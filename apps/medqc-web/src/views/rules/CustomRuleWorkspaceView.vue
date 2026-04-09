@@ -300,9 +300,7 @@
               size="small"
               @click="openEditDrawer(selectedDraft)"
             >
-              <template #icon>
-                <EditOutlined />
-              </template>编辑规则
+              编辑规则
             </a-button>
           </div>
         </div>
@@ -450,10 +448,9 @@
             v-else
             class="space-y-2"
           >
-            <button
+            <div
               v-for="job in batchJobs"
               :key="job.id"
-              type="button"
               class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left transition"
               :class="
                 batchJobDetail?.id === job.id
@@ -484,8 +481,16 @@
                   发起人 {{ job.created_by || '-' }}
                 </div>
               </div>
-              <span class="text-xs text-slate-400">{{ job.record_ids?.length || job.total_records || 0 }} 条</span>
-            </button>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-slate-400">{{ job.record_ids?.length || job.total_records || 0 }} 条</span>
+                <a-button
+                  size="small"
+                  @click.stop="openBatchJobDrawer(job)"
+                >
+                  查看结果
+                </a-button>
+              </div>
+            </div>
             <div class="flex items-center justify-end">
               <a-pagination
                 size="small"
@@ -744,7 +749,10 @@
           </template>
         </a-table>
 
-        <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+        <div
+          v-if="false"
+          class="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4"
+        >
           <div class="mb-3 flex items-center justify-between gap-2">
             <div>
               <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
@@ -1789,7 +1797,6 @@ import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import {
   CloseOutlined,
   DownloadOutlined,
-  EditOutlined,
   EyeOutlined,
   FileSearchOutlined,
   PlayCircleOutlined,
@@ -2610,6 +2617,7 @@ async function runSingleTestByPayload(
       recordResults.value = { ...recordResults.value, [preferred.record_id]: preferred }
       resultDrawerRecord.value = preferred
     }
+    resultDrawerOpen.value = true
     resultDrawerMode.value = 'single'
     message.success(options.successMessage || '单病历测试完成')
   } catch (error: any) {
@@ -3169,6 +3177,7 @@ async function fetchBatchJobDetail(jobId: string) {
     const response = await getWorkspaceBatchJob(jobId)
     if (!response.success || !response.data) throw new Error(response.message || '获取任务详情失败')
     batchJobDetail.value = response.data
+    resultDrawerOpen.value = true
     resultDrawerMode.value = 'batch'
     resultDrawerRecord.value = null
     if (['queued', 'running'].includes(response.data.status)) startBatchJobPolling(response.data.id)
@@ -3320,6 +3329,7 @@ async function runBatchTest() {
       nextMap[item.record_id] = normalizeRecordResult(item)
     })
     recordResults.value = nextMap
+    resultDrawerOpen.value = true
     resultDrawerMode.value = 'batch'
     message.success('批量测试完成')
   } catch (error: any) {
@@ -3446,18 +3456,22 @@ function getRecordFindingPreview(recordId: string) {
 function openSingleResultDrawer(record: CustomRuleWorkspaceRecord) {
   const result = getRecordResult(record.record_id)
   if (!result) return message.info('当前病历暂无测试结果')
+  resultDrawerOpen.value = true
   resultDrawerMode.value = 'single'
   resultDrawerRecord.value = result
 }
 function openBatchItemEvidence(item: RecordTestResultItem) {
+  resultDrawerOpen.value = true
   resultDrawerMode.value = 'single'
   resultDrawerRecord.value = item
 }
 function openBatchResultDrawer() {
   if (!batchResult.value) return message.info('当前暂无批量测试结果')
+  resultDrawerOpen.value = true
   resultDrawerMode.value = 'batch'
 }
 function closeResultDrawer() {
+  resultDrawerOpen.value = false
   resultDrawerMode.value = 'empty'
   resultDrawerRecord.value = null
   batchResult.value = null
