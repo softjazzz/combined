@@ -4,14 +4,14 @@
   >
     <div class="mx-auto w-full max-w-[1440px] space-y-4">
       <section
-        class="cw-analysis-overview workstation-surface-enter rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm"
+        class="cw-analysis-overview workstation-surface-enter rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
       >
         <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div class="max-w-3xl">
             <p
               class="cw-analysis-overview__eyebrow mb-1 text-[12px] font-bold uppercase tracking-[0.16em] text-blue-500/75"
             >
-              Custom QC Workspace
+              规则工作区
             </p>
             <h1 class="cw-analysis-overview__title text-[24px] font-black text-slate-800">
               自定义规则工作台
@@ -51,8 +51,7 @@
 
             <a-button
               type="primary"
-              size="large"
-              class="cw-primary-action !h-11 !rounded-xl !border-0 !bg-blue-600 px-5 shadow-[0_10px_20px_-12px_rgba(37,99,235,0.8)] hover:!bg-blue-500"
+              class="cw-primary-action"
               @click="openCreateDrawer"
             >
               <template #icon>
@@ -65,12 +64,12 @@
       </section>
 
       <section
-        class="cw-panel workstation-surface-enter workstation-surface-enter--delay-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+        class="cw-panel workstation-surface-enter workstation-surface-enter--delay-1 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
       >
         <div class="mb-2 flex items-center justify-between gap-3">
           <div>
             <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              Rule Catalog
+              规则目录
             </p>
             <h2 class="text-lg font-black text-slate-900">
               自定义规则列表
@@ -87,6 +86,7 @@
             </template>
             刷新
           </a-button>
+          <span class="text-xs text-slate-400">已勾选 {{ selectedDraftIds.length }} 条用于执行</span>
         </div>
 
         <div class="mb-3 flex flex-wrap items-center gap-2 md:flex-nowrap">
@@ -118,6 +118,7 @@
             :loading="draftLoading"
             :columns="draftColumns"
             :data-source="drafts"
+            :row-selection="draftRowSelection"
             :pagination="draftPagination"
             :row-class-name="draftRowClassName"
             :custom-row="draftCustomRow"
@@ -225,12 +226,12 @@
       </section>
 
       <section
-        class="cw-panel workstation-surface-enter workstation-surface-enter--delay-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+        class="cw-panel workstation-surface-enter workstation-surface-enter--delay-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
       >
         <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
             <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              Real Record QC Bench
+              真实病历质控台
             </p>
             <h2 class="text-lg font-black text-slate-900">
               真实病历质控台
@@ -247,7 +248,7 @@
               </template>查看任务结果
             </a-button>
             <a-button
-              :disabled="!selectedDraft || !hasPromptTemplate"
+              :disabled="!hasSelectedRunDrafts || !allSelectedRunDraftPromptReady"
               :loading="testingBatch"
               @click="triggerBatchQcJob"
             >
@@ -279,6 +280,7 @@
             }}</strong>
             <span class="ml-2 text-xs text-slate-500">{{ selectedDraft.document_type }} /
               {{ selectedDraft.scene === 'final' ? '终末病历' : '运行病历' }}</span>
+            <span class="ml-2 text-xs text-blue-600">已勾选执行 {{ selectedDraftIds.length }} 条</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <a-tag :color="selectedDraft.status === 'published' ? 'success' : 'processing'">
@@ -313,7 +315,7 @@
           <div class="mb-2 flex items-center justify-between gap-2">
             <div>
               <div class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                Recent Batch Jobs
+                批量任务
               </div>
               <div class="text-sm font-semibold text-slate-800">
                 最近批量任务
@@ -404,6 +406,14 @@
               class="w-[124px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
               @change="searchBatchJobs"
             />
+            <a-select
+              v-model:value="batchJobQuery.execution_mode"
+              allow-clear
+              placeholder="执行类型"
+              :options="batchJobExecutionModeOptions"
+              class="w-[124px] [&_.ant-select-selector]:!rounded-lg [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white"
+              @change="searchBatchJobs"
+            />
             <a-range-picker
               v-model:value="batchJobQuery.dateRange"
               class="w-[260px]"
@@ -451,6 +461,7 @@
                     {{ getBatchJobStatusText(job.status) }}
                   </a-tag>
                   <a-tag>{{ scopeLabelMap[job.scope] }}</a-tag>
+                  <a-tag>{{ job.execution_mode === 'single' ? '单条' : '批量' }}</a-tag>
                 </div>
                 <div class="mt-1 text-xs text-slate-500">
                   {{ formatDateTime(job.created_at) }} · 成功 {{ job.success_count }} · 失败
@@ -500,7 +511,7 @@
           <a-input
             v-model:value="recordFilters.keyword"
             allow-clear
-            placeholder="搜索病历号 / visit / 患者姓名"
+            placeholder="搜索病历号 / 就诊号 / 患者姓名"
             class="min-w-[240px] flex-1 !rounded-lg !border-slate-200"
             @press-enter="searchRecords"
           >
@@ -691,7 +702,7 @@
                 <a-button
                   size="small"
                   class="record-action-btn"
-                  :disabled="!selectedDraft || !hasPromptTemplate"
+                  :disabled="!hasSelectedRunDrafts || !allSelectedRunDraftPromptReady"
                   :loading="testingSingleRecordId === record.record_id"
                   @click="runSingleTest(record as CustomRuleWorkspaceRecord)"
                 >
@@ -715,8 +726,287 @@
             </template>
           </template>
         </a-table>
+
+        <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+          <div class="mb-3 flex items-center justify-between gap-2">
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                结果中心
+              </p>
+              <h3 class="text-lg font-black text-slate-900">
+                质控结果中心
+              </h3>
+            </div>
+            <div class="flex items-center gap-2">
+              <a-button
+                v-if="activeBatchJob && activeBatchJob.status === 'completed'"
+                :loading="batchJobDetailLoading"
+                @click="exportBatchJobReport('xlsx')"
+              >
+                <template #icon>
+                  <DownloadOutlined />
+                </template>导出报告
+              </a-button>
+              <a-button
+                v-if="activeBatchJob && ['queued', 'running'].includes(activeBatchJob.status)"
+                danger
+                :loading="cancellingBatchJobId === activeBatchJob.id"
+                @click="cancelActiveBatchJob"
+              >
+                停止任务
+              </a-button>
+              <a-button @click="closeResultDrawer">
+                清空展示
+              </a-button>
+            </div>
+          </div>
+
+          <template v-if="resultDrawerMode === 'batch' && activeBatchSummary">
+            <div class="grid gap-3 md:grid-cols-5">
+              <div class="rounded-xl border border-slate-200 bg-white p-3 text-center">
+                <div class="text-xs text-slate-400">
+                  总病历
+                </div>
+                <div class="text-xl font-bold text-slate-900">
+                  {{ activeBatchSummary.total_records }}
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-white p-3 text-center">
+                <div class="text-xs text-slate-400">
+                  成功
+                </div>
+                <div class="text-xl font-bold text-slate-900">
+                  {{ activeBatchSummary.success_count }}
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-white p-3 text-center">
+                <div class="text-xs text-slate-400">
+                  失败
+                </div>
+                <div class="text-xl font-bold text-slate-900">
+                  {{ activeBatchSummary.failed_count }}
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-white p-3 text-center">
+                <div class="text-xs text-slate-400">
+                  命中
+                </div>
+                <div class="text-xl font-bold text-slate-900">
+                  {{ activeBatchSummary.issue_records }}
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-white p-3 text-center">
+                <div class="text-xs text-slate-400">
+                  规则数
+                </div>
+                <div class="text-xl font-bold text-slate-900">
+                  {{ activeBatchJob?.rule_count || activeBatchRuleResults.length || 1 }}
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-if="activeBatchRuleResults.length"
+              class="mt-3 rounded-xl border border-slate-200 bg-white p-3"
+            >
+              <div class="mb-2 text-sm font-semibold text-slate-800">
+                规则执行结果
+              </div>
+              <div class="space-y-2">
+                <div
+                  v-for="ruleResult in activeBatchRuleResults"
+                  :key="ruleResult.id || `${ruleResult.draft_id}-${ruleResult.rule_code}`"
+                  class="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
+                >
+                  <span class="font-medium text-slate-700">{{
+                    ruleResult.rule_name || ruleResult.rule_code
+                  }}</span>
+                  <span class="text-slate-500">成功 {{ ruleResult.success_count || 0 }} · 失败
+                    {{ ruleResult.failed_count || 0 }} · 命中
+                    {{ ruleResult.issue_records || 0 }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-3 grid gap-3 md:grid-cols-2">
+              <div class="rounded-xl border border-slate-200 bg-white p-3">
+                <div class="mb-2 text-sm font-semibold text-slate-800">
+                  命中明细
+                </div>
+                <div class="max-h-[320px] space-y-2 overflow-auto">
+                  <div
+                    v-for="item in activeBatchItems"
+                    :key="`${item.record_id}-${item.rule_code || ''}-${item.findings || ''}`"
+                    class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                  >
+                    <div class="flex items-center justify-between gap-2">
+                      <span class="font-medium text-slate-700">{{
+                        item.patient_name || item.record_id
+                      }}</span>
+                      <a-tag :color="item.is_compliant ? 'success' : 'error'">
+                        {{ item.is_compliant ? '合规/不适用' : '命中问题' }}
+                      </a-tag>
+                    </div>
+                    <div class="mt-1 text-xs text-slate-500">
+                      {{ item.rule_name || item.rule_code || '-' }} · {{ item.record_id }} /
+                      {{ item.department || '-' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="rounded-xl border border-slate-200 bg-white p-3">
+                <div class="mb-2 text-sm font-semibold text-slate-800">
+                  失败明细
+                </div>
+                <div class="max-h-[320px] space-y-2 overflow-auto">
+                  <div
+                    v-for="item in activeBatchFailedRecords"
+                    :key="`${item.record_id}-${item.rule_code || ''}-${item.error}`"
+                    class="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2"
+                  >
+                    <div class="text-xs font-medium text-rose-700">
+                      {{ item.rule_name || item.rule_code || '-' }}
+                    </div>
+                    <div class="mt-1 text-xs text-slate-500">
+                      {{ item.record_id }} / {{ item.department || '-' }}
+                    </div>
+                    <div class="mt-1 text-xs text-rose-700">
+                      {{ item.error }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <template v-else-if="resultDrawerMode === 'single' && resultDrawerRecord">
+            <div class="rounded-xl border border-slate-200 bg-white p-4">
+              <div class="flex items-center justify-between gap-2">
+                <strong>{{
+                  resultDrawerRecord.patient_name || resultDrawerRecord.record_id
+                }}</strong>
+                <a-tag :color="resultDrawerRecord.is_compliant ? 'success' : 'error'">
+                  {{ resultDrawerRecord.is_compliant ? '合规/不适用' : '命中问题' }}
+                </a-tag>
+              </div>
+              <div class="mt-2 text-xs text-slate-400">
+                {{ resultDrawerRecord.rule_name || resultDrawerRecord.rule_code || '-' }} ·
+                {{ resultDrawerRecord.record_id }} / {{ resultDrawerRecord.department || '-' }}
+              </div>
+              <div
+                class="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-7 text-slate-600"
+              >
+                {{ resultDrawerRecord.findings || '无附加结论' }}
+              </div>
+              <div class="mt-3 grid gap-3 md:grid-cols-2">
+                <div
+                  class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"
+                >
+                  <div class="mb-1 font-semibold text-slate-700">
+                    证据
+                  </div>
+                  {{ resultDrawerRecord.evidence || '无' }}
+                </div>
+                <div
+                  class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600"
+                >
+                  <div class="mb-1 font-semibold text-slate-700">
+                    建议
+                  </div>
+                  {{ resultDrawerRecord.suggestion || '无' }}
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <a-empty
+            v-else
+            :image="Empty.PRESENTED_IMAGE_SIMPLE"
+            description="选择历史任务或执行测试后，这里展示结果"
+          />
+        </div>
       </section>
     </div>
+
+    <a-modal
+      v-model:open="batchLaunchModalOpen"
+      title="发起批量质控"
+      :confirm-loading="testingBatch"
+      ok-text="确认发起"
+      cancel-text="取消"
+      @ok="confirmBatchLaunch"
+    >
+      <div class="space-y-3">
+        <div
+          class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500"
+        >
+          <div>
+            已选择规则 {{ selectedRunDrafts.length }} 条
+            <span v-if="selectedRunSceneLabel">（{{ selectedRunSceneLabel }}）</span>
+          </div>
+          <div
+            v-if="selectedRecordKeys.length > 0"
+            class="mt-1 text-blue-600"
+          >
+            已手动勾选 {{ selectedRecordKeys.length }} 条病历，执行时将优先使用勾选病历。
+          </div>
+        </div>
+        <a-form layout="vertical">
+          <div class="grid gap-3 md:grid-cols-2">
+            <a-form-item label="病历范围">
+              <a-select
+                v-model:value="batchLaunchFilters.scope"
+                :options="scopeOptions"
+                :disabled="batchLaunchFiltersLoading"
+                @change="(value) => handleBatchLaunchScopeChange(value as WorkspaceScope)"
+              />
+            </a-form-item>
+            <a-form-item label="日期字段">
+              <a-select
+                v-model:value="batchLaunchFilters.date_field"
+                :options="dateFieldOptions"
+              />
+            </a-form-item>
+          </div>
+          <div class="grid gap-3 md:grid-cols-2">
+            <a-form-item label="科室">
+              <a-select
+                v-model:value="batchLaunchFilters.department"
+                allow-clear
+                show-search
+                :options="batchLaunchDepartmentOptions"
+                placeholder="全部科室"
+                :loading="batchLaunchFiltersLoading"
+                @change="handleBatchLaunchDepartmentChange"
+              />
+            </a-form-item>
+            <a-form-item label="医生">
+              <a-select
+                v-model:value="batchLaunchFilters.doctor"
+                allow-clear
+                show-search
+                :options="batchLaunchDoctorOptions"
+                placeholder="全部医生"
+                :loading="batchLaunchFiltersLoading"
+              />
+            </a-form-item>
+          </div>
+          <a-form-item label="日期范围">
+            <a-range-picker
+              v-model:value="batchLaunchFilters.dateRange"
+              class="w-full"
+            />
+          </a-form-item>
+          <a-form-item label="关键词（可选）">
+            <a-input
+              v-model:value="batchLaunchFilters.keyword"
+              allow-clear
+              placeholder="病历号 / 就诊号 / 患者姓名"
+            />
+          </a-form-item>
+        </a-form>
+      </div>
+    </a-modal>
 
     <a-drawer
       :open="editorDrawerOpen"
@@ -732,13 +1022,13 @@
         >
           <div>
             <p class="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              Rule Editor
+              规则编辑
             </p>
             <h2 class="text-2xl font-black text-slate-900">
               {{ editorDrawerTitle }}
             </h2>
             <p class="mt-2 text-sm leading-6 text-slate-500">
-              在抽屉内完成元数据、Prompt、示例和发布动作。
+              在抽屉内完成元数据、提示词、示例和发布动作。
             </p>
           </div>
           <a-button
@@ -831,7 +1121,7 @@
 
           <div class="rounded-2xl border border-slate-200 bg-white p-4">
             <p class="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              Examples
+              示例
             </p>
             <h3 class="text-lg font-black text-slate-900">
               示例区
@@ -854,7 +1144,56 @@
 
           <div class="rounded-2xl border border-slate-200 bg-white p-4">
             <p class="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              Test Input
+              提示词
+            </p>
+            <h3 class="text-lg font-black text-slate-900">
+              质控提示词
+            </h3>
+            <p class="mt-1 text-xs text-slate-500">
+              点击“AI生成质控规则”后可在此查看和手工调整提示词内容。
+            </p>
+            <a-form-item
+              class="mt-3"
+              label="提示词模板"
+            >
+              <a-textarea
+                v-model:value="draftForm.prompt_template"
+                :rows="12"
+                :maxlength="20000"
+                show-count
+                placeholder="生成后将在此展示完整提示词，可手工微调。"
+              />
+            </a-form-item>
+            <div
+              v-if="draftForm.prompt_summary || draftForm.check_points.length"
+              class="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3"
+            >
+              <div
+                v-if="draftForm.prompt_summary"
+                class="text-xs leading-5 text-slate-600"
+              >
+                <span class="font-semibold text-slate-700">摘要：</span>{{ draftForm.prompt_summary }}
+              </div>
+              <div v-if="draftForm.check_points.length">
+                <div class="mb-1 text-xs font-semibold text-slate-700">
+                  检查要点
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <a-tag
+                    v-for="(point, idx) in draftForm.check_points"
+                    :key="`${idx}-${point}`"
+                    color="blue"
+                  >
+                    {{ point }}
+                  </a-tag>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 bg-white p-4">
+            <p class="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+              测试输入
             </p>
             <h3 class="text-lg font-black text-slate-900">
               抽屉内测试输入
@@ -914,7 +1253,7 @@
 
           <div class="rounded-2xl border border-slate-200 bg-white p-4">
             <p class="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              Last Test Summary
+              最近测试摘要
             </p>
             <h3 class="text-lg font-black text-slate-900">
               测试摘要
@@ -1013,7 +1352,7 @@
         >
           <div>
             <p class="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-              Test Result
+              测试结果
             </p>
             <h2 class="text-2xl font-black text-slate-900">
               {{ resultDrawerMode === 'batch' ? '批量任务结果' : '单病历测试结果' }}
@@ -1214,31 +1553,79 @@
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-4">
               <h3 class="text-lg font-black text-slate-900">
-                Findings
+                发现问题
               </h3>
               <p class="mt-2 text-sm leading-7 text-slate-500">
                 {{ resultDrawerRecord.findings || '无附加结论' }}
               </p>
             </div>
+            <div
+              v-if="resultDrawerRecord.issues && resultDrawerRecord.issues.length"
+              class="rounded-2xl border border-slate-200 bg-white p-4"
+            >
+              <h3 class="text-lg font-black text-slate-900">
+                问题列表
+              </h3>
+              <div class="mt-2 space-y-2">
+                <div
+                  v-for="(issue, idx) in getDisplayIssues(resultDrawerRecord)"
+                  :key="`single-issue-${idx}-${issue.description}`"
+                  class="rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 text-sm text-slate-600"
+                >
+                  <div class="font-semibold text-slate-800">
+                    {{ idx + 1 }}. {{ issue.description || '问题描述缺失' }}
+                  </div>
+                  <div
+                    v-if="issue.evidence"
+                    class="mt-1 text-xs text-slate-500"
+                  >
+                    证据：{{ issue.evidence }}
+                  </div>
+                </div>
+                <p
+                  v-if="(resultDrawerRecord.issues?.length || 0) > ISSUE_DISPLAY_LIMIT"
+                  class="text-xs text-slate-400"
+                >
+                  仅展示前 {{ ISSUE_DISPLAY_LIMIT }} 条，共
+                  {{ resultDrawerRecord.issues?.length }} 条。
+                </p>
+              </div>
+            </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-4">
               <h3 class="text-lg font-black text-slate-900">
-                Evidence
+                证据
               </h3>
-              <p class="mt-2 text-sm leading-7 text-slate-500">
+              <p class="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-slate-500">
                 {{ resultDrawerRecord.evidence || '无' }}
               </p>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-4">
               <h3 class="text-lg font-black text-slate-900">
-                Suggestion
+                建议
               </h3>
-              <p class="mt-2 text-sm leading-7 text-slate-500">
+              <p class="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-slate-500">
                 {{ resultDrawerRecord.suggestion || '无' }}
               </p>
             </div>
+            <div
+              v-if="resultDrawerRecord.llm_raw_output"
+              class="rounded-2xl border border-slate-200 bg-white p-4"
+            >
+              <h3 class="text-lg font-black text-slate-900">
+                原始输出
+              </h3>
+              <details class="mt-2">
+                <summary class="cursor-pointer text-xs text-slate-500">
+                  展开查看模型原始输出
+                </summary>
+                <pre
+                  class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-6 text-slate-600"
+                >{{ resultDrawerRecord.llm_raw_output }}</pre>
+              </details>
+            </div>
             <div class="rounded-2xl border border-slate-200 bg-white p-4">
               <h3 class="text-lg font-black text-slate-900">
-                Confidence
+                置信度
               </h3>
               <p class="mt-2 text-sm leading-7 text-slate-500">
                 {{ formatConfidence(resultDrawerRecord.confidence) }}
@@ -1281,15 +1668,47 @@
           </div>
           <div class="rounded-2xl border border-slate-200 bg-white p-4">
             <h3 class="text-lg font-black text-slate-900">
-              Findings
+              发现问题
             </h3>
             <p class="mt-2 text-sm leading-7 text-slate-500">
               {{ evidenceDrawerRecord.findings || '无附加结论' }}
             </p>
           </div>
+          <div
+            v-if="evidenceDrawerRecord.issues && evidenceDrawerRecord.issues.length"
+            class="rounded-2xl border border-slate-200 bg-white p-4"
+          >
+            <h3 class="text-lg font-black text-slate-900">
+              问题列表
+            </h3>
+            <div class="mt-2 space-y-2">
+              <div
+                v-for="(issue, idx) in getDisplayIssues(evidenceDrawerRecord)"
+                :key="`batch-issue-${idx}-${issue.description}`"
+                class="rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 text-sm text-slate-600"
+              >
+                <div class="font-semibold text-slate-800">
+                  {{ idx + 1 }}. {{ issue.description || '问题描述缺失' }}
+                </div>
+                <div
+                  v-if="issue.evidence"
+                  class="mt-1 text-xs text-slate-500"
+                >
+                  证据：{{ issue.evidence }}
+                </div>
+              </div>
+              <p
+                v-if="(evidenceDrawerRecord.issues?.length || 0) > ISSUE_DISPLAY_LIMIT"
+                class="text-xs text-slate-400"
+              >
+                仅展示前 {{ ISSUE_DISPLAY_LIMIT }} 条，共
+                {{ evidenceDrawerRecord.issues?.length }} 条。
+              </p>
+            </div>
+          </div>
           <div class="rounded-2xl border border-slate-200 bg-white p-4">
             <h3 class="text-lg font-black text-slate-900">
-              Evidence
+              证据
             </h3>
             <p class="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-500">
               {{ evidenceDrawerRecord.evidence || '无' }}
@@ -1297,15 +1716,31 @@
           </div>
           <div class="rounded-2xl border border-slate-200 bg-white p-4">
             <h3 class="text-lg font-black text-slate-900">
-              Suggestion
+              建议
             </h3>
             <p class="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-500">
               {{ evidenceDrawerRecord.suggestion || '无' }}
             </p>
           </div>
+          <div
+            v-if="evidenceDrawerRecord.llm_raw_output"
+            class="rounded-2xl border border-slate-200 bg-white p-4"
+          >
+            <h3 class="text-lg font-black text-slate-900">
+              原始输出
+            </h3>
+            <details class="mt-2">
+              <summary class="cursor-pointer text-xs text-slate-500">
+                展开查看模型原始输出
+              </summary>
+              <pre
+                class="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-6 text-slate-600"
+              >{{ evidenceDrawerRecord.llm_raw_output }}</pre>
+            </details>
+          </div>
           <div class="rounded-2xl border border-slate-200 bg-white p-4">
             <h3 class="text-lg font-black text-slate-900">
-              Confidence
+              置信度
             </h3>
             <p class="mt-2 text-sm leading-7 text-slate-500">
               {{ formatConfidence(evidenceDrawerRecord.confidence) }}
@@ -1353,6 +1788,7 @@ import {
   createWorkspaceDraft,
   deleteWorkspaceDraft,
   createWorkspaceBatchJob,
+  cancelWorkspaceBatchJob,
   exportWorkspaceBatchJob,
   generateWorkspaceDraftPrompt,
   getWorkspaceBatchJob,
@@ -1368,6 +1804,8 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import type {
   CustomRuleBatchJob,
+  CustomRuleBatchJobRuleResult,
+  CustomRuleBatchJobSummary,
   CustomRuleBatchJobStatus,
   CustomRuleBatchResult,
   CustomRuleDraft,
@@ -1382,18 +1820,33 @@ import type {
 } from '@/types/custom-rule-workspace'
 
 type DateRangeValue = [Dayjs, Dayjs] | null
+type WorkspaceDateField = 'admission' | 'discharge'
+
+interface BatchLaunchFilters {
+  scope: WorkspaceScope
+  department?: string
+  doctor?: string
+  date_field: WorkspaceDateField
+  dateRange: DateRangeValue
+  keyword: string
+}
 
 interface RecordTestResultItem {
+  draft_id?: string
+  rule_code?: string
+  rule_name?: string
   record_id: string
   visit_id?: string
   patient_name?: string
   department?: string
   status: string
   is_compliant: boolean
+  issues?: Array<{ description: string; evidence?: string }>
   findings: string
   evidence: string
   suggestion: string
   confidence: number
+  llm_raw_output?: string
 }
 
 const router = useRouter()
@@ -1408,8 +1861,12 @@ const testingBatch = ref(false)
 const testingSingleRecordId = ref('')
 const batchJobLoading = ref(false)
 const batchJobDetailLoading = ref(false)
+const cancellingBatchJobId = ref('')
+const batchLaunchModalOpen = ref(false)
+const batchLaunchFiltersLoading = ref(false)
 const drafts = ref<CustomRuleDraft[]>([])
 const selectedDraftId = ref('')
+const selectedDraftIds = ref<string[]>([])
 const batchResult = ref<CustomRuleBatchResult | null>(null)
 const batchJobs = ref<CustomRuleBatchJob[]>([])
 const batchJobDetail = ref<CustomRuleBatchJob | null>(null)
@@ -1442,6 +1899,7 @@ const batchJobQuery = reactive({
   keyword: '',
   status: undefined as CustomRuleBatchJobStatus | undefined,
   scope: undefined as WorkspaceScope | undefined,
+  execution_mode: undefined as 'single' | 'batch' | undefined,
   dateRange: null as DateRangeValue,
   mineOnly: true,
   onlyCurrentRule: true,
@@ -1487,7 +1945,7 @@ const sceneOptions = [
   { label: '运行病历', value: 'running' },
   { label: '终末病历', value: 'final' },
 ]
-const scopeOptions = [
+const scopeOptions: Array<{ label: string; value: WorkspaceScope }> = [
   { label: '终末病历', value: 'final' },
   { label: '运行病历', value: 'running' },
   { label: '全量病历', value: 'all' },
@@ -1516,21 +1974,40 @@ const batchJobStatusOptions = [
   { label: '执行中', value: 'running' },
   { label: '已完成', value: 'completed' },
   { label: '已失败', value: 'failed' },
+  { label: '已停止', value: 'canceled' },
 ]
 const batchJobScopeOptions = [
   { label: '终末病历', value: 'final' },
   { label: '运行病历', value: 'running' },
   { label: '全量病历', value: 'all' },
 ]
+const batchJobExecutionModeOptions = [
+  { label: '单条', value: 'single' },
+  { label: '批量', value: 'batch' },
+]
 
 const selectedDraft = computed(
   () => drafts.value.find((item) => item.id === selectedDraftId.value) || null,
 )
+const selectedRunDrafts = computed(() => {
+  const selectedSet = new Set(selectedDraftIds.value)
+  return drafts.value.filter((item) => selectedSet.has(item.id))
+})
+const selectedRunDraftIds = computed(() => selectedRunDrafts.value.map((item) => item.id))
+const selectedRunScene = computed(() => {
+  const sceneSet = Array.from(new Set(selectedRunDrafts.value.map((item) => item.scene)))
+  return sceneSet.length === 1 ? sceneSet[0] : ''
+})
 const scopeLabelMap: Record<WorkspaceScope, string> = {
   final: '终末病历',
   running: '运行病历',
   all: '全量病历',
 }
+const selectedRunSceneLabel = computed(() =>
+  selectedRunScene.value === 'running' || selectedRunScene.value === 'final'
+    ? scopeLabelMap[selectedRunScene.value]
+    : '',
+)
 const currentScopeLabel = computed(() => scopeLabelMap[recordFilters.scope] || '终末病历')
 const recentBatchJobCount = computed(() => batchJobPagination.total)
 const activeBatchJob = computed(() => batchJobDetail.value)
@@ -1543,8 +2020,17 @@ const activeBatchItems = computed(
 const activeBatchFailedRecords = computed(
   () => activeBatchJob.value?.failed_records || batchResult.value?.failed_records || [],
 )
+const activeBatchRuleResults = computed(
+  () => activeBatchJob.value?.rule_results || batchResult.value?.rule_results || [],
+)
 const hasPromptTemplate = computed(
   () => !!String(selectedDraft.value?.prompt_template || '').trim(),
+)
+const hasSelectedRunDrafts = computed(() => selectedRunDrafts.value.length > 0)
+const allSelectedRunDraftPromptReady = computed(
+  () =>
+    selectedRunDrafts.value.length > 0 &&
+    selectedRunDrafts.value.every((item) => !!String(item.prompt_template || '').trim()),
 )
 const canPublishSelectedDraft = computed(
   () => !!selectedDraft.value && canPublishRecord(selectedDraft.value),
@@ -1616,12 +2102,22 @@ const recordFilters = reactive({
   scope: 'final' as WorkspaceScope,
   department: undefined as string | undefined,
   doctor: undefined as string | undefined,
-  date_field: 'discharge' as 'admission' | 'discharge',
+  date_field: 'discharge' as WorkspaceDateField,
   dateRange: null as DateRangeValue,
+  keyword: '',
+})
+const batchLaunchFilters = reactive<BatchLaunchFilters>({
+  scope: 'final',
+  department: undefined,
+  doctor: undefined,
+  date_field: 'discharge',
+  dateRange: null,
   keyword: '',
 })
 const departmentOptions = ref<Array<{ label: string; value: string }>>([])
 const doctorOptions = ref<Array<{ label: string; value: string }>>([])
+const batchLaunchDepartmentOptions = ref<Array<{ label: string; value: string }>>([])
+const batchLaunchDoctorOptions = ref<Array<{ label: string; value: string }>>([])
 const recordLoading = ref(false)
 const records = ref<CustomRuleWorkspaceRecord[]>([])
 const selectedRecordKeys = ref<string[]>([])
@@ -1634,7 +2130,7 @@ const recordPagination = reactive({
   showTotal: (total: number) => `共 ${total} 条病历`,
 })
 const recordColumns: TableColumnsType<CustomRuleWorkspaceRecord> = [
-  { title: '病历号 / visit', key: 'record_info', width: 160 },
+  { title: '病历号 / 就诊号', key: 'record_info', width: 160 },
   { title: '患者信息', dataIndex: 'patient_name', key: 'patient_name', width: 170 },
   { title: '科室', dataIndex: 'department', key: 'department', width: 130 },
   { title: '医生', dataIndex: 'doctor', key: 'doctor', width: 130 },
@@ -1653,6 +2149,8 @@ function getBatchJobStatusText(status?: string) {
       return '已完成'
     case 'failed':
       return '已失败'
+    case 'canceled':
+      return '已停止'
     default:
       return '未知'
   }
@@ -1667,6 +2165,8 @@ function getBatchJobStatusTagColor(status?: string) {
       return 'success'
     case 'failed':
       return 'error'
+    case 'canceled':
+      return 'warning'
     default:
       return 'default'
   }
@@ -1767,6 +2267,12 @@ const recordRowSelection = computed<TableProps['rowSelection']>(() => ({
   selectedRowKeys: selectedRecordKeys.value,
   onChange: (keys: Array<string | number>) => {
     selectedRecordKeys.value = keys.map((item) => String(item))
+  },
+}))
+const draftRowSelection = computed<TableProps['rowSelection']>(() => ({
+  selectedRowKeys: selectedDraftIds.value,
+  onChange: (keys: Array<string | number>) => {
+    selectedDraftIds.value = Array.from(new Set(keys.map((item) => String(item))))
   },
 }))
 const advancedParams = reactive({ temperature: 0.2, top_p: 0.9, max_tokens: 4096 })
@@ -1876,6 +2382,12 @@ async function loadDrafts() {
     drafts.value = response.data.items
     draftPagination.total = response.data.total
     if (!selectedDraftId.value && drafts.value[0]) selectedDraftId.value = drafts.value[0].id
+    if (!selectedDraftIds.value.length && selectedDraftId.value) {
+      selectedDraftIds.value = [selectedDraftId.value]
+    }
+    selectedDraftIds.value = selectedDraftIds.value.filter((id) =>
+      drafts.value.some((item) => item.id === id),
+    )
     const current = drafts.value.find((item) => item.id === selectedDraftId.value)
     if (current && editorDrawerOpen.value && editorDrawerMode.value !== 'create')
       hydrateDraftForm(current)
@@ -1898,6 +2410,9 @@ function draftCustomRow(record: CustomRuleDraft) {
   return {
     onClick: () => {
       selectedDraftId.value = record.id
+      if (!selectedDraftIds.value.includes(record.id)) {
+        selectedDraftIds.value = Array.from(new Set([record.id, ...selectedDraftIds.value]))
+      }
     },
   }
 }
@@ -1911,6 +2426,9 @@ function openCreateDrawer() {
 }
 function openEditDrawer(record: CustomRuleDraft) {
   selectedDraftId.value = record.id
+  if (!selectedDraftIds.value.includes(record.id)) {
+    selectedDraftIds.value = Array.from(new Set([record.id, ...selectedDraftIds.value]))
+  }
   editorDrawerMode.value = 'edit'
   hydrateDraftForm(record)
   editorDrawerOpen.value = true
@@ -1930,6 +2448,7 @@ async function persistDraftFromDrawer(
       const response = await createWorkspaceDraft(buildDraftPayload())
       if (!response.success || !response.data) throw new Error(response.message || '创建草稿失败')
       selectedDraftId.value = response.data.id
+      selectedDraftIds.value = Array.from(new Set([response.data.id, ...selectedDraftIds.value]))
       editorDrawerMode.value = 'edit'
       await loadDrafts()
       hydrateDraftForm(response.data)
@@ -1951,6 +2470,9 @@ async function persistDraftFromDrawer(
       item.id === response.data!.id ? response.data! : item,
     )
     selectedDraftId.value = response.data.id
+    if (!selectedDraftIds.value.includes(response.data.id)) {
+      selectedDraftIds.value = Array.from(new Set([response.data.id, ...selectedDraftIds.value]))
+    }
     hydrateDraftForm(response.data)
     if (!options.silentSuccess) message.success('草稿已保存')
     return response.data
@@ -2035,12 +2557,14 @@ async function runSingleTestByPayload(
   },
   options: { successMessage?: string } = {},
 ) {
-  if (!selectedDraft.value) return message.warning('请先选择规则')
-  if (!hasPromptTemplate.value) return message.warning('请先为当前规则生成或填写 Prompt')
+  const runDrafts = resolveSelectedRunDraftsForExecution()
+  if (!runDrafts) return
   testingSingleRecordId.value = record.record_id
   try {
+    const draftIds = runDrafts.map((item) => item.id)
     const response = await runWorkspaceSingleTest({
-      draft_id: selectedDraft.value.id,
+      draft_id: draftIds[0],
+      draft_ids: draftIds,
       records: [record],
       temperature: advancedParams.temperature,
       top_p: advancedParams.top_p,
@@ -2049,23 +2573,26 @@ async function runSingleTestByPayload(
     if (!response.success || !response.data) throw new Error(response.message || '单病历测试失败')
     singleResult.value = response.data
     batchResult.value = null
-    syncDraftSummary(response.data.summary || {})
-    const normalized = normalizeRecordResult({
-      record_id: response.data.result.record_id,
-      visit_id: response.data.result.visit_id,
-      patient_name: response.data.record.patient_name,
-      department: response.data.record.department,
-      status: response.data.result.status,
-      is_compliant: response.data.result.is_compliant,
-      findings: response.data.result.findings,
-      evidence: response.data.result.evidence,
-      suggestion: response.data.result.suggestion,
-      confidence: response.data.result.confidence,
-    })
-    recordResults.value = { ...recordResults.value, [normalized.record_id]: normalized }
+    syncDraftSummariesFromRuleResults(response.data.rule_results || [])
+    if (!response.data.rule_results?.length) {
+      syncDraftSummary(response.data.summary || {})
+    }
+    const rawResults =
+      (Array.isArray(response.data.results) && response.data.results.length
+        ? response.data.results
+        : response.data.result
+          ? [response.data.result]
+          : []) || []
+    const normalizedResults = rawResults.map((item) =>
+      normalizeRecordResult(item as RecordTestResultItem),
+    )
+    const preferred =
+      normalizedResults.find((item) => !item.is_compliant) || normalizedResults[0] || null
+    if (preferred) {
+      recordResults.value = { ...recordResults.value, [preferred.record_id]: preferred }
+      resultDrawerRecord.value = preferred
+    }
     resultDrawerMode.value = 'single'
-    resultDrawerRecord.value = normalized
-    resultDrawerOpen.value = true
     message.success(options.successMessage || '单病历测试完成')
   } catch (error: any) {
     message.error(error?.message || '单病历测试失败')
@@ -2109,6 +2636,7 @@ async function copyDraft(record: CustomRuleDraft) {
     if (!response.success || !response.data) throw new Error(response.message || '复制草稿失败')
     await loadDrafts()
     selectedDraftId.value = response.data.id
+    selectedDraftIds.value = Array.from(new Set([response.data.id, ...selectedDraftIds.value]))
     editorDrawerMode.value = 'copy'
     hydrateDraftForm(response.data)
     editorDrawerOpen.value = true
@@ -2121,6 +2649,7 @@ async function deleteDraft(record: CustomRuleDraft) {
   try {
     const response = await deleteWorkspaceDraft(record.id)
     if (!response.success) throw new Error(response.message || '删除草稿失败')
+    selectedDraftIds.value = selectedDraftIds.value.filter((id) => id !== record.id)
     if (selectedDraftId.value === record.id) selectedDraftId.value = ''
     await loadDrafts()
     if (!selectedDraftId.value && drafts.value[0]) selectedDraftId.value = drafts.value[0].id
@@ -2154,6 +2683,111 @@ async function publishSelectedDraft() {
   await publishDraftById(selectedDraft.value.id)
 }
 
+function parseLooseJsonObject(text: string): Record<string, unknown> | null {
+  const raw = String(text || '').trim()
+  if (!raw) return null
+
+  const candidates: string[] = []
+  candidates.push(raw)
+
+  const fencedMatches = raw.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi)
+  for (const match of fencedMatches) {
+    const body = String(match?.[1] || '').trim()
+    if (body) candidates.push(body)
+  }
+
+  const firstBrace = raw.indexOf('{')
+  const lastBrace = raw.lastIndexOf('}')
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.push(raw.slice(firstBrace, lastBrace + 1))
+  }
+
+  const uniqueCandidates = Array.from(
+    new Set(
+      candidates
+        .map((item) =>
+          item
+            .replace(/^```(?:json)?/i, '')
+            .replace(/```$/i, '')
+            .trim(),
+        )
+        .filter(Boolean),
+    ),
+  )
+
+  for (const candidate of uniqueCandidates) {
+    try {
+      const parsed = JSON.parse(candidate)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 容错兜底：即使不是严格 JSON，也尽量抽取 status/reasons/suggestions
+  const statusMatch = raw.match(/["'`]?status["'`]?\s*[:：]\s*["'`]([^"'`]+)["'`]/i)
+  const reasonsMatch = raw.match(/["'`]?reasons?["'`]?\s*[:：]\s*\[([\s\S]*?)\]/i)
+  const suggestionsMatch = raw.match(/["'`]?suggestions?["'`]?\s*[:：]\s*\[([\s\S]*?)\]/i)
+  const extractQuotedItems = (block: string): string[] => {
+    if (!block) return []
+    const values: string[] = []
+    for (const match of block.matchAll(/["'`]([^"'`]{2,})["'`]/g)) {
+      const item = String(match[1] || '').trim()
+      if (item) values.push(item)
+    }
+    return values
+  }
+  const reasons = extractQuotedItems(String(reasonsMatch?.[1] || ''))
+  const suggestions = extractQuotedItems(String(suggestionsMatch?.[1] || ''))
+  if (statusMatch?.[1] || reasons.length || suggestions.length) {
+    return {
+      status: String(statusMatch?.[1] || '').trim(),
+      reasons,
+      suggestions,
+    }
+  }
+  return null
+}
+
+function deriveComplianceFromValue(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value
+  const text = String(value || '')
+    .trim()
+    .toLowerCase()
+  if (!text) return null
+  if (['true', '1', 'yes'].includes(text)) return true
+  if (['false', '0', 'no'].includes(text)) return false
+  if (
+    ['non_compliant', '不合规', '不符合', '不通过', '命中问题', '违规'].some((hint) =>
+      text.includes(hint),
+    )
+  ) {
+    return false
+  }
+  if (
+    ['compliant', '合规', '通过', 'not_applicable', '不适用', '未见明显问题'].some((hint) =>
+      text.includes(hint),
+    )
+  ) {
+    return true
+  }
+  return null
+}
+
+function looksJsonLike(text: string): boolean {
+  const normalized = String(text || '').trim()
+  if (!normalized) return false
+  return (
+    normalized.startsWith('{') ||
+    normalized.startsWith('```') ||
+    normalized.startsWith('json ') ||
+    normalized.includes('"status"') ||
+    normalized.includes('"reasons"')
+  )
+}
+
 function normalizeRecordResult(result: {
   record_id: string
   visit_id?: string
@@ -2161,12 +2795,144 @@ function normalizeRecordResult(result: {
   department?: string
   status: string
   is_compliant: boolean
+  issues?: Array<{ description: string; evidence?: string }>
   findings: string
   evidence: string
   suggestion: string
   confidence: number
+  llm_raw_output?: string
 }): RecordTestResultItem {
-  return { ...result }
+  const rawOutput = String(result.llm_raw_output || '').trim()
+  const normalizedIssues = Array.isArray(result.issues)
+    ? result.issues
+        .map((item) => ({
+          description: String(item?.description || '').trim(),
+          evidence: String(item?.evidence || '').trim(),
+        }))
+        .filter((item) => !!item.description || !!item.evidence)
+    : []
+
+  const structuredPayload =
+    parseLooseJsonObject(rawOutput) ||
+    parseLooseJsonObject(String(result.evidence || '')) ||
+    parseLooseJsonObject(String(result.findings || ''))
+
+  const reasonsFromPayload = Array.isArray(structuredPayload?.reasons)
+    ? structuredPayload?.reasons
+        .map((item) => String(item || '').trim())
+        .filter((item) => !!item) || []
+    : []
+  const payloadIssues =
+    reasonsFromPayload.length > 0
+      ? reasonsFromPayload.map((description) => ({ description, evidence: '' }))
+      : []
+  const mergedIssues = Array.from(
+    new Map(
+      [...normalizedIssues, ...payloadIssues]
+        .filter((item) => !!item.description || !!item.evidence)
+        .map((item) => [`${item.description}__${item.evidence || ''}`, item]),
+    ).values(),
+  )
+
+  const findings = String(result.findings || '').trim()
+  const evidence = String(result.evidence || '').trim()
+  const suggestion = String(result.suggestion || '').trim()
+  const complianceFromPayload = deriveComplianceFromValue(
+    structuredPayload?.is_compliant ?? structuredPayload?.status,
+  )
+  const complianceFromStatus = deriveComplianceFromValue(result.status)
+
+  const findingsFromPayload =
+    String(
+      structuredPayload?.findings ||
+        structuredPayload?.summary ||
+        structuredPayload?.conclusion ||
+        structuredPayload?.judgement ||
+        structuredPayload?.status ||
+        '',
+    ).trim() || (reasonsFromPayload.length > 0 ? reasonsFromPayload.slice(0, 3).join('；') : '')
+  const evidenceFromPayload = String(
+    structuredPayload?.evidence || structuredPayload?.evidence_text || '',
+  ).trim()
+  const suggestionsFromPayload = Array.isArray(structuredPayload?.suggestions)
+    ? structuredPayload.suggestions
+        .map((item) => String(item || '').trim())
+        .filter((item) => !!item)
+    : []
+  const suggestionFromPayload =
+    String(
+      structuredPayload?.suggestion ||
+        structuredPayload?.recommendation ||
+        structuredPayload?.advice ||
+        '',
+    ).trim() ||
+    (suggestionsFromPayload.length > 0
+      ? suggestionsFromPayload.map((item, index) => `(${index + 1}) ${item}`).join('\n')
+      : '')
+  const confidenceFromPayload = Number(structuredPayload?.confidence)
+  const normalizedConfidence = Number.isFinite(confidenceFromPayload)
+    ? confidenceFromPayload
+    : Number(result.confidence || 0.7)
+  const inferredNonCompliantByPayload =
+    reasonsFromPayload.length > 0 &&
+    /(不合规|不通过|命中问题|违规|需整改|non_compliant)/i.test(
+      `${String(structuredPayload?.status || '')} ${findingsFromPayload}`,
+    )
+  const finalIsCompliant =
+    complianceFromPayload ??
+    complianceFromStatus ??
+    (inferredNonCompliantByPayload ? false : Boolean(result.is_compliant))
+
+  const usePayloadAsPrimary =
+    !!structuredPayload &&
+    (!!reasonsFromPayload.length || !!findingsFromPayload || !!suggestionFromPayload)
+
+  const fallbackFindings =
+    (!usePayloadAsPrimary ? findings : findingsFromPayload || findings) ||
+    (mergedIssues.length > 0
+      ? `命中${mergedIssues.length}个问题：${mergedIssues
+          .map((item) => item.description || '问题描述缺失')
+          .slice(0, 3)
+          .join('；')}`
+      : finalIsCompliant
+        ? '未发现质控问题'
+        : '命中问题，但模型未返回详细结论')
+
+  const fallbackEvidence =
+    (!looksJsonLike(evidence) ? evidence : '') ||
+    evidenceFromPayload ||
+    mergedIssues.map((item) => item.evidence || '').find((item) => !!item) ||
+    (!finalIsCompliant ? '未返回可引用证据' : '')
+
+  const fallbackSuggestion =
+    (!looksJsonLike(suggestion) ? suggestion : '') ||
+    suggestionFromPayload ||
+    (finalIsCompliant ? '' : '未返回整改建议，请在 Prompt 中强化 suggestion 输出要求后重试')
+
+  const finalStatus = finalIsCompliant
+    ? result.status === 'not_applicable'
+      ? 'not_applicable'
+      : 'compliant'
+    : 'non_compliant'
+
+  return {
+    ...result,
+    status: finalStatus,
+    is_compliant: finalIsCompliant,
+    issues: mergedIssues,
+    findings: fallbackFindings,
+    evidence: fallbackEvidence,
+    suggestion: fallbackSuggestion,
+    confidence: normalizedConfidence,
+    llm_raw_output: rawOutput,
+  }
+}
+
+const ISSUE_DISPLAY_LIMIT = 6
+
+function getDisplayIssues(record: RecordTestResultItem | null) {
+  if (!record?.issues?.length) return []
+  return record.issues.slice(0, ISSUE_DISPLAY_LIMIT)
 }
 function syncDraftSummary(summary: Record<string, unknown>) {
   if (!selectedDraft.value) return
@@ -2174,17 +2940,119 @@ function syncDraftSummary(summary: Record<string, unknown>) {
     item.id === selectedDraft.value?.id ? { ...item, last_test_summary: summary } : item,
   )
 }
-async function loadRecordFilters() {
-  const response = await getWorkspaceRecordFilters({
-    scope: recordFilters.scope,
-    department: recordFilters.department,
+function toDraftSummaryRecord(
+  summary: CustomRuleBatchJobSummary | Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!summary || typeof summary !== 'object') return null
+  return summary as Record<string, unknown>
+}
+function syncDraftSummariesFromRuleResults(ruleResults: CustomRuleBatchJobRuleResult[] = []) {
+  if (!Array.isArray(ruleResults) || ruleResults.length === 0) return
+  const summaryByDraft = new Map<string, Record<string, unknown>>()
+  ruleResults.forEach((item) => {
+    const draftId = String(item?.draft_id || '').trim()
+    const summary = toDraftSummaryRecord(item?.summary)
+    if (!draftId || !summary) return
+    summaryByDraft.set(draftId, summary)
   })
-  if (!response.success || !response.data) throw new Error(response.message || '获取筛选项失败')
-  departmentOptions.value = (response.data.departments || []).map((item) => ({
-    label: item,
-    value: item,
-  }))
-  doctorOptions.value = (response.data.doctors || []).map((item) => ({ label: item, value: item }))
+  if (!summaryByDraft.size) return
+  drafts.value = drafts.value.map((item) =>
+    summaryByDraft.has(item.id)
+      ? { ...item, last_test_summary: summaryByDraft.get(item.id) as Record<string, unknown> }
+      : item,
+  )
+}
+function resolveSelectedRunDraftsForExecution(
+  options: { requireScopeMatch?: boolean; scopeOverride?: WorkspaceScope } = {},
+) {
+  if (!selectedRunDrafts.value.length) {
+    message.warning('请先勾选至少一条规则')
+    return null
+  }
+  const invalidPrompt = selectedRunDrafts.value.find(
+    (item) => !String(item.prompt_template || '').trim(),
+  )
+  if (invalidPrompt) {
+    message.warning(`规则 ${invalidPrompt.rule_code || invalidPrompt.name} 尚未生成 Prompt`)
+    return null
+  }
+  const sceneSet = new Set(selectedRunDrafts.value.map((item) => item.scene))
+  if (sceneSet.size > 1) {
+    message.warning('多选规则必须保持同一病历范围（运行/终末）')
+    return null
+  }
+  const effectiveScope = options.scopeOverride || recordFilters.scope
+  if (
+    options.requireScopeMatch &&
+    effectiveScope !== 'all' &&
+    selectedRunScene.value &&
+    selectedRunScene.value !== effectiveScope
+  ) {
+    message.warning(
+      `所选规则范围为 ${selectedRunScene.value}，与当前执行范围 ${effectiveScope} 不一致`,
+    )
+    return null
+  }
+  return selectedRunDrafts.value
+}
+function cloneDateRange(value: DateRangeValue): DateRangeValue {
+  if (!value) return null
+  return [value[0], value[1]]
+}
+function resetBatchLaunchFiltersFromCurrent() {
+  batchLaunchFilters.scope = recordFilters.scope
+  batchLaunchFilters.department = recordFilters.department
+  batchLaunchFilters.doctor = recordFilters.doctor
+  batchLaunchFilters.date_field = recordFilters.date_field
+  batchLaunchFilters.dateRange = cloneDateRange(recordFilters.dateRange)
+  batchLaunchFilters.keyword = recordFilters.keyword || ''
+}
+async function loadBatchLaunchFilterOptions(options: { silent?: boolean } = {}) {
+  batchLaunchFiltersLoading.value = true
+  try {
+    const response = await getWorkspaceRecordFilters({
+      scope: batchLaunchFilters.scope,
+      department: batchLaunchFilters.department,
+    })
+    if (!response.success || !response.data) throw new Error(response.message || '获取筛选项失败')
+    batchLaunchDepartmentOptions.value = (response.data.departments || []).map((item) => ({
+      label: item,
+      value: item,
+    }))
+    batchLaunchDoctorOptions.value = (response.data.doctors || []).map((item) => ({
+      label: item,
+      value: item,
+    }))
+  } catch (error: any) {
+    if (!options.silent) {
+      message.error(error?.message || '获取筛选项失败')
+    }
+    throw error
+  } finally {
+    batchLaunchFiltersLoading.value = false
+  }
+}
+async function loadRecordFilters(options: { silent?: boolean } = {}) {
+  try {
+    const response = await getWorkspaceRecordFilters({
+      scope: recordFilters.scope,
+      department: recordFilters.department,
+    })
+    if (!response.success || !response.data) throw new Error(response.message || '获取筛选项失败')
+    departmentOptions.value = (response.data.departments || []).map((item) => ({
+      label: item,
+      value: item,
+    }))
+    doctorOptions.value = (response.data.doctors || []).map((item) => ({
+      label: item,
+      value: item,
+    }))
+  } catch (error: any) {
+    if (!options.silent) {
+      message.error(error?.message || '获取筛选项失败')
+    }
+    throw error
+  }
 }
 async function loadRecords() {
   recordLoading.value = true
@@ -2222,6 +3090,7 @@ async function loadBatchJobs() {
       mine_only: batchJobQuery.mineOnly,
       status: batchJobQuery.status,
       scope: batchJobQuery.scope,
+      execution_mode: batchJobQuery.execution_mode,
       q: batchJobQuery.keyword || undefined,
       created_start_date: batchJobQuery.dateRange?.[0]?.format('YYYY-MM-DD'),
       created_end_date: batchJobQuery.dateRange?.[1]?.format('YYYY-MM-DD'),
@@ -2269,23 +3138,21 @@ function stopBatchJobPolling() {
 function startBatchJobPolling(jobId: string) {
   stopBatchJobPolling()
   batchJobPollTimer = window.setInterval(async () => {
-    const current = await fetchBatchJobDetail(jobId, false)
+    const current = await fetchBatchJobDetail(jobId)
     await loadBatchJobs()
     if (!current || !['queued', 'running'].includes(current.status)) {
       stopBatchJobPolling()
     }
   }, 3000)
 }
-async function fetchBatchJobDetail(jobId: string, openDrawer = false) {
+async function fetchBatchJobDetail(jobId: string) {
   batchJobDetailLoading.value = true
   try {
     const response = await getWorkspaceBatchJob(jobId)
     if (!response.success || !response.data) throw new Error(response.message || '获取任务详情失败')
     batchJobDetail.value = response.data
-    if (openDrawer) {
-      resultDrawerMode.value = 'batch'
-      resultDrawerOpen.value = true
-    }
+    resultDrawerMode.value = 'batch'
+    resultDrawerRecord.value = null
     if (['queued', 'running'].includes(response.data.status)) startBatchJobPolling(response.data.id)
     else stopBatchJobPolling()
     return response.data
@@ -2297,7 +3164,7 @@ async function fetchBatchJobDetail(jobId: string, openDrawer = false) {
   }
 }
 function openBatchJobDrawer(job: CustomRuleBatchJob) {
-  fetchBatchJobDetail(job.id, true)
+  fetchBatchJobDetail(job.id)
 }
 function openLatestBatchJobDrawer() {
   if (batchJobDetail.value?.id) {
@@ -2306,6 +3173,42 @@ function openLatestBatchJobDrawer() {
   }
   if (!batchJobs.value.length) return message.info('当前暂无批量任务')
   openBatchJobDrawer(batchJobs.value[0])
+}
+async function executeCancelBatchJob(jobId: string) {
+  if (!jobId || cancellingBatchJobId.value) return
+  cancellingBatchJobId.value = jobId
+  try {
+    const response = await cancelWorkspaceBatchJob(jobId)
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '停止批量任务失败')
+    }
+    if (batchJobDetail.value?.id === response.data.id) {
+      batchJobDetail.value = response.data
+    }
+    await loadBatchJobs()
+    await fetchBatchJobDetail(jobId)
+    stopBatchJobPolling()
+    message.success('批量任务已停止')
+  } catch (error: any) {
+    message.error(error?.message || '停止批量任务失败')
+  } finally {
+    cancellingBatchJobId.value = ''
+  }
+}
+function cancelActiveBatchJob() {
+  const job = activeBatchJob.value
+  if (!job || !['queued', 'running'].includes(job.status)) {
+    message.info('当前任务无需停止')
+    return
+  }
+  Modal.confirm({
+    title: '确认停止当前批量任务？',
+    content: '停止后将不再继续处理剩余病历，已完成部分会保留。',
+    okText: '停止任务',
+    cancelText: '取消',
+    okButtonProps: { danger: true },
+    onOk: () => executeCancelBatchJob(job.id),
+  })
 }
 async function changeScope(scope: WorkspaceScope) {
   if (recordFilters.scope === scope) return
@@ -2319,14 +3222,22 @@ async function changeScope(scope: WorkspaceScope) {
 }
 async function searchRecords() {
   recordPagination.current = 1
-  await Promise.all([loadRecordFilters(), loadRecords()])
+  await loadRecords()
+  void loadRecordFilters({ silent: true }).catch(() => {
+    message.warning('筛选项加载较慢，请稍后重试')
+  })
 }
 async function refreshRecords() {
-  await Promise.all([loadRecordFilters(), loadRecords()])
+  await loadRecords()
+  void loadRecordFilters({ silent: true }).catch(() => {
+    message.warning('筛选项加载较慢，请稍后重试')
+  })
 }
 async function handleDepartmentChange() {
   recordFilters.doctor = undefined
-  await loadRecordFilters()
+  await loadRecordFilters({ silent: true }).catch(() => {
+    message.warning('医生筛选项加载失败，请重试')
+  })
 }
 function handleRecordTableChange(pagination: { current?: number; pageSize?: number }) {
   recordPagination.current = pagination.current || 1
@@ -2360,8 +3271,8 @@ async function runSingleTest(record: CustomRuleWorkspaceRecord) {
   })
 }
 async function runBatchTest() {
-  if (!selectedDraft.value) return message.warning('请先选择规则')
-  if (!hasPromptTemplate.value) return message.warning('请先为当前规则生成或填写 Prompt')
+  const runDrafts = resolveSelectedRunDraftsForExecution()
+  if (!runDrafts) return
   const selectedRecords = selectedTestRecords()
   if (selectedRecords.length === 0) return message.warning('请先选择病历')
   if (selectedRecords.length === 1) {
@@ -2370,8 +3281,10 @@ async function runBatchTest() {
   }
   testingBatch.value = true
   try {
+    const draftIds = runDrafts.map((item) => item.id)
     const response = await runWorkspaceBatchTest({
-      draft_id: selectedDraft.value.id,
+      draft_id: draftIds[0],
+      draft_ids: draftIds,
       records: selectedRecords,
       temperature: advancedParams.temperature,
       top_p: advancedParams.top_p,
@@ -2380,14 +3293,16 @@ async function runBatchTest() {
     if (!response.success || !response.data) throw new Error(response.message || '批量测试失败')
     batchResult.value = response.data
     singleResult.value = null
-    syncDraftSummary(response.data.summary || {})
+    syncDraftSummariesFromRuleResults(response.data.rule_results || [])
+    if (!response.data.rule_results?.length) {
+      syncDraftSummary(response.data.summary || {})
+    }
     const nextMap = { ...recordResults.value }
     response.data.items.forEach((item) => {
       nextMap[item.record_id] = normalizeRecordResult(item)
     })
     recordResults.value = nextMap
     resultDrawerMode.value = 'batch'
-    resultDrawerOpen.value = true
     message.success('批量测试完成')
   } catch (error: any) {
     message.error(error?.message || '批量测试失败')
@@ -2395,21 +3310,27 @@ async function runBatchTest() {
     testingBatch.value = false
   }
 }
-async function createBatchJobInternal() {
-  if (!selectedDraft.value) return
+async function createBatchJobInternal(filters: BatchLaunchFilters): Promise<boolean> {
+  const runDrafts = resolveSelectedRunDraftsForExecution({
+    requireScopeMatch: true,
+    scopeOverride: filters.scope,
+  })
+  if (!runDrafts) return false
   testingBatch.value = true
   try {
     const recordIds =
       selectedRecordKeys.value.length > 0 ? [...selectedRecordKeys.value] : undefined
+    const draftIds = runDrafts.map((item) => item.id)
     const response = await createWorkspaceBatchJob({
-      draft_id: selectedDraft.value.id,
-      scope: recordFilters.scope,
-      department: recordFilters.department,
-      doctor: recordFilters.doctor,
-      date_field: recordFilters.date_field,
-      start_date: recordFilters.dateRange?.[0]?.format('YYYY-MM-DD'),
-      end_date: recordFilters.dateRange?.[1]?.format('YYYY-MM-DD'),
-      keyword: recordFilters.keyword || undefined,
+      draft_id: draftIds[0],
+      draft_ids: draftIds,
+      scope: filters.scope,
+      department: filters.department,
+      doctor: filters.doctor,
+      date_field: filters.date_field,
+      start_date: filters.dateRange?.[0]?.format('YYYY-MM-DD'),
+      end_date: filters.dateRange?.[1]?.format('YYYY-MM-DD'),
+      keyword: filters.keyword || undefined,
       record_ids: recordIds,
       temperature: advancedParams.temperature,
       top_p: advancedParams.top_p,
@@ -2420,34 +3341,47 @@ async function createBatchJobInternal() {
     singleResult.value = null
     batchJobDetail.value = response.data
     resultDrawerMode.value = 'batch'
-    resultDrawerOpen.value = true
     await loadBatchJobs()
     startBatchJobPolling(response.data.id)
     message.success(
       recordIds?.length
-        ? `批量任务已创建，将处理 ${recordIds.length} 条${currentScopeLabel.value}`
-        : `批量任务已创建，将按当前筛选处理${currentScopeLabel.value}`,
+        ? `批量任务已创建，将处理 ${recordIds.length} 条${scopeLabelMap[filters.scope]}`
+        : `批量任务已创建，将按筛选条件处理${scopeLabelMap[filters.scope]}`,
     )
+    return true
   } catch (error: any) {
     message.error(error?.message || '创建批量任务失败')
+    return false
   } finally {
     testingBatch.value = false
   }
 }
+async function handleBatchLaunchScopeChange(scope: WorkspaceScope) {
+  batchLaunchFilters.scope = scope
+  batchLaunchFilters.department = undefined
+  batchLaunchFilters.doctor = undefined
+  batchLaunchFilters.date_field = scope === 'running' ? 'admission' : 'discharge'
+  await loadBatchLaunchFilterOptions({ silent: true }).catch(() => {
+    message.warning('批量筛选项加载较慢，请稍后重试')
+  })
+}
+async function handleBatchLaunchDepartmentChange() {
+  batchLaunchFilters.doctor = undefined
+  await loadBatchLaunchFilterOptions({ silent: true }).catch(() => {
+    message.warning('批量医生筛选项加载失败，请重试')
+  })
+}
+async function confirmBatchLaunch() {
+  const ok = await createBatchJobInternal(batchLaunchFilters)
+  if (ok) batchLaunchModalOpen.value = false
+}
 async function triggerBatchQcJob() {
-  if (!selectedDraft.value) return message.warning('请先选择规则')
-  if (!hasPromptTemplate.value) return message.warning('请先为当前规则生成或填写 Prompt')
-  if (recordFilters.scope === 'all' && selectedRecordKeys.value.length === 0) {
-    Modal.confirm({
-      title: '确认对全量病历发起批量质控？',
-      content: '当前未手动选择病历，将按当前筛选条件对全量病历创建异步任务。建议确认范围后再执行。',
-      okText: '确认发起',
-      cancelText: '取消',
-      onOk: () => createBatchJobInternal(),
-    })
-    return
-  }
-  await createBatchJobInternal()
+  if (!resolveSelectedRunDraftsForExecution()) return
+  resetBatchLaunchFiltersFromCurrent()
+  batchLaunchModalOpen.value = true
+  await loadBatchLaunchFilterOptions({ silent: true }).catch(() => {
+    message.warning('批量筛选项加载较慢，请稍后重试')
+  })
 }
 async function exportBatchJobReport(format: 'xlsx' | 'csv' = 'xlsx') {
   if (!activeBatchJob.value) return message.info('请先选择一个批量任务')
@@ -2496,28 +3430,30 @@ function openSingleResultDrawer(record: CustomRuleWorkspaceRecord) {
   if (!result) return message.info('当前病历暂无测试结果')
   resultDrawerMode.value = 'single'
   resultDrawerRecord.value = result
-  resultDrawerOpen.value = true
 }
 function openBatchItemEvidence(item: RecordTestResultItem) {
-  evidenceDrawerRecord.value = item
-  evidenceDrawerOpen.value = true
+  resultDrawerMode.value = 'single'
+  resultDrawerRecord.value = item
 }
 function openBatchResultDrawer() {
   if (!batchResult.value) return message.info('当前暂无批量测试结果')
   resultDrawerMode.value = 'batch'
-  resultDrawerOpen.value = true
 }
 function closeResultDrawer() {
-  resultDrawerOpen.value = false
+  resultDrawerMode.value = 'empty'
   resultDrawerRecord.value = null
+  batchResult.value = null
+  singleResult.value = null
 }
 function closeEvidenceDrawer() {
-  evidenceDrawerOpen.value = false
-  evidenceDrawerRecord.value = null
+  resultDrawerRecord.value = null
 }
 
 watch(selectedDraftId, async (next, prev) => {
   if (next === prev) return
+  if (next && !selectedDraftIds.value.includes(next)) {
+    selectedDraftIds.value = Array.from(new Set([next, ...selectedDraftIds.value]))
+  }
   batchJobPagination.current = 1
   batchJobDetail.value = null
   stopBatchJobPolling()
@@ -2525,7 +3461,7 @@ watch(selectedDraftId, async (next, prev) => {
 })
 
 onMounted(async () => {
-  await Promise.all([loadDrafts(), searchRecords()])
+  await Promise.allSettled([loadDrafts(), searchRecords()])
   await loadBatchJobs()
 })
 
@@ -2536,22 +3472,25 @@ onUnmounted(() => {
 
 <style scoped>
 .custom-workspace-page {
-  --cw-bg-page: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 48%, #edf2f7 100%);
-  --cw-text-primary: #0f172a;
-  --cw-text-secondary: #475569;
-  --cw-text-muted: #64748b;
-  --cw-border-soft: rgba(226, 232, 240, 0.9);
-  --cw-brand-600: #1e5ae0;
-  --cw-brand-500: #2f6fed;
-  --cw-brand-100: rgba(239, 246, 255, 0.96);
-  --cw-brand-border: rgba(191, 219, 254, 0.92);
-  --cw-panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.96), 0 14px 34px rgba(148, 163, 184, 0.12);
-  background: var(--cw-bg-page);
+  --cw-color-bg: #f9fafb;
+  --cw-color-surface: #ffffff;
+  --cw-color-border: #e5e7eb;
+  --cw-color-input-border: #d1d5db;
+  --cw-color-title: #111827;
+  --cw-color-body: #374151;
+  --cw-color-muted: #6b7280;
+  --cw-color-caption: #9ca3af;
+  --cw-color-brand: #2563eb;
+  --cw-color-brand-hover: #1d4ed8;
+  --cw-shadow-surface: 0 1px 3px rgba(15, 23, 42, 0.08);
+  background: var(--cw-color-bg);
+  color: var(--cw-color-body);
+  font-size: 12px;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -2559,73 +3498,86 @@ onUnmounted(() => {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(148, 163, 184, 0.42);
+  background-color: rgba(107, 114, 128, 0.32);
   border-radius: 999px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(100, 116, 139, 0.6);
+  background-color: rgba(75, 85, 99, 0.52);
 }
 
 .cw-analysis-overview {
-  border-radius: 24px;
-  border: 1px solid var(--cw-brand-border);
-  background: linear-gradient(135deg, rgba(239, 246, 255, 0.95), rgba(255, 255, 255, 0.98));
-  box-shadow: var(--cw-panel-shadow);
+  border-radius: 6px !important;
+  border: 1px solid var(--cw-color-border) !important;
+  background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
+  box-shadow: var(--cw-shadow-surface);
 }
 
 .cw-analysis-overview__eyebrow {
-  color: var(--cw-text-muted);
+  color: var(--cw-color-caption);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .cw-analysis-overview__title {
-  color: var(--cw-text-primary);
-  letter-spacing: -0.02em;
+  color: var(--cw-color-title);
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0;
 }
 
 .cw-analysis-overview__subtitle {
-  color: var(--cw-text-secondary);
+  color: var(--cw-color-muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .cw-kpi-card {
-  border-color: var(--cw-border-soft);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.98),
-    0 8px 20px rgba(148, 163, 184, 0.1);
+  border-radius: 6px !important;
+  border-color: var(--cw-color-border) !important;
+  background: var(--cw-color-surface) !important;
+  box-shadow: var(--cw-shadow-surface);
 }
 
 .cw-primary-action {
-  border-radius: 999px !important;
-  background: linear-gradient(180deg, var(--cw-brand-500), var(--cw-brand-600)) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    0 14px 26px rgba(47, 111, 237, 0.3) !important;
+  height: 30px !important;
+  padding: 4px 14px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  border-radius: 4px !important;
+  border: 1px solid var(--cw-color-brand) !important;
+  background: var(--cw-color-brand) !important;
+  box-shadow: none !important;
+}
+
+.cw-primary-action:hover {
+  background: var(--cw-color-brand-hover) !important;
+  border-color: var(--cw-color-brand-hover) !important;
 }
 
 .cw-panel {
-  border-radius: 24px;
-  border: 1px solid var(--cw-border-soft);
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: var(--cw-panel-shadow);
+  border-radius: 6px !important;
+  border: 1px solid var(--cw-color-border) !important;
+  background: var(--cw-color-surface) !important;
+  box-shadow: var(--cw-shadow-surface);
 }
 
 .workstation-surface-enter {
-  animation: workstationSurfaceEnter 420ms ease-out both;
+  animation: workstationSurfaceEnter 260ms ease-out both;
 }
 
 .workstation-surface-enter--delay-1 {
-  animation-delay: 90ms;
+  animation-delay: 50ms;
 }
 
 .workstation-surface-enter--delay-2 {
-  animation-delay: 160ms;
+  animation-delay: 90ms;
 }
 
 @keyframes workstationSurfaceEnter {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(4px);
   }
 
   to {
@@ -2637,20 +3589,87 @@ onUnmounted(() => {
 :deep(.draft-row-active > td) {
   background: #eef5ff !important;
 }
-:deep(.ant-table-thead > tr > th) {
-  background: #f8fafc !important;
-  color: #64748b !important;
+
+:deep(.custom-workspace-page .rounded-2xl),
+:deep(.custom-workspace-page .rounded-xl),
+:deep(.custom-workspace-page .rounded-lg) {
+  border-radius: 6px !important;
+}
+
+:deep(.custom-workspace-page .ant-btn) {
+  height: 30px;
+  padding: 4px 14px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+:deep(.custom-workspace-page .ant-btn-sm) {
+  height: 22px;
+  padding: 0 6px;
   font-size: 12px;
+  font-weight: 400;
+  border-radius: 2px;
+}
+
+:deep(.custom-workspace-page .ant-btn-lg) {
+  height: 30px;
+  padding: 4px 14px;
+  font-size: 13px;
+}
+
+:deep(.custom-workspace-page .ant-input),
+:deep(.custom-workspace-page .ant-select-selector),
+:deep(.custom-workspace-page .ant-picker) {
+  border-color: var(--cw-color-input-border) !important;
+  border-radius: 4px !important;
+  font-size: 12px !important;
+}
+
+:deep(.cw-panel .ant-input),
+:deep(.cw-panel .ant-picker) {
+  min-height: 28px !important;
+  height: 28px !important;
+  padding: 3px 8px !important;
+}
+
+:deep(.cw-panel .ant-select-single .ant-select-selector) {
+  min-height: 28px !important;
+  height: 28px !important;
+  padding: 0 8px !important;
+}
+
+:deep(.cw-panel .ant-select-single .ant-select-selection-item),
+:deep(.cw-panel .ant-select-single .ant-select-selection-placeholder) {
+  line-height: 26px !important;
+  font-size: 12px !important;
+}
+
+:deep(.cw-panel .ant-picker-input > input) {
+  font-size: 12px !important;
+}
+
+:deep(.ant-table-thead > tr > th) {
+  height: 40px;
+  padding: 8px 6px !important;
+  background: #f9fafb !important;
+  color: #374151 !important;
+  font-size: 11px;
   font-weight: 600 !important;
+  white-space: nowrap;
 }
 :deep(.ant-table-tbody > tr > td) {
+  height: 36px;
+  padding: 4px 8px !important;
   border-bottom: 1px solid #f1f5f9 !important;
+  color: #374151 !important;
+  font-size: 12px;
 }
 :deep(.ant-table-tbody > tr:hover > td) {
-  background: #f8fafc !important;
+  background: #eff6ff !important;
 }
 :deep(.record-bench-table .ant-table-tbody > tr:hover > td) {
-  background: #f1f5f9 !important;
+  background: #eff6ff !important;
 }
 :deep(.record-bench-table .ant-table-tbody > tr > td) {
   vertical-align: middle;
@@ -2669,53 +3688,84 @@ onUnmounted(() => {
   pointer-events: auto;
 }
 :deep(.record-action-btn) {
-  border-radius: 8px !important;
-  border: 1px solid #dbe2ea !important;
+  height: 22px !important;
+  padding: 0 6px !important;
+  border-radius: 2px !important;
+  border: 1px solid #d1d5db !important;
   background: #ffffff !important;
-  color: #475569 !important;
+  color: #2563eb !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
   box-shadow: none !important;
 }
 :deep(.record-action-btn:hover) {
-  border-color: #93c5fd !important;
+  border-color: #2563eb !important;
   background: #eff6ff !important;
-  color: #2563eb !important;
+  color: #1d4ed8 !important;
 }
 :deep(.drawer-meta-control-input.ant-input) {
-  height: 40px !important;
+  height: 30px !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
-  font-size: 16px !important;
-  line-height: 40px !important;
+  font-size: 13px !important;
+  line-height: 30px !important;
 }
 :deep(.drawer-meta-control-select.ant-select .ant-select-selector) {
-  height: 40px !important;
+  height: 30px !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
   display: flex !important;
   align-items: center !important;
 }
 :deep(.drawer-meta-control-select.ant-select .ant-select-selection-item) {
-  font-size: 16px !important;
-  line-height: 40px !important;
+  font-size: 13px !important;
+  line-height: 30px !important;
 }
 :deep(.drawer-meta-control-select.ant-select .ant-select-selection-placeholder) {
-  font-size: 16px !important;
-  line-height: 40px !important;
+  font-size: 13px !important;
+  line-height: 30px !important;
+}
+
+:deep(.custom-workspace-page .ant-form-item-label > label) {
+  color: var(--cw-color-body) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+}
+
+:deep(.custom-workspace-page .ant-tag) {
+  border-radius: 2px !important;
+  font-size: 11px !important;
+  line-height: 16px !important;
+  padding: 0 5px !important;
+}
+
+:deep(.custom-workspace-page .ant-empty-description) {
+  color: var(--cw-color-muted) !important;
+  font-size: 12px !important;
+}
+
+:deep(.custom-workspace-page .ant-pagination-item),
+:deep(.custom-workspace-page .ant-pagination-prev),
+:deep(.custom-workspace-page .ant-pagination-next) {
+  min-width: 24px !important;
+  height: 24px !important;
+  line-height: 22px !important;
+  font-size: 12px !important;
 }
 
 @media (max-width: 1279px) {
   .cw-analysis-overview {
-    padding: 16px !important;
+    padding: 12px !important;
   }
 }
 
 @media (max-width: 1023px) {
   .custom-workspace-page {
-    padding-top: 12px;
+    padding-top: 10px;
   }
 
   .cw-analysis-overview__title {
-    font-size: 22px !important;
+    font-size: 15px !important;
   }
 }
 </style>
