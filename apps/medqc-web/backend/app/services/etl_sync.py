@@ -28,6 +28,14 @@ from ..database.connection import engine
 
 logger = logging.getLogger(__name__)
 
+# 同步字段别名（本地列 <- 源库列）
+_TABLE_COLUMN_ALIASES: Dict[str, Dict[str, List[str]]] = {
+    "mr_surgery": {
+        "surgery_begin_datetime": ["surgery_begin_time"],
+        "surgery_end_datetime": ["surgery_end_time"],
+    }
+}
+
 
 # ==================== 同步状态管理 ====================
 
@@ -483,11 +491,26 @@ def upsert_to_local(table_name: str, records: List[Dict], key_fields: List[str])
         ))
         existing_columns = {row[0] for row in result}
 
+        alias_map = _TABLE_COLUMN_ALIASES.get(str(table_name or "").strip().lower(), {})
+
         inserted = 0
         for record in records:
+            normalized_record = {str(k).lower(): v for k, v in record.items()}
+            if alias_map:
+                for target_col, source_cols in alias_map.items():
+                    if target_col not in existing_columns:
+                        continue
+                    if normalized_record.get(target_col) not in (None, ""):
+                        continue
+                    for source_col in source_cols:
+                        value = normalized_record.get(source_col)
+                        if value in (None, ""):
+                            continue
+                        normalized_record[target_col] = value
+                        break
             # 只保留表中存在的字段（远端可能有额外字段）
             filtered = {}
-            for k, v in record.items():
+            for k, v in normalized_record.items():
                 col_name = k.lower()  # 远端列名统一转小写
                 if col_name in existing_columns:
                     filtered[col_name] = v
