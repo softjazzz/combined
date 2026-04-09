@@ -176,9 +176,7 @@
                     class="cw-draft-action-btn cw-draft-action-btn--edit"
                     @click.stop="openEditDrawer(record as CustomRuleDraft)"
                   >
-                    <template #icon>
-                      <EditOutlined />
-                    </template>
+                    编辑
                   </a-button>
                   <a-button
                     type="text"
@@ -186,9 +184,7 @@
                     class="cw-draft-action-btn cw-draft-action-btn--copy"
                     @click.stop="copyDraft(record as CustomRuleDraft)"
                   >
-                    <template #icon>
-                      <CopyOutlined />
-                    </template>
+                    复制
                   </a-button>
                   <a-popconfirm
                     title="确认删除该规则草稿？"
@@ -201,9 +197,7 @@
                       class="cw-draft-action-btn cw-draft-action-btn--delete"
                       @click.stop
                     >
-                      <template #icon>
-                        <DeleteOutlined />
-                      </template>
+                      删除
                     </a-button>
                   </a-popconfirm>
                   <a-button
@@ -1794,8 +1788,6 @@ import { Empty, Modal, message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
 import {
   CloseOutlined,
-  CopyOutlined,
-  DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
   EyeOutlined,
@@ -3853,23 +3845,26 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 4px;
 }
 
 :deep(.cw-draft-action-btn.ant-btn) {
-  width: 24px !important;
   height: 24px !important;
-  min-width: 24px !important;
-  padding: 0 !important;
+  min-width: 44px !important;
+  padding: 0 8px !important;
   border-radius: 6px !important;
   border: 1px solid #dbe2ea !important;
   background: #ffffff !important;
   color: #334155 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 22px !important;
   transition: all 0.2s ease;
 }
 
-:deep(.cw-draft-action-btn.ant-btn .anticon) {
-  font-size: 14px !important;
+:deep(.cw-draft-action-btn--edit.ant-btn),
+:deep(.cw-draft-action-btn--copy.ant-btn) {
+  border-color: #dbe2ea !important;
 }
 
 :deep(.cw-draft-action-btn.ant-btn:hover) {
@@ -3879,7 +3874,9 @@ onUnmounted(() => {
 }
 
 :deep(.cw-draft-action-btn--delete.ant-btn) {
+  min-width: 44px !important;
   border-color: #fecaca !important;
+  background: #fff5f5 !important;
   color: #ef4444 !important;
 }
 
