@@ -12,6 +12,7 @@ from ..services.sichuan_qc_service import SichuanQCService
 from ..services.unified_rule_engine import UnifiedRuleEngine
 from ..services.segmented_qc_pipeline import SegmentedQCPipeline
 from ..services.llm_config_loader import LLMConfigLoader
+from ..services.qc_input_adapters import evaluate_running_final_bundle
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..core.security import require_admin
@@ -50,10 +51,11 @@ async def get_qc_service() -> SichuanQCService:
 
 class SichuanEvaluateRequest(BaseModel):
     document_id: str
-    document_content: str
+    document_content: Optional[str] = None
     document_type: Optional[str] = "病程记录"
     document_types: Optional[List[str]] = None
     rule_ids: Optional[List[str]] = None
+    bundle_input: Optional[Dict[str, Any]] = None
     use_multi_document_mode: Optional[bool] = False
     patient_info: Optional[Dict[str, str]] = None
     documents_by_type: Optional[Dict[str, Any]] = None
@@ -85,6 +87,28 @@ class SichuanBatchDocument(BaseModel):
 
 class SichuanBatchRequest(BaseModel):
     documents: List[SichuanBatchDocument]
+
+
+class SichuanBundleEvaluateRequest(BaseModel):
+    scene: Optional[str] = None
+    institute_id: Optional[str] = None
+    patient_id: Optional[str] = None
+    visit_id: Optional[str] = None
+    bundle_input: Optional[Dict[str, Any]] = None
+    rule_ids: Optional[List[str]] = None
+    model: Optional[str] = None
+    schema: Optional[str] = "public"
+
+
+class SichuanRuleVisitEvaluateRequest(BaseModel):
+    rule_id: str
+    institute_id: str
+    patient_id: str
+    visit_id: str
+    source_schema: Optional[str] = None
+    bundle_schema: Optional[str] = "public"
+    force_refresh_bundle: Optional[bool] = False
+    model: Optional[str] = None
 
 
 class SaveQCResultRequest(BaseModel):
@@ -154,6 +178,20 @@ async def evaluate(
         # Allow runtime override of model (for A/B testing different LLMs)
         if req.model:
             qc_service.client.model = req.model
+        # running/final bundle 直入旧规则链入口（不依赖独立 runtime）
+        if isinstance(req.bundle_input, dict) and req.bundle_input:
+            bundle_result = await evaluate_running_final_bundle(
+                qc_service=qc_service,
+                bundle_input=req.bundle_input,
+                rule_ids=req.rule_ids,
+            )
+            if req.persist:
+                _persist_evaluation_to_db(req.document_id, bundle_result)
+            return bundle_result
+
+        if not str(req.document_content or "").strip():
+            raise HTTPException(status_code=422, detail="document_content 不能为空（bundle_input 模式除外）")
+
         if req.use_multi_document_mode:
             # Prefer frontend-provided grouped rules; fallback to fetching from Supabase
             rules_by_document_type = req.rules_by_document_type
@@ -303,8 +341,77 @@ async def evaluate(
             if req.persist:
                 _persist_evaluation_to_db(req.document_id, response)
             return response
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"四川省质控评估失败: {e}")
+
+
+@router.post("/evaluate-bundle")
+async def evaluate_bundle(
+    request: Request,
+    req: SichuanBundleEvaluateRequest,
+    qc_service: SichuanQCService = Depends(get_qc_service)
+):
+    try:
+        if req.model:
+            qc_service.client.model = req.model
+        result = await evaluate_running_final_bundle(
+            qc_service=qc_service,
+            scene=req.scene,
+            institute_id=req.institute_id,
+            patient_id=req.patient_id,
+            visit_id=req.visit_id,
+            bundle_input=req.bundle_input,
+            rule_ids=list(req.rule_ids or []),
+            schema=str(req.schema or "public").strip() or "public",
+        )
+        return success_response(
+            data=result,
+            message="bundle 质控评估完成",
+            trace_id=get_trace_id(request),
+        )
+    except HTTPException:
+        raise
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"bundle 质控评估失败: {exc}")
+
+
+@router.post("/evaluate-rule-for-visit")
+async def evaluate_rule_for_visit(
+    request: Request,
+    req: SichuanRuleVisitEvaluateRequest,
+    qc_service: SichuanQCService = Depends(get_qc_service),
+):
+    try:
+        if req.model:
+            qc_service.client.model = req.model
+        result = await qc_service.evaluate_rule_for_visit(
+            rule_id=req.rule_id,
+            institute_id=req.institute_id,
+            patient_id=req.patient_id,
+            visit_id=req.visit_id,
+            source_schema=req.source_schema,
+            bundle_schema=str(req.bundle_schema or "public").strip() or "public",
+            force_refresh_bundle=bool(req.force_refresh_bundle),
+        )
+        return success_response(
+            data=result,
+            message="规则级 visit 质控评估完成",
+            trace_id=get_trace_id(request),
+        )
+    except HTTPException:
+        raise
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"规则级 visit 质控失败: {exc}")
 
 
 @router.post("/evaluate/batch")
@@ -708,7 +815,10 @@ async def rules(
     if records is not None and len(records) > 0:
         def normalize(rec: dict[str, Any]) -> dict[str, Any]:
             # 统一字段到前端所需格式
-            rule_id = rec.get("id") or rec.get("rule_code") or rec.get("rule_id") or ""
+            # 业务主键优先使用规则库中的可读规则编号，避免回传数据库内部 id 影响后续接口
+            # 优先级：rule_id(如 SC-001) > rule_code(如 SC-001/3.1.1) > id(内部主键兜底)
+            rule_id = rec.get("rule_id") or rec.get("rule_code") or rec.get("id") or ""
+            rule_code = rec.get("rule_code") or rec.get("rule_id") or rec.get("id") or ""
             name = rec.get("name") or rec.get("rule_name") or "未命名规则"
             description = rec.get("description") or rec.get("desc") or ""
             category = rec.get("category") or rec.get("rule_category") or "基础"
@@ -728,6 +838,7 @@ async def rules(
                 docs = [d.strip() for d in docs.split(",") if d.strip()]
             return {
                 "rule_id": rule_id,
+                "rule_code": rule_code,
                 "name": name,
                 "description": description,
                 "category": category,
@@ -777,6 +888,7 @@ async def rules(
                 docs = [doc_type_mapping.get(d, d) for d in (rule.get("applicable_documents", []) or [])]
                 data.append({
                     "rule_id": rule.get("rule_id", ""),
+                    "rule_code": rule.get("rule_code", rule.get("rule_id", "")),
                     "name": rule.get("name", ""),
                     "category": rule.get("category", ""),
                     "defect_level": rule.get("defect_level", "一般缺陷"),

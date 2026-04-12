@@ -117,6 +117,21 @@ describe('semantic rules workspace service', () => {
     expect(stats.defect_level_distribution['轻微缺陷']).toBe(1)
   })
 
+  it('应优先选择可用业务规则编号作为 rule_id', () => {
+    const normalized = normalizeSemanticRule({
+      id: '22d3f60f-5dd8-40dc-8f00-40aee3d8f509',
+      rule_id: '3.1.1',
+      rule_code: 'SC-001',
+      name: '示例规则',
+      description: '',
+      category: '入院记录',
+      complexity: '低复杂度',
+      defect_level: '严重缺陷',
+      applicable_documents: ['admission_record'],
+    })
+    expect(normalized.rule_id).toBe('SC-001')
+  })
+
   it('应生成固定四卡 KPI 展示模型', () => {
     const cards = buildSemanticKpiCards({
       stats: {

@@ -7,8 +7,15 @@ from ..core.http import safe_post_json
 from ..core.supabase_client import get_supabase
 from .unified_rule_engine import UnifiedRuleEngine
 from .llm_config_loader import LLMConfigLoader
-from .qc_llm_client import SichuanQCLLMClient  # 拆分出的 LLM 客户端
+from .qc_llm_client_runtime import SichuanQCLLMClient  # 拆分出的 LLM 客户端（runtime 源码版）
 from .qc_prompt_builder import QCPromptBuilder  # 拆分出的 Prompt 构建器
+from .bundles import load_or_assemble_domain_bundle
+from .rule_domain_router import (
+    RuleExecutionInput,
+    display_name_for_doc_type,
+    render_rule_execution_medical_text,
+    route_rule_to_domain,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -360,6 +367,164 @@ class SichuanQCService:
 
         return fallback_results
 
+    @staticmethod
+    def _find_source_documents_for_types(
+        source_documents: List[Dict[str, Any]],
+        doc_types: List[str],
+    ) -> List[Dict[str, Any]]:
+        wanted = {str(item or "").strip() for item in doc_types if str(item or "").strip()}
+        matched = [
+            dict(item)
+            for item in source_documents or []
+            if str(item.get("document_type") or item.get("source_table") or "").strip() in wanted
+        ]
+        matched.sort(
+            key=lambda item: (
+                0 if item.get("content") else 1,
+                str(item.get("display_time") or item.get("record_time") or ""),
+            )
+        )
+        return matched
+
+    def _build_rule_execution_input_from_bundle(
+        self,
+        *,
+        rule: Dict[str, Any],
+        routing: Any,
+        domain_bundle: Dict[str, Any],
+    ) -> RuleExecutionInput:
+        source_documents = list(domain_bundle.get("source_documents") or [])
+        primary_candidates = self._find_source_documents_for_types(
+            source_documents,
+            list(routing.primary_doc_types),
+        )
+        auxiliary_candidates = self._find_source_documents_for_types(
+            source_documents,
+            list(routing.aux_doc_types),
+        )
+
+        primary_document = next(
+            (item for item in primary_candidates if str(item.get("content") or "").strip()),
+            primary_candidates[0] if primary_candidates else None,
+        )
+        if primary_document is None:
+            raise LookupError("missing_required_document")
+
+        primary_text = str(primary_document.get("content") or "").strip()
+        if routing.strict_primary_required and not primary_text:
+            raise LookupError("missing_required_document")
+
+        supporting_evidence: List[Dict[str, Any]] = []
+        for item in auxiliary_candidates[:3]:
+            evidence_text = str(item.get("content") or item.get("text_preview") or "").strip()
+            if not evidence_text:
+                continue
+            supporting_evidence.append(
+                {
+                    "document_type": display_name_for_doc_type(str(item.get("document_type") or item.get("source_table") or "")),
+                    "source_table": str(item.get("source_table") or ""),
+                    "document_id": str(item.get("document_id") or ""),
+                    "document_title": str(item.get("document_title") or ""),
+                    "display_time": str(item.get("display_time") or item.get("record_time") or ""),
+                    "evidence_text": evidence_text[:800],
+                    "sections": list(item.get("sections") or []),
+                    "source_fields": list(item.get("source_fields") or []),
+                    "assembly_status": str(item.get("assembly_status") or ""),
+                    "data_quality_flags": list(item.get("data_quality_flags") or []),
+                }
+            )
+
+        primary_doc_type = display_name_for_doc_type(
+            str(primary_document.get("document_type") or primary_document.get("source_table") or "")
+        )
+        return RuleExecutionInput(
+            rule_id=str(rule.get("rule_id") or ""),
+            document_type=primary_doc_type,
+            execution_domain=str(domain_bundle.get("execution_domain") or routing.execution_domain),
+            primary_medical_text=primary_text,
+            supporting_evidence=supporting_evidence,
+            timeline_facts=list(domain_bundle.get("timeline_facts") or []),
+            source_documents=[
+                {
+                    "document_type": display_name_for_doc_type(str(item.get("document_type") or item.get("source_table") or "")),
+                    "source_table": str(item.get("source_table") or ""),
+                    "document_id": str(item.get("document_id") or ""),
+                    "document_title": str(item.get("document_title") or ""),
+                    "display_time": str(item.get("display_time") or item.get("record_time") or ""),
+                    "hit": bool(item.get("hit")),
+                    "sections": list(item.get("sections") or []),
+                    "source_fields": list(item.get("source_fields") or []),
+                    "assembly_status": str(item.get("assembly_status") or ""),
+                    "data_quality_flags": list(item.get("data_quality_flags") or []),
+                }
+                for item in source_documents
+            ],
+        )
+
+    def _build_missing_primary_result(
+        self,
+        *,
+        rule: Dict[str, Any],
+        routing: Any,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
+        domain_bundle: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        primary_docs = [display_name_for_doc_type(item) for item in routing.primary_doc_types]
+        result = {
+            "rule_id": str(rule.get("rule_id") or ""),
+            "rule_name": str(rule.get("name") or ""),
+            "status": "not_applicable",
+            "is_compliant": True,
+            "issues": [],
+            "findings": f"缺少主文书，无法执行规则：{', '.join(primary_docs) or '未配置主文书'}",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 1.0,
+            "llm_raw_output": None,
+            "applicability": {
+                "is_applicable": False,
+                "reason": "missing_required_document",
+                "method": "domain_primary_guard",
+            },
+            "evidence_verified": True,
+            "evidence_span": None,
+            "metadata": {
+                "tokens_used": 0,
+                "api_time": 0.0,
+            },
+        }
+        return {
+            "document_id": visit_id,
+            "document_type": ", ".join(primary_docs) or "未知文书",
+            "total_rules": 1,
+            "applicable_rules": [str(rule.get("rule_id") or "")],
+            "evaluation_summary": {
+                "compliance_rate": 100.0,
+                "issues_found": 0,
+                "not_applicable": 1,
+                "total_rules": 1,
+                "compliant_rules": 1,
+                "model": self.client.model,
+            },
+            "parsed_evaluation_results": [result],
+            "evaluation_results": [result],
+            "llm_output": None,
+            "token_usage": {"total_tokens": 0},
+            "api_time": 0.0,
+            "routing": routing.to_dict(),
+            "rule_execution_input": None,
+            "bundle_metadata": {
+                "execution_domain": routing.execution_domain,
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+                "document_hits": domain_bundle.get("document_hits") or {},
+                "data_quality_flags": domain_bundle.get("data_quality_flags") or [],
+            },
+        }
+
     async def evaluate_document(
         self,
         document_id: str,
@@ -466,6 +631,149 @@ class SichuanQCService:
             "llm_output": None,
             "token_usage": {"total_tokens": total_tokens},
             "api_time": total_api_time,
+        }
+
+    async def evaluate_running_final_bundle_input(
+        self,
+        bundle: Dict[str, Any],
+        *,
+        rule_ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        通过 running/final bundle 输入复用旧规则链入口（evaluate_document）。
+
+        说明：
+        - 不改规则引擎本体；
+        - 仅做输入适配；
+        - 仅支持 running/final 场景。
+        """
+        from .qc_input_adapters import adapt_bundle_to_sichuan_eval_args
+
+        scene = str((bundle or {}).get("scene") or "").strip().lower()
+        if scene not in {"running", "final"}:
+            raise ValueError(f"仅支持 running/final bundle，当前 scene={scene or 'unknown'}")
+
+        eval_args = adapt_bundle_to_sichuan_eval_args(bundle, rule_ids=rule_ids or [])
+        result = await self.evaluate_document(
+            document_id=str(eval_args["document_id"]),
+            content=str(eval_args["content"]),
+            document_type=str(eval_args["document_type"]),
+            rule_ids=list(eval_args.get("rule_ids") or []),
+        )
+        result["bundle_metadata"] = {
+            "scene": scene,
+            "visit_id": str((bundle or {}).get("visit_id") or ""),
+            "policy_version": str((bundle or {}).get("policy_version") or ""),
+            "bundle_schema_version": str((bundle or {}).get("bundle_schema_version") or ""),
+            "document_hits": (bundle or {}).get("document_hits") or {},
+            "text_available": bool((bundle or {}).get("text_available")),
+            "adapter_version": str((eval_args.get("metadata") or {}).get("adapter_version") or ""),
+            "compat_strategy": str((eval_args.get("metadata") or {}).get("compat_strategy") or ""),
+        }
+        return result
+
+    async def evaluate_rule_for_visit(
+        self,
+        *,
+        rule_id: str,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
+        source_schema: Optional[str] = None,
+        bundle_schema: str = "public",
+        force_refresh_bundle: bool = False,
+    ) -> Dict[str, Any]:
+        rule = self.get_rule_by_id(str(rule_id or "").strip())
+        if not rule:
+            raise ValueError(f"规则不存在: {rule_id}")
+
+        routing = route_rule_to_domain(rule)
+        domain_bundle = load_or_assemble_domain_bundle(
+            execution_domain=routing.execution_domain,
+            institute_id=str(institute_id or "").strip(),
+            patient_id=str(patient_id or "").strip(),
+            visit_id=str(visit_id or "").strip(),
+            source_schema=source_schema,
+            bundle_schema=bundle_schema,
+            force_refresh=force_refresh_bundle,
+        )
+
+        try:
+            rule_input = self._build_rule_execution_input_from_bundle(
+                rule=rule,
+                routing=routing,
+                domain_bundle=domain_bundle,
+            )
+        except LookupError:
+            return self._build_missing_primary_result(
+                rule=rule,
+                routing=routing,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                domain_bundle=domain_bundle,
+            )
+
+        medical_text = render_rule_execution_medical_text(rule_input)
+        engine_result = await self.rule_engine.evaluate(
+            rule,
+            medical_record={
+                "id": f"{visit_id}:{rule.get('rule_id')}",
+                "content": medical_text,
+                "document_type": rule_input.document_type,
+            },
+        )
+
+        evaluation_results = [
+            {
+                "rule_id": engine_result.get("rule_id"),
+                "rule_name": engine_result.get("rule_name"),
+                "is_compliant": engine_result.get("is_compliant"),
+                "status": engine_result.get("status"),
+                "findings": engine_result.get("findings"),
+                "evidence": engine_result.get("evidence"),
+                "suggestion": engine_result.get("suggestion"),
+                "confidence": engine_result.get("confidence"),
+                "applicability": engine_result.get("applicability"),
+                "evidence_verified": engine_result.get("evidence_verified"),
+                "metadata": engine_result.get("metadata"),
+            }
+        ]
+        status = str(engine_result.get("status") or "")
+        not_applicable = 1 if status == "not_applicable" else 0
+        compliant_rules = 1 if status in {"compliant", "not_applicable"} else 0
+        issues_found = 1 if status == "non_compliant" else 0
+        metadata = engine_result.get("metadata") or {}
+        return {
+            "document_id": visit_id,
+            "document_type": rule_input.document_type,
+            "total_rules": 1,
+            "applicable_rules": [str(rule.get("rule_id") or "")],
+            "evaluation_summary": {
+                "compliance_rate": 100.0 if compliant_rules else 0.0,
+                "issues_found": issues_found,
+                "not_applicable": not_applicable,
+                "total_rules": 1,
+                "compliant_rules": compliant_rules,
+                "model": self.client.model,
+            },
+            "parsed_evaluation_results": [engine_result],
+            "evaluation_results": evaluation_results,
+            "llm_output": engine_result.get("llm_raw_output"),
+            "token_usage": {"total_tokens": int(metadata.get("tokens_used") or 0)},
+            "api_time": float(metadata.get("api_time") or 0.0),
+            "routing": routing.to_dict(),
+            "rule_execution_input": rule_input.to_dict(),
+            "bundle_metadata": {
+                "execution_domain": routing.execution_domain,
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+                "document_hits": domain_bundle.get("document_hits") or {},
+                "data_quality_flags": domain_bundle.get("data_quality_flags") or [],
+                "bundle_schema_version": domain_bundle.get("bundle_schema_version") or "",
+                "policy_version": domain_bundle.get("policy_version") or "",
+            },
         }
 
     async def evaluate_batch(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -741,20 +1049,32 @@ class SichuanQCService:
         Returns:
             规则对象，如果未找到则返回 None
         """
+        normalized_rule_id = str(rule_id or "").strip().upper()
+        if not normalized_rule_id:
+            return None
+
         # 根据规则ID前缀明确区分规则来源
         # SC- 开头：四川省规则（sichuan_rules_146.json）
         # LX- / LXE- 开头：泸县自定义规则（custom_rules_33.json）
-        if rule_id.startswith("SC-"):
+        if normalized_rule_id.startswith("SC-"):
             all_rules = self._load_rules_from_json()
-        elif rule_id.startswith("LX-") or rule_id.startswith("LXE-"):
+        elif normalized_rule_id.startswith("LX-") or normalized_rule_id.startswith("LXE-"):
             all_rules = self._load_custom_rules_from_json()
         else:
-            logger.warning(f"未知的规则ID前缀: {rule_id}")
-            return None
+            # 兼容旧调用：允许传入 rule_code/original_id，再从两套规则里回查
+            all_rules = [*self._load_rules_from_json(), *self._load_custom_rules_from_json()]
 
         for rule in all_rules:
-            if rule.get("rule_id") == rule_id:
+            candidate_ids = {
+                str(rule.get("rule_id") or "").strip().upper(),
+                str(rule.get("rule_code") or "").strip().upper(),
+                str(rule.get("original_id") or "").strip().upper(),
+            }
+            candidate_ids.discard("")
+            if normalized_rule_id in candidate_ids:
                 return rule
+
+        logger.warning(f"未找到规则: {rule_id}")
         return None
 
     def update_rule_prompt(self, rule_id: str, custom_prompt: Optional[str]) -> bool:
@@ -771,16 +1091,33 @@ class SichuanQCService:
         import json
         import os
 
-        # 根据规则ID前缀明确确定要更新的文件
-        # SC- 开头：四川省规则（sichuan_rules_146.json）
-        # LX- 开头：自定义规则（custom_rules_33.json）
-        if rule_id.startswith("SC-"):
-            json_filename = "sichuan_rules_146.json"
-        elif rule_id.startswith("LX-"):
-            json_filename = "custom_rules_33.json"
-        else:
+        normalized_rule_id = str(rule_id or "").strip().upper()
+        if not normalized_rule_id:
+            return False
+
+        def _rule_file_and_id(target: str) -> tuple[str, str] | None:
+            if target.startswith("SC-"):
+                return ("sichuan_rules_146.json", target)
+            if target.startswith("LX-") or target.startswith("LXE-"):
+                return ("custom_rules_33.json", target)
+
+            # 兼容 rule_code/original_id 入参：回查规则并落到真实 rule_id
+            resolved = self.get_rule_by_id(target)
+            if not resolved:
+                return None
+            resolved_rule_id = str(resolved.get("rule_id") or "").strip().upper()
+            if resolved_rule_id.startswith("SC-"):
+                return ("sichuan_rules_146.json", resolved_rule_id)
+            if resolved_rule_id.startswith("LX-") or resolved_rule_id.startswith("LXE-"):
+                return ("custom_rules_33.json", resolved_rule_id)
+            return None
+
+        resolved_target = _rule_file_and_id(normalized_rule_id)
+        if not resolved_target:
             logger.warning(f"未知的规则ID前缀: {rule_id}")
             return False
+
+        json_filename, persisted_rule_id = resolved_target
 
         json_path = os.path.join(
             os.path.dirname(__file__),
@@ -795,7 +1132,7 @@ class SichuanQCService:
             # 查找并更新指定规则
             rule_found = False
             for rule in rules:
-                if rule.get("rule_id") == rule_id:
+                if str(rule.get("rule_id") or "").strip().upper() == persisted_rule_id:
                     if custom_prompt is None:
                         # 删除自定义提示词
                         rule.pop("custom_prompt", None)
@@ -813,10 +1150,10 @@ class SichuanQCService:
                 json.dump(rules, f, ensure_ascii=False, indent=2)
 
             # 清除缓存，强制下次重新加载
-            if rule_id.startswith("SC-"):
+            if persisted_rule_id.startswith("SC-"):
                 self._rules_cache = None
 
-            logger.info(f"成功更新规则 {rule_id} 的提示词（文件：{json_filename}）")
+            logger.info(f"成功更新规则 {persisted_rule_id} 的提示词（文件：{json_filename}）")
             return True
 
         except Exception as e:

@@ -1,5 +1,5 @@
 import type { LocationQuery, LocationQueryRaw } from 'vue-router'
-import { getAccessToken } from '@/utils/auth-token'
+import { ApiService } from '@/services/apiService'
 import type {
   SemanticKpiCard,
   SemanticRuleItem,
@@ -10,20 +10,6 @@ import type {
   SemanticRuleWorkspaceQueryState,
 } from './types'
 import { SEMANTIC_RULE_QUERY_KEYS, getDocTypeZh } from './types'
-
-const BASE_URL = import.meta.env.DEV
-  ? ''
-  : window.location.hostname === 'localhost'
-    ? 'http://localhost:8001'
-    : 'http://124.220.6.136:8001'
-
-function buildAuthHeaders(includeJson: boolean = false): Record<string, string> {
-  const headers: Record<string, string> = {}
-  const token = getAccessToken()
-  if (token) headers.Authorization = `Bearer ${token}`
-  if (includeJson) headers['Content-Type'] = 'application/json'
-  return headers
-}
 
 function pickResponseData(payload: unknown): Record<string, any> {
   if (!payload || typeof payload !== 'object') return {}
@@ -37,9 +23,58 @@ function parseCount(value: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
+function pickCanonicalRuleId(raw: Record<string, any>): string {
+  const candidates = [raw.rule_id, raw.rule_code, raw.original_id, raw.id]
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+  const canonical = candidates.find((value) => /^(SC|LX|LXE)-/i.test(value))
+  return canonical || candidates[0] || ''
+}
+
+function readErrorMessageFromRaw(raw: string, fallback: string): string {
+  if (!raw) return fallback
+  try {
+    const parsed = JSON.parse(raw) as Record<string, any>
+    return (
+      String(parsed?.detail || '') ||
+      String(parsed?.message || '') ||
+      String(parsed?.error || '') ||
+      String(parsed?.data?.message || '') ||
+      raw
+    )
+  } catch {
+    return raw
+  }
+}
+
+function parseRequestError(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object') {
+    const maybeResponse = (error as any).response
+    if (maybeResponse && typeof maybeResponse === 'object') {
+      const payload = maybeResponse.data
+      if (typeof payload === 'string') {
+        return readErrorMessageFromRaw(payload, fallback)
+      }
+      if (payload && typeof payload === 'object') {
+        return (
+          String(payload.detail || '') ||
+          String(payload.message || '') ||
+          String(payload.error || '') ||
+          String(payload.data?.message || '') ||
+          fallback
+        )
+      }
+    }
+    const maybeMessage = String((error as any).message || '').trim()
+    if (maybeMessage) return maybeMessage
+  }
+  return fallback
+}
+
 export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleItem {
+  const canonicalRuleId = pickCanonicalRuleId(raw)
   return {
-    rule_id: String(raw.rule_id || raw.id || ''),
+    rule_id: canonicalRuleId,
     rule_code: raw.rule_code ? String(raw.rule_code) : undefined,
     name: String(raw.name || raw.rule_name || '未命名规则'),
     description: String(raw.description || raw.desc || ''),
@@ -250,24 +285,21 @@ export async function fetchSemanticRulesFromBackend(): Promise<{
   rules: SemanticRuleItem[]
   stats: SemanticRuleStats
 }> {
-  const response = await fetch(`${BASE_URL}/api/v1/qc/sichuan/rules?_ts=${Date.now()}`, {
-    headers: buildAuthHeaders(),
-  })
+  try {
+    const response = await ApiService.getRaw('/api/v1/qc/sichuan/rules', {
+      _ts: Date.now(),
+    })
+    const data = pickResponseData(response.data)
+    const rules = Array.isArray(data.rules)
+      ? data.rules.map((item: Record<string, any>) => normalizeSemanticRule(item))
+      : []
 
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || '加载规则库失败')
-  }
-
-  const payload = await response.json()
-  const data = pickResponseData(payload)
-  const rules = Array.isArray(data.rules)
-    ? data.rules.map((item: Record<string, any>) => normalizeSemanticRule(item))
-    : []
-
-  return {
-    rules,
-    stats: buildSemanticStatsFromRules(rules, data),
+    return {
+      rules,
+      stats: buildSemanticStatsFromRules(rules, data),
+    }
+  } catch (error) {
+    throw new Error(parseRequestError(error, '加载规则库失败'))
   }
 }
 
@@ -275,41 +307,27 @@ export async function fetchRulePrompt(ruleId: string): Promise<{
   prompt: string
   isDefaultPrompt: boolean
 }> {
-  const response = await fetch(
-    `${BASE_URL}/api/v1/qc/sichuan/rules/${encodeURIComponent(ruleId)}/prompt`,
-    {
-      headers: buildAuthHeaders(),
-    },
-  )
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || '获取提示词失败')
-  }
-
-  const payload = await response.json()
-  const data = pickResponseData(payload)
-  return {
-    prompt: String(data.prompt || ''),
-    isDefaultPrompt: Boolean(data.is_default ?? true),
+  try {
+    const response = await ApiService.getRaw(
+      `/api/v1/qc/sichuan/rules/${encodeURIComponent(ruleId)}/prompt`,
+    )
+    const data = pickResponseData(response.data)
+    return {
+      prompt: String(data.prompt || ''),
+      isDefaultPrompt: Boolean(data.is_default ?? true),
+    }
+  } catch (error) {
+    throw new Error(parseRequestError(error, '获取提示词失败'))
   }
 }
 
 export async function saveRulePrompt(ruleId: string, promptText: string): Promise<void> {
-  const response = await fetch(
-    `${BASE_URL}/api/v1/qc/sichuan/rules/${encodeURIComponent(ruleId)}/prompt`,
-    {
-      method: 'PUT',
-      headers: buildAuthHeaders(true),
-      body: JSON.stringify({
-        custom_prompt: promptText.trim() ? promptText.trim() : null,
-      }),
-    },
-  )
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || '保存提示词失败')
+  try {
+    await ApiService.putRaw(`/api/v1/qc/sichuan/rules/${encodeURIComponent(ruleId)}/prompt`, {
+      custom_prompt: promptText.trim() ? promptText.trim() : null,
+    })
+  } catch (error) {
+    throw new Error(parseRequestError(error, '保存提示词失败'))
   }
 }
 
@@ -317,27 +335,20 @@ export async function executeSemanticRuleTest(
   ruleId: string,
   medicalText: string,
 ): Promise<SemanticRuleTestResult> {
-  const response = await fetch(`${BASE_URL}/api/v1/qc/sichuan/test-rule`, {
-    method: 'POST',
-    headers: buildAuthHeaders(true),
-    body: JSON.stringify({
+  try {
+    const response = await ApiService.postRaw('/api/v1/qc/sichuan/test-rule', {
       rule_id: ruleId,
       medical_text: medicalText,
-    }),
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || '规则测试失败')
-  }
-
-  const payload = await response.json()
-  const data = pickResponseData(payload)
-  return {
-    is_compliant: Boolean(data.is_compliant ?? true),
-    confidence: parseCount(data.confidence),
-    findings: String(data.findings || ''),
-    evidence: String(data.evidence || ''),
-    suggestion: String(data.suggestion || ''),
+    })
+    const data = pickResponseData(response.data)
+    return {
+      is_compliant: Boolean(data.is_compliant ?? true),
+      confidence: parseCount(data.confidence),
+      findings: String(data.findings || ''),
+      evidence: String(data.evidence || ''),
+      suggestion: String(data.suggestion || ''),
+    }
+  } catch (error) {
+    throw new Error(parseRequestError(error, '规则测试失败'))
   }
 }

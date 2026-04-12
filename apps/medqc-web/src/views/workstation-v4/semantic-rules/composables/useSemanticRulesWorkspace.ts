@@ -26,6 +26,13 @@ import {
 
 type BuildCaseText = (example: any, options?: Record<string, unknown>) => string
 
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback
+  const messageText = String(error.message || '').trim()
+  if (!messageText) return fallback
+  return messageText.length > 120 ? `${messageText.slice(0, 120)}...` : messageText
+}
+
 export function useSemanticRulesWorkspace() {
   const route = useRoute()
   const router = useRouter()
@@ -316,7 +323,7 @@ export function useSemanticRulesWorkspace() {
       editingPrompt.value = payload.prompt || ''
       isDefaultPrompt.value = payload.isDefaultPrompt
     } catch (error) {
-      currentPrompt.value = '// 获取提示词失败'
+      currentPrompt.value = `// 获取提示词失败：${toErrorMessage(error, '请稍后重试')}`
       console.error('[SemanticRulesWorkspace] load prompt failed', error)
     } finally {
       promptLoading.value = false
