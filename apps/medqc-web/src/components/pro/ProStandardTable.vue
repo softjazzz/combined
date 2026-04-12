@@ -6,6 +6,7 @@
     :pagination="pagination"
     :row-selection="rowSelection"
     :row-key="rowKey"
+    :custom-row="customRow"
     class="modern-table h-full"
     :scroll="scroll"
     @change="handleChange"
@@ -46,6 +47,10 @@ const props = defineProps({
   rowKey: {
     type: [String, Function] as PropType<string | ((record: any) => string)>,
     default: 'id',
+  },
+  customRow: {
+    type: Function as PropType<(record: any, index: number) => Record<string, unknown>>,
+    default: undefined,
   },
   scroll: {
     type: Object as PropType<any>,

@@ -1,11 +1,11 @@
 <template>
   <div class="semantic-page">
-    <SemanticRulesManager />
+    <SemanticRulesWorkspace />
   </div>
 </template>
 
 <script setup lang="ts">
-import SemanticRulesManager from '@/components/SemanticRulesManager.vue'
+import SemanticRulesWorkspace from '@/views/workstation-v4/semantic-rules/SemanticRulesWorkspace.vue'
 </script>
 
 <style scoped>
