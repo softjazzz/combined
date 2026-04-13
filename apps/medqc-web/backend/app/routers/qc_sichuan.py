@@ -4,7 +4,8 @@ import json
 import logging
 from pathlib import Path
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException, Query, Request, Depends
+from fastapi import APIRouter, HTTPException, Query, Request, Depends, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from datetime import datetime, timezone
 
 from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
@@ -15,7 +16,8 @@ from ..services.llm_config_loader import LLMConfigLoader
 from ..services.qc_input_adapters import evaluate_running_final_bundle
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
-from ..core.security import require_admin
+from ..core.security import require_admin, get_current_user
+from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +113,18 @@ class SichuanRuleVisitEvaluateRequest(BaseModel):
     model: Optional[str] = None
 
 
+class SichuanWorkspaceBatchJobCreateRequest(BaseModel):
+    rule_ids: List[str]
+    scope: str = "final"
+    department: Optional[str] = None
+    doctor: Optional[str] = None
+    date_field: str = "discharge"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    keyword: Optional[str] = None
+    record_ids: Optional[List[str]] = None
+
+
 class SaveQCResultRequest(BaseModel):
     mode: str
     document_type: str
@@ -128,6 +142,179 @@ class SaveQCResultRequest(BaseModel):
 
 def _grade_from_rate(rate: float) -> str:
     return "A" if rate >= 90 else "B" if rate >= 75 else "C"
+
+
+def _current_user_id(current_user: Dict[str, Any]) -> str:
+    return (
+        str(current_user.get("id") or current_user.get("user_id") or current_user.get("username") or "")
+        .strip()
+        or "anonymous"
+    )
+
+
+def _normalize_scope(scope: Optional[str]) -> str:
+    value = str(scope or "").strip().lower()
+    if value not in {"all", "running", "final"}:
+        return "all"
+    return value
+
+
+def _normalize_date_field(date_field: Optional[str]) -> str:
+    value = str(date_field or "").strip().lower()
+    if value not in {"admission", "discharge"}:
+        return "admission"
+    return value
+
+
+def _resolve_document_type(scope: str, record_scope: Optional[str]) -> str:
+    if scope == "running":
+        return "病程记录"
+    if scope == "final":
+        return "出院记录"
+    return "出院记录" if str(record_scope or "").strip().lower() == "final" else "病程记录"
+
+
+def _build_cluster_key(item: Dict[str, Any]) -> str:
+    evidence = str(item.get("evidence") or "").strip()
+    findings = str(item.get("findings") or "").strip()
+    base = evidence or findings or str(item.get("rule_name") or item.get("rule_code") or "命中项")
+    return base[:64]
+
+
+def _to_breakdown_list(counter: Dict[str, int], top_n: int = 8) -> List[Dict[str, Any]]:
+    ranked = sorted(counter.items(), key=lambda it: it[1], reverse=True)[:top_n]
+    return [{"key": key, "count": int(count)} for key, count in ranked if key]
+
+
+def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    clusters: Dict[str, Dict[str, Any]] = {}
+    rule_counter: Dict[str, int] = {}
+    executor_counter: Dict[str, int] = {}
+    doc_counter: Dict[str, int] = {}
+    defect_counter: Dict[str, int] = {}
+
+    for item in items:
+        cluster_key = _build_cluster_key(item)
+        cluster = clusters.setdefault(
+            cluster_key,
+            {
+                "cluster_key": cluster_key,
+                "sample_evidence": str(item.get("evidence") or "")[:120],
+                "records": 0,
+                "rules": {},
+                "document_types": {},
+                "executor_types": {},
+                "defect_levels": {},
+            },
+        )
+        cluster["records"] += 1
+        rule_id = str(item.get("rule_id") or item.get("rule_code") or "").strip()
+        rule_name = str(item.get("rule_name") or rule_id or "未知规则").strip()
+        if rule_id:
+            cluster["rules"][rule_id] = {"rule_id": rule_id, "rule_name": rule_name}
+            rule_counter[rule_id] = int(rule_counter.get(rule_id) or 0) + 1
+        doc_type = str(item.get("document_type") or "").strip()
+        if doc_type:
+            cluster["document_types"][doc_type] = int(cluster["document_types"].get(doc_type) or 0) + 1
+            doc_counter[doc_type] = int(doc_counter.get(doc_type) or 0) + 1
+        executor_type = str(item.get("executor_type") or "").strip().lower() or "llm"
+        cluster["executor_types"][executor_type] = int(cluster["executor_types"].get(executor_type) or 0) + 1
+        executor_counter[executor_type] = int(executor_counter.get(executor_type) or 0) + 1
+        defect_level = str(item.get("defect_level") or "").strip()
+        if defect_level:
+            cluster["defect_levels"][defect_level] = int(cluster["defect_levels"].get(defect_level) or 0) + 1
+            defect_counter[defect_level] = int(defect_counter.get(defect_level) or 0) + 1
+
+    cluster_list: List[Dict[str, Any]] = []
+    for cluster in clusters.values():
+        cluster_list.append(
+            {
+                "cluster_key": cluster["cluster_key"],
+                "sample_evidence": cluster["sample_evidence"],
+                "records": int(cluster["records"]),
+                "rules": list(cluster["rules"].values()),
+                "document_types": cluster["document_types"],
+                "executor_types": cluster["executor_types"],
+                "defect_levels": cluster["defect_levels"],
+            }
+        )
+    cluster_list.sort(key=lambda it: int(it.get("records") or 0), reverse=True)
+
+    return {
+        "cluster_count": len(cluster_list),
+        "duplicate_hits": max(0, len(items) - len(cluster_list)),
+        "clusters": cluster_list[:20],
+        "rule_breakdown": [
+            {
+                "rule_id": rule_id,
+                "rule_name": rule_id,
+                "hits": int(hits),
+            }
+            for rule_id, hits in sorted(rule_counter.items(), key=lambda it: it[1], reverse=True)[:12]
+        ],
+        "executor_breakdown": _to_breakdown_list(executor_counter, top_n=6),
+        "document_breakdown": _to_breakdown_list(doc_counter, top_n=8),
+        "defect_level_breakdown": _to_breakdown_list(defect_counter, top_n=8),
+    }
+
+
+def _build_debug_snapshot(
+    job: Dict[str, Any],
+    *,
+    rule_job_id: Optional[str] = None,
+    item_limit: int = 30,
+) -> Dict[str, Any]:
+    rules = list(job.get("rule_results") or [])
+    if rule_job_id:
+        rules = [item for item in rules if str(item.get("id") or "") == str(rule_job_id)]
+    current_rule = (
+        next((item for item in rules if str(item.get("status") or "").lower() == "running"), None)
+        or (rules[0] if rules else None)
+    )
+    all_items = list(job.get("items") or [])
+    all_failed = list(job.get("failed_records") or [])
+    if rule_job_id:
+        all_items = [item for item in all_items if str(item.get("rule_job_id") or "") == str(rule_job_id)]
+        all_failed = [item for item in all_failed if str(item.get("rule_job_id") or "") == str(rule_job_id)]
+
+    return {
+        "job_id": job.get("id"),
+        "status": job.get("status"),
+        "scope": job.get("scope"),
+        "execution_mode": job.get("execution_mode") or "batch",
+        "rule_count": int((job.get("summary") or {}).get("rule_count") or len(job.get("rule_results") or [])),
+        "filtered_rule_count": len(rules),
+        "summary": job.get("summary") or {},
+        "current_rule": {
+            "rule_job_id": current_rule.get("id"),
+            "rule_code": current_rule.get("rule_code"),
+            "rule_name": current_rule.get("rule_name"),
+            "progress": current_rule.get("progress") or {},
+        } if current_rule else None,
+        "rules": [
+            {
+                "rule_job_id": item.get("id"),
+                "rule_code": item.get("rule_code"),
+                "rule_name": item.get("rule_name"),
+                "status": item.get("status"),
+                "progress": item.get("progress") or {},
+                "debug": item.get("debug") or {},
+                "total_records": item.get("total_records"),
+                "success_count": item.get("success_count"),
+                "failed_count": item.get("failed_count"),
+                "issue_records": item.get("issue_records"),
+                "compliant_records": item.get("compliant_records"),
+                "total_tokens": item.get("total_tokens"),
+                "total_processing_time": item.get("total_processing_time"),
+                "error_message": item.get("error_message"),
+                "updated_at": item.get("updated_at"),
+            }
+            for item in rules
+        ],
+        "recent_items": all_items[:max(1, int(item_limit or 30))],
+        "recent_failed_records": all_failed[:max(1, int(item_limit or 30))],
+        "updated_at": (job.get("summary") or {}).get("updated_at") or job.get("updated_at"),
+    }
 
 
 @router.post("/evaluate-fast")
@@ -488,6 +675,448 @@ async def evaluate_batch(
         return response
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"四川省批量质控评估失败: {e}")
+
+
+def _sichuan_workspace_service() -> CustomQCWorkspaceService:
+    return CustomQCWorkspaceService()
+
+
+async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
+    workspace = _sichuan_workspace_service()
+    job = workspace.get_batch_job_for_processing(job_id=job_id)
+    if not job:
+        return
+
+    try:
+        workspace.mark_batch_job_running(job_id=job_id)
+        qc_service = await get_qc_service()
+        current = workspace.get_batch_job_for_processing(job_id=job_id) or job
+        filters = dict(current.get("filters") or {})
+        rule_ids = [str(item).strip() for item in (filters.get("rule_ids") or []) if str(item).strip()]
+        if not rule_ids:
+            raise ValueError("批量任务缺少 rule_ids")
+
+        records = workspace.collect_records(
+            scope=str(current.get("scope") or "all"),
+            department=filters.get("department"),
+            doctor=filters.get("doctor"),
+            date_field=filters.get("date_field") or "admission",
+            start_date=filters.get("start_date"),
+            end_date=filters.get("end_date"),
+            keyword=filters.get("keyword"),
+            record_ids=current.get("record_ids") or None,
+        )
+        hydrated_records = workspace.hydrate_records_with_medical_text(records)
+        total_records = len(hydrated_records)
+
+        all_items: List[Dict[str, Any]] = []
+        all_failed_records: List[Dict[str, Any]] = []
+        rule_results: List[Dict[str, Any]] = []
+        issue_record_ids: set[str] = set()
+        failed_record_ids: set[str] = set()
+        total_tokens = 0
+        total_processing_time = 0.0
+        executor_program = 0
+        executor_llm = 0
+        cache_hit = 0
+        cache_miss = 0
+
+        for rule_index, rule_id in enumerate(rule_ids):
+            latest = workspace.get_batch_job_for_processing(job_id=job_id)
+            if not latest or str(latest.get("status") or "").lower() == "canceled":
+                logger.info("四川批量任务 %s 已取消，停止执行", job_id)
+                return
+
+            rule = qc_service.get_rule_by_id(rule_id)
+            rule_name = str((rule or {}).get("name") or rule_id)
+            rule_code = str((rule or {}).get("rule_code") or rule_id)
+            rule_job_id = str(uuid.uuid4())
+            rule_items: List[Dict[str, Any]] = []
+            rule_failed: List[Dict[str, Any]] = []
+            rule_tokens = 0
+            rule_processing_time = 0.0
+
+            if not rule:
+                rule_failed.append(
+                    {
+                        "rule_job_id": rule_job_id,
+                        "rule_id": rule_id,
+                        "rule_code": rule_code,
+                        "rule_name": rule_name,
+                        "error_phase": "rule_lookup",
+                        "error": f"未找到规则: {rule_id}",
+                    }
+                )
+            else:
+                for record in hydrated_records:
+                    record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
+                    try:
+                        document_type = _resolve_document_type(
+                            str(current.get("scope") or "all"),
+                            str(record.get("scope") or ""),
+                        )
+                        result = await qc_service.evaluate_document(
+                            document_id=record_id or "unknown",
+                            content=str(record.get("medical_text") or ""),
+                            document_type=document_type,
+                            rule_ids=[rule_id],
+                        )
+                        eval_items = list(result.get("evaluation_results") or [])
+                        eval_item = eval_items[0] if eval_items else {}
+                        status = str(eval_item.get("status") or "")
+                        metadata = dict(eval_item.get("metadata") or {})
+                        if status == "non_compliant":
+                            issue_record_ids.add(record_id)
+                        tokens_used = int(metadata.get("tokens_used") or 0)
+                        api_time = float(metadata.get("api_time") or 0.0)
+                        total_tokens += tokens_used
+                        total_processing_time += api_time
+                        rule_tokens += tokens_used
+                        rule_processing_time += api_time
+                        executor_type = str(metadata.get("executor_type") or "llm").lower()
+                        if executor_type == "program":
+                            executor_program += 1
+                        else:
+                            executor_llm += 1
+                        if metadata.get("cache_hit") is True:
+                            cache_hit += 1
+                        else:
+                            cache_miss += 1
+
+                        issue_item = {
+                            "rule_job_id": rule_job_id,
+                            "rule_id": str(eval_item.get("rule_id") or rule_id),
+                            "rule_code": rule_code,
+                            "rule_name": str(eval_item.get("rule_name") or rule_name),
+                            "record_id": record_id,
+                            "visit_id": str(record.get("visit_id") or ""),
+                            "patient_name": str(record.get("patient_name") or ""),
+                            "department": str(record.get("department") or ""),
+                            "status": status or ("compliant" if eval_item.get("is_compliant") else "non_compliant"),
+                            "is_compliant": bool(eval_item.get("is_compliant") is True),
+                            "findings": str(eval_item.get("findings") or ""),
+                            "evidence": str(eval_item.get("evidence") or ""),
+                            "suggestion": str(eval_item.get("suggestion") or ""),
+                            "confidence": float(eval_item.get("confidence") or 0),
+                            "executor_type": executor_type,
+                            "rule_version": str(metadata.get("rule_version") or ""),
+                            "prompt_version": str(metadata.get("prompt_version") or ""),
+                            "model_version": str(metadata.get("model_version") or ""),
+                            "evidence_source": str(metadata.get("evidence_source") or ""),
+                            "cache_hit": bool(metadata.get("cache_hit") is True),
+                            "trace_id": str(metadata.get("trace_id") or ""),
+                            "cache_key": str(metadata.get("cache_key") or ""),
+                            "execution_domain": str(metadata.get("execution_domain") or ""),
+                            "doc_scope": str(metadata.get("doc_scope") or ""),
+                            "cost_class": str(metadata.get("cost_class") or ""),
+                            "document_type": document_type,
+                            "defect_level": str(rule.get("defect_level") or ""),
+                            "llm_fallback": bool(metadata.get("llm_fallback") is True),
+                        }
+                        if issue_item["status"] == "non_compliant":
+                            rule_items.append(issue_item)
+                            all_items.append(issue_item)
+                    except Exception as exc:
+                        failed_record_ids.add(record_id)
+                        failed_payload = {
+                            "rule_job_id": rule_job_id,
+                            "rule_id": rule_id,
+                            "rule_code": rule_code,
+                            "rule_name": rule_name,
+                            "record_id": record_id,
+                            "visit_id": str(record.get("visit_id") or ""),
+                            "patient_name": str(record.get("patient_name") or ""),
+                            "department": str(record.get("department") or ""),
+                            "error_phase": "evaluate_document",
+                            "error": str(exc),
+                        }
+                        rule_failed.append(failed_payload)
+                        all_failed_records.append(failed_payload)
+
+            rule_summary = {
+                "total_records": total_records,
+                "success_count": max(0, total_records - len(rule_failed)),
+                "failed_count": len(rule_failed),
+                "issue_records": len({str(item.get("record_id") or "") for item in rule_items}),
+                "compliant_records": max(0, total_records - len(rule_failed) - len({str(item.get("record_id") or "") for item in rule_items})),
+                "total_tokens": int(rule_tokens),
+                "total_processing_time": float(rule_processing_time),
+            }
+            rule_results.append(
+                {
+                    "id": rule_job_id,
+                    "job_id": job_id,
+                    "rule_code": rule_code,
+                    "rule_name": rule_name,
+                    "status": "failed" if rule_failed and len(rule_failed) >= total_records else "completed",
+                    "items": rule_items,
+                    "failed_records": rule_failed,
+                    "total_records": rule_summary["total_records"],
+                    "success_count": rule_summary["success_count"],
+                    "failed_count": rule_summary["failed_count"],
+                    "issue_records": rule_summary["issue_records"],
+                    "compliant_records": rule_summary["compliant_records"],
+                    "total_tokens": rule_summary["total_tokens"],
+                    "total_processing_time": rule_summary["total_processing_time"],
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "progress": {
+                        "rule_index": rule_index + 1,
+                        "rule_count": len(rule_ids),
+                        "processed_records": total_records,
+                    },
+                    "debug": {
+                        "executor_breakdown": {
+                            "program": executor_program,
+                            "llm": executor_llm,
+                        }
+                    },
+                }
+            )
+
+        summary = {
+            "total_records": total_records,
+            "success_count": max(0, total_records - len(failed_record_ids)),
+            "failed_record_count": len(failed_record_ids),
+            "failed_count": len(all_failed_records),
+            "issue_records": len(issue_record_ids),
+            "compliant_records": max(0, total_records - len(issue_record_ids) - len(failed_record_ids)),
+            "total_tokens": int(total_tokens),
+            "total_processing_time": float(total_processing_time),
+            "rule_count": len(rule_ids),
+            "processed_rule_count": len(rule_results),
+            "executor_breakdown": {
+                "program": executor_program,
+                "llm": executor_llm,
+            },
+            "cache_breakdown": {
+                "hit": cache_hit,
+                "miss": cache_miss,
+            },
+            "result_aggregation": _build_result_aggregation(all_items),
+            "rule_results": rule_results,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        workspace.complete_batch_job(
+            job_id=job_id,
+            summary=summary,
+            items=all_items,
+            failed_records=all_failed_records,
+        )
+    except Exception as exc:
+        logger.exception("四川规则批量任务执行失败: %s", exc)
+        workspace.fail_batch_job(job_id=job_id, error_message=str(exc))
+
+
+@router.post("/workspace/batch-jobs")
+async def create_workspace_batch_job(
+    request: Request,
+    payload: SichuanWorkspaceBatchJobCreateRequest,
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    rule_ids = [str(item).strip() for item in (payload.rule_ids or []) if str(item).strip()]
+    if not rule_ids:
+        raise HTTPException(status_code=422, detail="rule_ids 不能为空")
+
+    workspace = _sichuan_workspace_service()
+    records = workspace.collect_records(
+        scope=_normalize_scope(payload.scope),
+        department=payload.department,
+        doctor=payload.doctor,
+        date_field=_normalize_date_field(payload.date_field),
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+        keyword=payload.keyword,
+        record_ids=payload.record_ids or None,
+    )
+    if not records:
+        raise HTTPException(status_code=422, detail="当前筛选条件下没有可执行病历")
+
+    pseudo_draft = {
+        "id": "sichuan-rule-library",
+        "rule_code": "SC-BATCH",
+        "name": f"四川规则库批量任务({len(rule_ids)}条规则)",
+        "scene": "running" if _normalize_scope(payload.scope) == "running" else "final",
+    }
+    job = workspace.create_batch_job(
+        draft=pseudo_draft,
+        created_by=_current_user_id(current_user),
+        scope=_normalize_scope(payload.scope),
+        filters={
+            "department": payload.department,
+            "doctor": payload.doctor,
+            "date_field": _normalize_date_field(payload.date_field),
+            "start_date": payload.start_date,
+            "end_date": payload.end_date,
+            "keyword": payload.keyword,
+            "rule_ids": rule_ids,
+            "source": "sichuan_rule_workspace",
+        },
+        record_ids=payload.record_ids or [],
+        total_records=len(records),
+    )
+    background_tasks.add_task(_run_sichuan_workspace_batch_job, job["id"])
+    return success_response(
+        data={
+            **job,
+            "execution_mode": "batch",
+            "rule_count": len(rule_ids),
+            "draft_ids": rule_ids,
+        },
+        message="四川规则批量任务已创建",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/batch-jobs")
+async def list_workspace_batch_jobs(
+    request: Request,
+    status: Optional[str] = Query(None),
+    scope: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    created_start_date: Optional[str] = Query(None),
+    created_end_date: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    workspace = _sichuan_workspace_service()
+    result = workspace.list_batch_jobs(
+        created_by=_current_user_id(current_user),
+        draft_id="sichuan-rule-library",
+        status=status,
+        scope=scope,
+        query=q,
+        created_start_date=created_start_date,
+        created_end_date=created_end_date,
+        page=page,
+        page_size=page_size,
+    )
+    items = [
+        {
+            **item,
+            "execution_mode": "batch",
+            "rule_count": int((item.get("summary") or {}).get("rule_count") or 0),
+            "draft_ids": list(((item.get("filters") or {}).get("rule_ids") or [])),
+        }
+        for item in result.items
+    ]
+    return success_response(
+        data={
+            "items": items,
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
+        },
+        message="获取四川规则批量任务成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/batch-jobs/{job_id}")
+async def get_workspace_batch_job(
+    request: Request,
+    job_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    workspace = _sichuan_workspace_service()
+    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not job or str(job.get("draft_id") or "") != "sichuan-rule-library":
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    return success_response(
+        data={
+            **job,
+            "execution_mode": "batch",
+            "rule_count": int((job.get("summary") or {}).get("rule_count") or 0),
+            "draft_ids": list(((job.get("filters") or {}).get("rule_ids") or [])),
+        },
+        message="获取四川规则批量任务详情成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/workspace/batch-jobs/{job_id}/cancel")
+async def cancel_workspace_batch_job(
+    request: Request,
+    job_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    workspace = _sichuan_workspace_service()
+    job = workspace.cancel_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not job or str(job.get("draft_id") or "") != "sichuan-rule-library":
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    return success_response(
+        data=job,
+        message="批量任务已取消",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/workspace/batch-jobs/{job_id}/retry")
+async def retry_workspace_batch_job(
+    request: Request,
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    workspace = _sichuan_workspace_service()
+    job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not job or str(job.get("draft_id") or "") != "sichuan-rule-library":
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    background_tasks.add_task(_run_sichuan_workspace_batch_job, job_id)
+    return success_response(
+        data=job,
+        message="批量任务已重新入队",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/batch-jobs/{job_id}/debug")
+async def get_workspace_batch_job_debug(
+    request: Request,
+    job_id: str,
+    rule_job_id: Optional[str] = Query(None),
+    item_limit: int = Query(30, ge=1, le=200),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    workspace = _sichuan_workspace_service()
+    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not job or str(job.get("draft_id") or "") != "sichuan-rule-library":
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    return success_response(
+        data=_build_debug_snapshot(job, rule_job_id=rule_job_id, item_limit=item_limit),
+        message="获取批量任务调试快照成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/batch-jobs/{job_id}/export")
+async def export_workspace_batch_job(
+    request: Request,
+    job_id: str,
+    format: str = Query("xlsx"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    workspace = _sichuan_workspace_service()
+    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not job or str(job.get("draft_id") or "") != "sichuan-rule-library":
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    if str(format or "").lower() == "csv":
+        content = workspace.export_batch_job_csv(job=job)
+        filename = f"sichuan_rules_{job_id}_{timestamp}.csv"
+        return StreamingResponse(
+            iter([content.getvalue().encode("utf-8-sig")]),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    workbook = workspace.export_batch_job_workbook(job=job)
+    filename = f"sichuan_rules_{job_id}_{timestamp}.xlsx"
+    return StreamingResponse(
+        workbook,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.post("/results/save")

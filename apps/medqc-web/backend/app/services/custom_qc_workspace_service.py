@@ -274,6 +274,11 @@ def _row_to_batch_job(row: Dict[str, Any]) -> Dict[str, Any]:
     summary = _safe_json_loads(row.get("summary_json"), None)
     items = _safe_json_loads(row.get("items_json"), [])
     failed_records = _safe_json_loads(row.get("failed_records_json"), [])
+    rule_results: List[Dict[str, Any]] = []
+    if isinstance(summary, dict):
+        candidate = summary.get("rule_results")
+        if isinstance(candidate, list):
+            rule_results = candidate
     return {
         "id": _safe_text(row.get("id")),
         "draft_id": _safe_text(row.get("draft_id")),
@@ -287,6 +292,7 @@ def _row_to_batch_job(row: Dict[str, Any]) -> Dict[str, Any]:
         "summary": summary if isinstance(summary, dict) else None,
         "items": items if isinstance(items, list) else [],
         "failed_records": failed_records if isinstance(failed_records, list) else [],
+        "rule_results": rule_results,
         "error_message": _safe_text(row.get("error_message")),
         "created_by": _safe_text(row.get("created_by")),
         "created_at": row.get("created_at"),
@@ -952,6 +958,11 @@ class CustomQCWorkspaceService:
         *,
         created_by: str,
         draft_id: Optional[str] = None,
+        status: Optional[str] = None,
+        scope: Optional[str] = None,
+        query: Optional[str] = None,
+        created_start_date: Optional[str] = None,
+        created_end_date: Optional[str] = None,
         page: int = 1,
         page_size: int = DEFAULT_BATCH_JOB_PAGE_SIZE,
     ) -> WorkspaceBatchJobListResult:
@@ -960,6 +971,26 @@ class CustomQCWorkspaceService:
             clauses = [self._batch_job_table.c.created_by == created_by]
             if draft_id:
                 clauses.append(self._batch_job_table.c.draft_id == draft_id)
+            status_value = _safe_text(status).lower()
+            if status_value:
+                clauses.append(self._batch_job_table.c.status == status_value)
+            scope_value = _safe_text(scope).lower()
+            if scope_value:
+                clauses.append(self._batch_job_table.c.scope == _normalize_scope(scope_value))
+            query_value = _safe_text(query)
+            if query_value:
+                clauses.append(
+                    or_(
+                        self._batch_job_table.c.rule_code.ilike(f"%{query_value}%"),
+                        self._batch_job_table.c.rule_name.ilike(f"%{query_value}%"),
+                    )
+                )
+            start = _as_date(created_start_date)
+            end = _as_date(created_end_date)
+            if start:
+                clauses.append(func.date(self._batch_job_table.c.created_at) >= start)
+            if end:
+                clauses.append(func.date(self._batch_job_table.c.created_at) <= end)
             where_clause = and_(*clauses)
             total = int(session.execute(select(func.count()).select_from(self._batch_job_table).where(where_clause)).scalar() or 0)
             rows = (
@@ -975,6 +1006,75 @@ class CustomQCWorkspaceService:
             )
             items = [_row_to_batch_job(dict(row)) for row in rows]
             return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
+        finally:
+            session.close()
+
+    def cancel_batch_job(self, *, job_id: str, created_by: str) -> Optional[Dict[str, Any]]:
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._batch_job_table).where(
+                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                )
+            ).mappings().first()
+            if not row:
+                return None
+            current = _row_to_batch_job(dict(row))
+            if current.get("status") in {"completed", "failed", "canceled"}:
+                return current
+            now = _now_utc()
+            session.execute(
+                update(self._batch_job_table)
+                .where(
+                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                )
+                .values(
+                    status="canceled",
+                    error_message="任务已取消",
+                    finished_at=now,
+                    updated_at=now,
+                )
+            )
+            session.commit()
+            return self.get_batch_job(job_id=job_id, created_by=created_by)
+        finally:
+            session.close()
+
+    def retry_batch_job(self, *, job_id: str, created_by: str) -> Optional[Dict[str, Any]]:
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._batch_job_table).where(
+                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                )
+            ).mappings().first()
+            if not row:
+                return None
+            now = _now_utc()
+            session.execute(
+                update(self._batch_job_table)
+                .where(
+                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                )
+                .values(
+                    status="queued",
+                    summary_json=None,
+                    items_json=None,
+                    failed_records_json=None,
+                    error_message=None,
+                    started_at=None,
+                    finished_at=None,
+                    updated_at=now,
+                    success_count=0,
+                    failed_count=0,
+                    issue_records=0,
+                    compliant_records=0,
+                    total_tokens=0,
+                    total_processing_time=0.0,
+                )
+            )
+            session.commit()
+            return self.get_batch_job(job_id=job_id, created_by=created_by)
         finally:
             session.close()
 
