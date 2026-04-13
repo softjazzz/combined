@@ -476,6 +476,7 @@ export function useSemanticRulesWorkspace() {
           error_message: error.message,
           error_detail: error.detail,
           status_code: error.statusCode,
+          error_category: error.errorCategory || 'unknown',
         }
       }
       console.error('[SemanticRulesWorkspace] rule test failed', error)

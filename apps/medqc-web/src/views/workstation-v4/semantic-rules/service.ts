@@ -71,6 +71,92 @@ function parseRequestError(error: unknown, fallback: string): string {
   return fallback
 }
 
+type SemanticRuleTestErrorMeta = {
+  statusCode?: number
+  traceId?: string
+  detail?: string
+  errorCategory?: string
+}
+
+export class SemanticRuleTestError extends Error {
+  statusCode?: number
+  traceId?: string
+  detail?: string
+  errorCategory?: string
+
+  constructor(message: string, meta?: SemanticRuleTestErrorMeta) {
+    super(message)
+    this.name = 'SemanticRuleTestError'
+    this.statusCode = meta?.statusCode
+    this.traceId = meta?.traceId
+    this.detail = meta?.detail
+    this.errorCategory = meta?.errorCategory
+  }
+}
+
+function toErrorCategory(statusCode?: number): string {
+  if (statusCode === 401) return 'unauthorized'
+  if (statusCode === 403) return 'permission_denied'
+  if (statusCode === 404) return 'not_found'
+  if (statusCode === 422) return 'validation_error'
+  if (typeof statusCode === 'number' && statusCode >= 500) return 'server_error'
+  return 'unknown'
+}
+
+function parseSemanticRuleTestError(
+  error: unknown,
+  fallback: string,
+): {
+  message: string
+  statusCode?: number
+  traceId?: string
+  detail?: string
+  errorCategory: string
+} {
+  const messageText = parseRequestError(error, fallback)
+  let statusCode: number | undefined
+  let traceId = ''
+  let detail = ''
+
+  if (error && typeof error === 'object') {
+    const maybeResponse = (error as any).response
+    if (maybeResponse && typeof maybeResponse === 'object') {
+      const parsedStatus = Number(maybeResponse.status)
+      if (Number.isFinite(parsedStatus)) {
+        statusCode = parsedStatus
+      }
+
+      const payload = maybeResponse.data
+      if (payload && typeof payload === 'object') {
+        traceId = String(
+          payload.trace_id || payload.traceId || payload?.data?.trace_id || '',
+        ).trim()
+        detail = String(
+          payload.detail || payload.message || payload.error || payload?.data?.message || '',
+        ).trim()
+      } else if (typeof payload === 'string') {
+        try {
+          const parsed = JSON.parse(payload) as Record<string, any>
+          traceId = String(parsed.trace_id || parsed.traceId || parsed?.data?.trace_id || '').trim()
+          detail = String(
+            parsed.detail || parsed.message || parsed.error || parsed?.data?.message || '',
+          ).trim()
+        } catch {
+          detail = payload.trim()
+        }
+      }
+    }
+  }
+
+  return {
+    message: messageText,
+    statusCode,
+    traceId: traceId || undefined,
+    detail: detail || undefined,
+    errorCategory: toErrorCategory(statusCode),
+  }
+}
+
 export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleItem {
   const canonicalRuleId = pickCanonicalRuleId(raw)
   return {
@@ -347,8 +433,17 @@ export async function executeSemanticRuleTest(
       findings: String(data.findings || ''),
       evidence: String(data.evidence || ''),
       suggestion: String(data.suggestion || ''),
+      trace_id: String(data.trace_id || ''),
+      status_code: Number(data.status_code || 0) || undefined,
+      error_category: data.error_category ? String(data.error_category) : undefined,
     }
   } catch (error) {
-    throw new Error(parseRequestError(error, '规则测试失败'))
+    const parsed = parseSemanticRuleTestError(error, '规则测试失败')
+    throw new SemanticRuleTestError(parsed.message, {
+      statusCode: parsed.statusCode,
+      traceId: parsed.traceId,
+      detail: parsed.detail,
+      errorCategory: parsed.errorCategory,
+    })
   }
 }

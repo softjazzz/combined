@@ -73,6 +73,30 @@
             show-icon
           />
           <div
+            v-if="
+              result.error_message || result.error_detail || result.trace_id || result.status_code
+            "
+            class="test-result-block"
+          >
+            <div class="test-result-block-title">
+              调试信息
+            </div>
+            <div class="test-result-block-content test-result-debug">
+              <p v-if="result.error_category">
+                错误分类：{{ result.error_category }}
+              </p>
+              <p v-if="result.status_code">
+                状态码：{{ result.status_code }}
+              </p>
+              <p v-if="result.trace_id">
+                Trace ID：{{ result.trace_id }}
+              </p>
+              <p v-if="result.error_detail">
+                错误详情：{{ result.error_detail }}
+              </p>
+            </div>
+          </div>
+          <div
             v-if="result.evidence"
             class="test-result-block"
           >
@@ -230,5 +254,13 @@ const emit = defineEmits<{
   line-height: 1.6;
   font-size: 13px;
   white-space: pre-wrap;
+}
+
+.test-result-debug p {
+  margin: 0;
+}
+
+.test-result-debug p + p {
+  margin-top: 4px;
 }
 </style>
