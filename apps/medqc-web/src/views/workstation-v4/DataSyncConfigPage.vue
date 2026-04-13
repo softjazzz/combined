@@ -26,10 +26,20 @@
               </div>
 
               <div class="w-[30%] shrink-0 flex flex-col gap-4 overflow-hidden right-stack">
-                <div class="zone zone-runs flex-1 overflow-hidden flex flex-col">
+                <div class="zone zone-policy flex-[1.15] overflow-hidden flex flex-col">
+                  <SyncPolicyPanel />
+                </div>
+
+                <div class="zone zone-runs flex-[0.85] overflow-hidden flex flex-col">
                   <SyncRunPanel />
                 </div>
               </div>
+            </div>
+
+            <div
+              class="zone zone-mappings min-h-[320px] max-h-[420px] overflow-hidden flex flex-col"
+            >
+              <FieldMappingWorkbench />
             </div>
           </div>
         </a-tab-pane>
@@ -66,6 +76,8 @@ import { useRoute } from 'vue-router'
 import SyncOverviewBar from './components/sync-console/SyncOverviewBar.vue'
 import ConnectionStudio from './components/sync-console/ConnectionStudio.vue'
 import SchemaExplorer from './components/sync-console/SchemaExplorer.vue'
+import FieldMappingWorkbench from './components/sync-console/FieldMappingWorkbench.vue'
+import SyncPolicyPanel from './components/sync-console/SyncPolicyPanel.vue'
 import SyncRunPanel from './components/sync-console/SyncRunPanel.vue'
 import FrontpageExtractionSettingsPanel from './components/system-config/FrontpageExtractionSettingsPanel.vue'
 import LLMApiConfig from '@/components/LLMApiConfig.vue'
@@ -128,6 +140,10 @@ onUnmounted(() => {
   border-color: rgba(59, 130, 246, 0.3);
 }
 
+.zone-mappings {
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
 .zone-runs {
   border-color: rgba(148, 163, 184, 0.32);
 }
@@ -180,6 +196,11 @@ onUnmounted(() => {
 
   .right-stack {
     min-height: 520px;
+  }
+
+  .zone-mappings {
+    min-height: 360px;
+    max-height: none;
   }
 }
 
