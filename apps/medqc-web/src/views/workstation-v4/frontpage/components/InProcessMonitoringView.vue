@@ -13,7 +13,9 @@
             <ArrowLeftOutlined class="text-base" />
           </button>
           <div>
-            <h2 class="text-xl font-semibold tracking-tight text-slate-900">事中监控</h2>
+            <h2 class="text-xl font-semibold tracking-tight text-slate-900">
+              事中监控
+            </h2>
             <p class="mt-1 text-sm text-slate-500">
               费用控制提示 + 模拟分组监测，统一 mid/payment/post mock 口径
             </p>
@@ -31,9 +33,7 @@
           >
             {{ drgMockEnabled ? 'Mock 演示模式' : '真实优先模式' }}
           </span>
-          <span class="rounded-full bg-blue-50 px-3 py-1 text-blue-700"
-            >控制阈值 {{ stats.control_threshold.toFixed(2) }}</span
-          >
+          <span class="rounded-full bg-blue-50 px-3 py-1 text-blue-700">控制阈值 {{ stats.control_threshold.toFixed(2) }}</span>
           <span
             v-if="loading"
             class="flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-amber-700"
@@ -44,9 +44,15 @@
           <a-dropdown>
             <template #overlay>
               <a-menu @click="handleExport">
-                <a-menu-item key="excel"> <FileExcelOutlined /> 导出 Excel </a-menu-item>
-                <a-menu-item key="pdf"> <FilePdfOutlined /> 导出 PDF </a-menu-item>
-                <a-menu-item key="word"> <FileWordOutlined /> 导出 Word </a-menu-item>
+                <a-menu-item key="excel">
+                  <FileExcelOutlined /> 导出 Excel
+                </a-menu-item>
+                <a-menu-item key="pdf">
+                  <FilePdfOutlined /> 导出 PDF
+                </a-menu-item>
+                <a-menu-item key="word">
+                  <FileWordOutlined /> 导出 Word
+                </a-menu-item>
               </a-menu>
             </template>
             <button
@@ -60,23 +66,31 @@
 
       <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div class="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">监测病例</div>
+          <div class="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+            监测病例
+          </div>
           <div class="mt-3 flex items-end gap-2">
             <WarningOutlined class="text-xl text-amber-500" />
             <span class="text-3xl font-semibold text-slate-900">{{ stats.total_alerts }}</span>
             <span class="pb-1 text-sm text-slate-400">例</span>
           </div>
-          <p class="mt-2 text-xs text-slate-500">当前命中的模拟监测病例总数</p>
+          <p class="mt-2 text-xs text-slate-500">
+            当前命中的模拟监测病例总数
+          </p>
         </article>
 
         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div class="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">重点预警</div>
+          <div class="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+            重点预警
+          </div>
           <div class="mt-3 flex items-end gap-2">
             <CloseCircleOutlined class="text-xl text-red-500" />
             <span class="text-3xl font-semibold text-slate-900">{{ stats.severe_alerts }}</span>
             <span class="pb-1 text-sm text-slate-400">例</span>
           </div>
-          <p class="mt-2 text-xs text-slate-500">费用比超过重点阈值的病例数</p>
+          <p class="mt-2 text-xs text-slate-500">
+            费用比超过重点阈值的病例数
+          </p>
         </article>
 
         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -90,17 +104,23 @@
             }}</span>
             <span class="pb-1 text-sm text-slate-400">条</span>
           </div>
-          <p class="mt-2 text-xs text-slate-500">可直接落地的费用控制建议</p>
+          <p class="mt-2 text-xs text-slate-500">
+            可直接落地的费用控制建议
+          </p>
         </article>
 
         <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div class="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">模拟分组</div>
+          <div class="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+            模拟分组
+          </div>
           <div class="mt-3 flex items-end gap-2">
             <RiseOutlined class="text-xl text-emerald-500" />
             <span class="text-3xl font-semibold text-slate-900">{{ stats.simulated_groups }}</span>
             <span class="pb-1 text-sm text-slate-400">组</span>
           </div>
-          <p class="mt-2 text-xs text-slate-500">今日新增 {{ stats.today_new }} 条，支持离线演示</p>
+          <p class="mt-2 text-xs text-slate-500">
+            今日新增 {{ stats.today_new }} 条，支持离线演示
+          </p>
         </article>
       </section>
 
@@ -108,7 +128,9 @@
         <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div class="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h3 class="text-base font-semibold text-slate-900">费用控制提示</h3>
+              <h3 class="text-base font-semibold text-slate-900">
+                费用控制提示
+              </h3>
               <p class="mt-1 text-sm text-slate-500">
                 把“当前值、目标值、建议动作”拆开展示，便于 mid/payment/post 共用同一套话术
               </p>
@@ -140,13 +162,17 @@
 
               <dl class="mt-4 space-y-2 text-sm">
                 <div class="flex items-center justify-between gap-4">
-                  <dt class="text-slate-500">当前值</dt>
+                  <dt class="text-slate-500">
+                    当前值
+                  </dt>
                   <dd class="font-medium text-slate-900">
                     {{ tip.current_value }}
                   </dd>
                 </div>
                 <div class="flex items-center justify-between gap-4">
-                  <dt class="text-slate-500">控制目标</dt>
+                  <dt class="text-slate-500">
+                    控制目标
+                  </dt>
                   <dd class="font-medium text-slate-900">
                     {{ tip.target_value }}
                   </dd>
@@ -164,21 +190,35 @@
           <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div class="mb-4 flex items-center justify-between">
               <div>
-                <h3 class="text-base font-semibold text-slate-900">CMI 近 7 日趋势</h3>
-                <p class="mt-1 text-sm text-slate-500">用于展示事中波动和统一演示口径</p>
+                <h3 class="text-base font-semibold text-slate-900">
+                  CMI 近 7 日趋势
+                </h3>
+                <p class="mt-1 text-sm text-slate-500">
+                  用于展示事中波动和统一演示口径
+                </p>
               </div>
             </div>
-            <div ref="cmiChartRef" class="h-64" />
+            <div
+              ref="cmiChartRef"
+              class="h-64"
+            />
           </div>
 
           <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div class="mb-4 flex items-center justify-between">
               <div>
-                <h3 class="text-base font-semibold text-slate-900">科室费用消耗指数</h3>
-                <p class="mt-1 text-sm text-slate-500">高于基准的科室会被标记为红色</p>
+                <h3 class="text-base font-semibold text-slate-900">
+                  科室费用消耗指数
+                </h3>
+                <p class="mt-1 text-sm text-slate-500">
+                  高于基准的科室会被标记为红色
+                </p>
               </div>
             </div>
-            <div ref="costChartRef" class="h-64" />
+            <div
+              ref="costChartRef"
+              class="h-64"
+            />
           </div>
         </div>
       </section>
@@ -188,15 +228,27 @@
           class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4"
         >
           <div>
-            <h3 class="text-base font-semibold text-slate-900">模拟分组监测</h3>
+            <h3 class="text-base font-semibold text-slate-900">
+              模拟分组监测
+            </h3>
             <p class="mt-1 text-sm text-slate-500">
               字段明确展示：支付标准、实际费用、差额、费用比、控制提示、监测等级
             </p>
           </div>
-          <a-select v-model:value="filterType" class="w-36" size="small">
-            <a-select-option value="all"> 全部 </a-select-option>
-            <a-select-option value="warning"> 预警 </a-select-option>
-            <a-select-option value="normal"> 正常 </a-select-option>
+          <a-select
+            v-model:value="filterType"
+            class="w-36"
+            size="small"
+          >
+            <a-select-option value="all">
+              全部
+            </a-select-option>
+            <a-select-option value="warning">
+              预警
+            </a-select-option>
+            <a-select-option value="normal">
+              正常
+            </a-select-option>
           </a-select>
         </div>
 
@@ -204,18 +256,42 @@
           <table class="min-w-full text-sm">
             <thead class="bg-slate-50 text-slate-500">
               <tr>
-                <th class="px-4 py-3 text-left font-medium">病例号</th>
-                <th class="px-4 py-3 text-left font-medium">科室</th>
-                <th class="px-4 py-3 text-left font-medium">诊断</th>
-                <th class="px-4 py-3 text-left font-medium">DRG</th>
-                <th class="px-4 py-3 text-left font-medium">支付标准</th>
-                <th class="px-4 py-3 text-left font-medium">实际费用</th>
-                <th class="px-4 py-3 text-left font-medium">差额</th>
-                <th class="px-4 py-3 text-left font-medium">费用比</th>
-                <th class="px-4 py-3 text-left font-medium">控制提示</th>
-                <th class="px-4 py-3 text-left font-medium">监测等级</th>
-                <th class="px-4 py-3 text-left font-medium">状态</th>
-                <th class="px-4 py-3 text-left font-medium">操作</th>
+                <th class="px-4 py-3 text-left font-medium">
+                  病例号
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  科室
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  诊断
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  DRG
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  支付标准
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  实际费用
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  差额
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  费用比
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  控制提示
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  监测等级
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  状态
+                </th>
+                <th class="px-4 py-3 text-left font-medium">
+                  操作
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -237,7 +313,9 @@
                   <div class="font-medium text-slate-900">
                     {{ item.drg }}
                   </div>
-                  <div class="text-xs text-slate-400">模拟分组</div>
+                  <div class="text-xs text-slate-400">
+                    模拟分组
+                  </div>
                 </td>
                 <td class="px-4 py-3 text-slate-600">
                   {{ formatMoney(item.baseline_payment) }}
@@ -299,7 +377,12 @@
       </section>
     </div>
 
-    <a-modal v-model:open="detailOpen" title="模拟分组详情" :footer="null" width="760px">
+    <a-modal
+      v-model:open="detailOpen"
+      title="模拟分组详情"
+      :footer="null"
+      width="760px"
+    >
       <template v-if="selectedAlert">
         <a-alert
           :type="
@@ -314,7 +397,11 @@
           class="mb-4"
         />
 
-        <a-descriptions bordered size="small" :column="2">
+        <a-descriptions
+          bordered
+          size="small"
+          :column="2"
+        >
           <a-descriptions-item label="病例号">
             {{ selectedAlert.case_no }}
           </a-descriptions-item>
@@ -339,7 +426,9 @@
           <a-descriptions-item label="费用比">
             {{ formatRatio(selectedAlert.ratio) }}
           </a-descriptions-item>
-          <a-descriptions-item label="住院天数"> {{ selectedAlert.los }} 天 </a-descriptions-item>
+          <a-descriptions-item label="住院天数">
+            {{ selectedAlert.los }} 天
+          </a-descriptions-item>
           <a-descriptions-item label="监测等级">
             {{ levelLabel(selectedAlert.monitor_level) }}
           </a-descriptions-item>

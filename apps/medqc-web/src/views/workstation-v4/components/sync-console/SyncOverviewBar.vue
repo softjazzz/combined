@@ -233,7 +233,7 @@ const handlePreflight = async () => {
 const handleExecute = async () => {
   try {
     const messages: string[] = []
-    if (state.selectedTier === 'tier3' && activeSource.value === 'mongo') {
+    if (state.selectedTier === 'tier3') {
       const inWindow = isNowInWindow(
         state.policyForm.night_window_start,
         state.policyForm.night_window_end,

@@ -61,7 +61,10 @@
           <div
             class="inline-flex items-center gap-1 rounded-full border border-slate-200/65 bg-white/66 p-1"
           >
-            <button :class="tabClass('records')" @click="emit('update:detailMainTab', 'records')">
+            <button
+              :class="tabClass('records')"
+              @click="emit('update:detailMainTab', 'records')"
+            >
               <span class="flex items-center gap-1.5"><FileTextOutlined />病历详情</span>
             </button>
             <button
@@ -79,17 +82,25 @@
                 <span
                   v-if="settlementQcFailed > 0"
                   class="ml-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold px-1"
-                  >{{ settlementQcFailed }}</span
-                >
+                >{{ settlementQcFailed }}</span>
               </span>
             </button>
           </div>
         </div>
 
         <div class="flex-1 overflow-y-auto custom-scrollbar">
-          <slot v-if="detailMainTab === 'records'" name="records" />
-          <slot v-else-if="detailMainTab === 'frontpage'" name="frontpage" />
-          <slot v-else-if="detailMainTab === 'settlement'" name="settlement" />
+          <slot
+            v-if="detailMainTab === 'records'"
+            name="records"
+          />
+          <slot
+            v-else-if="detailMainTab === 'frontpage'"
+            name="frontpage"
+          />
+          <slot
+            v-else-if="detailMainTab === 'settlement'"
+            name="settlement"
+          />
         </div>
       </main>
     </div>

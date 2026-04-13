@@ -92,7 +92,9 @@
                     预检：{{ state.preflightResult?.executable ? '通过' : '未执行/未通过' }}
                   </a-tag>
                   <a-tag class="wv4-status-chip wv4-status-chip--neutral">
-                    策略版本：{{ state.policyForm.tier3_cron || '未生成' }}
+                    策略版本：{{
+                      state.policyForm.policy_version || state.policyForm.tier3_cron || '未生成'
+                    }}
                   </a-tag>
                 </a-space>
                 <div class="system-config-overview-hint">
@@ -122,7 +124,7 @@
                   {{ state.stats.pendingRecords.toLocaleString() }}
                 </div>
                 <div class="wv4-analysis-kpi-card__desc">
-                  以 mongo 状态统计聚合
+                  以 PG 状态统计聚合
                 </div>
               </article>
 
@@ -361,6 +363,7 @@ onUnmounted(() => {
 })
 </script>
 
+<style src="./styles/workstation-v4-view.css"></style>
 <style scoped>
 .sync-config-page {
   background: linear-gradient(180deg, #f8fafc, #f1f5f9 48%, #edf2f7);
@@ -497,7 +500,7 @@ onUnmounted(() => {
 
 .layout-main {
   display: grid;
-  grid-template-columns: minmax(520px, 2fr) minmax(300px, 1fr);
+  grid-template-columns: minmax(640px, 1.75fr) minmax(320px, 0.72fr);
   gap: 14px;
 }
 
@@ -515,23 +518,27 @@ onUnmounted(() => {
 
 @media (max-width: 1536px) {
   .layout-main {
-    grid-template-columns: minmax(460px, 1.9fr) minmax(280px, 1fr);
+    grid-template-columns: minmax(560px, 1.6fr) minmax(300px, 0.76fr);
   }
 }
 
 @media (max-width: 1366px) {
   .layout-main {
-    grid-template-columns: minmax(400px, 1.7fr) minmax(260px, 1fr);
+    grid-template-columns: minmax(480px, 1.45fr) minmax(280px, 0.8fr);
   }
 }
 
-@media (max-width: 1140px) {
+@media (max-width: 980px) {
   .layout-main {
     grid-template-columns: 1fr;
   }
 
   .system-config-execution-card--runs {
-    min-height: 520px;
+    min-height: 420px;
+  }
+
+  .system-config-policy-area {
+    max-height: none;
   }
 }
 

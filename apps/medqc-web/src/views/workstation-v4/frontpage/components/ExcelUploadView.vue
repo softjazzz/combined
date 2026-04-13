@@ -1,7 +1,10 @@
 <template>
   <div class="h-full w-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden">
     <!-- Step 1: 上传 -->
-    <div v-if="currentStep === 'upload'" class="flex-1 flex flex-col p-6 overflow-hidden">
+    <div
+      v-if="currentStep === 'upload'"
+      class="flex-1 flex flex-col p-6 overflow-hidden"
+    >
       <!-- Header -->
       <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-3">
@@ -12,7 +15,9 @@
             <ArrowLeftOutlined class="text-lg" />
           </button>
           <div>
-            <h2 class="text-xl font-semibold text-slate-800 dark:text-white">DRG/DIP 数据分析</h2>
+            <h2 class="text-xl font-semibold text-slate-800 dark:text-white">
+              DRG/DIP 数据分析
+            </h2>
             <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
               上传任意格式的 Excel 文件，AI 自动识别字段并生成分析报表
             </p>
@@ -42,9 +47,12 @@
               accept=".xlsx,.xls,.csv,.zip"
               class="hidden"
               @change="handleFileSelect"
-            />
+            >
 
-            <div v-if="!selectedFile && !uploading" class="text-center p-8">
+            <div
+              v-if="!selectedFile && !uploading"
+              class="text-center p-8"
+            >
               <div
                 class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"
               >
@@ -56,11 +64,16 @@
               <p class="text-sm text-slate-500 dark:text-slate-400">
                 支持 .xlsx, .xls, .csv, .zip（多文件压缩包）格式
               </p>
-              <p class="text-xs text-slate-400 mt-2">✨ 无需固定模板，AI 自动识别字段</p>
+              <p class="text-xs text-slate-400 mt-2">
+                ✨ 无需固定模板，AI 自动识别字段
+              </p>
             </div>
 
             <!-- Selected File Preview -->
-            <div v-else-if="selectedFile && !uploading" class="text-center p-8">
+            <div
+              v-else-if="selectedFile && !uploading"
+              class="text-center p-8"
+            >
               <div
                 class="w-20 h-20 mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center"
               >
@@ -90,14 +103,21 @@
             </div>
 
             <!-- Uploading State -->
-            <div v-else class="text-center p-8">
+            <div
+              v-else
+              class="text-center p-8"
+            >
               <div
                 class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"
               >
                 <LoadingOutlined class="text-4xl text-blue-500 animate-spin" />
               </div>
-              <h3 class="text-lg font-medium text-slate-700 dark:text-white mb-2">正在上传...</h3>
-              <p class="text-sm text-slate-500 dark:text-slate-400">请稍候，正在解析文件结构</p>
+              <h3 class="text-lg font-medium text-slate-700 dark:text-white mb-2">
+                正在上传...
+              </h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400">
+                请稍候，正在解析文件结构
+              </p>
             </div>
           </div>
         </div>
@@ -109,14 +129,22 @@
           <div
             class="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between"
           >
-            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">历史批次</h3>
-            <button class="text-blue-500 hover:text-blue-600" @click="() => loadBatches()">
+            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              历史批次
+            </h3>
+            <button
+              class="text-blue-500 hover:text-blue-600"
+              @click="() => loadBatches()"
+            >
               <SyncOutlined :class="{ 'animate-spin': loadingBatches }" />
             </button>
           </div>
 
           <div class="flex-1 overflow-y-auto">
-            <div v-if="batches.length === 0" class="p-8 text-center text-slate-400">
+            <div
+              v-if="batches.length === 0"
+              class="p-8 text-center text-slate-400"
+            >
               暂无上传记录
             </div>
             <div
@@ -137,7 +165,9 @@
                 }}</span>
                 <span class="text-xs text-blue-500">{{ batch.count }} 条</span>
               </div>
-              <div class="text-xs text-slate-500">费用: ¥{{ formatNumber(batch.total_cost) }}</div>
+              <div class="text-xs text-slate-500">
+                费用: ¥{{ formatNumber(batch.total_cost) }}
+              </div>
               <div class="text-xs text-slate-400 mt-1">
                 {{ formatDate(batch.created_at) }}
               </div>
@@ -167,13 +197,23 @@
       <div class="w-24 h-24 rounded-full bg-green-100 flex items-center justify-center mb-6">
         <CheckCircleOutlined class="text-5xl text-green-500" />
       </div>
-      <h2 class="text-2xl font-semibold text-slate-800 mb-2">分析完成！</h2>
+      <h2 class="text-2xl font-semibold text-slate-800 mb-2">
+        分析完成！
+      </h2>
       <p class="text-slate-500 mb-6">
         已处理 {{ analysisResult?.row_count || 0 }} 条病例数据，生成 {{ chartCount }} 个分析图表
       </p>
       <div class="flex gap-4">
-        <a-button @click="currentStep = 'upload'"> 继续上传 </a-button>
-        <a-button type="primary" size="large" @click="goToAnalysis"> 查看分析报表 → </a-button>
+        <a-button @click="currentStep = 'upload'">
+          继续上传
+        </a-button>
+        <a-button
+          type="primary"
+          size="large"
+          @click="goToAnalysis"
+        >
+          查看分析报表 →
+        </a-button>
       </div>
     </div>
   </div>

@@ -74,7 +74,7 @@ describe('apiService trace propagation', () => {
       method: 'post',
       url: '/api/v1/sync/trigger',
       headers: {},
-      data: { source: 'mongo', tier: 'tier1' },
+      data: { source: 'pg', tier: 'tier1' },
     }
 
     const nextConfig = requestFulfilled!(config)

@@ -7,7 +7,9 @@
     >
       <div class="flex items-center gap-2">
         <FileTextOutlined class="text-blue-500" />
-        <h3 class="font-semibold text-slate-800 dark:text-white">病历原文</h3>
+        <h3 class="font-semibold text-slate-800 dark:text-white">
+          病历原文
+        </h3>
       </div>
       <div class="flex gap-2">
         <button
@@ -23,8 +25,14 @@
       </div>
     </div>
 
-    <div v-if="loading" class="p-8">
-      <a-skeleton active :paragraph="{ rows: 10 }" />
+    <div
+      v-if="loading"
+      class="p-8"
+    >
+      <a-skeleton
+        active
+        :paragraph="{ rows: 10 }"
+      />
     </div>
     <div
       v-else-if="medicalText"
@@ -32,8 +40,7 @@
     >
       <pre
         class="font-mono text-sm leading-relaxed whitespace-pre-wrap text-slate-700 dark:text-slate-300"
-        >{{ medicalText }}</pre
-      >
+      >{{ medicalText }}</pre>
     </div>
     <div
       v-else
@@ -52,7 +59,9 @@
           <RobotOutlined class="text-blue-500 text-xl" />
         </div>
       </div>
-      <h3 class="text-lg font-medium text-slate-700 dark:text-slate-200 mb-2">未加载病历</h3>
+      <h3 class="text-lg font-medium text-slate-700 dark:text-slate-200 mb-2">
+        未加载病历
+      </h3>
       <p class="text-slate-500 dark:text-slate-400 text-sm mb-6 text-center max-w-xs">
         上传扫描的 PDF 或图片以开始 AI 分析流程。
       </p>

@@ -1,10 +1,19 @@
 <template>
   <teleport to="body">
-    <div v-if="visible" class="evidence-overlay" @click.self="emit('close')">
+    <div
+      v-if="visible"
+      class="evidence-overlay"
+      @click.self="emit('close')"
+    >
       <div class="evidence-card">
-        <div class="evidence-title">主诊断 LLM 证据</div>
+        <div class="evidence-title">
+          主诊断 LLM 证据
+        </div>
         <template v-if="mainDiagnosisLlmEvidence || codingAuditLlmEvidence">
-          <div class="evidence-hero" :class="formatSeverityClass(topAlert?.severity)">
+          <div
+            class="evidence-hero"
+            :class="formatSeverityClass(topAlert?.severity)"
+          >
             <div class="evidence-hero__left">
               <span class="evidence-hero__badge">{{
                 formatFindingSeverityLabel(topAlert?.severity)
@@ -26,16 +35,22 @@
 
           <div class="evidence-details">
             <section class="evidence-block">
-              <div class="evidence-block-title">主诊断决策</div>
+              <div class="evidence-block-title">
+                主诊断决策
+              </div>
               <div class="evidence-decision-grid">
                 <div class="evidence-decision-col">
-                  <div class="evidence-meta">临床主诊断</div>
+                  <div class="evidence-meta">
+                    临床主诊断
+                  </div>
                   <div class="evidence-decision-main">
                     {{ mainDiagnosisLlmEvidence?.clinician_main_diagnosis || '-' }}
                   </div>
                 </div>
                 <div class="evidence-decision-col">
-                  <div class="evidence-meta">LLM 推荐主诊断</div>
+                  <div class="evidence-meta">
+                    LLM 推荐主诊断
+                  </div>
                   <div class="evidence-decision-main">
                     {{ mainDiagnosisLlmEvidence?.llm_recommended_main_diagnosis || '-' }}
                   </div>
@@ -64,8 +79,13 @@
             </section>
 
             <section class="evidence-block">
-              <div class="evidence-block-title">审核风险（Top3）</div>
-              <div v-if="riskTimelineItems.length === 0" class="evidence-logic">
+              <div class="evidence-block-title">
+                审核风险（Top3）
+              </div>
+              <div
+                v-if="riskTimelineItems.length === 0"
+                class="evidence-logic"
+              >
                 {{ codingAuditLlmEvidence?.summary || '当前未识别到高风险审核项。' }}
               </div>
               <template v-else>
@@ -75,18 +95,15 @@
                   class="evidence-risk-card"
                 >
                   <div class="evidence-risk-head">
-                    <span class="evidence-risk-type"
-                      >{{ formatFindingTypeLabel(risk.type) }}（{{
-                        formatFindingSeverityLabel(risk.severity)
-                      }}）</span
-                    >
+                    <span class="evidence-risk-type">{{ formatFindingTypeLabel(risk.type) }}（{{
+                      formatFindingSeverityLabel(risk.severity)
+                    }}）</span>
                     <span
                       class="evidence-risk-severity"
                       :class="formatSeverityClass(risk.severity)"
-                      >{{
-                        risk.confidence ? `置信度 ${Math.round(risk.confidence * 100)}%` : '待复核'
-                      }}</span
-                    >
+                    >{{
+                      risk.confidence ? `置信度 ${Math.round(risk.confidence * 100)}%` : '待复核'
+                    }}</span>
                   </div>
                   <div class="evidence-key-reason">
                     {{ risk.reason || risk.summary || '未提供风险摘要。' }}
@@ -129,11 +146,16 @@
             </section>
 
             <section class="evidence-block">
-              <div class="evidence-block-title">关键证据</div>
+              <div class="evidence-block-title">
+                关键证据
+              </div>
               <div class="evidence-logic">
                 {{ codingAuditLlmEvidence?.summary || 'LLM审核暂不可用' }}
               </div>
-              <div v-if="keyEvidenceGroups.length === 0" class="evidence-logic">
+              <div
+                v-if="keyEvidenceGroups.length === 0"
+                class="evidence-logic"
+              >
                 当前未返回可展示的关键证据。
               </div>
               <template v-else>
@@ -148,7 +170,9 @@
                       formatFindingSeverityLabel(group.severity)
                     }}</span>
                   </div>
-                  <div class="evidence-key-meta">证据条数：{{ group.evidence.length }}</div>
+                  <div class="evidence-key-meta">
+                    证据条数：{{ group.evidence.length }}
+                  </div>
                   <div class="evidence-collapsed-snippet">
                     {{ buildEvidenceGroupCollapsedText(group.evidence) }}
                   </div>
@@ -181,12 +205,25 @@
             </section>
           </div>
         </template>
-        <section v-else class="evidence-block">
-          <div class="evidence-block-title">暂未生成 LLM 证据</div>
-          <div class="evidence-logic">当前病历尚未返回可用的主诊断证据数据，请稍后重试。</div>
+        <section
+          v-else
+          class="evidence-block"
+        >
+          <div class="evidence-block-title">
+            暂未生成 LLM 证据
+          </div>
+          <div class="evidence-logic">
+            当前病历尚未返回可用的主诊断证据数据，请稍后重试。
+          </div>
         </section>
         <div class="evidence-actions">
-          <button type="button" class="evidence-close-btn" @click="emit('close')">关闭</button>
+          <button
+            type="button"
+            class="evidence-close-btn"
+            @click="emit('close')"
+          >
+            关闭
+          </button>
         </div>
       </div>
     </div>

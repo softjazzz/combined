@@ -1,8 +1,17 @@
 <template>
-  <a-modal :open="open" :title="title" width="1000px" :footer="null" @cancel="handleCancel">
+  <a-modal
+    :open="open"
+    :title="title"
+    width="1000px"
+    :footer="null"
+    @cancel="handleCancel"
+  >
     <div class="p-4">
       <!-- Summary Info -->
-      <div v-if="loading" class="flex justify-center py-10">
+      <div
+        v-if="loading"
+        class="flex justify-center py-10"
+      >
         <a-spin tip="加载数据中..." />
       </div>
 

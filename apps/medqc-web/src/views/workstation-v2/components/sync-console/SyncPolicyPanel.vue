@@ -100,7 +100,7 @@
             class="mt-2"
             show-icon
             message="暂无可选科室"
-            description="请先检查 Mongo 连接配置（mongo_uri / mongo_database）并确认 mr.discharge_dept_name 有真实数据。"
+            description="请先检查远端 PG 连接配置，并确认源库存在可用科室数据（mr.discharge_dept_name）。"
           />
         </div>
 

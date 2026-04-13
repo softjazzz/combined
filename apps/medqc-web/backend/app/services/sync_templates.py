@@ -6,10 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from typing import Any, Optional
-
-from ..services.etl_config import MongoSyncConfig
 
 TemplateId = str
 
@@ -123,7 +120,7 @@ def build_template_overrides(
     *,
     template_id: TemplateId,
     departments: Optional[list[str]],
-    current_config: MongoSyncConfig,
+    current_config: dict[str, Any],
 ) -> dict[str, Any]:
     template = _find_template(template_id)
     normalized = _normalize_departments(departments)
@@ -146,7 +143,7 @@ def build_template_overrides(
         if "*" in normalized:
             raise ValueError("多科模板不允许使用 *")
 
-    payload = asdict(current_config)
+    payload = dict(current_config)
     for key, value in template["defaults"].items():
         payload[key] = value
 

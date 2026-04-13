@@ -7,7 +7,10 @@
     :mask-closable="true"
     @update:open="handleOpenUpdate"
   >
-    <div v-if="loading" class="flex justify-center items-center h-40">
+    <div
+      v-if="loading"
+      class="flex justify-center items-center h-40"
+    >
       <a-spin />
     </div>
     <div
@@ -17,7 +20,10 @@
       <CheckCircleOutlined class="text-4xl text-green-500 mb-4" />
       <p>暂无优化建议，编码质量良好</p>
     </div>
-    <div v-else class="space-y-4">
+    <div
+      v-else
+      class="space-y-4"
+    >
       <div
         v-for="item in suggestions"
         :key="item.suggestion_id"
@@ -35,8 +41,14 @@
           <span
             class="font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-2"
           >
-            <ExclamationCircleOutlined v-if="item.severity === 'error'" class="text-red-500" />
-            <QuestionCircleOutlined v-else class="text-amber-500" />
+            <ExclamationCircleOutlined
+              v-if="item.severity === 'error'"
+              class="text-red-500"
+            />
+            <QuestionCircleOutlined
+              v-else
+              class="text-amber-500"
+            />
             {{ getSuggestionTitle(item.suggestion_type) }}
           </span>
           <span class="text-xs text-slate-400">{{ item.created_at?.substring(5, 16) }}</span>
@@ -52,7 +64,10 @@
         </div>
 
         <div class="flex justify-end gap-2 pl-3">
-          <a-button size="small" @click="$emit('handle', item.suggestion_id, 'reject')">
+          <a-button
+            size="small"
+            @click="$emit('handle', item.suggestion_id, 'reject')"
+          >
             忽略
           </a-button>
           <a-button

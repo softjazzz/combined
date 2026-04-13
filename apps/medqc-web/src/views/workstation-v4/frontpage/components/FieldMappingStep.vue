@@ -10,12 +10,19 @@
           <ArrowLeftOutlined class="text-lg" />
         </button>
         <div>
-          <h2 class="text-xl font-semibold text-slate-800">字段映射确认</h2>
-          <p class="text-sm text-slate-500 mt-1">AI 已自动识别字段对应关系，请核对后确认</p>
+          <h2 class="text-xl font-semibold text-slate-800">
+            字段映射确认
+          </h2>
+          <p class="text-sm text-slate-500 mt-1">
+            AI 已自动识别字段对应关系，请核对后确认
+          </p>
         </div>
       </div>
       <div class="flex items-center gap-3">
-        <div v-if="confidence > 0" class="flex items-center gap-2">
+        <div
+          v-if="confidence > 0"
+          class="flex items-center gap-2"
+        >
           <span class="text-xs text-slate-500">AI 置信度</span>
           <a-progress
             :percent="Math.round(confidence * 100)"
@@ -23,39 +30,67 @@
             :stroke-color="confidence > 0.8 ? '#52c41a' : confidence > 0.5 ? '#faad14' : '#f5222d'"
           />
         </div>
-        <a-tag v-if="fallback" color="orange"> 规则引擎模式 </a-tag>
+        <a-tag
+          v-if="fallback"
+          color="orange"
+        >
+          规则引擎模式
+        </a-tag>
       </div>
     </div>
 
     <!-- 加载中 -->
-    <div v-if="loading" class="mapping-loading">
+    <div
+      v-if="loading"
+      class="mapping-loading"
+    >
       <a-spin size="large" />
-      <p class="mt-4 text-slate-500">正在进行 AI 字段识别...</p>
-      <p class="text-xs text-slate-400 mt-1">首次分析可能需要 5-10 秒</p>
+      <p class="mt-4 text-slate-500">
+        正在进行 AI 字段识别...
+      </p>
+      <p class="text-xs text-slate-400 mt-1">
+        首次分析可能需要 5-10 秒
+      </p>
     </div>
 
     <!-- 映射内容 -->
-    <div v-else class="mapping-content">
+    <div
+      v-else
+      class="mapping-content"
+    >
       <!-- 数据预览 -->
       <div class="preview-section">
         <h3 class="section-title">
           <FileExcelOutlined class="text-green-500" />
           数据预览
           <a-tag>{{ fileName }}</a-tag>
-          <a-tag color="blue"> {{ rowCount }} 行 </a-tag>
+          <a-tag color="blue">
+            {{ rowCount }} 行
+          </a-tag>
         </h3>
         <div class="preview-table-wrapper">
           <table class="preview-table">
             <thead>
               <tr>
-                <th v-for="col in columns" :key="col" class="preview-th">
+                <th
+                  v-for="col in columns"
+                  :key="col"
+                  class="preview-th"
+                >
                   {{ col }}
                 </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, idx) in sampleData.slice(0, 3)" :key="idx">
-                <td v-for="col in columns" :key="col" class="preview-td">
+              <tr
+                v-for="(row, idx) in sampleData.slice(0, 3)"
+                :key="idx"
+              >
+                <td
+                  v-for="col in columns"
+                  :key="col"
+                  class="preview-td"
+                >
                   {{ row[col] || '-' }}
                 </td>
               </tr>
@@ -88,15 +123,24 @@
             <!-- 源列名 -->
             <div class="source-col">
               <span class="col-name">{{ col }}</span>
-              <span v-if="sampleData[0]" class="col-sample">
+              <span
+                v-if="sampleData[0]"
+                class="col-sample"
+              >
                 {{ String(sampleData[0][col] || '').slice(0, 20) }}
               </span>
             </div>
 
             <!-- 箭头 -->
             <div class="mapping-arrow">
-              <RightOutlined v-if="localMappings[col]" class="text-green-500" />
-              <MinusOutlined v-else class="text-slate-300" />
+              <RightOutlined
+                v-if="localMappings[col]"
+                class="text-green-500"
+              />
+              <MinusOutlined
+                v-else
+                class="text-slate-300"
+              />
             </div>
 
             <!-- 目标字段选择 -->
@@ -118,7 +162,12 @@
                 >
                   <div class="field-option">
                     <span>{{ field.name }}</span>
-                    <a-tag v-if="field.required" color="red" size="small" class="ml-1">
+                    <a-tag
+                      v-if="field.required"
+                      color="red"
+                      size="small"
+                      class="ml-1"
+                    >
                       必填
                     </a-tag>
                     <span class="field-key">{{ key }}</span>
@@ -131,7 +180,10 @@
       </div>
 
       <!-- 缺失必填字段警告 -->
-      <div v-if="missingRequired.length > 0" class="missing-warning">
+      <div
+        v-if="missingRequired.length > 0"
+        class="missing-warning"
+      >
         <a-alert
           type="warning"
           show-icon

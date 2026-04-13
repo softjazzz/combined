@@ -1,27 +1,7 @@
 import { http } from '@/utils/http'
 
-export type SyncSource = 'mongo' | 'pg'
+export type SyncSource = 'pg'
 export type SyncTier = 'tier1' | 'tier2' | 'tier3' | 'all'
-
-export interface MongoConnectionConfig {
-  mongo_uri?: string
-  mongo_uri_display?: string
-  mongo_database?: string
-  read_preference?: 'primary' | 'primaryPreferred' | 'secondary' | 'secondaryPreferred' | 'nearest'
-  connect_timeout_ms?: number
-  discharge_stable_days?: number
-  lookback_minutes?: number
-  rescan_recent_days?: number
-  tier1_interval_minutes?: number
-  tier2_interval_minutes?: number
-  tier3_cron?: string
-  max_batch_size?: number
-  inter_request_delay_ms?: number
-  night_window_start?: string
-  night_window_end?: string
-  target_departments?: string[]
-  enabled?: boolean
-}
 
 export interface PgConnectionConfig {
   remote_host?: string
@@ -60,7 +40,6 @@ export interface PgSyncTableConfigItem {
 
 export interface SyncStatusResponse {
   pg_sync: Record<string, any>
-  mongo_sync: Record<string, any>
 }
 
 export interface SyncStatistics {
@@ -82,7 +61,6 @@ export interface SyncConnectionStatus {
   all_connected: boolean
   connected_count: number
   total_sources: number
-  mongo: Record<string, any>
   pg_remote: Record<string, any>
   pg_local: Record<string, any>
 }
@@ -125,7 +103,7 @@ export interface SyncMappingsResponse {
 
 export interface SyncRunLogItem {
   id: string
-  source: SyncSource
+  source: 'pg'
   tier: SyncTier | 'all'
   status: 'success' | 'failed' | 'partial' | string
   started_at: string
@@ -157,7 +135,27 @@ export interface SyncTemplate {
   risk_tip: string
   requires_departments: boolean
   allow_multi_departments: boolean
-  defaults: Partial<MongoConnectionConfig>
+  defaults: Record<string, any>
+}
+
+export interface SyncPolicyConfig {
+  scope?: 'running' | 'final' | 'frontpage' | 'coding' | 'settlement' | 'both' | string
+  target_departments?: string[]
+  start_date?: string
+  end_date?: string
+  schedule?: {
+    mode?: 'interval' | 'cron' | string
+    minutes?: number
+  }
+  night_window?: {
+    start?: string
+    end?: string
+  }
+  mirror_delay_base_minutes?: number
+  policy_version?: string
+  template_id?: string
+  template_mapping_version?: string
+  template_applied_at?: string
 }
 
 function unwrapSyncResponse<T = any>(raw: any): T {
@@ -186,18 +184,6 @@ export const syncApi = {
     return unwrapSyncResponse<SyncStatistics>(response.data)
   },
 
-  async getMongoConfig(): Promise<MongoConnectionConfig> {
-    const response = await http.get('/api/v1/sync/config/mongo')
-    return unwrapSyncResponse<MongoConnectionConfig>(response.data)
-  },
-
-  async updateMongoConfig(
-    payload: Partial<MongoConnectionConfig>,
-  ): Promise<{ config: MongoConnectionConfig }> {
-    const response = await http.put('/api/v1/sync/config/mongo', payload)
-    return unwrapSyncResponse<{ config: MongoConnectionConfig }>(response.data)
-  },
-
   async getPgConfig(): Promise<PgConnectionConfig> {
     const response = await http.get('/api/v1/sync/config/pg')
     return unwrapSyncResponse<PgConnectionConfig>(response.data)
@@ -218,6 +204,25 @@ export const syncApi = {
     )
   },
 
+  async getSyncPolicy(): Promise<SyncPolicyConfig> {
+    const response = await http.get('/api/v1/sync/config/policy')
+    return unwrapSyncResponse<SyncPolicyConfig>(response.data)
+  },
+
+  async updateSyncPolicy(payload: {
+    scope?: SyncPolicyConfig['scope']
+    target_departments?: string[]
+    start_date?: string
+    end_date?: string
+    schedule?: SyncPolicyConfig['schedule']
+    night_window?: SyncPolicyConfig['night_window']
+    mirror_delay_base_minutes?: number
+    keep_policy_version?: boolean
+  }): Promise<SyncPolicyConfig> {
+    const response = await http.put('/api/v1/sync/config/policy', payload)
+    return unwrapSyncResponse<SyncPolicyConfig>(response.data)
+  },
+
   async getPgSyncTables(): Promise<{ items: PgSyncTableConfigItem[]; total: number }> {
     const response = await http.get('/api/v1/sync/config/pg/tables')
     return unwrapSyncResponse<{ items: PgSyncTableConfigItem[]; total: number }>(response.data)
@@ -234,11 +239,6 @@ export const syncApi = {
   }): Promise<{ items: PgSyncTableConfigItem[]; total: number }> {
     const response = await http.put('/api/v1/sync/config/pg/tables', payload)
     return unwrapSyncResponse<{ items: PgSyncTableConfigItem[]; total: number }>(response.data)
-  },
-
-  async testMongoConnection(): Promise<Record<string, any>> {
-    const response = await http.post('/api/v1/sync/test-connection/mongo')
-    return unwrapSyncResponse<Record<string, any>>(response.data)
   },
 
   async testPgRemoteConnection(): Promise<Record<string, any>> {
@@ -297,9 +297,9 @@ export const syncApi = {
   async applyTemplate(payload: {
     template_id: SyncTemplate['id']
     departments?: string[]
-  }): Promise<{ template_id: string; config: MongoConnectionConfig }> {
+  }): Promise<{ template_id: string; policy: SyncPolicyConfig }> {
     const response = await http.post('/api/v1/sync/templates/apply', payload)
-    return unwrapSyncResponse<{ template_id: string; config: MongoConnectionConfig }>(response.data)
+    return unwrapSyncResponse<{ template_id: string; policy: SyncPolicyConfig }>(response.data)
   },
 
   async getDepartments(): Promise<string[]> {

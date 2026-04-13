@@ -4,11 +4,11 @@ import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   syncApi,
-  type MongoConnectionConfig,
   type PgConnectionConfig,
   type PgSyncTableConfigItem,
   type SyncConnectionStatus,
   type SyncMappingItem,
+  type SyncPolicyConfig,
   type SyncPreflightResult,
   type SyncRunLogItem as SyncRunHistoryItem,
   type SyncSource,
@@ -29,13 +29,6 @@ export interface SyncOverviewStats {
   lastSyncTime: string | null
   pendingRecords: number
   failedRecords: number
-}
-
-export interface MongoConnectionForm {
-  mongo_uri: string
-  mongo_database: string
-  read_preference: MongoConnectionConfig['read_preference']
-  connect_timeout_ms: number
 }
 
 export interface PgConnectionForm {
@@ -60,6 +53,13 @@ export interface PgSyncTableFormItem {
 }
 
 export interface SyncPolicyForm {
+  scope: 'running' | 'final' | 'frontpage' | 'coding' | 'settlement' | 'both'
+  start_date: string
+  end_date: string
+  schedule_mode: 'interval' | 'cron'
+  schedule_minutes: number
+  mirror_delay_base_minutes: number
+  policy_version: string
   enabled: boolean
   target_departments: string[]
   discharge_stable_days: number
@@ -86,17 +86,8 @@ function parseTimestamp(value?: string | null): number {
   return Number.isNaN(parsed) ? 0 : parsed
 }
 
-function pickLastSyncTime(
-  mongoSyncState: Record<string, any>,
-  pgSyncState: Record<string, any>,
-): string | null {
-  const candidates = [
-    mongoSyncState.tier3_last_run,
-    mongoSyncState.tier2_last_run,
-    mongoSyncState.tier1_last_run,
-    mongoSyncState.last_sync_time,
-    pgSyncState.last_sync_time,
-  ].filter(Boolean) as string[]
+function pickLastSyncTime(pgSyncState: Record<string, any>): string | null {
+  const candidates = [pgSyncState.last_sync_time].filter(Boolean) as string[]
 
   if (candidates.length === 0) {
     return null
@@ -124,13 +115,6 @@ function createInitialState() {
       failedRecords: 0,
     } as SyncOverviewStats,
 
-    mongoConnectionForm: {
-      mongo_uri: '',
-      mongo_database: 'his_emr',
-      read_preference: 'secondaryPreferred',
-      connect_timeout_ms: 5000,
-    } as MongoConnectionForm,
-
     pgConnectionForm: {
       remote_host: '',
       remote_port: 5432,
@@ -145,6 +129,13 @@ function createInitialState() {
     pgSyncTables: [] as PgSyncTableFormItem[],
 
     policyForm: {
+      scope: 'both',
+      start_date: '',
+      end_date: '',
+      schedule_mode: 'interval',
+      schedule_minutes: 30,
+      mirror_delay_base_minutes: 30,
+      policy_version: '',
       enabled: false,
       target_departments: ['*'],
       discharge_stable_days: 3,
@@ -159,11 +150,9 @@ function createInitialState() {
       night_window_end: '06:00',
     } as SyncPolicyForm,
 
-    mongoConfigRaw: {} as MongoConnectionConfig,
     pgConfigRaw: {} as PgConnectionConfig,
-    mongoSyncState: {} as Record<string, any>,
     pgSyncState: {} as Record<string, any>,
-    mongoStats: { PENDING: 0, PARTIAL: 0, SYNCED: 0, STALE: 0, FAILED: 0 } as SyncStatistics,
+    pgStats: { PENDING: 0, PARTIAL: 0, SYNCED: 0, STALE: 0, FAILED: 0 } as SyncStatistics,
     connectionStatus: null as SyncConnectionStatus | null,
     preflightResult: null as SyncPreflightResult | null,
     mappings: [] as SyncMappingItem[],
@@ -176,7 +165,6 @@ function createInitialState() {
     isLoadingStatus: false,
     isTestingAll: false,
     isTestingActive: false,
-    isSavingMongoConnection: false,
     isSavingPgConnection: false,
     isLoadingPgTables: false,
     isSavingPgTables: false,
@@ -210,29 +198,39 @@ function pushLog(level: SyncRuntimeLogItem['level'], text: string) {
   })
 }
 
-function patchMongoForms(payload: MongoConnectionConfig) {
-  globalSyncState.mongoConfigRaw = payload
-  globalSyncState.mongoConnectionForm.mongo_uri = ''
-  globalSyncState.mongoConnectionForm.mongo_database = payload.mongo_database || 'his_emr'
-  globalSyncState.mongoConnectionForm.read_preference =
-    payload.read_preference || 'secondaryPreferred'
-  globalSyncState.mongoConnectionForm.connect_timeout_ms = payload.connect_timeout_ms || 5000
-
-  globalSyncState.policyForm.enabled = payload.enabled ?? false
-  globalSyncState.policyForm.target_departments =
+function patchSyncPolicy(payload: SyncPolicyConfig) {
+  const departments =
     Array.isArray(payload.target_departments) && payload.target_departments.length > 0
       ? payload.target_departments
       : ['*']
-  globalSyncState.policyForm.discharge_stable_days = payload.discharge_stable_days ?? 3
-  globalSyncState.policyForm.lookback_minutes = payload.lookback_minutes ?? 10
-  globalSyncState.policyForm.rescan_recent_days = payload.rescan_recent_days ?? 7
-  globalSyncState.policyForm.tier1_interval_minutes = payload.tier1_interval_minutes ?? 30
-  globalSyncState.policyForm.tier2_interval_minutes = payload.tier2_interval_minutes ?? 120
-  globalSyncState.policyForm.tier3_cron = payload.tier3_cron || '0 2 * * *'
-  globalSyncState.policyForm.max_batch_size = payload.max_batch_size ?? 100
-  globalSyncState.policyForm.inter_request_delay_ms = payload.inter_request_delay_ms ?? 200
-  globalSyncState.policyForm.night_window_start = payload.night_window_start || '22:00'
-  globalSyncState.policyForm.night_window_end = payload.night_window_end || '06:00'
+  const schedule = payload.schedule || {}
+  const nightWindow = payload.night_window || {}
+
+  const scope = String(payload.scope || 'both').toLowerCase()
+  const normalizedScope: SyncPolicyForm['scope'] = [
+    'running',
+    'final',
+    'frontpage',
+    'coding',
+    'settlement',
+    'both',
+  ].includes(scope)
+    ? (scope as SyncPolicyForm['scope'])
+    : 'both'
+
+  globalSyncState.policyForm.scope = normalizedScope
+  globalSyncState.policyForm.target_departments = departments
+  globalSyncState.policyForm.start_date = String(payload.start_date || '')
+  globalSyncState.policyForm.end_date = String(payload.end_date || '')
+  globalSyncState.policyForm.schedule_mode =
+    String(schedule.mode || '').toLowerCase() === 'cron' ? 'cron' : 'interval'
+  globalSyncState.policyForm.schedule_minutes = Number(schedule.minutes || 30)
+  globalSyncState.policyForm.night_window_start = String(nightWindow.start || '22:00')
+  globalSyncState.policyForm.night_window_end = String(nightWindow.end || '06:00')
+  globalSyncState.policyForm.mirror_delay_base_minutes = Number(
+    payload.mirror_delay_base_minutes || 30,
+  )
+  globalSyncState.policyForm.policy_version = String(payload.policy_version || '')
 }
 
 function patchPgForms(payload: PgConnectionConfig) {
@@ -261,9 +259,9 @@ function normalizePgSyncTable(item: PgSyncTableConfigItem): PgSyncTableFormItem 
 }
 
 function recomputeOverview() {
-  const pending = Number(globalSyncState.mongoStats.PENDING || 0)
-  const partial = Number(globalSyncState.mongoStats.PARTIAL || 0)
-  const failed = Number(globalSyncState.mongoStats.FAILED || 0)
+  const pending = Number(globalSyncState.pgStats.PENDING || 0)
+  const partial = Number(globalSyncState.pgStats.PARTIAL || 0)
+  const failed = Number(globalSyncState.pgStats.FAILED || 0)
 
   let connectedCount = 0
   if (globalSyncState.connectionStatus) {
@@ -275,22 +273,19 @@ function recomputeOverview() {
 
   globalSyncState.stats.connectedCount = connectedCount
   globalSyncState.stats.totalSources = 2
-  globalSyncState.stats.lastSyncTime = pickLastSyncTime(
-    globalSyncState.mongoSyncState,
-    globalSyncState.pgSyncState,
-  )
+  globalSyncState.stats.lastSyncTime = pickLastSyncTime(globalSyncState.pgSyncState)
   globalSyncState.stats.pendingRecords = pending + partial
   globalSyncState.stats.failedRecords = failed
-}
-
-async function loadMongoConfig() {
-  const payload = await syncApi.getMongoConfig()
-  patchMongoForms(payload)
 }
 
 async function loadPgConfig() {
   const payload = await syncApi.getPgConfig()
   patchPgForms(payload)
+}
+
+async function loadSyncPolicy() {
+  const payload = await syncApi.getSyncPolicy()
+  patchSyncPolicy(payload)
 }
 
 async function loadPgSyncTables() {
@@ -317,9 +312,8 @@ async function loadStatusAndStats() {
       syncApi.getStatus(),
       syncApi.getStatistics(),
     ])
-    globalSyncState.mongoSyncState = statusResp.mongo_sync || {}
     globalSyncState.pgSyncState = statusResp.pg_sync || {}
-    globalSyncState.mongoStats = statsResp
+    globalSyncState.pgStats = statsResp
     globalSyncState.isSyncing = Boolean(globalSyncState.pgSyncState.is_running)
     recomputeOverview()
   } finally {
@@ -441,29 +435,6 @@ async function testActiveConnection() {
   }
 }
 
-async function saveMongoConnection() {
-  globalSyncState.isSavingMongoConnection = true
-  try {
-    const payload = {
-      mongo_database: globalSyncState.mongoConnectionForm.mongo_database,
-      read_preference: globalSyncState.mongoConnectionForm.read_preference,
-      connect_timeout_ms: Number(globalSyncState.mongoConnectionForm.connect_timeout_ms),
-      mongo_uri: globalSyncState.mongoConnectionForm.mongo_uri || undefined,
-    }
-    await syncApi.updateMongoConfig(payload)
-    pushLog('success', 'Mongo 连接配置已保存')
-    await loadMongoConfig()
-    await loadStatusAndStats()
-    return await syncApi.testMongoConnection()
-  } catch (error: any) {
-    const errMsg = error?.response?.data?.detail || error?.message || '未知错误'
-    pushLog('error', `保存 Mongo 连接配置失败：${errMsg}`)
-    throw error
-  } finally {
-    globalSyncState.isSavingMongoConnection = false
-  }
-}
-
 async function savePgConnection() {
   globalSyncState.isSavingPgConnection = true
   try {
@@ -530,22 +501,23 @@ async function savePolicy() {
     const safeDepartments =
       departments.length === 0 || departments.includes('*') ? ['*'] : departments
 
-    await syncApi.updateMongoConfig({
-      enabled: globalSyncState.policyForm.enabled,
+    const saved = await syncApi.updateSyncPolicy({
+      scope: globalSyncState.policyForm.scope,
       target_departments: safeDepartments,
-      discharge_stable_days: globalSyncState.policyForm.discharge_stable_days,
-      lookback_minutes: globalSyncState.policyForm.lookback_minutes,
-      rescan_recent_days: globalSyncState.policyForm.rescan_recent_days,
-      tier1_interval_minutes: globalSyncState.policyForm.tier1_interval_minutes,
-      tier2_interval_minutes: globalSyncState.policyForm.tier2_interval_minutes,
-      tier3_cron: globalSyncState.policyForm.tier3_cron,
-      max_batch_size: globalSyncState.policyForm.max_batch_size,
-      inter_request_delay_ms: globalSyncState.policyForm.inter_request_delay_ms,
-      night_window_start: globalSyncState.policyForm.night_window_start,
-      night_window_end: globalSyncState.policyForm.night_window_end,
+      start_date: globalSyncState.policyForm.start_date || undefined,
+      end_date: globalSyncState.policyForm.end_date || undefined,
+      schedule: {
+        mode: globalSyncState.policyForm.schedule_mode,
+        minutes: Number(globalSyncState.policyForm.schedule_minutes || 30),
+      },
+      night_window: {
+        start: globalSyncState.policyForm.night_window_start,
+        end: globalSyncState.policyForm.night_window_end,
+      },
+      mirror_delay_base_minutes: Number(globalSyncState.policyForm.mirror_delay_base_minutes || 30),
     })
+    patchSyncPolicy(saved)
     pushLog('success', '同步策略已保存')
-    await loadMongoConfig()
   } catch (error: any) {
     const errMsg = error?.response?.data?.detail || error?.message || '未知错误'
     pushLog('error', `保存同步策略失败：${errMsg}`)
@@ -566,10 +538,9 @@ async function applyTemplate() {
           : undefined,
     })
     pushLog('success', `模板已应用：${resp.template_id}`)
-    await loadMongoConfig()
-    await loadStatusAndStats()
+    await Promise.all([loadSyncPolicy(), loadStatusAndStats()])
     try {
-      await runPreflight('mongo')
+      await runPreflight('pg')
     } catch {
       // 模板应用后预检失败仅记录日志，不中断主流程
     }
@@ -607,7 +578,7 @@ function startPolling() {
   }, 2000)
 }
 
-async function runPreflight(source: SyncSource = 'mongo') {
+async function runPreflight(source: SyncSource = 'pg') {
   globalSyncState.isPreflighting = true
   try {
     const result = await syncApi.preflight({
@@ -630,7 +601,7 @@ async function runPreflight(source: SyncSource = 'mongo') {
   }
 }
 
-async function executeSync(source: SyncSource = 'mongo') {
+async function executeSync(source: SyncSource = 'pg') {
   globalSyncState.isSyncing = true
   try {
     const result = await syncApi.triggerSync({
@@ -661,7 +632,15 @@ function clearLogs() {
 async function initialize() {
   globalSyncState.isInitializing = true
   try {
-    await Promise.all([loadPgConfig(), loadPgSyncTables(), loadStatusAndStats(), loadRunHistory()])
+    await Promise.all([
+      loadPgConfig(),
+      loadPgSyncTables(),
+      loadSyncPolicy(),
+      loadTemplates(),
+      loadDepartments(),
+      loadStatusAndStats(),
+      loadRunHistory(),
+    ])
     pushLog('info', '数据同步控制台已加载')
   } catch (error: any) {
     const errMsg = error?.response?.data?.detail || error?.message || '加载失败'
@@ -705,7 +684,6 @@ export function useDataSync() {
     loadStatusAndStats,
     testAllConnections,
     testActiveConnection,
-    saveMongoConnection,
     savePgConnection,
     loadPgSyncTables,
     savePgSyncTables,
@@ -716,6 +694,7 @@ export function useDataSync() {
     loadMappings,
     loadRunHistory: refreshRunHistory,
     applyTemplate,
+    loadSyncPolicy,
     loadTemplates,
     loadDepartments,
     resetState,

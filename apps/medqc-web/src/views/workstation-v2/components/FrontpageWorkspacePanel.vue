@@ -1,6 +1,9 @@
 <template>
   <div class="frontpage-workspace-panel">
-    <div v-if="generating" class="py-4">
+    <div
+      v-if="generating"
+      class="py-4"
+    >
       <div
         class="mb-3 rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(250,252,255,0.98)_0%,rgba(255,255,255,0.98)_100%)] px-4 py-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.035)]"
       >
@@ -57,43 +60,56 @@
               class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[10px]"
               :class="moduleIconClass(module.status)"
             >
-              <CheckCircleOutlined v-if="module.status === 'done'" class="text-[12px] text-white" />
+              <CheckCircleOutlined
+                v-if="module.status === 'done'"
+                class="text-[12px] text-white"
+              />
               <span
                 v-else-if="module.status === 'active'"
                 class="h-2.5 w-2.5 rounded-full bg-white animate-pulse"
               />
-              <span v-else class="h-2 w-2 rounded-full bg-slate-400" />
+              <span
+                v-else
+                class="h-2 w-2 rounded-full bg-slate-400"
+              />
             </div>
 
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span class="text-[13px] font-semibold" :class="moduleTitleClass(module.status)">{{
+                <span
+                  class="text-[13px] font-semibold"
+                  :class="moduleTitleClass(module.status)"
+                >{{
                   module.label
                 }}</span>
-                <span v-if="module.entry?.timestamp" class="text-[10px] tabular-nums text-slate-400"
-                  >{{ (module.entry.timestamp / 1000).toFixed(1) }}s</span
-                >
+                <span
+                  v-if="module.entry?.timestamp"
+                  class="text-[10px] tabular-nums text-slate-400"
+                >{{ (module.entry.timestamp / 1000).toFixed(1) }}s</span>
                 <span
                   v-if="module.status === 'active'"
                   class="rounded-full border border-blue-100/80 bg-blue-50/70 px-2 py-0.5 text-[10px] font-semibold text-blue-600"
-                  >提取中</span
-                >
+                >提取中</span>
                 <span
                   v-else-if="module.status === 'done'"
                   class="rounded-full border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-500"
-                  >已完成</span
-                >
+                >已完成</span>
               </div>
 
-              <div v-if="module.entry?.preview?.length" class="mt-1.5 flex flex-wrap gap-1.5">
+              <div
+                v-if="module.entry?.preview?.length"
+                class="mt-1.5 flex flex-wrap gap-1.5"
+              >
                 <span
                   v-for="(preview, pi) in module.entry.preview"
                   :key="pi"
                   class="max-w-[220px] truncate rounded-full border border-slate-200/80 bg-white px-2.5 py-0.5 text-[11px] leading-5 text-slate-600"
-                  >{{ preview.label }}: {{ preview.value }}</span
-                >
+                >{{ preview.label }}: {{ preview.value }}</span>
               </div>
-              <div v-else class="mt-1.5 text-[11px] text-slate-400">
+              <div
+                v-else
+                class="mt-1.5 text-[11px] text-slate-400"
+              >
                 {{ module.status === 'active' ? '正在解析当前模块字段...' : '等待提取' }}
               </div>
             </div>
@@ -125,7 +141,9 @@
             >
               <FileTextOutlined class="text-2xl" />
             </div>
-            <div class="mb-1 text-sm font-medium text-slate-500">尚未生成 AI 首页草稿</div>
+            <div class="mb-1 text-sm font-medium text-slate-500">
+              尚未生成 AI 首页草稿
+            </div>
             <div class="text-xs text-slate-400">
               可点击右上角“AI 生成首页”生成草稿；系统首页请查看“系统首页”标签。
             </div>
@@ -140,7 +158,10 @@
         </template>
 
         <template #official>
-          <FrontpageOfficialSheet :sheet-loading="sheetLoading" :sheet-data="sheetData" />
+          <FrontpageOfficialSheet
+            :sheet-loading="sheetLoading"
+            :sheet-data="sheetData"
+          />
         </template>
       </FrontpagePreviewTabs>
     </div>

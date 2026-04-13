@@ -32,12 +32,10 @@
           <span
             v-if="dept.warningCount > 0"
             class="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-blue-500 text-white text-[10px] font-bold px-1"
-            >{{ dept.warningCount }}</span
-          >
+          >{{ dept.warningCount }}</span>
           <span
             class="min-w-[20px] h-[20px] flex items-center justify-center rounded-full text-[10px] font-bold px-1.5 bg-slate-200/80 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-            >{{ dept.total }}</span
-          >
+          >{{ dept.total }}</span>
         </div>
       </div>
     </div>
@@ -48,7 +46,9 @@
         <SafetyCertificateOutlined class="text-base" />
         <div>
           <div>质控规则</div>
-          <div class="text-[11px] font-medium text-blue-600/80">统一规则总览</div>
+          <div class="text-[11px] font-medium text-blue-600/80">
+            统一规则总览
+          </div>
         </div>
       </div>
     </div>

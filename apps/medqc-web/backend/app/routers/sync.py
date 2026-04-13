@@ -2,7 +2,6 @@
 数据同步 API 路由（V4）
 
 统一归口：
-- /api/v1/sync/config/mongo
 - /api/v1/sync/config/pg
 - /api/v1/sync/status
 - /api/v1/sync/statistics
@@ -77,17 +76,6 @@ def require_sync_write_access(current_user: dict = Depends(get_current_user)) ->
     return current_user
 
 
-def _mask_mongo_uri(uri: str) -> str:
-    if not uri:
-        return ""
-    if "@" in uri:
-        parts = uri.split("@")
-        cred = parts[0].rsplit(":", 1)
-        if len(cred) == 2:
-            return f"{cred[0]}:***@{parts[1]}"
-    return uri
-
-
 def _mask_pg_config(raw: dict) -> dict:
     data = dict(raw)
     password = str(data.get("remote_password") or "")
@@ -101,36 +89,10 @@ def _mask_pg_config(raw: dict) -> dict:
 
 
 class TriggerRequest(BaseModel):
-    source: Literal["pg", "mongo"] = "pg"
+    source: Literal["pg"] = "pg"
     sync_date: Optional[str] = None
-    tier: Literal["tier1", "tier2", "tier3", "all"] = "all"
+    tier: Literal["all"] = "all"
     tables: Optional[list[str]] = None
-
-
-class MongoConfigUpdate(BaseModel):
-    mongo_uri: Optional[str] = Field(default=None, min_length=1, max_length=500)
-    mongo_database: Optional[str] = Field(default=None, min_length=1, max_length=128)
-    read_preference: Optional[Literal["primary", "primaryPreferred", "secondary", "secondaryPreferred", "nearest"]] = None
-    max_pool_size: Optional[int] = Field(default=None, ge=1, le=50)
-    socket_timeout_ms: Optional[int] = Field(default=None, ge=1000, le=120000)
-    connect_timeout_ms: Optional[int] = Field(default=None, ge=1000, le=60000)
-    discharge_stable_days: Optional[int] = Field(default=None, ge=0, le=60)
-    lookback_minutes: Optional[int] = Field(default=None, ge=0, le=240)
-    rescan_recent_days: Optional[int] = Field(default=None, ge=0, le=60)
-    tier1_interval_minutes: Optional[int] = Field(default=None, ge=5, le=1440)
-    tier2_interval_minutes: Optional[int] = Field(default=None, ge=5, le=1440)
-    tier3_cron: Optional[str] = Field(default=None, min_length=3, max_length=80)
-    max_batch_size: Optional[int] = Field(default=None, ge=10, le=5000)
-    tier3_batch_size: Optional[int] = Field(default=None, ge=10, le=2000)
-    inter_request_delay_ms: Optional[int] = Field(default=None, ge=0, le=10000)
-    max_concurrent: Optional[int] = Field(default=None, ge=1, le=20)
-    query_timeout_s: Optional[int] = Field(default=None, ge=1, le=600)
-    retry_max: Optional[int] = Field(default=None, ge=0, le=20)
-    retry_backoff: Optional[list[int]] = Field(default=None)
-    night_window_start: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
-    night_window_end: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
-    target_departments: Optional[list[str]] = None
-    enabled: Optional[bool] = None
 
 
 class PgConfigUpdate(BaseModel):
@@ -144,9 +106,30 @@ class PgConfigUpdate(BaseModel):
     sync_mode: Optional[Literal["table", "procedure"]] = None
 
 
+class SyncPolicyScheduleUpdate(BaseModel):
+    mode: Optional[Literal["interval", "cron"]] = "interval"
+    minutes: Optional[int] = Field(default=None, ge=1, le=1440)
+
+
+class SyncPolicyNightWindowUpdate(BaseModel):
+    start: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    end: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+
+
+class SyncPolicyUpdate(BaseModel):
+    scope: Optional[Literal["running", "final", "frontpage", "coding", "settlement", "both"]] = None
+    target_departments: Optional[list[str]] = None
+    start_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    schedule: Optional[SyncPolicyScheduleUpdate] = None
+    night_window: Optional[SyncPolicyNightWindowUpdate] = None
+    mirror_delay_base_minutes: Optional[int] = Field(default=None, ge=0, le=720)
+    keep_policy_version: Optional[bool] = False
+
+
 class PreflightRequest(BaseModel):
-    source: Literal["mongo", "pg"] = "mongo"
-    tier: Literal["tier1", "tier2", "tier3", "all"] = "all"
+    source: Literal["pg"] = "pg"
+    tier: Literal["all"] = "all"
     tables: Optional[list[str]] = None
 
 
@@ -239,65 +222,35 @@ def _build_idempotency_key(*, source: str, tier: str, sync_date: str, operator: 
 
 @router.get("/status")
 async def get_sync_status(request: Request, _: dict = Depends(require_sync_read_access)):
-    """获取同步状态（PG + MongoDB）"""
+    """获取同步状态（仅 PG）"""
     from ..services.etl_sync import get_sync_state
-    from ..services.mongo_sync import get_mongo_sync_state
 
     return _ok(request, {
         "pg_sync": get_sync_state(),
-        "mongo_sync": get_mongo_sync_state(),
     })
 
 
 @router.get("/statistics")
 async def get_statistics(request: Request, _: dict = Depends(require_sync_read_access)):
-    """同步统计（各状态 visit 数量）"""
-    from ..services.mongo_sync import get_sync_statistics
+    """同步统计（PG 口径，保留旧字段形状）"""
+    from ..services.etl_sync import get_sync_state
 
-    return _ok(request, get_sync_statistics())
-
-
-# ==================== MongoDB 配置 ====================
-
-@router.get("/config/mongo")
-async def get_mongo_config(request: Request, _: dict = Depends(require_sync_read_access)):
-    """获取 MongoDB 同步配置"""
-    from ..services.etl_config import load_mongo_config
-
-    config = load_mongo_config()
-    data = asdict(config)
-    data["mongo_uri_display"] = _mask_mongo_uri(str(data.get("mongo_uri") or ""))
-    return _ok(request, data)
-
-
-@router.put("/config/mongo")
-async def update_mongo_config(
-    request: Request,
-    update: MongoConfigUpdate,
-    current_user: dict = Depends(require_sync_write_access),
-):
-    """更新 MongoDB 同步配置"""
-    from ..services.etl_config import load_mongo_config, save_mongo_config
-
-    config = load_mongo_config()
-    for key, value in update.model_dump(exclude_none=True).items():
-        if hasattr(config, key):
-            setattr(config, key, value)
-
-    saved = save_mongo_config(config)
-    saved["mongo_uri_display"] = _mask_mongo_uri(str(saved.get("mongo_uri") or ""))
-    audit_event(
+    sync_state = get_sync_state()
+    is_running = bool(sync_state.get("is_running"))
+    logs = sync_state.get("logs") if isinstance(sync_state.get("logs"), list) else []
+    failed = sum(1 for item in logs if isinstance(item, dict) and str(item.get("status")) == "failed")
+    partial = 1 if str(sync_state.get("last_sync_status")) == "partial" else 0
+    pending = 1 if is_running else 0
+    return _ok(
         request,
-        action="sync.config.mongo.update",
-        resource="/api/v1/sync/config/mongo",
-        outcome="success",
-        current_user=current_user,
-        details={
-            "changed_fields": sorted(update.model_dump(exclude_none=True).keys()),
-            "enabled": bool(saved.get("enabled")),
+        {
+            "PENDING": pending,
+            "PARTIAL": partial,
+            "SYNCED": int(sync_state.get("total_records_synced") or 0),
+            "STALE": 0,
+            "FAILED": failed,
         },
     )
-    return _ok(request, {"config": saved})
 
 
 # ==================== PG 配置 ====================
@@ -356,6 +309,46 @@ async def update_pg_config(
     )
 
 
+@router.get("/config/policy")
+async def get_sync_policy(request: Request, _: dict = Depends(require_sync_read_access)):
+    """获取 PG 抽取策略（scope/日期窗口/调度/夜间窗口）。"""
+    from ..services.sync_policy import load_sync_policy
+
+    policy = load_sync_policy()
+    return _ok(request, policy)
+
+
+@router.put("/config/policy")
+async def update_sync_policy(
+    request: Request,
+    update: SyncPolicyUpdate,
+    current_user: dict = Depends(require_sync_write_access),
+):
+    """更新 PG 抽取策略（仅 admin）。"""
+    from ..services.sync_policy import save_sync_policy
+
+    payload = update.model_dump(exclude_none=True)
+    keep_policy_version = bool(payload.pop("keep_policy_version", False))
+    try:
+        saved = save_sync_policy(payload, keep_policy_version=keep_policy_version)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
+    audit_event(
+        request,
+        action="sync.config.policy.update",
+        resource="/api/v1/sync/config/policy",
+        outcome="success",
+        current_user=current_user,
+        details={
+            "changed_fields": sorted(update.model_dump(exclude_none=True).keys()),
+            "scope": saved.get("scope"),
+            "policy_version": saved.get("policy_version"),
+        },
+    )
+    return _ok(request, saved)
+
+
 @router.get("/config/pg/tables")
 async def get_pg_sync_tables(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取 PG 表直连同步配置（分阶段启用）"""
@@ -396,30 +389,6 @@ async def update_pg_sync_tables(
 
 # ==================== 连接测试 ====================
 
-@router.post("/test-connection/mongo")
-async def test_mongo_connection(request: Request, _: dict = Depends(require_sync_write_access)):
-    """测试 MongoDB 连接（仅 admin）"""
-    from ..services.etl_config import load_mongo_config
-    from ..services.mongo_sync import MongoConnector
-
-    config = load_mongo_config()
-    if not config.mongo_uri:
-        return _ok(request, {"connected": False, "error": "mongo_uri 未配置"})
-
-    connector = MongoConnector(
-        uri=config.mongo_uri,
-        database=config.mongo_database,
-        read_preference=config.read_preference,
-        max_pool_size=1,
-        socket_timeout_ms=config.query_timeout_s * 1000,
-        connect_timeout_ms=config.connect_timeout_ms,
-    )
-    try:
-        return _ok(request, connector.test_connection())
-    finally:
-        connector.close()
-
-
 @router.post("/test-connection/pg-remote")
 async def test_pg_remote(request: Request, _: dict = Depends(require_sync_write_access)):
     """测试远端 PG 连接（仅 admin）"""
@@ -455,41 +424,24 @@ async def test_all_connections(request: Request, _: dict = Depends(require_sync_
 
 
 @router.get("/departments")
-async def get_mongo_departments(request: Request, _: dict = Depends(require_sync_read_access)):
-    """从远端 Mongo 实时获取科室列表（用于模板科室选择）"""
-    from ..services.etl_config import load_mongo_config
-    from ..services.mongo_sync import MongoConnector
-
-    config = load_mongo_config()
-    if not config.mongo_uri:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="mongo_uri 未配置")
-
-    connector = MongoConnector(
-        uri=config.mongo_uri,
-        database=config.mongo_database,
-        read_preference=config.read_preference,
-        max_pool_size=1,
-        socket_timeout_ms=config.query_timeout_s * 1000,
-        connect_timeout_ms=config.connect_timeout_ms,
+async def get_departments(request: Request, _: dict = Depends(require_sync_read_access)):
+    """获取科室列表（仅源 PG 口径）。"""
+    from ..services.etl_sync import list_remote_departments
+    result = list_remote_departments(limit=500)
+    items = list(result.get("items") or [])
+    return _ok(
+        request,
+        {
+            "items": items,
+            "total": len(items),
+            "source": "pg",
+            "meta": {
+                "schema": result.get("schema"),
+                "source_table": result.get("source_table"),
+                "source_column": result.get("source_column"),
+            },
+        },
     )
-    try:
-        db = connector.get_db()
-        raw_departments = db["mr"].distinct("discharge_dept_name")
-        items = sorted(
-            {
-                str(item).strip()
-                for item in raw_departments
-                if str(item or "").strip()
-            }
-        )
-        return _ok(request, {"items": items, "total": len(items)})
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"获取科室失败: {str(exc)[:200]}",
-        )
-    finally:
-        connector.close()
 
 
 # ==================== 试运行预检 ====================
@@ -503,123 +455,57 @@ async def run_preflight(
     """
     试运行预检（不落库、不触发实际同步）
     """
-    if req.source == "pg":
-        from ..services.etl_sync import (
-            get_sync_state,
-            test_local_connection,
-            test_remote_connection,
-            validate_pg_sync_plan,
-        )
+    from ..services.etl_sync import (
+        get_sync_state,
+        test_local_connection,
+        test_remote_connection,
+        validate_pg_sync_plan,
+    )
 
-        local_result = test_local_connection()
-        remote_result = test_remote_connection()
-        blockers: list[str] = []
-        warnings: list[str] = []
+    local_result = test_local_connection()
+    remote_result = test_remote_connection()
+    blockers: list[str] = []
+    warnings: list[str] = []
 
-        if not local_result.get("connected"):
-            blockers.append(f"本地 PG 未连通: {local_result.get('error', '未知错误')}")
-        if not remote_result.get("connected"):
-            blockers.append(f"远端 PG 未连通: {remote_result.get('error', '未知错误')}")
+    if not local_result.get("connected"):
+        blockers.append(f"本地 PG 未连通: {local_result.get('error', '未知错误')}")
+    if not remote_result.get("connected"):
+        blockers.append(f"远端 PG 未连通: {remote_result.get('error', '未知错误')}")
 
-        if req.tables and len(req.tables) > 10:
-            warnings.append("本次指定同步表数量较多，建议分批执行。")
+    if req.tables and len(req.tables) > 10:
+        warnings.append("本次指定同步表数量较多，建议分批执行。")
 
-        execution_plan = validate_pg_sync_plan(tables=req.tables, include_disabled=False)
-        full_matrix_plan = validate_pg_sync_plan(tables=req.tables, include_disabled=True)
-        blockers.extend([str(item) for item in execution_plan.get("blockers", [])])
-        warnings.extend([str(item) for item in execution_plan.get("warnings", [])])
-        warnings.extend([str(item) for item in full_matrix_plan.get("warnings", [])])
-        warnings = list(dict.fromkeys([w for w in warnings if str(w).strip()]))
+    execution_plan = validate_pg_sync_plan(tables=req.tables, include_disabled=False)
+    full_matrix_plan = validate_pg_sync_plan(tables=req.tables, include_disabled=True)
+    blockers.extend([str(item) for item in execution_plan.get("blockers", [])])
+    warnings.extend([str(item) for item in execution_plan.get("warnings", [])])
+    warnings.extend([str(item) for item in full_matrix_plan.get("warnings", [])])
+    warnings = list(dict.fromkeys([w for w in warnings if str(w).strip()]))
 
-        sync_state = get_sync_state()
-        estimated_impact = int(sync_state.get("total_records_synced") or 0)
-        return _ok(request, {
-            "source": "pg",
-            "tier": "all",
-            "mode": execution_plan.get("mode"),
-            "remote_schema": execution_plan.get("remote_schema"),
-            "executable": len(blockers) == 0,
-            "blockers": blockers,
-            "warnings": warnings,
-            "estimated_impact": estimated_impact,
-            "risk_level": "low" if len(blockers) == 0 else "high",
-            "matrix_scope": {
-                "execution": execution_plan.get("matrix_scope", "enabled"),
-                "full": full_matrix_plan.get("matrix_scope", "all"),
-            },
-            "table_validations": full_matrix_plan.get("table_validations", []),
-            "target_tables": full_matrix_plan.get("target_tables", []),
-            "execution_table_validations": execution_plan.get("table_validations", []),
-            "execution_target_tables": execution_plan.get("target_tables", []),
-            "connections": {
-                "pg_remote": remote_result,
-                "pg_local": local_result,
-            },
-        })
-
-    from ..services.etl_config import load_mongo_config
-    from ..services.mongo_sync import MongoConnector, get_mongo_sync_state, get_sync_statistics
-
-    config = load_mongo_config()
-    blockers = []
-    warnings = []
-
-    if not config.enabled:
-        blockers.append("Mongo 同步总开关已关闭。")
-    if not config.mongo_uri:
-        blockers.append("mongo_uri 未配置。")
-
-    mongo_result = {"connected": False, "error": "mongo_uri 未配置"}
-    if config.mongo_uri:
-        connector = MongoConnector(
-            uri=config.mongo_uri,
-            database=config.mongo_database,
-            read_preference=config.read_preference,
-            max_pool_size=1,
-            socket_timeout_ms=config.query_timeout_s * 1000,
-            connect_timeout_ms=config.connect_timeout_ms,
-        )
-        try:
-            mongo_result = connector.test_connection()
-        finally:
-            connector.close()
-        if not mongo_result.get("connected"):
-            blockers.append(f"Mongo 连接失败: {mongo_result.get('error', '未知错误')}")
-
-    if req.tier == "tier3" and not str(config.tier3_cron or "").strip():
-        blockers.append("Tier3 定时表达式为空。")
-    if config.max_batch_size > 500:
-        warnings.append("单批处理量较大，可能对源端造成较高压力。")
-    if config.inter_request_delay_ms < 100:
-        warnings.append("请求间隔较小，建议评估源端负载风险。")
-
-    stats = get_sync_statistics()
-    pending = int(stats.get("PENDING", 0))
-    partial = int(stats.get("PARTIAL", 0))
-    failed = int(stats.get("FAILED", 0))
-    stale = int(stats.get("STALE", 0))
-    estimated_impact = pending + partial + stale
-    if failed > 0:
-        warnings.append(f"当前存在 {failed} 条失败记录，建议先排查错误后再执行。")
-
-    if blockers:
-        risk_level = "high"
-    elif failed > 0 or stale > 0:
-        risk_level = "medium"
-    else:
-        risk_level = "low"
-
+    sync_state = get_sync_state()
+    estimated_impact = int(sync_state.get("total_records_synced") or 0)
     return _ok(request, {
-        "source": "mongo",
-        "tier": req.tier,
+        "source": "pg",
+        "tier": "all",
+        "mode": execution_plan.get("mode"),
+        "remote_schema": execution_plan.get("remote_schema"),
         "executable": len(blockers) == 0,
         "blockers": blockers,
         "warnings": warnings,
         "estimated_impact": estimated_impact,
-        "risk_level": risk_level,
-        "connections": {"mongo": mongo_result},
-        "state": get_mongo_sync_state(),
-        "statistics": stats,
+        "risk_level": "low" if len(blockers) == 0 else "high",
+        "matrix_scope": {
+            "execution": execution_plan.get("matrix_scope", "enabled"),
+            "full": full_matrix_plan.get("matrix_scope", "all"),
+        },
+        "table_validations": full_matrix_plan.get("table_validations", []),
+        "target_tables": full_matrix_plan.get("target_tables", []),
+        "execution_table_validations": execution_plan.get("table_validations", []),
+        "execution_target_tables": execution_plan.get("target_tables", []),
+        "connections": {
+            "pg_remote": remote_result,
+            "pg_local": local_result,
+        },
     })
 
 
@@ -640,7 +526,7 @@ async def trigger_sync(
     )
     from ..services.sync_idempotency import complete_sync_trigger, reserve_sync_trigger
 
-    effective_tier = req.tier if req.source == "mongo" else "all"
+    effective_tier = "all"
     effective_sync_date = _resolve_effective_sync_date(req.source, req.sync_date)
     operator_email = str(current_user.get("email") or current_user.get("id") or "unknown").strip().lower()
     idempotency_key = _build_idempotency_key(
@@ -688,14 +574,8 @@ async def trigger_sync(
     run_id = reservation.run_id
     started_at = datetime.now(timezone.utc)
 
-    if req.source == "mongo":
-        from ..services.mongo_sync import run_mongo_sync
-
-        result = run_mongo_sync(tier=req.tier)
-    else:
-        from ..services.etl_sync import run_sync
-
-        result = run_sync(sync_date=effective_sync_date, tables=req.tables)
+    from ..services.etl_sync import run_sync
+    result = run_sync(sync_date=effective_sync_date, tables=req.tables)
 
     finished_at = datetime.now(timezone.utc)
     status_name = _infer_trigger_status(req.source, result)
@@ -823,28 +703,14 @@ async def trigger_sync(
 
 @router.get("/mappings")
 async def get_sync_mappings(request: Request, _: dict = Depends(require_sync_read_access)):
-    """获取 Mongo -> CDM 映射（只读）"""
-    from ..services.etl_config import COLLECTION_KEY_FIELDS, MONGO_COLLECTION_MAP, TIER2_COLLECTIONS
-
-    items = []
-    for source_collection, target_table in MONGO_COLLECTION_MAP.items():
-        tier = "tier2" if source_collection in TIER2_COLLECTIONS else "tier3"
-        items.append(
-            {
-                "source_collection": source_collection,
-                "target_table": target_table,
-                "key_fields": COLLECTION_KEY_FIELDS.get(source_collection, []),
-                "tier": tier,
-                "enabled": True,
-            }
-        )
-    return _ok(request, {"items": items, "total": len(items)})
+    """保留接口：当前返回空映射。"""
+    return _ok(request, {"items": [], "total": 0})
 
 
 @router.get("/runs")
 async def get_sync_runs(
     request: Request,
-    source: Optional[Literal["mongo", "pg"]] = Query(default=None),
+    source: Optional[Literal["pg"]] = Query(default=None),
     tier: Optional[Literal["tier1", "tier2", "tier3", "all"]] = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: Optional[int] = Query(default=None, ge=1, le=500),
@@ -884,26 +750,48 @@ async def apply_sync_template(
     req: SyncTemplateApplyRequest,
     current_user: dict = Depends(require_sync_write_access),
 ):
-    """应用同步模板（仅 admin）"""
-    from ..services.etl_config import load_mongo_config, save_mongo_config
-    from ..services.sync_templates import build_template_overrides
+    """应用同步模板（仅 admin，PG 策略口径）。"""
+    from ..services.sync_policy import save_sync_policy
+    from ..services.sync_templates import list_sync_templates
 
-    config = load_mongo_config()
-    try:
-        overrides = build_template_overrides(
-            template_id=req.template_id,
-            departments=req.departments,
-            current_config=config,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    template = next((item for item in list_sync_templates() if item.get("id") == req.template_id), None)
+    if not template:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"未知模板: {req.template_id}")
 
-    for key, value in overrides.items():
-        if hasattr(config, key):
-            setattr(config, key, value)
+    normalized_departments: list[str] = []
+    for dep in req.departments or []:
+        name = str(dep or "").strip()
+        if name and name not in normalized_departments:
+            normalized_departments.append(name)
 
-    saved = save_mongo_config(config)
-    saved["mongo_uri_display"] = _mask_mongo_uri(str(saved.get("mongo_uri") or ""))
+    requires_departments = bool(template.get("requires_departments"))
+    allow_multi_departments = bool(template.get("allow_multi_departments"))
+    if requires_departments and not normalized_departments:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="该模板必须选择科室")
+    if "*" in normalized_departments and len(normalized_departments) > 1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="科室列表不允许同时包含 * 和具体科室")
+    if not allow_multi_departments and len([d for d in normalized_departments if d != "*"]) > 1:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="该模板仅支持单科室")
+
+    defaults = template.get("defaults") or {}
+    payload: dict = {}
+
+    target_departments = normalized_departments or defaults.get("target_departments") or ["*"]
+    payload["target_departments"] = target_departments
+
+    schedule_minutes = defaults.get("tier1_interval_minutes")
+    if schedule_minutes:
+        payload["schedule"] = {"mode": "interval", "minutes": int(schedule_minutes)}
+
+    night_start = defaults.get("night_window_start")
+    night_end = defaults.get("night_window_end")
+    if night_start or night_end:
+        payload["night_window"] = {
+            "start": str(night_start or "22:00"),
+            "end": str(night_end or "06:00"),
+        }
+
+    saved = save_sync_policy(payload, keep_policy_version=False)
     audit_event(
         request,
         action="sync.template.apply",
@@ -913,7 +801,8 @@ async def apply_sync_template(
         details={
             "template_id": req.template_id,
             "departments_count": len(req.departments or []),
-            "enabled": bool(saved.get("enabled")),
+            "scope": saved.get("scope"),
+            "policy_version": saved.get("policy_version"),
         },
     )
-    return _ok(request, {"template_id": req.template_id, "config": saved})
+    return _ok(request, {"template_id": req.template_id, "policy": saved})

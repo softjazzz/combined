@@ -8,7 +8,9 @@
       <CheckCircleOutlined class="text-sm text-white" />
     </div>
     <div class="flex-1">
-      <div class="text-[13px] font-bold text-slate-800">病案首页提取完成</div>
+      <div class="text-[13px] font-bold text-slate-800">
+        病案首页提取完成
+      </div>
       <div class="mt-0.5 text-xs text-slate-400">
         已从病历中提取 {{ completedCount }} 个模块的结构化字段信息
       </div>
@@ -54,16 +56,17 @@
         <span
           v-if="module.entry?.timestamp"
           class="ml-auto rounded-full bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-400"
-          >{{ (module.entry.timestamp / 1000).toFixed(1) }}s</span
-        >
+        >{{ (module.entry.timestamp / 1000).toFixed(1) }}s</span>
         <span
           v-if="!module.entry?.preview?.length"
           class="ml-auto text-[11px] italic text-slate-400"
-          >未提取到数据</span
-        >
+        >未提取到数据</span>
       </div>
 
-      <div v-if="module.entry?.preview?.length" class="flex flex-col gap-3">
+      <div
+        v-if="module.entry?.preview?.length"
+        class="flex flex-col gap-3"
+      >
         <div
           v-for="(preview, pi) in module.entry.preview"
           :key="pi"

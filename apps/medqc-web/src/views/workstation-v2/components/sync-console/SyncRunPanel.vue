@@ -3,7 +3,9 @@
     <div
       class="px-5 py-3 border-b border-slate-100 bg-white flex justify-between items-center shrink-0"
     >
-      <h2 class="text-[13px] font-semibold text-slate-900 tracking-tight">执行日志与历史</h2>
+      <h2 class="text-[13px] font-semibold text-slate-900 tracking-tight">
+        执行日志与历史
+      </h2>
       <div class="flex items-center gap-2">
         <button
           class="text-[11px] text-slate-400 hover:text-slate-800 transition-colors font-medium"
@@ -79,10 +81,16 @@
           {{ state.preflightResult.risk_level }}
         </a-tag>
       </div>
-      <div v-if="state.preflightResult.blockers?.length" class="text-[11px] text-red-500 mt-1">
+      <div
+        v-if="state.preflightResult.blockers?.length"
+        class="text-[11px] text-red-500 mt-1"
+      >
         阻断项：{{ state.preflightResult.blockers.join('；') }}
       </div>
-      <div v-if="state.preflightResult.warnings?.length" class="text-[11px] text-amber-600 mt-1">
+      <div
+        v-if="state.preflightResult.warnings?.length"
+        class="text-[11px] text-amber-600 mt-1"
+      >
         告警：{{ state.preflightResult.warnings.join('；') }}
       </div>
     </div>
@@ -91,11 +99,18 @@
       v-if="activeView === 'realtime'"
       class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-2 text-[11.5px] font-mono bg-[#FAFAFA]"
     >
-      <div v-if="state.currentRunLog.length === 0" class="text-slate-400">
+      <div
+        v-if="state.currentRunLog.length === 0"
+        class="text-slate-400"
+      >
         > Ready. Waiting for command...
       </div>
 
-      <div v-for="(log, idx) in state.currentRunLog" :key="idx" class="flex gap-3 leading-relaxed">
+      <div
+        v-for="(log, idx) in state.currentRunLog"
+        :key="idx"
+        class="flex gap-3 leading-relaxed"
+      >
         <span class="text-slate-400 shrink-0 select-none">[{{ log.timestamp }}]</span>
         <span
           class="whitespace-pre-wrap flex-1"
@@ -105,12 +120,14 @@
             'text-amber-600': log.level === 'warn',
             'text-red-600': log.level === 'error',
           }"
-          >{{ log.message }}</span
-        >
+        >{{ log.message }}</span>
       </div>
     </div>
 
-    <div v-else class="flex-1 flex flex-col min-h-0">
+    <div
+      v-else
+      class="flex-1 flex flex-col min-h-0"
+    >
       <div class="px-5 py-2 border-b border-slate-100 flex items-center gap-2 history-toolbar">
         <a-select
           v-model:value="state.runHistorySourceFilter"
@@ -130,8 +147,16 @@
       </div>
 
       <div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-2 bg-[#FAFAFA]">
-        <div v-if="state.runsLoading" class="text-[12px] text-slate-500">正在加载运行历史...</div>
-        <div v-else-if="state.runHistory.length === 0" class="text-[12px] text-slate-500">
+        <div
+          v-if="state.runsLoading"
+          class="text-[12px] text-slate-500"
+        >
+          正在加载运行历史...
+        </div>
+        <div
+          v-else-if="state.runHistory.length === 0"
+          class="text-[12px] text-slate-500"
+        >
           暂无运行历史记录。
         </div>
         <template v-else>
@@ -144,7 +169,10 @@
               <div class="text-[12px] font-semibold text-slate-800">
                 {{ item.source.toUpperCase() }} · {{ item.tier }}
               </div>
-              <span class="text-[11px] font-medium" :class="statusClass(item.status)">
+              <span
+                class="text-[11px] font-medium"
+                :class="statusClass(item.status)"
+              >
                 {{ item.status }}
               </span>
             </div>
@@ -154,10 +182,16 @@
               }}
               · 记录数：{{ item.total_records || 0 }}
             </div>
-            <div v-if="item.error" class="mt-1 text-[11px] text-red-500">
+            <div
+              v-if="item.error"
+              class="mt-1 text-[11px] text-red-500"
+            >
               错误：{{ item.error }}
             </div>
-            <div v-if="item.operator?.email" class="mt-1 text-[11px] text-slate-400">
+            <div
+              v-if="item.operator?.email"
+              class="mt-1 text-[11px] text-slate-400"
+            >
               操作人：{{ item.operator.email }}
             </div>
           </div>

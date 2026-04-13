@@ -23,8 +23,14 @@
       :title="isExpanded ? '恢复分栏' : '展开工作台'"
       @click="$emit('toggleExpand')"
     >
-      <MenuUnfoldOutlined v-if="isExpanded" class="text-lg" />
-      <ArrowsAltOutlined v-else class="text-lg" />
+      <MenuUnfoldOutlined
+        v-if="isExpanded"
+        class="text-lg"
+      />
+      <ArrowsAltOutlined
+        v-else
+        class="text-lg"
+      />
     </button>
   </div>
 </template>

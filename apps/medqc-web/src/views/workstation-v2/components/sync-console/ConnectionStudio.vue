@@ -1,7 +1,9 @@
 <template>
   <div class="flex flex-col h-full bg-white">
     <div class="px-5 py-4 border-b border-[#E5E7EB] flex items-center justify-between shrink-0">
-      <h2 class="text-[14px] font-semibold text-slate-800 tracking-tight">连接配置</h2>
+      <h2 class="text-[14px] font-semibold text-slate-800 tracking-tight">
+        连接配置
+      </h2>
       <a-tooltip :title="isReadonly ? '仅 admin 可执行' : '测试当前标签连接'">
         <button
           class="text-[12px] font-medium text-slate-500 hover:text-slate-700 transition-colors"
@@ -15,18 +17,33 @@
 
     <div class="px-5 py-3 shrink-0 relative">
       <div class="flex p-1 rounded-[8px] bg-slate-100/80 border border-slate-200/50 relative">
-        <button :class="tabClass('pg_local')" @click="state.activeTab = 'pg_local'">本地库</button>
-        <button :class="tabClass('pg_remote')" @click="state.activeTab = 'pg_remote'">
+        <button
+          :class="tabClass('pg_local')"
+          @click="state.activeTab = 'pg_local'"
+        >
+          本地库
+        </button>
+        <button
+          :class="tabClass('pg_remote')"
+          @click="state.activeTab = 'pg_remote'"
+        >
           前端 PG
         </button>
       </div>
     </div>
 
     <div class="flex-1 overflow-y-auto custom-scrollbar px-5 pb-5">
-      <div v-if="state.activeTab === 'pg_remote'" class="space-y-4">
+      <div
+        v-if="state.activeTab === 'pg_remote'"
+        class="space-y-4"
+      >
         <div class="pt-2 pb-3 border-b border-slate-100">
-          <div class="text-[13px] font-semibold text-slate-800">业务流水库 (PG 远端)</div>
-          <div class="text-[11px] text-slate-500 mt-1">仅 admin 可修改，qc_manager 只读。</div>
+          <div class="text-[13px] font-semibold text-slate-800">
+            业务流水库 (PG 远端)
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1">
+            仅 admin 可修改，qc_manager 只读。
+          </div>
         </div>
 
         <div>
@@ -36,7 +53,7 @@
             type="text"
             :disabled="isReadonly"
             class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
-          />
+          >
         </div>
 
         <div>
@@ -48,7 +65,7 @@
             :max="65535"
             :disabled="isReadonly"
             class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
-          />
+          >
         </div>
 
         <div>
@@ -58,7 +75,7 @@
             type="text"
             :disabled="isReadonly"
             class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
-          />
+          >
         </div>
 
         <div>
@@ -68,7 +85,7 @@
             type="text"
             :disabled="isReadonly"
             class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
-          />
+          >
         </div>
 
         <div>
@@ -78,7 +95,7 @@
             type="password"
             :disabled="isReadonly"
             class="w-full px-3 py-1.5 text-[13px] font-mono bg-white border border-slate-200/80 rounded-[8px] focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 outline-none transition-all text-slate-700 disabled:bg-slate-50 disabled:text-slate-400"
-          />
+          >
           <div class="text-[11px] text-slate-400 mt-1">
             当前密码状态：{{ state.pgConnectionForm.remote_password_set ? '已设置' : '未设置' }}
           </div>
@@ -101,13 +118,24 @@
         </div>
       </div>
 
-      <div v-else class="space-y-4">
+      <div
+        v-else
+        class="space-y-4"
+      >
         <div class="pt-2 pb-3 border-b border-slate-100">
-          <div class="text-[13px] font-semibold text-slate-800">本地核心仓 (PG 本地)</div>
-          <div class="text-[11px] text-slate-500 mt-1">本地连接只读，支持检测连通性。</div>
+          <div class="text-[13px] font-semibold text-slate-800">
+            本地核心仓 (PG 本地)
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1">
+            本地连接只读，支持检测连通性。
+          </div>
         </div>
 
-        <a-alert type="info" show-icon message="本地库配置由部署环境管理，不在控制台中修改。" />
+        <a-alert
+          type="info"
+          show-icon
+          message="本地库配置由部署环境管理，不在控制台中修改。"
+        />
       </div>
     </div>
   </div>

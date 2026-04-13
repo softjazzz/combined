@@ -1,7 +1,9 @@
 <template>
   <section class="priority-lane mb-4">
     <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-      <h3 class="priority-lane__title">优先处理池</h3>
+      <h3 class="priority-lane__title">
+        优先处理池
+      </h3>
 
       <div class="priority-lane__segments">
         <button
@@ -29,7 +31,10 @@
       暂无高优病历，建议切换科室或放宽筛选条件。
     </div>
 
-    <div v-else class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+    <div
+      v-else
+      class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5"
+    >
       <article
         v-for="card in cards"
         :key="card.id"
@@ -38,7 +43,10 @@
       >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <div class="priority-lane__card-name truncate" :title="card.patientName">
+            <div
+              class="priority-lane__card-name truncate"
+              :title="card.patientName"
+            >
               {{ card.patientName }}
             </div>
             <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -58,7 +66,10 @@
             <div class="priority-lane__risk-label">
               {{ riskLabel(card.riskType) }}
             </div>
-            <div class="priority-lane__risk-value mt-0.5" title="住院天数">
+            <div
+              class="priority-lane__risk-value mt-0.5"
+              title="住院天数"
+            >
               {{ card.hospitalDays }} 天
             </div>
           </div>
@@ -70,12 +81,19 @@
           <span class="priority-lane__department-dot inline-flex h-1.5 w-1.5 rounded-full" />
           {{ card.department || '未分科室' }}
         </div>
-        <div v-if="card.riskText" class="priority-lane__risk-text mt-2 text-[12px] min-h-[36px]">
+        <div
+          v-if="card.riskText"
+          class="priority-lane__risk-text mt-2 text-[12px] min-h-[36px]"
+        >
           {{ card.riskText }}
         </div>
 
         <div class="priority-lane__actions mt-4 flex items-center gap-2">
-          <a-button type="primary" class="flex-1 rounded-md" @click="emit('open-record', card.id)">
+          <a-button
+            type="primary"
+            class="flex-1 rounded-md"
+            @click="emit('open-record', card.id)"
+          >
             立即处理
           </a-button>
           <a-button

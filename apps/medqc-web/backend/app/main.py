@@ -293,7 +293,7 @@ def create_app() -> FastAPI:
     app.include_router(settlement_router.router)
     # 甲乙丙阈值配置
     app.include_router(scoring_config_router.router)
-    # 数据同步（PG 存储过程 + MongoDB 增量同步）
+    # 数据同步（PG 同步链路）
     app.include_router(sync_router.router)
     # Workstation V4 聚合工作台
     app.include_router(workstation_router.router)

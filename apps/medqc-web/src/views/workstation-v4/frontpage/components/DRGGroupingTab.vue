@@ -1,5 +1,8 @@
 <template>
-  <div v-if="drgResult" class="space-y-6 pb-10">
+  <div
+    v-if="drgResult"
+    class="space-y-6 pb-10"
+  >
     <!-- DRG Key Metrics -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
       <!-- DRG Code -->
@@ -18,7 +21,10 @@
           <div class="text-4xl font-bold font-mono tracking-tight">
             {{ drgResult.code }}
           </div>
-          <div class="text-blue-100 mt-2 font-medium truncate" :title="drgResult.name">
+          <div
+            class="text-blue-100 mt-2 font-medium truncate"
+            :title="drgResult.name"
+          >
             {{ drgResult.name }}
           </div>
         </div>
@@ -51,18 +57,17 @@
           </div>
         </div>
         <div class="mt-4 text-xs text-slate-500 flex items-center justify-between">
-          <span
-            >实际费用:
-            <span class="font-medium"
-              >¥ {{ drgResult.actual_cost?.toLocaleString() || '-' }}</span
-            ></span
-          >
+          <span>实际费用:
+            <span class="font-medium">¥ {{ drgResult.actual_cost?.toLocaleString() || '-' }}</span></span>
           <span :class="drgResult.profit >= 0 ? 'text-green-500' : 'text-red-500'">
             {{ drgResult.profit >= 0 ? '+' : '' }}{{ drgResult.profit?.toLocaleString() }}
           </span>
         </div>
         <!-- Cost Consumption Rate Progress -->
-        <div v-if="drgResult.payment > 0" class="mt-3">
+        <div
+          v-if="drgResult.payment > 0"
+          class="mt-3"
+        >
           <div class="flex justify-between text-[10px] text-slate-400 mb-1">
             <span>费用消耗率</span>
             <span>{{ Math.round((drgResult.actual_cost / drgResult.payment) * 100) }}%</span>
@@ -106,8 +111,14 @@
           <div
             class="w-10 h-10 rounded-full bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center text-orange-500"
           >
-            <RiseOutlined v-if="drgResult.profit >= 0" class="text-xl" />
-            <FallOutlined v-else class="text-xl" />
+            <RiseOutlined
+              v-if="drgResult.profit >= 0"
+              class="text-xl"
+            />
+            <FallOutlined
+              v-else
+              class="text-xl"
+            />
           </div>
         </div>
         <div class="mt-4 w-full bg-slate-100 dark:bg-slate-600 h-2 rounded-full overflow-hidden">
@@ -157,16 +168,24 @@
               </span>
               {{ mainProcedureName }}
             </template>
-            <span v-else class="text-slate-400 italic">无手术操作</span>
+            <span
+              v-else
+              class="text-slate-400 italic"
+            >无手术操作</span>
           </div>
         </div>
         <div
           v-if="drgResult.messages && drgResult.messages.length > 0"
           class="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-100 dark:border-yellow-900/40"
         >
-          <div class="text-yellow-700 dark:text-yellow-500 font-medium text-sm mb-2">入组提示</div>
+          <div class="text-yellow-700 dark:text-yellow-500 font-medium text-sm mb-2">
+            入组提示
+          </div>
           <ul class="list-disc list-inside text-xs text-yellow-600 dark:text-yellow-400 space-y-1">
-            <li v-for="(msg, idx) in drgResult.messages" :key="idx">
+            <li
+              v-for="(msg, idx) in drgResult.messages"
+              :key="idx"
+            >
               {{ msg }}
             </li>
           </ul>
@@ -187,13 +206,18 @@
   </div>
 
   <!-- Empty State -->
-  <div v-else class="h-full flex flex-col items-center justify-center text-center p-6">
+  <div
+    v-else
+    class="h-full flex flex-col items-center justify-center text-center p-6"
+  >
     <div
       class="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 rounded-2xl mb-5 flex items-center justify-center"
     >
       <AppstoreOutlined class="text-4xl text-blue-500" />
     </div>
-    <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-2">DRG/DIP 智能分组</h3>
+    <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-2">
+      DRG/DIP 智能分组
+    </h3>
     <p class="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-xs">
       基于病案首页数据进行预分组，预测入组结果、RW值及支付费用。
     </p>
@@ -205,7 +229,12 @@
       <CalculatorOutlined />
       {{ loading ? '正在分组...' : '开始分组预测' }}
     </button>
-    <p v-if="!hasFrontpage" class="text-xs text-orange-500 mt-3">请先完成 AI 结构化提取</p>
+    <p
+      v-if="!hasFrontpage"
+      class="text-xs text-orange-500 mt-3"
+    >
+      请先完成 AI 结构化提取
+    </p>
   </div>
 </template>
 

@@ -35,7 +35,7 @@ def _extract_metrics(name: str, output: str) -> dict[str, object]:
         }
 
     if name == "secret_hygiene":
-        findings = len(re.findall(r"contains plaintext secret value|contains inline MongoDB credentials", output))
+        findings = len(re.findall(r"contains plaintext secret value", output))
         return {"findings": findings}
 
     if name == "migration_roundtrip":

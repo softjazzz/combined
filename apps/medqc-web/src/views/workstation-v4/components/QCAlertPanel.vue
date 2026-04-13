@@ -1,8 +1,15 @@
 ﻿<template>
   <div class="qc-alert-wrapper">
     <!-- 浮动触发按钮 -->
-    <div v-if="!visible" class="qc-trigger-btn" @click="visible = true">
-      <a-badge :count="totalIssueCount" :offset="[-2, 2]">
+    <div
+      v-if="!visible"
+      class="qc-trigger-btn"
+      @click="visible = true"
+    >
+      <a-badge
+        :count="totalIssueCount"
+        :offset="[-2, 2]"
+      >
         <div class="trigger-icon">
           <BellOutlined />
         </div>
@@ -11,13 +18,24 @@
 
     <!-- 浮动质控面板 -->
     <Transition name="qc-slide">
-      <div v-if="visible" class="qc-alert-panel" :style="panelStyle">
+      <div
+        v-if="visible"
+        class="qc-alert-panel"
+        :style="panelStyle"
+      >
         <!-- 标题栏 -->
-        <div class="panel-titlebar" @mousedown="startDrag">
+        <div
+          class="panel-titlebar"
+          @mousedown="startDrag"
+        >
           <div class="titlebar-left">
             <AlertOutlined class="title-icon" />
             <span class="title-text">质控提醒</span>
-            <a-tag v-if="totalIssueCount > 0" color="error" class="count-tag">
+            <a-tag
+              v-if="totalIssueCount > 0"
+              color="error"
+              class="count-tag"
+            >
               {{ totalIssueCount }}
             </a-tag>
           </div>
@@ -43,7 +61,10 @@
         </div>
 
         <!-- 患者信息条 -->
-        <div v-if="patientInfo" class="patient-bar">
+        <div
+          v-if="patientInfo"
+          class="patient-bar"
+        >
           <div class="patient-main">
             <UserOutlined class="patient-icon" />
             <span class="patient-name">{{ patientInfo.name }}</span>
@@ -52,11 +73,17 @@
             <a-divider type="vertical" />
             <span class="patient-meta">{{ patientInfo.age }}</span>
           </div>
-          <div class="patient-diagnosis" :title="patientInfo.diagnosis">
+          <div
+            class="patient-diagnosis"
+            :title="patientInfo.diagnosis"
+          >
             {{ patientInfo.diagnosis }}
           </div>
         </div>
-        <div v-else class="patient-bar patient-bar-empty">
+        <div
+          v-else
+          class="patient-bar patient-bar-empty"
+        >
           <span class="empty-hint">暂无病历数据，请先加载病历</span>
         </div>
 
@@ -68,7 +95,10 @@
             :class="['qc-tab', { active: activeTab === tab.key }]"
             @click="activeTab = tab.key"
           >
-            <component :is="tab.icon" class="tab-icon" />
+            <component
+              :is="tab.icon"
+              class="tab-icon"
+            />
             <span>{{ tab.label }}</span>
             <a-badge
               v-if="getTabCount(tab.key) > 0"
@@ -89,10 +119,17 @@
         <!-- 问题列表 -->
         <div class="qc-issues-container custom-scrollbar">
           <template v-if="currentIssues.length > 0">
-            <div v-for="(group, gIdx) in groupedIssues" :key="gIdx" class="issue-group">
+            <div
+              v-for="(group, gIdx) in groupedIssues"
+              :key="gIdx"
+              class="issue-group"
+            >
               <div class="group-header">
                 <span class="group-title">
-                  <span class="group-dot" :style="{ background: severityColor(group.severity) }" />
+                  <span
+                    class="group-dot"
+                    :style="{ background: severityColor(group.severity) }"
+                  />
                   {{ group.title }} ({{ group.items.length }})
                 </span>
               </div>
@@ -103,26 +140,41 @@
               >
                 <div class="issue-content">
                   <div class="issue-severity">
-                    <a-tag :color="severityTagColor(issue.severity)" size="small">
+                    <a-tag
+                      :color="severityTagColor(issue.severity)"
+                      size="small"
+                    >
                       {{ severityLabel(issue.severity) }}
                     </a-tag>
                   </div>
                   <div class="issue-desc">
                     {{ issue.description }}
                   </div>
-                  <div v-if="issue.suggestion" class="issue-suggestion">
+                  <div
+                    v-if="issue.suggestion"
+                    class="issue-suggestion"
+                  >
                     AI 建议：{{ issue.suggestion }}
                   </div>
                 </div>
                 <div class="issue-actions">
                   <!-- 缺陷操作按钮组 -->
-                  <a-dropdown v-if="issue.id" :trigger="['click']">
-                    <a-button type="link" size="small" class="action-more-btn">
+                  <a-dropdown
+                    v-if="issue.id"
+                    :trigger="['click']"
+                  >
+                    <a-button
+                      type="link"
+                      size="small"
+                      class="action-more-btn"
+                    >
                       操作 <DownOutlined />
                     </a-button>
                     <template #overlay>
                       <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
-                        <a-menu-item key="urge"> <SendOutlined /> 催办 </a-menu-item>
+                        <a-menu-item key="urge">
+                          <SendOutlined /> 催办
+                        </a-menu-item>
                         <a-menu-item key="mark_remediated">
                           <EditOutlined /> 标记已整改
                         </a-menu-item>
@@ -156,7 +208,10 @@
               </div>
             </div>
           </template>
-          <div v-else class="no-issues">
+          <div
+            v-else
+            class="no-issues"
+          >
             <CheckCircleOutlined class="no-issues-icon" />
             <p>{{ analyzing ? '正在分析...' : '未发现质控问题' }}</p>
           </div>
@@ -168,19 +223,27 @@
             共 <strong>{{ totalIssueCount }}</strong> 个问题
           </span>
           <div class="footer-actions">
-            <a-button type="link" size="small" :loading="exporting" @click="handleExportDefects">
+            <a-button
+              type="link"
+              size="small"
+              :loading="exporting"
+              @click="handleExportDefects"
+            >
               <DownloadOutlined /> 导出
             </a-button>
             <span class="footer-detail">
-              <span v-if="severityCount('error') > 0" class="stat-error"
-                >{{ severityCount('error') }} 严重</span
-              >
-              <span v-if="severityCount('warning') > 0" class="stat-warning"
-                >{{ severityCount('warning') }} 警告</span
-              >
-              <span v-if="severityCount('info') > 0" class="stat-info"
-                >{{ severityCount('info') }} 提示</span
-              >
+              <span
+                v-if="severityCount('error') > 0"
+                class="stat-error"
+              >{{ severityCount('error') }} 严重</span>
+              <span
+                v-if="severityCount('warning') > 0"
+                class="stat-warning"
+              >{{ severityCount('warning') }} 警告</span>
+              <span
+                v-if="severityCount('info') > 0"
+                class="stat-info"
+              >{{ severityCount('info') }} 提示</span>
             </span>
           </div>
         </div>

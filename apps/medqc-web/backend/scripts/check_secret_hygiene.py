@@ -12,13 +12,11 @@ ROOT = Path(__file__).resolve().parents[2]
 TARGET_FILES = [
     ROOT / "backend" / "data" / "db_config.json",
     ROOT / "backend" / "app" / "data" / "db_config.json",
-    ROOT / "backend" / "app" / "data" / "mongo_sync_config.json",
 ]
 
 SENSITIVE_KEYWORDS = ("password", "secret", "token", "api_key", "apikey")
 REF_VALUE_PATTERN = re.compile(r"^(env:[A-Z0-9_]+|vault:[\w\-/]+|ref:[\w\-/]+)$")
 MASKED_VALUE_PATTERN = re.compile(r"^\*{3,}$")
-MONGO_URI_WITH_CREDENTIALS = re.compile(r"://[^/\s:@]+:[^/\s@]+@")
 
 
 def _looks_like_plain_secret(key: str, value: str) -> bool:
@@ -44,8 +42,6 @@ def _scan_node(node: Any, path: str, findings: list[str]) -> None:
             if isinstance(value, str):
                 if _looks_like_plain_secret(key, value):
                     findings.append(f"{node_path}: contains plaintext secret value")
-                if key == "mongo_uri" and MONGO_URI_WITH_CREDENTIALS.search(value):
-                    findings.append(f"{node_path}: contains inline MongoDB credentials")
             _scan_node(value, node_path, findings)
         return
     if isinstance(node, list):

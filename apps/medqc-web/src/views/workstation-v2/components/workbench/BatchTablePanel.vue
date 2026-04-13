@@ -6,7 +6,9 @@
       >
         <div class="batch-table-panel__toolbar-meta min-w-0">
           <div class="flex flex-wrap items-center gap-2.5">
-            <div class="batch-table-panel__title">批量工作台</div>
+            <div class="batch-table-panel__title">
+              批量工作台
+            </div>
             <span class="batch-table-panel__summary-pill">当前 {{ rows.length }} 条</span>
             <span class="batch-table-panel__summary-pill batch-table-panel__summary-pill--selected">
               已选 {{ selectedRowKeys.length }} 条
