@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
@@ -8,8 +8,10 @@ import logging
 from fastapi.middleware.cors import CORSMiddleware
 from .core.settings import get_settings
 from .core.logging import configure_logging, request_logger_middleware
+from .core.otel import configure_otel
 from .core.middleware_errors import UnifiedErrorMiddleware
 from .core.middleware_api_version import APIVersionMiddleware
+from .core.access_control import enforce_default_auth
 
 logger = logging.getLogger(__name__)
 from .routers import system as system_router
@@ -18,6 +20,7 @@ from .routers import auth as auth_router
 from .routers import records as records_router
 from .routers import qc as qc_router
 from .routers import qc_sichuan as qc_sichuan_router
+from .routers import qc_settings as qc_settings_router
 from .routers import tools as tools_router
 from .routers import ingest as ingest_router
 from .routers import medical_documents as medical_documents_router
@@ -35,14 +38,36 @@ from .routers import remediation as remediation_router
 from .routers import department_qc_rules as department_qc_rules_router
 from .routers import demo as demo_router
 from .routers import frontpage as frontpage_router
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
+from .routers import frontpage_settings as frontpage_settings_router
+from .routers import drg as drg_router
+from .routers import smart_upload as smart_upload_router
+from .routers import dip as dip_router
+from .routers import case_front_page as case_front_page_router
+from .routers import icd_search as icd_search_router
+from .routers import medical_records as medical_records_router_cdm
+from .routers import system_config as system_config_router
+from .routers import demo_panel as demo_panel_router
+from .routers import defects as defects_router
+from .routers import dashboard_api as dashboard_api_router
+from .routers import emr_render as emr_render_router
+from .routers import scoring_rules as scoring_rules_router
+from .routers import staff_ranking as staff_ranking_router
+from .routers import notifications as notifications_router
+from .routers import settlement as settlement_router
+from .routers import scoring_config as scoring_config_router
+from .routers import sync as sync_router
+from .routers import workstation as workstation_router
+from .routers import custom_qc as custom_qc_router
 # Mount legacy routes to preserve all routes during migration
 try:
     from ..main_api import app as legacy_app  # type: ignore
 except Exception:  # pragma: no cover
     legacy_app = None
+
+
+class UTF8JSONResponse(JSONResponse):
+    """JSON response with explicit charset=utf-8 for Windows CJK compatibility."""
+    media_type = "application/json; charset=utf-8"
 
 
 def create_app() -> FastAPI:
@@ -72,8 +97,9 @@ def create_app() -> FastAPI:
         >>> import uvicorn
         >>> uvicorn.run(app, host="0.0.0.0", port=8001)
     """
-    settings = get_settings()
     configure_logging()
+    settings = get_settings()
+    logger.info("LLM diagnostics at startup: %s", settings.llm_diagnostics())
 
     app = FastAPI(
         title="医疗质控系统API",
@@ -81,6 +107,7 @@ def create_app() -> FastAPI:
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        dependencies=[Depends(enforce_default_auth)],
     )
 
     # CORS
@@ -109,6 +136,18 @@ def create_app() -> FastAPI:
     app.middleware("http")(request_logger_middleware)
     # Unified error shape
     app.add_middleware(UnifiedErrorMiddleware)
+
+    @app.middleware("http")
+    async def trace_header_writeback_middleware(request: Request, call_next):
+        """确保最终响应头中的 X-Trace-ID 与请求 trace_id 保持一致。"""
+        response = await call_next(request)
+        trace_id = getattr(request.state, "trace_id", None)
+        if trace_id:
+            response.headers["X-Trace-ID"] = str(trace_id)
+        return response
+
+    # P2-OBS-01: optional OTel bootstrap (fail-open, no startup blocking).
+    configure_otel(app)
 
     # Global exception handlers
     @app.exception_handler(HTTPException)
@@ -199,6 +238,7 @@ def create_app() -> FastAPI:
     app.include_router(records_router.router)
     app.include_router(qc_router.router)
     app.include_router(qc_sichuan_router.router)
+    app.include_router(qc_settings_router.router)
     app.include_router(tools_router.router)
     app.include_router(ingest_router.router)
     app.include_router(medical_documents_router.router)
@@ -220,6 +260,45 @@ def create_app() -> FastAPI:
     app.include_router(demo_router.router)
     # Front page auto-generation (demo + future real extraction)
     app.include_router(frontpage_router.router)
+    # Front page extraction settings
+    app.include_router(frontpage_settings_router.router)
+    # DRG/DIP demo APIs (to support DRG pages in web)
+    app.include_router(case_front_page_router.router)
+    app.include_router(drg_router.router)
+    # 智能上传 + 字段映射 + 报表生成（从 drg 项目迁移）
+    app.include_router(smart_upload_router.router)
+    # DIP 入组预测 (泸州市)
+    app.include_router(dip_router.router)
+    # ICD 编码搜索（基于本地编码库 JSON）
+    app.include_router(icd_search_router.router)
+    # CDM 病案数据 API（连接 Repository 层）
+    app.include_router(medical_records_router_cdm.router)
+    # 系统配置与 ETL 同步管理
+    app.include_router(system_config_router.router)
+    # 演示面板 API (P5/P7/P8)
+    app.include_router(demo_panel_router.router)
+    # 缺陷操作管理（催办/整改/审核/导出）
+    app.include_router(defects_router.router)
+    # Dashboard 统计聚合（待办统计/表现排名/概览）
+    app.include_router(dashboard_api_router.router)
+    # EMR 文书渲染（文书内容+缺陷标注）
+    app.include_router(emr_render_router.router)
+    # 评分标准配置（扣分规则 CRUD + 导入导出）
+    app.include_router(scoring_rules_router.router)
+    # 质控员工作量排名
+    app.include_router(staff_ranking_router.router)
+    # 通知与申诉（消息+整改跟踪+问题闭环）
+    app.include_router(notifications_router.router)
+    # 医保结算清单（查询+质控+导出）
+    app.include_router(settlement_router.router)
+    # 甲乙丙阈值配置
+    app.include_router(scoring_config_router.router)
+    # 数据同步（PG 同步链路）
+    app.include_router(sync_router.router)
+    # Workstation V4 聚合工作台
+    app.include_router(workstation_router.router)
+    # 自定义质控点体验中心
+    app.include_router(custom_qc_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
@@ -234,13 +313,36 @@ def create_app() -> FastAPI:
     # Startup event: 初始化四川质控服务
     @app.on_event("startup")
     async def startup_event():
-        """应用启动时初始化四川质控服务"""
+        """应用启动时初始化"""
         logger.info("🚀 应用启动中...")
+        strict_startup_checks = (
+            settings.ENV.lower() == "production"
+            or os.getenv("STRICT_STARTUP_CHECKS", "false").lower() in {"1", "true", "yes"}
+        )
+
+        # P0-SEC-05: production must not boot with built-in demo users.
+        from .storage.memory import assert_no_default_demo_users_in_production
+        assert_no_default_demo_users_in_production(settings.ENV)
+
+        # 前置校验 DATA_SOURCE（ADR-2026-03-16：启动即失败）
+        from .database.repository import validate_data_source
+        validate_data_source()
+
         try:
-            await qc_sichuan_router.init_qc_service()
-            logger.info("✅ 四川质控服务初始化完成")
+            # 初始化 CDM 数据库
+            from .database import init_db
+            init_db()
+            # 预热可持久化后台任务服务，启动时恢复未完成任务。
+            from .services.smart_upload_async_service import get_smart_upload_async_service
+            from .services.drg.batch_task_service import get_batch_task_manager
+
+            get_smart_upload_async_service()
+            get_batch_task_manager()
+            logger.info("ℹ️ 跳过启动阶段的四川质控服务初始化（将按需懒加载）")
         except Exception as exc:
-            logger.error(f"❌ 四川质控服务初始化失败: {exc}")
+            logger.error(f"❌ 启动初始化失败: {exc}")
+            if strict_startup_checks:
+                raise
 
     return app
 
