@@ -11,11 +11,15 @@ from .qc_llm_client_runtime import SichuanQCLLMClient  # 拆分出的 LLM 客户
 from .qc_prompt_builder import QCPromptBuilder  # 拆分出的 Prompt 构建器
 from .bundles import load_or_assemble_domain_bundle
 from .rule_domain_router import (
+    build_evidence_payload_from_rule_input,
     RuleExecutionInput,
     display_name_for_doc_type,
     render_rule_execution_medical_text,
     route_rule_to_domain,
 )
+from .programmatic_rule_executor import PROGRAMMATIC_RULE_SPECS
+from .qc_execution_cache import QCExecutionCache
+from .qc_rule_orchestrator import QCRuleOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +45,8 @@ class SichuanQCService:
 
         # 统一规则引擎 (用于串行模式)
         self.rule_engine = UnifiedRuleEngine(self.client.generate)
+        self.rule_orchestrator = QCRuleOrchestrator()
+        self.execution_cache = QCExecutionCache(default_ttl_seconds=1800)
 
         # 英文到中文文书类型映射（从共享常量导入，避免重复维护）
         from app.constants.doc_types import DOC_TYPE_FULL_MAP
@@ -56,6 +62,52 @@ class SichuanQCService:
             enable_truncate=self.enable_truncate,
             max_content_length=self.max_content_length,
         )
+
+    def _ensure_rule_execution_meta(self, rule: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = dict(rule or {})
+        rule_id = str(normalized.get("rule_id") or "").strip().upper()
+        rule_code = str(normalized.get("rule_code") or "").strip()
+
+        raw_executor_type = str(normalized.get("executor_type") or "").strip().lower()
+        executor_type = raw_executor_type
+        if executor_type not in {"llm", "program"}:
+            executor_type = "llm"
+            if rule_id in PROGRAMMATIC_RULE_SPECS:
+                executor_type = "program"
+            logger.warning(
+                "规则 %s(%s) 未标注或标注了无效 executor_type，已默认回退为 %s",
+                rule_id or "UNKNOWN_RULE",
+                rule_code or "-",
+                executor_type,
+            )
+        normalized["executor_type"] = executor_type
+
+        execution_domain = str(normalized.get("execution_domain") or "").strip().lower()
+        if not execution_domain:
+            execution_domain = route_rule_to_domain(normalized).execution_domain
+        normalized["execution_domain"] = execution_domain
+
+        doc_scope = str(normalized.get("doc_scope") or "").strip().lower()
+        if not doc_scope:
+            doc_scope = "primary"
+        normalized["doc_scope"] = doc_scope
+
+        rule_version = str(normalized.get("rule_version") or "").strip()
+        if not rule_version:
+            rule_version = "v1"
+        normalized["rule_version"] = rule_version
+
+        prompt_version = str(normalized.get("prompt_version") or "").strip()
+        if not prompt_version:
+            prompt_version = "custom-v1" if str(normalized.get("custom_prompt") or "").strip() else "default-v1"
+        normalized["prompt_version"] = prompt_version
+
+        cost_class = str(normalized.get("cost_class") or "").strip().lower()
+        if not cost_class:
+            cost_class = "low" if executor_type == "program" else "medium"
+        normalized["cost_class"] = cost_class
+
+        return normalized
 
     async def reload_config(self, config_name: str = "default", user_id: Optional[str] = None) -> bool:
         """
@@ -105,6 +157,9 @@ class SichuanQCService:
                         self.doc_type_mapping.get(doc, doc)
                         for doc in applicable_docs
                     ]
+                normalized_rule = self._ensure_rule_execution_meta(rule)
+                rule.clear()
+                rule.update(normalized_rule)
 
             self._rules_cache = rules
             logger.info(f"从 JSON 文件加载了 {len(rules)} 条四川省规则")
@@ -140,6 +195,9 @@ class SichuanQCService:
                         self.doc_type_mapping.get(doc, doc)
                         for doc in applicable_docs
                     ]
+                normalized_rule = self._ensure_rule_execution_meta(rule)
+                rule.clear()
+                rule.update(normalized_rule)
 
             self._custom_rules_cache = rules
             logger.info(f"从 JSON 文件加载了 {len(rules)} 条自定义规则")
@@ -231,6 +289,37 @@ class SichuanQCService:
         return await self.prompt_builder.build_prompt(rules, content, document_type, prompt_mode)
 
 
+    async def _evaluate_rules_orchestrated(
+        self,
+        *,
+        document_id: str,
+        content: str,
+        document_type: str,
+        rules: List[Dict[str, Any]],
+        evidence_source: str = "medical_text",
+    ) -> Dict[str, Any]:
+        prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
+        model_version = str(self.client.model or "")
+        llm_concurrency = 6
+
+        async def _llm_evaluate(rule: Dict[str, Any], medical_record: Dict[str, Any]) -> Dict[str, Any]:
+            return await self.rule_engine.evaluate(rule, medical_record=medical_record)
+
+        return await self.rule_orchestrator.evaluate_rules(
+            rules=prepared_rules,
+            medical_record={
+                "id": document_id,
+                "content": content,
+                "document_type": document_type,
+            },
+            llm_evaluate=_llm_evaluate,
+            evidence_source=evidence_source,
+            llm_concurrency=llm_concurrency,
+            model_version=model_version,
+            execution_cache=self.execution_cache,
+            cache_ttl_seconds=1800,
+        )
+
     async def _evaluate_rules_with_engine(
         self,
         document_id: str,
@@ -244,25 +333,18 @@ class SichuanQCService:
         Returns:
             (results, total_tokens, total_api_time)
         """
-        results: List[Dict[str, Any]] = []
-        total_tokens = 0
-        total_api_time = 0.0
-
-        for rule in rules:
-            engine_result = await self.rule_engine.evaluate(
-                rule,
-                medical_record={
-                    "id": document_id,
-                    "content": content,
-                    "document_type": document_type,
-                },
-            )
-            results.append(engine_result)
-            meta = engine_result.get("metadata", {}) or {}
-            total_tokens += int(meta.get("tokens_used") or 0)
-            total_api_time += float(meta.get("api_time") or 0.0)
-
-        return results, total_tokens, total_api_time
+        orchestrated = await self._evaluate_rules_orchestrated(
+            document_id=document_id,
+            content=content,
+            document_type=document_type,
+            rules=rules,
+            evidence_source="medical_text",
+        )
+        return (
+            list(orchestrated.get("results") or []),
+            int(orchestrated.get("total_tokens") or 0),
+            float(orchestrated.get("total_api_time") or 0.0),
+        )
 
 
 
@@ -576,13 +658,16 @@ class SichuanQCService:
                 ]
                 logger.info(f"Filtered to {len(rules)} rules based on rule_ids within loaded set: {rule_ids}")
 
-        # 使用统一规则引擎逐条执行
-        rule_results, total_tokens, total_api_time = await self._evaluate_rules_with_engine(
+        orchestrated = await self._evaluate_rules_orchestrated(
             document_id=document_id,
             content=content,
             document_type=document_type,
-            rules=rules
+            rules=rules,
+            evidence_source="medical_text",
         )
+        rule_results = list(orchestrated.get("results") or [])
+        total_tokens = int(orchestrated.get("total_tokens") or 0)
+        total_api_time = float(orchestrated.get("total_api_time") or 0.0)
 
         total_rules = len(rules)
         compliant_rules = sum(
@@ -625,12 +710,17 @@ class SichuanQCService:
                 "total_rules": total_rules,
                 "compliant_rules": compliant_rules,
                 "model": self.client.model,
+                "executor_breakdown": orchestrated.get("executor_breakdown") or {},
+                "cache_breakdown": orchestrated.get("cache_breakdown") or {},
             },
             "parsed_evaluation_results": rule_results,
             "evaluation_results": evaluation_results,
             "llm_output": None,
             "token_usage": {"total_tokens": total_tokens},
             "api_time": total_api_time,
+            "executor_breakdown": orchestrated.get("executor_breakdown") or {},
+            "cache_breakdown": orchestrated.get("cache_breakdown") or {},
+            "trace": orchestrated.get("trace") or [],
         }
 
     async def evaluate_running_final_bundle_input(
@@ -715,14 +805,17 @@ class SichuanQCService:
             )
 
         medical_text = render_rule_execution_medical_text(rule_input)
-        engine_result = await self.rule_engine.evaluate(
-            rule,
-            medical_record={
-                "id": f"{visit_id}:{rule.get('rule_id')}",
-                "content": medical_text,
-                "document_type": rule_input.document_type,
-            },
+        orchestrated = await self._evaluate_rules_orchestrated(
+            document_id=f"{visit_id}:{rule.get('rule_id')}",
+            content=medical_text,
+            document_type=rule_input.document_type,
+            rules=[rule],
+            evidence_source="bundle",
         )
+        orchestrated_results = list(orchestrated.get("results") or [])
+        if not orchestrated_results:
+            raise ValueError("规则执行失败：未返回结果")
+        engine_result = orchestrated_results[0]
 
         evaluation_results = [
             {
@@ -764,6 +857,14 @@ class SichuanQCService:
             "api_time": float(metadata.get("api_time") or 0.0),
             "routing": routing.to_dict(),
             "rule_execution_input": rule_input.to_dict(),
+            "evidence_payload": build_evidence_payload_from_rule_input(
+                rule_input=rule_input,
+                document_hits=domain_bundle.get("document_hits") or {},
+                data_quality_flags=domain_bundle.get("data_quality_flags") or [],
+            ).to_dict(),
+            "executor_breakdown": orchestrated.get("executor_breakdown") or {},
+            "cache_breakdown": orchestrated.get("cache_breakdown") or {},
+            "trace": orchestrated.get("trace") or [],
             "bundle_metadata": {
                 "execution_domain": routing.execution_domain,
                 "institute_id": institute_id,
