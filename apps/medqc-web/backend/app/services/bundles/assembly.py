@@ -1,0 +1,1645 @@
+from __future__ import annotations
+
+import json
+import logging
+import os
+from functools import lru_cache
+from datetime import date, datetime
+from typing import Any, Iterable, Optional
+
+from sqlalchemy import inspect, text
+
+from ...database.connection import DB_SCHEMA_MODE, engine
+from ..document_assembly import assemble_document, build_document_select_columns
+from .contracts import BUNDLE_DOMAINS, BUNDLE_SCHEMA_VERSION_CURRENT
+from .factory import (
+    build_coding_bundle,
+    build_final_record_bundle,
+    build_frontpage_bundle,
+    build_running_record_bundle,
+    build_settlement_bundle,
+)
+from .refresh_manager import mark_bundle_refresh_success, record_bundle_refresh_failure
+
+logger = logging.getLogger(__name__)
+
+_IDENTIFIER_ALLOWED = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
+_TEXT_COLUMNS_PRIORITY: tuple[str, ...] = (
+    "follow_up_visit_content",
+    "record_content",
+    "history_of_present_illness",
+    "chief_complaint",
+    "checkup",
+    "assist_exam",
+    "past_history",
+    "content",
+    "note_text",
+    "summary_text",
+    "memo",
+    "description",
+)
+_FRONTPAGE_EXTRA_COLUMNS: tuple[str, ...] = (
+    "sex",
+    "gender",
+    "age",
+    "age_year",
+    "age_in_days",
+    "id_card_no",
+    "identity_no",
+    "admission_route",
+    "leaving_hospital_way",
+    "medical_payment_method",
+    "diagnosis_type",
+    "diagnosis_no",
+    "main_surgery_sign",
+    "surgery_begin_datetime",
+)
+_ORDER_COLUMNS_PRIORITY: tuple[str, ...] = (
+    "update_time",
+    "modified_time",
+    "create_time",
+    "record_time",
+    "discharge_datetime",
+    "discharge_time",
+    "admission_datetime",
+    "admission_time",
+)
+_RUNNING_DOC_PRIORITY: tuple[str, ...] = (
+    "admission_record",
+    "first_course_record",
+    "daily_course_record",
+    "senior_course_record",
+    "rescue_record",
+    "consultation_record",
+)
+_FINAL_DOC_PRIORITY: tuple[str, ...] = (
+    "discharge_record",
+    "death_record",
+    "death_discussion",
+    "admission_record",
+    "first_course_record",
+)
+_FRONTPAGE_DOC_PRIORITY: tuple[str, ...] = (
+    "mr",
+    "diagnosis",
+    "mr_surgery",
+    "mr_cost",
+    "admission_record",
+    "discharge_record",
+)
+_CODING_DOC_PRIORITY: tuple[str, ...] = (
+    "mr",
+    "diagnosis",
+    "mr_surgery",
+    "admission_record",
+    "discharge_record",
+)
+_SETTLEMENT_DOC_PRIORITY: tuple[str, ...] = (
+    "medical_insurance_settlement",
+    "medical_insurance_settlement_cost",
+    "mr_cost",
+    "mr",
+    "diagnosis",
+    "mr_surgery",
+)
+_SCENE_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
+    "running": _RUNNING_DOC_PRIORITY,
+    "final": _FINAL_DOC_PRIORITY,
+    "frontpage": _FRONTPAGE_DOC_PRIORITY,
+    "coding": _CODING_DOC_PRIORITY,
+    "settlement": _SETTLEMENT_DOC_PRIORITY,
+}
+_SCENE_BUNDLE_TABLE: dict[str, str] = {
+    "running": "running_record_bundle",
+    "final": "final_record_bundle",
+    "frontpage": "frontpage_bundle",
+    "coding": "coding_bundle",
+    "settlement": "settlement_bundle",
+}
+_DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
+    "admission": (
+        "admission_record",
+    ),
+    "course": (
+        "first_course_record",
+        "daily_course_record",
+        "senior_course_record",
+        "rescue_record",
+    ),
+    "surgery": (
+        "presurg_summary",
+        "presurg_discussion",
+        "surgery_record",
+        "anesthesia_record",
+        "consent_form",
+        "postsurg_firstcourse_record",
+        "surgery_safecheck_record",
+    ),
+    "consult_discussion": (
+        "consultation_record",
+        "diffcase_discussion_record",
+        "death_discussion",
+        "handoff_record",
+        "handover_record",
+    ),
+    "terminal": (
+        "discharge_record",
+        "death_record",
+    ),
+    "index_coding_settlement": (
+        "mr",
+        "diagnosis",
+        "mr_surgery",
+        "mr_cost",
+        "medical_insurance_settlement",
+        "medical_insurance_settlement_cost",
+    ),
+}
+_DOMAIN_BUNDLE_TABLE: dict[str, str] = {
+    "admission": "admission_domain_bundle",
+    "course": "course_domain_bundle",
+    "surgery": "surgery_domain_bundle",
+    "consult_discussion": "consult_discussion_domain_bundle",
+    "terminal": "terminal_domain_bundle",
+    "index_coding_settlement": "index_coding_settlement_domain_bundle",
+}
+
+
+def _default_source_schema() -> str:
+    return "cdm" if str(DB_SCHEMA_MODE or "").strip().lower() == "split" else "public"
+
+
+def _pg_required_in_current_env() -> bool:
+    env = str(os.getenv("ENV") or "").strip().lower()
+    return env in {"prod", "production"}
+
+
+def _ensure_engine_available(component: str) -> bool:
+    if engine is not None:
+        return True
+    if _pg_required_in_current_env():
+        raise RuntimeError(f"PG 未就绪：生产环境禁止 {component} 内存回退")
+    return False
+
+
+def _is_safe_identifier(value: str) -> bool:
+    return bool(value) and all(ch in _IDENTIFIER_ALLOWED for ch in value)
+
+
+def _quote_ident(value: str) -> str:
+    if not _is_safe_identifier(value):
+        raise ValueError(f"非法标识符: {value}")
+    return f'"{value}"'
+
+
+def _qualified_table(schema: str, table: str) -> str:
+    return f"{_quote_ident(schema)}.{_quote_ident(table)}"
+
+
+def _table_exists(schema: str, table_name: str) -> bool:
+    if engine is None:
+        return False
+    with engine.connect() as conn:
+        exists = conn.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = :schema_name
+                  AND table_name = :table_name
+                """
+            ),
+            {"schema_name": schema, "table_name": table_name},
+        ).first()
+    return bool(exists)
+
+
+@lru_cache(maxsize=256)
+def _get_table_columns(schema: str, table: str) -> tuple[str, ...]:
+    if engine is None:
+        return ()
+    inspector = inspect(engine)
+    if not inspector.has_table(table_name=table, schema=schema):
+        return ()
+    return tuple(str(col.get("name") or "").strip() for col in inspector.get_columns(table_name=table, schema=schema))
+
+
+def _pick_first(columns: set[str], candidates: Iterable[str]) -> str:
+    for candidate in candidates:
+        if candidate in columns:
+            return candidate
+    return ""
+
+
+def _normalize_text(value: Any) -> str:
+    text_value = str(value or "").strip()
+    if not text_value:
+        return ""
+    return " ".join(text_value.split())
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+def _find_text_value(record: dict[str, Any], columns: set[str]) -> str:
+    assembled = assemble_document(str(record.get("__document_type") or ""), record)
+    if assembled.assembled_text:
+        return assembled.assembled_text
+    for name in _TEXT_COLUMNS_PRIORITY:
+        if name in columns:
+            value = _normalize_text(record.get(name))
+            if value:
+                return value
+    return ""
+
+
+def _select_records(
+    *,
+    schema: str,
+    table: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    columns = set(_get_table_columns(schema, table))
+    if not columns:
+        return []
+
+    select_columns = {
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "admission_datetime",
+        "admission_time",
+        "admission_date",
+        "discharge_datetime",
+        "discharge_time",
+        "discharge_date",
+        "admission_dept_name",
+        "discharge_dept_name",
+        "dept_name",
+        "department_name",
+        "patient_name",
+        "name",
+        "pat_name",
+        "mobile",
+        "phone",
+        "phone_no",
+        "id_card",
+        "identity_no",
+        "id_card_no",
+        "record_time",
+        "record_datetime",
+        "round_datetime",
+        "submit_datetime",
+        "submit_time",
+        "last_modified_datetime",
+        "last_modified_time",
+        "update_time",
+        "modified_time",
+        "create_time",
+        "document_id",
+        "document_title",
+    }
+    select_columns.update(_TEXT_COLUMNS_PRIORITY)
+    select_columns.update(build_document_select_columns(table, columns))
+    select_columns.update(_FRONTPAGE_EXTRA_COLUMNS)
+    selected = [col for col in select_columns if col in columns]
+    if not selected:
+        return []
+
+    if {"institute_id", "patient_id", "visit_id"}.issubset(columns):
+        where_sql = (
+            f"{_quote_ident('institute_id')} = :institute_id AND "
+            f"{_quote_ident('patient_id')} = :patient_id AND "
+            f"{_quote_ident('visit_id')} = :visit_id"
+        )
+        params = {
+            "institute_id": institute_id,
+            "patient_id": patient_id,
+            "visit_id": visit_id,
+            "limit_rows": max(1, int(limit)),
+        }
+    elif "visit_id" in columns:
+        where_sql = f"{_quote_ident('visit_id')} = :visit_id"
+        params = {
+            "visit_id": visit_id,
+            "limit_rows": max(1, int(limit)),
+        }
+    else:
+        return []
+
+    order_column = _pick_first(columns, _ORDER_COLUMNS_PRIORITY)
+    order_sql = f" ORDER BY {_quote_ident(order_column)} DESC NULLS LAST" if order_column else ""
+    sql = (
+        f"SELECT {', '.join(_quote_ident(col) for col in selected)} "
+        f"FROM {_qualified_table(schema, table)} "
+        f"WHERE {where_sql}{order_sql} LIMIT :limit_rows"
+    )
+
+    with engine.connect() as conn:
+        rows = conn.execute(text(sql), params).mappings().all()
+    return [{**dict(row), "__document_type": table} for row in rows]
+
+
+def ensure_scene_bundle_tables(*, schema: str = "public") -> None:
+    if engine is None:
+        raise RuntimeError("DATABASE_URL is not configured; cannot verify bundle tables.")
+    missing = [table_name for table_name in _SCENE_BUNDLE_TABLE.values() if not _table_exists(schema, table_name)]
+    if missing:
+        raise RuntimeError(
+            f"缺少 scene bundle 表（请先执行 Alembic 迁移）: {', '.join(f'{schema}.{t}' for t in missing)}"
+        )
+
+
+def ensure_domain_bundle_tables(*, schema: str = "public") -> None:
+    if engine is None:
+        raise RuntimeError("DATABASE_URL is not configured; cannot verify domain bundle tables.")
+    missing = [table_name for table_name in _DOMAIN_BUNDLE_TABLE.values() if not _table_exists(schema, table_name)]
+    if missing:
+        raise RuntimeError(
+            f"缺少 domain bundle 表（请先执行 Alembic 迁移）: {', '.join(f'{schema}.{t}' for t in missing)}"
+        )
+
+
+def _fetch_patient_profile(
+    *,
+    source_schema: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+) -> dict[str, str]:
+    candidates = ("patient_information", "mr")
+    profile = {
+        "patient_name": "",
+        "mobile": "",
+        "id_card": "",
+    }
+    for table in candidates:
+        rows = _select_records(
+            schema=source_schema,
+            table=table,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            limit=1,
+        )
+        if not rows:
+            continue
+        row = rows[0]
+        if not profile["patient_name"]:
+            profile["patient_name"] = str(
+                row.get("patient_name") or row.get("name") or row.get("pat_name") or ""
+            ).strip()
+        if not profile["mobile"]:
+            profile["mobile"] = str(
+                row.get("mobile") or row.get("phone") or row.get("phone_no") or ""
+            ).strip()
+        if not profile["id_card"]:
+            profile["id_card"] = str(
+                row.get("id_card") or row.get("identity_no") or row.get("id_card_no") or ""
+            ).strip()
+        if all(profile.values()):
+            break
+    return profile
+
+
+def _build_structured_context(
+    *,
+    scene: str,
+    schema: str,
+    docs: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    if scene == "running":
+        anchor_table = "admission_record"
+    elif scene == "final":
+        anchor_table = "discharge_record"
+    elif scene == "settlement":
+        anchor_table = "medical_insurance_settlement"
+    else:
+        anchor_table = "mr"
+    anchor_rows = docs.get(anchor_table) or []
+    anchor = anchor_rows[0] if anchor_rows else {}
+
+    department = str(
+        anchor.get("admission_dept_name")
+        or anchor.get("discharge_dept_name")
+        or anchor.get("dept_name")
+        or anchor.get("department_name")
+        or ""
+    ).strip()
+
+    summary_docs: dict[str, list[dict[str, Any]]] = {}
+    text_available_tables: list[str] = []
+    for table_name, rows in docs.items():
+        columns = set(_get_table_columns(schema, table_name))
+        summary_docs[table_name] = []
+        for row in rows[:3]:
+            assembled = assemble_document(table_name, row)
+            preview = assembled.assembled_text[:300]
+            if preview and table_name not in text_available_tables:
+                text_available_tables.append(table_name)
+            summary_docs[table_name].append(
+                {
+                    "text_preview": preview,
+                    "document_title": assembled.document_title,
+                    "display_time": assembled.display_time,
+                    "assembly_status": assembled.assembly_status,
+                    "update_time": str(
+                        assembled.display_time
+                        or row.get("update_time")
+                        or row.get("modified_time")
+                        or row.get("create_time")
+                        or row.get("record_time")
+                        or row.get("discharge_datetime")
+                        or row.get("admission_datetime")
+                        or ""
+                    ).strip(),
+                }
+            )
+
+    priority = _SCENE_DOC_PRIORITY.get(scene, ())
+    missing_required_docs = [table_name for table_name in priority if not docs.get(table_name)]
+    primary_document_type = priority[0] if priority else anchor_table
+    quality_status = "ready"
+    if missing_required_docs and text_available_tables:
+        quality_status = "partial"
+    if not text_available_tables:
+        quality_status = "text_unavailable"
+
+    return {
+        "anchor_table": anchor_table,
+        "primary_document_type": primary_document_type,
+        "anchor_time": str(
+            anchor.get("update_time")
+            or anchor.get("record_time")
+            or anchor.get("discharge_datetime")
+            or anchor.get("admission_datetime")
+            or ""
+        ).strip(),
+        "admission_datetime": str(
+            anchor.get("admission_datetime")
+            or anchor.get("admission_time")
+            or anchor.get("admission_date")
+            or ""
+        ).strip(),
+        "discharge_datetime": str(
+            anchor.get("discharge_datetime")
+            or anchor.get("discharge_time")
+            or anchor.get("discharge_date")
+            or ""
+        ).strip(),
+        "department": department,
+        "document_rows": {table_name: len(rows) for table_name, rows in docs.items()},
+        "text_available_tables": text_available_tables,
+        "missing_required_docs": missing_required_docs,
+        "record_quality_summary": {
+            "status": quality_status,
+            "available_doc_count": len(text_available_tables),
+            "missing_doc_count": len(missing_required_docs),
+        },
+        "documents": summary_docs,
+    }
+
+
+def _build_settlement_payload(
+    *,
+    docs: dict[str, list[dict[str, Any]]],
+    patient_profile: dict[str, str],
+    structured_context: dict[str, Any],
+) -> dict[str, Any]:
+    settlement_rows = docs.get("medical_insurance_settlement") or []
+    settlement_cost_rows = docs.get("medical_insurance_settlement_cost") or []
+    mr_cost_rows = docs.get("mr_cost") or []
+    mr_rows = docs.get("mr") or []
+    diagnosis_rows = docs.get("diagnosis") or []
+    surgery_rows = docs.get("mr_surgery") or []
+
+    settlement = dict(settlement_rows[0]) if settlement_rows else {}
+    mr = dict(mr_rows[0]) if mr_rows else {}
+    mr_cost = dict(mr_cost_rows[0]) if mr_cost_rows else {}
+
+    diagnoses: list[dict[str, Any]] = []
+    for row in diagnosis_rows:
+        diagnoses.append(
+            {
+                "type": str(row.get("diagnosis_type") or ""),
+                "name": str(row.get("diagnosis_name") or row.get("diag_name") or ""),
+                "code": str(row.get("diagnosis_code") or row.get("icd10_code") or row.get("icd_code") or ""),
+                "sequence": str(row.get("diagnosis_no") or ""),
+                "condition": str(row.get("admission_condition") or ""),
+            }
+        )
+
+    surgeries: list[dict[str, Any]] = []
+    for row in surgery_rows:
+        surgeries.append(
+            {
+                "name": str(row.get("surgery_name") or row.get("operation_name") or ""),
+                "code": str(row.get("surgery_code") or row.get("operation_code") or row.get("icd9_code") or ""),
+                "date": str(row.get("surgery_begin_datetime") or row.get("surgery_datetime") or ""),
+                "level": str(row.get("surgical_level") or ""),
+                "surgeon": str(row.get("surgeon") or ""),
+                "sequence": str(row.get("surgery_id") or ""),
+            }
+        )
+
+    cost_details: list[dict[str, Any]] = []
+    for row in settlement_cost_rows:
+        cost_details.append(
+            {
+                "item_id": str(row.get("medinsur_serial_item_id") or row.get("item_id") or ""),
+                "charge": str(row.get("charge") or ""),
+                "type": str(row.get("type_of_medicalcharge") or row.get("charge_type") or ""),
+                "level": str(row.get("charge_item_level") or ""),
+                "class_a_amount": str(row.get("item_class_a_amount") or ""),
+                "class_b_amount": str(row.get("item_class_b_amount") or ""),
+                "own_pay_amount": str(row.get("item_own_pay_amount") or ""),
+                "other_amount": str(row.get("item_other_amount") or ""),
+            }
+        )
+
+    payload = dict(settlement)
+    payload["patient_name"] = str(patient_profile.get("patient_name") or mr.get("name") or mr.get("patient_name") or "")
+    payload["patient_sex"] = str(mr.get("sex") or mr.get("gender") or "")
+    payload["patient_age"] = str(mr.get("age_year") or mr.get("age") or "")
+    payload["patient_id_card"] = str(patient_profile.get("id_card") or mr.get("id_card") or mr.get("id_card_no") or "")
+    payload["admission_dept_name"] = str(
+        payload.get("admission_dept_name")
+        or structured_context.get("department")
+        or mr.get("admission_dept_name")
+        or ""
+    )
+    payload["discharge_dept_name"] = str(payload.get("discharge_dept_name") or mr.get("discharge_dept_name") or "")
+    payload["diagnoses"] = diagnoses
+    payload["surgeries"] = surgeries
+    payload["cost_summary"] = mr_cost
+    payload["cost_details"] = cost_details
+    return payload
+
+
+def _build_frontpage_coding_context(
+    *,
+    docs: dict[str, list[dict[str, Any]]],
+    patient_profile: dict[str, str],
+) -> dict[str, Any]:
+    mr_rows = docs.get("mr") or []
+    diagnosis_rows = docs.get("diagnosis") or []
+    surgery_rows = docs.get("mr_surgery") or []
+    cost_rows = docs.get("mr_cost") or []
+    admission_rows = docs.get("admission_record") or []
+    discharge_rows = docs.get("discharge_record") or []
+
+    mr = mr_rows[0] if mr_rows else {}
+    admission = admission_rows[0] if admission_rows else {}
+    discharge = discharge_rows[0] if discharge_rows else {}
+    diagnoses: list[dict[str, Any]] = []
+    for row in diagnosis_rows:
+        diag_name = str(
+            row.get("diagnosis_name")
+            or row.get("diag_name")
+            or row.get("name")
+            or row.get("discharge_diagnosis")
+            or ""
+        ).strip()
+        diag_code = str(
+            row.get("diagnosis_code")
+            or row.get("icd10_code")
+            or row.get("icd_code")
+            or ""
+        ).strip()
+        if not diag_name and not diag_code:
+            continue
+        diagnoses.append(
+            {
+                "name": diag_name,
+                "code": diag_code,
+                "is_main": str(row.get("is_main") or row.get("main_flag") or "").strip() in {"1", "true", "True"},
+            }
+        )
+
+    surgeries: list[dict[str, Any]] = []
+    for row in surgery_rows:
+        surg_name = str(
+            row.get("surgery_name")
+            or row.get("operation_name")
+            or row.get("name")
+            or ""
+        ).strip()
+        surg_code = str(
+            row.get("surgery_code")
+            or row.get("operation_code")
+            or row.get("icd9_code")
+            or ""
+        ).strip()
+        if not surg_name and not surg_code:
+            continue
+        surgeries.append({"name": surg_name, "code": surg_code})
+
+    cost_row = cost_rows[0] if cost_rows else {}
+    total_cost = str(
+        cost_row.get("total_cost")
+        or cost_row.get("sum_cost")
+        or ""
+    ).strip()
+    pathological_diagnostic_fee = str(
+        cost_row.get("pathological_diagnostic_fee")
+        or cost_row.get("pathology_diagnosis_fee")
+        or cost_row.get("pathology_fee")
+        or ""
+    ).strip()
+
+    clinical_summary = str(
+        mr.get("clinical_summary")
+        or mr.get("discharge_summary")
+        or mr.get("record_content")
+        or ""
+    ).strip()
+
+    patient_name = str(
+        patient_profile.get("patient_name")
+        or mr.get("patient_name")
+        or mr.get("name")
+        or ""
+    ).strip()
+    sex = str(mr.get("sex") or mr.get("gender") or "").strip()
+    age = str(mr.get("age") or mr.get("age_year") or "").strip()
+    age_in_days = str(mr.get("age_in_days") or "").strip()
+    id_card = str(
+        patient_profile.get("id_card")
+        or mr.get("id_card_no")
+        or mr.get("identity_no")
+        or ""
+    ).strip()
+    admission_datetime = str(
+        admission.get("admission_datetime")
+        or admission.get("admission_time")
+        or mr.get("admission_datetime")
+        or ""
+    ).strip()
+    discharge_datetime = str(
+        discharge.get("discharge_datetime")
+        or discharge.get("discharge_time")
+        or mr.get("discharge_datetime")
+        or ""
+    ).strip()
+    admission_dept = str(
+        admission.get("admission_dept_name")
+        or mr.get("admission_dept_name")
+        or ""
+    ).strip()
+    discharge_dept = str(
+        discharge.get("discharge_dept_name")
+        or mr.get("discharge_dept_name")
+        or ""
+    ).strip()
+    discharge_method = str(
+        discharge.get("leaving_hospital_way")
+        or mr.get("leaving_hospital_way")
+        or ""
+    ).strip()
+
+    coding_payload = {
+        "patient_name": patient_name,
+        "sex": sex,
+        "age": age,
+        "age_in_days": age_in_days,
+        "diagnoses": diagnoses,
+        "surgeries": surgeries,
+        "clinical_summary": clinical_summary,
+        "discharge_summary": clinical_summary,
+        "admission_datetime": admission_datetime,
+        "discharge_datetime": discharge_datetime,
+        "admission_dept": admission_dept,
+        "discharge_dept": discharge_dept,
+        "medical_payment_method": str(mr.get("medical_payment_method") or "").strip(),
+        "total_cost": total_cost,
+        "pathological_diagnostic_fee": pathological_diagnostic_fee,
+        "pathology_diagnosis_fee": pathological_diagnostic_fee,
+        "cost_summary": {
+            "total_cost": total_cost,
+            "pathological_diagnostic_fee": pathological_diagnostic_fee,
+        },
+    }
+
+    frontpage_formal_payload = {
+        "patient_name": patient_name,
+        "sex": sex,
+        "age": age,
+        "age_in_days": age_in_days,
+        "id_card": id_card,
+        "admission_datetime": admission_datetime,
+        "discharge_datetime": discharge_datetime,
+        "admission_dept": admission_dept,
+        "discharge_dept": discharge_dept,
+        "discharge_method": discharge_method,
+        "medical_payment_method": str(mr.get("medical_payment_method") or "").strip(),
+        "admission_route": str(mr.get("admission_route") or "").strip(),
+        "diagnoses": diagnoses,
+        "surgeries": surgeries,
+        "total_cost": total_cost,
+        "clinical_summary": clinical_summary,
+    }
+
+    return {
+        "coding_payload": coding_payload,
+        "frontpage_formal_payload": frontpage_formal_payload,
+    }
+
+
+def _build_document_hits(docs: dict[str, list[dict[str, Any]]], priority: tuple[str, ...]) -> dict[str, bool]:
+    return {table_name: bool(docs.get(table_name)) for table_name in priority}
+
+
+def _build_document_inventory(docs: dict[str, list[dict[str, Any]]], schema: str) -> list[dict[str, Any]]:
+    inventory: list[dict[str, Any]] = []
+    for table_name, rows in docs.items():
+        columns = set(_get_table_columns(schema, table_name))
+        for row in rows or []:
+            assembled = assemble_document(table_name, row)
+            text_value = assembled.assembled_text
+            inventory.append(
+                {
+                    "source_table": table_name,
+                    "document_type": table_name,
+                    "document_id": assembled.document_id,
+                    "document_title": assembled.document_title,
+                    "record_time": assembled.record_time or "",
+                    "display_time": assembled.display_time or "",
+                    "hit": bool(text_value),
+                    "text_preview": text_value[:600],
+                    "content": text_value,
+                    "sections": [section.to_dict() for section in assembled.sections],
+                    "source_fields": [field.to_dict() for field in assembled.source_fields],
+                    "assembly_status": assembled.assembly_status,
+                    "data_quality_flags": list(assembled.data_quality_flags),
+                }
+            )
+    return inventory
+
+
+def _build_timeline_facts_from_docs(docs: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    facts: list[dict[str, Any]] = []
+    timeline_fields = (
+        "admission_datetime",
+        "admission_time",
+        "admission_date",
+        "discharge_datetime",
+        "discharge_time",
+        "discharge_date",
+        "record_time",
+        "update_time",
+        "modified_time",
+        "create_time",
+        "surgery_begin_datetime",
+        "surgery_begin_time",
+    )
+    seen: set[tuple[str, str, str]] = set()
+    for table_name, rows in docs.items():
+        for row in rows or []:
+            for field in timeline_fields:
+                value = row.get(field)
+                normalized = str(value or "").strip()
+                if not normalized:
+                    continue
+                key = (table_name, field, normalized)
+                if key in seen:
+                    continue
+                seen.add(key)
+                facts.append(
+                    {
+                        "source_table": table_name,
+                        "document_type": table_name,
+                        "field": field,
+                        "value": normalized,
+                    }
+                )
+    return facts
+
+
+def _build_medical_text(docs: dict[str, list[dict[str, Any]]], priority: tuple[str, ...], schema: str) -> str:
+    blocks: list[str] = []
+    for table_name in priority:
+        rows = docs.get(table_name) or []
+        if not rows:
+            continue
+        texts = [assemble_document(table_name, row).assembled_text for row in rows]
+        texts = [item for item in texts if item]
+        if not texts:
+            continue
+        section = "\n".join(texts[:3])
+        blocks.append(f"## {table_name}\n{section}")
+    return "\n\n".join(blocks)
+
+
+def _assemble_scene_bundle(
+    *,
+    scene: str,
+    source_schema: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    policy_version: str = "",
+) -> dict[str, Any]:
+    if engine is None:
+        raise RuntimeError("DATABASE_URL is not configured; bundle assembly unavailable.")
+    if scene not in _SCENE_DOC_PRIORITY:
+        raise ValueError(f"Unsupported scene for bundle assembly: {scene}")
+
+    priority = _SCENE_DOC_PRIORITY[scene]
+    docs: dict[str, list[dict[str, Any]]] = {}
+    for table_name in priority:
+        docs[table_name] = _select_records(
+            schema=source_schema,
+            table=table_name,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            limit=3,
+        )
+
+    patient_profile = _fetch_patient_profile(
+        source_schema=source_schema,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+    )
+    structured_context = _build_structured_context(scene=scene, schema=source_schema, docs=docs)
+    department = str(structured_context.get("department") or "").strip()
+    document_hits = _build_document_hits(docs, priority)
+    medical_text = _build_medical_text(docs, priority, source_schema)
+
+    data_quality_flags: list[str] = []
+    for table_name, hit in document_hits.items():
+        if not hit:
+            data_quality_flags.append(f"missing:{table_name}")
+    if not medical_text:
+        data_quality_flags.append("text_unavailable")
+
+    scene_builders = {
+        "running": build_running_record_bundle,
+        "final": build_final_record_bundle,
+        "frontpage": build_frontpage_bundle,
+        "coding": build_coding_bundle,
+        "settlement": build_settlement_bundle,
+    }
+    builder = scene_builders.get(scene)
+    if builder is None:
+        raise ValueError(f"Unsupported scene for bundle builder: {scene}")
+    bundle = builder(
+        policy_version=policy_version,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        department=department,
+        medical_text=medical_text,
+        structured_context=structured_context,
+        document_hits=document_hits,
+        data_quality_flags=data_quality_flags,
+        patient_name=patient_profile["patient_name"],
+        mobile=patient_profile["mobile"],
+        id_card=patient_profile["id_card"],
+    )
+    bundle["source_doc_priority"] = list(priority)
+    bundle["compat_strategy"] = "dual-read-single-write"
+    bundle["bundle_schema_version"] = BUNDLE_SCHEMA_VERSION_CURRENT
+    if scene in {"frontpage", "coding"}:
+        bundle["structured_context"]["frontpage_coding"] = _build_frontpage_coding_context(
+            docs=docs,
+            patient_profile=patient_profile,
+        )
+    if scene == "settlement":
+        bundle["structured_context"]["settlement_payload"] = _build_settlement_payload(
+            docs=docs,
+            patient_profile=patient_profile,
+            structured_context=structured_context,
+        )
+    return bundle
+
+
+def _upsert_scene_bundle(
+    *,
+    scene: str,
+    bundle: dict[str, Any],
+    bundle_schema: str,
+) -> None:
+    table_name = _SCENE_BUNDLE_TABLE.get(scene)
+    if not table_name:
+        raise ValueError(f"Unsupported scene bundle table: {scene}")
+
+    ensure_scene_bundle_tables(schema=bundle_schema)
+    structured_context = _json_safe(dict(bundle.get("structured_context") or {}))
+    payload = {
+        "institute_id": str(bundle.get("institute_id") or ""),
+        "patient_id": str(bundle.get("patient_id") or ""),
+        "visit_id": str(bundle.get("visit_id") or ""),
+        "scene": str(bundle.get("scene") or scene),
+        "department": str(bundle.get("department") or ""),
+        "admission_datetime": str(structured_context.get("admission_datetime") or ""),
+        "discharge_datetime": str(structured_context.get("discharge_datetime") or ""),
+        "medical_text": str(bundle.get("medical_text") or ""),
+        "structured_context": json.dumps(structured_context, ensure_ascii=False),
+        "document_hits": json.dumps(_json_safe(dict(bundle.get("document_hits") or {})), ensure_ascii=False),
+        "text_available": bool(bundle.get("text_available")),
+        "data_quality_flags": json.dumps(_json_safe(list(bundle.get("data_quality_flags") or [])), ensure_ascii=False),
+        "patient_name_masked": str(bundle.get("patient_name_masked") or ""),
+        "mobile_masked": str(bundle.get("mobile_masked") or ""),
+        "id_card_masked": str(bundle.get("id_card_masked") or ""),
+        "source_doc_priority": json.dumps(_json_safe(list(bundle.get("source_doc_priority") or [])), ensure_ascii=False),
+        "compat_strategy": str(bundle.get("compat_strategy") or "dual-read-single-write"),
+        "bundle_schema_version": str(bundle.get("bundle_schema_version") or BUNDLE_SCHEMA_VERSION_CURRENT),
+        "policy_version": str(bundle.get("policy_version") or ""),
+        "bundle_updated_at": datetime.utcnow(),
+    }
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                f"""
+                INSERT INTO {_qualified_table(bundle_schema, table_name)} (
+                    institute_id, patient_id, visit_id, scene, department,
+                    admission_datetime, discharge_datetime, medical_text,
+                    structured_context, document_hits, text_available, data_quality_flags,
+                    patient_name_masked, mobile_masked, id_card_masked,
+                    source_doc_priority, compat_strategy, bundle_schema_version,
+                    policy_version, bundle_updated_at
+                )
+                VALUES (
+                    :institute_id, :patient_id, :visit_id, :scene, :department,
+                    :admission_datetime, :discharge_datetime, :medical_text,
+                    CAST(:structured_context AS jsonb), CAST(:document_hits AS jsonb), :text_available, CAST(:data_quality_flags AS jsonb),
+                    :patient_name_masked, :mobile_masked, :id_card_masked,
+                    CAST(:source_doc_priority AS jsonb), :compat_strategy, :bundle_schema_version,
+                    :policy_version, :bundle_updated_at
+                )
+                ON CONFLICT (institute_id, patient_id, visit_id) DO UPDATE SET
+                    scene = EXCLUDED.scene,
+                    department = EXCLUDED.department,
+                    admission_datetime = EXCLUDED.admission_datetime,
+                    discharge_datetime = EXCLUDED.discharge_datetime,
+                    medical_text = EXCLUDED.medical_text,
+                    structured_context = EXCLUDED.structured_context,
+                    document_hits = EXCLUDED.document_hits,
+                    text_available = EXCLUDED.text_available,
+                    data_quality_flags = EXCLUDED.data_quality_flags,
+                    patient_name_masked = EXCLUDED.patient_name_masked,
+                    mobile_masked = EXCLUDED.mobile_masked,
+                    id_card_masked = EXCLUDED.id_card_masked,
+                    source_doc_priority = EXCLUDED.source_doc_priority,
+                    compat_strategy = EXCLUDED.compat_strategy,
+                    bundle_schema_version = EXCLUDED.bundle_schema_version,
+                    policy_version = EXCLUDED.policy_version,
+                    bundle_updated_at = EXCLUDED.bundle_updated_at
+                """
+            ),
+            payload,
+        )
+
+
+def assemble_domain_bundle(
+    *,
+    execution_domain: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    policy_version: str = "",
+    source_schema: str | None = None,
+) -> dict[str, Any]:
+    if engine is None:
+        raise RuntimeError("DATABASE_URL is not configured; domain bundle assembly unavailable.")
+    if execution_domain not in _DOMAIN_DOC_PRIORITY:
+        raise ValueError(f"Unsupported execution domain: {execution_domain}")
+
+    effective_schema = source_schema or _default_source_schema()
+    priority = _DOMAIN_DOC_PRIORITY[execution_domain]
+    docs: dict[str, list[dict[str, Any]]] = {}
+    for table_name in priority:
+        docs[table_name] = _select_records(
+            schema=effective_schema,
+            table=table_name,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            limit=3,
+        )
+
+    document_hits = _build_document_hits(docs, priority)
+    source_documents = _build_document_inventory(docs, effective_schema)
+    timeline_facts = _build_timeline_facts_from_docs(docs)
+    data_quality_flags = [f"missing:{table_name}" for table_name, hit in document_hits.items() if not hit]
+
+    return {
+        "institute_id": institute_id,
+        "patient_id": patient_id,
+        "visit_id": visit_id,
+        "execution_domain": execution_domain,
+        "policy_version": str(policy_version or ""),
+        "bundle_schema_version": BUNDLE_SCHEMA_VERSION_CURRENT,
+        "document_hits": document_hits,
+        "data_quality_flags": data_quality_flags,
+        "timeline_facts": timeline_facts,
+        "source_documents": source_documents,
+        "structured_context": {
+            "documents": docs,
+            "document_priority": list(priority),
+            "document_inventory": source_documents,
+            "timeline_facts": timeline_facts,
+        },
+    }
+
+
+def _upsert_domain_bundle(
+    *,
+    execution_domain: str,
+    bundle: dict[str, Any],
+    bundle_schema: str,
+) -> None:
+    table_name = _DOMAIN_BUNDLE_TABLE.get(execution_domain)
+    if not table_name:
+        raise ValueError(f"Unsupported execution domain bundle table: {execution_domain}")
+
+    ensure_domain_bundle_tables(schema=bundle_schema)
+    payload = {
+        "institute_id": str(bundle.get("institute_id") or ""),
+        "patient_id": str(bundle.get("patient_id") or ""),
+        "visit_id": str(bundle.get("visit_id") or ""),
+        "execution_domain": str(bundle.get("execution_domain") or execution_domain),
+        "policy_version": str(bundle.get("policy_version") or ""),
+        "bundle_schema_version": str(bundle.get("bundle_schema_version") or BUNDLE_SCHEMA_VERSION_CURRENT),
+        "document_hits": json.dumps(_json_safe(dict(bundle.get("document_hits") or {})), ensure_ascii=False),
+        "data_quality_flags": json.dumps(_json_safe(list(bundle.get("data_quality_flags") or [])), ensure_ascii=False),
+        "timeline_facts": json.dumps(_json_safe(list(bundle.get("timeline_facts") or [])), ensure_ascii=False),
+        "source_documents": json.dumps(_json_safe(list(bundle.get("source_documents") or [])), ensure_ascii=False),
+        "structured_context": json.dumps(_json_safe(dict(bundle.get("structured_context") or {})), ensure_ascii=False),
+        "bundle_updated_at": datetime.utcnow(),
+    }
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                f"""
+                INSERT INTO {_qualified_table(bundle_schema, table_name)} (
+                    institute_id, patient_id, visit_id, execution_domain, policy_version,
+                    bundle_schema_version, document_hits, data_quality_flags, timeline_facts,
+                    source_documents, structured_context, bundle_updated_at
+                )
+                VALUES (
+                    :institute_id, :patient_id, :visit_id, :execution_domain, :policy_version,
+                    :bundle_schema_version, CAST(:document_hits AS jsonb), CAST(:data_quality_flags AS jsonb),
+                    CAST(:timeline_facts AS jsonb), CAST(:source_documents AS jsonb),
+                    CAST(:structured_context AS jsonb), :bundle_updated_at
+                )
+                ON CONFLICT (institute_id, patient_id, visit_id) DO UPDATE SET
+                    execution_domain = EXCLUDED.execution_domain,
+                    policy_version = EXCLUDED.policy_version,
+                    bundle_schema_version = EXCLUDED.bundle_schema_version,
+                    document_hits = EXCLUDED.document_hits,
+                    data_quality_flags = EXCLUDED.data_quality_flags,
+                    timeline_facts = EXCLUDED.timeline_facts,
+                    source_documents = EXCLUDED.source_documents,
+                    structured_context = EXCLUDED.structured_context,
+                    bundle_updated_at = EXCLUDED.bundle_updated_at
+                """
+            ),
+            payload,
+        )
+
+
+def load_domain_bundle(
+    *,
+    execution_domain: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    schema: str = "public",
+) -> dict[str, Any] | None:
+    if engine is None:
+        raise RuntimeError("DATABASE_URL is not configured; domain bundle loading unavailable.")
+    table_name = _DOMAIN_BUNDLE_TABLE.get(execution_domain)
+    if not table_name:
+        raise ValueError(f"Unsupported execution domain: {execution_domain}")
+    sql = text(
+        f"""
+        SELECT institute_id, patient_id, visit_id, execution_domain, policy_version,
+               bundle_schema_version, document_hits, data_quality_flags, timeline_facts,
+               source_documents, structured_context, bundle_updated_at
+        FROM {_qualified_table(schema, table_name)}
+        WHERE institute_id = :institute_id
+          AND patient_id = :patient_id
+          AND visit_id = :visit_id
+        LIMIT 1
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(
+            sql,
+            {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+            },
+        ).mappings().first()
+    if not row:
+        return None
+    payload = dict(row)
+    for field_name in ("document_hits", "data_quality_flags", "timeline_facts", "source_documents", "structured_context"):
+        value = payload.get(field_name)
+        if isinstance(value, str):
+            try:
+                payload[field_name] = json.loads(value)
+            except Exception:
+                payload[field_name] = {} if field_name in {"document_hits", "structured_context"} else []
+    return payload
+
+
+def load_or_assemble_domain_bundle(
+    *,
+    execution_domain: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    policy_version: str = "",
+    source_schema: str | None = None,
+    bundle_schema: str = "public",
+    force_refresh: bool = False,
+) -> dict[str, Any]:
+    ensure_domain_bundle_tables(schema=bundle_schema)
+    if not force_refresh:
+        existing = load_domain_bundle(
+            execution_domain=execution_domain,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            schema=bundle_schema,
+        )
+        if existing and str(existing.get("bundle_schema_version") or "") == BUNDLE_SCHEMA_VERSION_CURRENT:
+            return existing
+
+    bundle = assemble_domain_bundle(
+        execution_domain=execution_domain,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        policy_version=policy_version,
+        source_schema=source_schema,
+    )
+    _upsert_domain_bundle(
+        execution_domain=execution_domain,
+        bundle=bundle,
+        bundle_schema=bundle_schema,
+    )
+    return bundle
+
+
+def _load_visit_index_row(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+) -> Optional[dict[str, Any]]:
+    if not _ensure_engine_available("visit_index loading"):
+        return None
+    sql = """
+        SELECT institute_id, patient_id, visit_id, scene_current, policy_version
+        FROM visit_index
+        WHERE institute_id = :institute_id
+          AND patient_id = :patient_id
+          AND visit_id = :visit_id
+        LIMIT 1
+    """
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(sql),
+            {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+            },
+        ).mappings().first()
+    return dict(row) if row else None
+
+
+def assemble_running_record_bundle(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    policy_version: str = "",
+    source_schema: str | None = None,
+) -> dict[str, Any]:
+    return _assemble_scene_bundle(
+        scene="running",
+        source_schema=source_schema or _default_source_schema(),
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        policy_version=policy_version,
+    )
+
+
+def assemble_final_record_bundle(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    policy_version: str = "",
+    source_schema: str | None = None,
+) -> dict[str, Any]:
+    return _assemble_scene_bundle(
+        scene="final",
+        source_schema=source_schema or _default_source_schema(),
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        policy_version=policy_version,
+    )
+
+
+def assemble_bundle_from_visit_index(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    scene: str | None = None,
+    source_schema: str | None = None,
+) -> dict[str, Any]:
+    visit_index_row = _load_visit_index_row(
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+    )
+    effective_scene = str(scene or (visit_index_row or {}).get("scene_current") or "").strip().lower()
+    effective_policy_version = str((visit_index_row or {}).get("policy_version") or "").strip()
+
+    if effective_scene == "running":
+        return assemble_running_record_bundle(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            policy_version=effective_policy_version,
+            source_schema=source_schema or _default_source_schema(),
+        )
+    if effective_scene == "final":
+        return assemble_final_record_bundle(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            policy_version=effective_policy_version,
+            source_schema=source_schema or _default_source_schema(),
+        )
+    if effective_scene == "frontpage":
+        return _assemble_scene_bundle(
+            scene="frontpage",
+            source_schema=source_schema or _default_source_schema(),
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            policy_version=effective_policy_version,
+        )
+    if effective_scene == "coding":
+        return _assemble_scene_bundle(
+            scene="coding",
+            source_schema=source_schema or _default_source_schema(),
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            policy_version=effective_policy_version,
+        )
+    if effective_scene == "settlement":
+        return _assemble_scene_bundle(
+            scene="settlement",
+            source_schema=source_schema or _default_source_schema(),
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            policy_version=effective_policy_version,
+        )
+    raise ValueError(f"visit_index 当前 scene 不支持 bundle 装配: {effective_scene or 'unknown'}")
+
+
+def assemble_frontpage_bundle(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    policy_version: str = "",
+    source_schema: str | None = None,
+) -> dict[str, Any]:
+    return _assemble_scene_bundle(
+        scene="frontpage",
+        source_schema=source_schema or _default_source_schema(),
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        policy_version=policy_version,
+    )
+
+
+def assemble_coding_bundle(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    policy_version: str = "",
+    source_schema: str | None = None,
+) -> dict[str, Any]:
+    return _assemble_scene_bundle(
+        scene="coding",
+        source_schema=source_schema or _default_source_schema(),
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        policy_version=policy_version,
+    )
+
+
+def assemble_settlement_bundle(
+    *,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    policy_version: str = "",
+    source_schema: str | None = None,
+) -> dict[str, Any]:
+    return _assemble_scene_bundle(
+        scene="settlement",
+        source_schema=source_schema or _default_source_schema(),
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        policy_version=policy_version,
+    )
+
+
+def load_frontpage_payload_from_bundle(
+    *,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+    visit_id: str,
+    schema: str = "public",
+) -> Optional[dict[str, Any]]:
+    table_name = _SCENE_BUNDLE_TABLE.get("frontpage")
+    if not table_name:
+        return None
+    if not _ensure_engine_available("bundle payload loading"):
+        return None
+    if institute_id and patient_id:
+        sql = text(
+            f"""
+            SELECT structured_context
+            FROM {_qualified_table(schema, table_name)}
+            WHERE institute_id = :institute_id
+              AND patient_id = :patient_id
+              AND visit_id = :visit_id
+            LIMIT 1
+            """
+        )
+        params = {
+            "institute_id": institute_id,
+            "patient_id": patient_id,
+            "visit_id": visit_id,
+        }
+    else:
+        sql = text(
+            f"""
+            SELECT structured_context
+            FROM {_qualified_table(schema, table_name)}
+            WHERE visit_id = :visit_id
+            ORDER BY bundle_updated_at DESC
+            LIMIT 1
+            """
+        )
+        params = {"visit_id": visit_id}
+    with engine.connect() as conn:
+        row = conn.execute(sql, params).mappings().first()
+    if not row:
+        return None
+    context = row.get("structured_context")
+    if isinstance(context, str):
+        try:
+            context = json.loads(context)
+        except Exception:
+            context = {}
+    if not isinstance(context, dict):
+        return None
+    payload = context.get("frontpage_coding")
+    if not isinstance(payload, dict):
+        return None
+    formal_payload = payload.get("frontpage_formal_payload")
+    if isinstance(formal_payload, dict):
+        return formal_payload
+    return payload
+
+
+def load_coding_payload_from_bundle(
+    *,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+    visit_id: str,
+    schema: str = "public",
+) -> Optional[dict[str, Any]]:
+    table_name = _SCENE_BUNDLE_TABLE.get("coding")
+    if not table_name:
+        return None
+    if not _ensure_engine_available("bundle payload loading"):
+        return None
+    if institute_id and patient_id:
+        sql = text(
+            f"""
+            SELECT structured_context
+            FROM {_qualified_table(schema, table_name)}
+            WHERE institute_id = :institute_id
+              AND patient_id = :patient_id
+              AND visit_id = :visit_id
+            LIMIT 1
+            """
+        )
+        params = {
+            "institute_id": institute_id,
+            "patient_id": patient_id,
+            "visit_id": visit_id,
+        }
+    else:
+        sql = text(
+            f"""
+            SELECT structured_context
+            FROM {_qualified_table(schema, table_name)}
+            WHERE visit_id = :visit_id
+            ORDER BY bundle_updated_at DESC
+            LIMIT 1
+            """
+        )
+        params = {"visit_id": visit_id}
+    with engine.connect() as conn:
+        row = conn.execute(sql, params).mappings().first()
+    if not row:
+        return None
+    context = row.get("structured_context")
+    if isinstance(context, str):
+        try:
+            context = json.loads(context)
+        except Exception:
+            context = {}
+    if not isinstance(context, dict):
+        return None
+    payload = context.get("frontpage_coding")
+    if not isinstance(payload, dict):
+        return None
+    coding_payload = payload.get("coding_payload")
+    if isinstance(coding_payload, dict):
+        return coding_payload
+    return payload
+
+
+def load_settlement_payload_from_bundle(
+    *,
+    institute_id: str | None = None,
+    patient_id: str | None = None,
+    visit_id: str,
+    schema: str = "public",
+) -> Optional[dict[str, Any]]:
+    table_name = _SCENE_BUNDLE_TABLE.get("settlement")
+    if not table_name:
+        return None
+    if not _ensure_engine_available("bundle payload loading"):
+        return None
+    if institute_id and patient_id:
+        sql = text(
+            f"""
+            SELECT structured_context
+            FROM {_qualified_table(schema, table_name)}
+            WHERE institute_id = :institute_id
+              AND patient_id = :patient_id
+              AND visit_id = :visit_id
+            LIMIT 1
+            """
+        )
+        params = {
+            "institute_id": institute_id,
+            "patient_id": patient_id,
+            "visit_id": visit_id,
+        }
+    else:
+        sql = text(
+            f"""
+            SELECT structured_context
+            FROM {_qualified_table(schema, table_name)}
+            WHERE visit_id = :visit_id
+            ORDER BY bundle_updated_at DESC
+            LIMIT 1
+            """
+        )
+        params = {"visit_id": visit_id}
+    with engine.connect() as conn:
+        row = conn.execute(sql, params).mappings().first()
+    if not row:
+        return None
+    context = row.get("structured_context")
+    if isinstance(context, str):
+        try:
+            context = json.loads(context)
+        except Exception:
+            context = {}
+    if not isinstance(context, dict):
+        return None
+    payload = context.get("settlement_payload")
+    if isinstance(payload, dict):
+        return payload
+    return None
+
+
+def refresh_scene_bundles_for_rows(
+    *,
+    scene: str,
+    rows: list[dict[str, Any]],
+    policy_version: str = "",
+    source_schema: str | None = None,
+    bundle_schema: str = "public",
+    trigger_source: str = "sync",
+    job_id: str = "",
+    continue_on_error: bool = True,
+) -> dict[str, int]:
+    if scene not in _SCENE_BUNDLE_TABLE:
+        if _pg_required_in_current_env():
+            raise ValueError(f"Unsupported scene for bundle refresh: {scene}")
+        return {"processed": 0, "updated": 0, "skipped": len(rows or [])}
+    effective_source_schema = source_schema or _default_source_schema()
+    ensure_scene_bundle_tables(schema=bundle_schema)
+
+    processed = 0
+    updated = 0
+    skipped = 0
+    failed = 0
+    seen: set[tuple[str, str, str]] = set()
+
+    for row in rows or []:
+        institute_id = str(row.get("institute_id") or "").strip()
+        patient_id = str(row.get("patient_id") or "").strip()
+        visit_id = str(row.get("visit_id") or "").strip()
+        if not (institute_id and patient_id and visit_id):
+            skipped += 1
+            continue
+        key = (institute_id, patient_id, visit_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        processed += 1
+        try:
+            bundle = _assemble_scene_bundle(
+                scene=scene,
+                source_schema=effective_source_schema,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                policy_version=policy_version,
+            )
+            _upsert_scene_bundle(scene=scene, bundle=bundle, bundle_schema=bundle_schema)
+            updated += 1
+            if scene in {"running", "final", "frontpage", "coding"}:
+                mark_bundle_refresh_success(
+                    scene=scene,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    resolved_by=str(trigger_source or "sync"),
+                    job_id=str(job_id or ""),
+                )
+        except Exception as exc:
+            failed += 1
+            logger.warning(
+                "bundle refresh failed scene=%s visit=(%s,%s,%s) source_schema=%s bundle_schema=%s error=%s",
+                scene,
+                institute_id,
+                patient_id,
+                visit_id,
+                effective_source_schema,
+                bundle_schema,
+                exc,
+            )
+            if scene in {"running", "final", "frontpage", "coding"}:
+                record_bundle_refresh_failure(
+                    scene=scene,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    policy_version=str(policy_version or ""),
+                    source_schema=effective_source_schema,
+                    bundle_schema=bundle_schema,
+                    trigger_source=str(trigger_source or "sync"),
+                    error_stage="assemble_or_upsert",
+                    error_message=str(exc),
+                    error_detail={"scene": scene, "trigger_source": trigger_source},
+                    job_id=str(job_id or ""),
+                )
+            if not continue_on_error:
+                raise
+
+    return {"processed": processed, "updated": updated, "failed": failed, "skipped": skipped}

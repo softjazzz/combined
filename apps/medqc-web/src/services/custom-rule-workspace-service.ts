@@ -242,6 +242,16 @@ export async function getWorkspaceBatchJob(jobId: string) {
   )
 }
 
+export async function cancelWorkspaceBatchJob(jobId: string) {
+  return requestEnvelope<CustomRuleBatchJob>(
+    {
+      method: 'POST',
+      url: `/api/v1/custom-qc/workspace/batch-jobs/${encodeURIComponent(jobId)}/cancel`,
+    },
+    '停止批量任务失败',
+  )
+}
+
 export async function exportWorkspaceBatchJob({
   job_id,
   format = 'xlsx',

@@ -1,0 +1,84 @@
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import time
+from dataclasses import dataclass
+from threading import Lock
+from typing import Any, Optional
+
+
+@dataclass
+class _CacheEntry:
+    value: dict[str, Any]
+    expires_at: float
+
+
+def build_record_snapshot_hash(medical_record: dict[str, Any]) -> str:
+    payload = {
+        "id": str(medical_record.get("id") or ""),
+        "document_type": str(medical_record.get("document_type") or ""),
+        "content": str(medical_record.get("content") or ""),
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def build_prompt_hash(rule: dict[str, Any]) -> str:
+    prompt_text = str(rule.get("custom_prompt") or "")
+    return hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()
+
+
+def build_execution_cache_key(
+    *,
+    record_snapshot_hash: str,
+    rule_id: str,
+    rule_version: str,
+    prompt_hash: str,
+    model_version: str,
+) -> str:
+    key = "|".join(
+        [
+            str(record_snapshot_hash or ""),
+            str(rule_id or ""),
+            str(rule_version or ""),
+            str(prompt_hash or ""),
+            str(model_version or ""),
+        ]
+    )
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+class QCExecutionCache:
+    def __init__(self, default_ttl_seconds: int = 1800) -> None:
+        self._default_ttl_seconds = max(60, int(default_ttl_seconds))
+        self._entries: dict[str, _CacheEntry] = {}
+        self._lock = Lock()
+
+    def get(self, key: str) -> Optional[dict[str, Any]]:
+        if not key:
+            return None
+        now = time.time()
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+            if entry.expires_at <= now:
+                self._entries.pop(key, None)
+                return None
+            return copy.deepcopy(entry.value)
+
+    def set(self, key: str, value: dict[str, Any], ttl_seconds: Optional[int] = None) -> None:
+        if not key:
+            return
+        ttl = max(60, int(ttl_seconds or self._default_ttl_seconds))
+        with self._lock:
+            self._entries[key] = _CacheEntry(
+                value=copy.deepcopy(value),
+                expires_at=time.time() + ttl,
+            )
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
