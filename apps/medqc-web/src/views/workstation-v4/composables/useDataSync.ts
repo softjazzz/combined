@@ -6,6 +6,7 @@ import {
   syncApi,
   type MongoConnectionConfig,
   type PgConnectionConfig,
+  type PgSyncTableConfigItem,
   type SyncConnectionStatus,
   type SyncMappingItem,
   type SyncPreflightResult,
@@ -42,8 +43,20 @@ export interface PgConnectionForm {
   remote_port: number
   remote_database: string
   remote_username: string
+  remote_schema: string
+  sync_mode: 'table' | 'procedure'
   remote_password: string
   remote_password_set: boolean
+}
+
+export interface PgSyncTableFormItem {
+  name: string
+  label?: string
+  source_table: string
+  date_field: string
+  fallback_date_field: string
+  enabled: boolean
+  procedure?: string
 }
 
 export interface SyncPolicyForm {
@@ -123,9 +136,13 @@ function createInitialState() {
       remote_port: 5432,
       remote_database: '',
       remote_username: '',
+      remote_schema: 'public',
+      sync_mode: 'table',
       remote_password: '',
       remote_password_set: false,
     } as PgConnectionForm,
+
+    pgSyncTables: [] as PgSyncTableFormItem[],
 
     policyForm: {
       enabled: false,
@@ -161,6 +178,8 @@ function createInitialState() {
     isTestingActive: false,
     isSavingMongoConnection: false,
     isSavingPgConnection: false,
+    isLoadingPgTables: false,
+    isSavingPgTables: false,
     isSavingPolicy: false,
     isPreflighting: false,
     isSyncing: false,
@@ -222,8 +241,23 @@ function patchPgForms(payload: PgConnectionConfig) {
   globalSyncState.pgConnectionForm.remote_port = Number(payload.remote_port || 5432)
   globalSyncState.pgConnectionForm.remote_database = payload.remote_database || ''
   globalSyncState.pgConnectionForm.remote_username = payload.remote_username || ''
+  globalSyncState.pgConnectionForm.remote_schema = payload.remote_schema || 'public'
+  globalSyncState.pgConnectionForm.sync_mode =
+    payload.sync_mode === 'procedure' ? 'procedure' : 'table'
   globalSyncState.pgConnectionForm.remote_password = ''
   globalSyncState.pgConnectionForm.remote_password_set = Boolean(payload.remote_password_set)
+}
+
+function normalizePgSyncTable(item: PgSyncTableConfigItem): PgSyncTableFormItem {
+  return {
+    name: item.name,
+    label: item.label,
+    source_table: item.source_table || '',
+    date_field: item.date_field || '',
+    fallback_date_field: item.fallback_date_field || '',
+    enabled: Boolean(item.enabled),
+    procedure: item.procedure,
+  }
 }
 
 function recomputeOverview() {
@@ -257,6 +291,23 @@ async function loadMongoConfig() {
 async function loadPgConfig() {
   const payload = await syncApi.getPgConfig()
   patchPgForms(payload)
+}
+
+async function loadPgSyncTables() {
+  globalSyncState.isLoadingPgTables = true
+  try {
+    const resp = await syncApi.getPgSyncTables()
+    globalSyncState.pgSyncTables = Array.isArray(resp.items)
+      ? resp.items.map(normalizePgSyncTable)
+      : []
+    return globalSyncState.pgSyncTables
+  } catch (error) {
+    console.error('加载 PG 表配置失败:', error)
+    globalSyncState.pgSyncTables = []
+    throw error
+  } finally {
+    globalSyncState.isLoadingPgTables = false
+  }
 }
 
 async function loadStatusAndStats() {
@@ -421,6 +472,8 @@ async function savePgConnection() {
       remote_port: Number(globalSyncState.pgConnectionForm.remote_port),
       remote_database: globalSyncState.pgConnectionForm.remote_database,
       remote_username: globalSyncState.pgConnectionForm.remote_username,
+      remote_schema: globalSyncState.pgConnectionForm.remote_schema || 'public',
+      sync_mode: globalSyncState.pgConnectionForm.sync_mode,
       remote_password: globalSyncState.pgConnectionForm.remote_password,
     }
     const resp = await syncApi.updatePgConfig(payload)
@@ -433,6 +486,32 @@ async function savePgConnection() {
     throw error
   } finally {
     globalSyncState.isSavingPgConnection = false
+  }
+}
+
+async function savePgSyncTables() {
+  globalSyncState.isSavingPgTables = true
+  try {
+    const resp = await syncApi.updatePgSyncTables({
+      items: globalSyncState.pgSyncTables.map((item) => ({
+        name: item.name,
+        source_table: item.source_table || undefined,
+        date_field: item.date_field || undefined,
+        fallback_date_field: item.fallback_date_field || undefined,
+        enabled: Boolean(item.enabled),
+      })),
+    })
+    globalSyncState.pgSyncTables = Array.isArray(resp.items)
+      ? resp.items.map(normalizePgSyncTable)
+      : []
+    pushLog('success', 'PG 表同步配置已保存')
+    return globalSyncState.pgSyncTables
+  } catch (error: any) {
+    const errMsg = error?.response?.data?.detail || error?.message || '未知错误'
+    pushLog('error', `保存 PG 表同步配置失败：${errMsg}`)
+    throw error
+  } finally {
+    globalSyncState.isSavingPgTables = false
   }
 }
 
@@ -582,7 +661,7 @@ function clearLogs() {
 async function initialize() {
   globalSyncState.isInitializing = true
   try {
-    await Promise.all([loadPgConfig(), loadStatusAndStats(), loadRunHistory()])
+    await Promise.all([loadPgConfig(), loadPgSyncTables(), loadStatusAndStats(), loadRunHistory()])
     pushLog('info', '数据同步控制台已加载')
   } catch (error: any) {
     const errMsg = error?.response?.data?.detail || error?.message || '加载失败'
@@ -628,6 +707,8 @@ export function useDataSync() {
     testActiveConnection,
     saveMongoConnection,
     savePgConnection,
+    loadPgSyncTables,
+    savePgSyncTables,
     savePolicy,
     runPreflight,
     executeSync,
