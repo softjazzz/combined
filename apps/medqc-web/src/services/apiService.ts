@@ -34,6 +34,10 @@ import type {
 // API基础配置
 const ENV_BASE = import.meta.env.VITE_API_BASE_URL as string | undefined
 
+function isLoopbackHost(host: string): boolean {
+  return ['localhost', '127.0.0.1', '::1'].includes(host)
+}
+
 function computeBaseURL(): string {
   // 优先使用环境变量
   let base = ENV_BASE && ENV_BASE.trim() !== '' ? ENV_BASE.trim() : ''
@@ -45,12 +49,25 @@ function computeBaseURL(): string {
 
   try {
     if (typeof window !== 'undefined') {
-      const host = window.location.hostname
-      const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(host)
-      const isPrivateIPv4 = /^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
-      // 本地/内网环境强制指向本机后端，避免误用线上域名导致证书/跨域问题
+      const { protocol, hostname } = window.location
+      const isLocalHost = isLoopbackHost(hostname)
+      const isPrivateIPv4 = /^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+      const sameHostBackend = `${protocol}//${hostname}:8001`
+
+      // 本地/内网环境：优先保持与前端同主机，避免硬编码 127.0.0.1 导致局域网客户端请求到“自己本机”。
       if (isLocalHost || isPrivateIPv4) {
-        base = 'http://127.0.0.1:8001'
+        if (!base) {
+          base = sameHostBackend
+        } else {
+          try {
+            const parsed = new URL(base, window.location.origin)
+            if (isLoopbackHost(parsed.hostname) && !isLocalHost) {
+              base = sameHostBackend
+            }
+          } catch {
+            // base 解析失败时保留原配置
+          }
+        }
       }
     }
   } catch {
