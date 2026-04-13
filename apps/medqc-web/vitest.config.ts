@@ -24,7 +24,15 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
     clearMocks: true,
-    exclude: ['**/tests/e2e/**', '**/*.test.js', 'src/services/document-category-service.test.ts'],
+    include: ['tests/**/*.{test,spec}.{ts,tsx,js,jsx}', 'src/**/*.{test,spec}.{ts,tsx,vue}'],
+    exclude: [
+      '**/tests/e2e/**',
+      '**/*.test.js',
+      '**/node_modules/**',
+      '**/.push-worktree/**',
+      '.push-worktree/**',
+      'src/services/document-category-service.test.ts',
+    ],
     coverage: {
       provider: 'istanbul',
       reportsDirectory: 'coverage/unit',

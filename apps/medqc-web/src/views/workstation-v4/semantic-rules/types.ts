@@ -11,6 +11,12 @@ export interface SemanticRuleItem {
   medical_domain: string
   requires_rag: boolean
   requires_cot: boolean
+  executor_type?: 'llm' | 'program' | string
+  execution_domain?: string
+  doc_scope?: string
+  rule_version?: string
+  prompt_version?: string
+  cost_class?: string
 }
 
 export interface SemanticRuleStats {
@@ -26,6 +32,237 @@ export interface SemanticRuleTestResult {
   findings: string
   evidence: string
   suggestion: string
+  status?: string
+  trace_id?: string
+  error_message?: string
+  error_detail?: string
+  status_code?: number
+  executor_type?: string
+  model_version?: string
+  cache_hit?: boolean
+  tokens_used?: number
+  api_time?: number
+}
+
+export type SichuanBatchJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'canceled'
+export type SichuanBatchExecutionMode = 'single' | 'batch'
+
+export interface SichuanBatchJobSummary {
+  total_records: number
+  success_count: number
+  failed_count: number
+  failed_record_count?: number
+  issue_records: number
+  compliant_records: number
+  total_tokens: number
+  total_processing_time: number
+  rule_count?: number
+  processed_rule_count?: number
+  progress_percent?: number
+  retryable_rule_count?: number
+  status_breakdown?: Record<string, number>
+  current_rule?: {
+    rule_job_id?: string
+    rule_code?: string
+    rule_name?: string
+    progress?: Record<string, unknown>
+  } | null
+  executor_breakdown?: {
+    program: number
+    llm: number
+  }
+  cache_breakdown?: {
+    hit: number
+    miss: number
+  }
+  result_aggregation?: SichuanBatchResultAggregation
+  updated_at?: string
+}
+
+export interface SichuanBatchAggregationCluster {
+  cluster_key: string
+  sample_evidence?: string
+  records: number
+  rules: Array<{
+    rule_id: string
+    rule_name: string
+  }>
+  document_types?: Record<string, number>
+  executor_types?: Record<string, number>
+  defect_levels?: Record<string, number>
+}
+
+export interface SichuanBatchAggregationBreakdownItem {
+  key: string
+  count: number
+}
+
+export interface SichuanBatchResultAggregation {
+  cluster_count: number
+  duplicate_hits: number
+  clusters: SichuanBatchAggregationCluster[]
+  rule_breakdown?: Array<{
+    rule_id: string
+    rule_name: string
+    hits: number
+  }>
+  executor_breakdown?: SichuanBatchAggregationBreakdownItem[]
+  document_breakdown?: SichuanBatchAggregationBreakdownItem[]
+  defect_level_breakdown?: SichuanBatchAggregationBreakdownItem[]
+}
+
+export interface SichuanBatchIssueItem {
+  rule_id?: string
+  rule_job_id?: string
+  rule_code?: string
+  rule_name?: string
+  record_id: string
+  visit_id?: string
+  patient_name?: string
+  department?: string
+  status: string
+  is_compliant: boolean
+  issues?: Array<{ description: string; evidence?: string }>
+  findings?: string
+  evidence?: string
+  suggestion?: string
+  confidence?: number
+  llm_raw_output?: string
+  executor_type?: string
+  rule_version?: string
+  prompt_version?: string
+  model_version?: string
+  evidence_source?: string
+  cache_hit?: boolean
+  trace_id?: string
+  cache_key?: string
+  execution_domain?: string
+  doc_scope?: string
+  cost_class?: string
+  document_type?: string
+  defect_level?: string
+  llm_fallback?: boolean
+}
+
+export interface SichuanBatchFailedItem {
+  rule_job_id?: string
+  record_id?: string
+  visit_id?: string
+  patient_name?: string
+  department?: string
+  trace_id?: string
+  rule_version?: string
+  prompt_version?: string
+  error_phase?: string
+  error: string
+}
+
+export interface SichuanBatchJobRuleResult {
+  id?: string
+  job_id?: string
+  draft_id?: string
+  rule_code: string
+  rule_name: string
+  scene?: string
+  status: SichuanBatchJobStatus
+  summary?: SichuanBatchJobSummary | null
+  items?: SichuanBatchIssueItem[]
+  failed_records?: SichuanBatchFailedItem[]
+  error_message?: string
+  created_at?: string
+  started_at?: string | null
+  finished_at?: string | null
+  updated_at?: string
+  total_records?: number
+  success_count?: number
+  failed_count?: number
+  issue_records?: number
+  compliant_records?: number
+  total_tokens?: number
+  total_processing_time?: number
+}
+
+export interface SichuanBatchJobDebugSnapshot {
+  job_id: string
+  status: SichuanBatchJobStatus | string
+  scope: 'all' | 'running' | 'final' | string
+  execution_mode?: SichuanBatchExecutionMode | string
+  rule_count?: number
+  filtered_rule_count?: number
+  summary?: SichuanBatchJobSummary | null
+  current_rule?: {
+    rule_job_id?: string
+    rule_code?: string
+    rule_name?: string
+    progress?: Record<string, unknown>
+  } | null
+  rules: Array<{
+    rule_job_id: string
+    rule_code: string
+    rule_name: string
+    status: string
+    progress?: Record<string, unknown>
+    debug?: Record<string, unknown>
+    total_records?: number
+    success_count?: number
+    failed_count?: number
+    issue_records?: number
+    compliant_records?: number
+    total_tokens?: number
+    total_processing_time?: number
+    error_message?: string
+    updated_at?: string
+  }>
+  recent_items: SichuanBatchIssueItem[]
+  recent_failed_records: SichuanBatchFailedItem[]
+  updated_at?: string
+}
+
+export interface SichuanBatchJob {
+  id: string
+  draft_id?: string
+  draft_ids?: string[]
+  rule_code: string
+  rule_name: string
+  scene?: string
+  scope: 'all' | 'running' | 'final'
+  execution_mode?: SichuanBatchExecutionMode
+  rule_count?: number
+  status: SichuanBatchJobStatus
+  filters?: Record<string, unknown>
+  record_ids?: string[]
+  summary?: SichuanBatchJobSummary | null
+  items?: SichuanBatchIssueItem[]
+  failed_records?: SichuanBatchFailedItem[]
+  error_message?: string
+  created_by?: string
+  created_at?: string
+  started_at?: string | null
+  finished_at?: string | null
+  updated_at?: string
+  total_records?: number
+  success_count?: number
+  failed_count?: number
+  issue_records?: number
+  compliant_records?: number
+  total_tokens?: number
+  total_processing_time?: number
+  rule_results?: SichuanBatchJobRuleResult[]
+}
+
+export interface SichuanBatchJobQuery {
+  status?: SichuanBatchJobStatus
+  scope?: 'all' | 'running' | 'final'
+  q?: string
+  created_start_date?: string
+  created_end_date?: string
+  page?: number
+  page_size?: number
+}
+
+export interface SichuanBatchJobExport {
+  job_id: string
+  format?: 'xlsx' | 'csv'
 }
 
 export interface SemanticRuleWorkspaceQueryState {

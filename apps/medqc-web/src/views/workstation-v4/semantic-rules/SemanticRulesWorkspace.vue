@@ -32,11 +32,31 @@
         @update:complexity="queryState.complexity = $event"
         @update:defect-level="queryState.defectLevel = $event"
         @update:document-type="queryState.documentType = $event"
-        @open-qc-evaluation="openQCEvaluation()"
+        @open-qc-evaluation="openBatchLaunchModal()"
         @open-custom-workspace="goCustomWorkspace()"
         @table-change="handleTableChange"
         @view-detail="openRuleDetail"
         @start-test="startRuleTest"
+      />
+
+      <SemanticRulesBatchPanel
+        :loading="batchJobLoading"
+        :batch-jobs="batchJobs"
+        :total="Number(batchJobPagination.total || 0)"
+        :pagination="batchJobPagination"
+        :query="batchJobQuery"
+        :status-options="batchJobStatusOptions"
+        :scope-options="batchJobScopeOptions"
+        :cancelling-batch-job-id="cancellingBatchJobId"
+        :retrying-batch-job-id="retryingBatchJobId"
+        :format-date-time="formatDateTime"
+        @open-batch-launch="openBatchLaunchModal()"
+        @search-batch-jobs="searchBatchJobs"
+        @table-change="handleBatchJobTableChange"
+        @open-batch-job-drawer="openBatchJobDrawer"
+        @cancel-batch-job="executeCancelBatchJob"
+        @retry-batch-job="executeRetryBatchJob"
+        @update-query="(value) => Object.assign(batchJobQuery, value)"
       />
     </div>
 
@@ -69,9 +89,45 @@
       @execute="executeRuleTestAction"
     />
 
-    <SemanticRuleEvaluationModal
-      :open="showQCEvaluation"
-      @update:open="handleEvaluationOpenChange"
+    <CustomQcBatchLaunchModal
+      :open="batchLaunchModalOpen"
+      :testing-batch="testingBatch"
+      :confirm-batch-launch="confirmBatchLaunch"
+      :selected-run-draft-count="filteredRules.length"
+      :selected-run-scene-label="
+        batchLaunchFilters.scope === 'running'
+          ? '运行病历'
+          : batchLaunchFilters.scope === 'all'
+            ? '全量病历'
+            : '终末病历'
+      "
+      :selected-record-count="0"
+      :batch-launch-filters="batchLaunchFilters"
+      :scope-options="batchJobScopeOptions"
+      :batch-launch-filters-loading="batchLaunchFiltersLoading"
+      :batch-launch-department-options="batchLaunchDepartmentOptions"
+      :batch-launch-doctor-options="batchLaunchDoctorOptions"
+      :handle-batch-launch-scope-change="handleBatchLaunchScopeChange"
+      :handle-batch-launch-department-change="handleBatchLaunchDepartmentChange"
+      :batch-launch-date-field-label="
+        batchLaunchFilters.date_field === 'admission' ? '入院日期' : '出院日期'
+      "
+      @update:open="(value) => (batchLaunchModalOpen = value)"
+      @update:batch-launch-filters="(value) => Object.assign(batchLaunchFilters, value)"
+    />
+
+    <SemanticRulesBatchResultDrawer
+      :open="resultDrawerOpen"
+      :batch-job-detail="batchJobDetail"
+      :batch-job-debug-snapshot="batchJobDebugSnapshot"
+      :batch-job-debug-loading="batchJobDebugLoading"
+      :batch-job-detail-loading="batchJobDetailLoading"
+      :fetch-batch-job-debug-snapshot="fetchBatchJobDebugSnapshot"
+      :close="closeBatchJobDrawer"
+      :export-batch-job-report="exportBatchJobReport"
+      :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
+      :get-batch-job-status-text="getBatchJobStatusText"
+      :format-date-time="formatDateTime"
     />
   </div>
 </template>
@@ -80,9 +136,15 @@
 import { useSemanticRulesWorkspace } from './composables/useSemanticRulesWorkspace'
 import SemanticRulesOverviewPanels from './components/SemanticRulesOverviewPanels.vue'
 import SemanticRulesTableSection from './components/SemanticRulesTableSection.vue'
+import SemanticRulesBatchPanel from './components/SemanticRulesBatchPanel.vue'
+import SemanticRulesBatchResultDrawer from './components/SemanticRulesBatchResultDrawer.vue'
 import SemanticRuleDetailModal from './components/modals/SemanticRuleDetailModal.vue'
-import SemanticRuleEvaluationModal from './components/modals/SemanticRuleEvaluationModal.vue'
 import SemanticRuleTestModal from './components/modals/SemanticRuleTestModal.vue'
+import CustomQcBatchLaunchModal from '@/views/rules/components/workspace/CustomQcBatchLaunchModal.vue'
+import {
+  getBatchJobStatusTagClass,
+  getBatchJobStatusText,
+} from '@/views/rules/utils/customQcWorkspacePresentation'
 
 const {
   loading,
@@ -128,10 +190,39 @@ const {
   switchExampleType,
   closeRuleTest,
   executeRuleTestAction,
-  showQCEvaluation,
-  openQCEvaluation,
-  closeQCEvaluation,
   goCustomWorkspace,
+  batchLaunchModalOpen,
+  batchLaunchFiltersLoading,
+  batchLaunchDepartmentOptions,
+  batchLaunchDoctorOptions,
+  batchLaunchFilters,
+  handleBatchLaunchScopeChange,
+  handleBatchLaunchDepartmentChange,
+  openBatchLaunchModal,
+  confirmBatchLaunch,
+  testingBatch,
+  batchJobLoading,
+  batchJobDetailLoading,
+  batchJobDebugLoading,
+  cancellingBatchJobId,
+  retryingBatchJobId,
+  batchJobs,
+  batchJobDetail,
+  batchJobDebugSnapshot,
+  batchJobPagination,
+  batchJobQuery,
+  batchJobStatusOptions,
+  batchJobScopeOptions,
+  handleBatchJobTableChange,
+  searchBatchJobs,
+  openBatchJobDrawer,
+  closeBatchJobDrawer,
+  fetchBatchJobDebugSnapshot,
+  executeCancelBatchJob,
+  executeRetryBatchJob,
+  exportBatchJobReport,
+  resultDrawerOpen,
+  formatDateTime,
 } = useSemanticRulesWorkspace()
 
 function handleDetailOpenChange(value: boolean) {
@@ -144,13 +235,6 @@ function handleDetailOpenChange(value: boolean) {
 function handleTestOpenChange(value: boolean) {
   if (!value) {
     closeRuleTest()
-    return
-  }
-}
-
-function handleEvaluationOpenChange(value: boolean) {
-  if (!value) {
-    closeQCEvaluation()
     return
   }
 }

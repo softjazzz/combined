@@ -6,6 +6,10 @@ import { ApiService } from '@/services/apiService'
 import { toWsPath } from '@/router/workstation-v4/registry'
 import { UserRole } from '@/types/auth'
 import type { User } from '@/types/auth'
+import type { WorkspaceScope } from '@/types/custom-rule-workspace'
+import { createSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
+import { useCustomQcBatchLaunchFilters } from '@/views/rules/composables/useCustomQcBatchLaunchFilters'
+import { useSichuanBatchJobs } from './useSichuanBatchJobs'
 import type {
   SemanticRuleItem,
   SemanticRuleStats,
@@ -21,6 +25,7 @@ import {
   filterSemanticRules,
   parseSemanticWorkspaceQuery,
   saveRulePrompt,
+  SemanticRuleTestError,
   toSemanticRulePage,
 } from '../service'
 
@@ -76,6 +81,62 @@ export function useSemanticRulesWorkspace() {
   const testResult = ref<SemanticRuleTestResult | null>(null)
 
   const showQCEvaluation = ref(false)
+
+  const recordFilters = reactive<{
+    scope: WorkspaceScope
+    department?: string
+    doctor?: string
+    dateRange: [any, any] | null
+    keyword: string
+  }>({
+    scope: 'final',
+    department: undefined,
+    doctor: undefined,
+    dateRange: null,
+    keyword: '',
+  })
+
+  const {
+    batchLaunchModalOpen,
+    batchLaunchFiltersLoading,
+    batchLaunchDepartmentOptions,
+    batchLaunchDoctorOptions,
+    batchLaunchFilters,
+    resetBatchLaunchFiltersFromCurrent,
+    loadBatchLaunchFilterOptions,
+    handleBatchLaunchScopeChange,
+    handleBatchLaunchDepartmentChange,
+  } = useCustomQcBatchLaunchFilters(recordFilters)
+
+  const testingBatch = ref(false)
+  const resultDrawerOpen = ref(false)
+
+  const {
+    batchJobLoading,
+    batchJobDetailLoading,
+    batchJobDebugLoading,
+    cancellingBatchJobId,
+    retryingBatchJobId,
+    batchJobs,
+    batchJobDetail,
+    batchJobDebugSnapshot,
+    activeBatchJob,
+    batchJobPagination,
+    batchJobQuery,
+    batchJobStatusOptions,
+    batchJobScopeOptions,
+    loadBatchJobs,
+    handleBatchJobTableChange,
+    searchBatchJobs,
+    startBatchJobPolling,
+    stopBatchJobPolling,
+    fetchBatchJobDetail,
+    fetchBatchJobDebugSnapshot,
+    executeCancelBatchJob,
+    executeRetryBatchJob,
+    exportBatchJobReport,
+    resetBatchJobs,
+  } = useSichuanBatchJobs()
 
   const qcRuleCaseMapRef = ref<Record<string, any>>({})
   const buildCaseTextRef = ref<BuildCaseText | null>(null)
@@ -323,7 +384,9 @@ export function useSemanticRulesWorkspace() {
       editingPrompt.value = payload.prompt || ''
       isDefaultPrompt.value = payload.isDefaultPrompt
     } catch (error) {
-      currentPrompt.value = `// 获取提示词失败：${toErrorMessage(error, '请稍后重试')}`
+      const reason = toErrorMessage(error, '请稍后重试')
+      currentPrompt.value = `// 获取提示词失败：${reason}`
+      message.error(`提示词加载失败：${reason}`)
       console.error('[SemanticRulesWorkspace] load prompt failed', error)
     } finally {
       promptLoading.value = false
@@ -350,7 +413,7 @@ export function useSemanticRulesWorkspace() {
       isEditingPrompt.value = false
       message.success('提示词已保存')
     } catch (error) {
-      message.error('保存提示词失败')
+      message.error(`保存提示词失败：${toErrorMessage(error, '请稍后重试')}`)
       console.error('[SemanticRulesWorkspace] save prompt failed', error)
     } finally {
       promptLoading.value = false
@@ -401,9 +464,90 @@ export function useSemanticRulesWorkspace() {
       )
     } catch (error) {
       message.error('规则测试失败')
+      if (error instanceof SemanticRuleTestError) {
+        testResult.value = {
+          is_compliant: false,
+          confidence: 0,
+          findings: error.message || '规则测试失败',
+          evidence: '',
+          suggestion: '',
+          status: 'failed',
+          trace_id: error.traceId,
+          error_message: error.message,
+          error_detail: error.detail,
+          status_code: error.statusCode,
+        }
+      }
       console.error('[SemanticRulesWorkspace] rule test failed', error)
     } finally {
       testLoading.value = false
+    }
+  }
+
+  function openBatchLaunchModal() {
+    resetBatchLaunchFiltersFromCurrent()
+    batchLaunchModalOpen.value = true
+    void loadBatchLaunchFilterOptions({ silent: true }).catch(() => {
+      message.warning('批量筛选项加载较慢，请稍后重试')
+    })
+  }
+
+  function closeBatchLaunchModal() {
+    batchLaunchModalOpen.value = false
+  }
+
+  async function confirmBatchLaunch() {
+    if (testingBatch.value) return
+    const ruleIds = filteredRules.value.map((rule) => rule.rule_id).filter(Boolean)
+    if (!ruleIds.length) {
+      message.info('当前没有可执行的规则')
+      return
+    }
+    testingBatch.value = true
+    try {
+      const payload = {
+        rule_ids: ruleIds,
+        scope: batchLaunchFilters.scope,
+        department: batchLaunchFilters.department,
+        doctor: batchLaunchFilters.doctor,
+        date_field: batchLaunchFilters.date_field,
+        start_date: batchLaunchFilters.dateRange?.[0]?.format('YYYY-MM-DD'),
+        end_date: batchLaunchFilters.dateRange?.[1]?.format('YYYY-MM-DD'),
+        keyword: batchLaunchFilters.keyword || undefined,
+      }
+      const response = await createSichuanWorkspaceBatchJob(payload)
+      if (!response.success || !response.data) {
+        throw new Error(response.message || '创建批量任务失败')
+      }
+      message.success('批量任务已创建')
+      batchLaunchModalOpen.value = false
+      await loadBatchJobs()
+      await openBatchJobDrawer(response.data)
+    } catch (error: any) {
+      message.error(error?.message || '创建批量任务失败')
+    } finally {
+      testingBatch.value = false
+    }
+  }
+
+  async function openBatchJobDrawer(job: { id: string }) {
+    resultDrawerOpen.value = true
+    await fetchBatchJobDetail(job.id, { includeDebugSnapshot: true })
+    startBatchJobPolling(job.id)
+  }
+
+  function closeBatchJobDrawer() {
+    resultDrawerOpen.value = false
+    stopBatchJobPolling()
+  }
+
+  function formatDateTime(value?: string | Date | null) {
+    if (!value) return '-'
+    try {
+      const date = typeof value === 'string' ? new Date(value) : value
+      return date.toLocaleString('zh-CN', { hour12: false })
+    } catch {
+      return String(value)
     }
   }
 
@@ -436,6 +580,7 @@ export function useSemanticRulesWorkspace() {
       console.error('[SemanticRulesWorkspace] initialize failed', error)
     }
     await refreshRules(false)
+    await loadBatchJobs()
   }
 
   onMounted(() => {
@@ -447,6 +592,7 @@ export function useSemanticRulesWorkspace() {
       clearTimeout(keywordTimer)
       keywordTimer = null
     }
+    resetBatchJobs()
   })
 
   return {
@@ -502,5 +648,39 @@ export function useSemanticRulesWorkspace() {
     openQCEvaluation,
     closeQCEvaluation,
     goCustomWorkspace,
+    batchLaunchModalOpen,
+    batchLaunchFiltersLoading,
+    batchLaunchDepartmentOptions,
+    batchLaunchDoctorOptions,
+    batchLaunchFilters,
+    handleBatchLaunchScopeChange,
+    handleBatchLaunchDepartmentChange,
+    openBatchLaunchModal,
+    closeBatchLaunchModal,
+    confirmBatchLaunch,
+    testingBatch,
+    batchJobLoading,
+    batchJobDetailLoading,
+    batchJobDebugLoading,
+    cancellingBatchJobId,
+    retryingBatchJobId,
+    batchJobs,
+    batchJobDetail,
+    batchJobDebugSnapshot,
+    activeBatchJob,
+    batchJobPagination,
+    batchJobQuery,
+    batchJobStatusOptions,
+    batchJobScopeOptions,
+    handleBatchJobTableChange,
+    searchBatchJobs,
+    openBatchJobDrawer,
+    closeBatchJobDrawer,
+    fetchBatchJobDebugSnapshot,
+    executeCancelBatchJob,
+    executeRetryBatchJob,
+    exportBatchJobReport,
+    resultDrawerOpen,
+    formatDateTime,
   }
 }
