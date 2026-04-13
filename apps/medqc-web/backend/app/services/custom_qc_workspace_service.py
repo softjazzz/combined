@@ -961,6 +961,8 @@ class CustomQCWorkspaceService:
         status: Optional[str] = None,
         scope: Optional[str] = None,
         query: Optional[str] = None,
+        executor_type: Optional[str] = None,
+        cache_hit: Optional[bool] = None,
         created_start_date: Optional[str] = None,
         created_end_date: Optional[str] = None,
         page: int = 1,
@@ -992,19 +994,65 @@ class CustomQCWorkspaceService:
             if end:
                 clauses.append(func.date(self._batch_job_table.c.created_at) <= end)
             where_clause = and_(*clauses)
-            total = int(session.execute(select(func.count()).select_from(self._batch_job_table).where(where_clause)).scalar() or 0)
+            executor_value = _safe_text(executor_type).lower()
+            enable_runtime_filter = executor_value in {"program", "llm"} or cache_hit is not None
+
+            if not enable_runtime_filter:
+                total = int(
+                    session.execute(
+                        select(func.count()).select_from(self._batch_job_table).where(where_clause)
+                    ).scalar()
+                    or 0
+                )
+                rows = (
+                    session.execute(
+                        select(self._batch_job_table)
+                        .where(where_clause)
+                        .order_by(desc(self._batch_job_table.c.created_at))
+                        .offset(max(page - 1, 0) * page_size)
+                        .limit(page_size)
+                    )
+                    .mappings()
+                    .all()
+                )
+                items = [_row_to_batch_job(dict(row)) for row in rows]
+                return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
+
             rows = (
                 session.execute(
                     select(self._batch_job_table)
                     .where(where_clause)
                     .order_by(desc(self._batch_job_table.c.created_at))
-                    .offset(max(page - 1, 0) * page_size)
-                    .limit(page_size)
                 )
                 .mappings()
                 .all()
             )
-            items = [_row_to_batch_job(dict(row)) for row in rows]
+            all_items = [_row_to_batch_job(dict(row)) for row in rows]
+
+            filtered_items = all_items
+            if executor_value in {"program", "llm"}:
+                filtered_items = [
+                    item
+                    for item in filtered_items
+                    if int(
+                        (((item.get("summary") or {}).get("executor_breakdown") or {}).get(executor_value) or 0)
+                    )
+                    > 0
+                ]
+            if cache_hit is not None:
+                expected = bool(cache_hit)
+                filtered_items = [
+                    item
+                    for item in filtered_items
+                    if (
+                        (int((((item.get("summary") or {}).get("cache_breakdown") or {}).get("hit") or 0) or 0) > 0)
+                        == expected
+                    )
+                ]
+
+            total = len(filtered_items)
+            offset = max(page - 1, 0) * page_size
+            items = filtered_items[offset : offset + page_size]
             return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
         finally:
             session.close()
