@@ -1,5 +1,4 @@
 from typing import Dict, Any, List, Optional, Tuple
-import time
 import logging
 
 from ..core.settings import get_settings
@@ -898,25 +897,11 @@ class SichuanQCService:
         prompt_mode: str = "plan_a"
     ) -> Dict[str, Any]:
         """
-        快速质控模式：一次性调用 LLM 评估所有规则（批量模式）
-
-        与 evaluate_document 的区别：
-        - evaluate_document: 逐条规则调用 LLM（串行模式）
-        - evaluate_document_fast: 一次调用评估所有规则（快速模式）
-
-        Args:
-            document_id: 文档 ID
-            content: 病历内容
-            document_type: 文书类型（默认为 "病程记录"）
-            rule_ids: 可选的规则ID列表，用于过滤只评估指定的规则
-            prompt_mode: 提示词优化方案（current/plan_a/plan_b/plan_c）
-
-        Returns:
-            质控评估结果
+        快速质控模式（P1 后收口版）：
+        复用 orchestrator 执行链，保持 /evaluate-fast 响应壳兼容。
         """
-        # 1. 加载规则
+        # 1) 加载规则（兼容旧逻辑）
         if rule_ids and len(rule_ids) > 0:
-            # 与串行模式保持一致：优先通过 get_rule_by_id 精确加载规则
             selected_rules: List[Dict[str, Any]] = []
             for rid in rule_ids:
                 try:
@@ -930,7 +915,6 @@ class SichuanQCService:
                 rules = selected_rules
                 logger.info(f"Selected {len(rules)} rules via get_rule_by_id from IDs: {rule_ids}")
             else:
-                # 回退：从数据库按文书类型加载，再按 rule_ids 过滤
                 rules = await self._load_applicable_rules(document_type)
                 rules = [
                     r for r in rules
@@ -958,27 +942,34 @@ class SichuanQCService:
                 "llm_output": "未找到适用的规则"
             }
 
-        # 3. 构建批量提示词（传递 prompt_mode）
-        prompt = await self._build_prompt(rules, content, document_type, prompt_mode)
+        # 2) 统一走 orchestrator
+        orchestrated = await self._evaluate_rules_orchestrated(
+            document_id=document_id,
+            content=content,
+            document_type=document_type,
+            rules=rules,
+            evidence_source="medical_text_fast",
+        )
+        rule_results = list(orchestrated.get("results") or [])
 
-        # 4. 调用 LLM（一次性评估所有规则）
-        api_start = time.time()
-        llm_response = await self.client.generate(prompt)
-        api_time = time.time() - api_start
+        evaluation_results = [
+            {
+                "rule_id": item.get("rule_id"),
+                "rule_name": item.get("rule_name"),
+                "is_compliant": item.get("is_compliant"),
+                "status": item.get("status"),
+                "findings": item.get("findings"),
+                "evidence": item.get("evidence"),
+                "suggestion": item.get("suggestion"),
+                "confidence": item.get("confidence"),
+                "applicability": item.get("applicability"),
+                "evidence_verified": item.get("evidence_verified"),
+                "metadata": item.get("metadata"),
+            }
+            for item in rule_results
+        ]
 
-        # 5. 解析响应
-        llm_output = llm_response.get("choices", [{}])[0].get("message", {}).get("content", "")
-        token_usage = llm_response.get("usage", {}).get("total_tokens", 0)
-
-        # 6. 解析 JSON 结果
-        try:
-            evaluation_results = self._parse_llm_json_response(llm_output, rules)
-        except Exception as e:
-            logger.error(f"解析 LLM 响应失败: {e}")
-            evaluation_results = []
-
-        # 7. 计算统计信息
-        total_rules = len(rules)
+        total_rules = len(rule_results)
         compliant_rules = sum(
             1 for r in evaluation_results
             if r.get("is_compliant") is True or r.get("status") in ("compliant", "not_applicable")
@@ -986,7 +977,8 @@ class SichuanQCService:
         issues_found = total_rules - compliant_rules
         compliance_rate = (compliant_rules / total_rules * 100) if total_rules > 0 else 100.0
 
-        # 8. 计算成本（假设 ¥0.002/1000 tokens）
+        token_usage = int(orchestrated.get("total_tokens") or 0)
+        api_time = float(orchestrated.get("total_api_time") or 0.0)
         estimated_cost = (token_usage / 1000) * 0.002
 
         return {
@@ -1007,7 +999,12 @@ class SichuanQCService:
                 "api_time": api_time,
                 "estimated_cost": estimated_cost
             },
-            "llm_output": llm_output
+            "parsed_evaluation_results": rule_results,
+            "executor_breakdown": orchestrated.get("executor_breakdown") or {},
+            "cache_breakdown": orchestrated.get("cache_breakdown") or {},
+            "trace": orchestrated.get("trace") or [],
+            "llm_output": None,
+            "mode": "orchestrated_fast",
         }
 
     def stats(self) -> Dict[str, Any]:

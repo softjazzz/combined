@@ -56,18 +56,22 @@
         @change="emit('searchBatchJobs')"
       />
       <a-select
-        v-model:value="localExecutorType"
+        :value="query.executor_type"
         allow-clear
         placeholder="执行器"
         :options="executorOptions"
         class="batch-filter-select"
+        @update:value="(value) => updateQuery('executor_type', value)"
+        @change="emit('searchBatchJobs')"
       />
       <a-select
-        v-model:value="localCacheHit"
+        :value="query.cache_hit"
         allow-clear
         placeholder="缓存命中"
         :options="cacheHitOptions"
         class="batch-filter-select"
+        @update:value="(value) => updateQuery('cache_hit', value)"
+        @change="emit('searchBatchJobs')"
       />
     </div>
 
@@ -146,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
@@ -165,6 +169,8 @@ const props = defineProps<{
     keyword: string
     status: string | undefined
     scope: string | undefined
+    executor_type?: 'program' | 'llm'
+    cache_hit?: 'hit' | 'miss'
   }
   statusOptions: Array<{ label: string; value: string }>
   scopeOptions: Array<{ label: string; value: string }>
@@ -192,9 +198,6 @@ const columns = computed(() => [
   { title: '操作', key: 'actions', width: 160, fixed: 'right' as const },
 ])
 
-const localExecutorType = ref<string | undefined>(undefined)
-const localCacheHit = ref<string | undefined>(undefined)
-
 const executorOptions = [
   { label: 'Program', value: 'program' },
   { label: 'LLM', value: 'llm' },
@@ -205,28 +208,12 @@ const cacheHitOptions = [
   { label: '未命中', value: 'miss' },
 ]
 
-const displayBatchJobs = computed(() => {
-  return props.batchJobs.filter((job) => {
-    const executorBreakdown = job.summary?.executor_breakdown
-    const cacheBreakdown = job.summary?.cache_breakdown
+const displayBatchJobs = computed(() => props.batchJobs)
 
-    if (localExecutorType.value === 'program' && Number(executorBreakdown?.program || 0) <= 0) {
-      return false
-    }
-    if (localExecutorType.value === 'llm' && Number(executorBreakdown?.llm || 0) <= 0) {
-      return false
-    }
-    if (localCacheHit.value === 'hit' && Number(cacheBreakdown?.hit || 0) <= 0) {
-      return false
-    }
-    if (localCacheHit.value === 'miss' && Number(cacheBreakdown?.miss || 0) <= 0) {
-      return false
-    }
-    return true
-  })
-})
-
-function updateQuery(field: 'keyword' | 'status' | 'scope', value: unknown) {
+function updateQuery(
+  field: 'keyword' | 'status' | 'scope' | 'executor_type' | 'cache_hit',
+  value: unknown,
+) {
   if (field === 'keyword') {
     emit('updateQuery', {
       ...props.query,

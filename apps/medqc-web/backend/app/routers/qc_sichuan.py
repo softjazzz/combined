@@ -10,8 +10,6 @@ from datetime import datetime, timezone
 
 from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
 from ..services.sichuan_qc_service import SichuanQCService
-from ..services.unified_rule_engine import UnifiedRuleEngine
-from ..services.segmented_qc_pipeline import SegmentedQCPipeline
 from ..services.llm_config_loader import LLMConfigLoader
 from ..services.qc_input_adapters import evaluate_running_final_bundle
 from ..core.supabase_client import get_supabase
@@ -466,65 +464,63 @@ async def evaluate(
                 _persist_evaluation_to_db(req.document_id, response)
             return response
         else:
-            # ── 使用分段 Pipeline（切段 → 规则路由 → 分批 → 并发 LLM） ──
-            # 应用前端传入的高级配置
+            # ── P1 收口：单文书主路径统一走 orchestrator（保持响应壳兼容） ──
             if req.temperature is not None:
                 qc_service.client.temperature = req.temperature
             if req.max_tokens is not None:
                 qc_service.client.max_tokens = req.max_tokens
 
-            pipeline = SegmentedQCPipeline(
-                llm_client=qc_service.client,
-                max_concurrency=req.max_concurrency or 3,
-                max_rules_per_batch=req.max_rules_per_batch or 15,
-            )
-            result = await pipeline.evaluate(
+            result = await qc_service.evaluate_document(
                 document_id=req.document_id,
                 content=req.document_content,
-                prompt_mode=req.prompt_mode or "plan_a",
+                document_type=req.document_type or "病程记录",
+                rule_ids=req.rule_ids,
             )
 
-            # 将 pipeline 结果转为前端兼容格式
-            summary = result.get("evaluation_summary", {})
-            perf = result.get("performance_metrics", {})
-            token_usage = perf.get("token_usage", 0)
-            compliance_rate = summary.get("compliance_rate", 100.0)
+            summary = result.get("evaluation_summary", {}) or {}
+            token_usage = int(((result.get("token_usage") or {}).get("total_tokens")) or 0)
+            processing_time = float(result.get("api_time") or 0.0)
+            compliance_rate = float(summary.get("compliance_rate", 100.0) or 100.0)
 
             response = {
                 "document_id": req.document_id,
                 "evaluation_summary": {
                     "total_rules": summary.get("total_rules", 0),
                     "compliant_rules": summary.get("compliant_rules", 0),
-                    "not_applicable": 0,
+                    "not_applicable": summary.get("not_applicable", 0),
                     "issues_found": summary.get("issues_found", 0),
                     "compliance_rate": round(compliance_rate, 2),
                     "overall_grade": _grade_from_rate(compliance_rate),
                     "critical_violations": summary.get("issues_found", 0),
                     "model": summary.get("model", qc_service.client.model),
+                    "executor_breakdown": summary.get("executor_breakdown") or {},
+                    "cache_breakdown": summary.get("cache_breakdown") or {},
                 },
                 "performance_metrics": {
-                    "processing_time": perf.get("pipeline_time", 0),
+                    "processing_time": processing_time,
                     "token_usage": token_usage,
                     "estimated_cost": token_usage / 1000 * 0.002,
-                    "llm_calls": perf.get("llm_calls", 0),
+                    "llm_calls": int((summary.get("executor_breakdown") or {}).get("llm", 0) or 0),
                 },
                 "evaluation_results": result.get("evaluation_results", []),
-                "sections_summary": result.get("sections_summary", []),
+                "sections_summary": [],
                 "optimization_metrics": {
-                    "token_savings_rate": 0.80,
-                    "estimated_original_tokens": token_usage * 5,
-                    "actual_tokens_saved": token_usage * 4,
-                    "cost_savings": token_usage * 4 / 1000 * 0.002,
+                    "token_savings_rate": 0.0,
+                    "estimated_original_tokens": token_usage,
+                    "actual_tokens_saved": 0,
+                    "cost_savings": 0.0,
                 },
+                "trace": result.get("trace") or [],
+                "executor_breakdown": result.get("executor_breakdown") or {},
+                "cache_breakdown": result.get("cache_breakdown") or {},
                 "llm_info": {
                     "model": qc_service.client.model,
                     "api_endpoint": qc_service.client.api_endpoint,
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "status": "success",
-                "mode": "segmented_pipeline",
+                "mode": "orchestrated",
             }
-            # Persist (best-effort)
             if req.persist:
                 _persist_evaluation_to_db(req.document_id, response)
             return response
@@ -974,6 +970,8 @@ async def list_workspace_batch_jobs(
     status: Optional[str] = Query(None),
     scope: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    executor_type: Optional[str] = Query(None),
+    cache_hit: Optional[str] = Query(None),
     created_start_date: Optional[str] = Query(None),
     created_end_date: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
@@ -981,11 +979,21 @@ async def list_workspace_batch_jobs(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service()
+    executor_filter = str(executor_type or "").strip().lower() or None
+    cache_hit_filter: Optional[bool] = None
+    cache_hit_value = str(cache_hit or "").strip().lower()
+    if cache_hit_value in {"hit", "true", "1", "yes"}:
+        cache_hit_filter = True
+    elif cache_hit_value in {"miss", "false", "0", "no"}:
+        cache_hit_filter = False
+
     list_kwargs = {
         "created_by": _current_user_id(current_user),
         "draft_id": "sichuan-rule-library",
         "status": status,
         "scope": scope,
+        "executor_type": executor_filter,
+        "cache_hit": cache_hit_filter,
         "created_start_date": created_start_date,
         "created_end_date": created_end_date,
         "page": page,

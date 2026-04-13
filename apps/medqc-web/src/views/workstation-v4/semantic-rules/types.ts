@@ -254,6 +254,8 @@ export interface SichuanBatchJobQuery {
   status?: SichuanBatchJobStatus
   scope?: 'all' | 'running' | 'final'
   q?: string
+  executor_type?: 'program' | 'llm'
+  cache_hit?: 'hit' | 'miss'
   created_start_date?: string
   created_end_date?: string
   page?: number

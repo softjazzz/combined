@@ -23,6 +23,8 @@ interface BatchJobQueryState {
   keyword: string
   status: SichuanBatchJobStatus | undefined
   scope: WorkspaceScope | undefined
+  executor_type: 'program' | 'llm' | undefined
+  cache_hit: 'hit' | 'miss' | undefined
   dateRange: DateRangeValue
 }
 
@@ -49,6 +51,8 @@ export function useSichuanBatchJobs() {
     keyword: '',
     status: undefined,
     scope: undefined,
+    executor_type: undefined,
+    cache_hit: undefined,
     dateRange: null,
   })
 
@@ -77,6 +81,8 @@ export function useSichuanBatchJobs() {
         status: batchJobQuery.status,
         scope: batchJobQuery.scope,
         q: batchJobQuery.keyword || undefined,
+        executor_type: batchJobQuery.executor_type,
+        cache_hit: batchJobQuery.cache_hit,
         created_start_date: batchJobQuery.dateRange?.[0]?.format('YYYY-MM-DD'),
         created_end_date: batchJobQuery.dateRange?.[1]?.format('YYYY-MM-DD'),
         page: batchJobPagination.current,
