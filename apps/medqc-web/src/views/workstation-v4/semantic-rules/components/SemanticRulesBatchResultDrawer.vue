@@ -186,7 +186,7 @@
             <a-button
               type="link"
               size="small"
-              @click.stop="selectedClusterKey = ''"
+              @click.stop="clearClusterFilter"
             >
               清除
             </a-button>
@@ -338,7 +338,7 @@
               v-if="selectedClusterKey"
               type="link"
               size="small"
-              @click.stop="selectedClusterKey = ''"
+              @click.stop="clearClusterFilter"
             >
               清除聚合过滤
             </a-button>
@@ -353,12 +353,14 @@
           </div>
           <a-table
             :columns="issueColumns"
+            class="batch-issue-table"
             :data-source="displayIssueItems"
-            :row-key="buildIssueRowKey"
+            :row-key="resolveIssueStableKey"
             size="small"
             :scroll="{ x: 980 }"
-            :pagination="{ pageSize: 8, showSizeChanger: false }"
+            :pagination="issuePagination"
             :row-class-name="resolveIssueRowClassName"
+            @change="handleIssueTableChange"
           />
         </div>
       </div>
@@ -367,7 +369,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import type {
   SichuanBatchIssueItem,
   SichuanBatchJobDebugSnapshot,
@@ -429,11 +431,18 @@ const issueItems = computed<SichuanBatchIssueItem[]>(() => {
       })
     })
   })
-  return merged.slice(0, 50)
+  const recentItems = props.batchJobDebugSnapshot?.recent_items || []
+  const source = merged.length > 0 ? merged : recentItems
+  return source.slice(0, 200)
 })
 
 const selectedClusterKey = ref('')
 const selectedDebugRuleJobId = ref('')
+const issuePagination = reactive({
+  current: 1,
+  pageSize: 8,
+  showSizeChanger: false,
+})
 
 watch(
   () => props.batchJobDetail?.id,
@@ -576,28 +585,12 @@ const displayIssueItems = computed<SichuanBatchIssueItem[]>(() => {
   })
   const cluster = selectedCluster.value
   if (!cluster) return items
-  const clusterRuleIdSet = new Set(
-    (cluster.rules || []).map((rule) => String(rule.rule_id || '').toLowerCase()).filter(Boolean),
-  )
-  const sampleEvidence = String(cluster.sample_evidence || '').trim()
-  const clusterKey = String(cluster.cluster_key || '').trim()
-  return items.filter((item) => {
-    const itemRuleCode = String(item.rule_code || '').toLowerCase()
-    const itemRuleId = String(item.rule_id || '').toLowerCase()
-    const byRule =
-      (itemRuleId && clusterRuleIdSet.has(itemRuleId)) ||
-      (itemRuleCode && clusterRuleIdSet.has(itemRuleCode))
-    if (byRule) return true
-    const finding = String(item.findings || '')
-    const evidence = String(item.evidence || '')
-    if (sampleEvidence && (finding.includes(sampleEvidence) || evidence.includes(sampleEvidence))) {
-      return true
-    }
-    if (clusterKey && (finding.includes(clusterKey) || evidence.includes(clusterKey))) {
-      return true
-    }
-    return false
-  })
+  return items.filter((item) => matchIssueItemWithCluster(item, cluster))
+})
+
+const linkedIssueRowKey = computed(() => {
+  if (!selectedCluster.value) return ''
+  return resolveIssueStableKey(displayIssueItems.value[0])
 })
 
 const displayRuleResults = computed(() => {
@@ -684,10 +677,6 @@ watch(
   { immediate: true },
 )
 
-function buildIssueRowKey(item: SichuanBatchIssueItem, index: number) {
-  return `${item.rule_code || 'NA'}-${item.record_id || 'NA'}-${item.visit_id || 'NA'}-${index}`
-}
-
 async function handleDebugRuleChange(value: string | undefined) {
   selectedDebugRuleJobId.value = value || ''
   const jobId = props.batchJobDetail?.id
@@ -699,6 +688,40 @@ async function handleDebugRuleChange(value: string | undefined) {
 
 function toggleClusterFilter(clusterKey: string) {
   selectedClusterKey.value = selectedClusterKey.value === clusterKey ? '' : clusterKey
+  issuePagination.current = 1
+  void nextTick(() => scrollToLinkedIssueRow())
+}
+
+function clearClusterFilter() {
+  selectedClusterKey.value = ''
+  issuePagination.current = 1
+}
+
+function handleIssueTableChange(pagination: { current?: number; pageSize?: number }) {
+  issuePagination.current = Number(pagination.current || 1)
+  issuePagination.pageSize = Number(pagination.pageSize || 8)
+}
+
+function resolveIssueStableKey(item?: SichuanBatchIssueItem) {
+  if (!item) return ''
+  return [
+    item.rule_job_id || '',
+    item.rule_id || item.rule_code || '',
+    item.record_id || '',
+    item.visit_id || '',
+    item.trace_id || '',
+  ].join('|')
+}
+
+function scrollToLinkedIssueRow() {
+  const linkedKey = linkedIssueRowKey.value
+  if (!linkedKey) return
+  const row = document.querySelector<HTMLElement>(
+    `.batch-issue-table tbody tr[data-row-key="${linkedKey.replace(/"/g, '\\"')}"]`,
+  )
+  if (row) {
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }
 }
 
 function normalizeBreakdownItems(items: Array<{ label: string; count: number }>) {
@@ -768,19 +791,49 @@ function formatCompactValue(value: unknown) {
 }
 
 function resolveIssueRowClassName(record: SichuanBatchIssueItem) {
+  const linkedKey = linkedIssueRowKey.value
+  const currentKey = resolveIssueStableKey(record)
+  if (linkedKey && currentKey === linkedKey) return 'issue-row-highlight issue-row-linked'
   if (!selectedCluster.value) return ''
+  return matchIssueItemWithCluster(record, selectedCluster.value) ? 'issue-row-highlight' : ''
+}
+
+// 聚合簇命中判定：优先规则ID/编码匹配，其次回退到证据文本匹配。
+function matchIssueItemWithCluster(
+  item: SichuanBatchIssueItem,
+  cluster: SichuanBatchResultAggregation['clusters'][number],
+) {
   const clusterRuleIdSet = new Set(
-    (selectedCluster.value.rules || [])
-      .map((rule) => String(rule.rule_id || '').toLowerCase())
-      .filter(Boolean),
+    (cluster.rules || []).map((rule) => String(rule.rule_id || '').toLowerCase()).filter(Boolean),
   )
-  const itemRuleCode = String(record.rule_code || '').toLowerCase()
-  const itemRuleId = String(record.rule_id || '').toLowerCase()
-  const match =
+  const itemRuleCode = String(item.rule_code || '').toLowerCase()
+  const itemRuleId = String(item.rule_id || '').toLowerCase()
+  const byRule =
     (itemRuleId && clusterRuleIdSet.has(itemRuleId)) ||
     (itemRuleCode && clusterRuleIdSet.has(itemRuleCode))
-  return match ? 'issue-row-highlight' : ''
+  if (byRule) return true
+  const finding = String(item.findings || '')
+  const evidence = String(item.evidence || '')
+  const sampleEvidence = String(cluster.sample_evidence || '').trim()
+  if (sampleEvidence && (finding.includes(sampleEvidence) || evidence.includes(sampleEvidence))) {
+    return true
+  }
+  const clusterKey = String(cluster.cluster_key || '').trim()
+  if (clusterKey && (finding.includes(clusterKey) || evidence.includes(clusterKey))) {
+    return true
+  }
+  return false
 }
+
+watch(
+  () => [selectedClusterKey.value, displayIssueItems.value.length],
+  async () => {
+    if (!selectedClusterKey.value) return
+    issuePagination.current = 1
+    await nextTick()
+    scrollToLinkedIssueRow()
+  },
+)
 </script>
 
 <style scoped>
@@ -1187,5 +1240,9 @@ function resolveIssueRowClassName(record: SichuanBatchIssueItem) {
 
 :deep(.issue-row-highlight td) {
   background: rgba(239, 246, 255, 0.66);
+}
+
+:deep(.issue-row-linked td) {
+  background: rgba(219, 234, 254, 0.85);
 }
 </style>
