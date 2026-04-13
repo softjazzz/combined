@@ -37,6 +37,7 @@ export interface SemanticRuleTestResult {
   error_message?: string
   error_detail?: string
   status_code?: number
+  error_category?: string
   executor_type?: string
   model_version?: string
   cache_hit?: boolean
