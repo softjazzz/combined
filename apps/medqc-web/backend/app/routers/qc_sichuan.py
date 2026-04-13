@@ -981,17 +981,26 @@ async def list_workspace_batch_jobs(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service()
-    result = workspace.list_batch_jobs(
-        created_by=_current_user_id(current_user),
-        draft_id="sichuan-rule-library",
-        status=status,
-        scope=scope,
-        query=q,
-        created_start_date=created_start_date,
-        created_end_date=created_end_date,
-        page=page,
-        page_size=page_size,
-    )
+    list_kwargs = {
+        "created_by": _current_user_id(current_user),
+        "draft_id": "sichuan-rule-library",
+        "status": status,
+        "scope": scope,
+        "created_start_date": created_start_date,
+        "created_end_date": created_end_date,
+        "page": page,
+        "page_size": page_size,
+    }
+    try:
+        result = workspace.list_batch_jobs(
+            **list_kwargs,
+            query=q,
+        )
+    except TypeError:
+        result = workspace.list_batch_jobs(
+            **list_kwargs,
+            q=q,
+        )
     items = [
         {
             **item,
