@@ -3,6 +3,8 @@ import { ApiService } from '@/services/apiService'
 import type { DeptInfo, PatientRecord } from '../types'
 import { normalizeRecord } from '../normalize'
 
+const WORKSTATION_PAGE_SIZE = 20
+
 function normalizeDepartment(raw: unknown): DeptInfo {
   const source = (raw || {}) as Record<string, unknown>
   const name = String(source.name ?? source.department ?? source.dept_name ?? '未分科室').trim()
@@ -87,7 +89,7 @@ export function usePatientRecords() {
     loading.value = true
     try {
       const response = await ApiService.getRaw('/api/medical-records/workstation', {
-        params: { page, page_size: 50 },
+        params: { page, page_size: WORKSTATION_PAGE_SIZE },
       })
       const raw = response.data as Record<string, unknown>
       const data = (
@@ -106,7 +108,7 @@ export function usePatientRecords() {
           : buildDepartments(normalizedRecords)
 
       const total = Number(data.total ?? data.total_count ?? 0)
-      const pageSize = Number(data.page_size ?? data.pageSize ?? 50)
+      const pageSize = Number(data.page_size ?? data.pageSize ?? WORKSTATION_PAGE_SIZE)
       const totalPagesRaw = Number(data.totalPages ?? data.total_pages ?? 0)
       const totalPagesComputed = pageSize > 0 ? Math.ceil(total / pageSize) : 1
 

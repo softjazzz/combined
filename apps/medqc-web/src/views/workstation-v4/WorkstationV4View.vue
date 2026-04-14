@@ -23,6 +23,7 @@
         :stage-empty-text="stageEmptyText"
         :display-server-total-pages="displayServerTotalPages"
         :current-page="currentPage"
+        :page-size="WORKSTATION_PAGE_SIZE"
         :display-server-total="displayServerTotal"
         @update:active-priority-group="activePriorityGroup = $event"
         @update:search-text="searchText = $event"
@@ -403,6 +404,7 @@ const displayServerTotalPages = computed(() =>
 const isStageQueueMode = computed(() => Boolean(currentStageFilter.value))
 
 const stageMeta = computed(() => getStageMeta(currentStageFilter.value))
+const WORKSTATION_PAGE_SIZE = 20
 
 async function fetchStageWorklist(stage: WorkflowStageKey | '') {
   const endpoint = stageWorklistEndpoint(stage)
@@ -419,7 +421,7 @@ async function fetchStageWorklist(stage: WorkflowStageKey | '') {
     const { data } = await apiClient.get<StageWorklistResponse>(endpoint, {
       params: {
         page: currentPage.value,
-        page_size: 50,
+        page_size: WORKSTATION_PAGE_SIZE,
         department: activeDept.value === '全部科室' ? undefined : activeDept.value,
         keyword: searchText.value.trim() || undefined,
       },
@@ -432,7 +434,10 @@ async function fetchStageWorklist(stage: WorkflowStageKey | '') {
       1,
       Number(
         payload.total_pages ||
-          Math.ceil(Number(payload.total || 0) / Math.max(1, Number(payload.page_size || 50))),
+          Math.ceil(
+            Number(payload.total || 0) /
+              Math.max(1, Number(payload.page_size || WORKSTATION_PAGE_SIZE)),
+          ),
       ),
     )
     stageDepartments.value = normalizeStageDepartments(payload.departments, stageServerTotal.value)

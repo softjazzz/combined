@@ -317,7 +317,7 @@
             :selected-row-keys="selectedWorkbenchKeys"
             :summary-text="tableSummaryText"
             :current-page="currentPage"
-            :page-size="50"
+            :page-size="pageSize"
             :total="displayServerTotal"
             :loading="displayLoading"
             :primary-action-label="stageMeta.batchActionText"
@@ -385,6 +385,7 @@ const props = defineProps<{
   stageEmptyText: string
   displayServerTotalPages: number
   currentPage: number
+  pageSize: number
   displayServerTotal: number
 }>()
 

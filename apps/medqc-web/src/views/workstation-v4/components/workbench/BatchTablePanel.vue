@@ -179,7 +179,7 @@ const tableLocale = {
 }
 
 const tablePagination = computed(() => {
-  const pageSize = Number(props.pageSize || 50)
+  const pageSize = Number(props.pageSize || 20)
   const total = Number(props.total || 0)
   return {
     current: Number(props.currentPage || 1),
