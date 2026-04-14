@@ -40,7 +40,7 @@
                 type="button"
                 class="group flex w-full items-center justify-between rounded-[8px] border px-2 py-1.5 text-left transition-all duration-150"
                 :class="
-                  resolveDocByNode(node)?.has_content
+                  hasDocContent(resolveDocByNode(node))
                     ? isActiveNode(node)
                       ? 'border-sky-200 bg-white text-sky-800 shadow-[0_6px_14px_rgba(14,165,233,0.12)]'
                       : 'border-transparent bg-transparent hover:border-sky-100 hover:bg-white/75'
@@ -49,7 +49,7 @@
                 @click="handleNodeClick(node)"
               >
                 <span class="min-w-0 truncate text-[12px] font-semibold">
-                  {{ node.title || '未命名文书' }}
+                  {{ resolveNodeTitle(node) }}
                 </span>
                 <span
                   v-if="node.record_time"
@@ -69,16 +69,16 @@
               :key="doc.doc_key || doc.type + doc.label"
               :class="[
                 'group relative flex items-center justify-between rounded-[10px] border px-2 py-1.5 transition-all duration-150',
-                doc.has_content
+                hasDocContent(doc)
                   ? isActive(doc)
                     ? 'cursor-pointer border-sky-200 bg-white text-sky-800 shadow-[0_6px_14px_rgba(14,165,233,0.12)]'
                     : 'cursor-pointer border-transparent bg-transparent hover:border-sky-100 hover:bg-white/75'
                   : 'border-transparent bg-transparent text-slate-300',
               ]"
-              @click="doc.has_content && $emit('preview-doc', doc)"
+              @click="hasDocContent(doc) && $emit('preview-doc', doc)"
             >
               <span
-                v-if="doc.has_content"
+                v-if="hasDocContent(doc)"
                 class="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r-full transition-all duration-150"
                 :class="isActive(doc) ? 'bg-sky-500' : 'bg-transparent group-hover:bg-sky-300'"
               />
@@ -97,19 +97,19 @@
                 </span>
                 <span
                   :class="
-                    doc.has_content
+                    hasDocContent(doc)
                       ? isActive(doc)
                         ? 'truncate text-[12px] font-bold text-sky-800'
                         : 'truncate text-[12px] font-semibold text-slate-700'
                       : 'truncate text-[12px]'
                   "
                 >
-                  {{ doc.label }}
+                  {{ resolveDocLabel(doc) }}
                 </span>
               </span>
 
               <span
-                v-if="doc.has_content"
+                v-if="hasDocContent(doc)"
                 class="ml-2 flex shrink-0 items-center gap-1.5"
               >
                 <span class="text-[10px] font-semibold text-slate-400">{{ doc.length }}字</span>
@@ -170,6 +170,35 @@ function isActive(doc: DocItem) {
   return (props.activeDocType || '') === docIdentityKey(doc)
 }
 
+function hasDocContent(doc?: DocItem): boolean {
+  if (!doc) return false
+  if (typeof doc.has_content === 'boolean') return doc.has_content
+  return Boolean((doc.content || '').trim() || Number(doc.length || 0) > 0)
+}
+
+function resolveDocLabel(doc: DocItem): string {
+  return (
+    String(doc.label || '').trim() ||
+    String(doc.doc_name || '').trim() ||
+    String(doc.document_title || '').trim() ||
+    String(doc.doc_type || doc.type || '').trim() ||
+    String(doc.id || doc.document_id || '').trim() ||
+    '未命名文书'
+  )
+}
+
+function resolveNodeTitle(node: DocTreeNode): string {
+  const typedNode = node as unknown as Record<string, unknown>
+  const byNode =
+    String(node.title || '').trim() ||
+    String(typedNode.label || '').trim() ||
+    String(typedNode.doc_name || '').trim()
+  if (byNode) return byNode
+  const matched = resolveDocByNode(node)
+  if (matched) return resolveDocLabel(matched)
+  return String(node.doc_type || '').trim() || '未命名文书'
+}
+
 function resolveDocByNode(node: DocTreeNode): DocItem | undefined {
   return (
     props.documents.find((doc) => (doc.doc_key || '') === node.doc_key) ||
@@ -190,7 +219,7 @@ function isActiveNode(node: DocTreeNode) {
 
 function handleNodeClick(node: DocTreeNode) {
   const doc = resolveDocByNode(node)
-  if (!doc) return
+  if (!doc || !hasDocContent(doc)) return
   emit('preview-doc', doc)
 }
 </script>

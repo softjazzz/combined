@@ -286,6 +286,7 @@ import type {
   DeptInfo,
   DocItem,
   DocTreeGroup,
+  DocTreeNode,
   FrontpageFocusTarget,
   QCIssueLike,
   WorkstationWorklistItem,
@@ -1190,6 +1191,184 @@ function openAiProfilePanel() {
   profileAnalyzed.value = true
 }
 
+function pickText(source: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const raw = source[key]
+    if (raw === null || raw === undefined) continue
+    const text = String(raw).trim()
+    if (text) return text
+  }
+  return ''
+}
+
+function pickNumber(source: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    const raw = source[key]
+    const num = Number(raw)
+    if (Number.isFinite(num)) return num
+  }
+  return 0
+}
+
+function normalizeDocItem(raw: unknown): DocItem {
+  const source = (raw || {}) as Record<string, unknown>
+  const docType = pickText(source, ['doc_type', 'type', 'document_type'])
+  const id = pickText(source, ['id', 'doc_id', 'document_id'])
+  const docKey = pickText(source, ['doc_key']) || (docType && id ? `${docType}::${id}` : '')
+  const contentRaw = source.content
+  const content = typeof contentRaw === 'string' ? contentRaw : null
+  const length =
+    pickNumber(source, ['length']) || (content ? content.replace(/\s+/g, '').length : 0)
+  const hasContentRaw = source.has_content
+  const hasContent =
+    typeof hasContentRaw === 'boolean'
+      ? hasContentRaw
+      : Boolean((content || '').trim() || length > 0)
+  const label =
+    pickText(source, ['label', 'doc_name', 'document_title', 'title', 'name']) ||
+    docType ||
+    (id ? `文书${id}` : '未命名文书')
+
+  return {
+    ...(source as Partial<DocItem>),
+    id: id || undefined,
+    doc_id: pickText(source, ['doc_id']) || id || undefined,
+    doc_key: docKey || undefined,
+    doc_type: docType || undefined,
+    doc_name: pickText(source, ['doc_name', 'document_title', 'title']) || label,
+    type: pickText(source, ['type']) || docType || 'unknown',
+    label,
+    has_content: hasContent,
+    content,
+    length,
+    document_id: pickText(source, ['document_id']) || id || undefined,
+    document_title: pickText(source, ['document_title', 'doc_name', 'title']) || label,
+    sort_time: pickText(source, ['sort_time', 'record_time']) || undefined,
+    record_time: pickText(source, ['record_time', 'sort_time']) || undefined,
+    source_table: pickText(source, ['source_table']) || undefined,
+    group_key: pickText(source, ['group_key']) || undefined,
+  }
+}
+
+function buildTreeNodeFromDoc(doc: DocItem): DocTreeNode {
+  const id = String(doc.document_id || doc.id || doc.doc_id || doc.label || '')
+  const docType = String(doc.doc_type || doc.type || '')
+  const docKey = String(doc.doc_key || `${docType}::${id}`)
+  return {
+    id,
+    doc_key: docKey,
+    doc_type: docType,
+    title: String(doc.label || doc.doc_name || doc.document_title || docType || '未命名文书'),
+    record_time: String(doc.record_time || doc.sort_time || ''),
+    has_content: Boolean(doc.has_content),
+    length: Number(doc.length || 0),
+  }
+}
+
+function inferGroupKey(doc: DocItem): string {
+  const explicit = String(doc.group_key || '').trim()
+  if (explicit) return explicit
+  const docType = String(doc.doc_type || doc.type || '').toLowerCase()
+  if (['mr', 'mr_surgery', 'mr_cost'].includes(docType)) return 'frontpage'
+  if (docType.includes('admission')) return 'admission'
+  if (docType.includes('course')) return 'course'
+  if (
+    docType.includes('surgery') ||
+    docType.includes('operation') ||
+    docType.includes('anesthesia')
+  )
+    return 'surgery'
+  if (docType.includes('discharge') || docType.includes('terminal')) return 'terminal'
+  if (docType.includes('order')) return 'orders'
+  return 'course'
+}
+
+function buildFallbackTreeFromDocs(docs: DocItem[]): DocTreeGroup[] {
+  const groups: Array<{ key: string; label: string }> = [
+    { key: 'all', label: '全部' },
+    { key: 'frontpage', label: '病案首页(临床医生)' },
+    { key: 'admission', label: '入院记录' },
+    { key: 'course', label: '病程记录' },
+    { key: 'surgery', label: '手术相关单据' },
+    { key: 'terminal', label: '出院记录' },
+    { key: 'orders', label: '医嘱' },
+  ]
+  const byGroup = new Map<string, DocTreeNode[]>()
+  for (const doc of docs) {
+    const node = buildTreeNodeFromDoc(doc)
+    const groupKey = inferGroupKey(doc)
+    byGroup.set(groupKey, [...(byGroup.get(groupKey) || []), node])
+    byGroup.set('all', [...(byGroup.get('all') || []), node])
+  }
+  return groups.map((group) => {
+    const children = byGroup.get(group.key) || []
+    return {
+      key: group.key,
+      label: group.label,
+      count: children.length,
+      children,
+    }
+  })
+}
+
+function normalizeDocumentsTree(rawTree: unknown, docs: DocItem[]): DocTreeGroup[] {
+  const groups = Array.isArray(rawTree) ? rawTree : []
+  const normalized = groups
+    .map((rawGroup) => {
+      const source = (rawGroup || {}) as Record<string, unknown>
+      const groupKey = pickText(source, ['key', 'group_key'])
+      const groupLabel = pickText(source, ['label', 'title', 'name']) || groupKey || '分组'
+      const rawChildren = Array.isArray(source.children)
+        ? source.children
+        : Array.isArray(source.nodes)
+          ? source.nodes
+          : []
+      const children = rawChildren
+        .map((rawNode) => {
+          const nodeSource = (rawNode || {}) as Record<string, unknown>
+          const id = pickText(nodeSource, ['id', 'doc_id', 'document_id'])
+          const docType = pickText(nodeSource, ['doc_type', 'type'])
+          const docKey =
+            pickText(nodeSource, ['doc_key']) || (docType && id ? `${docType}::${id}` : '')
+          const title =
+            pickText(nodeSource, ['title', 'label', 'doc_name', 'name']) ||
+            docs.find((doc) => String(doc.doc_key || '') === docKey)?.label ||
+            docType ||
+            '未命名文书'
+          const hasContentRaw = nodeSource.has_content
+          const hasContent =
+            typeof hasContentRaw === 'boolean'
+              ? hasContentRaw
+              : Boolean(docs.find((doc) => String(doc.doc_key || '') === docKey)?.has_content)
+          return {
+            id: id || docKey || title,
+            doc_key: docKey || `${docType || 'unknown'}::${id || title}`,
+            doc_type: docType || '',
+            title,
+            record_time: pickText(nodeSource, ['record_time', 'sort_time']) || undefined,
+            has_content: hasContent,
+            length: pickNumber(nodeSource, ['length']),
+          } as DocTreeNode
+        })
+        .filter((node) => Boolean(node.id))
+
+      return {
+        key: groupKey || groupLabel,
+        label: groupLabel,
+        count: children.length,
+        children,
+      } as DocTreeGroup
+    })
+    .filter((group) => Boolean(group.key))
+
+  const hasUsefulGroup = normalized.some(
+    (group) => group.key !== 'all' && Array.isArray(group.children) && group.children.length > 0,
+  )
+  if (hasUsefulGroup) return normalized
+  if (docs.length > 0) return buildFallbackTreeFromDocs(docs)
+  return normalized
+}
+
 async function loadDocuments(visitId: string) {
   documentsLoading.value = true
   concatLoading.value = true
@@ -1209,12 +1388,13 @@ async function loadDocuments(visitId: string) {
 
     const { data } = await apiClient.get(`/api/v1/emr/${visitId}/documents`, { params })
     const payload = data?.data || data || {}
-    const docs: DocItem[] = Array.isArray(payload.documents)
+    const docsRaw = Array.isArray(payload.documents)
       ? payload.documents
       : Array.isArray(payload)
         ? payload
         : []
-    const tree: DocTreeGroup[] = Array.isArray(payload.documents_tree) ? payload.documents_tree : []
+    const docs: DocItem[] = docsRaw.map((item) => normalizeDocItem(item))
+    const tree: DocTreeGroup[] = normalizeDocumentsTree(payload.documents_tree, docs)
     documentsList.value = docs
     documentsTree.value = tree
     concatText.value = buildConcatTextFromDocuments(docs)
