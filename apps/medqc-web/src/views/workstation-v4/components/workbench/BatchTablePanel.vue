@@ -62,10 +62,11 @@
       :data-source="rows"
       :loading="loading"
       row-key="id"
-      :pagination="false"
+      :pagination="tablePagination"
       :row-selection="rowSelection"
       :scroll="{ x: 980 }"
       :locale="tableLocale"
+      @change="handleTableChange"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'patient'">
@@ -136,6 +137,9 @@ const props = defineProps<{
   rows: WorkbenchRow[]
   selectedRowKeys: string[]
   summaryText: string
+  currentPage?: number
+  pageSize?: number
+  total?: number
   loading?: boolean
   readonly?: boolean
   primaryActionLabel?: string
@@ -152,6 +156,7 @@ const emit = defineEmits<{
   'batch-defer': [keys: string[]]
   'batch-assign': [keys: string[]]
   'clear-filters': []
+  'page-change': [page: number]
 }>()
 
 const rowSelection = computed(() => ({
@@ -171,6 +176,27 @@ const showAssignAction = computed(() => props.showAssignAction === true)
 
 const tableLocale = {
   emptyText: '当前筛选条件下暂无候选病历',
+}
+
+const tablePagination = computed(() => {
+  const pageSize = Number(props.pageSize || 50)
+  const total = Number(props.total || 0)
+  return {
+    current: Number(props.currentPage || 1),
+    total,
+    pageSize,
+    size: 'small' as const,
+    showQuickJumper: true,
+    showSizeChanger: false,
+    hideOnSinglePage: total <= pageSize,
+    showTotal: (value: number) => `共 ${value} 例`,
+  }
+})
+
+function handleTableChange(pagination: { current?: number }) {
+  const nextPage = Number(pagination.current || 1)
+  if (nextPage === Number(props.currentPage || 1)) return
+  emit('page-change', nextPage)
 }
 
 function stageTagClass(stageStatus: string) {

@@ -316,6 +316,9 @@
             :rows="workbenchRows"
             :selected-row-keys="selectedWorkbenchKeys"
             :summary-text="tableSummaryText"
+            :current-page="currentPage"
+            :page-size="50"
+            :total="displayServerTotal"
             :loading="displayLoading"
             :primary-action-label="stageMeta.batchActionText"
             :row-action-label="stageMeta.singleActionText"
@@ -328,6 +331,7 @@
             @batch-defer="emit('batch-defer', $event)"
             @batch-assign="emit('batch-assign', $event)"
             @clear-filters="emit('clear-filters')"
+            @page-change="emit('page-change', $event)"
           />
         </div>
 
@@ -339,22 +343,6 @@
           <div class="workstation-empty-state__text text-[13px] font-medium">
             {{ stageEmptyText }}
           </div>
-        </div>
-
-        <div
-          v-if="displayServerTotalPages > 1"
-          class="workstation-pagination-shell mt-3 flex justify-center px-5 py-3"
-        >
-          <a-pagination
-            class="workstation-pagination"
-            :current="currentPage"
-            :total="displayServerTotal"
-            :page-size="50"
-            size="small"
-            show-quick-jumper
-            :show-total="(value: number) => `共 ${value} 例`"
-            @change="emit('page-change', $event)"
-          />
         </div>
       </div>
     </div>
