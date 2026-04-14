@@ -25,41 +25,67 @@
         </div>
 
         <template v-if="displayTree.length > 0">
-          <section
-            v-for="group in displayTree"
-            :key="group.key"
-            class="mb-2"
-          >
-            <div class="mb-1 px-1 text-[12px] font-bold text-slate-700">
-              {{ group.label }}
-            </div>
-            <div class="space-y-0.5">
+          <div class="space-y-1">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between rounded-[8px] border px-2 py-1.5 text-left text-[12px] font-semibold transition-all duration-150"
+              :class="
+                isAllNodeActive
+                  ? 'border-sky-200 bg-white text-sky-800 shadow-[0_6px_14px_rgba(14,165,233,0.12)]'
+                  : 'border-transparent bg-transparent text-slate-700 hover:border-sky-100 hover:bg-white/75'
+              "
+              @click="emit('show-concat')"
+            >
+              <span>全部</span>
+            </button>
+
+            <section
+              v-for="group in displayTree"
+              :key="group.key"
+              class="rounded-[8px]"
+            >
               <button
-                v-for="node in group.children"
-                :key="`${group.key}:${node.id}`"
                 type="button"
-                class="group flex w-full items-center justify-between rounded-[8px] border px-2 py-1.5 text-left transition-all duration-150"
-                :class="
-                  hasDocContent(resolveDocByNode(node))
-                    ? isActiveNode(node)
-                      ? 'border-sky-200 bg-white text-sky-800 shadow-[0_6px_14px_rgba(14,165,233,0.12)]'
-                      : 'border-transparent bg-transparent hover:border-sky-100 hover:bg-white/75'
-                    : 'cursor-default border-transparent bg-transparent text-slate-300'
-                "
-                @click="handleNodeClick(node)"
+                class="flex w-full items-center justify-between rounded-[8px] border border-transparent px-2 py-1.5 text-left text-[12px] font-bold text-slate-700 transition-all duration-150 hover:border-sky-100 hover:bg-white/70"
+                @click="toggleGroup(group.key)"
               >
-                <span class="min-w-0 truncate text-[12px] font-semibold">
-                  {{ resolveNodeTitle(node) }}
+                <span class="flex min-w-0 items-center gap-1.5">
+                  <CaretRightOutlined
+                    class="text-[10px] text-slate-400 transition-transform duration-150"
+                    :class="isGroupExpanded(group.key) ? 'rotate-90' : ''"
+                  />
+                  <span class="truncate">{{ group.label }}</span>
                 </span>
-                <span
-                  v-if="node.record_time"
-                  class="ml-2 shrink-0 text-[10px] text-slate-400"
-                >{{
-                  formatDocSortTime(node.record_time)
+                <span class="ml-2 shrink-0 text-[10px] font-semibold text-slate-400">{{
+                  group.count
                 }}</span>
               </button>
-            </div>
-          </section>
+
+              <div
+                v-if="isGroupExpanded(group.key)"
+                class="ml-3 mt-0.5 space-y-0.5 border-l border-slate-200/80 pl-2"
+              >
+                <button
+                  v-for="node in group.children"
+                  :key="`${group.key}:${node.id}`"
+                  type="button"
+                  class="group flex w-full items-center rounded-[8px] border px-2 py-1.5 text-left transition-all duration-150"
+                  :class="
+                    hasDocContent(resolveDocByNode(node))
+                      ? isActiveNode(node)
+                        ? 'border-sky-200 bg-white text-sky-800 shadow-[0_4px_10px_rgba(14,165,233,0.1)]'
+                        : 'border-transparent bg-transparent text-slate-600 hover:border-sky-100 hover:bg-white/75'
+                      : 'cursor-default border-transparent bg-transparent text-slate-300'
+                  "
+                  @click="handleNodeClick(node)"
+                >
+                  <span class="min-w-0 truncate text-[12px] font-semibold">
+                    {{ renderTreeNodeTitle(node) }}
+                  </span>
+                </button>
+              </div>
+            </section>
+          </div>
         </template>
 
         <template v-else>
@@ -135,8 +161,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { SyncOutlined, FileTextOutlined, EyeOutlined } from '@ant-design/icons-vue'
+import { computed, ref, watch } from 'vue'
+import {
+  SyncOutlined,
+  FileTextOutlined,
+  EyeOutlined,
+  CaretRightOutlined,
+} from '@ant-design/icons-vue'
 import type { PatientRecord, DocItem, DocTreeGroup, DocTreeNode } from '../types'
 import { formatDocSortTime } from '../utils/documentDisplay'
 
@@ -157,6 +188,30 @@ const displayTree = computed(() =>
   (props.documentsTree || []).filter(
     (group) => group.key !== 'all' && (group.children || []).length > 0,
   ),
+)
+const expandedGroupKeys = ref<string[]>([])
+const isAllNodeActive = computed(() => !String(props.activeDocType || '').trim())
+
+watch(
+  [displayTree, () => props.activeDocType],
+  ([groups]) => {
+    const keys = (groups || []).map((group) => String(group.key || '')).filter(Boolean)
+    if (!keys.length) {
+      expandedGroupKeys.value = []
+      return
+    }
+    const kept = expandedGroupKeys.value.filter((key) => keys.includes(key))
+    const activeGroup = findActiveGroupKey(groups || [])
+    if (activeGroup && !kept.includes(activeGroup)) {
+      kept.push(activeGroup)
+    }
+    if (!kept.length) {
+      if (keys.includes('course')) kept.push('course')
+      else kept.push(keys[0])
+    }
+    expandedGroupKeys.value = kept
+  },
+  { immediate: true },
 )
 
 function docIdentityKey(doc: DocItem) {
@@ -199,6 +254,19 @@ function resolveNodeTitle(node: DocTreeNode): string {
   return String(node.doc_type || '').trim() || '未命名文书'
 }
 
+function resolveNodeDateLabel(node: DocTreeNode): string {
+  const formatted = formatDocSortTime(node.record_time)
+  if (!formatted) return ''
+  return formatted.slice(0, 10)
+}
+
+function renderTreeNodeTitle(node: DocTreeNode): string {
+  const dateLabel = resolveNodeDateLabel(node)
+  const title = resolveNodeTitle(node)
+  if (!dateLabel || title.startsWith(dateLabel)) return title
+  return `${dateLabel} ${title}`
+}
+
 function resolveDocByNode(node: DocTreeNode): DocItem | undefined {
   return (
     props.documents.find((doc) => (doc.doc_key || '') === node.doc_key) ||
@@ -221,5 +289,26 @@ function handleNodeClick(node: DocTreeNode) {
   const doc = resolveDocByNode(node)
   if (!doc || !hasDocContent(doc)) return
   emit('preview-doc', doc)
+}
+
+function findActiveGroupKey(groups: DocTreeGroup[]): string {
+  for (const group of groups) {
+    if ((group.children || []).some((node) => isActiveNode(node))) {
+      return String(group.key || '')
+    }
+  }
+  return ''
+}
+
+function isGroupExpanded(groupKey: string): boolean {
+  return expandedGroupKeys.value.includes(groupKey)
+}
+
+function toggleGroup(groupKey: string) {
+  if (isGroupExpanded(groupKey)) {
+    expandedGroupKeys.value = expandedGroupKeys.value.filter((key) => key !== groupKey)
+    return
+  }
+  expandedGroupKeys.value = [...expandedGroupKeys.value, groupKey]
 }
 </script>
