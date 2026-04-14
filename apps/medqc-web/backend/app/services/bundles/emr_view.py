@@ -77,6 +77,14 @@ _GROUP_BY_DOC_TYPE: dict[str, str] = {
 }
 
 _ORDER_DOC_TYPES = {"inpat_drug_order", "inpat_nondrug_order"}
+_SURGERY_STRUCT_DOC_TYPES: set[str] = {
+    "surgery_record",
+    "anesthesia_record",
+    "presurg_summary",
+    "presurg_discussion",
+    "surgery_safecheck_record",
+    "postsurg_firstcourse_record",
+}
 
 _FIELD_LABELS: dict[str, str] = {
     "record_time": "记录时间",
@@ -95,7 +103,96 @@ _FIELD_LABELS: dict[str, str] = {
     "past_history": "既往史",
     "checkup": "体格检查",
     "assist_exam": "辅助检查",
+    "dept_name": "科室",
+    "submitter": "记录者",
+    "surgeon_sign": "手术医生签名",
+    "presurg_summary": "术前小结",
+    "surgery_name": "手术项目",
+    "surgery_code": "手术编码",
+    "surgery_level": "手术等级",
+    "surgical_level": "手术等级",
+    "surgeon": "手术医师",
+    "first_assistant": "手术I助",
+    "second_assistant": "手术II助",
+    "anesthesiologist": "麻醉医师",
+    "anesthesia_method": "麻醉方式",
+    "preoperative_diagnosis": "术前诊断",
+    "intraoperative_diagnosis": "术中诊断",
+    "postoperative_diagnosis": "术后诊断",
+    "surgery_process": "手术经过",
+    "surgical_incisionheal_level": "切口愈合等级",
+    "surgery_begin_time": "手术开始时间",
+    "surgery_end_time": "手术结束时间",
+    "blood_loss": "失血量",
+    "other_content": "其他内容",
+    "discuss_staff": "参与人员",
+    "host_summary": "讨论摘要",
+    "host_name": "主持人",
+    "discuss_place": "讨论地点",
+    "discuss_time": "讨论时间",
 }
+
+_KV_TITLE_BY_DOC_TYPE: dict[str, str] = {
+    "surgery_record": "手术记录",
+    "anesthesia_record": "麻醉记录",
+    "presurg_summary": "术前小结",
+    "presurg_discussion": "术前讨论",
+    "surgery_safecheck_record": "手术安全核查",
+    "postsurg_firstcourse_record": "术后首次病程记录",
+}
+
+_SURGERY_TEMPLATE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("record_time", "记录时间"),
+    ("dept_name", "科室"),
+    ("ward_name", "病房"),
+    ("submitter", "记录者"),
+    ("surgeon_sign", "手术医生签名"),
+    ("presurg_summary", "术前小结"),
+    ("surgery_name", "手术项目"),
+    ("surgery_code", "手术编码"),
+    ("surgery_level", "手术等级"),
+    ("surgeon", "手术医师"),
+    ("first_assistant", "手术I助"),
+    ("second_assistant", "手术II助"),
+    ("anesthesiologist", "麻醉医师"),
+    ("anesthesia_method", "麻醉方式"),
+    ("preoperative_diagnosis", "术前诊断"),
+)
+
+
+def _should_skip_template_source_field(source_field: str) -> bool:
+    field = _safe_text(source_field).lower()
+    return field.endswith("_template")
+
+
+def _extract_kv_from_content(content: str, *, max_fields: int, keep_empty_value: bool) -> list[dict[str, str]]:
+    fields: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for line in content.splitlines():
+        raw = _safe_text(line)
+        if not raw:
+            continue
+        matched = re.match(r"^([^:：]{1,36})[:：]\s*(.*)$", raw)
+        if not matched:
+            continue
+        key = matched.group(1).strip()
+        value = matched.group(2).strip()
+        if not key:
+            continue
+        if (not keep_empty_value) and (not value):
+            continue
+        norm_key = key.replace(" ", "_").lower()
+        if norm_key in seen:
+            continue
+        seen.add(norm_key)
+        fields.append({"key": norm_key, "label": key, "value": value})
+        if len(fields) >= max_fields:
+            break
+    return fields
+
+
+def _fallback_surgery_template_fields() -> list[dict[str, str]]:
+    return [{"key": key, "label": label, "value": ""} for key, label in _SURGERY_TEMPLATE_FIELDS]
 
 
 def _safe_text(value: Any) -> str:
@@ -323,6 +420,8 @@ def _extract_kv_fields(document: dict[str, Any]) -> list[dict[str, str]]:
     source_fields = list(document.get("source_fields") or [])
     fields: list[dict[str, str]] = []
     seen: set[str] = set()
+    doc_type = _safe_text(document.get("doc_type"))
+    surgery_mode = doc_type in _SURGERY_STRUCT_DOC_TYPES
 
     for item in source_fields:
         if not isinstance(item, dict):
@@ -330,6 +429,8 @@ def _extract_kv_fields(document: dict[str, Any]) -> list[dict[str, str]]:
         used = bool(item.get("used"))
         preview = _safe_text(item.get("raw_value_preview"))
         source_field = _safe_text(item.get("source_field"))
+        if _should_skip_template_source_field(source_field):
+            continue
         if not used or not preview or not source_field:
             continue
         if source_field in seen:
@@ -343,31 +444,28 @@ def _extract_kv_fields(document: dict[str, Any]) -> list[dict[str, str]]:
             }
         )
 
-    if fields:
+    if fields and not surgery_mode:
         return fields
 
     content = _safe_text(document.get("content"))
     if not content:
+        if fields:
+            return fields
+        if surgery_mode:
+            return _fallback_surgery_template_fields()
         return fields
 
-    for line in content.splitlines()[:16]:
-        raw = _safe_text(line)
-        if not raw:
-            continue
-        matched = re.match(r"^([^:：]{1,30})[:：]\s*(.+)$", raw)
-        if not matched:
-            continue
-        key = matched.group(1).strip()
-        value = matched.group(2).strip()
-        if not key or not value:
-            continue
-        norm_key = key.replace(" ", "_").lower()
-        if norm_key in seen:
-            continue
-        seen.add(norm_key)
-        fields.append({"key": norm_key, "label": key, "value": value})
-        if len(fields) >= 16:
-            break
+    parsed = _extract_kv_from_content(
+        content,
+        max_fields=28 if surgery_mode else 16,
+        keep_empty_value=surgery_mode,
+    )
+    if parsed:
+        return parsed
+    if fields:
+        return fields
+    if surgery_mode:
+        return _fallback_surgery_template_fields()
     return fields
 
 
@@ -519,6 +617,7 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
     doc_id = _safe_text(document.get("id") or document.get("document_id"))
 
     render_blocks: list[dict[str, Any]] = []
+    kv_fields: list[dict[str, str]] = []
     if group_key == "orders" or doc_type in _ORDER_DOC_TYPES:
         render_blocks.append(_build_order_table_block(document))
     else:
@@ -527,13 +626,17 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
             {
                 "block_id": f"{doc_key}:kv",
                 "block_type": "kv_section",
-                "title": "基础信息",
+                "title": _KV_TITLE_BY_DOC_TYPE.get(doc_type, "基础信息"),
                 "fields": kv_fields,
                 "empty": len(kv_fields) == 0,
             }
         )
 
-    render_blocks.extend(_build_paragraph_blocks(document))
+    should_append_paragraph = not (
+        doc_type in _SURGERY_STRUCT_DOC_TYPES and len(kv_fields) >= 6
+    )
+    if should_append_paragraph:
+        render_blocks.extend(_build_paragraph_blocks(document))
     anchors = _build_highlight_anchors(content=content, render_blocks=render_blocks)
     return {
         "layout_version": "bundle_struct_v1",
@@ -552,4 +655,3 @@ def build_render_view(document: dict[str, Any] | None) -> dict[str, Any]:
         "highlight_anchors": anchors,
         "empty_reason": "" if content or any(not bool(block.get("empty")) for block in render_blocks) else "document_empty",
     }
-
