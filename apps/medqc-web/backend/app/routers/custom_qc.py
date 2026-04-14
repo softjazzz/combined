@@ -130,7 +130,10 @@ class WorkspaceTestRequest(BaseModel):
 
 
 class WorkspaceBatchJobCreateRequest(BaseModel):
-    draft_id: str
+    draft_id: Optional[str] = None
+    draft_ids: List[str] = Field(default_factory=list)
+    execution_mode: str = "single"
+    run_mode: str = "serial"
     scope: str = "final"
     department: Optional[str] = None
     doctor: Optional[str] = None
@@ -155,7 +158,17 @@ def _batch_job_payload_filters(payload: WorkspaceBatchJobCreateRequest) -> Dict[
         "temperature": payload.temperature,
         "top_p": payload.top_p,
         "max_tokens": payload.max_tokens,
+        "execution_mode": payload.execution_mode,
+        "run_mode": payload.run_mode,
     }
+
+
+def _normalize_execution_mode(value: Optional[str]) -> str:
+    return "multi" if str(value or "").strip().lower() == "multi" else "single"
+
+
+def _normalize_run_mode(value: Optional[str]) -> str:
+    return "serial"
 
 
 async def _run_workspace_batch_job(job_id: str) -> None:
@@ -165,65 +178,253 @@ async def _run_workspace_batch_job(job_id: str) -> None:
         return
 
     try:
-        workspace.mark_batch_job_running(job_id=job_id)
-        draft = workspace.get_draft(draft_id=job["draft_id"], created_by=job["created_by"])
-        if not draft:
-            raise ValueError("规则草稿不存在或无权限")
+        if not workspace.mark_batch_job_running(job_id=job_id):
+            return
+        current_job = workspace.get_batch_job_for_processing(job_id=job_id) or job
+        filters = current_job.get("filters") or {}
+        draft_ids = [str(item).strip() for item in (current_job.get("draft_ids") or []) if str(item).strip()]
+        if not draft_ids:
+            current_draft_id = str(current_job.get("draft_id") or "").strip()
+            if current_draft_id:
+                draft_ids = [current_draft_id]
+        if not draft_ids:
+            raise ValueError("批量任务缺少 draft_id 或 draft_ids")
 
-        filters = job.get("filters") or {}
+        unique_draft_ids: List[str] = []
+        for draft_id in draft_ids:
+            if draft_id not in unique_draft_ids:
+                unique_draft_ids.append(draft_id)
+
+        drafts: List[Dict[str, Any]] = []
+        for draft_id in unique_draft_ids:
+            draft = workspace.get_draft(draft_id=draft_id, created_by=current_job["created_by"])
+            if not draft:
+                raise ValueError(f"规则草稿不存在或无权限: {draft_id}")
+            drafts.append(draft)
+
+        total_rules = max(1, len(drafts))
         records = workspace.collect_records(
-            scope=job.get("scope") or "final",
+            scope=current_job.get("scope") or "final",
             department=filters.get("department"),
             doctor=filters.get("doctor"),
             date_field=filters.get("date_field") or "discharge",
             start_date=filters.get("start_date"),
             end_date=filters.get("end_date"),
             keyword=filters.get("keyword"),
-            record_ids=job.get("record_ids") or None,
+            record_ids=current_job.get("record_ids") or None,
         )
         hydrated_records = workspace.hydrate_records_with_medical_text(records)
-        rule_payload = _workspace_rule_payload_from_draft(draft)
+        total_records = len(hydrated_records)
+        workspace.update_batch_job_progress(
+            job_id=job_id,
+            step_key="filter",
+            rule_index=0,
+            rule_count=total_rules,
+            processed_records=0,
+            total_records=total_records,
+            summary_patch={
+                "rule_count": total_rules,
+                "total_records": total_records,
+                "success_count": 0,
+                "failed_count": 0,
+                "issue_records": 0,
+                "compliant_records": total_records,
+                "total_tokens": 0,
+                "total_processing_time": 0.0,
+            },
+        )
         qc_service = await create_custom_qc_service()
 
         items: List[Dict[str, Any]] = []
         failed_records: List[Dict[str, Any]] = []
+        rule_results: List[Dict[str, Any]] = []
+        issue_record_ids: set[str] = set()
+        failed_record_ids: set[str] = set()
         total_tokens = 0
         total_processing_time = 0.0
 
-        for record in hydrated_records:
-            try:
-                ensure_record_medical_text([record])
-                result = await evaluate_inline_rule(
-                    qc_service=qc_service,
-                    rule=rule_payload,
-                    record=record,
-                    temperature=filters.get("temperature"),
-                    top_p=filters.get("top_p"),
-                    max_tokens=filters.get("max_tokens"),
-                )
-                total_tokens += int((result.get("performance") or {}).get("token_usage") or 0)
-                total_processing_time += float((result.get("performance") or {}).get("processing_time") or 0.0)
-                items.append(result)
-            except Exception as exc:
-                logger.warning("workspace batch job record failed: %s", exc)
-                failed_records.append(
-                    {
+        for rule_index, draft in enumerate(drafts, start=1):
+            latest = workspace.get_batch_job_for_processing(job_id=job_id)
+            if not latest or str(latest.get("status") or "").lower() == "canceled":
+                logger.info("workspace 批量任务 %s 已取消，停止执行", job_id)
+                return
+            rule_payload = _workspace_rule_payload_from_draft(draft)
+            rule_code = str(draft.get("rule_code") or "")
+            rule_name = str(draft.get("name") or rule_code or "未命名规则")
+            rule_items: List[Dict[str, Any]] = []
+            rule_failed: List[Dict[str, Any]] = []
+            rule_tokens = 0
+            rule_processing_time = 0.0
+
+            workspace.update_batch_job_progress(
+                job_id=job_id,
+                step_key="run",
+                rule_index=rule_index,
+                rule_count=total_rules,
+                processed_records=0,
+                total_records=total_records,
+                summary_patch={
+                    "rule_count": total_rules,
+                    "rule_results": rule_results,
+                    "total_records": total_records,
+                    "success_count": len(items),
+                    "failed_count": len(failed_records),
+                    "issue_records": len(issue_record_ids),
+                    "compliant_records": max(
+                        0,
+                        total_records - len(issue_record_ids) - len(failed_record_ids),
+                    ),
+                    "total_tokens": int(total_tokens),
+                    "total_processing_time": float(total_processing_time),
+                },
+            )
+
+            for processed_index, record in enumerate(hydrated_records, start=1):
+                latest = workspace.get_batch_job_for_processing(job_id=job_id)
+                if not latest or str(latest.get("status") or "").lower() == "canceled":
+                    logger.info("workspace 批量任务 %s 已取消，停止执行", job_id)
+                    return
+                record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
+                try:
+                    ensure_record_medical_text([record])
+                    result = await evaluate_inline_rule(
+                        qc_service=qc_service,
+                        rule=rule_payload,
+                        record=record,
+                        temperature=filters.get("temperature"),
+                        top_p=filters.get("top_p"),
+                        max_tokens=filters.get("max_tokens"),
+                    )
+                    enriched_result = {
+                        **result,
+                        "rule_code": rule_code,
+                        "rule_name": rule_name,
+                        "draft_id": str(draft.get("id") or ""),
+                    }
+                    total_tokens += int((enriched_result.get("performance") or {}).get("token_usage") or 0)
+                    total_processing_time += float(
+                        (enriched_result.get("performance") or {}).get("processing_time") or 0.0
+                    )
+                    rule_tokens += int((enriched_result.get("performance") or {}).get("token_usage") or 0)
+                    rule_processing_time += float(
+                        (enriched_result.get("performance") or {}).get("processing_time") or 0.0
+                    )
+                    if str(enriched_result.get("status") or "").lower() == "non_compliant":
+                        issue_record_ids.add(record_id)
+                    items.append(enriched_result)
+                    rule_items.append(enriched_result)
+                except Exception as exc:
+                    logger.warning("workspace batch job record failed: %s", exc)
+                    failed_record_ids.add(record_id)
+                    failed_payload = {
+                        "rule_code": rule_code,
+                        "rule_name": rule_name,
+                        "draft_id": str(draft.get("id") or ""),
                         "record_id": str(record.get("record_id") or ""),
                         "visit_id": str(record.get("visit_id") or ""),
                         "patient_name": str(record.get("patient_name") or ""),
                         "department": str(record.get("department") or ""),
                         "error": str(exc),
                     }
+                    failed_records.append(failed_payload)
+                    rule_failed.append(failed_payload)
+
+                workspace.update_batch_job_progress(
+                    job_id=job_id,
+                    step_key="run",
+                    rule_index=rule_index,
+                    rule_count=total_rules,
+                    processed_records=processed_index,
+                    total_records=total_records,
+                    summary_patch={
+                        "rule_count": total_rules,
+                        "rule_results": rule_results,
+                        "total_records": total_records,
+                        "success_count": len(items),
+                        "failed_count": len(failed_records),
+                        "issue_records": len(issue_record_ids),
+                        "compliant_records": max(
+                            0,
+                            total_records - len(issue_record_ids) - len(failed_record_ids),
+                        ),
+                        "total_tokens": int(total_tokens),
+                        "total_processing_time": float(total_processing_time),
+                    },
                 )
+            rule_summary = {
+                "total_records": total_records,
+                "success_count": len(rule_items),
+                "failed_count": len(rule_failed),
+                "issue_records": sum(1 for item in rule_items if item.get("status") == "non_compliant"),
+                "compliant_records": sum(
+                    1 for item in rule_items if item.get("status") in {"compliant", "not_applicable"}
+                ),
+                "total_tokens": int(rule_tokens),
+                "total_processing_time": float(rule_processing_time),
+            }
+            rule_results.append(
+                {
+                    "id": str(draft.get("id") or ""),
+                    "draft_id": str(draft.get("id") or ""),
+                    "rule_code": rule_code,
+                    "rule_name": rule_name,
+                    "status": "failed" if rule_summary["failed_count"] >= total_records and total_records > 0 else "completed",
+                    "items": rule_items,
+                    "failed_records": rule_failed,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    **rule_summary,
+                    "progress": {
+                        "rule_index": rule_index,
+                        "rule_count": total_rules,
+                        "processed_records": total_records,
+                    },
+                }
+            )
+            workspace.update_batch_job_progress(
+                job_id=job_id,
+                step_key="aggregate",
+                rule_index=rule_index,
+                rule_count=total_rules,
+                processed_records=total_records,
+                total_records=total_records,
+                summary_patch={
+                    "rule_count": total_rules,
+                    "rule_results": rule_results,
+                    "total_records": total_records,
+                    "success_count": len(items),
+                    "failed_count": len(failed_records),
+                    "issue_records": len(issue_record_ids),
+                    "compliant_records": max(
+                        0,
+                        total_records - len(issue_record_ids) - len(failed_record_ids),
+                    ),
+                    "total_tokens": int(total_tokens),
+                    "total_processing_time": float(total_processing_time),
+                },
+                items=items,
+                failed_records=failed_records,
+            )
 
         summary = {
-            "total_records": len(hydrated_records),
+            "total_records": total_records,
+            "total_tasks": total_records * total_rules,
+            "rule_count": total_rules,
+            "execution_mode": "multi" if total_rules > 1 else "single",
             "success_count": len(items),
             "failed_count": len(failed_records),
-            "issue_records": sum(1 for item in items if item.get("status") == "non_compliant"),
-            "compliant_records": sum(1 for item in items if item.get("status") in {"compliant", "not_applicable"}),
-            "total_tokens": total_tokens,
-            "total_processing_time": total_processing_time,
+            "issue_records": len(issue_record_ids),
+            "compliant_records": max(0, total_records - len(issue_record_ids) - len(failed_record_ids)),
+            "total_tokens": int(total_tokens),
+            "total_processing_time": float(total_processing_time),
+            "rule_results": rule_results,
+            "processed_rule_count": len(rule_results),
+            "progress": {
+                "step_key": "completed",
+                "rule_index": total_rules,
+                "rule_count": total_rules,
+                "processed_records": total_records,
+                "total_records": total_records,
+            },
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         workspace.complete_batch_job(
@@ -232,11 +433,12 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             items=items,
             failed_records=failed_records,
         )
-        workspace.save_last_test_summary(
-            draft_id=job["draft_id"],
-            created_by=job["created_by"],
-            summary=summary,
-        )
+        for draft in drafts:
+            workspace.save_last_test_summary(
+                draft_id=str(draft.get("id") or ""),
+                created_by=current_job["created_by"],
+                summary=summary,
+            )
     except Exception as exc:
         logger.exception("workspace batch job failed: %s", exc)
         workspace.fail_batch_job(job_id=job_id, error_message=str(exc))
@@ -737,8 +939,29 @@ async def create_workspace_batch_job(
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
     created_by = _current_user_id(current_user)
-    draft = workspace.get_draft(draft_id=payload.draft_id, created_by=created_by)
-    if not draft:
+    requested_draft_ids = [str(item).strip() for item in (payload.draft_ids or []) if str(item).strip()]
+    if payload.draft_id:
+        draft_id = str(payload.draft_id).strip()
+        if draft_id:
+            requested_draft_ids.insert(0, draft_id)
+    normalized_draft_ids: List[str] = []
+    for draft_id in requested_draft_ids:
+        if draft_id and draft_id not in normalized_draft_ids:
+            normalized_draft_ids.append(draft_id)
+    if not normalized_draft_ids:
+        raise HTTPException(status_code=422, detail="draft_id 或 draft_ids 至少提供一个")
+
+    drafts: List[Dict[str, Any]] = []
+    missing_draft_ids: List[str] = []
+    for draft_id in normalized_draft_ids:
+        draft = workspace.get_draft(draft_id=draft_id, created_by=created_by)
+        if draft:
+            drafts.append(draft)
+        else:
+            missing_draft_ids.append(draft_id)
+    if missing_draft_ids:
+        raise HTTPException(status_code=404, detail=f"草稿不存在或无权限: {', '.join(missing_draft_ids)}")
+    if not drafts:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
     records = workspace.collect_records(
@@ -754,17 +977,41 @@ async def create_workspace_batch_job(
     if not records:
         raise HTTPException(status_code=422, detail="当前筛选条件下没有可执行的病历")
 
+    execution_mode = _normalize_execution_mode(payload.execution_mode)
+    if len(drafts) > 1:
+        execution_mode = "multi"
+    run_mode = _normalize_run_mode(payload.run_mode)
+
+    primary_draft = drafts[0]
+    if execution_mode == "multi":
+        primary_draft = {
+            "id": drafts[0].get("id"),
+            "rule_code": "CUST-MULTI",
+            "name": f"自定义规则批量任务({len(drafts)}条)",
+            "scene": drafts[0].get("scene") or "final",
+        }
+
     job = workspace.create_batch_job(
-        draft=draft,
+        draft=primary_draft,
         created_by=created_by,
         scope=payload.scope,
         filters=_batch_job_payload_filters(payload),
         record_ids=payload.record_ids or [],
         total_records=len(records),
+        draft_ids=[str(item.get("id") or "") for item in drafts],
+        execution_mode=execution_mode,
+        run_mode=run_mode,
+        rule_count=len(drafts),
     )
     background_tasks.add_task(_run_workspace_batch_job, job["id"])
     return success_response(
-        data=job,
+        data={
+            **job,
+            "draft_ids": [str(item.get("id") or "") for item in drafts],
+            "execution_mode": execution_mode,
+            "run_mode": run_mode,
+            "rule_count": len(drafts),
+        },
         message="批量任务已创建",
         trace_id=get_trace_id(request),
     )
@@ -774,14 +1021,36 @@ async def create_workspace_batch_job(
 async def list_workspace_batch_jobs(
     request: Request,
     draft_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    scope: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    executor_type: Optional[str] = Query(None),
+    cache_hit: Optional[str] = Query(None),
+    created_start_date: Optional[str] = Query(None),
+    created_end_date: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    executor_filter = str(executor_type or "").strip().lower() or None
+    cache_hit_filter: Optional[bool] = None
+    cache_hit_value = str(cache_hit or "").strip().lower()
+    if cache_hit_value in {"hit", "true", "1", "yes"}:
+        cache_hit_filter = True
+    elif cache_hit_value in {"miss", "false", "0", "no"}:
+        cache_hit_filter = False
+
     result = workspace.list_batch_jobs(
         created_by=_current_user_id(current_user),
         draft_id=draft_id,
+        status=status,
+        scope=scope,
+        query=q,
+        executor_type=executor_filter,
+        cache_hit=cache_hit_filter,
+        created_start_date=created_start_date,
+        created_end_date=created_end_date,
         page=page,
         page_size=page_size,
     )
@@ -810,6 +1079,42 @@ async def get_workspace_batch_job(
     return success_response(
         data=job,
         message="获取批量任务详情成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/workspace/batch-jobs/{job_id}/cancel")
+async def cancel_workspace_batch_job(
+    request: Request,
+    job_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    job = workspace.cancel_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not job:
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    return success_response(
+        data=job,
+        message="批量任务已取消",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/workspace/batch-jobs/{job_id}/retry")
+async def retry_workspace_batch_job(
+    request: Request,
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
+):
+    job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    if not job:
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    background_tasks.add_task(_run_workspace_batch_job, job_id)
+    return success_response(
+        data=job,
+        message="批量任务已重新入队",
         trace_id=get_trace_id(request),
     )
 

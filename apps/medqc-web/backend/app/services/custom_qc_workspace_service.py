@@ -135,6 +135,27 @@ def _normalize_date_field(date_field: Optional[str]) -> str:
     return normalized
 
 
+def _normalize_execution_mode(execution_mode: Optional[str]) -> str:
+    value = _safe_text(execution_mode, "single").lower()
+    return "multi" if value == "multi" else "single"
+
+
+def _normalize_run_mode(run_mode: Optional[str]) -> str:
+    value = _safe_text(run_mode, "serial").lower()
+    return "serial" if value != "parallel" else "parallel"
+
+
+def _normalize_string_list(values: Any) -> List[str]:
+    if not isinstance(values, list):
+        return []
+    normalized: List[str] = []
+    for item in values:
+        text = _safe_text(item)
+        if text:
+            normalized.append(text)
+    return normalized
+
+
 @lru_cache(maxsize=1)
 def _drafts_table() -> Table:
     if engine is None:
@@ -274,25 +295,62 @@ def _row_to_batch_job(row: Dict[str, Any]) -> Dict[str, Any]:
     summary = _safe_json_loads(row.get("summary_json"), None)
     items = _safe_json_loads(row.get("items_json"), [])
     failed_records = _safe_json_loads(row.get("failed_records_json"), [])
+    filters_dict = filters if isinstance(filters, dict) else {}
+    summary_dict = summary if isinstance(summary, dict) else None
+    draft_ids = _normalize_string_list(filters_dict.get("draft_ids"))
+    if not draft_ids:
+        draft_id = _safe_text(row.get("draft_id"))
+        if draft_id:
+            draft_ids = [draft_id]
+    execution_mode = _normalize_execution_mode(filters_dict.get("execution_mode"))
+    if execution_mode == "single" and len(draft_ids) > 1:
+        execution_mode = "multi"
+    run_mode = _normalize_run_mode(filters_dict.get("run_mode"))
+    progress = {}
+    if summary_dict is not None:
+        progress_candidate = summary_dict.get("progress")
+        if isinstance(progress_candidate, dict):
+            progress = progress_candidate
+    rule_count = int((summary_dict or {}).get("rule_count") or 0)
+    if rule_count <= 0:
+        rule_count = max(1, len(draft_ids))
+    normalized_items: List[Dict[str, Any]] = []
+    if isinstance(items, list):
+        for raw_item in items:
+            if isinstance(raw_item, dict):
+                normalized_items.append(
+                    {
+                        **raw_item,
+                        "rule_code": _safe_text(raw_item.get("rule_code")) or _safe_text(row.get("rule_code")),
+                        "rule_name": _safe_text(raw_item.get("rule_name")) or _safe_text(row.get("rule_name")),
+                    }
+                )
     rule_results: List[Dict[str, Any]] = []
-    if isinstance(summary, dict):
-        candidate = summary.get("rule_results")
+    if summary_dict is not None:
+        candidate = summary_dict.get("rule_results")
         if isinstance(candidate, list):
             rule_results = candidate
+    status_value = _safe_text(row.get("status"), "queued")
     return {
         "id": _safe_text(row.get("id")),
         "draft_id": _safe_text(row.get("draft_id")),
+        "draft_ids": draft_ids,
         "rule_code": _safe_text(row.get("rule_code")),
         "rule_name": _safe_text(row.get("rule_name")),
         "scene": _safe_text(row.get("scene"), "final"),
         "scope": _safe_text(row.get("scope"), "final"),
-        "status": _safe_text(row.get("status"), "queued"),
-        "filters": filters if isinstance(filters, dict) else {},
+        "status": status_value,
+        "execution_mode": execution_mode,
+        "rule_count": int(rule_count),
+        "run_mode": run_mode,
+        "filters": filters_dict,
         "record_ids": record_ids if isinstance(record_ids, list) else [],
-        "summary": summary if isinstance(summary, dict) else None,
-        "items": items if isinstance(items, list) else [],
+        "summary": summary_dict,
+        "progress": progress,
+        "items": normalized_items,
         "failed_records": failed_records if isinstance(failed_records, list) else [],
         "rule_results": rule_results,
+        "cancellable": status_value in {"queued", "running"},
         "error_message": _safe_text(row.get("error_message")),
         "created_by": _safe_text(row.get("created_by")),
         "created_at": row.get("created_at"),
@@ -893,11 +951,41 @@ class CustomQCWorkspaceService:
         filters: Dict[str, Any],
         record_ids: Sequence[str],
         total_records: int,
+        draft_ids: Optional[Sequence[str]] = None,
+        execution_mode: str = "single",
+        run_mode: str = "serial",
+        rule_count: int = 1,
     ) -> Dict[str, Any]:
         session = _session()
         try:
             now = _now_utc()
             job_id = str(uuid.uuid4())
+            normalized_draft_ids = [item for item in _normalize_string_list(list(draft_ids or [])) if item]
+            if not normalized_draft_ids:
+                current_draft_id = _safe_text(draft.get("id"))
+                if current_draft_id:
+                    normalized_draft_ids = [current_draft_id]
+            normalized_execution_mode = _normalize_execution_mode(execution_mode)
+            if normalized_execution_mode == "single" and len(normalized_draft_ids) > 1:
+                normalized_execution_mode = "multi"
+            normalized_run_mode = _normalize_run_mode(run_mode)
+            filters_payload = {
+                **(filters or {}),
+                "draft_ids": normalized_draft_ids,
+                "execution_mode": normalized_execution_mode,
+                "run_mode": normalized_run_mode,
+            }
+            summary_payload = {
+                "rule_count": max(1, int(rule_count or len(normalized_draft_ids) or 1)),
+                "progress": {
+                    "step_key": "queued",
+                    "rule_index": 0,
+                    "rule_count": max(1, int(rule_count or len(normalized_draft_ids) or 1)),
+                    "processed_records": 0,
+                    "total_records": int(total_records or 0),
+                },
+                "updated_at": now.isoformat(),
+            }
             row_payload = {
                 "id": job_id,
                 "draft_id": _safe_text(draft.get("id")),
@@ -906,9 +994,9 @@ class CustomQCWorkspaceService:
                 "scene": _safe_text(draft.get("scene"), "final"),
                 "scope": _normalize_scope(scope),
                 "status": "queued",
-                "filters_json": _safe_json_dumps(filters),
+                "filters_json": _safe_json_dumps(filters_payload),
                 "record_ids_json": _safe_json_dumps(list(record_ids)),
-                "summary_json": None,
+                "summary_json": _safe_json_dumps(summary_payload),
                 "items_json": None,
                 "failed_records_json": None,
                 "error_message": None,
@@ -1070,6 +1158,9 @@ class CustomQCWorkspaceService:
             current = _row_to_batch_job(dict(row))
             if current.get("status") in {"completed", "failed", "canceled"}:
                 return current
+            current_summary = _safe_json_loads(row.get("summary_json"), {})
+            if not isinstance(current_summary, dict):
+                current_summary = {}
             now = _now_utc()
             session.execute(
                 update(self._batch_job_table)
@@ -1078,6 +1169,20 @@ class CustomQCWorkspaceService:
                 )
                 .values(
                     status="canceled",
+                    summary_json=_safe_json_dumps(
+                        {
+                            **current_summary,
+                            "progress": {
+                                **(
+                                    current_summary.get("progress")
+                                    if isinstance(current_summary.get("progress"), dict)
+                                    else {}
+                                ),
+                                "step_key": "canceled",
+                            },
+                            "updated_at": now.isoformat(),
+                        }
+                    ),
                     error_message="任务已取消",
                     finished_at=now,
                     updated_at=now,
@@ -1098,6 +1203,9 @@ class CustomQCWorkspaceService:
             ).mappings().first()
             if not row:
                 return None
+            current = _row_to_batch_job(dict(row))
+            rule_count = int(current.get("rule_count") or 1)
+            total_records = int(current.get("total_records") or 0)
             now = _now_utc()
             session.execute(
                 update(self._batch_job_table)
@@ -1106,7 +1214,19 @@ class CustomQCWorkspaceService:
                 )
                 .values(
                     status="queued",
-                    summary_json=None,
+                    summary_json=_safe_json_dumps(
+                        {
+                            "rule_count": max(1, rule_count),
+                            "progress": {
+                                "step_key": "queued",
+                                "rule_index": 0,
+                                "rule_count": max(1, rule_count),
+                                "processed_records": 0,
+                                "total_records": total_records,
+                            },
+                            "updated_at": now.isoformat(),
+                        }
+                    ),
                     items_json=None,
                     failed_records_json=None,
                     error_message=None,
@@ -1126,16 +1246,111 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def mark_batch_job_running(self, *, job_id: str) -> None:
+    def mark_batch_job_running(self, *, job_id: str) -> bool:
         session = _session()
         try:
+            row = session.execute(
+                select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
+            ).mappings().first()
+            if not row:
+                return False
+            current = _row_to_batch_job(dict(row))
+            if current.get("status") in {"canceled", "completed", "failed"}:
+                return False
+            current_summary = _safe_json_loads(row.get("summary_json"), {})
+            if not isinstance(current_summary, dict):
+                current_summary = {}
+            progress_value = current_summary.get("progress")
+            if not isinstance(progress_value, dict):
+                progress_value = {}
             now = _now_utc()
             session.execute(
                 update(self._batch_job_table)
                 .where(self._batch_job_table.c.id == job_id)
-                .values(status="running", started_at=now, updated_at=now, error_message=None)
+                .values(
+                    status="running",
+                    started_at=now,
+                    updated_at=now,
+                    error_message=None,
+                    summary_json=_safe_json_dumps(
+                        {
+                            **current_summary,
+                            "progress": {
+                                **progress_value,
+                                "step_key": "prepare",
+                            },
+                            "updated_at": now.isoformat(),
+                        }
+                    ),
+                )
             )
             session.commit()
+            return True
+        finally:
+            session.close()
+
+    def update_batch_job_progress(
+        self,
+        *,
+        job_id: str,
+        step_key: str,
+        rule_index: int,
+        rule_count: int,
+        processed_records: int,
+        total_records: int,
+        summary_patch: Optional[Dict[str, Any]] = None,
+        items: Optional[List[Dict[str, Any]]] = None,
+        failed_records: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        session = _session()
+        try:
+            row = session.execute(
+                select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
+            ).mappings().first()
+            if not row:
+                return None
+            current = _row_to_batch_job(dict(row))
+            if current.get("status") == "canceled":
+                return current
+
+            current_summary = _safe_json_loads(row.get("summary_json"), {})
+            if not isinstance(current_summary, dict):
+                current_summary = {}
+            merged_summary = {**current_summary, **(summary_patch or {})}
+            merged_summary["rule_count"] = max(1, int(merged_summary.get("rule_count") or rule_count or 1))
+            merged_summary["progress"] = {
+                "step_key": _safe_text(step_key) or "run",
+                "rule_index": max(0, int(rule_index or 0)),
+                "rule_count": max(1, int(rule_count or merged_summary.get("rule_count") or 1)),
+                "processed_records": max(0, int(processed_records or 0)),
+                "total_records": max(0, int(total_records or 0)),
+            }
+            now = _now_utc()
+            merged_summary["updated_at"] = now.isoformat()
+
+            values: Dict[str, Any] = {
+                "summary_json": _safe_json_dumps(merged_summary),
+                "updated_at": now,
+                "total_records": int(merged_summary.get("total_records") or total_records or 0),
+                "success_count": int(merged_summary.get("success_count") or 0),
+                "failed_count": int(merged_summary.get("failed_count") or 0),
+                "issue_records": int(merged_summary.get("issue_records") or 0),
+                "compliant_records": int(merged_summary.get("compliant_records") or 0),
+                "total_tokens": int(merged_summary.get("total_tokens") or 0),
+                "total_processing_time": float(merged_summary.get("total_processing_time") or 0.0),
+            }
+            if items is not None:
+                values["items_json"] = _safe_json_dumps(items)
+            if failed_records is not None:
+                values["failed_records_json"] = _safe_json_dumps(failed_records)
+
+            session.execute(
+                update(self._batch_job_table)
+                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
+                .values(**values)
+            )
+            session.commit()
+            return self.get_batch_job_for_processing(job_id=job_id)
         finally:
             session.close()
 
@@ -1150,12 +1365,26 @@ class CustomQCWorkspaceService:
         session = _session()
         try:
             now = _now_utc()
+            merged_summary = {
+                **(summary or {}),
+                "progress": {
+                    **(
+                        summary.get("progress")
+                        if isinstance(summary.get("progress"), dict)
+                        else {}
+                    ),
+                    "step_key": "completed",
+                    "processed_records": int((summary or {}).get("total_records") or 0),
+                    "total_records": int((summary or {}).get("total_records") or 0),
+                },
+                "updated_at": now.isoformat(),
+            }
             session.execute(
                 update(self._batch_job_table)
-                .where(self._batch_job_table.c.id == job_id)
+                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
                 .values(
                     status="completed",
-                    summary_json=_safe_json_dumps(summary),
+                    summary_json=_safe_json_dumps(merged_summary),
                     items_json=_safe_json_dumps(items),
                     failed_records_json=_safe_json_dumps(failed_records),
                     total_records=int(summary.get("total_records") or 0),
@@ -1176,12 +1405,34 @@ class CustomQCWorkspaceService:
     def fail_batch_job(self, *, job_id: str, error_message: str) -> None:
         session = _session()
         try:
+            row = session.execute(
+                select(self._batch_job_table).where(self._batch_job_table.c.id == job_id)
+            ).mappings().first()
+            if not row:
+                return
+            current_summary = _safe_json_loads(row.get("summary_json"), {})
+            if not isinstance(current_summary, dict):
+                current_summary = {}
             now = _now_utc()
             session.execute(
                 update(self._batch_job_table)
-                .where(self._batch_job_table.c.id == job_id)
+                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.status != "canceled"))
                 .values(
                     status="failed",
+                    summary_json=_safe_json_dumps(
+                        {
+                            **current_summary,
+                            "progress": {
+                                **(
+                                    current_summary.get("progress")
+                                    if isinstance(current_summary.get("progress"), dict)
+                                    else {}
+                                ),
+                                "step_key": "failed",
+                            },
+                            "updated_at": now.isoformat(),
+                        }
+                    ),
                     error_message=_safe_text(error_message),
                     finished_at=now,
                     updated_at=now,

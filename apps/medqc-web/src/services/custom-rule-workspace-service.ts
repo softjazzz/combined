@@ -193,7 +193,10 @@ export async function runWorkspaceBatchTest(payload: {
 }
 
 export async function createWorkspaceBatchJob(payload: {
-  draft_id: string
+  draft_id?: string
+  draft_ids?: string[]
+  execution_mode?: 'single' | 'multi'
+  run_mode?: 'serial' | 'parallel'
   scope: 'all' | 'running' | 'final'
   department?: string
   doctor?: string
@@ -249,6 +252,16 @@ export async function cancelWorkspaceBatchJob(jobId: string) {
       url: `/api/v1/custom-qc/workspace/batch-jobs/${encodeURIComponent(jobId)}/cancel`,
     },
     '停止批量任务失败',
+  )
+}
+
+export async function retryWorkspaceBatchJob(jobId: string) {
+  return requestEnvelope<CustomRuleBatchJob>(
+    {
+      method: 'POST',
+      url: `/api/v1/custom-qc/workspace/batch-jobs/${encodeURIComponent(jobId)}/retry`,
+    },
+    '重试批量任务失败',
   )
 }
 

@@ -1,7 +1,7 @@
 <template>
   <div class="custom-rule-workspace">
-    <section class="ops-context">
-      <div>
+    <section class="ops-overview">
+      <div class="ops-title-wrap">
         <p class="ops-eyebrow">
           Custom Rule Workspace
         </p>
@@ -9,34 +9,60 @@
           自定义规则工作台
         </h1>
         <p class="ops-subtitle">
-          在统一页面完成草稿创建、Prompt 生成、病历批量质控和发布入库。
+          单页完成建规、Prompt
+          编辑、病历筛选、批量执行与结果复盘。默认走任务化执行，支持单规则与多规则串行。
         </p>
       </div>
       <div class="ops-kpis">
-        <div class="ops-kpi">
-          <span class="ops-kpi-label">草稿总数</span>
-          <span class="ops-kpi-value">{{ draftPagination.total }}</span>
-        </div>
-        <div class="ops-kpi">
-          <span class="ops-kpi-label">当前范围</span>
-          <span class="ops-kpi-value">{{ scopeLabelMap[recordFilters.scope] }}</span>
-        </div>
-        <div class="ops-kpi">
-          <span class="ops-kpi-label">已选病历</span>
-          <span class="ops-kpi-value">{{ selectedRecordKeys.length }}</span>
-        </div>
+        <article class="kpi-card">
+          <span class="kpi-label">草稿总数</span>
+          <strong class="kpi-value">{{ draftPagination.total }}</strong>
+        </article>
+        <article class="kpi-card">
+          <span class="kpi-label">执行规则</span>
+          <strong class="kpi-value">{{ effectiveExecutionDraftIds.length }}</strong>
+        </article>
+        <article class="kpi-card">
+          <span class="kpi-label">已选病历</span>
+          <strong class="kpi-value">{{ selectedRecordKeys.length }}</strong>
+        </article>
+        <article class="kpi-card">
+          <span class="kpi-label">任务状态</span>
+          <strong class="kpi-value">{{
+            activeBatchJob ? jobStatusText(activeBatchJob.status) : '未启动'
+          }}</strong>
+        </article>
       </div>
     </section>
 
-    <section class="workspace-grid workspace-grid-half">
+    <section class="step-nav-shell">
+      <div class="step-nav">
+        <button
+          v-for="item in stepItems"
+          :key="item.anchor"
+          class="step-pill"
+          :class="`step-pill--${item.status}`"
+          @click="scrollToStep(item.anchor)"
+        >
+          <span class="step-index">{{ item.index }}</span>
+          <span class="step-label">{{ item.label }}</span>
+          <span class="step-state">{{ item.statusLabel }}</span>
+        </button>
+      </div>
+    </section>
+
+    <section
+      id="step-rules"
+      class="workspace-grid workspace-grid-half"
+    >
       <article class="workspace-panel">
         <div class="panel-head">
           <div>
             <p class="panel-eyebrow">
-              Draft List
+              Step 1
             </p>
             <h2 class="panel-title">
-              1. 规则草稿列表
+              规则草稿列表
             </h2>
           </div>
           <a-button
@@ -71,6 +97,14 @@
           />
         </div>
 
+        <a-alert
+          class="mb-10"
+          show-icon
+          type="info"
+          message="执行集与编辑对象已分离"
+          description="复选框用于批量执行，行高亮用于当前编辑。"
+        />
+
         <a-table
           row-key="id"
           size="small"
@@ -78,18 +112,19 @@
           :columns="draftColumns"
           :data-source="drafts"
           :pagination="draftPagination"
-          :scroll="{ y: 260 }"
+          :row-selection="draftRowSelection"
+          :scroll="{ y: 280 }"
+          :custom-row="buildDraftRow"
           @change="handleDraftTableChange"
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'rule_code'">
-              <button
+              <span
                 class="rule-code-pill"
                 :class="{ active: selectedDraftId === record.id }"
-                @click="selectDraft(record as CustomRuleDraft)"
               >
                 {{ record.rule_code }}
-              </button>
+              </span>
             </template>
             <template v-else-if="column.key === 'name'">
               <div class="draft-title">
@@ -110,7 +145,7 @@
                   <a-button
                     type="text"
                     size="small"
-                    @click="selectDraft(record as CustomRuleDraft)"
+                    @click.stop="selectDraft(record as CustomRuleDraft)"
                   >
                     <template #icon>
                       <EditOutlined />
@@ -121,7 +156,7 @@
                   <a-button
                     type="text"
                     size="small"
-                    @click="copyDraft(record as CustomRuleDraft)"
+                    @click.stop="copyDraft(record as CustomRuleDraft)"
                   >
                     <template #icon>
                       <CopyOutlined />
@@ -136,21 +171,13 @@
                     type="text"
                     danger
                     size="small"
+                    @click.stop
                   >
                     <template #icon>
                       <DeleteOutlined />
                     </template>
                   </a-button>
                 </a-popconfirm>
-                <a-button
-                  v-if="record.status === 'draft'"
-                  type="link"
-                  size="small"
-                  :disabled="!canPublishRecord(record as CustomRuleDraft)"
-                  @click="publishDraftById(record.id)"
-                >
-                  发布
-                </a-button>
               </div>
             </template>
           </template>
@@ -161,22 +188,29 @@
         <div class="panel-head">
           <div>
             <p class="panel-eyebrow">
-              Draft Creator
+              Step 2
             </p>
             <h2 class="panel-title">
-              2. 规则创建区
+              规则创建区
             </h2>
           </div>
-          <a-button
-            type="primary"
-            :loading="creatingDraft"
-            @click="createDraft"
-          >
-            <template #icon>
-              <PlusOutlined />
-            </template>
-            创建草稿
-          </a-button>
+          <div class="panel-actions">
+            <a-switch
+              v-model:checked="createAutoJoinExecutionSet"
+              checked-children="加入执行集"
+              un-checked-children="仅编辑"
+            />
+            <a-button
+              type="primary"
+              :loading="creatingDraft"
+              @click="createDraft"
+            >
+              <template #icon>
+                <PlusOutlined />
+              </template>
+              创建草稿
+            </a-button>
+          </div>
         </div>
 
         <a-form layout="vertical">
@@ -244,17 +278,23 @@
       </article>
     </section>
 
-    <section class="workspace-panel">
+    <section
+      id="step-prompt"
+      class="workspace-panel"
+    >
       <div class="panel-head">
         <div>
           <p class="panel-eyebrow">
-            Prompt Editor
+            Step 3
           </p>
           <h2 class="panel-title">
-            3. Prompt 生成与编辑
+            Prompt 生成与编辑
           </h2>
         </div>
         <div class="panel-actions">
+          <a-tag :color="promptReady ? 'success' : 'warning'">
+            {{ promptReady ? '就绪' : '待补全' }}
+          </a-tag>
           <a-button
             :disabled="!selectedDraft"
             :loading="generatingPrompt"
@@ -284,7 +324,6 @@
         "
         :description="editorPromptSummary || '请先选中草稿后生成 Prompt，也可手工编辑。'"
       />
-
       <div
         v-if="editorCheckPoints.length > 0"
         class="check-point-list"
@@ -303,7 +342,7 @@
 
       <a-form
         layout="vertical"
-        class="mt-4"
+        class="mt-10"
       >
         <div class="form-grid">
           <a-form-item
@@ -362,39 +401,70 @@
       </a-form>
     </section>
 
-    <section class="workspace-panel">
+    <section
+      id="step-records"
+      class="workspace-panel"
+    >
       <div class="panel-head">
         <div>
           <p class="panel-eyebrow">
-            Record QA
+            Step 4
           </p>
           <h2 class="panel-title">
-            4. 病历筛选与批量质控
+            病历筛选与任务执行
           </h2>
         </div>
         <div class="panel-actions">
+          <a-radio-group
+            v-model:value="executionMode"
+            button-style="solid"
+            size="small"
+          >
+            <a-radio-button value="single">
+              单规则
+            </a-radio-button>
+            <a-radio-button value="multi">
+              多规则串行
+            </a-radio-button>
+          </a-radio-group>
           <a-button
-            :disabled="!selectedDraft || selectedRecordKeys.length === 0"
-            :loading="testingBatch"
-            @click="runBatchTest"
+            type="primary"
+            :disabled="!canRunBatchJob"
+            :loading="runningBatchJob"
+            @click="runBatchJob"
           >
             <template #icon>
               <PlayCircleOutlined />
             </template>
-            批量质控
+            发起任务
           </a-button>
           <a-button
-            type="primary"
-            :disabled="!selectedDraft || !canPublishSelectedDraft"
-            :loading="publishingDraft"
-            @click="publishSelectedDraft"
+            :disabled="!activeBatchJob"
+            @click="refreshActiveBatchJob"
           >
             <template #icon>
-              <RocketOutlined />
+              <ReloadOutlined />
             </template>
-            发布到正式规则库
+            刷新任务
+          </a-button>
+          <a-button
+            :disabled="!activeBatchJob"
+            @click="exportActiveBatchJob('xlsx')"
+          >
+            导出
           </a-button>
         </div>
+      </div>
+
+      <div class="execution-tips">
+        <a-alert
+          show-icon
+          type="info"
+          :message="
+            executionMode === 'single' ? '当前模式：单规则批量' : '当前模式：多规则串行批量'
+          "
+          :description="executionTipText"
+        />
       </div>
 
       <div class="record-filter-grid">
@@ -495,7 +565,7 @@
         :data-source="records"
         :pagination="recordPagination"
         :row-selection="recordRowSelection"
-        :scroll="{ x: 1100, y: 360 }"
+        :scroll="{ x: 1100, y: 320 }"
         @change="handleRecordTableChange"
       >
         <template #bodyCell="{ column, record }">
@@ -522,67 +592,223 @@
         </template>
       </a-table>
 
+      <div class="batch-shell">
+        <div class="batch-shell-head">
+          <div>
+            <p class="panel-eyebrow">
+              Batch Jobs
+            </p>
+            <h3 class="batch-shell-title">
+              任务列表
+            </h3>
+          </div>
+          <a-button
+            size="small"
+            :loading="batchJobLoading"
+            @click="loadBatchJobs"
+          >
+            <template #icon>
+              <ReloadOutlined />
+            </template>
+            刷新任务
+          </a-button>
+        </div>
+        <div class="batch-filters">
+          <a-input
+            v-model:value="batchJobQuery.keyword"
+            allow-clear
+            placeholder="搜索规则名称/编码/任务ID"
+            @press-enter="searchBatchJobs"
+          >
+            <template #prefix>
+              <SearchOutlined />
+            </template>
+          </a-input>
+          <a-select
+            v-model:value="batchJobQuery.status"
+            allow-clear
+            placeholder="任务状态"
+            :options="batchJobStatusOptions"
+            @change="searchBatchJobs"
+          />
+          <a-select
+            v-model:value="batchJobQuery.scope"
+            allow-clear
+            placeholder="病历范围"
+            :options="scopeOptions"
+            @change="searchBatchJobs"
+          />
+        </div>
+
+        <a-table
+          row-key="id"
+          size="small"
+          :loading="batchJobLoading"
+          :columns="batchJobColumns"
+          :data-source="batchJobs"
+          :pagination="batchJobPagination"
+          :scroll="{ x: 960 }"
+          @change="handleBatchJobTableChange"
+        >
+          <template #bodyCell="{ column, record }">
+            <template v-if="column.key === 'rule'">
+              <div class="batch-rule-name">
+                {{ record.rule_name || record.rule_code }}
+              </div>
+              <div class="batch-rule-meta">
+                {{ record.execution_mode === 'multi' ? '多规则串行' : '单规则' }} ·
+                {{ record.rule_count || 1 }} 条规则
+              </div>
+            </template>
+            <template v-else-if="column.key === 'status'">
+              <a-tag :class="`job-status job-status--${record.status}`">
+                {{ jobStatusText(record.status) }}
+              </a-tag>
+            </template>
+            <template v-else-if="column.key === 'progress'">
+              <div class="job-progress-text">
+                {{ formatJobProgress(record) }}
+              </div>
+            </template>
+            <template v-else-if="column.key === 'created_at'">
+              <span class="cell-muted">{{ formatDateTime(record.created_at) }}</span>
+            </template>
+            <template v-else-if="column.key === 'actions'">
+              <div class="batch-actions">
+                <a-button
+                  size="small"
+                  @click="openBatchJob(record as CustomRuleBatchJob)"
+                >
+                  查看
+                </a-button>
+                <a-button
+                  v-if="record.cancellable"
+                  size="small"
+                  danger
+                  :loading="cancellingBatchJobId === record.id"
+                  @click="cancelBatchJob(record.id)"
+                >
+                  停止
+                </a-button>
+                <a-button
+                  v-else
+                  size="small"
+                  :loading="retryingBatchJobId === record.id"
+                  @click="retryBatchJob(record.id)"
+                >
+                  重试
+                </a-button>
+              </div>
+            </template>
+          </template>
+        </a-table>
+      </div>
+
       <div class="result-grid">
         <div class="result-panel">
-          <h3>批量结果摘要</h3>
+          <h3>任务概览</h3>
           <a-empty
-            v-if="!batchResult"
-            description="执行批量质控后展示统计"
+            v-if="!activeBatchJob"
+            description="选择任务后查看"
           />
           <template v-else>
             <div class="result-kpis">
               <div class="result-kpi">
-                <span>总病历</span>
-                <strong>{{ batchResult.summary.total_records }}</strong>
+                <span>状态</span>
+                <strong>{{ jobStatusText(activeBatchJob.status) }}</strong>
+              </div>
+              <div class="result-kpi">
+                <span>规则数</span>
+                <strong>{{ activeBatchJob.rule_count || 1 }}</strong>
+              </div>
+              <div class="result-kpi">
+                <span>病历数</span>
+                <strong>{{
+                  activeBatchJob.summary?.total_records || activeBatchJob.total_records || 0
+                }}</strong>
               </div>
               <div class="result-kpi">
                 <span>成功</span>
-                <strong>{{ batchResult.summary.success_count }}</strong>
+                <strong>{{
+                  activeBatchJob.summary?.success_count || activeBatchJob.success_count || 0
+                }}</strong>
               </div>
               <div class="result-kpi">
                 <span>失败</span>
-                <strong>{{ batchResult.summary.failed_count }}</strong>
-              </div>
-              <div class="result-kpi">
-                <span>命中问题</span>
-                <strong>{{ batchResult.summary.issue_records }}</strong>
-              </div>
-              <div class="result-kpi">
-                <span>总耗时</span>
-                <strong>{{ batchResult.summary.total_processing_time.toFixed(2) }}s</strong>
+                <strong>{{
+                  activeBatchJob.summary?.failed_count || activeBatchJob.failed_count || 0
+                }}</strong>
               </div>
             </div>
+            <p class="result-text">
+              进度：{{ formatJobProgress(activeBatchJob) }}
+            </p>
+            <p
+              v-if="activeBatchJob.error_message"
+              class="result-text result-text--danger"
+            >
+              错误：{{ activeBatchJob.error_message }}
+            </p>
           </template>
         </div>
 
         <div class="result-panel">
-          <h3>单病历结果</h3>
+          <h3>按规则汇总</h3>
           <a-empty
-            v-if="!singleResult"
-            description="点击病历行的单条质控查看"
+            v-if="ruleResultRows.length === 0"
+            description="暂无规则汇总"
           />
-          <template v-else>
-            <a-tag :color="singleResult.result.is_compliant ? 'success' : 'error'">
-              {{ singleResult.result.is_compliant ? '合规/不适用' : '命中问题' }}
-            </a-tag>
-            <p class="result-text">
-              {{ singleResult.result.findings || '无附加结论' }}
-            </p>
-            <p class="result-text">
-              证据：{{ singleResult.result.evidence || '无' }}
-            </p>
-            <p class="result-text">
-              建议：{{ singleResult.result.suggestion || '无' }}
-            </p>
-          </template>
+          <a-table
+            v-else
+            row-key="rule_code"
+            size="small"
+            :pagination="false"
+            :columns="ruleResultColumns"
+            :data-source="ruleResultRows"
+            :scroll="{ y: 220 }"
+          />
+        </div>
+
+        <div class="result-panel">
+          <h3>按病历明细</h3>
+          <a-empty
+            v-if="recordResultRows.length === 0"
+            description="暂无病历明细"
+          />
+          <a-table
+            v-else
+            row-key="record_id"
+            size="small"
+            :pagination="false"
+            :columns="recordResultColumns"
+            :data-source="recordResultRows"
+            :scroll="{ y: 220, x: 760 }"
+          />
+        </div>
+
+        <div class="result-panel">
+          <h3>失败明细</h3>
+          <a-empty
+            v-if="failedResultRows.length === 0"
+            description="暂无失败记录"
+          />
+          <a-table
+            v-else
+            row-key="record_id"
+            size="small"
+            :pagination="false"
+            :columns="failedResultColumns"
+            :data-source="failedResultRows"
+            :scroll="{ y: 220, x: 760 }"
+          />
         </div>
       </div>
     </section>
   </div>
 </template>
-
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
@@ -594,23 +820,30 @@ import {
   PlusOutlined,
   ReloadOutlined,
   RobotOutlined,
-  RocketOutlined,
   SearchOutlined,
 } from '@ant-design/icons-vue'
 import {
+  cancelWorkspaceBatchJob,
+  createWorkspaceBatchJob,
   createWorkspaceDraft,
   deleteWorkspaceDraft,
+  exportWorkspaceBatchJob,
   generateWorkspaceDraftPrompt,
+  getWorkspaceBatchJob,
   getWorkspaceRecordFilters,
   getWorkspaceRecords,
+  listWorkspaceBatchJobs,
   listWorkspaceDrafts,
   publishWorkspaceDraft,
-  runWorkspaceBatchTest,
+  retryWorkspaceBatchJob,
   runWorkspaceSingleTest,
   updateWorkspaceDraft,
 } from '@/services/custom-rule-workspace-service'
 import type {
-  CustomRuleBatchResult,
+  CustomRuleBatchJob,
+  CustomRuleBatchJobProgress,
+  CustomRuleBatchJobQuery,
+  CustomRuleBatchJobRuleResult,
   CustomRuleDraft,
   CustomRuleDraftPayload,
   CustomRuleSingleTestResult,
@@ -622,17 +855,24 @@ import type {
 
 type DateRangeValue = [Dayjs, Dayjs] | null
 
+type StepStatus = 'pending' | 'ready' | 'running' | 'done'
+
+const JOB_POLL_INTERVAL_MS = 3000
+
 const draftLoading = ref(false)
 const creatingDraft = ref(false)
 const savingDraft = ref(false)
 const generatingPrompt = ref(false)
 const publishingDraft = ref(false)
-const testingBatch = ref(false)
+const runningBatchJob = ref(false)
 const testingSingleRecordId = ref('')
+
 const drafts = ref<CustomRuleDraft[]>([])
 const selectedDraftId = ref('')
+const selectedDraftIds = ref<string[]>([])
+const createAutoJoinExecutionSet = ref(true)
+
 const singleResult = ref<CustomRuleSingleTestResult | null>(null)
-const batchResult = ref<CustomRuleBatchResult | null>(null)
 
 const draftQuery = reactive({
   keyword: '',
@@ -717,316 +957,27 @@ const selectedDraft = computed(
   () => drafts.value.find((item) => item.id === selectedDraftId.value) || null,
 )
 
-const canPublishSelectedDraft = computed(
-  () =>
-    !!selectedDraft.value &&
-    selectedDraft.value.status === 'draft' &&
-    hasSuccessfulTest(selectedDraft.value),
-)
+const executionMode = ref<'single' | 'multi'>('single')
+
+const effectiveExecutionDraftIds = computed(() => {
+  if (executionMode.value === 'single') {
+    return selectedDraftId.value ? [selectedDraftId.value] : []
+  }
+  if (selectedDraftIds.value.length > 0) {
+    return selectedDraftIds.value
+  }
+  return selectedDraftId.value ? [selectedDraftId.value] : []
+})
+
+const promptReady = computed(() => {
+  return Boolean(
+    editorForm.name.trim() && editorForm.description.trim() && editorForm.prompt_template.trim(),
+  )
+})
 
 const editorGenerationMode = computed(
   () => editorForm.generation_mode || selectedDraft.value?.generation_mode || 'fallback_template',
 )
-
-const draftColumns: TableColumnsType<CustomRuleDraft> = [
-  { title: '编码', dataIndex: 'rule_code', key: 'rule_code', width: 110 },
-  { title: '规则', dataIndex: 'name', key: 'name' },
-  { title: '状态', dataIndex: 'status', key: 'status', width: 90 },
-  { title: '操作', key: 'actions', width: 170, fixed: 'right' },
-]
-
-function hasSuccessfulTest(draft: CustomRuleDraft): boolean {
-  return Number((draft.last_test_summary || {}).success_count || 0) > 0
-}
-
-function getExamplesFromDraft(draft: CustomRuleDraft): { positive: string; negative: string } {
-  const examples = Array.isArray(draft.examples) ? draft.examples : []
-  const positive = examples.find((item) => String(item.title || '').includes('合规'))?.content || ''
-  const negative =
-    examples.find((item) => String(item.title || '').includes('不合规'))?.content || ''
-  return { positive, negative }
-}
-
-function hydrateEditorFromDraft(draft: CustomRuleDraft) {
-  const examples = getExamplesFromDraft(draft)
-  editorForm.name = draft.name || ''
-  editorForm.description = draft.description || ''
-  editorForm.prompt_template = draft.prompt_template || ''
-  editorForm.source_requirement = draft.source_requirement || ''
-  editorForm.document_type = draft.document_type || '入院记录'
-  editorForm.scene = draft.scene || 'running'
-  editorForm.severity = draft.severity || 'major'
-  editorForm.defect_level = draft.defect_level || '一般缺陷'
-  editorForm.complexity = draft.complexity || '中复杂度'
-  editorForm.generation_mode = draft.generation_mode || 'fallback_template'
-  editorForm.positive_example = examples.positive
-  editorForm.negative_example = examples.negative
-  editorForm.check_logic = (draft.check_logic || {}) as Record<string, unknown>
-  editorPromptSummary.value = String((draft.check_logic || {}).last_prompt_summary || '')
-  editorCheckPoints.value = Array.isArray((draft.check_logic || {}).generated_check_points)
-    ? ((draft.check_logic || {}).generated_check_points as string[])
-    : []
-}
-
-async function loadDrafts() {
-  draftLoading.value = true
-  try {
-    const response = await listWorkspaceDrafts({
-      page: draftPagination.current,
-      page_size: draftPagination.pageSize,
-      status: draftQuery.status,
-      q: draftQuery.keyword || undefined,
-    })
-    if (!response.success || !response.data) {
-      throw new Error(response.message || '获取草稿列表失败')
-    }
-    drafts.value = response.data.items
-    draftPagination.total = response.data.total
-    if (!selectedDraftId.value && drafts.value.length > 0) {
-      selectedDraftId.value = drafts.value[0].id
-    }
-    const currentDraft = drafts.value.find((item) => item.id === selectedDraftId.value)
-    if (currentDraft) {
-      hydrateEditorFromDraft(currentDraft)
-    }
-  } catch (error: any) {
-    message.error(error?.message || '获取草稿列表失败')
-  } finally {
-    draftLoading.value = false
-  }
-}
-
-function searchDrafts() {
-  draftPagination.current = 1
-  loadDrafts()
-}
-
-function handleDraftTableChange(pagination: { current?: number; pageSize?: number }) {
-  draftPagination.current = pagination.current || 1
-  draftPagination.pageSize = pagination.pageSize || 8
-  loadDrafts()
-}
-
-function selectDraft(record: CustomRuleDraft) {
-  selectedDraftId.value = record.id
-  hydrateEditorFromDraft(record)
-  singleResult.value = null
-  batchResult.value = null
-}
-
-function mapDefectLevelToSeverity(defectLevel: string): WorkspaceSeverity {
-  if (defectLevel === '严重缺陷') return 'critical'
-  if (defectLevel === '提示性缺陷') return 'minor'
-  return 'major'
-}
-
-async function createDraft() {
-  const name = createForm.name.trim()
-  const requirement = createForm.source_requirement.trim()
-  if (!name) {
-    message.warning('请先填写规则名称')
-    return
-  }
-  if (!requirement) {
-    message.warning('请先填写需求描述')
-    return
-  }
-
-  creatingDraft.value = true
-  try {
-    const payload: CustomRuleDraftPayload = {
-      name,
-      description: requirement,
-      source_requirement: requirement,
-      document_type: createForm.document_type,
-      severity: createForm.severity || mapDefectLevelToSeverity(createForm.defect_level),
-      defect_level: createForm.defect_level,
-      complexity: createForm.complexity,
-      scene: createForm.scene,
-      applicable_documents: [createForm.document_type],
-      generation_mode: 'fallback_template',
-      check_logic: {
-        source: 'custom_rule_workspace',
-        scene: createForm.scene,
-        applicable_documents: [createForm.document_type],
-      },
-    }
-    const response = await createWorkspaceDraft(payload)
-    if (!response.success || !response.data) {
-      throw new Error(response.message || '创建草稿失败')
-    }
-    message.success(`草稿 ${response.data.rule_code} 已创建`)
-    selectedDraftId.value = response.data.id
-    await loadDrafts()
-    selectDraft(response.data)
-  } catch (error: any) {
-    message.error(error?.message || '创建草稿失败')
-  } finally {
-    creatingDraft.value = false
-  }
-}
-
-function buildEditorExamples() {
-  const examples: Array<{ title: string; content: string }> = []
-  if (editorForm.positive_example.trim()) {
-    examples.push({ title: '合规示例', content: editorForm.positive_example.trim() })
-  }
-  if (editorForm.negative_example.trim()) {
-    examples.push({ title: '不合规模例', content: editorForm.negative_example.trim() })
-  }
-  return examples
-}
-
-async function saveDraftEditor() {
-  if (!selectedDraft.value) {
-    message.warning('请先选择草稿')
-    return
-  }
-  const name = editorForm.name.trim()
-  const description = editorForm.description.trim()
-  const promptTemplate = editorForm.prompt_template.trim()
-  if (!name || !description || !promptTemplate) {
-    message.warning('规则名称、描述、Prompt 均不能为空')
-    return
-  }
-  savingDraft.value = true
-  try {
-    const response = await updateWorkspaceDraft(selectedDraft.value.id, {
-      name,
-      description,
-      source_requirement: editorForm.source_requirement || description,
-      prompt_template: promptTemplate,
-      document_type: editorForm.document_type,
-      scene: editorForm.scene,
-      severity: editorForm.severity,
-      defect_level: editorForm.defect_level,
-      complexity: editorForm.complexity,
-      generation_mode: editorForm.generation_mode,
-      examples: buildEditorExamples(),
-      check_logic: {
-        ...(editorForm.check_logic || {}),
-        last_prompt_summary: editorPromptSummary.value,
-        generated_check_points: editorCheckPoints.value,
-      },
-      applicable_documents: [editorForm.document_type],
-    })
-    if (!response.success || !response.data) {
-      throw new Error(response.message || '保存草稿失败')
-    }
-    const next = response.data
-    drafts.value = drafts.value.map((item) => (item.id === next.id ? next : item))
-    selectDraft(next)
-    message.success('草稿已保存')
-  } catch (error: any) {
-    message.error(error?.message || '保存草稿失败')
-  } finally {
-    savingDraft.value = false
-  }
-}
-
-async function generatePromptForDraft() {
-  if (!selectedDraft.value) {
-    message.warning('请先选择草稿')
-    return
-  }
-  generatingPrompt.value = true
-  try {
-    await saveDraftEditor()
-    const response = await generateWorkspaceDraftPrompt(selectedDraft.value.id)
-    if (!response.success || !response.data) {
-      throw new Error(response.message || '生成 Prompt 失败')
-    }
-    const { draft, prompt_result: promptResult } = response.data
-    drafts.value = drafts.value.map((item) => (item.id === draft.id ? draft : item))
-    selectDraft(draft)
-    editorPromptSummary.value = promptResult.summary || ''
-    editorCheckPoints.value = promptResult.check_points || []
-    message.success(
-      promptResult.generation_mode === 'llm' ? 'Prompt 生成成功' : '已回退模板 Prompt',
-    )
-  } catch (error: any) {
-    message.error(error?.message || '生成 Prompt 失败')
-  } finally {
-    generatingPrompt.value = false
-  }
-}
-
-async function copyDraft(record: CustomRuleDraft) {
-  try {
-    const response = await createWorkspaceDraft({
-      name: `${record.name}-副本`,
-      description: record.description,
-      source_requirement: record.source_requirement,
-      prompt_template: record.prompt_template,
-      document_type: record.document_type,
-      severity: record.severity,
-      defect_level: record.defect_level,
-      complexity: record.complexity,
-      scene: record.scene,
-      generation_mode: record.generation_mode,
-      applicable_documents: record.applicable_documents,
-      examples: record.examples,
-      check_logic: record.check_logic,
-    })
-    if (!response.success || !response.data) {
-      throw new Error(response.message || '复制草稿失败')
-    }
-    message.success('草稿已复制')
-    selectedDraftId.value = response.data.id
-    await loadDrafts()
-  } catch (error: any) {
-    message.error(error?.message || '复制草稿失败')
-  }
-}
-
-async function deleteDraft(record: CustomRuleDraft) {
-  try {
-    const response = await deleteWorkspaceDraft(record.id)
-    if (!response.success) {
-      throw new Error(response.message || '删除草稿失败')
-    }
-    message.success('草稿已删除')
-    if (selectedDraftId.value === record.id) {
-      selectedDraftId.value = ''
-    }
-    await loadDrafts()
-  } catch (error: any) {
-    message.error(error?.message || '删除草稿失败')
-  }
-}
-
-async function publishDraftById(draftId: string) {
-  publishingDraft.value = true
-  try {
-    const response = await publishWorkspaceDraft(draftId)
-    if (!response.success || !response.data) {
-      throw new Error(response.message || '发布失败')
-    }
-    message.success(`发布成功：${response.data.rule_code}`)
-    await loadDrafts()
-  } catch (error: any) {
-    message.error(error?.message || '发布失败')
-  } finally {
-    publishingDraft.value = false
-  }
-}
-
-async function publishSelectedDraft() {
-  if (!selectedDraft.value) {
-    message.warning('请先选择草稿')
-    return
-  }
-  if (!canPublishSelectedDraft.value) {
-    message.warning('请先完成至少一次成功测试')
-    return
-  }
-  await saveDraftEditor()
-  await publishDraftById(selectedDraft.value.id)
-}
-
-function canPublishRecord(record: CustomRuleDraft): boolean {
-  return record.status === 'draft' && hasSuccessfulTest(record)
-}
 
 const scopeLabelMap: Record<WorkspaceScope, string> = {
   all: '全部病历',
@@ -1069,6 +1020,12 @@ const recordPagination = reactive({
   showTotal: (total: number) => `共 ${total} 条病历`,
 })
 
+const advancedParams = reactive({
+  temperature: 0.2,
+  top_p: 0.9,
+  max_tokens: 4096,
+})
+
 const recordColumns: TableColumnsType<CustomRuleWorkspaceRecord> = [
   { title: '患者', dataIndex: 'patient_name', key: 'patient_name', width: 120 },
   { title: '住院号/visit', dataIndex: 'visit_id', key: 'visit_id', width: 140 },
@@ -1087,23 +1044,331 @@ const recordRowSelection = computed<TableProps['rowSelection']>(() => ({
   },
 }))
 
-const advancedParams = reactive({
-  temperature: 0.2,
-  top_p: 0.9,
-  max_tokens: 4096,
-})
+const draftColumns: TableColumnsType<CustomRuleDraft> = [
+  { title: '编码', dataIndex: 'rule_code', key: 'rule_code', width: 120 },
+  { title: '规则', dataIndex: 'name', key: 'name' },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 90 },
+  { title: '操作', key: 'actions', width: 120, fixed: 'right' },
+]
 
-function selectedTestRecords() {
-  const keySet = new Set(selectedRecordKeys.value)
-  return records.value
-    .filter((item) => keySet.has(item.record_id))
-    .map((item) => ({
-      record_id: item.record_id,
-      visit_id: item.visit_id,
-      patient_name: item.patient_name,
-      department: item.department,
-      doctor: item.doctor,
-    }))
+const draftRowSelection = computed<TableProps['rowSelection']>(() => ({
+  selectedRowKeys: selectedDraftIds.value,
+  onChange: (keys: Array<string | number>) => {
+    selectedDraftIds.value = keys.map((item) => String(item))
+  },
+}))
+
+function buildDraftRow(record: CustomRuleDraft) {
+  return {
+    class: record.id === selectedDraftId.value ? 'draft-row-active' : '',
+    onClick: () => {
+      selectDraft(record)
+    },
+  }
+}
+
+function getExamplesFromDraft(draft: CustomRuleDraft): { positive: string; negative: string } {
+  const examples = Array.isArray(draft.examples) ? draft.examples : []
+  const positive = examples.find((item) => String(item.title || '').includes('合规'))?.content || ''
+  const negative =
+    examples.find((item) => String(item.title || '').includes('不合规'))?.content || ''
+  return { positive, negative }
+}
+
+function hydrateEditorFromDraft(draft: CustomRuleDraft) {
+  const examples = getExamplesFromDraft(draft)
+  editorForm.name = draft.name || ''
+  editorForm.description = draft.description || ''
+  editorForm.prompt_template = draft.prompt_template || ''
+  editorForm.source_requirement = draft.source_requirement || ''
+  editorForm.document_type = draft.document_type || '入院记录'
+  editorForm.scene = draft.scene || 'running'
+  editorForm.severity = draft.severity || 'major'
+  editorForm.defect_level = draft.defect_level || '一般缺陷'
+  editorForm.complexity = draft.complexity || '中复杂度'
+  editorForm.generation_mode = draft.generation_mode || 'fallback_template'
+  editorForm.positive_example = examples.positive
+  editorForm.negative_example = examples.negative
+  editorForm.check_logic = (draft.check_logic || {}) as Record<string, unknown>
+  editorPromptSummary.value = String((draft.check_logic || {}).last_prompt_summary || '')
+  editorCheckPoints.value = Array.isArray((draft.check_logic || {}).generated_check_points)
+    ? ((draft.check_logic || {}).generated_check_points as string[])
+    : []
+}
+
+function mapDefectLevelToSeverity(defectLevel: string): WorkspaceSeverity {
+  if (defectLevel === '严重缺陷') return 'critical'
+  if (defectLevel === '提示性缺陷') return 'minor'
+  return 'major'
+}
+
+function formatDateTime(value?: string | Date | null): string {
+  if (!value) return '-'
+  const dt = dayjs(value)
+  if (!dt.isValid()) return String(value)
+  return dt.format('YYYY-MM-DD HH:mm:ss')
+}
+
+async function loadDrafts() {
+  draftLoading.value = true
+  try {
+    const response = await listWorkspaceDrafts({
+      page: draftPagination.current,
+      page_size: draftPagination.pageSize,
+      status: draftQuery.status,
+      q: draftQuery.keyword || undefined,
+    })
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '获取草稿列表失败')
+    }
+    drafts.value = response.data.items
+    draftPagination.total = response.data.total
+
+    if (drafts.value.length === 0) {
+      selectedDraftId.value = ''
+      selectedDraftIds.value = []
+      return
+    }
+
+    const draftIdSet = new Set(drafts.value.map((item) => item.id))
+    if (!selectedDraftId.value || !draftIdSet.has(selectedDraftId.value)) {
+      selectedDraftId.value = drafts.value[0].id
+    }
+    selectedDraftIds.value = selectedDraftIds.value.filter((id) => draftIdSet.has(id))
+    if (selectedDraftIds.value.length === 0 && selectedDraftId.value) {
+      selectedDraftIds.value = [selectedDraftId.value]
+    }
+
+    const currentDraft = drafts.value.find((item) => item.id === selectedDraftId.value)
+    if (currentDraft) {
+      hydrateEditorFromDraft(currentDraft)
+    }
+  } catch (error: any) {
+    message.error(error?.message || '获取草稿列表失败')
+  } finally {
+    draftLoading.value = false
+  }
+}
+
+function searchDrafts() {
+  draftPagination.current = 1
+  void loadDrafts()
+}
+
+function handleDraftTableChange(pagination: { current?: number; pageSize?: number }) {
+  draftPagination.current = pagination.current || 1
+  draftPagination.pageSize = pagination.pageSize || 8
+  void loadDrafts()
+}
+
+function selectDraft(record: CustomRuleDraft) {
+  selectedDraftId.value = record.id
+  hydrateEditorFromDraft(record)
+  singleResult.value = null
+}
+async function createDraft() {
+  const name = createForm.name.trim()
+  const requirement = createForm.source_requirement.trim()
+  if (!name) {
+    message.warning('请先填写规则名称')
+    return
+  }
+  if (!requirement) {
+    message.warning('请先填写需求描述')
+    return
+  }
+
+  creatingDraft.value = true
+  try {
+    const payload: CustomRuleDraftPayload = {
+      name,
+      description: requirement,
+      source_requirement: requirement,
+      document_type: createForm.document_type,
+      severity: createForm.severity || mapDefectLevelToSeverity(createForm.defect_level),
+      defect_level: createForm.defect_level,
+      complexity: createForm.complexity,
+      scene: createForm.scene,
+      applicable_documents: [createForm.document_type],
+      generation_mode: 'fallback_template',
+      check_logic: {
+        source: 'custom_rule_workspace',
+        scene: createForm.scene,
+        applicable_documents: [createForm.document_type],
+      },
+    }
+    const response = await createWorkspaceDraft(payload)
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '创建草稿失败')
+    }
+    message.success(`草稿 ${response.data.rule_code} 已创建`)
+    selectedDraftId.value = response.data.id
+    if (createAutoJoinExecutionSet.value) {
+      selectedDraftIds.value = Array.from(new Set([...selectedDraftIds.value, response.data.id]))
+    }
+    await loadDrafts()
+    selectDraft(response.data)
+  } catch (error: any) {
+    message.error(error?.message || '创建草稿失败')
+  } finally {
+    creatingDraft.value = false
+  }
+}
+
+function buildEditorExamples() {
+  const examples: Array<{ title: string; content: string }> = []
+  if (editorForm.positive_example.trim()) {
+    examples.push({ title: '合规示例', content: editorForm.positive_example.trim() })
+  }
+  if (editorForm.negative_example.trim()) {
+    examples.push({ title: '不合规模例', content: editorForm.negative_example.trim() })
+  }
+  return examples
+}
+
+function validateEditorReady(showWarning = true): boolean {
+  const ready = Boolean(
+    editorForm.name.trim() && editorForm.description.trim() && editorForm.prompt_template.trim(),
+  )
+  if (!ready && showWarning) {
+    message.warning('规则名称、描述、Prompt 均不能为空')
+  }
+  return ready
+}
+
+async function saveDraftEditor() {
+  if (!selectedDraft.value) {
+    message.warning('请先选择草稿')
+    return false
+  }
+  if (!validateEditorReady()) {
+    return false
+  }
+  savingDraft.value = true
+  try {
+    const response = await updateWorkspaceDraft(selectedDraft.value.id, {
+      name: editorForm.name.trim(),
+      description: editorForm.description.trim(),
+      source_requirement: editorForm.source_requirement || editorForm.description,
+      prompt_template: editorForm.prompt_template.trim(),
+      document_type: editorForm.document_type,
+      scene: editorForm.scene,
+      severity: editorForm.severity,
+      defect_level: editorForm.defect_level,
+      complexity: editorForm.complexity,
+      generation_mode: editorForm.generation_mode,
+      examples: buildEditorExamples(),
+      check_logic: {
+        ...(editorForm.check_logic || {}),
+        last_prompt_summary: editorPromptSummary.value,
+        generated_check_points: editorCheckPoints.value,
+      },
+      applicable_documents: [editorForm.document_type],
+    })
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '保存草稿失败')
+    }
+    const next = response.data
+    drafts.value = drafts.value.map((item) => (item.id === next.id ? next : item))
+    selectDraft(next)
+    message.success('草稿已保存')
+    return true
+  } catch (error: any) {
+    message.error(error?.message || '保存草稿失败')
+    return false
+  } finally {
+    savingDraft.value = false
+  }
+}
+
+async function generatePromptForDraft() {
+  if (!selectedDraft.value) {
+    message.warning('请先选择草稿')
+    return
+  }
+  generatingPrompt.value = true
+  try {
+    const saved = await saveDraftEditor()
+    if (!saved) return
+    const response = await generateWorkspaceDraftPrompt(selectedDraft.value.id)
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '生成 Prompt 失败')
+    }
+    const { draft, prompt_result: promptResult } = response.data
+    drafts.value = drafts.value.map((item) => (item.id === draft.id ? draft : item))
+    selectDraft(draft)
+    editorPromptSummary.value = promptResult.summary || ''
+    editorCheckPoints.value = promptResult.check_points || []
+    message.success(
+      promptResult.generation_mode === 'llm' ? 'Prompt 生成成功' : '已回退模板 Prompt',
+    )
+  } catch (error: any) {
+    message.error(error?.message || '生成 Prompt 失败')
+  } finally {
+    generatingPrompt.value = false
+  }
+}
+
+async function copyDraft(record: CustomRuleDraft) {
+  try {
+    const response = await createWorkspaceDraft({
+      name: `${record.name}-副本`,
+      description: record.description,
+      source_requirement: record.source_requirement,
+      prompt_template: record.prompt_template,
+      document_type: record.document_type,
+      severity: record.severity,
+      defect_level: record.defect_level,
+      complexity: record.complexity,
+      scene: record.scene,
+      generation_mode: record.generation_mode,
+      applicable_documents: record.applicable_documents,
+      examples: record.examples,
+      check_logic: record.check_logic,
+    })
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '复制草稿失败')
+    }
+    message.success('草稿已复制')
+    selectedDraftId.value = response.data.id
+    selectedDraftIds.value = Array.from(new Set([...selectedDraftIds.value, response.data.id]))
+    await loadDrafts()
+  } catch (error: any) {
+    message.error(error?.message || '复制草稿失败')
+  }
+}
+
+async function deleteDraft(record: CustomRuleDraft) {
+  try {
+    const response = await deleteWorkspaceDraft(record.id)
+    if (!response.success) {
+      throw new Error(response.message || '删除草稿失败')
+    }
+    message.success('草稿已删除')
+    if (selectedDraftId.value === record.id) {
+      selectedDraftId.value = ''
+    }
+    selectedDraftIds.value = selectedDraftIds.value.filter((id) => id !== record.id)
+    await loadDrafts()
+  } catch (error: any) {
+    message.error(error?.message || '删除草稿失败')
+  }
+}
+
+async function publishDraftById(draftId: string) {
+  publishingDraft.value = true
+  try {
+    const response = await publishWorkspaceDraft(draftId)
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '发布失败')
+    }
+    message.success(`发布成功：${response.data.rule_code}`)
+    await loadDrafts()
+  } catch (error: any) {
+    message.error(error?.message || '发布失败')
+  } finally {
+    publishingDraft.value = false
+  }
 }
 
 async function loadRecordFilters() {
@@ -1163,24 +1428,12 @@ async function handleDepartmentChange() {
 function handleRecordTableChange(pagination: { current?: number; pageSize?: number }) {
   recordPagination.current = pagination.current || 1
   recordPagination.pageSize = pagination.pageSize || 20
-  loadRecords()
+  void loadRecords()
 }
 
 function selectCurrentPageRecords() {
   selectedRecordKeys.value = Array.from(
     new Set([...selectedRecordKeys.value, ...records.value.map((item) => item.record_id)]),
-  )
-}
-
-function syncDraftSummary(summary: Record<string, unknown>) {
-  if (!selectedDraft.value) return
-  drafts.value = drafts.value.map((item) =>
-    item.id === selectedDraft.value?.id
-      ? {
-          ...item,
-          last_test_summary: summary,
-        }
-      : item,
   )
 }
 
@@ -1191,7 +1444,8 @@ async function runSingleTest(record: CustomRuleWorkspaceRecord) {
   }
   testingSingleRecordId.value = record.record_id
   try {
-    await saveDraftEditor()
+    const saved = await saveDraftEditor()
+    if (!saved) return
     const response = await runWorkspaceSingleTest({
       draft_id: selectedDraft.value.id,
       records: [
@@ -1211,8 +1465,6 @@ async function runSingleTest(record: CustomRuleWorkspaceRecord) {
       throw new Error(response.message || '单病历测试失败')
     }
     singleResult.value = response.data
-    batchResult.value = null
-    syncDraftSummary(response.data.summary || {})
     message.success('单病历测试完成')
   } catch (error: any) {
     message.error(error?.message || '单病历测试失败')
@@ -1220,48 +1472,398 @@ async function runSingleTest(record: CustomRuleWorkspaceRecord) {
     testingSingleRecordId.value = ''
   }
 }
+const batchJobLoading = ref(false)
+const batchJobs = ref<CustomRuleBatchJob[]>([])
+const activeBatchJob = ref<CustomRuleBatchJob | null>(null)
+const activeBatchJobId = ref('')
+const cancellingBatchJobId = ref('')
+const retryingBatchJobId = ref('')
 
-async function runBatchTest() {
+const batchJobQuery = reactive({
+  keyword: '',
+  status: undefined as CustomRuleBatchJobQuery['status'],
+  scope: undefined as WorkspaceScope | undefined,
+})
+
+const batchJobPagination = reactive({
+  current: 1,
+  pageSize: 5,
+  total: 0,
+  showSizeChanger: true,
+  showQuickJumper: true,
+  showTotal: (total: number) => `共 ${total} 个任务`,
+})
+
+const batchJobStatusOptions = [
+  { label: '排队中', value: 'queued' },
+  { label: '执行中', value: 'running' },
+  { label: '已完成', value: 'completed' },
+  { label: '已失败', value: 'failed' },
+  { label: '已取消', value: 'canceled' },
+]
+
+const batchJobColumns: TableColumnsType<CustomRuleBatchJob> = [
+  { title: '任务', key: 'rule', width: 280 },
+  { title: '范围', dataIndex: 'scope', key: 'scope', width: 100 },
+  { title: '进度', key: 'progress', width: 280 },
+  { title: '状态', key: 'status', width: 90 },
+  { title: '创建时间', key: 'created_at', width: 180 },
+  { title: '操作', key: 'actions', width: 170, fixed: 'right' },
+]
+
+let batchJobPollTimer: number | null = null
+
+function stopBatchJobPolling() {
+  if (batchJobPollTimer !== null) {
+    window.clearInterval(batchJobPollTimer)
+    batchJobPollTimer = null
+  }
+}
+
+function startBatchJobPolling(jobId: string) {
+  stopBatchJobPolling()
+  batchJobPollTimer = window.setInterval(async () => {
+    await Promise.all([fetchBatchJobDetail(jobId, true), loadBatchJobs()])
+    const current = activeBatchJob.value
+    if (!current || !['queued', 'running'].includes(current.status)) {
+      stopBatchJobPolling()
+    }
+  }, JOB_POLL_INTERVAL_MS)
+}
+
+async function loadBatchJobs() {
+  batchJobLoading.value = true
+  try {
+    const response = await listWorkspaceBatchJobs({
+      q: batchJobQuery.keyword || undefined,
+      status: batchJobQuery.status,
+      scope: batchJobQuery.scope,
+      page: batchJobPagination.current,
+      page_size: batchJobPagination.pageSize,
+    })
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '获取批量任务失败')
+    }
+    batchJobs.value = response.data.items
+    batchJobPagination.total = response.data.total
+    if (activeBatchJobId.value) {
+      const found = batchJobs.value.find((item) => item.id === activeBatchJobId.value)
+      if (found) {
+        activeBatchJob.value = {
+          ...found,
+          ...activeBatchJob.value,
+        }
+      }
+    }
+  } catch (error: any) {
+    message.error(error?.message || '获取批量任务失败')
+  } finally {
+    batchJobLoading.value = false
+  }
+}
+
+function searchBatchJobs() {
+  batchJobPagination.current = 1
+  void loadBatchJobs()
+}
+
+function handleBatchJobTableChange(pagination: { current?: number; pageSize?: number }) {
+  batchJobPagination.current = pagination.current || 1
+  batchJobPagination.pageSize = pagination.pageSize || 5
+  void loadBatchJobs()
+}
+
+async function fetchBatchJobDetail(jobId: string, silent = false) {
+  try {
+    const response = await getWorkspaceBatchJob(jobId)
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '获取任务详情失败')
+    }
+    activeBatchJob.value = response.data
+    activeBatchJobId.value = response.data.id
+    return response.data
+  } catch (error: any) {
+    if (!silent) {
+      message.error(error?.message || '获取任务详情失败')
+    }
+    return null
+  }
+}
+
+async function openBatchJob(job: CustomRuleBatchJob) {
+  activeBatchJobId.value = job.id
+  const detail = await fetchBatchJobDetail(job.id)
+  if (detail && ['queued', 'running'].includes(detail.status)) {
+    startBatchJobPolling(job.id)
+  } else {
+    stopBatchJobPolling()
+  }
+}
+
+async function cancelBatchJob(jobId: string) {
+  if (!jobId || cancellingBatchJobId.value) return
+  cancellingBatchJobId.value = jobId
+  try {
+    const response = await cancelWorkspaceBatchJob(jobId)
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '取消任务失败')
+    }
+    message.success('任务已取消')
+    await Promise.all([loadBatchJobs(), fetchBatchJobDetail(jobId, true)])
+    stopBatchJobPolling()
+  } catch (error: any) {
+    message.error(error?.message || '取消任务失败')
+  } finally {
+    cancellingBatchJobId.value = ''
+  }
+}
+
+async function retryBatchJob(jobId: string) {
+  if (!jobId || retryingBatchJobId.value) return
+  retryingBatchJobId.value = jobId
+  try {
+    const response = await retryWorkspaceBatchJob(jobId)
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '重试任务失败')
+    }
+    message.success('任务已重新入队')
+    await Promise.all([loadBatchJobs(), fetchBatchJobDetail(jobId, true)])
+    startBatchJobPolling(jobId)
+  } catch (error: any) {
+    message.error(error?.message || '重试任务失败')
+  } finally {
+    retryingBatchJobId.value = ''
+  }
+}
+
+async function refreshActiveBatchJob() {
+  if (!activeBatchJobId.value) {
+    message.info('请先在任务列表选择一个任务')
+    return
+  }
+  await Promise.all([fetchBatchJobDetail(activeBatchJobId.value), loadBatchJobs()])
+}
+
+async function exportActiveBatchJob(format: 'xlsx' | 'csv') {
+  if (!activeBatchJob.value) {
+    message.info('请先选择任务')
+    return
+  }
+  const response = await exportWorkspaceBatchJob({
+    job_id: activeBatchJob.value.id,
+    format,
+  })
+  if (!response.success || !response.data) {
+    message.error(response.message || '导出任务失败')
+    return
+  }
+  const blob = response.data
+  const url = window.URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `custom-rule-batch-${activeBatchJob.value.id}.${format}`
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  window.URL.revokeObjectURL(url)
+  message.success('导出任务已开始下载')
+}
+
+function jobStatusText(status?: string): string {
+  if (status === 'queued') return '排队中'
+  if (status === 'running') return '执行中'
+  if (status === 'completed') return '已完成'
+  if (status === 'failed') return '已失败'
+  if (status === 'canceled') return '已取消'
+  return status || '未知'
+}
+
+function formatJobProgress(job: Partial<CustomRuleBatchJob> & Record<string, any>): string {
+  const progress = (job.progress ||
+    job.summary?.progress ||
+    {}) as Partial<CustomRuleBatchJobProgress>
+  const stepKey = String(progress.step_key || 'queued')
+  const stepLabelMap: Record<string, string> = {
+    queued: '排队',
+    prepare: '准备',
+    filter: '筛选',
+    run: '执行',
+    aggregate: '汇总',
+    completed: '完成',
+    failed: '失败',
+    canceled: '取消',
+  }
+  const ruleIndex = Number(progress.rule_index || 0)
+  const ruleCount = Number(progress.rule_count || job.rule_count || 1)
+  const processed = Number(progress.processed_records || 0)
+  const total = Number(
+    progress.total_records || job.summary?.total_records || job.total_records || 0,
+  )
+  return `${stepLabelMap[stepKey] || stepKey} · 规则 ${Math.min(ruleIndex, ruleCount)}/${ruleCount} · 病历 ${processed}/${total}`
+}
+
+const canRunBatchJob = computed(() => {
+  if (selectedRecordKeys.value.length === 0) return false
+  if (!promptReady.value) return false
+  return effectiveExecutionDraftIds.value.length > 0
+})
+
+const executionTipText = computed(() => {
+  if (executionMode.value === 'single') {
+    return selectedDraft.value
+      ? `当前执行草稿：${selectedDraft.value.rule_code} ${selectedDraft.value.name}`
+      : '请先选择一个草稿作为编辑与执行目标。'
+  }
+  return effectiveExecutionDraftIds.value.length > 0
+    ? `当前执行集共 ${effectiveExecutionDraftIds.value.length} 条规则，后端按串行依次执行。`
+    : '请在步骤1勾选至少一条规则加入执行集。'
+})
+
+async function runBatchJob() {
+  if (!canRunBatchJob.value) {
+    message.warning('请先补全 Prompt、选择病历并确定执行规则')
+    return
+  }
   if (!selectedDraft.value) {
-    message.warning('请先选择草稿规则')
+    message.warning('请先选择编辑草稿')
     return
   }
-  const selectedRecords = selectedTestRecords()
-  if (selectedRecords.length === 0) {
-    message.warning('请先选择病历')
-    return
-  }
-  if (selectedRecords.length === 1) {
-    const target = records.value.find((item) => item.record_id === selectedRecords[0].record_id)
-    if (target) {
-      await runSingleTest(target)
+
+  const saved = await saveDraftEditor()
+  if (!saved) return
+
+  runningBatchJob.value = true
+  try {
+    const draftIds = effectiveExecutionDraftIds.value
+    if (executionMode.value === 'single' && draftIds.length !== 1) {
+      message.warning('单规则模式需要且仅需要 1 条规则')
       return
     }
-  }
 
-  testingBatch.value = true
-  try {
-    await saveDraftEditor()
-    const response = await runWorkspaceBatchTest({
-      draft_id: selectedDraft.value.id,
-      records: selectedRecords,
+    const response = await createWorkspaceBatchJob({
+      draft_id: executionMode.value === 'single' ? draftIds[0] : undefined,
+      draft_ids: executionMode.value === 'multi' ? draftIds : undefined,
+      execution_mode: executionMode.value,
+      run_mode: 'serial',
+      scope: recordFilters.scope,
+      department: recordFilters.department,
+      doctor: recordFilters.doctor,
+      date_field: recordFilters.date_field,
+      start_date: recordFilters.dateRange?.[0]?.format('YYYY-MM-DD'),
+      end_date: recordFilters.dateRange?.[1]?.format('YYYY-MM-DD'),
+      keyword: recordFilters.keyword || undefined,
+      record_ids: selectedRecordKeys.value,
       temperature: advancedParams.temperature,
       top_p: advancedParams.top_p,
       max_tokens: advancedParams.max_tokens,
     })
+
     if (!response.success || !response.data) {
-      throw new Error(response.message || '批量测试失败')
+      throw new Error(response.message || '创建任务失败')
     }
-    batchResult.value = response.data
-    singleResult.value = null
-    syncDraftSummary(response.data.summary || {})
-    message.success('批量质控完成')
+
+    message.success('批量任务已创建并开始执行')
+    activeBatchJob.value = response.data
+    activeBatchJobId.value = response.data.id
+    await loadBatchJobs()
+    startBatchJobPolling(response.data.id)
   } catch (error: any) {
-    message.error(error?.message || '批量测试失败')
+    message.error(error?.message || '创建任务失败')
   } finally {
-    testingBatch.value = false
+    runningBatchJob.value = false
   }
 }
+
+const stepItems = computed(() => {
+  const running =
+    activeBatchJob.value && ['queued', 'running'].includes(activeBatchJob.value.status)
+  const done =
+    activeBatchJob.value &&
+    ['completed', 'failed', 'canceled'].includes(activeBatchJob.value.status)
+
+  const steps: Array<{
+    index: string
+    label: string
+    anchor: string
+    status: StepStatus
+    statusLabel: string
+  }> = [
+    {
+      index: '1',
+      label: '规则列表',
+      anchor: 'step-rules',
+      status: selectedDraftIds.value.length > 0 ? 'ready' : 'pending',
+      statusLabel: selectedDraftIds.value.length > 0 ? '可执行' : '未就绪',
+    },
+    {
+      index: '2',
+      label: '规则创建',
+      anchor: 'step-rules',
+      status: selectedDraft.value ? 'ready' : 'pending',
+      statusLabel: selectedDraft.value ? '可编辑' : '未就绪',
+    },
+    {
+      index: '3',
+      label: 'Prompt 编辑',
+      anchor: 'step-prompt',
+      status: promptReady.value ? 'ready' : 'pending',
+      statusLabel: promptReady.value ? '可执行' : '待补全',
+    },
+    {
+      index: '4',
+      label: '筛选与执行',
+      anchor: 'step-records',
+      status: running ? 'running' : done ? 'done' : canRunBatchJob.value ? 'ready' : 'pending',
+      statusLabel: running
+        ? '执行中'
+        : done
+          ? '已完成'
+          : canRunBatchJob.value
+            ? '可执行'
+            : '未就绪',
+    },
+  ]
+  return steps
+})
+
+function scrollToStep(anchor: string) {
+  const target = document.getElementById(anchor)
+  if (!target) return
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+const ruleResultRows = computed(() => {
+  if (!activeBatchJob.value) return []
+  const rows = activeBatchJob.value.rule_results || activeBatchJob.value.summary?.rule_results || []
+  return rows as CustomRuleBatchJobRuleResult[]
+})
+
+const recordResultRows = computed(() => activeBatchJob.value?.items || [])
+const failedResultRows = computed(() => activeBatchJob.value?.failed_records || [])
+
+const ruleResultColumns: TableColumnsType<CustomRuleBatchJobRuleResult> = [
+  { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 120 },
+  { title: '规则名称', dataIndex: 'rule_name', key: 'rule_name', width: 200 },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 90 },
+  { title: '成功', dataIndex: 'success_count', key: 'success_count', width: 90 },
+  { title: '失败', dataIndex: 'failed_count', key: 'failed_count', width: 90 },
+  { title: '命中', dataIndex: 'issue_records', key: 'issue_records', width: 90 },
+]
+
+const recordResultColumns: TableColumnsType<Record<string, unknown>> = [
+  { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 110 },
+  { title: '患者', dataIndex: 'patient_name', key: 'patient_name', width: 100 },
+  { title: 'visit', dataIndex: 'visit_id', key: 'visit_id', width: 120 },
+  { title: '状态', dataIndex: 'status', key: 'status', width: 90 },
+  { title: '结论', dataIndex: 'findings', key: 'findings' },
+]
+
+const failedResultColumns: TableColumnsType<Record<string, unknown>> = [
+  { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 110 },
+  { title: '患者', dataIndex: 'patient_name', key: 'patient_name', width: 100 },
+  { title: 'visit', dataIndex: 'visit_id', key: 'visit_id', width: 120 },
+  { title: '错误', dataIndex: 'error', key: 'error' },
+]
 
 watch(
   () => selectedDraftId.value,
@@ -1282,39 +1884,52 @@ watch(
   },
 )
 
+watch(
+  () => executionMode.value,
+  (mode) => {
+    if (mode === 'single' && selectedDraftId.value) {
+      selectedDraftIds.value = [selectedDraftId.value]
+    }
+  },
+)
+
 onMounted(async () => {
-  await Promise.all([loadDrafts(), searchRecords()])
+  await Promise.all([loadDrafts(), searchRecords(), loadBatchJobs()])
+})
+
+onBeforeUnmount(() => {
+  stopBatchJobPolling()
 })
 </script>
-
 <style scoped>
 .custom-rule-workspace {
-  --panel-bg: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  --panel-bg: #ffffff;
   --panel-border: #dbe7f5;
-  --panel-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
-  --ink-strong: #0f2747;
-  --ink-main: #1f3b63;
-  --ink-muted: #6a7d99;
+  --panel-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  --ink-strong: #102746;
+  --ink-main: #23456f;
+  --ink-muted: #6e84a5;
+  --brand-soft: #f2f7ff;
   min-height: 100%;
   padding: 14px;
   color: var(--ink-main);
+  background: linear-gradient(180deg, #f6f9ff 0%, #eef4fb 100%);
 }
 
-.ops-context {
+.ops-overview {
   display: flex;
   justify-content: space-between;
-  gap: 14px;
   align-items: flex-start;
+  gap: 14px;
   border: 1px solid var(--panel-border);
   border-radius: 18px;
-  background: radial-gradient(circle at right top, #edf4ff 0%, #ffffff 55%);
+  background: linear-gradient(120deg, #ffffff 0%, #f5f9ff 100%);
   box-shadow: var(--panel-shadow);
   padding: 16px 18px;
-  margin-bottom: 12px;
 }
 
 .ops-eyebrow {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1324,7 +1939,8 @@ onMounted(async () => {
 
 .ops-title {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: 26px;
+  line-height: 1.1;
   font-weight: 700;
   color: var(--ink-strong);
 }
@@ -1337,36 +1953,113 @@ onMounted(async () => {
 
 .ops-kpis {
   display: grid;
-  grid-template-columns: repeat(3, minmax(88px, 1fr));
+  grid-template-columns: repeat(2, minmax(108px, 1fr));
   gap: 10px;
   width: min(420px, 100%);
 }
 
-.ops-kpi {
-  border: 1px solid #dce8fb;
+.kpi-card {
   border-radius: 12px;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.9);
-  display: flex;
-  flex-direction: column;
+  border: 1px solid #dbe7f5;
+  background: #f8fbff;
+  padding: 10px 12px;
 }
 
-.ops-kpi-label {
+.kpi-label {
+  display: block;
   font-size: 11px;
-  color: #6f82a0;
+  color: #6f84a4;
 }
 
-.ops-kpi-value {
-  margin-top: 2px;
-  font-size: 14px;
+.kpi-value {
+  margin-top: 3px;
+  display: block;
+  color: #14365f;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.step-nav-shell {
+  position: sticky;
+  top: 8px;
+  z-index: 15;
+  margin-top: 12px;
+}
+
+.step-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(8px);
+}
+
+.step-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  border: 1px solid #dbe7f5;
+  background: #f8fbff;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: #36547b;
+  text-align: left;
+}
+
+.step-pill:hover {
+  border-color: #9fc0f2;
+  background: #f2f7ff;
+}
+
+.step-index {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #e5efff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--ink-strong);
+}
+
+.step-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.step-state {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+.step-pill--pending {
+  border-color: #dbe7f5;
+}
+
+.step-pill--ready {
+  border-color: #9dc1f5;
+  background: #edf4ff;
+}
+
+.step-pill--running {
+  border-color: #f0c36d;
+  background: #fff7e8;
+}
+
+.step-pill--done {
+  border-color: #9fd9b2;
+  background: #edfbf2;
 }
 
 .workspace-grid {
   display: grid;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-top: 12px;
 }
 
 .workspace-grid-half {
@@ -1379,6 +2072,7 @@ onMounted(async () => {
   background: var(--panel-bg);
   box-shadow: var(--panel-shadow);
   padding: 14px;
+  margin-top: 12px;
 }
 
 .panel-head {
@@ -1400,7 +2094,7 @@ onMounted(async () => {
 
 .panel-title {
   margin: 2px 0 0;
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.2;
   color: var(--ink-strong);
   font-weight: 700;
@@ -1421,14 +2115,13 @@ onMounted(async () => {
 
 .rule-code-pill {
   min-width: 88px;
-  padding: 5px 10px;
+  padding: 4px 10px;
   border-radius: 10px;
   border: 1px solid #d3e0f5;
   background: linear-gradient(180deg, #f6faff 0%, #eaf2ff 100%);
   color: #27456b;
   font-size: 12px;
   font-weight: 700;
-  cursor: pointer;
 }
 
 .rule-code-pill.active {
@@ -1454,9 +2147,12 @@ onMounted(async () => {
 
 .draft-actions {
   display: flex;
-  align-items: center;
   justify-content: flex-end;
   gap: 4px;
+}
+
+:deep(.draft-row-active > td) {
+  background: #eff5ff !important;
 }
 
 .form-grid {
@@ -1486,13 +2182,16 @@ onMounted(async () => {
   line-height: 1.7;
 }
 
+.execution-tips {
+  margin-bottom: 10px;
+}
+
 .record-filter-grid {
   display: grid;
   grid-template-columns: 140px 150px 150px 120px 260px minmax(200px, 1fr) 94px;
   gap: 8px;
   margin-bottom: 10px;
 }
-
 .record-toolbar {
   display: flex;
   align-items: center;
@@ -1513,11 +2212,95 @@ onMounted(async () => {
   margin-bottom: 0;
 }
 
+.batch-shell {
+  margin-top: 12px;
+  border: 1px solid #dbe7f5;
+  border-radius: 14px;
+  background: #fbfdff;
+}
+
+.batch-shell-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5eefb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.batch-shell-title {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: #173860;
+}
+
+.batch-filters {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+.batch-rule-name {
+  font-size: 12px;
+  color: #173860;
+  font-weight: 700;
+}
+
+.batch-rule-meta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #6f82a0;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.job-progress-text {
+  font-size: 12px;
+  color: #47658f;
+}
+
+.cell-muted {
+  color: #6b7f9d;
+}
+
+.job-status {
+  border: none;
+  font-size: 11px;
+}
+
+.job-status--queued {
+  background: #f0f5ff;
+  color: #2a57a8;
+}
+
+.job-status--running {
+  background: #fff7e8;
+  color: #ad6800;
+}
+
+.job-status--completed {
+  background: #f0fff4;
+  color: #1d7a3f;
+}
+
+.job-status--failed {
+  background: #fff1f0;
+  color: #b3261e;
+}
+
+.job-status--canceled {
+  background: #f5f5f5;
+  color: #595959;
+}
+
 .result-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .result-panel {
@@ -1568,6 +2351,22 @@ onMounted(async () => {
   line-height: 1.6;
 }
 
+.result-text--danger {
+  color: #b3261e;
+}
+
+.mt-10 {
+  margin-top: 10px;
+}
+
+.mb-10 {
+  margin-bottom: 10px;
+}
+
+.w-full {
+  width: 100%;
+}
+
 :deep(.ant-table-thead > tr > th) {
   background: #f2f7ff !important;
   color: #36547b !important;
@@ -1590,43 +2389,30 @@ onMounted(async () => {
   }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .workspace-grid-half {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .ops-context {
+  .ops-overview {
     flex-direction: column;
   }
 
   .ops-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
+  }
+
+  .step-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .result-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-}
 
-@media (max-width: 768px) {
-  .custom-rule-workspace {
-    padding: 8px;
-  }
-
-  .form-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .record-filter-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .advanced-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .result-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .batch-filters {
+    flex-wrap: wrap;
   }
 }
 </style>

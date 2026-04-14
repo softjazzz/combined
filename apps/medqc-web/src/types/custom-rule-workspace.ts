@@ -4,7 +4,9 @@ export type WorkspaceSeverity = 'critical' | 'major' | 'minor'
 export type WorkspaceGenerationMode = 'llm' | 'fallback_template'
 export type CustomRuleEditorDrawerMode = 'create' | 'edit' | 'copy'
 export type CustomRuleTestResultPanelState = 'single' | 'batch' | 'empty'
-export type CustomRuleBatchJobStatus = 'queued' | 'running' | 'completed' | 'failed'
+export type CustomRuleBatchJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'canceled'
+export type CustomRuleBatchExecutionMode = 'single' | 'multi'
+export type CustomRuleBatchRunMode = 'serial' | 'parallel'
 
 export interface CustomRuleDraft {
   id: string
@@ -185,28 +187,83 @@ export interface CustomRulePublishResult {
 
 export interface CustomRuleBatchJobSummary {
   total_records: number
+  total_tasks?: number
+  rule_count?: number
+  processed_rule_count?: number
+  execution_mode?: CustomRuleBatchExecutionMode
   success_count: number
   failed_count: number
   issue_records: number
   compliant_records: number
   total_tokens: number
   total_processing_time: number
+  progress?: CustomRuleBatchJobProgress
+  rule_results?: CustomRuleBatchJobRuleResult[]
   updated_at?: string
+}
+
+export interface CustomRuleBatchJobProgress {
+  step_key: string
+  rule_index: number
+  rule_count: number
+  processed_records: number
+  total_records: number
+}
+
+export interface CustomRuleBatchJobRuleResult {
+  id?: string
+  draft_id?: string
+  rule_code: string
+  rule_name: string
+  status: CustomRuleBatchJobStatus | string
+  progress?: Partial<CustomRuleBatchJobProgress>
+  total_records?: number
+  success_count?: number
+  failed_count?: number
+  issue_records?: number
+  compliant_records?: number
+  total_tokens?: number
+  total_processing_time?: number
+  items?: CustomRuleBatchIssueItem[]
+  failed_records?: CustomRuleBatchFailedRecord[]
+  updated_at?: string
+}
+
+type CustomRuleBatchIssueBase = CustomRuleBatchResult['items'][number]
+type CustomRuleBatchFailedRecordBase = CustomRuleBatchResult['failed_records'][number]
+
+export interface CustomRuleBatchIssueItem extends CustomRuleBatchIssueBase {
+  draft_id?: string
+  rule_code?: string
+  rule_name?: string
+}
+
+export interface CustomRuleBatchFailedRecord extends CustomRuleBatchFailedRecordBase {
+  draft_id?: string
+  rule_code?: string
+  rule_name?: string
 }
 
 export interface CustomRuleBatchJob {
   id: string
   draft_id: string
+  draft_ids?: string[]
   rule_code: string
   rule_name: string
   scene: 'running' | 'final'
   scope: WorkspaceScope
+  execution_mode?: CustomRuleBatchExecutionMode
+  run_mode?: CustomRuleBatchRunMode
+  rule_count?: number
   status: CustomRuleBatchJobStatus
   filters: Record<string, unknown>
   record_ids: string[]
   summary?: CustomRuleBatchJobSummary | null
-  items: CustomRuleBatchResult['items']
-  failed_records: CustomRuleBatchResult['failed_records']
+  progress?: CustomRuleBatchJobProgress
+  items: CustomRuleBatchIssueItem[]
+  failed_records: CustomRuleBatchFailedRecord[]
+  rule_results?: CustomRuleBatchJobRuleResult[]
+  cancellable?: boolean
   error_message?: string
   created_by: string
   created_at: string
@@ -224,6 +281,13 @@ export interface CustomRuleBatchJob {
 
 export interface CustomRuleBatchJobQuery {
   draft_id?: string
+  status?: CustomRuleBatchJobStatus
+  scope?: WorkspaceScope
+  q?: string
+  executor_type?: 'program' | 'llm'
+  cache_hit?: 'hit' | 'miss'
+  created_start_date?: string
+  created_end_date?: string
   page?: number
   page_size?: number
 }
