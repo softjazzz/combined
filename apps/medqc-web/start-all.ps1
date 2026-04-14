@@ -3,6 +3,9 @@ param(
   [string]$FrontendMode = "dist",
   [int]$FrontendPort = 3000,
   [int]$BackendPort = 8001,
+  [string]$FrontendHost = "0.0.0.0",
+  [string]$BackendHost = "0.0.0.0",
+  [string]$HealthCheckHost = "127.0.0.1",
   [string]$PythonExe = "C:\Python310\python.exe",
   [switch]$BackendReload,
   [switch]$NoKill,
@@ -76,7 +79,7 @@ function Test-HttpOk([string]$url, [int]$timeoutSec = 3) {
 }
 
 function Test-ViteDevClient([int]$port, [int]$timeoutSec = 3) {
-  $devClientUrl = "http://127.0.0.1:$port/@vite/client"
+  $devClientUrl = "http://${HealthCheckHost}:$port/@vite/client"
   try {
     $resp = Invoke-WebRequest -Uri $devClientUrl -UseBasicParsing -TimeoutSec $timeoutSec
     if ($resp.StatusCode -lt 200 -or $resp.StatusCode -ge 500) {
@@ -104,7 +107,7 @@ function Test-ViteDevClient([int]$port, [int]$timeoutSec = 3) {
 }
 
 function Wait-FrontendHealthy([string]$mode, [int]$port, [int]$timeoutSec = 30) {
-  $rootUrl = "http://127.0.0.1:$port/"
+  $rootUrl = "http://${HealthCheckHost}:$port/"
   $deadline = (Get-Date).AddSeconds($timeoutSec)
 
   while ((Get-Date) -lt $deadline) {
@@ -161,7 +164,7 @@ function Start-NpmCommand([string[]]$arguments, [string]$workingDirectory, [stri
     -RedirectStandardError $errLog | Out-Null
 }
 
-function Start-FrontendDistViaPython([string]$projectRoot, [int]$port, [string]$pythonExe, [string]$log, [string]$errLog) {
+function Start-FrontendDistViaPython([string]$projectRoot, [int]$port, [string]$pythonExe, [string]$log, [string]$errLog, [string]$frontendHost) {
   $entry = Join-Path $projectRoot "scripts\serve_dist_spa.py"
   $distIndex = Join-Path $projectRoot "dist\index.html"
   if (-not (Test-Path -LiteralPath $entry)) {
@@ -179,13 +182,13 @@ function Start-FrontendDistViaPython([string]$projectRoot, [int]$port, [string]$
   }
 
   Start-Process -FilePath $resolvedPython `
-    -ArgumentList "scripts/serve_dist_spa.py --host 127.0.0.1 --port $port --dir dist" `
+    -ArgumentList "scripts/serve_dist_spa.py --host $frontendHost --port $port --dir dist" `
     -WorkingDirectory $projectRoot `
     -RedirectStandardOutput $log `
     -RedirectStandardError $errLog | Out-Null
 
-  if (Wait-HttpOk "http://127.0.0.1:$port/" 20) {
-    Write-Host "  frontend ok (dist-python): http://127.0.0.1:$port/" -ForegroundColor Green
+  if (Wait-HttpOk "http://${HealthCheckHost}:$port/" 20) {
+    Write-Host "  frontend ok (dist-python): http://${frontendHost}:$port/" -ForegroundColor Green
     return $true
   }
   return $false
@@ -210,12 +213,12 @@ if (-not (Test-Path -LiteralPath $PythonExe)) {
   $PythonExe = $resolvedPython.Source
 }
 
-$backendArgs = @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$BackendPort", "--timeout-keep-alive", "5")
+$backendArgs = @("-m", "uvicorn", "app.main:app", "--host", "$BackendHost", "--port", "$BackendPort", "--timeout-keep-alive", "5")
 if ($BackendReload) {
   $backendArgs += @("--reload", "--reload-dir", "app", "--reload-exclude=*.log", "--reload-exclude=data/*", "--reload-exclude=downloads/*")
 }
 
-if (-not (Wait-HttpOk "http://127.0.0.1:$BackendPort/docs" 2)) {
+if (-not (Wait-HttpOk "http://${HealthCheckHost}:$BackendPort/docs" 2)) {
   Remove-FileIfPossible $backendLog
   Remove-FileIfPossible $backendErrLog
 
@@ -228,12 +231,12 @@ if (-not (Wait-HttpOk "http://127.0.0.1:$BackendPort/docs" 2)) {
   Write-Host "  backend already running on $BackendPort, skip start"
 }
 
-if (-not (Wait-HttpOk "http://127.0.0.1:$BackendPort/docs" 40)) {
-  Write-Host "backend failed to become healthy: http://127.0.0.1:$BackendPort/docs" -ForegroundColor Red
+if (-not (Wait-HttpOk "http://${HealthCheckHost}:$BackendPort/docs" 40)) {
+  Write-Host "backend failed to become healthy: http://${HealthCheckHost}:$BackendPort/docs" -ForegroundColor Red
   Write-Host "check logs: $backendLog / $backendErrLog" -ForegroundColor Yellow
   exit 1
 }
-Write-Host "  backend ok: http://127.0.0.1:$BackendPort/docs" -ForegroundColor Green
+Write-Host "  backend ok: http://${BackendHost}:$BackendPort/docs" -ForegroundColor Green
 
 Write-Step "Start frontend ($FrontendMode, $FrontendPort)"
 
@@ -241,18 +244,18 @@ if ($FrontendMode -eq "dist") {
   if (-not (Wait-FrontendHealthy $FrontendMode $FrontendPort 2)) {
     Remove-FileIfPossible $frontendLog
     Remove-FileIfPossible $frontendErrLog
-    Start-FrontendDistViaPython $root $FrontendPort $PythonExe $frontendLog $frontendErrLog | Out-Null
+    Start-FrontendDistViaPython $root $FrontendPort $PythonExe $frontendLog $frontendErrLog $FrontendHost | Out-Null
   } else {
     Write-Host "  frontend already running on $FrontendPort (dist/python), skip start"
   }
 } elseif ($FrontendMode -eq "preview") {
-  $frontendArgs = @("run", "preview", "--", "--host", "127.0.0.1", "--port", "$FrontendPort", "--strictPort")
+  $frontendArgs = @("run", "preview", "--", "--host", "$FrontendHost", "--port", "$FrontendPort", "--strictPort")
 } else {
-  $frontendArgs = @("run", "dev", "--", "--host", "127.0.0.1", "--port", "$FrontendPort", "--strictPort")
+  $frontendArgs = @("run", "dev", "--", "--host", "$FrontendHost", "--port", "$FrontendPort", "--strictPort")
 }
 
 if ($FrontendMode -ne "dist") {
-  $frontendRootAlive = Test-HttpOk "http://127.0.0.1:$FrontendPort/" 2
+  $frontendRootAlive = Test-HttpOk "http://${HealthCheckHost}:$FrontendPort/" 2
   $frontendHealthy = Wait-FrontendHealthy $FrontendMode $FrontendPort 2
 
   if (-not $frontendHealthy -and $frontendRootAlive -and $NoKill) {
@@ -285,14 +288,14 @@ if (-not (Wait-FrontendHealthy $FrontendMode $FrontendPort 40)) {
     if ($needFallback) {
       Write-Warning "frontend unstable. fallback to dist-python..."
       Stop-PortProcess $FrontendPort
-      $fallbackTriggered = Start-FrontendDistViaPython $root $FrontendPort $PythonExe $frontendLog $frontendErrLog
+      $fallbackTriggered = Start-FrontendDistViaPython $root $FrontendPort $PythonExe $frontendLog $frontendErrLog $FrontendHost
     }
   }
   if (-not $fallbackTriggered) {
     if ($FrontendMode -eq "dev") {
-      Write-Host "frontend failed to become healthy: http://127.0.0.1:$FrontendPort/@vite/client" -ForegroundColor Red
+      Write-Host "frontend failed to become healthy: http://${HealthCheckHost}:$FrontendPort/@vite/client" -ForegroundColor Red
     } else {
-      Write-Host "frontend failed to become healthy: http://127.0.0.1:$FrontendPort/" -ForegroundColor Red
+      Write-Host "frontend failed to become healthy: http://${HealthCheckHost}:$FrontendPort/" -ForegroundColor Red
     }
     Write-Host "check log: $frontendLog" -ForegroundColor Yellow
     Write-Host "check err: $frontendErrLog" -ForegroundColor Yellow
@@ -300,9 +303,9 @@ if (-not (Wait-FrontendHealthy $FrontendMode $FrontendPort 40)) {
   }
 }
 if ($FrontendMode -eq "dev") {
-  Write-Host "  frontend ok (dev + HMR): http://127.0.0.1:$FrontendPort/" -ForegroundColor Green
+  Write-Host "  frontend ok (dev + HMR): http://${FrontendHost}:$FrontendPort/" -ForegroundColor Green
 } elseif ($FrontendMode -eq "preview") {
-  Write-Host "  frontend ok (preview): http://127.0.0.1:$FrontendPort/" -ForegroundColor Green
+  Write-Host "  frontend ok (preview): http://${FrontendHost}:$FrontendPort/" -ForegroundColor Green
 }
 
 Write-Host ""

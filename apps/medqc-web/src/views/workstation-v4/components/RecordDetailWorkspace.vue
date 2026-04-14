@@ -34,6 +34,7 @@
         :visit-id="selectedRecord.visitId || selectedRecord.id"
         :patient-id="selectedRecord.patientId"
         :institute-id="selectedRecord.instituteId"
+        :active-doc-key="activeDocType"
         :max-height="760"
         :hide-doc-tabs="true"
         @loaded="emit('emr-loaded', $event)"
@@ -157,6 +158,10 @@ defineProps<{
   concatSections: ConcatSection[]
   concatTotalChars: number
   allConcatSectionsExpanded: boolean
+  activeDocType?: string
+  docPreviewActive?: boolean
+  docPreviewTitle?: string
+  docPreviewContent?: string
   isSectionExpanded: (index: number) => boolean
 }>()
 

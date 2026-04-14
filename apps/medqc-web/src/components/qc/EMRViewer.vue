@@ -3,46 +3,140 @@
     ref="viewerRef"
     class="emr-viewer"
   >
-    <!-- 文书标签页（仅在没有外部导航时显示） -->
     <div
       v-if="!hideDocTabs && documents.length > 1"
       class="mb-5"
     >
       <div
-        class="inline-flex items-center gap-1 bg-gray-100/80 p-1 rounded-xl border border-gray-100/50"
+        class="inline-flex items-center gap-1 rounded-xl border border-gray-100/50 bg-gray-100/80 p-1"
       >
         <button
           v-for="doc in documents"
           :key="doc.id"
           :class="[
-            'px-4 py-1.5 text-[13px] font-medium whitespace-nowrap rounded-lg transition-all duration-200',
+            'rounded-lg px-4 py-1.5 text-[13px] font-medium whitespace-nowrap transition-all duration-200',
             activeDocId === doc.id
               ? 'bg-white text-blue-700 shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
               : 'text-gray-500 hover:text-gray-700',
           ]"
-          @click="
-            () => {
-              activeDocId = doc.id
-              loadDocument(doc)
-            }
-          "
+          @click="handleSwitchDoc(doc)"
         >
           {{ doc.doc_name || doc.doc_type }}
         </button>
       </div>
     </div>
 
-    <!-- 工具栏已移除：患者/科室信息由外层 Header 展示 -->
-
-    <!-- 加载中 -->
     <div
       v-if="loading"
-      class="flex items-center justify-center h-64"
+      class="flex h-64 items-center justify-center"
     >
       <a-spin tip="正在加载文书内容..." />
     </div>
 
-    <!-- 文书内容 -->
+    <div
+      v-else-if="isStructuredLayout"
+      ref="contentRef"
+      class="emr-struct overflow-auto"
+      :style="{ maxHeight: maxHeight + 'px' }"
+    >
+      <div class="emr-struct__header">
+        <div class="emr-struct__title">
+          {{ metadata.doc_name || metadata.doc_type || '病历文书' }}
+        </div>
+        <div
+          v-if="metadata.record_time"
+          class="emr-struct__time"
+        >
+          记录时间：{{ metadata.record_time }}
+        </div>
+      </div>
+
+      <section
+        v-for="block in renderBlocks"
+        :key="block.block_id"
+        class="emr-struct__block"
+      >
+        <template v-if="block.block_type === 'kv_section'">
+          <h4 class="emr-struct__block-title">
+            {{ block.title || '基础信息' }}
+          </h4>
+          <div
+            v-if="(block.fields || []).length > 0"
+            class="emr-struct__kv-grid"
+          >
+            <div
+              v-for="field in block.fields || []"
+              :key="`${block.block_id}:${field.key}`"
+              class="emr-struct__kv-row"
+              :data-field-value="field.value || ''"
+            >
+              <span class="emr-struct__kv-label">{{ field.label }}</span>
+              <span class="emr-struct__kv-value">{{ field.value || '-' }}</span>
+            </div>
+          </div>
+          <div
+            v-else
+            class="emr-struct__empty"
+          >
+            暂无结构化字段
+          </div>
+        </template>
+
+        <template v-else-if="block.block_type === 'order_table'">
+          <h4 class="emr-struct__block-title">
+            {{ block.title || '医嘱' }}
+          </h4>
+          <div
+            v-if="(block.rows || []).length > 0"
+            class="emr-struct__table-wrap"
+          >
+            <table class="emr-struct__table">
+              <thead>
+                <tr>
+                  <th
+                    v-for="col in block.columns || []"
+                    :key="col.key"
+                  >
+                    {{ col.label }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(row, rowIdx) in block.rows || []"
+                  :key="`${block.block_id}:row:${rowIdx}`"
+                >
+                  <td
+                    v-for="col in block.columns || []"
+                    :key="`${block.block_id}:row:${rowIdx}:${col.key}`"
+                  >
+                    {{ row[col.key] || '-' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div
+            v-else
+            class="emr-struct__empty"
+          >
+            {{ block.empty_text || '暂无医嘱数据' }}
+          </div>
+        </template>
+
+        <template v-else>
+          <h4 class="emr-struct__block-title">
+            {{ block.title || '正文' }}
+          </h4>
+          <div
+            class="emr-struct__paragraph"
+            :data-anchor-text="(block.text || '').slice(0, 80)"
+            v-html="renderParagraphContent(block.text || '')"
+          />
+        </template>
+      </section>
+    </div>
+
     <div
       v-else-if="renderedContent"
       ref="contentRef"
@@ -51,22 +145,20 @@
       v-html="renderedContent"
     />
 
-    <!-- 空状态 -->
     <div
       v-else
-      class="flex flex-col items-center justify-center h-64 text-gray-400"
+      class="flex h-64 flex-col items-center justify-center text-gray-400"
     >
-      <FileTextOutlined class="text-4xl mb-3" />
+      <FileTextOutlined class="mb-3 text-4xl" />
       <p>暂无文书内容</p>
       <p class="text-xs">
         请在左侧选择病历
       </p>
     </div>
 
-    <!-- 缺陷列表面板（悬浮） -->
     <div
       v-if="showAnnotationPanel && annotations.length > 0"
-      class="annotation-panel fixed bottom-4 right-4 z-50 max-h-[26rem] w-72 overflow-hidden rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] shadow-[0_16px_34px_rgba(15,23,42,0.14)] backdrop-blur-xl"
+      class="annotation-panel fixed right-4 bottom-4 z-50 max-h-[26rem] w-72 overflow-hidden rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] shadow-[0_16px_34px_rgba(15,23,42,0.14)] backdrop-blur-xl"
     >
       <div
         class="flex items-center justify-between border-b border-slate-200/80 bg-white/72 px-4 py-3"
@@ -79,20 +171,20 @@
           ✕
         </button>
       </div>
-      <div class="max-h-80 overflow-y-auto divide-y divide-slate-100">
+      <div class="max-h-80 divide-y divide-slate-100 overflow-y-auto">
         <div
           v-for="ann in annotations"
           :key="ann.defect_id"
           :class="[
-            'px-4 py-3 cursor-pointer transition-colors text-sm',
+            'cursor-pointer px-4 py-3 text-sm transition-colors',
             activeDefectId === ann.defect_id ? 'bg-blue-50/80' : 'hover:bg-slate-50/80',
           ]"
           @click="handleAnnotationClick(ann)"
         >
-          <div class="flex items-center gap-2 mb-1">
+          <div class="mb-1 flex items-center gap-2">
             <span
               :class="[
-                'w-2 h-2 rounded-full',
+                'h-2 w-2 rounded-full',
                 ann.severity === 'critical'
                   ? 'bg-blue-700'
                   : ann.severity === 'error'
@@ -102,18 +194,17 @@
                       : 'bg-blue-400',
               ]"
             />
-            <span class="font-medium text-slate-700 truncate">{{
+            <span class="truncate font-medium text-slate-700">{{
               ann.rule_name || ann.category
             }}</span>
           </div>
-          <p class="text-slate-500 text-xs line-clamp-2">
+          <p class="line-clamp-2 text-xs text-slate-500">
             {{ ann.description }}
           </p>
         </div>
       </div>
     </div>
 
-    <!-- 缺陷面板触发按钮 -->
     <button
       v-if="annotations.length > 0 && !showAnnotationPanel"
       class="fixed right-4 bottom-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-blue-600 text-white shadow-[0_12px_24px_rgba(37,99,235,0.22)] transition-all hover:scale-105 hover:bg-blue-700"
@@ -126,12 +217,42 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import { UserOutlined, ApartmentOutlined, FileTextOutlined } from '@ant-design/icons-vue'
+import { FileTextOutlined } from '@ant-design/icons-vue'
 import { useDefectHighlight } from '@/composables/useDefectHighlight'
 import type { DefectAnnotation } from '@/composables/useDefectHighlight'
 import { getAccessToken } from '@/utils/auth-token'
 
-// ============= Props =============
+interface EmrDocumentSummary {
+  id: string
+  doc_type: string
+  doc_name: string
+  doc_key?: string
+  has_content?: boolean
+}
+
+interface EmrKvField {
+  key: string
+  label: string
+  value: string
+}
+
+interface EmrTableColumn {
+  key: string
+  label: string
+}
+
+interface EmrRenderBlock {
+  block_id: string
+  block_type: 'kv_section' | 'paragraph' | 'order_table'
+  title?: string
+  fields?: EmrKvField[]
+  text?: string
+  columns?: EmrTableColumn[]
+  rows?: Array<Record<string, string>>
+  empty?: boolean
+  empty_text?: string
+}
+
 const props = withDefaults(
   defineProps<{
     recordId?: string
@@ -139,8 +260,9 @@ const props = withDefaults(
     patientId?: string
     instituteId?: string
     docType?: string
+    activeDocKey?: string
     maxHeight?: number
-    hideDocTabs?: boolean // 外部已有文书导航时，隐藏内部 Tab
+    hideDocTabs?: boolean
   }>(),
   {
     maxHeight: 600,
@@ -154,20 +276,21 @@ const emit = defineEmits<{
   (e: 'error', reason?: string): void
 }>()
 
-// ============= 状态 =============
 const loading = ref(false)
 const rawContent = ref('')
 const contentType = ref<'text' | 'html'>('text')
 const metadata = ref<Record<string, string>>({})
 const annotations = ref<DefectAnnotation[]>([])
-const documents = ref<any[]>([])
+const documents = ref<EmrDocumentSummary[]>([])
 const activeDocId = ref<string | null>(null)
 const showAnnotationPanel = ref(false)
+const layoutVersion = ref('')
+const renderBlocks = ref<EmrRenderBlock[]>([])
+const boundClickContainer = ref<HTMLElement | null>(null)
 
 const viewerRef = ref<HTMLElement>()
 const contentRef = ref<HTMLElement>()
 
-// 高亮 composable
 const { activeDefectId, highlightDefects, scrollToDefect, onDefectClick, bindClickEvents } =
   useDefectHighlight()
 
@@ -182,20 +305,16 @@ const baseQueryString = computed(() => {
   return params.toString()
 })
 
-// ============= 计算属性 =============
 const renderedContent = computed(() => {
   if (!rawContent.value) return ''
-
-  if (contentType.value === 'html') {
-    // HTML 内容：直接渲染（后续可加 DOMPurify 净化）
-    return rawContent.value
-  }
-
-  // 纯文本：注入高亮标记
+  if (contentType.value === 'html') return rawContent.value
   return highlightDefects(rawContent.value, annotations.value)
 })
 
-// ============= 方法 =============
+const isStructuredLayout = computed(
+  () => layoutVersion.value === 'bundle_struct_v1' && renderBlocks.value.length > 0,
+)
+
 function buildUrl(path: 'documents' | 'render', extraParams?: Record<string, string>) {
   const baseId = effectiveRecordId.value
   if (!baseId) return ''
@@ -207,6 +326,10 @@ function buildUrl(path: 'documents' | 'render', extraParams?: Record<string, str
   return `/api/v1/emr/${encodeURIComponent(baseId)}/${path}${query ? `?${query}` : ''}`
 }
 
+function docIdentityKey(doc: EmrDocumentSummary): string {
+  return String(doc.doc_key || `${doc.doc_type || ''}::${doc.id || ''}`)
+}
+
 function resetViewerState() {
   rawContent.value = ''
   contentType.value = 'text'
@@ -214,11 +337,12 @@ function resetViewerState() {
   annotations.value = []
   documents.value = []
   activeDocId.value = null
+  layoutVersion.value = ''
+  renderBlocks.value = []
 }
 
 function getAuthHeaders(): Record<string, string> {
   const token = getAccessToken()
-
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -227,24 +351,31 @@ function getAuthHeaders(): Record<string, string> {
 
 function readEnvelopeMessage(result: unknown, fallbackMessage: string): string {
   if (!result || typeof result !== 'object') return fallbackMessage
-
   const envelope = result as {
     message?: unknown
     normalized?: {
       message?: unknown
     }
   }
-
   const normalizedMessage = envelope.normalized?.message
-  if (typeof normalizedMessage === 'string' && normalizedMessage.trim()) {
-    return normalizedMessage
-  }
-
-  if (typeof envelope.message === 'string' && envelope.message.trim()) {
-    return envelope.message
-  }
-
+  if (typeof normalizedMessage === 'string' && normalizedMessage.trim()) return normalizedMessage
+  if (typeof envelope.message === 'string' && envelope.message.trim()) return envelope.message
   return fallbackMessage
+}
+
+function findDocByActiveKey(activeKey?: string): EmrDocumentSummary | undefined {
+  if (!activeKey) return undefined
+  return documents.value.find((doc) => docIdentityKey(doc) === activeKey)
+}
+
+function pickInitialDocument(): EmrDocumentSummary | undefined {
+  const byExternal = findDocByActiveKey(props.activeDocKey)
+  if (byExternal) return byExternal
+  if (props.docType) {
+    const byType = documents.value.find((doc) => doc.doc_type === props.docType)
+    if (byType) return byType
+  }
+  return documents.value.find((doc) => doc.has_content) || documents.value[0]
 }
 
 async function fetchDocuments() {
@@ -264,36 +395,56 @@ async function fetchDocuments() {
       emit('error', 'unauthorized')
       return
     }
-    if (result?.success !== false) {
-      documents.value = result?.data || []
-      if (documents.value.length > 0) {
-        activeDocId.value = documents.value[0].id
-        await loadDocument(documents.value[0])
-      } else {
-        rawContent.value = ''
-        annotations.value = []
-        emit('error', 'no-documents')
-      }
-    } else {
+    if (result?.success === false) {
       emit('error', readEnvelopeMessage(result, 'load-documents-failed'))
+      return
     }
+    const payload = result?.data || {}
+    const docList = Array.isArray(payload.documents)
+      ? payload.documents
+      : Array.isArray(payload)
+        ? payload
+        : []
+    documents.value = docList
+    const target = pickInitialDocument()
+    if (!target) {
+      rawContent.value = ''
+      annotations.value = []
+      renderBlocks.value = []
+      layoutVersion.value = String(payload.layout_version || '')
+      emit('error', 'no-documents')
+      return
+    }
+    activeDocId.value = target.id || null
+    await loadDocument(target)
   } catch (err) {
     console.error('获取文书列表失败:', err)
     emit('error', 'load-documents-failed')
   }
 }
 
-async function loadDocument(doc?: any) {
+function bindHighlightClicks() {
+  const container = contentRef.value
+  if (!container) return
+  if (boundClickContainer.value === container) return
+  bindClickEvents(container)
+  boundClickContainer.value = container
+}
+
+async function loadDocument(doc?: EmrDocumentSummary) {
+  if (!doc) return
   loading.value = true
+  activeDocId.value = doc.id || null
   try {
     const extraParams: Record<string, string> = {}
-    if (doc?.doc_type) extraParams.doc_type = doc.doc_type
-    if (doc?.id) extraParams.doc_id = doc.id
+    if (doc.doc_type) extraParams.doc_type = doc.doc_type
+    if (doc.id) extraParams.doc_id = doc.id
     const url = buildUrl('render', extraParams)
     if (!url) {
       emit('error', 'missing-identifiers')
       return
     }
+
     const response = await fetch(url, {
       headers: getAuthHeaders(),
     })
@@ -302,29 +453,28 @@ async function loadDocument(doc?: any) {
       emit('error', 'unauthorized')
       return
     }
-
-    if (result?.success !== false && result?.data) {
-      const data = result.data
-      rawContent.value = data.content || ''
-      contentType.value = data.content_type || 'text'
-      metadata.value = data.metadata || {}
-      annotations.value = data.defect_annotations || []
-
-      if (rawContent.value) {
-        emit('loaded', data)
-      } else {
-        emit('error', 'empty-content')
-      }
-
-      // 绑定高亮点击事件
-      nextTick(() => {
-        if (contentRef.value) {
-          bindClickEvents(contentRef.value)
-        }
-      })
-    } else {
+    if (result?.success === false || !result?.data) {
       emit('error', readEnvelopeMessage(result, 'load-document-failed'))
+      return
     }
+
+    const data = result.data
+    rawContent.value = data.content || ''
+    contentType.value = data.content_type || 'text'
+    metadata.value = data.metadata || {}
+    annotations.value = data.defect_annotations || []
+    layoutVersion.value = data.layout_version || ''
+    renderBlocks.value = Array.isArray(data.render_blocks) ? data.render_blocks : []
+
+    if (rawContent.value || renderBlocks.value.length > 0) {
+      emit('loaded', data)
+    } else {
+      emit('error', 'empty-content')
+    }
+
+    nextTick(() => {
+      bindHighlightClicks()
+    })
   } catch (err) {
     console.error('加载文书内容失败:', err)
     emit('error', 'load-document-failed')
@@ -333,19 +483,64 @@ async function loadDocument(doc?: any) {
   }
 }
 
+function handleSwitchDoc(doc: EmrDocumentSummary) {
+  void loadDocument(doc)
+}
+
+function scrollStructuredByKeyword(keyword?: string): boolean {
+  const text = String(keyword || '').trim()
+  const container = contentRef.value
+  if (!text || !container) return false
+  const candidates = Array.from(
+    container.querySelectorAll<HTMLElement>('[data-anchor-text], [data-field-value], .emr-defect'),
+  )
+  const hit = candidates.find((item) => (item.textContent || '').includes(text))
+  if (!hit) return false
+  hit.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  hit.style.outline = '2px solid #3b82f6'
+  hit.style.outlineOffset = '2px'
+  setTimeout(() => {
+    hit.style.outline = 'none'
+  }, 1500)
+  return true
+}
+
 function handleAnnotationClick(ann: DefectAnnotation) {
-  scrollToDefect(ann.defect_id, contentRef.value)
+  const scrolled = isStructuredLayout.value ? scrollStructuredByKeyword(ann.keyword) : false
+  if (!scrolled) {
+    scrollToDefect(ann.defect_id, contentRef.value)
+  }
   emit('defect-click', ann.defect_id)
 }
 
-// 对外暴露：供父组件调用
+function renderParagraphContent(text: string): string {
+  const normalized = String(text || '')
+  if (!normalized) return ''
+  const localAnnotations: DefectAnnotation[] = []
+  for (const ann of annotations.value) {
+    const keyword = String(ann.keyword || '').trim()
+    if (!keyword) continue
+    const index = normalized.indexOf(keyword)
+    if (index < 0) continue
+    localAnnotations.push({
+      ...ann,
+      start_offset: index,
+      end_offset: index + keyword.length,
+    })
+  }
+  return highlightDefects(normalized, localAnnotations)
+}
+
 function scrollTo(defectId: string) {
+  if (isStructuredLayout.value) {
+    const ann = annotations.value.find((item) => item.defect_id === defectId)
+    if (ann && scrollStructuredByKeyword(ann.keyword)) return
+  }
   scrollToDefect(defectId, contentRef.value)
 }
 
 defineExpose({ scrollTo, loadDocument })
 
-// ============= 生命周期 =============
 onDefectClick((defectId) => {
   emit('defect-click', defectId)
 })
@@ -354,52 +549,158 @@ watch(
   () => [props.recordId, props.visitId, props.patientId, props.instituteId, props.docType],
   () => {
     if (effectiveRecordId.value || hasTripletContext.value) {
-      fetchDocuments()
+      void fetchDocuments()
     } else {
       resetViewerState()
     }
   },
   { immediate: true },
 )
+
+watch(
+  () => props.activeDocKey,
+  (newKey) => {
+    const doc = findDocByActiveKey(newKey)
+    if (!doc) return
+    if (activeDocId.value && doc.id === activeDocId.value) return
+    void loadDocument(doc)
+  },
+)
 </script>
 
 <style scoped>
-/* ============ 阅读区外壳 ============ */
-.emr-content {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 253, 255, 0.98));
-  border-radius: 10px;
+.emr-content,
+.emr-struct {
+  margin: 0 auto;
+  max-width: 104ch;
   border: 1px solid rgba(226, 232, 240, 0.56);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 253, 255, 0.98));
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.025);
   padding: 12px 14px 22px;
-  /* 文字排版黄金参数 */
+  color: #475569;
   font-family: 'PingFang SC', 'Microsoft YaHei', 'SimSun', serif;
   font-size: 14px;
   line-height: 1.9;
-  color: #475569; /* slate-600：不用纯黑，减少长时间阅读视网膜疲劳 */
-  white-space: pre-wrap;
   word-break: break-all;
-  /* 人体工学最大宽度，自动居中 */
-  max-width: 104ch;
-  margin: 0 auto;
 }
 
-/* ============ 段落标题（块级视觉锚点） ============ */
-.emr-content :deep(.emr-section-title) {
-  display: block;
+.emr-content {
+  white-space: pre-wrap;
+}
+
+.emr-struct__header {
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.7);
+  padding-bottom: 10px;
+}
+
+.emr-struct__title {
+  font-size: 15px;
   font-weight: 700;
-  color: #1e293b; /* slate-900：比正文深，立刻抓住视线 */
-  font-size: 14px;
+  color: #0f172a;
+}
+
+.emr-struct__time {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.emr-struct__block {
+  margin-bottom: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.62);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 10px 12px;
+}
+
+.emr-struct__block-title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.emr-struct__kv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.emr-struct__kv-row {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  align-items: start;
+  gap: 8px;
+}
+
+.emr-struct__kv-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.emr-struct__kv-value {
+  color: #334155;
+}
+
+.emr-struct__paragraph {
+  white-space: pre-wrap;
+  color: #334155;
+}
+
+.emr-struct__table-wrap {
+  overflow-x: auto;
+}
+
+.emr-struct__table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.emr-struct__table th,
+.emr-struct__table td {
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  padding: 6px 8px;
+  text-align: left;
+  color: #334155;
+}
+
+.emr-struct__table th {
+  background: rgba(248, 250, 252, 0.9);
+  color: #64748b;
+  font-weight: 700;
+}
+
+.emr-struct__empty {
+  border: 1px dashed rgba(148, 163, 184, 0.45);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.emr-content :deep(.emr-section-title),
+.emr-struct :deep(.emr-section-title) {
+  display: block;
   margin-top: 1.15em;
   margin-bottom: 0.1em;
+  color: #1e293b;
+  font-size: 14px;
+  font-weight: 700;
   letter-spacing: 0.01em;
 }
 
-.emr-content :deep(.emr-section-title:first-child) {
+.emr-content :deep(.emr-section-title:first-child),
+.emr-struct :deep(.emr-section-title:first-child) {
   margin-top: 0;
 }
 
-/* ============ 缺陷高亮（虚线下划线，克制） ============ */
-.emr-content :deep(.emr-defect) {
+.emr-content :deep(.emr-defect),
+.emr-struct :deep(.emr-defect) {
   position: relative;
   cursor: help;
   border-bottom: 1.5px dashed;
@@ -408,85 +709,116 @@ watch(
     background-color 0.15s,
     border-color 0.15s;
 }
-.emr-content :deep(.emr-defect--critical) {
+
+.emr-content :deep(.emr-defect--critical),
+.emr-struct :deep(.emr-defect--critical) {
   background-color: rgba(219, 234, 254, 0.82);
   border-color: #2563eb;
 }
-.emr-content :deep(.emr-defect--error) {
+
+.emr-content :deep(.emr-defect--error),
+.emr-struct :deep(.emr-defect--error) {
   background-color: rgba(239, 246, 255, 0.82);
   border-color: #3b82f6;
 }
-.emr-content :deep(.emr-defect--warning) {
+
+.emr-content :deep(.emr-defect--warning),
+.emr-struct :deep(.emr-defect--warning) {
   background-color: rgba(239, 246, 255, 0.62);
   border-color: #60a5fa;
 }
-.emr-content :deep(.emr-defect--info) {
+
+.emr-content :deep(.emr-defect--info),
+.emr-struct :deep(.emr-defect--info) {
   background-color: rgba(239, 246, 255, 0.52);
   border-color: #3b82f6;
 }
-.emr-content :deep(.emr-defect:hover) {
+
+.emr-content :deep(.emr-defect:hover),
+.emr-struct :deep(.emr-defect:hover) {
   filter: brightness(0.97);
 }
 
-/* ============ Tooltip 卡片（pure CSS hover） ============ */
-.emr-content :deep(.emr-defect-tip) {
+.emr-content :deep(.emr-defect-tip),
+.emr-struct :deep(.emr-defect-tip) {
   display: none;
   position: absolute;
-  bottom: calc(100% + 8px);
   left: 0;
+  bottom: calc(100% + 8px);
   z-index: 200;
   width: 260px;
-  background: #fff;
-  border-radius: 12px;
   border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 12px;
+  background: #fff;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
   padding: 11px 13px;
   pointer-events: none;
   white-space: normal;
   word-break: break-all;
 }
-.emr-content :deep(.emr-defect:hover .emr-defect-tip) {
+
+.emr-content :deep(.emr-defect:hover .emr-defect-tip),
+.emr-struct :deep(.emr-defect:hover .emr-defect-tip) {
   display: block;
 }
-.emr-content :deep(.emr-defect-tip__header) {
+
+.emr-content :deep(.emr-defect-tip__header),
+.emr-struct :deep(.emr-defect-tip__header) {
   display: flex;
   align-items: center;
+  margin-bottom: 7px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 7px;
   font-size: 11px;
   font-weight: 700;
-  margin-bottom: 7px;
-  padding-bottom: 7px;
-  border-bottom: 1px solid #f1f5f9;
 }
-.emr-content :deep(.emr-defect-tip__header--critical) {
+
+.emr-content :deep(.emr-defect-tip__header--critical),
+.emr-struct :deep(.emr-defect-tip__header--critical) {
   color: #1d4ed8;
 }
-.emr-content :deep(.emr-defect-tip__header--error) {
+
+.emr-content :deep(.emr-defect-tip__header--error),
+.emr-struct :deep(.emr-defect-tip__header--error) {
   color: #2563eb;
 }
-.emr-content :deep(.emr-defect-tip__header--warning) {
+
+.emr-content :deep(.emr-defect-tip__header--warning),
+.emr-struct :deep(.emr-defect-tip__header--warning) {
   color: #3b82f6;
 }
-.emr-content :deep(.emr-defect-tip__header--info) {
+
+.emr-content :deep(.emr-defect-tip__header--info),
+.emr-struct :deep(.emr-defect-tip__header--info) {
   color: #2563eb;
 }
-.emr-content :deep(.emr-defect-tip__body) {
+
+.emr-content :deep(.emr-defect-tip__body),
+.emr-struct :deep(.emr-defect-tip__body) {
+  color: #475569;
   font-size: 12.5px;
   line-height: 1.6;
-  color: #475569;
 }
-.emr-content :deep(.emr-defect-tip__suggest) {
+
+.emr-content :deep(.emr-defect-tip__suggest),
+.emr-struct :deep(.emr-defect-tip__suggest) {
   margin-top: 7px;
-  padding-top: 7px;
   border-top: 1px solid #f1f5f9;
-  font-size: 12px;
+  padding-top: 7px;
   color: #64748b;
+  font-size: 12px;
   line-height: 1.55;
 }
 
 @media (max-width: 960px) {
-  .emr-content {
-    padding: 12px 14px 18px;
+  .emr-content,
+  .emr-struct {
     max-width: none;
+    padding: 12px 14px 18px;
+  }
+
+  .emr-struct__kv-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

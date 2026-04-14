@@ -36,11 +36,55 @@ export interface DeptInfo {
 }
 
 export interface DocItem {
+  id?: string
+  doc_id?: string
+  doc_key?: string
+  doc_type?: string
+  doc_name?: string
   type: string
   label: string
   has_content: boolean
   content: string | null
   length: number
+  document_id?: string
+  document_title?: string
+  sort_time?: string
+  record_time?: string
+  source_table?: string
+  group_key?: string
+  sections?: Array<{
+    section_key?: string
+    section_label?: string
+    text?: string
+    source_field?: string
+    order_index?: number
+  }>
+  source_fields?: Array<{
+    source_table?: string
+    source_field?: string
+    source_path?: string | null
+    used?: boolean
+    raw_value_preview?: string
+  }>
+  assembly_status?: string
+  data_quality_flags?: string[]
+}
+
+export interface DocTreeNode {
+  id: string
+  doc_key: string
+  doc_type: string
+  title: string
+  record_time?: string
+  has_content: boolean
+  length: number
+}
+
+export interface DocTreeGroup {
+  key: string
+  label: string
+  count: number
+  children: DocTreeNode[]
 }
 
 export type FrontpageFocusTarget = 'basic' | 'admission' | 'diagnosis' | 'procedure'

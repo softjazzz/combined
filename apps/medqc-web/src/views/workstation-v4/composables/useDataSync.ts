@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth'
 import {
   syncApi,
   type PgConnectionConfig,
+  type PgSyncTableGroupItem,
   type PgSyncTableConfigItem,
   type SyncConnectionStatus,
   type SyncMappingItem,
@@ -127,6 +128,8 @@ function createInitialState() {
     } as PgConnectionForm,
 
     pgSyncTables: [] as PgSyncTableFormItem[],
+    pgTableGroups: [] as PgSyncTableGroupItem[],
+    selectedTableGroups: ['core_8'] as string[],
 
     policyForm: {
       scope: 'both',
@@ -258,6 +261,24 @@ function normalizePgSyncTable(item: PgSyncTableConfigItem): PgSyncTableFormItem 
   }
 }
 
+function normalizeSelectedTableGroups(
+  selected: string[],
+  groups: PgSyncTableGroupItem[],
+): string[] {
+  const validIds = new Set(groups.map((item) => String(item.id || '').trim()).filter(Boolean))
+  const cleaned = [
+    ...new Set((selected || []).map((item) => String(item || '').trim()).filter(Boolean)),
+  ]
+  const kept = cleaned.filter((id) => validIds.has(id))
+  if (kept.length > 0) {
+    return kept
+  }
+  if (validIds.has('core_8')) {
+    return ['core_8']
+  }
+  return Array.from(validIds).slice(0, 1)
+}
+
 function recomputeOverview() {
   const pending = Number(globalSyncState.pgStats.PENDING || 0)
   const partial = Number(globalSyncState.pgStats.PARTIAL || 0)
@@ -302,6 +323,25 @@ async function loadPgSyncTables() {
     throw error
   } finally {
     globalSyncState.isLoadingPgTables = false
+  }
+}
+
+async function loadPgSyncTableGroups() {
+  try {
+    const resp = await syncApi.getPgSyncTableGroups()
+    globalSyncState.pgTableGroups = Array.isArray(resp.items) ? resp.items : []
+    globalSyncState.selectedTableGroups = normalizeSelectedTableGroups(
+      globalSyncState.selectedTableGroups,
+      globalSyncState.pgTableGroups,
+    )
+    return globalSyncState.pgTableGroups
+  } catch (error: any) {
+    console.error('加载 PG 表分组失败:', error)
+    const detail =
+      error?.response?.data?.detail || error?.response?.data?.error || error?.message || '未知错误'
+    message.warning(`加载 PG 表分组失败：${detail}`)
+    globalSyncState.pgTableGroups = []
+    return []
   }
 }
 
@@ -578,12 +618,50 @@ function startPolling() {
   }, 2000)
 }
 
+function resolveTargetDepartments(): string[] | undefined {
+  const cleaned = [
+    ...new Set(
+      (globalSyncState.policyForm.target_departments || [])
+        .map((item) => String(item || '').trim())
+        .filter(Boolean),
+    ),
+  ]
+  if (cleaned.length === 0 || (cleaned.length === 1 && cleaned[0] === '*')) {
+    return undefined
+  }
+  if (cleaned.includes('*')) {
+    return cleaned.filter((item) => item !== '*')
+  }
+  return cleaned
+}
+
+function resolveTableGroups(): string[] | undefined {
+  const groups = normalizeSelectedTableGroups(
+    globalSyncState.selectedTableGroups,
+    globalSyncState.pgTableGroups,
+  )
+  globalSyncState.selectedTableGroups = groups
+  return groups.length > 0 ? groups : undefined
+}
+
 async function runPreflight(source: SyncSource = 'pg') {
   globalSyncState.isPreflighting = true
   try {
     const result = await syncApi.preflight({
       source,
       tier: globalSyncState.selectedTier,
+      scene: source === 'pg' ? globalSyncState.policyForm.scope : undefined,
+      date_window:
+        source === 'pg'
+          ? {
+              start: globalSyncState.policyForm.start_date || undefined,
+              end: globalSyncState.policyForm.end_date || undefined,
+            }
+          : undefined,
+      target_departments: source === 'pg' ? resolveTargetDepartments() : undefined,
+      policy_version:
+        source === 'pg' ? globalSyncState.policyForm.policy_version || undefined : undefined,
+      table_groups: source === 'pg' ? resolveTableGroups() : undefined,
     })
     globalSyncState.preflightResult = result
     if (result.executable) {
@@ -607,6 +685,18 @@ async function executeSync(source: SyncSource = 'pg') {
     const result = await syncApi.triggerSync({
       source,
       tier: globalSyncState.selectedTier,
+      scene: source === 'pg' ? globalSyncState.policyForm.scope : undefined,
+      date_window:
+        source === 'pg'
+          ? {
+              start: globalSyncState.policyForm.start_date || undefined,
+              end: globalSyncState.policyForm.end_date || undefined,
+            }
+          : undefined,
+      target_departments: source === 'pg' ? resolveTargetDepartments() : undefined,
+      policy_version:
+        source === 'pg' ? globalSyncState.policyForm.policy_version || undefined : undefined,
+      table_groups: source === 'pg' ? resolveTableGroups() : undefined,
     })
     if (result.success) {
       pushLog('info', '同步任务已启动，进入状态轮询')
@@ -635,6 +725,7 @@ async function initialize() {
     await Promise.all([
       loadPgConfig(),
       loadPgSyncTables(),
+      loadPgSyncTableGroups(),
       loadSyncPolicy(),
       loadTemplates(),
       loadDepartments(),
@@ -686,6 +777,7 @@ export function useDataSync() {
     testActiveConnection,
     savePgConnection,
     loadPgSyncTables,
+    loadPgSyncTableGroups,
     savePgSyncTables,
     savePolicy,
     runPreflight,

@@ -93,6 +93,11 @@ class TriggerRequest(BaseModel):
     sync_date: Optional[str] = None
     tier: Literal["all"] = "all"
     tables: Optional[list[str]] = None
+    scene: Optional[Literal["running", "final", "frontpage", "coding", "settlement", "both"]] = "both"
+    date_window: Optional[dict[str, str]] = None
+    target_departments: Optional[list[str]] = None
+    policy_version: Optional[str] = Field(default=None, max_length=128)
+    table_groups: Optional[list[str]] = None
 
 
 class PgConfigUpdate(BaseModel):
@@ -131,6 +136,11 @@ class PreflightRequest(BaseModel):
     source: Literal["pg"] = "pg"
     tier: Literal["all"] = "all"
     tables: Optional[list[str]] = None
+    scene: Optional[Literal["running", "final", "frontpage", "coding", "settlement", "both"]] = "both"
+    date_window: Optional[dict[str, str]] = None
+    target_departments: Optional[list[str]] = None
+    policy_version: Optional[str] = Field(default=None, max_length=128)
+    table_groups: Optional[list[str]] = None
 
 
 class PgSyncTableConfigItem(BaseModel):
@@ -216,6 +226,62 @@ def _resolve_effective_sync_date(source: str, sync_date: Optional[str]) -> str:
 
 def _build_idempotency_key(*, source: str, tier: str, sync_date: str, operator: str) -> str:
     return f"{source}:{tier}:{sync_date}:{operator}"
+
+
+def _resolve_selected_tables(
+    tables: Optional[list[str]],
+    table_groups: Optional[list[str]],
+) -> tuple[Optional[list[str]], list[str]]:
+    direct_tables = [str(item or "").strip() for item in (tables or []) if str(item or "").strip()]
+    selected: list[str] = []
+    seen: set[str] = set()
+
+    for item in direct_tables:
+        if item in seen:
+            continue
+        seen.add(item)
+        selected.append(item)
+
+    missing_groups: list[str] = []
+    if table_groups:
+        from ..services.etl_sync import expand_table_groups
+
+        group_tables, missing_groups = expand_table_groups(table_groups)
+        for item in group_tables:
+            key = str(item or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            selected.append(key)
+
+    return (selected or None), missing_groups
+
+
+def _normalize_date_window_payload(raw: Optional[dict[str, str]]) -> Optional[dict[str, str]]:
+    if not isinstance(raw, dict):
+        return None
+    start = str(raw.get("start") or raw.get("start_date") or "").strip()
+    end = str(raw.get("end") or raw.get("end_date") or "").strip()
+    if not start and not end:
+        return None
+    return {
+        "start": start or None,
+        "end": end or None,
+    }
+
+
+def _normalize_target_departments(values: Optional[list[str]]) -> Optional[list[str]]:
+    if not values:
+        return None
+    cleaned = [str(item or "").strip() for item in values if str(item or "").strip()]
+    if not cleaned:
+        return None
+    dedup = list(dict.fromkeys(cleaned))
+    if len(dedup) == 1 and dedup[0] == "*":
+        return None
+    if "*" in dedup:
+        dedup = [item for item in dedup if item != "*"]
+    return dedup or None
 
 
 # ==================== 状态查询 ====================
@@ -358,6 +424,15 @@ async def get_pg_sync_tables(request: Request, _: dict = Depends(require_sync_re
     return _ok(request, {"items": items, "total": len(items)})
 
 
+@router.get("/config/pg/table-groups")
+async def get_pg_sync_table_groups(request: Request, _: dict = Depends(require_sync_read_access)):
+    """获取 PG 同步表分组（核心8/扩展分组/全量56）。"""
+    from ..services.etl_sync import list_sync_table_groups
+
+    items = list_sync_table_groups()
+    return _ok(request, {"items": items, "total": len(items)})
+
+
 @router.put("/config/pg/tables")
 async def update_pg_sync_tables(
     request: Request,
@@ -475,8 +550,12 @@ async def run_preflight(
     if req.tables and len(req.tables) > 10:
         warnings.append("本次指定同步表数量较多，建议分批执行。")
 
-    execution_plan = validate_pg_sync_plan(tables=req.tables, include_disabled=False)
-    full_matrix_plan = validate_pg_sync_plan(tables=req.tables, include_disabled=True)
+    selected_tables, missing_groups = _resolve_selected_tables(req.tables, req.table_groups)
+    if missing_groups:
+        blockers.append(f"未知同步分组: {', '.join(missing_groups)}")
+
+    execution_plan = validate_pg_sync_plan(tables=selected_tables, include_disabled=False)
+    full_matrix_plan = validate_pg_sync_plan(tables=selected_tables, include_disabled=True)
     blockers.extend([str(item) for item in execution_plan.get("blockers", [])])
     warnings.extend([str(item) for item in execution_plan.get("warnings", [])])
     warnings.extend([str(item) for item in full_matrix_plan.get("warnings", [])])
@@ -502,6 +581,11 @@ async def run_preflight(
         "target_tables": full_matrix_plan.get("target_tables", []),
         "execution_table_validations": execution_plan.get("table_validations", []),
         "execution_target_tables": execution_plan.get("target_tables", []),
+        "scene": req.scene,
+        "date_window": _normalize_date_window_payload(req.date_window),
+        "target_departments": _normalize_target_departments(req.target_departments) or ["*"],
+        "policy_version": str(req.policy_version or ""),
+        "table_groups": req.table_groups or [],
         "connections": {
             "pg_remote": remote_result,
             "pg_local": local_result,
@@ -574,8 +658,28 @@ async def trigger_sync(
     run_id = reservation.run_id
     started_at = datetime.now(timezone.utc)
 
+    selected_tables, missing_groups = _resolve_selected_tables(req.tables, req.table_groups)
+    if missing_groups:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"未知同步分组: {', '.join(missing_groups)}",
+        )
+
+    date_window_payload = _normalize_date_window_payload(req.date_window)
+    target_departments = _normalize_target_departments(req.target_departments)
+    policy_version = str(req.policy_version or "").strip()
+    scene = str(req.scene or "both")
+
     from ..services.etl_sync import run_sync
-    result = run_sync(sync_date=effective_sync_date, tables=req.tables)
+    result = run_sync(
+        sync_date=effective_sync_date,
+        tables=selected_tables,
+        scene=scene,
+        policy_version=policy_version,
+        date_window=date_window_payload,
+        target_departments=target_departments,
+        run_id=run_id,
+    )
 
     finished_at = datetime.now(timezone.utc)
     status_name = _infer_trigger_status(req.source, result)
@@ -617,7 +721,12 @@ async def trigger_sync(
                 "id": run_id,
                 "source": req.source,
                 "tier": effective_tier,
-                "tables": req.tables or [],
+                "tables": selected_tables or [],
+                "table_groups": req.table_groups or [],
+                "scene": scene,
+                "date_window": date_window_payload or {},
+                "target_departments": target_departments or ["*"],
+                "policy_version": policy_version,
                 "status": status_name,
                 "started_at": _utc_iso(started_at),
                 "finished_at": _utc_iso(finished_at),
@@ -655,6 +764,7 @@ async def trigger_sync(
                 "source": req.source,
                 "tier": effective_tier,
                 "sync_date": effective_sync_date,
+                "scene": scene,
                 "run_id": run_id,
                 "idempotency_key": idempotency_key,
                 "status": status_name,
@@ -689,6 +799,7 @@ async def trigger_sync(
             "source": req.source,
             "tier": effective_tier,
             "sync_date": effective_sync_date,
+            "scene": scene,
             "run_id": run_id,
             "idempotency_key": idempotency_key,
             "status": status_name,

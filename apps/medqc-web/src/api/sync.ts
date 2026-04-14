@@ -38,6 +38,14 @@ export interface PgSyncTableConfigItem {
   procedure?: string
 }
 
+export interface PgSyncTableGroupItem {
+  id: string
+  label: string
+  description?: string
+  table_names: string[]
+  table_count: number
+}
+
 export interface SyncStatusResponse {
   pg_sync: Record<string, any>
 }
@@ -228,6 +236,11 @@ export const syncApi = {
     return unwrapSyncResponse<{ items: PgSyncTableConfigItem[]; total: number }>(response.data)
   },
 
+  async getPgSyncTableGroups(): Promise<{ items: PgSyncTableGroupItem[]; total: number }> {
+    const response = await http.get('/api/v1/sync/config/pg/table-groups')
+    return unwrapSyncResponse<{ items: PgSyncTableGroupItem[]; total: number }>(response.data)
+  },
+
   async updatePgSyncTables(payload: {
     items: Array<{
       name: string
@@ -260,6 +273,16 @@ export const syncApi = {
     source: SyncSource
     tier?: SyncTier
     tables?: string[]
+    scene?: SyncPolicyConfig['scope']
+    date_window?: {
+      start?: string
+      end?: string
+      start_date?: string
+      end_date?: string
+    }
+    target_departments?: string[]
+    policy_version?: string
+    table_groups?: string[]
   }): Promise<SyncPreflightResult> {
     const response = await http.post('/api/v1/sync/preflight', payload)
     return unwrapSyncResponse<SyncPreflightResult>(response.data)
@@ -270,6 +293,16 @@ export const syncApi = {
     tier?: SyncTier
     sync_date?: string
     tables?: string[]
+    scene?: SyncPolicyConfig['scope']
+    date_window?: {
+      start?: string
+      end?: string
+      start_date?: string
+      end_date?: string
+    }
+    target_departments?: string[]
+    policy_version?: string
+    table_groups?: string[]
   }): Promise<SyncTriggerResponse> {
     const response = await http.post('/api/v1/sync/trigger', payload)
     return unwrapSyncResponse<SyncTriggerResponse>(response.data)

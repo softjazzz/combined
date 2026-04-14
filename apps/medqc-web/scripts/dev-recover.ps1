@@ -3,6 +3,9 @@ param(
   [switch]$BackendOnly,
   [int]$FrontendPort = 3000,
   [int]$BackendPort = 8001,
+  [string]$FrontendHost = "0.0.0.0",
+  [string]$BackendHost = "0.0.0.0",
+  [string]$HealthCheckHost = "127.0.0.1",
   [string]$PythonExe = "C:\Python310\python.exe",
   [switch]$NoDistFallback
 )
@@ -86,10 +89,10 @@ function Start-DistFrontend([string]$projectRoot, [int]$port, [string]$logFile) 
   $pyPath = Resolve-PythonExecutable $PythonExe
   if ($pyPath -and (Test-Path -LiteralPath $pySpaEntry)) {
     if ($pyPath -like "py *") {
-      $cmd = "set HTTP_PROXY=&& set HTTPS_PROXY=&& set ALL_PROXY=&& set NO_PROXY=localhost,127.0.0.1&& $pyPath scripts\\serve_dist_spa.py --host 127.0.0.1 --port $port --dir dist > `"$logFile`" 2>&1"
+      $cmd = "set HTTP_PROXY=&& set HTTPS_PROXY=&& set ALL_PROXY=&& set NO_PROXY=localhost,127.0.0.1&& $pyPath scripts\\serve_dist_spa.py --host $FrontendHost --port $port --dir dist > `"$logFile`" 2>&1"
       Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $cmd -WorkingDirectory $projectRoot | Out-Null
     } else {
-      Start-Process -FilePath $pyPath -ArgumentList "scripts/serve_dist_spa.py --host 127.0.0.1 --port $port --dir dist" -WorkingDirectory $projectRoot -RedirectStandardOutput $logFile -RedirectStandardError $logFile | Out-Null
+      Start-Process -FilePath $pyPath -ArgumentList "scripts/serve_dist_spa.py --host $FrontendHost --port $port --dir dist" -WorkingDirectory $projectRoot -RedirectStandardOutput $logFile -RedirectStandardError $logFile | Out-Null
     }
   } elseif (Test-Path -LiteralPath $nodeSpaEntry) {
     $cmd = "set HTTP_PROXY=&& set HTTPS_PROXY=&& set ALL_PROXY=&& set NO_PROXY=localhost,127.0.0.1&& set PORT=$port&& node scripts\\serve-dist-spa.mjs > `"$logFile`" 2>&1"
@@ -98,8 +101,8 @@ function Start-DistFrontend([string]$projectRoot, [int]$port, [string]$logFile) 
     Write-Warning "  dist fallback unavailable: no spa server script found"
     return $false
   }
-  if (Wait-HttpOk "http://127.0.0.1:$port" 20) {
-    Write-Host "  frontend fallback ok: http://127.0.0.1:$port (dist mode)" -ForegroundColor Green
+  if (Wait-HttpOk "http://${HealthCheckHost}:$port" 20) {
+    Write-Host "  frontend fallback ok: http://${FrontendHost}:$port (dist mode)" -ForegroundColor Green
     return $true
   }
   return $false
@@ -130,8 +133,8 @@ function Test-HttpEndpoint([string]$url, [int]$timeoutSec = 8) {
 
 function Test-FrontendHealth([int]$port) {
   $baseTargets = @(
-    "http://127.0.0.1:$port/",
-    "http://127.0.0.1:$port/@vite/client"
+    "http://${HealthCheckHost}:$port/",
+    "http://${HealthCheckHost}:$port/@vite/client"
   )
   foreach ($target in $baseTargets) {
     if (-not (Test-HttpEndpoint $target 10)) {
@@ -142,7 +145,7 @@ function Test-FrontendHealth([int]$port) {
 
   # 冷启动时模块转换较慢，给 src/main.ts 更长超时窗口
   $stamp = [DateTimeOffset]::Now.ToUnixTimeMilliseconds()
-  $mainUrl = "http://127.0.0.1:$port/src/main.ts?t=$stamp"
+  $mainUrl = "http://${HealthCheckHost}:$port/src/main.ts?t=$stamp"
   if (-not (Test-HttpEndpoint $mainUrl 45)) {
     Write-Warning "  frontend module warmup timeout: $mainUrl"
     return $false
@@ -274,7 +277,7 @@ if ($runFrontend) {
   $frontendReady = $false
   for ($attempt = 1; $attempt -le 2; $attempt++) {
     Write-Host "  frontend boot attempt $attempt/2"
-    $extraArgs = "--host=127.0.0.1 --port=$FrontendPort --strictPort"
+    $extraArgs = "--host=$FrontendHost --port=$FrontendPort --strictPort"
     if ($attempt -eq 2) {
       $viteCache = Join-Path $root "node_modules\.vite"
       if (Test-Path $viteCache) {
@@ -290,7 +293,7 @@ if ($runFrontend) {
     $frontendCmd = "set HTTP_PROXY=&& set HTTPS_PROXY=&& set ALL_PROXY=&& set NO_PROXY=localhost,127.0.0.1&& $esbuildEnv npm run dev -- $extraArgs > `"$frontendLog`" 2>&1"
     Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $frontendCmd -WorkingDirectory $root | Out-Null
 
-    if (-not (Wait-HttpOk "http://127.0.0.1:$FrontendPort" 35)) {
+    if (-not (Wait-HttpOk "http://${HealthCheckHost}:$FrontendPort" 35)) {
       Write-Warning "  frontend base url not ready in attempt $attempt"
     } elseif (Test-FrontendHealth $FrontendPort) {
       $frontendReady = $true
@@ -316,7 +319,7 @@ if ($runFrontend) {
   }
 
   if ($frontendReady) {
-    Write-Host "  frontend ok: http://127.0.0.1:$FrontendPort" -ForegroundColor Green
+    Write-Host "  frontend ok: http://${FrontendHost}:$FrontendPort" -ForegroundColor Green
   } else {
     $isEsbuildEperm = $false
     try {
@@ -358,7 +361,7 @@ if ($runBackend) {
     }
 
     $backendDir = Join-Path $root "backend"
-    $arg = "-m uvicorn app.main:app --host 0.0.0.0 --port $BackendPort"
+    $arg = "-m uvicorn app.main:app --host $BackendHost --port $BackendPort"
     $backendErrLog = [System.IO.Path]::ChangeExtension($backendLog, ".err.log")
     if ($resolvedPython -like "py *") {
       $cmd = "$resolvedPython $arg > `"$backendLog`" 2> `"$backendErrLog`""
@@ -367,8 +370,8 @@ if ($runBackend) {
       Start-Process -FilePath $resolvedPython -ArgumentList $arg -WorkingDirectory $backendDir -RedirectStandardOutput $backendLog -RedirectStandardError $backendErrLog | Out-Null
     }
 
-    if (Wait-HttpOk "http://127.0.0.1:$BackendPort/docs" 35) {
-      Write-Host "  backend ok: http://127.0.0.1:$BackendPort/docs" -ForegroundColor Green
+    if (Wait-HttpOk "http://${HealthCheckHost}:$BackendPort/docs" 35) {
+      Write-Host "  backend ok: http://${BackendHost}:$BackendPort/docs" -ForegroundColor Green
     } else {
       $fallbackWithoutReload = $false
       if (Test-Path $backendErrLog) {
@@ -384,7 +387,7 @@ if ($runBackend) {
         Write-Warning "  detected Windows reload permission issue, retry backend without --reload..."
         Stop-PortProcess $BackendPort
 
-        $arg = "-m uvicorn app.main:app --host 0.0.0.0 --port $BackendPort"
+        $arg = "-m uvicorn app.main:app --host $BackendHost --port $BackendPort"
         if ($resolvedPython -like "py *") {
           $cmd = "$resolvedPython $arg > `"$backendLog`" 2> `"$backendErrLog`""
           Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $cmd -WorkingDirectory $backendDir | Out-Null
@@ -392,8 +395,8 @@ if ($runBackend) {
           Start-Process -FilePath $resolvedPython -ArgumentList $arg -WorkingDirectory $backendDir -RedirectStandardOutput $backendLog -RedirectStandardError $backendErrLog | Out-Null
         }
 
-        if (Wait-HttpOk "http://127.0.0.1:$BackendPort/docs" 35) {
-          Write-Host "  backend ok: http://127.0.0.1:$BackendPort/docs (no-reload mode)" -ForegroundColor Green
+        if (Wait-HttpOk "http://${HealthCheckHost}:$BackendPort/docs" 35) {
+          Write-Host "  backend ok: http://${BackendHost}:$BackendPort/docs (no-reload mode)" -ForegroundColor Green
         } else {
           Write-Warning "  backend not ready. see log: $backendLog"
         }

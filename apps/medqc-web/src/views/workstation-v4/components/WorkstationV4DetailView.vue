@@ -21,6 +21,7 @@
       <DetailSidebar
         :record="selectedRecord"
         :documents="documentsList"
+        :documents-tree="documentsTree"
         :documents-loading="documentsLoading"
         :active-doc-type="activeDocType"
         @preview-doc="emit('preview-doc', $event)"
@@ -87,7 +88,7 @@ import { FileSearchOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 
 import DetailHeader from './DetailHeader.vue'
 import DetailSidebar from './DetailSidebar.vue'
-import type { DocItem, PatientRecord } from '../types'
+import type { DocItem, DocTreeGroup, PatientRecord } from '../types'
 
 const props = defineProps<{
   selectedRecord?: PatientRecord
@@ -98,6 +99,7 @@ const props = defineProps<{
   canGenerateFrontpage: boolean
   frontpageDisabledReason: string
   documentsList: DocItem[]
+  documentsTree: DocTreeGroup[]
   documentsLoading: boolean
   activeDocType?: string
   detailMainTab: 'records' | 'frontpage' | 'settlement'

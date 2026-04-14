@@ -1,6 +1,9 @@
 param(
   [int]$FrontendPort = 3000,
   [int]$BackendPort = 8001,
+  [string]$FrontendHost = "0.0.0.0",
+  [string]$BackendHost = "0.0.0.0",
+  [string]$HealthCheckHost = "127.0.0.1",
   [string]$PythonExe = "C:\Python310\python.exe",
   [int]$IntervalSec = 8,
   [int]$FailThreshold = 2
@@ -20,7 +23,7 @@ function Test-Endpoint([string]$url, [int]$timeoutSec = 8) {
 }
 
 function Test-FrontendHealthy([int]$port) {
-  $base = "http://127.0.0.1:$port"
+  $base = "http://${HealthCheckHost}:$port"
   if (-not (Test-Endpoint "$base/" 8)) { return $false }
   if (-not (Test-Endpoint "$base/@vite/client" 8)) { return $false }
   if (-not (Test-Endpoint "$base/src/main.ts?t=$([DateTimeOffset]::Now.ToUnixTimeMilliseconds())" 20)) { return $false }
@@ -50,6 +53,9 @@ while ($true) {
         -FrontendOnly `
         -FrontendPort $FrontendPort `
         -BackendPort $BackendPort `
+        -FrontendHost $FrontendHost `
+        -BackendHost $BackendHost `
+        -HealthCheckHost $HealthCheckHost `
         -PythonExe $PythonExe
       $failedCount = 0
     }

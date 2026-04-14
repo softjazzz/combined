@@ -50,6 +50,7 @@
           :can-generate-frontpage="canGenerateFrontpage"
           :frontpage-disabled-reason="frontpageDisabledReason"
           :documents-list="documentsList"
+          :documents-tree="documentsTree"
           :documents-loading="documentsLoading"
           :active-doc-type="activeDocType"
           :detail-main-tab="detailMainTab"
@@ -73,6 +74,7 @@
               :concat-total-chars="concatTotalChars"
               :all-concat-sections-expanded="allConcatSectionsExpanded"
               :is-section-expanded="isConcatSectionExpanded"
+              :active-doc-type="activeDocType"
               :doc-preview-active="!!activeDocType"
               :doc-preview-title="docPreviewTitle"
               :doc-preview-content="docPreviewContent"
@@ -283,6 +285,7 @@ import type {
   PatientRecord,
   DeptInfo,
   DocItem,
+  DocTreeGroup,
   FrontpageFocusTarget,
   QCIssueLike,
   WorkstationWorklistItem,
@@ -890,6 +893,7 @@ const AsyncDRGGroupingTab = defineAsyncComponent(
 
 // ========== 鐥呭巻鏂囦功棰勮 ==========
 const documentsList = ref<DocItem[]>([])
+const documentsTree = ref<DocTreeGroup[]>([])
 const documentsLoading = ref(false)
 const activeDocType = ref<string>('')
 const docPreviewTitle = ref('')
@@ -1190,12 +1194,36 @@ async function loadDocuments(visitId: string) {
   documentsLoading.value = true
   concatLoading.value = true
   documentsList.value = []
+  documentsTree.value = []
   concatText.value = ''
   try {
-    const { data } = await apiClient.get(`/api/medical-records/documents/${visitId}`)
-    const docs: DocItem[] = data.documents || []
+    const record = selectedRecord.value
+    const params: Record<string, string> = {}
+    if (record?.patientId) params.patient_id = record.patientId
+    if (record?.instituteId) params.institute_id = record.instituteId
+    if (record?.visitId) {
+      params.visit_id = record.visitId
+    } else {
+      params.visit_id = visitId
+    }
+
+    const { data } = await apiClient.get(`/api/v1/emr/${visitId}/documents`, { params })
+    const payload = data?.data || data || {}
+    const docs: DocItem[] = Array.isArray(payload.documents)
+      ? payload.documents
+      : Array.isArray(payload)
+        ? payload
+        : []
+    const tree: DocTreeGroup[] = Array.isArray(payload.documents_tree) ? payload.documents_tree : []
     documentsList.value = docs
+    documentsTree.value = tree
     concatText.value = buildConcatTextFromDocuments(docs)
+    if (docs.length > 0) {
+      const defaultDoc = docs.find((item) => item.has_content) || docs[0]
+      activeDocType.value = docIdentityKey(defaultDoc)
+      docPreviewTitle.value = resolveDocDisplayTitle(defaultDoc, true)
+      docPreviewContent.value = defaultDoc.content || ''
+    }
   } catch (err) {
     console.error('加载病历文书失败:', err)
   } finally {
@@ -1205,7 +1233,10 @@ async function loadDocuments(visitId: string) {
 }
 
 function docIdentityKey(doc: DocItem) {
-  return `${doc.type || ''}::${doc.document_id || doc.label || ''}`
+  return String(
+    doc.doc_key ||
+      `${doc.doc_type || doc.type || ''}::${doc.document_id || doc.id || doc.label || ''}`,
+  )
 }
 
 function openDocPreview(doc: DocItem) {
@@ -1410,6 +1441,7 @@ watch(selectedId, (newId) => {
   } else {
     qcSnapshotState.value = {}
     documentsList.value = []
+    documentsTree.value = []
     concatText.value = ''
     settlementData.value = null
     frontpageSheetData.value = null

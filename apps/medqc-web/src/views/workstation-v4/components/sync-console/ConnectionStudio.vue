@@ -529,8 +529,47 @@
                 分组选择
               </div>
               <div class="studio-summary-card__value">
-                核心8表
+                {{ selectedTableGroupSummary }}
               </div>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-slate-200/80 bg-slate-50 px-3 py-2 space-y-2">
+            <label class="studio-label !mb-0">同步表分组（推荐）</label>
+            <a-select
+              v-model:value="state.selectedTableGroups"
+              mode="multiple"
+              :disabled="isReadonly || !hasTableGroups"
+              :options="tableGroupOptions"
+              :max-tag-count="2"
+              style="width: 100%"
+              placeholder="默认核心8表，可按分组扩展"
+            />
+            <div class="text-[11px] text-slate-500">
+              当前：{{ selectedTableGroupSummary }}
+            </div>
+            <div class="flex items-center gap-2">
+              <a-button
+                size="small"
+                :disabled="isReadonly || !hasTableGroups"
+                @click="applyTableGroupPreset('core')"
+              >
+                核心8表
+              </a-button>
+              <a-button
+                size="small"
+                :disabled="isReadonly || !hasTableGroups"
+                @click="applyTableGroupPreset('clinical')"
+              >
+                临床常用
+              </a-button>
+              <a-button
+                size="small"
+                :disabled="isReadonly || !hasTableGroups"
+                @click="applyTableGroupPreset('all')"
+              >
+                全量56表
+              </a-button>
             </div>
           </div>
 
@@ -835,6 +874,7 @@ const {
   testActiveConnection,
   savePgConnection,
   loadPgSyncTables,
+  loadPgSyncTableGroups,
   savePgSyncTables,
   savePolicy,
   runPreflight,
@@ -903,6 +943,31 @@ const policyDepartmentOptions = computed(() => [
 ])
 
 const enabledTableCount = computed(() => state.pgSyncTables.filter((item) => item.enabled).length)
+const hasTableGroups = computed(() => state.pgTableGroups.length > 0)
+
+const tableGroupOptions = computed(() =>
+  state.pgTableGroups.map((item) => ({
+    label: `${item.label}${item.table_count ? `（${item.table_count}）` : ''}`,
+    value: item.id,
+  })),
+)
+
+const selectedTableGroupSummary = computed(() => {
+  const selected = Array.isArray(state.selectedTableGroups) ? state.selectedTableGroups : []
+  if (selected.length === 0) {
+    return '默认核心8表'
+  }
+  const labelMap = new Map(
+    state.pgTableGroups.map((item) => [
+      String(item.id || '').trim(),
+      String(item.label || item.id || '').trim(),
+    ]),
+  )
+  const labels = selected
+    .map((item) => labelMap.get(String(item || '').trim()) || String(item || '').trim())
+    .filter(Boolean)
+  return labels.length > 0 ? labels.join(' / ') : '默认核心8表'
+})
 
 const policyDateRangeLabel = computed(() => {
   const start = state.policyForm.start_date || '未设'
@@ -981,6 +1046,9 @@ const preflightToneClass = computed(() => {
 
 onMounted(() => {
   state.activeTab = 'pg_remote'
+  if (!state.pgTableGroups.length) {
+    void loadPgSyncTableGroups()
+  }
 })
 
 const tabClass = (tab: 'pg_remote' | 'pg_local') => [
@@ -1007,6 +1075,47 @@ const normalizeDepartments = (values: string[]): string[] => {
     return latest === '*' ? ['*'] : cleaned.filter((item) => item !== '*')
   }
   return cleaned
+}
+
+const normalizeSelectedTableGroups = (values: string[]): string[] => {
+  const validIds = new Set(
+    state.pgTableGroups.map((item) => String(item.id || '').trim()).filter(Boolean),
+  )
+  const cleaned = [...new Set(values.map((item) => String(item || '').trim()).filter(Boolean))]
+  const kept = cleaned.filter((item) => validIds.has(item))
+  if (kept.length > 0) {
+    return kept
+  }
+  if (validIds.has('core_8')) {
+    return ['core_8']
+  }
+  return Array.from(validIds).slice(0, 1)
+}
+
+const applyTableGroupPreset = (preset: 'core' | 'clinical' | 'all') => {
+  const validIds = new Set(
+    state.pgTableGroups.map((item) => String(item.id || '').trim()).filter(Boolean),
+  )
+  if (validIds.size === 0) {
+    return
+  }
+
+  let next: string[] = []
+  if (preset === 'core') {
+    next = ['core_8']
+  } else if (preset === 'all') {
+    next = validIds.has('all_56') ? ['all_56'] : Array.from(validIds)
+  } else {
+    next = [
+      'core_8',
+      'document_extended',
+      'diagnosis_extended',
+      'orders_prescriptions',
+      'exam_lab_pathology',
+      'inpatient_notes',
+    ]
+  }
+  state.selectedTableGroups = normalizeSelectedTableGroups(next)
 }
 
 const handlePolicyStartDateChange = (value: DateValue) => {
@@ -1067,8 +1176,9 @@ const handleSavePgTables = async () => {
 
 const handleRefreshTemplateResources = async () => {
   try {
-    await Promise.all([loadTemplates(), loadDepartments()])
-    message.success('模板与科室列表已刷新')
+    await Promise.all([loadTemplates(), loadDepartments(), loadPgSyncTableGroups()])
+    state.selectedTableGroups = normalizeSelectedTableGroups(state.selectedTableGroups || [])
+    message.success('模板、科室与分组列表已刷新')
   } catch {
     message.error('刷新模板资源失败')
   }
@@ -1103,6 +1213,7 @@ const handleSavePolicy = async () => {
 }
 
 const handleRunPreflight = async () => {
+  state.selectedTableGroups = normalizeSelectedTableGroups(state.selectedTableGroups || [])
   try {
     const result = await runPreflight('pg')
     if (result.executable) {

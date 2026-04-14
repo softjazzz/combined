@@ -1,0 +1,2510 @@
+"""
+ETL 同步服务 — 从远端 PostgreSQL 拉取数据写入本地 PostgreSQL。
+
+当前支持两种模式：
+- table: 按远端表 + 日期字段抽取（默认）
+- procedure: 调用远端存储过程（兼容回退）
+"""
+
+import os
+import json
+import logging
+import re
+import uuid
+from pathlib import Path
+from datetime import datetime, date, timedelta
+from typing import Callable, Dict, List, Optional, Any, Tuple
+from dataclasses import dataclass, field, asdict
+
+import psycopg2
+import psycopg2.extras
+from psycopg2.extensions import make_dsn
+from sqlalchemy.orm import Session
+from sqlalchemy import text
+
+from ..database.connection import engine
+from .bundles.assembly import refresh_scene_bundles_for_rows
+from .visit_index_service import ingest_sync_rows
+from .sync_policy import load_sync_policy
+from .config_registry import get_config, set_config
+
+logger = logging.getLogger(__name__)
+
+_SYNC_LOCK_KEY = int(os.getenv("PG_SYNC_LOCK_KEY", "2026032601"))
+_runtime_remote_password: str = ""
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_VISIT_INDEX_ANCHOR_TABLES = {"admission_record", "discharge_record", "mr"}
+_VISIT_KEY_CHUNK_SIZE = max(100, int(os.getenv("PG_SYNC_VISIT_KEY_CHUNK", "500")))
+_LOCAL_TARGET_SCHEMAS_RAW = tuple(
+    s.strip()
+    for s in str(os.getenv("PG_LOCAL_TARGET_SCHEMAS", "public,cdm")).split(",")
+    if s.strip()
+)
+_SCENE_ANCHOR_TABLES = {
+    "running": {"admission_record"},
+    "final": {"discharge_record"},
+    "frontpage": {"mr"},
+    "coding": {"mr"},
+    "settlement": {"medical_insurance_settlement"},
+    "both": {"admission_record", "discharge_record", "mr"},
+}
+
+# 源库字段与本地 CDM 列名不一致时的同步映射（目标列 -> 源候选列）。
+# 仅在目标列存在、本条记录未携带目标列时生效。
+_TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
+    "mr_surgery": {
+        "surgery_begin_datetime": ("surgery_begin_time",),
+        "surgery_end_datetime": ("surgery_end_time",),
+    },
+}
+
+
+def _get_local_target_schemas() -> Tuple[str, ...]:
+    normalized: List[str] = []
+    seen: set[str] = set()
+    for schema in _LOCAL_TARGET_SCHEMAS_RAW:
+        name = str(schema or "").strip().lower()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        normalized.append(name)
+    if "public" not in seen:
+        normalized.append("public")
+    if "cdm" not in seen:
+        normalized.append("cdm")
+    return tuple(normalized)
+
+
+_LOCAL_TARGET_SCHEMAS = _get_local_target_schemas()
+
+
+def _pg_required_in_current_env() -> bool:
+    env = str(os.getenv("ENV") or "").strip().lower()
+    return env in {"prod", "production"}
+
+
+# ==================== 同步状态管理 ====================
+
+@dataclass
+class SyncLog:
+    """单次同步记录"""
+    table_name: str
+    source: str
+    stage: str = "schema_check"
+    # 兼容旧前端字段，后续可清理
+    stored_procedure: str = ""
+    record_count: int = 0
+    status: str = "pending"  # pending / running / success / failed
+    error_msg: str = ""
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
+
+@dataclass
+class SyncState:
+    """全局同步状态"""
+    is_running: bool = False
+    last_sync_time: Optional[str] = None
+    last_sync_status: str = "never"  # never / success / partial / failed
+    total_records_synced: int = 0
+    logs: List[Dict] = field(default_factory=list)
+    remote_connected: bool = False
+    local_connected: bool = False
+
+
+# 全局状态（内存中维护，重启后重置）
+_sync_state = SyncState()
+
+
+def _ensure_sync_job_state_table(session: Session):
+    exists = session.execute(
+        text(
+            """
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = 'qc'
+              AND table_name = 'sync_job_state'
+            """
+        )
+    ).first()
+    if not exists:
+        raise RuntimeError("缺少 qc.sync_job_state（请先执行 Alembic 迁移）")
+
+
+def _upsert_sync_job_state(state: SyncState):
+    if engine is None:
+        if _pg_required_in_current_env():
+            raise RuntimeError("PG 未就绪：生产环境禁止 etl_sync sync_state 内存回退")
+        return
+    payload = asdict(state)
+    with Session(engine) as session:
+        _ensure_sync_job_state_table(session)
+        session.execute(
+            text(
+                f"""
+                INSERT INTO {_SYNC_JOB_STATE_TABLE} (
+                    job_name, is_running, last_sync_time, last_sync_status,
+                    total_records_synced, logs_json, remote_connected, local_connected, updated_at
+                )
+                VALUES (
+                    'pg_sync', :is_running, :last_sync_time, :last_sync_status,
+                    :total_records_synced, :logs_json, :remote_connected, :local_connected, CURRENT_TIMESTAMP
+                )
+                ON CONFLICT (job_name)
+                DO UPDATE SET
+                    is_running = EXCLUDED.is_running,
+                    last_sync_time = EXCLUDED.last_sync_time,
+                    last_sync_status = EXCLUDED.last_sync_status,
+                    total_records_synced = EXCLUDED.total_records_synced,
+                    logs_json = EXCLUDED.logs_json,
+                    remote_connected = EXCLUDED.remote_connected,
+                    local_connected = EXCLUDED.local_connected,
+                    updated_at = CURRENT_TIMESTAMP
+                """
+            ),
+            {
+                "is_running": bool(payload.get("is_running")),
+                "last_sync_time": str(payload.get("last_sync_time") or ""),
+                "last_sync_status": payload.get("last_sync_status") or "never",
+                "total_records_synced": int(payload.get("total_records_synced") or 0),
+                "logs_json": json.dumps(payload.get("logs") or [], ensure_ascii=False),
+                "remote_connected": bool(payload.get("remote_connected")),
+                "local_connected": bool(payload.get("local_connected")),
+            },
+        )
+        session.commit()
+
+
+def get_sync_state() -> Dict:
+    """获取当前同步状态（优先读取数据库状态，回退内存）"""
+    if engine is None:
+        if _pg_required_in_current_env():
+            raise RuntimeError("PG 未就绪：生产环境禁止 etl_sync sync_state 内存回退")
+        return asdict(_sync_state)
+    try:
+        with Session(engine) as session:
+            _ensure_sync_job_state_table(session)
+            row = session.execute(
+                text(
+                    f"""
+                    SELECT
+                        is_running, last_sync_time, last_sync_status, total_records_synced,
+                        logs_json, remote_connected, local_connected
+                    FROM {_SYNC_JOB_STATE_TABLE}
+                    WHERE job_name = 'pg_sync'
+                    """
+                )
+            ).mappings().first()
+            if not row:
+                _upsert_sync_job_state(_sync_state)
+                return asdict(_sync_state)
+            logs = row.get("logs_json") or []
+            last_sync_time = row.get("last_sync_time")
+            if hasattr(last_sync_time, "strftime"):
+                last_sync_time = last_sync_time.strftime("%Y-%m-%d %H:%M:%S")
+            elif last_sync_time is not None:
+                last_sync_time = str(last_sync_time)
+            if isinstance(logs, str):
+                try:
+                    logs = json.loads(logs)
+                except Exception:
+                    logs = []
+            return {
+                "is_running": bool(row.get("is_running")),
+                "last_sync_time": last_sync_time,
+                "last_sync_status": row.get("last_sync_status") or "never",
+                "total_records_synced": int(row.get("total_records_synced") or 0),
+                "logs": logs if isinstance(logs, list) else [],
+                "remote_connected": bool(row.get("remote_connected")),
+                "local_connected": bool(row.get("local_connected")),
+            }
+    except Exception as exc:
+        if _pg_required_in_current_env():
+            raise RuntimeError("读取 qc.sync_job_state 失败：生产环境禁止回退内存状态") from exc
+        logger.warning("读取 sync_job_state 失败，回退内存状态: %s", exc)
+        return asdict(_sync_state)
+
+
+# ==================== 配置文件持久化 ====================
+
+_CONFIG_DIR = Path(__file__).parent.parent.parent / "data"
+_CONFIG_FILE = _CONFIG_DIR / "db_config.json"
+_SYNC_TABLES_FILE = _CONFIG_DIR / "sync_tables.json"
+_DB_CONFIG_NAMESPACE = "sync"
+_DB_CONFIG_KEY = "pg_source_config"
+_TABLE_CONFIG_NAMESPACE = "sync"
+_TABLE_CONFIG_KEY = "sync_tables"
+_SYNC_JOB_STATE_TABLE = "qc.sync_job_state"
+_SYNC_RUN_DETAILS_TABLE = "qc.sync_run_details"
+_SYNC_ERROR_TABLE = "qc.sync_error_records"
+
+_DEFAULT_CONFIG = {
+    "remote_host": "192.168.140.160",
+    "remote_port": "5432",
+    "remote_database": "clinical_data",
+    "remote_username": "postgres",
+    "remote_password_ref": "env:REMOTE_DB_PASSWORD",
+    "remote_schema": "public",
+    "sync_mode": "table",  # table | procedure
+}
+
+
+def _safe_identifier(name: str) -> str:
+    if not _IDENTIFIER_RE.match(name):
+        raise ValueError(f"非法标识符: {name}")
+    return name
+
+
+def _ensure_sync_tracking_tables(session: Session) -> None:
+    required = (
+        ("qc", "sync_run_details"),
+        ("qc", "sync_error_records"),
+    )
+    missing: list[str] = []
+    for schema_name, table_name in required:
+        exists = session.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = :schema_name
+                  AND table_name = :table_name
+                """
+            ),
+            {"schema_name": schema_name, "table_name": table_name},
+        ).first()
+        if not exists:
+            missing.append(f"{schema_name}.{table_name}")
+    if missing:
+        raise RuntimeError(f"缺少同步追踪表（请先执行 Alembic 迁移）: {', '.join(missing)}")
+
+
+def _record_sync_run_detail(
+    *,
+    run_id: str,
+    source_table: str,
+    target_table: str,
+    status: str,
+    pulled_count: int,
+    upserted_count: int,
+    failed_count: int,
+    started_at: Optional[datetime],
+    finished_at: Optional[datetime],
+    error_message: str = "",
+) -> None:
+    if engine is None:
+        if _pg_required_in_current_env():
+            raise RuntimeError("PG 未就绪：生产环境禁止 etl_sync tracking 内存回退")
+        return
+    if not run_id:
+        return
+    with Session(engine) as session:
+        _ensure_sync_tracking_tables(session)
+        session.execute(
+            text(
+                f"""
+                INSERT INTO {_SYNC_RUN_DETAILS_TABLE} (
+                    id, run_id, source_table, target_table, status,
+                    pulled_count, upserted_count, failed_count,
+                    started_at, finished_at, error_message, created_at
+                )
+                VALUES (
+                    :id, :run_id, :source_table, :target_table, :status,
+                    :pulled_count, :upserted_count, :failed_count,
+                    :started_at, :finished_at, :error_message, CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "run_id": str(run_id).strip(),
+                "source_table": str(source_table).strip(),
+                "target_table": str(target_table).strip() or None,
+                "status": str(status).strip()[:20] or "unknown",
+                "pulled_count": max(0, int(pulled_count)),
+                "upserted_count": max(0, int(upserted_count)),
+                "failed_count": max(0, int(failed_count)),
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "error_message": str(error_message or "")[:2000],
+            },
+        )
+        session.commit()
+
+
+def _record_sync_error(
+    *,
+    run_id: str,
+    source_table: str,
+    source_primary_key: str,
+    visit_id: str = "",
+    error_code: str = "",
+    error_message: str = "",
+    payload: Optional[dict[str, Any]] = None,
+) -> None:
+    if engine is None:
+        if _pg_required_in_current_env():
+            raise RuntimeError("PG 未就绪：生产环境禁止 etl_sync tracking 内存回退")
+        return
+    if not run_id:
+        return
+    with Session(engine) as session:
+        _ensure_sync_tracking_tables(session)
+        session.execute(
+            text(
+                f"""
+                INSERT INTO {_SYNC_ERROR_TABLE} (
+                    id, run_id, source_table, source_primary_key, visit_id,
+                    error_code, error_message, payload_json, retry_count, created_at
+                )
+                VALUES (
+                    :id, :run_id, :source_table, :source_primary_key, :visit_id,
+                    :error_code, :error_message, :payload_json, 0, CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "run_id": str(run_id).strip(),
+                "source_table": str(source_table).strip(),
+                "source_primary_key": str(source_primary_key or "")[:300],
+                "visit_id": str(visit_id or "")[:100] or None,
+                "error_code": str(error_code or "")[:80] or None,
+                "error_message": str(error_message or "")[:2000],
+                "payload_json": json.dumps(payload or {}, ensure_ascii=False),
+            },
+        )
+        session.commit()
+
+
+def _parse_local_datetime(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text_value = str(value).strip()
+    if not text_value:
+        return None
+    if " " in text_value and "T" not in text_value:
+        text_value = text_value.replace(" ", "T")
+    if text_value.endswith("Z"):
+        text_value = text_value[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text_value)
+    except Exception:
+        return None
+
+
+def _normalize_sync_scene(scene: Optional[str]) -> str:
+    normalized = str(scene or "").strip().lower()
+    if normalized in {"running", "final", "frontpage", "coding", "settlement", "both"}:
+        return normalized
+    return "both"
+
+
+def _apply_sync_column_aliases(
+    *,
+    table_name: str,
+    record: Dict[str, Any],
+    existing_columns: set[str],
+) -> Dict[str, Any]:
+    normalized: Dict[str, Any] = {str(k).lower(): v for k, v in record.items()}
+    alias_map = _TABLE_COLUMN_ALIASES.get(str(table_name or "").strip().lower(), {})
+    if not alias_map:
+        return normalized
+    for target_col, source_cols in alias_map.items():
+        if target_col not in existing_columns:
+            continue
+        current_value = normalized.get(target_col)
+        if current_value not in (None, ""):
+            continue
+        for source_col in source_cols:
+            alias_value = normalized.get(source_col)
+            if alias_value in (None, ""):
+                continue
+            normalized[target_col] = alias_value
+            break
+    return normalized
+
+
+def _route_tables_by_scene(
+    target_tables: List[Dict[str, Any]],
+    scene: str,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """
+    Route execution table set by scene anchors.
+    - running: admission_record
+    - final: discharge_record
+    - frontpage/coding: mr
+    - settlement: medical_insurance_settlement
+    - both: admission_record + discharge_record + mr
+    """
+    anchor_set = _SCENE_ANCHOR_TABLES.get(scene)
+    if not anchor_set:
+        return target_tables, []
+    # 执行表集合不再按 scene 裁剪。
+    # scene 仅用于确定“病例集合锚点表”，执行阶段仍跑调用方选中的所有表。
+    routed = list(target_tables)
+    existing = {str(item.get("name") or "") for item in target_tables}
+    missing_anchors = sorted(list(anchor_set - existing))
+    return routed, missing_anchors
+
+
+def _resolve_password_from_ref(ref: str) -> str:
+    if not ref:
+        return ""
+    env_key = ref
+    if ref.startswith("env:"):
+        env_key = ref.split(":", 1)[1].strip()
+    return os.getenv(env_key, "")
+
+
+def load_db_config() -> Dict:
+    """读取数据库配置（配置文件仅保存非敏感字段；口令通过环境变量/运行时注入）"""
+    global _runtime_remote_password
+    cfg = dict(_DEFAULT_CONFIG)
+
+    pg_cfg = get_config(_DB_CONFIG_NAMESPACE, _DB_CONFIG_KEY)
+    if isinstance(pg_cfg, dict):
+        legacy_password = str(pg_cfg.get("remote_password") or "")
+        if legacy_password and not _runtime_remote_password:
+            _runtime_remote_password = legacy_password
+        pg_cfg.pop("remote_password", None)
+        cfg.update(pg_cfg)
+
+    if not isinstance(pg_cfg, dict) and _pg_required_in_current_env():
+        raise RuntimeError("缺少 PG 配置 sync/pg_source_config：生产环境禁止读取文件回退")
+
+    if _CONFIG_FILE.exists() and not _pg_required_in_current_env():
+        try:
+            with open(_CONFIG_FILE, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+                if isinstance(raw, dict):
+                    # 兼容旧格式（含 remote_password），读取但不再持久化
+                    legacy_password = str(raw.get("remote_password") or "")
+                    if legacy_password and not _runtime_remote_password:
+                        _runtime_remote_password = legacy_password
+                    raw.pop("remote_password", None)
+                    cfg.update(raw)
+        except Exception:
+            pass
+
+    # 回退：从 .env 的 REMOTE_DB_URL 解析（用于 host/user/db）
+    env_url = os.getenv("REMOTE_DB_URL", "")
+    if env_url:
+        try:
+            # postgresql://user:pass@host:port/db
+            rest = env_url.split("://", 1)[1]
+            cred, hostdb = rest.split("@", 1)
+            username, password = cred.rsplit(":", 1)
+            hostport, database = hostdb.split("/", 1)
+            host, port = hostport.split(":", 1) if ":" in hostport else (hostport, "5432")
+            cfg.update({
+                "remote_host": host,
+                "remote_port": port,
+                "remote_database": database,
+                "remote_username": username,
+            })
+            if password and not _runtime_remote_password:
+                _runtime_remote_password = password
+        except Exception:
+            pass
+
+    if not cfg.get("remote_password_ref"):
+        cfg["remote_password_ref"] = "env:REMOTE_DB_PASSWORD"
+    cfg["remote_schema"] = str(cfg.get("remote_schema") or "public")
+    cfg["sync_mode"] = str(cfg.get("sync_mode") or "table").lower()
+
+    cfg["remote_password"] = _runtime_remote_password or _resolve_password_from_ref(str(cfg.get("remote_password_ref", "")))
+    return cfg
+
+
+def save_db_config(config: Dict, runtime_password: Optional[str] = None) -> Dict:
+    """保存数据库配置到 PG config registry（不持久化明文密码）。"""
+    global _runtime_remote_password
+    if runtime_password is not None and str(runtime_password).strip():
+        _runtime_remote_password = str(runtime_password).strip()
+    # 只保存白名单字段（不包含 remote_password）
+    safe_keys = {
+        "remote_host",
+        "remote_port",
+        "remote_database",
+        "remote_username",
+        "remote_password_ref",
+        "remote_schema",
+        "sync_mode",
+    }
+    to_save = {k: v for k, v in config.items() if k in safe_keys}
+    if not to_save.get("remote_password_ref"):
+        to_save["remote_password_ref"] = "env:REMOTE_DB_PASSWORD"
+    if not to_save.get("remote_schema"):
+        to_save["remote_schema"] = "public"
+    if str(to_save.get("sync_mode") or "").lower() not in {"table", "procedure"}:
+        to_save["sync_mode"] = "table"
+    if not set_config(
+        _DB_CONFIG_NAMESPACE,
+        _DB_CONFIG_KEY,
+        to_save,
+        updated_by="system",
+        source="etl_sync",
+        change_reason="update pg source config",
+    ):
+        raise RuntimeError("写入 PG pg_source_config 失败")
+    return to_save
+
+
+# ==================== 远端数据库连接 ====================
+
+def get_remote_db_url() -> str:
+    """从配置构建远端 PG DSN（安全处理特殊字符口令）。"""
+    cfg = load_db_config()
+    host = str(cfg.get("remote_host") or "").strip()
+    port = str(cfg.get("remote_port") or "5432").strip() or "5432"
+    db = str(cfg.get("remote_database") or "").strip()
+    user = str(cfg.get("remote_username") or "").strip()
+    pwd = str(cfg.get("remote_password") or "").strip()
+    if not host or not user or not pwd:
+        return os.getenv("REMOTE_DB_URL", "")
+    return make_dsn(host=host, port=port, dbname=db, user=user, password=pwd)
+
+
+def get_remote_display_url() -> str:
+    """返回脱敏后的远端连接信息，供 UI/日志展示。"""
+    cfg = load_db_config()
+    host = str(cfg.get("remote_host") or "").strip()
+    port = str(cfg.get("remote_port") or "5432").strip() or "5432"
+    db = str(cfg.get("remote_database") or "").strip()
+    user = str(cfg.get("remote_username") or "").strip()
+    if not host or not user:
+        return ""
+    return f"postgresql://{user}:***@{host}:{port}/{db}"
+
+
+def test_remote_connection() -> Dict:
+    """测试远端数据库连接"""
+    url = get_remote_db_url()
+    if not url:
+        return {"connected": False, "error": "REMOTE_DB_URL 未配置", "url": ""}
+
+    display_url = get_remote_display_url() or ""
+
+    try:
+        conn = psycopg2.connect(url, connect_timeout=5)
+        cursor = conn.cursor()
+        cursor.execute("SELECT version()")
+        version = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        _sync_state.remote_connected = True
+        _upsert_sync_job_state(_sync_state)
+        return {
+            "connected": True,
+            "version": version[:80],
+            "url": display_url,
+            "error": "",
+        }
+    except Exception as e:
+        _sync_state.remote_connected = False
+        _upsert_sync_job_state(_sync_state)
+        return {
+            "connected": False,
+            "error": str(e)[:200],
+            "url": display_url,
+        }
+
+
+def test_local_connection() -> Dict:
+    """测试本地数据库连接"""
+    from ..database.connection import DATABASE_URL
+    display_url = DATABASE_URL
+    try:
+        if "@" in DATABASE_URL and ":" in DATABASE_URL.split("@")[0]:
+            parts = DATABASE_URL.split("@")
+            credential = parts[0].rsplit(":", 1)
+            display_url = credential[0] + ":***@" + parts[1]
+    except Exception:
+        pass
+
+    try:
+        with Session(engine) as session:
+            result = session.execute(text("SELECT version()"))
+            version = result.scalar()
+            # 统计各表数据量
+            tables_info = {}
+            for table_name in ["mr", "diagnosis", "admission_record"]:
+                try:
+                    schema_name, _, _ = _get_local_table_meta(session, table_name)
+                    if not schema_name:
+                        tables_info[table_name] = 0
+                        continue
+                    schema_ident = _safe_identifier(schema_name)
+                    table_ident = _safe_identifier(table_name)
+                    count = session.execute(text(f"SELECT count(*) FROM {schema_ident}.{table_ident}")).scalar()
+                    tables_info[table_name] = int(count or 0)
+                except Exception:
+                    tables_info[table_name] = 0
+        _sync_state.local_connected = True
+        _upsert_sync_job_state(_sync_state)
+        return {
+            "connected": True,
+            "version": version[:80] if version else "",
+            "url": display_url,
+            "tables": tables_info,
+            "error": "",
+        }
+    except Exception as e:
+        _sync_state.local_connected = False
+        _upsert_sync_job_state(_sync_state)
+        return {
+            "connected": False,
+            "error": str(e)[:200],
+            "url": display_url,
+        }
+
+
+# ==================== 同步表配置 ====================
+
+_CORE_ENABLED_TABLES = {
+    "mr",
+    "diagnosis",
+    "mr_surgery",
+    "mr_cost",
+    "admission_record",
+    "discharge_record",
+    "first_course_record",
+    "daily_course_record",
+}
+
+SYNC_TABLE_GROUPS: List[Dict[str, Any]] = [
+    {
+        "id": "core_8",
+        "label": "核心8表",
+        "description": "首页与核心文书最小闭环",
+        "table_names": [
+            "mr",
+            "diagnosis",
+            "mr_surgery",
+            "mr_cost",
+            "admission_record",
+            "discharge_record",
+            "first_course_record",
+            "daily_course_record",
+        ],
+    },
+    {
+        "id": "document_extended",
+        "label": "文书扩展",
+        "description": "上级查房、会诊、手术及相关文书",
+        "table_names": [
+            "senior_course_record",
+            "rescue_record",
+            "diffcase_discussion_record",
+            "death_discussion",
+            "consultation_record",
+            "handoff_record",
+            "handover_record",
+            "summary_record",
+            "surgery_record",
+            "presurg_summary",
+            "presurg_discussion",
+            "postsurg_firstcourse_record",
+            "surgery_safecheck_record",
+            "surgery_risk_assessment",
+            "anesthesia_record",
+            "newborn_record",
+            "bloodtrans_record",
+            "nursing_record",
+            "death_record",
+        ],
+    },
+    {
+        "id": "diagnosis_extended",
+        "label": "诊断扩展",
+        "description": "文书附属诊断与首页诊断扩展",
+        "table_names": [
+            "admission_record_diagnosis",
+            "discharge_record_diagnosis",
+            "first_course_record_diagnosis",
+            "mr_diagnosis",
+            "preane_surveil_record_diagnosis",
+            "daily_admission_record_diagnosis",
+            "daily_death_record_diagnosis",
+            "transfer_in_record_diagnosis",
+            "transfer_out_record_diagnosis",
+        ],
+    },
+    {
+        "id": "orders_prescriptions",
+        "label": "医嘱处方",
+        "description": "住院医嘱与处方相关数据",
+        "table_names": [
+            "inpat_drug_order",
+            "inpat_nondrug_order",
+            "inpat_prescription",
+            "inpat_prescription_item",
+        ],
+    },
+    {
+        "id": "exam_lab_pathology",
+        "label": "检验检查病理",
+        "description": "检查、检验、病理与术前访视扩展",
+        "table_names": [
+            "exam_master",
+            "exam_item_report",
+            "labtest_master",
+            "labtest_item_report",
+            "pathology_exam_master",
+            "pathology_exam_report",
+            "surgery_application",
+            "surgery_inform_consent",
+            "surgery_inventory_record",
+            "preane_surveil_record",
+            "daily_admission_record",
+            "daily_death_record",
+            "transfer_in_record",
+            "transfer_out_record",
+        ],
+    },
+    {
+        "id": "settlement",
+        "label": "医保结算",
+        "description": "医保结算清单及费用明细",
+        "table_names": [
+            "medical_insurance_settlement",
+            "medical_insurance_settlement_cost",
+        ],
+    },
+]
+
+# 核心同步表配置：存储过程 → 本地 CDM 表
+# 历史 key_fields 字段保留兼容；新链路按本地主键 UPSERT
+SYNC_TABLES = [
+    # ---- 基础表 ----
+    {
+        "name": "mr",
+        "label": "病案首页",
+        "procedure": "web.mr",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id"],
+    },
+    {
+        "name": "diagnosis",
+        "label": "诊断表",
+        "procedure": "web.diagnosis",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
+    },
+    {
+        "name": "mr_surgery",
+        "label": "手术明细",
+        "procedure": "web.mr_surgery",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id"],
+    },
+    {
+        "name": "mr_cost",
+        "label": "费用明细",
+        "procedure": "web.mr_cost",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id"],
+    },
+    # ---- 入院 / 出院 / 死亡 ----
+    {
+        "name": "admission_record",
+        "label": "入院记录",
+        "procedure": "web.admission_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id"],
+    },
+    {
+        "name": "discharge_record",
+        "label": "出院记录",
+        "procedure": "web.discharge_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id"],
+    },
+    {
+        "name": "death_record",
+        "label": "死亡记录",
+        "procedure": "web.death_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id"],
+    },
+    # ---- 病程记录 ----
+    {
+        "name": "first_course_record",
+        "label": "首次病程记录",
+        "procedure": "web.first_course_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id"],
+    },
+    {
+        "name": "daily_course_record",
+        "label": "日常病程记录",
+        "procedure": "web.daily_course_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "senior_course_record",
+        "label": "上级查房记录",
+        "procedure": "web.senior_course_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "rescue_record",
+        "label": "抢救记录",
+        "procedure": "web.rescue_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    # ---- 讨论 / 会诊 ----
+    {
+        "name": "diffcase_discussion_record",
+        "label": "疑难病例讨论",
+        "procedure": "web.diffcase_discussion_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "death_discussion",
+        "label": "死亡病例讨论",
+        "procedure": "web.death_discussion",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "consultation_record",
+        "label": "会诊记录",
+        "procedure": "web.consultation_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    # ---- 交接班 / 转科 / 小结 ----
+    {
+        "name": "handoff_record",
+        "label": "交接班记录",
+        "procedure": "web.handoff_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "handover_record",
+        "label": "接班记录",
+        "procedure": "web.handover_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "summary_record",
+        "label": "阶段小结",
+        "procedure": "web.summary_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    # ---- 手术相关 ----
+    {
+        "name": "surgery_record",
+        "label": "手术记录",
+        "procedure": "web.surgery_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "presurg_summary",
+        "label": "术前小结",
+        "procedure": "web.presurg_summary",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "presurg_discussion",
+        "label": "术前讨论",
+        "procedure": "web.presurg_discussion",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "postsurg_firstcourse_record",
+        "label": "术后首次病程",
+        "procedure": "web.postsurg_firstcourse_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "surgery_safecheck_record",
+        "label": "手术安全核查",
+        "procedure": "web.surgery_safecheck_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "surgery_risk_assessment",
+        "label": "手术风险评估",
+        "procedure": "web.surgery_risk_assessment",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "anesthesia_record",
+        "label": "麻醉记录",
+        "procedure": "web.anesthesia_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    # ---- 其他文书 ----
+    {
+        "name": "newborn_record",
+        "label": "新生儿记录",
+        "procedure": "web.newborn_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "bloodtrans_record",
+        "label": "输血记录",
+        "procedure": "web.bloodtrans_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "nursing_record",
+        "label": "护理记录",
+        "procedure": "web.nursing_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    # ---- Wave 1 / T10 第一批扩表（默认纳管未启用）----
+    {
+        "name": "admission_record_diagnosis",
+        "label": "入院记录诊断",
+        "procedure": "web.admission_record_diagnosis",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
+    },
+    {
+        "name": "discharge_record_diagnosis",
+        "label": "出院记录诊断",
+        "procedure": "web.discharge_record_diagnosis",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
+    },
+    {
+        "name": "first_course_record_diagnosis",
+        "label": "首次病程诊断",
+        "procedure": "web.first_course_record_diagnosis",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
+    },
+    {
+        "name": "mr_diagnosis",
+        "label": "病案首页诊断",
+        "procedure": "web.mr_diagnosis",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
+    },
+    {
+        "name": "inpat_drug_order",
+        "label": "住院用药医嘱",
+        "procedure": "web.inpat_drug_order",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "order_id"],
+    },
+    {
+        "name": "inpat_nondrug_order",
+        "label": "住院非药医嘱",
+        "procedure": "web.inpat_nondrug_order",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "order_id"],
+    },
+    {
+        "name": "inpat_prescription",
+        "label": "住院处方",
+        "procedure": "web.inpat_prescription",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "prescription_id"],
+    },
+    {
+        "name": "inpat_prescription_item",
+        "label": "住院处方明细",
+        "procedure": "web.inpat_prescription_item",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "prescription_id", "item_id"],
+    },
+    {
+        "name": "exam_master",
+        "label": "检查主表",
+        "procedure": "web.exam_master",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "exam_no"],
+    },
+    {
+        "name": "exam_item_report",
+        "label": "检查报告",
+        "procedure": "web.exam_item_report",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "exam_no", "item_no"],
+    },
+    {
+        "name": "labtest_master",
+        "label": "检验主表",
+        "procedure": "web.labtest_master",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "test_no"],
+    },
+    {
+        "name": "labtest_item_report",
+        "label": "检验报告",
+        "procedure": "web.labtest_item_report",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "test_no", "item_no"],
+    },
+    # ---- Wave 1 / T10 第二批扩表候选（先纳管，默认不启用）----
+    {
+        "name": "pathology_exam_master",
+        "label": "病理检查主表",
+        "procedure": "web.pathology_exam_master",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "pathology_exam_report",
+        "label": "病理检查报告",
+        "procedure": "web.pathology_exam_report",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "surgery_application",
+        "label": "手术申请单",
+        "procedure": "web.surgery_application",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "surgery_inform_consent",
+        "label": "手术知情同意书",
+        "procedure": "web.surgery_inform_consent",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "surgery_inventory_record",
+        "label": "术中清点记录",
+        "procedure": "web.surgery_inventory_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "preane_surveil_record",
+        "label": "麻醉前访视记录",
+        "procedure": "web.preane_surveil_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "preane_surveil_record_diagnosis",
+        "label": "麻醉前访视诊断",
+        "procedure": "web.preane_surveil_record_diagnosis",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
+    },
+    {
+        "name": "daily_admission_record",
+        "label": "日常入院记录",
+        "procedure": "web.daily_admission_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "daily_admission_record_diagnosis",
+        "label": "日常入院记录诊断",
+        "procedure": "web.daily_admission_record_diagnosis",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
+    },
+    {
+        "name": "daily_death_record",
+        "label": "日常死亡记录",
+        "procedure": "web.daily_death_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "daily_death_record_diagnosis",
+        "label": "日常死亡记录诊断",
+        "procedure": "web.daily_death_record_diagnosis",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
+    },
+    {
+        "name": "transfer_in_record",
+        "label": "转入记录",
+        "procedure": "web.transfer_in_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "transfer_out_record",
+        "label": "转出记录",
+        "procedure": "web.transfer_out_record",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "document_id"],
+    },
+    {
+        "name": "transfer_in_record_diagnosis",
+        "label": "转入记录诊断",
+        "procedure": "web.transfer_in_record_diagnosis",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
+    },
+    {
+        "name": "transfer_out_record_diagnosis",
+        "label": "转出记录诊断",
+        "procedure": "web.transfer_out_record_diagnosis",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "diagnosis_id"],
+    },
+    # ---- 医保结算清单（Phase 2：待医院开放存储过程后启用）----
+    {
+        "name": "medical_insurance_settlement",
+        "label": "医保结算清单",
+        "procedure": "web.medical_insurance_settlement",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id"],
+    },
+    {
+        "name": "medical_insurance_settlement_cost",
+        "label": "医保结算费用明细",
+        "procedure": "web.medical_insurance_settlement_cost",
+        "params": 1,
+        "key_fields": ["patient_id", "visit_id", "medinsur_serial_item_id"],
+    },
+]
+
+
+for _item in SYNC_TABLES:
+    _name = str(_item.get("name") or "")
+    _item.setdefault("source_table", _name)
+    _item.setdefault("date_field", "update_time")
+    _item.setdefault("fallback_date_field", None)
+    _item.setdefault("enabled", _name in _CORE_ENABLED_TABLES)
+
+
+def _load_sync_table_overrides() -> Dict[str, Dict[str, Any]]:
+    pg_raw = get_config(_TABLE_CONFIG_NAMESPACE, _TABLE_CONFIG_KEY)
+    if isinstance(pg_raw, list):
+        out: Dict[str, Dict[str, Any]] = {}
+        for row in pg_raw:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()
+            if not name:
+                continue
+            out[name] = row
+        if out:
+            return out
+
+    if _pg_required_in_current_env():
+        raise RuntimeError("缺少 PG 配置 sync/sync_tables：生产环境禁止读取文件回退")
+
+    if not _SYNC_TABLES_FILE.exists():
+        return {}
+    try:
+        with open(_SYNC_TABLES_FILE, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        if not isinstance(raw, list):
+            return {}
+        out: Dict[str, Dict[str, Any]] = {}
+        for row in raw:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or "").strip()
+            if not name:
+                continue
+            out[name] = row
+        return out
+    except Exception:
+        return {}
+
+
+def _apply_sync_table_overrides():
+    overrides = _load_sync_table_overrides()
+    if not overrides:
+        return
+    for item in SYNC_TABLES:
+        name = str(item.get("name") or "")
+        override = overrides.get(name)
+        if not override:
+            continue
+        if "source_table" in override and override.get("source_table"):
+            item["source_table"] = str(override["source_table"])
+        if "date_field" in override and override.get("date_field"):
+            item["date_field"] = str(override["date_field"])
+        if "fallback_date_field" in override:
+            value = override.get("fallback_date_field")
+            item["fallback_date_field"] = str(value) if value else None
+        if "enabled" in override:
+            item["enabled"] = bool(override.get("enabled"))
+
+
+_apply_sync_table_overrides()
+
+
+def list_sync_tables() -> List[Dict[str, Any]]:
+    return [dict(item) for item in SYNC_TABLES]
+
+
+def save_sync_tables_config(updates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    table_map = {str(item["name"]): item for item in SYNC_TABLES}
+    changed_names: set[str] = set()
+    for row in updates:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or "").strip()
+        if not name or name not in table_map:
+            raise ValueError(f"未知同步表: {name or '<empty>'}")
+        target = table_map[name]
+        if "source_table" in row and row.get("source_table") is not None:
+            target["source_table"] = str(row.get("source_table") or "").strip() or target["name"]
+        if "date_field" in row and row.get("date_field") is not None:
+            target["date_field"] = str(row.get("date_field") or "").strip() or "update_time"
+        if "fallback_date_field" in row:
+            val = row.get("fallback_date_field")
+            target["fallback_date_field"] = str(val).strip() if val else None
+        if "enabled" in row:
+            target["enabled"] = bool(row.get("enabled"))
+        changed_names.add(name)
+
+    if changed_names:
+        persisted = []
+        for item in SYNC_TABLES:
+            persisted.append(
+                {
+                    "name": item["name"],
+                    "source_table": item.get("source_table"),
+                    "date_field": item.get("date_field"),
+                    "fallback_date_field": item.get("fallback_date_field"),
+                    "enabled": bool(item.get("enabled")),
+                }
+            )
+        if not set_config(
+            _TABLE_CONFIG_NAMESPACE,
+            _TABLE_CONFIG_KEY,
+            persisted,
+            updated_by="system",
+            source="etl_sync",
+            change_reason="update sync tables config",
+        ):
+            raise RuntimeError("写入 PG sync_tables 配置失败")
+
+    return list_sync_tables()
+
+
+def _resolve_sync_mode(mode: Optional[str] = None) -> str:
+    if mode and mode in {"table", "procedure"}:
+        return mode
+    env_mode = str(os.getenv("PG_SYNC_MODE", "")).strip().lower()
+    if env_mode in {"table", "procedure"}:
+        return env_mode
+    cfg_mode = str(load_db_config().get("sync_mode") or "table").strip().lower()
+    return cfg_mode if cfg_mode in {"table", "procedure"} else "table"
+
+
+def _resolve_target_tables(tables: Optional[List[str]] = None) -> Tuple[List[Dict[str, Any]], List[str]]:
+    table_map = {str(item["name"]): item for item in SYNC_TABLES}
+    if tables:
+        target: List[Dict[str, Any]] = []
+        missing: List[str] = []
+        for name in tables:
+            key = str(name or "").strip()
+            if not key:
+                continue
+            if key not in table_map:
+                missing.append(key)
+            else:
+                target.append(table_map[key])
+        return target, missing
+    return [item for item in SYNC_TABLES if bool(item.get("enabled"))], []
+
+
+def list_sync_table_groups() -> List[Dict[str, Any]]:
+    table_map = {str(item["name"]): item for item in SYNC_TABLES}
+    groups: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for group in SYNC_TABLE_GROUPS:
+        table_names = [str(name) for name in group.get("table_names", []) if str(name) in table_map]
+        group_id = str(group.get("id") or "")
+        seen_ids.add(group_id)
+        groups.append(
+            {
+                "id": group_id,
+                "label": str(group.get("label") or ""),
+                "description": str(group.get("description") or ""),
+                "table_names": table_names,
+                "table_count": len(table_names),
+            }
+        )
+    if "all_56" not in seen_ids:
+        all_table_names = [str(item.get("name") or "") for item in SYNC_TABLES if str(item.get("name") or "").strip()]
+        groups.append(
+            {
+                "id": "all_56",
+                "label": "全量56表",
+                "description": "稳定分组ID，覆盖当前所有已配置同步表",
+                "table_names": all_table_names,
+                "table_count": len(all_table_names),
+            }
+        )
+    return groups
+
+
+def expand_table_groups(group_ids: Optional[List[str]]) -> Tuple[List[str], List[str]]:
+    if not group_ids:
+        return [], []
+    valid_groups = {str(group.get("id") or ""): group for group in list_sync_table_groups()}
+    missing: List[str] = []
+    selected: List[str] = []
+    seen: set[str] = set()
+    for raw in group_ids:
+        gid = str(raw or "").strip()
+        if not gid:
+            continue
+        group = valid_groups.get(gid)
+        if not group:
+            missing.append(gid)
+            continue
+        for table_name in group.get("table_names", []):
+            if table_name in seen:
+                continue
+            seen.add(table_name)
+            selected.append(str(table_name))
+    return selected, missing
+
+
+def _resolve_target_tables_with_scope(
+    tables: Optional[List[str]] = None,
+    include_disabled: bool = False,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    if tables:
+        return _resolve_target_tables(tables)
+    if include_disabled:
+        return [dict(item) for item in SYNC_TABLES], []
+    return _resolve_target_tables(None)
+
+
+
+def call_stored_procedure(remote_url: str, procedure: str, date_str: str, param_count: int = 1) -> List[Dict]:
+    """
+    调用远端存储过程并返回结果
+    
+    Args:
+        remote_url: 远端 PG 连接 URL
+        procedure: 存储过程名称，如 'web.mr'
+        date_str: 日期参数，如 '2025-01-01'
+        param_count: 参数个数（1=单日期，2=起止日期用同一天）
+    
+    Returns:
+        结果字典列表
+    """
+    conn = psycopg2.connect(remote_url, connect_timeout=10)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    try:
+        if param_count == 1:
+            cursor.execute(f"CALL {procedure}(%s)", (date_str,))
+        else:
+            cursor.execute(f"CALL {procedure}(%s, %s)", (date_str, date_str))
+        
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def _resolve_local_table_schema(session: Session, table_name: str) -> Optional[str]:
+    schema_params = {f"schema_{idx}": schema for idx, schema in enumerate(_LOCAL_TARGET_SCHEMAS)}
+    schema_placeholders = ", ".join(f":schema_{idx}" for idx in range(len(_LOCAL_TARGET_SCHEMAS)))
+    rows = session.execute(
+        text(
+            """
+            SELECT table_schema
+            FROM information_schema.tables
+            WHERE table_schema IN (""" + schema_placeholders + """)
+              AND table_name = :table_name
+            """
+        ),
+        {"table_name": table_name, **schema_params},
+    ).fetchall()
+    if not rows:
+        return None
+    candidates = [str(row[0]) for row in rows if str(row[0] or "").strip()]
+    if not candidates:
+        return None
+    for schema in _LOCAL_TARGET_SCHEMAS:
+        if schema in candidates:
+            if len(candidates) > 1:
+                logger.warning(
+                    "本地目标表 %s 在多个 schema 命中=%s，按优先级选择 %s",
+                    table_name,
+                    candidates,
+                    schema,
+                )
+            return schema
+    return candidates[0]
+
+
+def _get_local_table_columns(session: Session, table_name: str, schema: Optional[str] = None) -> List[str]:
+    resolved_schema = schema or _resolve_local_table_schema(session, table_name)
+    if not resolved_schema:
+        return []
+    result = session.execute(
+        text(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = :schema
+              AND table_name = :table_name
+            ORDER BY ordinal_position
+            """
+        ),
+        {"schema": resolved_schema, "table_name": table_name},
+    )
+    return [str(row[0]) for row in result]
+
+
+def _get_local_primary_keys(session: Session, table_name: str, schema: Optional[str] = None) -> List[str]:
+    resolved_schema = schema or _resolve_local_table_schema(session, table_name)
+    if not resolved_schema:
+        return []
+    result = session.execute(
+        text(
+            """
+            SELECT a.attname
+            FROM pg_index i
+            JOIN pg_class c ON c.oid = i.indrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord) ON TRUE
+            JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = k.attnum
+            WHERE n.nspname = :schema
+              AND c.relname = :table_name
+              AND i.indisprimary
+            ORDER BY k.ord
+            """
+        ),
+        {"schema": resolved_schema, "table_name": table_name},
+    )
+    return [str(row[0]) for row in result]
+
+
+def _get_local_table_meta(session: Session, table_name: str) -> Tuple[Optional[str], List[str], List[str]]:
+    schema = _resolve_local_table_schema(session, table_name)
+    if not schema:
+        return None, [], []
+    columns = _get_local_table_columns(session, table_name, schema=schema)
+    primary_keys = _get_local_primary_keys(session, table_name, schema=schema)
+    return schema, columns, primary_keys
+
+
+def _remote_table_exists(cursor, schema: str, table: str) -> bool:
+    cursor.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = %s AND table_name = %s
+        LIMIT 1
+        """,
+        (schema, table),
+    )
+    return cursor.fetchone() is not None
+
+
+def _remote_column_exists(cursor, schema: str, table: str, column: str) -> bool:
+    cursor.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = %s AND table_name = %s AND column_name = %s
+        LIMIT 1
+        """,
+        (schema, table, column),
+    )
+    return cursor.fetchone() is not None
+
+
+def _remote_procedure_exists(cursor, schema: str, procedure: str) -> bool:
+    cursor.execute(
+        """
+        SELECT 1
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = %s AND p.proname = %s
+        LIMIT 1
+        """,
+        (schema, procedure),
+    )
+    return cursor.fetchone() is not None
+
+
+def _parse_ymd_or_none(value: Any) -> Optional[date]:
+    text_value = str(value or "").strip()
+    if not text_value:
+        return None
+    try:
+        return datetime.strptime(text_value, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+def _normalize_target_departments(raw: Any) -> List[str]:
+    if not isinstance(raw, list):
+        return []
+    wildcard_aliases = {"*", "all", "全部", "全院", "全部科室", "全科室"}
+    cleaned: List[str] = []
+    seen: set[str] = set()
+    wildcard_seen = False
+    for item in raw:
+        name = str(item or "").strip()
+        if not name or name in seen:
+            continue
+        if name.lower() in wildcard_aliases:
+            wildcard_seen = True
+            continue
+        cleaned.append(name)
+        seen.add(name)
+    if wildcard_seen and cleaned:
+        # 具体科室优先，避免 ["*", "骨科"] 被误判为全院
+        return cleaned
+    if wildcard_seen:
+        return []
+    return cleaned
+
+
+def _resolve_pg_extract_window(
+    *,
+    policy: Dict[str, Any],
+    date_window: Optional[Dict[str, str]] = None,
+    target_departments: Optional[List[str]] = None,
+) -> Tuple[Optional[date], Optional[date], List[str], Optional[str]]:
+    window_payload = date_window if isinstance(date_window, dict) else {}
+    start_text = str(
+        window_payload.get("start") or window_payload.get("start_date") or policy.get("start_date") or ""
+    ).strip()
+    end_text = str(
+        window_payload.get("end") or window_payload.get("end_date") or policy.get("end_date") or ""
+    ).strip()
+    start_dt = _parse_ymd_or_none(start_text)
+    end_dt = _parse_ymd_or_none(end_text)
+    if start_dt is None or end_dt is None:
+        return None, None, [], "请先设置出院日期范围（开始日期/结束日期）后再执行抽取"
+    if start_dt > end_dt:
+        return None, None, [], "出院日期范围非法：开始日期不能晚于结束日期"
+    if (end_dt - start_dt).days > 180:
+        return None, None, [], "出院日期范围过大（最多 180 天），请缩小后重试"
+
+    override_departments = (
+        _normalize_target_departments(target_departments)
+        if isinstance(target_departments, list)
+        else []
+    )
+    policy_departments = _normalize_target_departments(policy.get("target_departments"))
+    dept_filters = override_departments if override_departments else policy_departments
+    return start_dt, end_dt, dept_filters, None
+
+
+def _chunk_visit_keys(visit_keys: List[Tuple[str, str]], chunk_size: int = _VISIT_KEY_CHUNK_SIZE):
+    for idx in range(0, len(visit_keys), chunk_size):
+        yield visit_keys[idx : idx + chunk_size]
+
+
+def _resolve_remote_visit_filters(cursor, remote_schema: str, source_table: str) -> Tuple[str, Optional[str]]:
+    date_field = None
+    for field in ["discharge_datetime", "discharge_date"]:
+        if _remote_column_exists(cursor, remote_schema, source_table, field):
+            date_field = field
+            break
+    if not date_field:
+        raise ValueError(f"{source_table} 缺少出院日期字段（discharge_datetime/discharge_date）")
+
+    dept_field = None
+    for field in ["discharge_dept_name", "admission_dept_name", "dept_name"]:
+        if _remote_column_exists(cursor, remote_schema, source_table, field):
+            dept_field = field
+            break
+    return date_field, dept_field
+
+
+def list_remote_departments(limit: int = 500) -> Dict[str, Any]:
+    """
+    从源 PG 拉取科室列表（用于同步策略中的科室选择）。
+    固定从 discharge_record.dept_name 读取，避免跨表口径不一致。
+    """
+    remote_url = get_remote_db_url()
+    if not remote_url:
+        raise ValueError("远端 PG 未配置（请先保存源 PG 连接）")
+
+    try:
+        limit_value = int(limit)
+    except Exception:
+        limit_value = 500
+    limit_value = max(1, min(limit_value, 2000))
+
+    cfg = load_db_config()
+    remote_schema = _safe_identifier(str(cfg.get("remote_schema") or "public").strip() or "public")
+    schema_ident = _safe_identifier(remote_schema)
+    source_table = "discharge_record"
+    dept_field = "dept_name"
+
+    conn = psycopg2.connect(remote_url, connect_timeout=10)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        if not _remote_table_exists(cursor, remote_schema, source_table):
+            raise ValueError(f"源 PG 缺少表: {remote_schema}.{source_table}")
+        if not _remote_column_exists(cursor, remote_schema, source_table, dept_field):
+            raise ValueError(f"源 PG 缺少科室字段: {remote_schema}.{source_table}.{dept_field}")
+
+        table_ident = _safe_identifier(source_table)
+        dept_ident = _safe_identifier(dept_field)
+        sql = (
+            f"SELECT DISTINCT TRIM({dept_ident}::text) AS dept_name "
+            f"FROM {schema_ident}.{table_ident} "
+            f"WHERE {dept_ident} IS NOT NULL AND TRIM({dept_ident}::text) <> '' "
+            f"ORDER BY dept_name "
+            f"LIMIT %s"
+        )
+        cursor.execute(sql, (limit_value,))
+        rows = cursor.fetchall() or []
+        items = [
+            str(row.get("dept_name") or "").strip()
+            for row in rows
+            if str(row.get("dept_name") or "").strip()
+        ]
+        return {
+            "items": items,
+            "schema": remote_schema,
+            "source_table": table_ident,
+            "source_column": dept_field,
+        }
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def collect_visit_keys_by_policy(
+    *,
+    remote_url: str,
+    remote_schema: str,
+    start_date: date,
+    end_date: date,
+    target_departments: List[str],
+) -> List[Tuple[str, str]]:
+    visit_key_set: set[Tuple[str, str]] = set()
+    conn = psycopg2.connect(remote_url, connect_timeout=10)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # 固定口径：只用 discharge_record 的科室字段筛病例集合。
+        source_table = "discharge_record"
+        if not _remote_table_exists(cursor, remote_schema, source_table):
+            raise ValueError(f"源 PG 缺少表: {remote_schema}.{source_table}")
+        if not _remote_column_exists(cursor, remote_schema, source_table, "patient_id") or not _remote_column_exists(
+            cursor, remote_schema, source_table, "visit_id"
+        ):
+            raise ValueError(f"{source_table} 缺少 patient_id/visit_id 字段")
+        if not _remote_column_exists(cursor, remote_schema, source_table, "dept_name"):
+            raise ValueError(f"{source_table} 缺少 CDM 科室字段 dept_name")
+
+        has_discharge_date = _remote_column_exists(cursor, remote_schema, source_table, "discharge_date")
+        has_discharge_time = _remote_column_exists(cursor, remote_schema, source_table, "discharge_time")
+        has_discharge_datetime = _remote_column_exists(cursor, remote_schema, source_table, "discharge_datetime")
+        if not (has_discharge_date or has_discharge_time or has_discharge_datetime):
+            raise ValueError(
+                f"{source_table} 缺少出院日期字段（discharge_date/discharge_time/discharge_datetime）"
+            )
+
+        schema_ident = _safe_identifier(remote_schema)
+        table_ident = _safe_identifier(source_table)
+        date_expr: str
+        if has_discharge_date and has_discharge_time:
+            # 真实源库常见 discharge_date 大量为空；兜底到 discharge_time::date。
+            date_expr = "COALESCE(discharge_date, discharge_time::date)"
+        elif has_discharge_date and has_discharge_datetime:
+            date_expr = "COALESCE(discharge_date, discharge_datetime::date)"
+        elif has_discharge_date:
+            date_expr = "discharge_date"
+        elif has_discharge_time:
+            date_expr = "discharge_time::date"
+        else:
+            date_expr = "discharge_datetime::date"
+        dept_ident = _safe_identifier("dept_name")
+        where_fragments = [
+            f"{date_expr} >= %s::date",
+            f"{date_expr} < (%s::date + INTERVAL '1 day')",
+        ]
+        params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
+
+        if target_departments:
+            normalized_departments = [
+                str(item or "").strip().lower()
+                for item in target_departments
+                if str(item or "").strip()
+            ]
+            normalized_departments = list(dict.fromkeys(normalized_departments))
+            if normalized_departments:
+                placeholders = ", ".join(["%s"] * len(normalized_departments))
+                where_fragments.append(f"LOWER(TRIM(COALESCE({dept_ident}::text, ''))) IN ({placeholders})")
+                params.extend(normalized_departments)
+
+        sql = (
+            f"SELECT DISTINCT patient_id::text AS patient_id, visit_id::text AS visit_id "
+            f"FROM {schema_ident}.{table_ident} "
+            f"WHERE {' AND '.join(where_fragments)}"
+        )
+        cursor.execute(sql, params)
+        rows = cursor.fetchall() or []
+        for row in rows:
+            patient_id = str(row.get("patient_id") or "").strip()
+            visit_id = str(row.get("visit_id") or "").strip()
+            if not patient_id or not visit_id:
+                continue
+            visit_key_set.add((patient_id, visit_id))
+    finally:
+        cursor.close()
+        conn.close()
+
+    return sorted(visit_key_set)
+
+
+def fetch_remote_rows_by_visit_keys(
+    *,
+    remote_url: str,
+    remote_schema: str,
+    source_table: str,
+    visit_keys: List[Tuple[str, str]],
+) -> List[Dict]:
+    if not visit_keys:
+        return []
+    schema_ident = _safe_identifier(remote_schema)
+    table_ident = _safe_identifier(source_table)
+
+    conn = psycopg2.connect(remote_url, connect_timeout=10)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        if not _remote_column_exists(cursor, remote_schema, source_table, "patient_id") or not _remote_column_exists(
+            cursor, remote_schema, source_table, "visit_id"
+        ):
+            raise ValueError(f"{source_table} 缺少 patient_id/visit_id 字段，无法按病例集合抽取")
+
+        all_rows: List[Dict] = []
+        for chunk in _chunk_visit_keys(visit_keys):
+            placeholders = ", ".join(["(%s, %s)"] * len(chunk))
+            params: List[str] = []
+            for patient_id, visit_id in chunk:
+                params.extend([str(patient_id), str(visit_id)])
+            sql = (
+                f"SELECT * FROM {schema_ident}.{table_ident} "
+                f"WHERE (patient_id::text, visit_id::text) IN ({placeholders})"
+            )
+            cursor.execute(sql, params)
+            rows = cursor.fetchall() or []
+            all_rows.extend([dict(row) for row in rows])
+        return all_rows
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def fetch_remote_rows_by_table(
+    remote_url: str,
+    remote_schema: str,
+    source_table: str,
+    date_field: str,
+    sync_date: str,
+) -> List[Dict]:
+    schema_ident = _safe_identifier(remote_schema)
+    table_ident = _safe_identifier(source_table)
+    date_ident = _safe_identifier(date_field)
+    sql = (
+        f"SELECT * FROM {schema_ident}.{table_ident} "
+        f"WHERE {date_ident} >= %s::date "
+        f"AND {date_ident} < (%s::date + INTERVAL '1 day')"
+    )
+
+    conn = psycopg2.connect(remote_url, connect_timeout=10)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cursor.execute(sql, (sync_date, sync_date))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def validate_pg_sync_plan(
+    tables: Optional[List[str]] = None,
+    mode: Optional[str] = None,
+    include_disabled: bool = False,
+) -> Dict[str, Any]:
+    """构建 PG 同步预检矩阵。"""
+    sync_mode = _resolve_sync_mode(mode)
+    cfg = load_db_config()
+    remote_schema = _safe_identifier(str(cfg.get("remote_schema") or "public").strip() or "public")
+
+    target_tables, missing = _resolve_target_tables_with_scope(
+        tables=tables,
+        include_disabled=include_disabled,
+    )
+    blockers: List[str] = []
+    warnings: List[str] = []
+    table_validations: List[Dict[str, Any]] = []
+    if missing:
+        blockers.append(f"未知同步表: {', '.join(missing)}")
+    if not target_tables:
+        blockers.append(
+            "未选择可执行同步表（默认只执行 enabled=true 的表）"
+            if not include_disabled
+            else "未选择可执行同步表"
+        )
+    if engine is None:
+        blockers.append("本地数据库未初始化")
+
+    remote_url = get_remote_db_url()
+    if not remote_url:
+        blockers.append("REMOTE_DB_URL 未配置")
+    if blockers and (engine is None or not remote_url):
+        return {
+            "mode": sync_mode,
+            "remote_schema": remote_schema,
+            "executable": False,
+            "blockers": blockers,
+            "warnings": warnings,
+            "table_validations": table_validations,
+            "target_tables": [item.get("name") for item in target_tables],
+            "matrix_scope": "all" if include_disabled else "enabled",
+        }
+
+    local_session: Optional[Session] = None
+    remote_conn = None
+    remote_cursor = None
+    try:
+        local_session = Session(engine)
+        remote_conn = psycopg2.connect(remote_url, connect_timeout=10)
+        remote_cursor = remote_conn.cursor()
+        for item in target_tables:
+            table_name = str(item["name"])
+            source_table = _safe_identifier(str(item.get("source_table") or table_name))
+            row_blockers: List[str] = []
+            resolved_date_field: Optional[str] = None
+
+            local_schema, local_columns, local_primary_keys = _get_local_table_meta(local_session, table_name)
+            if not local_schema or not local_columns:
+                row_blockers.append("本地目标表不存在")
+            if not local_primary_keys:
+                row_blockers.append("本地目标表缺少主键")
+
+            if sync_mode == "table":
+                if not _remote_table_exists(remote_cursor, remote_schema, source_table):
+                    row_blockers.append("远端源表不存在")
+                else:
+                    if not _remote_column_exists(remote_cursor, remote_schema, source_table, "patient_id") or not _remote_column_exists(
+                        remote_cursor, remote_schema, source_table, "visit_id"
+                    ):
+                        row_blockers.append("远端缺少 patient_id/visit_id，无法按病例集合抽取")
+                    # 当前固定病例锚点口径：discharge_record 负责日期过滤能力。
+                    if source_table == "discharge_record":
+                        date_field = str(item.get("date_field") or "update_time")
+                        fallback_date_field = str(item.get("fallback_date_field") or "").strip()
+                        if _remote_column_exists(remote_cursor, remote_schema, source_table, date_field):
+                            resolved_date_field = date_field
+                        elif fallback_date_field and _remote_column_exists(
+                            remote_cursor, remote_schema, source_table, fallback_date_field
+                        ):
+                            resolved_date_field = fallback_date_field
+                            warnings.append(f"{table_name}: 使用 fallback_date_field={fallback_date_field}")
+                        else:
+                            row_blockers.append("远端日期字段不可用（锚点表）")
+            else:
+                procedure_full = str(item.get("procedure") or "")
+                if "." in procedure_full:
+                    proc_schema, proc_name = procedure_full.split(".", 1)
+                else:
+                    proc_schema, proc_name = "public", procedure_full
+                if not _remote_procedure_exists(remote_cursor, _safe_identifier(proc_schema), _safe_identifier(proc_name)):
+                    row_blockers.append(f"远端过程不存在: {proc_schema}.{proc_name}")
+
+            source = f"{remote_schema}.{source_table}" if sync_mode == "table" else str(item.get("procedure") or "")
+            table_validations.append(
+                {
+                    "table": table_name,
+                    "source_table": source_table,
+                    "source": source,
+                    "enabled": bool(item.get("enabled")),
+                    "mode": sync_mode,
+                    "local_schema": local_schema,
+                    "date_field": item.get("date_field"),
+                    "fallback_date_field": item.get("fallback_date_field"),
+                    "resolved_date_field": resolved_date_field,
+                    "local_primary_keys": local_primary_keys,
+                    "executable": len(row_blockers) == 0,
+                    "blockers": row_blockers,
+                }
+            )
+
+        for row in table_validations:
+            for reason in row.get("blockers", []):
+                blockers.append(f"{row['table']}: {reason}")
+        return {
+            "mode": sync_mode,
+            "remote_schema": remote_schema,
+            "executable": len(blockers) == 0,
+            "blockers": blockers,
+            "warnings": warnings,
+            "table_validations": table_validations,
+            "target_tables": [item.get("name") for item in target_tables],
+            "matrix_scope": "all" if include_disabled else "enabled",
+        }
+    finally:
+        if remote_cursor is not None:
+            remote_cursor.close()
+        if remote_conn is not None:
+            remote_conn.close()
+        if local_session is not None:
+            local_session.close()
+
+
+def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str]) -> int:
+    """将数据写入本地 PG（按主键 UPSERT）。"""
+    if not records:
+        return 0
+
+    if not primary_keys:
+        raise ValueError(f"表 {table_name} 缺少主键信息，无法执行 UPSERT")
+    for key in primary_keys:
+        _safe_identifier(key)
+
+    with Session(engine) as session:
+        local_schema, local_columns, _ = _get_local_table_meta(session, table_name)
+        if not local_schema:
+            raise ValueError(f"表 {table_name} 本地目标 schema 未命中，无法执行 UPSERT")
+        table_ident = f"{_safe_identifier(local_schema)}.{_safe_identifier(table_name)}"
+        existing_columns = set(local_columns)
+
+        inserted = 0
+        for record in records:
+            normalized_record = _apply_sync_column_aliases(
+                table_name=table_name,
+                record=record,
+                existing_columns=existing_columns,
+            )
+            filtered: Dict[str, Any] = {}
+            for k, v in normalized_record.items():
+                col_name = str(k).lower()
+                if col_name in existing_columns:
+                    filtered[col_name] = v
+
+            if not filtered:
+                continue
+            if not all(pk in filtered for pk in primary_keys):
+                continue
+
+            columns = list(filtered.keys())
+            placeholders = ", ".join([f":{c}" for c in columns])
+            col_list = ", ".join([_safe_identifier(c) for c in columns])
+            conflict_clause = ", ".join([_safe_identifier(k) for k in primary_keys])
+            update_cols = [c for c in columns if c not in primary_keys]
+            if update_cols:
+                update_set = ", ".join(
+                    [f"{_safe_identifier(c)} = EXCLUDED.{_safe_identifier(c)}" for c in update_cols]
+                )
+                sql = (
+                    f"INSERT INTO {table_ident} ({col_list}) VALUES ({placeholders}) "
+                    f"ON CONFLICT ({conflict_clause}) DO UPDATE SET {update_set}"
+                )
+            else:
+                sql = (
+                    f"INSERT INTO {table_ident} ({col_list}) VALUES ({placeholders}) "
+                    f"ON CONFLICT ({conflict_clause}) DO NOTHING"
+                )
+
+            session.execute(text(sql), filtered)
+            inserted += 1
+
+        session.commit()
+        return inserted
+
+
+# ==================== 主同步逻辑 ====================
+
+def _emit_sync_progress(
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]],
+    payload: Dict[str, Any],
+) -> None:
+    if progress_callback is None:
+        return
+    try:
+        progress_callback(payload)
+    except Exception as exc:
+        logger.debug("sync progress callback failed (ignored): %s", exc)
+
+def run_sync(
+    sync_date: str = None,
+    tables: List[str] = None,
+    scene: str = "both",
+    policy_version: str = "",
+    tables_hash: str = "",
+    date_window: Optional[Dict[str, str]] = None,
+    target_departments: Optional[List[str]] = None,
+    run_id: str = "",
+    progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+) -> Dict:
+    """
+    执行数据同步
+    
+    Args:
+        sync_date: 兼容历史参数，表模式下优先使用 date_window
+        tables: 要同步的表名列表，默认同步所有核心表
+        scene: 同步场景（用于幂等与追溯，不影响当前抽取逻辑）
+        policy_version: 策略版本（用于幂等与追溯）
+        tables_hash: 表范围哈希（用于幂等与追溯）
+        date_window: 出院日期范围覆盖（start/end 或 start_date/end_date）
+        target_departments: 目标科室覆盖（空或 * 表示全院）
+    
+    Returns:
+        同步结果
+    """
+    lock_conn = None
+    lock_acquired = False
+    sync_started_at = datetime.now()
+    try:
+        if engine is not None:
+            lock_conn = engine.connect()
+            lock_acquired = bool(
+                lock_conn.execute(
+                    text("SELECT pg_try_advisory_lock(:lock_key)"),
+                    {"lock_key": _SYNC_LOCK_KEY},
+                ).scalar()
+            )
+            if not lock_acquired:
+                return {"success": False, "error": "同步正在进行中，请稍后再试"}
+        elif _sync_state.is_running:
+            return {"success": False, "error": "同步正在进行中，请稍后再试"}
+
+        _sync_state.is_running = True
+        _sync_state.logs = []
+        _upsert_sync_job_state(_sync_state)
+        _emit_sync_progress(
+            progress_callback,
+            {
+                "run_id": run_id,
+                "status": "running",
+                "stage": "initializing",
+                "current_table": "",
+                "tables_total": 0,
+                "tables_done": 0,
+                "rows_pulled_total": 0,
+                "rows_upserted_total": 0,
+                "failed_tables": 0,
+                "eta_seconds": None,
+            },
+        )
+
+        remote_url = get_remote_db_url()
+        if not remote_url:
+            return {"success": False, "error": "REMOTE_DB_URL 未配置"}
+
+        sync_mode = _resolve_sync_mode()
+        resolved_scene = _normalize_sync_scene(scene)
+        base_target_tables, missing_tables = _resolve_target_tables(tables)
+        if missing_tables:
+            return {"success": False, "error": f"未知同步表: {', '.join(missing_tables)}"}
+
+        target_tables, missing_anchors = _route_tables_by_scene(base_target_tables, resolved_scene)
+        if missing_anchors:
+            return {
+                "success": False,
+                "error": f"场景 {resolved_scene} 的锚点表未纳入执行集: {', '.join(missing_anchors)}",
+                "scene": resolved_scene,
+                "target_tables": [str(item.get('name')) for item in base_target_tables],
+            }
+        if not target_tables:
+            return {
+                "success": False,
+                "error": f"场景 {resolved_scene} 当前无可执行锚点表",
+                "scene": resolved_scene,
+            }
+        _emit_sync_progress(
+            progress_callback,
+            {
+                "run_id": run_id,
+                "status": "running",
+                "stage": "preflight",
+                "current_table": "",
+                "tables_total": len(target_tables),
+                "tables_done": 0,
+                "rows_pulled_total": 0,
+                "rows_upserted_total": 0,
+                "failed_tables": 0,
+                "eta_seconds": None,
+            },
+        )
+
+        preflight = validate_pg_sync_plan(
+            tables=[str(item.get("name")) for item in target_tables],
+            mode=sync_mode,
+        )
+        if not preflight.get("executable"):
+            return {
+                "success": False,
+                "error": "预检未通过，已阻断同步触发",
+                "mode": sync_mode,
+                "scene": resolved_scene,
+                "blockers": preflight.get("blockers", []),
+                "table_validations": preflight.get("table_validations", []),
+            }
+
+        validation_map = {
+            str(item.get("table")): item
+            for item in preflight.get("table_validations", [])
+            if isinstance(item, dict)
+        }
+        policy = load_sync_policy()
+        schedule = policy.get("schedule") if isinstance(policy.get("schedule"), dict) else {}
+        policy_sync_interval_minutes = int(schedule.get("minutes") or 30)
+        policy_mirror_delay_base_minutes = int(policy.get("mirror_delay_base_minutes") or 30)
+        remote_schema = str(preflight.get("remote_schema") or load_db_config().get("remote_schema") or "public")
+        start_date, end_date, dept_filters, window_error = _resolve_pg_extract_window(
+            policy=policy,
+            date_window=date_window,
+            target_departments=target_departments,
+        )
+        if window_error:
+            return {"success": False, "error": window_error}
+        if resolved_scene == "running":
+            return {
+                "success": False,
+                "error": "running 场景不支持按出院日期范围抽取，请切换为 final/frontpage/coding/both",
+            }
+        if sync_mode != "table":
+            return {
+                "success": False,
+                "error": "存储过程模式暂不支持按科室 + 出院日期范围抽取，请切换为表直连模式",
+            }
+
+        target_table_map = {
+            str(item.get("name")): str(item.get("source_table") or item.get("name"))
+            for item in target_tables
+        }
+        anchor_tables = [
+            str(item)
+            for item in (_SCENE_ANCHOR_TABLES.get(resolved_scene) or set())
+            if str(item) in target_table_map
+        ]
+        if not anchor_tables:
+            return {
+                "success": False,
+                "error": f"场景 {resolved_scene} 缺少可用锚点表，无法计算病例抽取范围",
+            }
+        try:
+            scoped_visit_keys = collect_visit_keys_by_policy(
+                remote_url=remote_url,
+                remote_schema=remote_schema,
+                start_date=start_date,
+                end_date=end_date,
+                target_departments=dept_filters,
+            )
+        except ValueError as exc:
+            return {"success": False, "error": str(exc)}
+
+        if not scoped_visit_keys:
+            _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            _sync_state.last_sync_status = "success"
+            _sync_state.total_records_synced = 0
+            _sync_state.logs = []
+            _emit_sync_progress(
+                progress_callback,
+                {
+                    "run_id": run_id,
+                    "status": "success",
+                    "stage": "completed",
+                    "current_table": "",
+                    "tables_total": len(target_tables),
+                    "tables_done": len(target_tables),
+                    "rows_pulled_total": 0,
+                    "rows_upserted_total": 0,
+                    "failed_tables": 0,
+                    "eta_seconds": 0,
+                },
+            )
+            return {
+                "success": True,
+                "mode": sync_mode,
+                "scene": resolved_scene,
+                "policy_version": str(policy_version or ""),
+                "tables_hash": str(tables_hash or ""),
+                "total_records": 0,
+                "target_tables": [str(item.get("name")) for item in target_tables],
+                "date_window": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+                "target_departments": dept_filters or ["*"],
+                "eligible_visits": 0,
+                "message": "当前筛选条件下无可抽取病历",
+                "tables": [],
+            }
+
+        total_synced = 0
+        results = []
+        has_error = False
+        pulled_total = 0
+        done_tables = 0
+        failed_tables = 0
+        tracking_write_failed = False
+        run_warnings: List[str] = []
+
+        for table_config in target_tables:
+            table_name = str(table_config["name"])
+            validation = validation_map.get(table_name) or {}
+            source = str(validation.get("source") or f"{remote_schema}.{table_name}")
+            source_table = str(validation.get("source_table") or table_name)
+            procedure_name = str(table_config.get("procedure") or "")
+
+            table_started_at = datetime.now()
+            log = SyncLog(
+                table_name=table_name,
+                source=source,
+                stored_procedure=procedure_name,
+                started_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
+            log.status = "running"
+            rows: List[Dict[str, Any]] = []
+            count = 0
+
+            try:
+                _emit_sync_progress(
+                    progress_callback,
+                    {
+                        "run_id": run_id,
+                        "status": "running",
+                        "stage": "syncing_table",
+                        "current_table": table_name,
+                        "tables_total": len(target_tables),
+                        "tables_done": done_tables,
+                        "rows_pulled_total": pulled_total,
+                        "rows_upserted_total": total_synced,
+                        "failed_tables": failed_tables,
+                        "eta_seconds": None if done_tables <= 0 else max(
+                            0,
+                            int(
+                                ((datetime.now() - sync_started_at).total_seconds() / max(done_tables, 1))
+                                * max(0, len(target_tables) - done_tables)
+                            ),
+                        ),
+                    },
+                )
+                log.stage = "remote_select"
+                if sync_mode == "table":
+                    rows = fetch_remote_rows_by_visit_keys(
+                        remote_url=remote_url,
+                        remote_schema=remote_schema,
+                        source_table=source_table,
+                        visit_keys=scoped_visit_keys,
+                    )
+                else:
+                    rows = call_stored_procedure(
+                        remote_url=remote_url,
+                        procedure=procedure_name,
+                        date_str=sync_date,
+                        param_count=int(table_config.get("params") or 1),
+                    )
+
+                log.stage = "local_upsert"
+                count = upsert_to_local(
+                    table_name=table_name,
+                    records=rows,
+                    primary_keys=[str(pk) for pk in validation.get("local_primary_keys", [])],
+                )
+
+                # Maintain visit_index state machine only on real anchor tables.
+                # Non-critical: failures are logged but should not block the core table sync.
+                if table_name in _VISIT_INDEX_ANCHOR_TABLES:
+                    try:
+                        ingest_sync_rows(
+                            table_name=table_name,
+                            rows=rows,
+                            policy_version=str(policy_version or "").strip() or None,
+                            sync_scene=resolved_scene,
+                            allow_frontpage_only=resolved_scene in {"frontpage", "coding", "both"},
+                            latest_mirror_success_time=datetime.now(),
+                            mirror_delay_base_minutes=policy_mirror_delay_base_minutes,
+                            sync_interval_minutes=policy_sync_interval_minutes,
+                        )
+                    except Exception as visit_index_exc:
+                        logger.warning("visit_index 更新失败（不阻断主同步）: %s", visit_index_exc)
+                    try:
+                        if resolved_scene in {"running", "final", "frontpage", "coding"}:
+                            refresh_scene_bundles_for_rows(
+                                scene=resolved_scene,
+                                rows=rows,
+                                policy_version=str(policy_version or "").strip(),
+                            )
+                    except Exception as bundle_exc:
+                        logger.warning("%s bundle 更新失败（不阻断主同步）: %s", resolved_scene, bundle_exc)
+
+                log.record_count = count
+                log.status = "success"
+                pulled_total += len(rows)
+                total_synced += count
+                logger.info("同步 %s (%s) 成功: %s 条", table_config["label"], source, count)
+                table_finished_at = datetime.now()
+                try:
+                    _record_sync_run_detail(
+                        run_id=run_id,
+                        source_table=source_table,
+                        target_table=table_name,
+                        status="success",
+                        pulled_count=len(rows),
+                        upserted_count=count,
+                        failed_count=max(0, len(rows) - count),
+                        started_at=table_started_at,
+                        finished_at=table_finished_at,
+                        error_message="",
+                    )
+                except Exception as detail_exc:
+                    tracking_write_failed = True
+                    run_warnings.append(f"{table_name}: 写入 sync_run_details 失败")
+                    logger.warning("写入 sync_run_details 失败（不阻断主同步）: %s", detail_exc)
+
+            except Exception as e:
+                log.status = "failed"
+                log.error_msg = str(e)[:200]
+                has_error = True
+                failed_tables += 1
+                pulled_total += len(rows)
+                logger.error("同步 %s (%s) 失败: %s", table_config["label"], source, e)
+                table_finished_at = datetime.now()
+                try:
+                    _record_sync_run_detail(
+                        run_id=run_id,
+                        source_table=source_table,
+                        target_table=table_name,
+                        status="failed",
+                        pulled_count=len(rows),
+                        upserted_count=0,
+                        failed_count=max(1, len(rows)),
+                        started_at=table_started_at,
+                        finished_at=table_finished_at,
+                        error_message=str(e),
+                    )
+                except Exception as detail_exc:
+                    tracking_write_failed = True
+                    run_warnings.append(f"{table_name}: 写入 sync_run_details 失败")
+                    logger.warning("写入 sync_run_details 失败（不阻断主同步）: %s", detail_exc)
+                try:
+                    sample_payload = rows[0] if rows and isinstance(rows[0], dict) else {}
+                    source_primary_key = ""
+                    pk_fields = [str(pk) for pk in validation.get("local_primary_keys", [])]
+                    if sample_payload and pk_fields:
+                        source_primary_key = "|".join(
+                            f"{pk}={str(sample_payload.get(pk) or '').strip()}" for pk in pk_fields
+                        )
+                    visit_id_value = str(sample_payload.get("visit_id") or "").strip() if sample_payload else ""
+                    _record_sync_error(
+                        run_id=run_id,
+                        source_table=source_table,
+                        source_primary_key=source_primary_key,
+                        visit_id=visit_id_value,
+                        error_code="SYNC_TABLE_FAILED",
+                        error_message=str(e),
+                        payload={
+                            "table": table_name,
+                            "source": source,
+                            "stage": log.stage,
+                            "sample_row": sample_payload,
+                        },
+                    )
+                except Exception as error_rec_exc:
+                    tracking_write_failed = True
+                    run_warnings.append(f"{table_name}: 写入 sync_error_records 失败")
+                    logger.warning("写入 sync_error_records 失败（不阻断主同步）: %s", error_rec_exc)
+
+            log.finished_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            results.append(asdict(log))
+            done_tables += 1
+            avg_seconds = (datetime.now() - sync_started_at).total_seconds() / max(done_tables, 1)
+            remaining = max(0, len(target_tables) - done_tables)
+            _emit_sync_progress(
+                progress_callback,
+                {
+                    "run_id": run_id,
+                    "status": "running",
+                    "stage": "syncing_table",
+                    "current_table": table_name,
+                    "tables_total": len(target_tables),
+                    "tables_done": done_tables,
+                    "rows_pulled_total": pulled_total,
+                    "rows_upserted_total": total_synced,
+                    "failed_tables": failed_tables,
+                    "eta_seconds": int(avg_seconds * remaining),
+                },
+            )
+
+        # 更新全局状态
+        _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        final_status = (
+            "failed"
+            if has_error and total_synced == 0
+            else "partial"
+            if has_error or tracking_write_failed
+            else "success"
+        )
+        _sync_state.last_sync_status = final_status
+        _sync_state.total_records_synced = total_synced
+        _sync_state.logs = results
+        _emit_sync_progress(
+            progress_callback,
+            {
+                "run_id": run_id,
+                "status": final_status,
+                "stage": "completed",
+                "current_table": "",
+                "tables_total": len(target_tables),
+                "tables_done": len(target_tables),
+                "rows_pulled_total": pulled_total,
+                "rows_upserted_total": total_synced,
+                "failed_tables": failed_tables,
+                "eta_seconds": 0,
+            },
+        )
+
+        return {
+            "success": not has_error,
+            "status": final_status,
+            "mode": sync_mode,
+            "scene": resolved_scene,
+            "policy_version": str(policy_version or ""),
+            "tables_hash": str(tables_hash or ""),
+            "total_records": total_synced,
+            "target_tables": [str(item.get("name")) for item in target_tables],
+            "date_window": {"start": start_date.isoformat(), "end": end_date.isoformat()},
+            "target_departments": dept_filters or ["*"],
+            "eligible_visits": len(scoped_visit_keys),
+            "tables": results,
+            "warnings": list(dict.fromkeys([item for item in run_warnings if str(item).strip()])),
+        }
+    finally:
+        _sync_state.is_running = False
+        try:
+            _upsert_sync_job_state(_sync_state)
+        except Exception as exc:
+            logger.exception("同步结束写入 sync_job_state 失败: %s", exc)
+        finally:
+            if lock_conn is not None and lock_acquired:
+                try:
+                    lock_conn.execute(text("SELECT pg_advisory_unlock(:lock_key)"), {"lock_key": _SYNC_LOCK_KEY})
+                except Exception as exc:
+                    logger.warning("释放同步锁失败: %s", exc)
+            if lock_conn is not None:
+                try:
+                    lock_conn.close()
+                except Exception:
+                    pass
