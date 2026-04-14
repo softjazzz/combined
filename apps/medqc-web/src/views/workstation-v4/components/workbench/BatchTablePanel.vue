@@ -191,7 +191,9 @@ const tableLocale = {
 
 const tablePagination = computed(() => {
   const pageSize = Number(props.pageSize || 20)
-  const total = Number(props.total || 0)
+  const totalFromProps = Number(props.total || 0)
+  const totalFromRows = Array.isArray(props.rows) ? props.rows.length : 0
+  const total = Math.max(totalFromProps, totalFromRows)
   return {
     current: Number(props.currentPage || 1),
     total,
@@ -199,7 +201,7 @@ const tablePagination = computed(() => {
     size: 'small' as const,
     showQuickJumper: true,
     showSizeChanger: false,
-    hideOnSinglePage: total <= pageSize,
+    hideOnSinglePage: false,
     showTotal: (value: number) => `共 ${value} 例`,
   }
 })
