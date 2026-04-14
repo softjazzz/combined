@@ -35,7 +35,28 @@
       </div>
     </section>
 
-    <section class="step-nav-shell">
+    <section class="view-mode-shell">
+      <a-radio-group
+        v-model:value="workspaceMode"
+        size="small"
+        button-style="solid"
+      >
+        <a-radio-button value="batch">
+          批量执行视图
+        </a-radio-button>
+        <a-radio-button value="design">
+          规则设计视图
+        </a-radio-button>
+      </a-radio-group>
+      <p class="view-mode-tip">
+        {{ workspaceModeTip }}
+      </p>
+    </section>
+
+    <section
+      v-if="workspaceMode === 'batch'"
+      class="step-nav-shell"
+    >
       <div class="step-nav">
         <button
           v-for="item in stepItems"
@@ -53,7 +74,7 @@
 
     <section
       id="step-rules"
-      class="workspace-grid workspace-grid-half"
+      class="workspace-grid"
     >
       <article class="workspace-panel">
         <div class="panel-head">
@@ -65,16 +86,27 @@
               规则草稿列表
             </h2>
           </div>
-          <a-button
-            size="small"
-            :loading="draftLoading"
-            @click="loadDrafts"
-          >
-            <template #icon>
-              <ReloadOutlined />
-            </template>
-            刷新
-          </a-button>
+          <div class="panel-actions">
+            <a-button
+              size="small"
+              :loading="draftLoading"
+              @click="loadDrafts"
+            >
+              <template #icon>
+                <ReloadOutlined />
+              </template>
+              刷新
+            </a-button>
+            <a-button
+              type="primary"
+              @click="openCreateDrawer"
+            >
+              <template #icon>
+                <PlusOutlined />
+              </template>
+              新建草稿
+            </a-button>
+          </div>
         </div>
 
         <div class="draft-filters">
@@ -96,14 +128,6 @@
             @change="searchDrafts"
           />
         </div>
-
-        <a-alert
-          class="mb-10"
-          show-icon
-          type="info"
-          message="执行集与编辑对象已分离"
-          description="复选框用于批量执行，行高亮用于当前编辑。"
-        />
 
         <a-table
           row-key="id"
@@ -183,102 +207,152 @@
           </template>
         </a-table>
       </article>
-
-      <article class="workspace-panel">
-        <div class="panel-head">
-          <div>
-            <p class="panel-eyebrow">
-              Step 2
-            </p>
-            <h2 class="panel-title">
-              规则创建区
-            </h2>
-          </div>
-          <div class="panel-actions">
-            <a-switch
-              v-model:checked="createAutoJoinExecutionSet"
-              checked-children="加入执行集"
-              un-checked-children="仅编辑"
-            />
-            <a-button
-              type="primary"
-              :loading="creatingDraft"
-              @click="createDraft"
-            >
-              <template #icon>
-                <PlusOutlined />
-              </template>
-              创建草稿
-            </a-button>
-          </div>
-        </div>
-
-        <a-form layout="vertical">
-          <div class="form-grid">
-            <a-form-item
-              label="规则名称"
-              required
-            >
-              <a-input
-                v-model:value="createForm.name"
-                placeholder="例如：出院记录缺少出院带药明细"
-              />
-            </a-form-item>
-            <a-form-item
-              label="适用文书"
-              required
-            >
-              <a-select
-                v-model:value="createForm.document_type"
-                :options="documentTypeOptions"
-              />
-            </a-form-item>
-          </div>
-          <div class="form-grid">
-            <a-form-item label="病历范围">
-              <a-select
-                v-model:value="createForm.scene"
-                :options="sceneOptions"
-              />
-            </a-form-item>
-            <a-form-item label="复杂度">
-              <a-select
-                v-model:value="createForm.complexity"
-                :options="complexityOptions"
-              />
-            </a-form-item>
-          </div>
-          <div class="form-grid">
-            <a-form-item label="缺陷级别">
-              <a-select
-                v-model:value="createForm.defect_level"
-                :options="defectLevelOptions"
-              />
-            </a-form-item>
-            <a-form-item label="严重程度">
-              <a-select
-                v-model:value="createForm.severity"
-                :options="severityOptions"
-              />
-            </a-form-item>
-          </div>
-          <a-form-item
-            label="需求描述"
-            required
-          >
-            <a-textarea
-              v-model:value="createForm.source_requirement"
-              :rows="5"
-              :maxlength="1200"
-              show-count
-              placeholder="描述你希望 AI 检查的问题边界、证据形式和建议口径。"
-            />
-          </a-form-item>
-        </a-form>
-      </article>
     </section>
 
     <section
+      id="step-create"
+      class="workspace-panel step-inline-panel"
+    >
+      <div class="panel-head">
+        <div>
+          <p class="panel-eyebrow">
+            Step 2
+          </p>
+          <h2 class="panel-title">
+            规则创建（抽屉）
+          </h2>
+        </div>
+        <a-button
+          type="primary"
+          @click="openCreateDrawer"
+        >
+          <template #icon>
+            <PlusOutlined />
+          </template>
+          新建草稿
+        </a-button>
+      </div>
+      <div class="step-inline-grid">
+        <div class="step-inline-card">
+          <p class="step-inline-label">
+            当前编辑对象
+          </p>
+          <p class="step-inline-value">
+            {{ selectedDraft ? `${selectedDraft.rule_code} ${selectedDraft.name}` : '未选择草稿' }}
+          </p>
+        </div>
+        <div class="step-inline-card">
+          <p class="step-inline-label">
+            当前执行集合
+          </p>
+          <p class="step-inline-value">
+            {{ effectiveExecutionDraftIds.length }} 条规则
+          </p>
+        </div>
+        <div class="step-inline-card">
+          <p class="step-inline-label">
+            操作入口
+          </p>
+          <p class="step-inline-value">
+            新建规则通过右侧抽屉完成，创建后可自动加入执行集合。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <a-drawer
+      v-model:open="createDrawerVisible"
+      title="步骤2：创建规则草稿"
+      placement="right"
+      :width="560"
+    >
+      <template #extra>
+        <a-switch
+          v-model:checked="createAutoJoinExecutionSet"
+          checked-children="加入执行集"
+          un-checked-children="仅编辑"
+        />
+      </template>
+      <a-form layout="vertical">
+        <div class="form-grid">
+          <a-form-item
+            label="规则名称"
+            required
+          >
+            <a-input
+              v-model:value="createForm.name"
+              placeholder="例如：出院记录缺少出院带药明细"
+            />
+          </a-form-item>
+          <a-form-item
+            label="适用文书"
+            required
+          >
+            <a-select
+              v-model:value="createForm.document_type"
+              :options="documentTypeOptions"
+            />
+          </a-form-item>
+        </div>
+        <div class="form-grid">
+          <a-form-item label="病历范围">
+            <a-select
+              v-model:value="createForm.scene"
+              :options="sceneOptions"
+            />
+          </a-form-item>
+          <a-form-item label="复杂度">
+            <a-select
+              v-model:value="createForm.complexity"
+              :options="complexityOptions"
+            />
+          </a-form-item>
+        </div>
+        <div class="form-grid">
+          <a-form-item label="缺陷级别">
+            <a-select
+              v-model:value="createForm.defect_level"
+              :options="defectLevelOptions"
+            />
+          </a-form-item>
+          <a-form-item label="严重程度">
+            <a-select
+              v-model:value="createForm.severity"
+              :options="severityOptions"
+            />
+          </a-form-item>
+        </div>
+        <a-form-item
+          label="需求描述"
+          required
+        >
+          <a-textarea
+            v-model:value="createForm.source_requirement"
+            :rows="5"
+            :maxlength="1200"
+            show-count
+            placeholder="描述你希望 AI 检查的问题边界、证据形式和建议口径。"
+          />
+        </a-form-item>
+      </a-form>
+      <template #footer>
+        <div class="drawer-footer">
+          <a-button @click="createDrawerVisible = false">
+            取消
+          </a-button>
+          <a-button
+            type="primary"
+            :loading="creatingDraft"
+            @click="createDraft"
+          >
+            创建草稿
+          </a-button>
+        </div>
+      </template>
+    </a-drawer>
+
+    <section
+      v-if="workspaceMode === 'batch'"
       id="step-prompt"
       class="workspace-panel"
     >
@@ -297,6 +371,15 @@
           </a-tag>
           <a-button
             :disabled="!selectedDraft"
+            @click="openPromptDrawer"
+          >
+            <template #icon>
+              <EditOutlined />
+            </template>
+            打开编辑器
+          </a-button>
+          <a-button
+            :disabled="!selectedDraft"
             :loading="generatingPrompt"
             @click="generatePromptForDraft"
           >
@@ -304,6 +387,67 @@
               <RobotOutlined />
             </template>
             AI 生成 Prompt
+          </a-button>
+        </div>
+      </div>
+
+      <div class="prompt-compact">
+        <div class="prompt-compact-main">
+          <a-tag :color="editorGenerationMode === 'llm' ? 'success' : 'warning'">
+            {{ editorGenerationMode === 'llm' ? 'AI生成' : '模板回退' }}
+          </a-tag>
+          <span class="prompt-compact-text">{{ promptPreviewInline }}</span>
+        </div>
+        <div
+          v-if="editorCheckPoints.length > 0"
+          class="prompt-compact-points"
+        >
+          <a-tag
+            v-for="(item, idx) in editorCheckPoints.slice(0, 2)"
+            :key="`${idx}-${item}`"
+          >
+            {{ item }}
+          </a-tag>
+        </div>
+      </div>
+    </section>
+
+    <section
+      v-else
+      id="step-prompt"
+      class="workspace-panel"
+    >
+      <div class="panel-head">
+        <div>
+          <p class="panel-eyebrow">
+            规则设计区
+          </p>
+          <h2 class="panel-title">
+            Prompt 与规则内容
+          </h2>
+        </div>
+        <div class="panel-actions">
+          <a-tag :color="promptReady ? 'success' : 'warning'">
+            {{ promptReady ? '可发布' : '待补全' }}
+          </a-tag>
+          <a-button
+            :disabled="!selectedDraft"
+            :loading="generatingPrompt"
+            @click="generatePromptForDraft"
+          >
+            <template #icon>
+              <RobotOutlined />
+            </template>
+            AI 生成 Prompt
+          </a-button>
+          <a-button
+            :disabled="!selectedDraft"
+            @click="openPromptDrawer"
+          >
+            <template #icon>
+              <EditOutlined />
+            </template>
+            打开编辑器
           </a-button>
           <a-button
             type="primary"
@@ -316,6 +460,76 @@
         </div>
       </div>
 
+      <div class="design-meta-grid">
+        <div class="design-meta-item">
+          <span class="design-meta-label">规则编码</span>
+          <strong class="design-meta-value">{{ selectedDraft?.rule_code || '-' }}</strong>
+        </div>
+        <div class="design-meta-item">
+          <span class="design-meta-label">规则名称</span>
+          <strong class="design-meta-value">{{ editorForm.name || '-' }}</strong>
+        </div>
+        <div class="design-meta-item">
+          <span class="design-meta-label">适用文书</span>
+          <strong class="design-meta-value">{{ editorForm.document_type || '-' }}</strong>
+        </div>
+        <div class="design-meta-item">
+          <span class="design-meta-label">病历范围</span>
+          <strong class="design-meta-value">{{
+            editorForm.scene === 'final' ? '终末病历' : '运行病历'
+          }}</strong>
+        </div>
+      </div>
+
+      <div class="prompt-summary">
+        <p class="prompt-summary-title">
+          Prompt 摘要
+        </p>
+        <p class="prompt-summary-text">
+          {{ promptPreviewText }}
+        </p>
+        <div
+          v-if="editorCheckPoints.length > 0"
+          class="prompt-summary-points"
+        >
+          <a-tag
+            v-for="(item, idx) in editorCheckPoints.slice(0, 4)"
+            :key="`${idx}-${item}`"
+          >
+            {{ item }}
+          </a-tag>
+        </div>
+      </div>
+    </section>
+
+    <a-drawer
+      v-model:open="promptDrawerVisible"
+      title="步骤3：Prompt 生成与编辑"
+      placement="right"
+      :width="780"
+    >
+      <template #extra>
+        <div class="panel-actions">
+          <a-button
+            :disabled="!selectedDraft"
+            :loading="generatingPrompt"
+            @click="generatePromptForDraft"
+          >
+            <template #icon>
+              <RobotOutlined />
+            </template>
+            AI 生成
+          </a-button>
+          <a-button
+            type="primary"
+            :disabled="!selectedDraft"
+            :loading="savingDraft"
+            @click="saveDraftEditor"
+          >
+            保存草稿
+          </a-button>
+        </div>
+      </template>
       <a-alert
         :type="editorGenerationMode === 'llm' ? 'success' : 'warning'"
         show-icon
@@ -326,14 +540,14 @@
       />
       <div
         v-if="editorCheckPoints.length > 0"
-        class="check-point-list"
+        class="check-point-list mt-10"
       >
         <div class="check-point-title">
           生成检查要点
         </div>
         <div
           v-for="(item, idx) in editorCheckPoints"
-          :key="`${idx}-${item}`"
+          :key="`drawer-${idx}-${item}`"
           class="check-point-item"
         >
           {{ idx + 1 }}. {{ item }}
@@ -399,9 +613,25 @@
           </a-form-item>
         </div>
       </a-form>
-    </section>
+      <template #footer>
+        <div class="drawer-footer">
+          <a-button @click="promptDrawerVisible = false">
+            关闭
+          </a-button>
+          <a-button
+            type="primary"
+            :disabled="!selectedDraft"
+            :loading="savingDraft"
+            @click="saveDraftEditor"
+          >
+            保存草稿
+          </a-button>
+        </div>
+      </template>
+    </a-drawer>
 
     <section
+      v-if="workspaceMode === 'batch'"
       id="step-records"
       class="workspace-panel"
     >
@@ -871,6 +1101,9 @@ const drafts = ref<CustomRuleDraft[]>([])
 const selectedDraftId = ref('')
 const selectedDraftIds = ref<string[]>([])
 const createAutoJoinExecutionSet = ref(true)
+const createDrawerVisible = ref(false)
+const promptDrawerVisible = ref(false)
+const workspaceMode = ref<'batch' | 'design'>('batch')
 
 const singleResult = ref<CustomRuleSingleTestResult | null>(null)
 
@@ -973,6 +1206,25 @@ const promptReady = computed(() => {
   return Boolean(
     editorForm.name.trim() && editorForm.description.trim() && editorForm.prompt_template.trim(),
   )
+})
+
+const workspaceModeTip = computed(() => {
+  if (workspaceMode.value === 'batch') {
+    return '面向执行：规则选择、病历筛选、任务执行与结果复盘在同一屏完成。'
+  }
+  return '面向设计：聚焦规则与 Prompt 调整，完整编辑放入右侧抽屉，避免主页面拥挤。'
+})
+
+const promptPreviewText = computed(() => {
+  const text = editorForm.prompt_template.trim()
+  if (!text) return '尚未填写 Prompt 模板，可点击“打开编辑器”补全。'
+  return text.length > 220 ? `${text.slice(0, 220)}...` : text
+})
+
+const promptPreviewInline = computed(() => {
+  const text = editorForm.prompt_template.replace(/\s+/g, ' ').trim()
+  if (!text) return '尚未填写 Prompt 模板'
+  return text.length > 88 ? `${text.slice(0, 88)}...` : text
 })
 
 const editorGenerationMode = computed(
@@ -1166,6 +1418,18 @@ function selectDraft(record: CustomRuleDraft) {
   hydrateEditorFromDraft(record)
   singleResult.value = null
 }
+
+function openCreateDrawer() {
+  createDrawerVisible.value = true
+}
+
+function openPromptDrawer() {
+  if (!selectedDraft.value) {
+    message.warning('请先选择草稿')
+    return
+  }
+  promptDrawerVisible.value = true
+}
 async function createDraft() {
   const name = createForm.name.trim()
   const requirement = createForm.source_requirement.trim()
@@ -1206,6 +1470,7 @@ async function createDraft() {
     if (createAutoJoinExecutionSet.value) {
       selectedDraftIds.value = Array.from(new Set([...selectedDraftIds.value, response.data.id]))
     }
+    createDrawerVisible.value = false
     await loadDrafts()
     selectDraft(response.data)
   } catch (error: any) {
@@ -1798,7 +2063,7 @@ const stepItems = computed(() => {
     {
       index: '2',
       label: '规则创建',
-      anchor: 'step-rules',
+      anchor: 'step-create',
       status: selectedDraft.value ? 'ready' : 'pending',
       statusLabel: selectedDraft.value ? '可编辑' : '未就绪',
     },
@@ -1926,6 +2191,25 @@ onBeforeUnmount(() => {
   background: linear-gradient(120deg, #ffffff 0%, #f5f9ff 100%);
   box-shadow: var(--panel-shadow);
   padding: 16px 18px;
+}
+
+.view-mode-shell {
+  margin-top: 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: var(--panel-shadow);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.view-mode-tip {
+  margin: 0;
+  font-size: 12px;
+  color: #6f84a4;
 }
 
 .ops-eyebrow {
@@ -2075,6 +2359,37 @@ onBeforeUnmount(() => {
   margin-top: 12px;
 }
 
+.step-inline-panel {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.step-inline-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.step-inline-card {
+  border: 1px solid #dce8f7;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 8px 10px;
+}
+
+.step-inline-label {
+  margin: 0;
+  font-size: 11px;
+  color: #6d84a5;
+}
+
+.step-inline-value {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #1f3f68;
+  line-height: 1.6;
+}
+
 .panel-head {
   display: flex;
   align-items: center;
@@ -2159,6 +2474,102 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.prompt-compact {
+  margin-top: 8px;
+  border: 1px solid #dbe7f5;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prompt-compact-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.prompt-compact-points {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prompt-compact-text {
+  color: #4c6992;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompt-summary {
+  margin-top: 8px;
+  border: 1px solid #dbe7f5;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 10px 12px;
+}
+
+.prompt-summary-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1f3f68;
+}
+
+.prompt-summary-text {
+  margin: 6px 0 0;
+  color: #4c6992;
+  line-height: 1.7;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.prompt-summary-points {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.design-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.design-meta-item {
+  border: 1px solid #dbe7f5;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #f8fbff;
+}
+
+.design-meta-label {
+  display: block;
+  font-size: 11px;
+  color: #6f84a4;
+}
+
+.design-meta-value {
+  margin-top: 4px;
+  display: block;
+  color: #173860;
+  font-size: 13px;
 }
 
 .check-point-list {
@@ -2403,6 +2814,11 @@ onBeforeUnmount(() => {
     width: 100%;
   }
 
+  .view-mode-shell {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .step-nav {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2413,6 +2829,14 @@ onBeforeUnmount(() => {
 
   .batch-filters {
     flex-wrap: wrap;
+  }
+
+  .step-inline-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .design-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>
