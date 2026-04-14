@@ -23,7 +23,7 @@
         :stage-empty-text="stageEmptyText"
         :display-server-total-pages="displayServerTotalPages"
         :current-page="currentPage"
-        :page-size="WORKSTATION_PAGE_SIZE"
+        :page-size="pageSize"
         :display-server-total="displayServerTotal"
         @update:active-priority-group="activePriorityGroup = $event"
         @update:search-text="searchText = $event"
@@ -319,6 +319,7 @@ const {
   allRecords,
   departments,
   currentPage,
+  pageSize,
   serverTotal,
   serverTotalPages,
   loading,
@@ -404,7 +405,6 @@ const displayServerTotalPages = computed(() =>
 const isStageQueueMode = computed(() => Boolean(currentStageFilter.value))
 
 const stageMeta = computed(() => getStageMeta(currentStageFilter.value))
-const WORKSTATION_PAGE_SIZE = 20
 
 async function fetchStageWorklist(stage: WorkflowStageKey | '') {
   const endpoint = stageWorklistEndpoint(stage)
@@ -421,7 +421,7 @@ async function fetchStageWorklist(stage: WorkflowStageKey | '') {
     const { data } = await apiClient.get<StageWorklistResponse>(endpoint, {
       params: {
         page: currentPage.value,
-        page_size: WORKSTATION_PAGE_SIZE,
+        page_size: pageSize.value,
         department: activeDept.value === '全部科室' ? undefined : activeDept.value,
         keyword: searchText.value.trim() || undefined,
       },
@@ -435,8 +435,7 @@ async function fetchStageWorklist(stage: WorkflowStageKey | '') {
       Number(
         payload.total_pages ||
           Math.ceil(
-            Number(payload.total || 0) /
-              Math.max(1, Number(payload.page_size || WORKSTATION_PAGE_SIZE)),
+            Number(payload.total || 0) / Math.max(1, Number(payload.page_size || pageSize.value)),
           ),
       ),
     )
@@ -1639,7 +1638,7 @@ watch(detailMainTab, (tab) => {
 })
 
 watch(
-  [currentStageFilter, activeDept, searchText, currentPage],
+  [currentStageFilter, activeDept, searchText, currentPage, pageSize],
   ([stage]) => {
     if (!aggregatedStageWorkflows[stage]) return
     void fetchStageWorklist(stage)
@@ -1803,14 +1802,20 @@ function handleBatchAssign(keys: string[]) {
   message.info(`批量分派功能准备中，已选择 ${keys.length} 条`)
 }
 
-function handlePageChange(page: number) {
+function handlePageChange(page: number, nextPageSize?: number) {
+  const resolvedPageSize =
+    Number.isFinite(Number(nextPageSize)) && Number(nextPageSize) > 0
+      ? Number(nextPageSize)
+      : pageSize.value
   if (isAggregatedStageMode.value) {
-    currentPage.value = page
+    const pageSizeChanged = resolvedPageSize !== pageSize.value
+    pageSize.value = resolvedPageSize
+    currentPage.value = pageSizeChanged ? 1 : page
     void fetchStageWorklist(currentStageFilter.value)
     document.querySelector('.custom-scrollbar')?.scrollTo({ top: 0, behavior: 'smooth' })
     return
   }
-  handleBasePageChange(page)
+  handleBasePageChange(page, resolvedPageSize)
 }
 
 function handleClearFilters() {

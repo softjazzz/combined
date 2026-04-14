@@ -43,6 +43,7 @@ export function usePatientRecords() {
   const allRecords = ref<PatientRecord[]>([])
   const departments = ref<DeptInfo[]>([])
   const currentPage = ref(1)
+  const pageSize = ref(WORKSTATION_PAGE_SIZE)
   const serverTotal = ref(0)
   const serverTotalPages = ref(1)
   const totalCount = computed(() => serverTotal.value)
@@ -85,11 +86,11 @@ export function usePatientRecords() {
 
   const filteredRecords = computed(() => scopedRecords.value)
 
-  async function fetchData(page = 1) {
+  async function fetchData(page = 1, targetPageSize = pageSize.value) {
     loading.value = true
     try {
       const response = await ApiService.getRaw('/api/medical-records/workstation', {
-        params: { page, page_size: WORKSTATION_PAGE_SIZE },
+        params: { page, page_size: targetPageSize },
       })
       const raw = response.data as Record<string, unknown>
       const data = (
@@ -108,13 +109,17 @@ export function usePatientRecords() {
           : buildDepartments(normalizedRecords)
 
       const total = Number(data.total ?? data.total_count ?? 0)
-      const pageSize = Number(data.page_size ?? data.pageSize ?? WORKSTATION_PAGE_SIZE)
+      const resolvedPageSize = Number(data.page_size ?? data.pageSize ?? targetPageSize)
       const totalPagesRaw = Number(data.totalPages ?? data.total_pages ?? 0)
-      const totalPagesComputed = pageSize > 0 ? Math.ceil(total / pageSize) : 1
+      const totalPagesComputed = resolvedPageSize > 0 ? Math.ceil(total / resolvedPageSize) : 1
 
       serverTotal.value = total
       serverTotalPages.value = Math.max(1, totalPagesRaw || totalPagesComputed || 1)
       currentPage.value = Number(data.page ?? data.current_page ?? page) || 1
+      pageSize.value =
+        Number.isFinite(resolvedPageSize) && resolvedPageSize > 0
+          ? resolvedPageSize
+          : WORKSTATION_PAGE_SIZE
     } catch (error) {
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
     } finally {
@@ -122,9 +127,16 @@ export function usePatientRecords() {
     }
   }
 
-  function handlePageChange(page: number) {
-    currentPage.value = page
-    fetchData(page)
+  function handlePageChange(page: number, nextPageSize?: number) {
+    const normalizedPageSize =
+      Number.isFinite(Number(nextPageSize)) && Number(nextPageSize) > 0
+        ? Number(nextPageSize)
+        : pageSize.value
+    const pageSizeChanged = normalizedPageSize !== pageSize.value
+    pageSize.value = normalizedPageSize
+    const nextPage = pageSizeChanged ? 1 : page
+    currentPage.value = nextPage
+    fetchData(nextPage, normalizedPageSize)
     document.querySelector('.custom-scrollbar')?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -141,6 +153,7 @@ export function usePatientRecords() {
     allRecords,
     departments,
     currentPage,
+    pageSize,
     serverTotal,
     serverTotalPages,
     totalCount,

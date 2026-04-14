@@ -331,7 +331,7 @@
             @batch-defer="emit('batch-defer', $event)"
             @batch-assign="emit('batch-assign', $event)"
             @clear-filters="emit('clear-filters')"
-            @page-change="emit('page-change', $event)"
+            @page-change="handleBatchPageChange"
           />
         </div>
 
@@ -401,8 +401,12 @@ const emit = defineEmits<{
   'batch-defer': [keys: string[]]
   'batch-assign': [keys: string[]]
   'clear-filters': []
-  'page-change': [page: number]
+  'page-change': [page: number, pageSize?: number]
 }>()
+
+function handleBatchPageChange(page: number, pageSize?: number) {
+  emit('page-change', page, pageSize)
+}
 
 const analysisTab = ref<'stage' | 'workflow'>('stage')
 

@@ -156,7 +156,7 @@ const emit = defineEmits<{
   'batch-defer': [keys: string[]]
   'batch-assign': [keys: string[]]
   'clear-filters': []
-  'page-change': [page: number]
+  'page-change': [page: number, pageSize?: number]
 }>()
 
 const rowSelection = computed(() => ({
@@ -187,16 +187,20 @@ const tablePagination = computed(() => {
     pageSize,
     size: 'small' as const,
     showQuickJumper: true,
-    showSizeChanger: false,
+    showSizeChanger: true,
+    pageSizeOptions: ['20', '50', '100'],
     hideOnSinglePage: total <= pageSize,
     showTotal: (value: number) => `共 ${value} 例`,
   }
 })
 
-function handleTableChange(pagination: { current?: number }) {
+function handleTableChange(pagination: { current?: number; pageSize?: number }) {
   const nextPage = Number(pagination.current || 1)
-  if (nextPage === Number(props.currentPage || 1)) return
-  emit('page-change', nextPage)
+  const nextPageSize = Number(pagination.pageSize || props.pageSize || 20)
+  const currentPage = Number(props.currentPage || 1)
+  const currentPageSize = Number(props.pageSize || 20)
+  if (nextPage === currentPage && nextPageSize === currentPageSize) return
+  emit('page-change', nextPage, nextPageSize)
 }
 
 function stageTagClass(stageStatus: string) {
