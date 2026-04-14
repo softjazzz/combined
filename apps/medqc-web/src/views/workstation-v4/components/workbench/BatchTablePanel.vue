@@ -17,17 +17,6 @@
         </div>
 
         <div class="batch-table-panel__actions flex flex-wrap items-center gap-2">
-          <div class="batch-table-panel__page-size">
-            <span class="batch-table-panel__page-size-label">每页</span>
-            <a-select
-              size="small"
-              class="batch-table-panel__page-size-select"
-              :value="String(props.pageSize || 20)"
-              :options="pageSizeOptions"
-              @change="handlePageSizeChange"
-            />
-            <span class="batch-table-panel__page-size-label">条</span>
-          </div>
           <a-button
             v-if="showPrimaryAction"
             size="small"
@@ -200,17 +189,12 @@ const tablePagination = computed(() => {
     pageSize,
     size: 'small' as const,
     showQuickJumper: true,
-    showSizeChanger: false,
+    showSizeChanger: true,
+    pageSizeOptions: ['20', '50', '100'],
     hideOnSinglePage: false,
     showTotal: (value: number) => `共 ${value} 例`,
   }
 })
-
-const pageSizeOptions = [
-  { value: '20', label: '20' },
-  { value: '50', label: '50' },
-  { value: '100', label: '100' },
-]
 
 function handleTableChange(pagination: { current?: number; pageSize?: number }) {
   const nextPage = Number(pagination.current || 1)
@@ -219,14 +203,6 @@ function handleTableChange(pagination: { current?: number; pageSize?: number }) 
   const currentPageSize = Number(props.pageSize || 20)
   if (nextPage === currentPage && nextPageSize === currentPageSize) return
   emit('page-change', nextPage, nextPageSize)
-}
-
-function handlePageSizeChange(value: string | number) {
-  const nextPageSize = Number(value || props.pageSize || 20)
-  if (!Number.isFinite(nextPageSize) || nextPageSize <= 0) return
-  const currentPageSize = Number(props.pageSize || 20)
-  if (nextPageSize === currentPageSize) return
-  emit('page-change', 1, nextPageSize)
 }
 
 function stageTagClass(stageStatus: string) {
@@ -354,21 +330,14 @@ const columns = [
   color: var(--workstation-brand-600, #1e5ae0) !important;
 }
 
-.batch-table-panel__page-size {
+.batch-table-panel :deep(.ant-pagination-options) {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-right: 4px;
+  gap: 8px;
 }
 
-.batch-table-panel__page-size-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--workstation-text-muted, #94a3b8);
-}
-
-.batch-table-panel__page-size-select {
-  width: 84px;
+.batch-table-panel :deep(.ant-pagination-options-size-changer) {
+  min-width: 104px;
 }
 
 .batch-table-panel__patient-name {
