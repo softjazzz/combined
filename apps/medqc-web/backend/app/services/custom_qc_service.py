@@ -39,6 +39,9 @@ def severity_to_defect_level(severity: Optional[str]) -> str:
 def build_inline_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
     document_type = normalize_document_type(rule.get("document_type"))
     prompt_template = str(rule.get("prompt_template") or "").strip()
+    check_logic = dict(rule.get("check_logic") or {})
+    raw_executor_type = str(rule.get("executor_type") or "").strip().lower()
+    executor_type = raw_executor_type if raw_executor_type in {"llm", "program"} else "llm"
 
     return {
         "rule_id": str(rule.get("rule_code") or "INLINE-DRAFT"),
@@ -56,7 +59,13 @@ def build_inline_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
             description=str(rule.get("description") or "").strip(),
             check_points=[],
         )["prompt_template"],
-        "check_logic": rule.get("check_logic") or {},
+        "check_logic": check_logic,
+        "executor_type": executor_type,
+        "execution_domain": str(rule.get("execution_domain") or check_logic.get("execution_domain") or "").strip(),
+        "doc_scope": str(rule.get("doc_scope") or check_logic.get("doc_scope") or "primary").strip(),
+        "rule_version": str(rule.get("rule_version") or "workspace-v1").strip(),
+        "prompt_version": str(rule.get("prompt_version") or "workspace-prompt-v1").strip(),
+        "cost_class": str(rule.get("cost_class") or ("low" if executor_type == "program" else "medium")).strip(),
     }
 
 
@@ -275,6 +284,28 @@ async def evaluate_inline_rule(
     top_p: Optional[float] = None,
     max_tokens: Optional[int] = None,
 ) -> Dict[str, Any]:
+    """
+    兼容旧调用入口，内部统一走 orchestrator 执行链。
+    """
+    return await evaluate_inline_rule_orchestrated(
+        qc_service=qc_service,
+        rule=rule,
+        record=record,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+    )
+
+
+async def evaluate_inline_rule_orchestrated(
+    *,
+    qc_service: SichuanQCService,
+    rule: Dict[str, Any],
+    record: Dict[str, Any],
+    temperature: Optional[float] = None,
+    top_p: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+) -> Dict[str, Any]:
     if temperature is not None:
         qc_service.client.temperature = temperature
     if top_p is not None:
@@ -283,15 +314,41 @@ async def evaluate_inline_rule(
         qc_service.client.max_tokens = max_tokens
 
     inline_rule = build_inline_rule(rule)
+    ensure_meta = getattr(qc_service, "_ensure_rule_execution_meta", None)
+    if callable(ensure_meta):
+        try:
+            inline_rule = ensure_meta(inline_rule)
+        except Exception:
+            logger.warning("custom-qc 内联规则补齐执行元数据失败，回退原始规则", exc_info=True)
+
     started_at = time.perf_counter()
-    result = await qc_service.rule_engine.evaluate(
-        rule=inline_rule,
-        medical_record={
-            "id": str(record.get("record_id") or record.get("visit_id") or record.get("id") or ""),
-            "content": str(record.get("medical_text") or ""),
-            "document_type": normalize_document_type(rule.get("document_type")),
-        },
+    medical_record = {
+        "id": str(record.get("record_id") or record.get("visit_id") or record.get("id") or ""),
+        "content": str(record.get("medical_text") or ""),
+        "document_type": normalize_document_type(rule.get("document_type")),
+    }
+
+    async def _llm_evaluate(candidate_rule: Dict[str, Any], candidate_record: Dict[str, Any]) -> Dict[str, Any]:
+        return await qc_service.rule_engine.evaluate(
+            rule=candidate_rule,
+            medical_record=candidate_record,
+        )
+
+    orchestrated = await qc_service.rule_orchestrator.evaluate_rules(
+        rules=[inline_rule],
+        medical_record=medical_record,
+        llm_evaluate=_llm_evaluate,
+        evidence_source="custom_qc_workspace",
+        llm_concurrency=1,
+        model_version=str(qc_service.client.model or ""),
+        execution_cache=qc_service.execution_cache,
+        cache_ttl_seconds=1800,
     )
+    orchestrated_results = list(orchestrated.get("results") or [])
+    if not orchestrated_results:
+        raise ValueError("自定义规则执行失败：未返回结果")
+    result = orchestrated_results[0]
+
     duration = time.perf_counter() - started_at
     metadata = result.get("metadata", {}) or {}
 
@@ -313,6 +370,9 @@ async def evaluate_inline_rule(
         "evidence_verified": result.get("evidence_verified", True),
         "evidence_span": result.get("evidence_span"),
         "metadata": metadata,
+        "executor_breakdown": orchestrated.get("executor_breakdown") or {},
+        "cache_breakdown": orchestrated.get("cache_breakdown") or {},
+        "trace": orchestrated.get("trace") or [],
         "performance": {
             "processing_time": duration,
             "token_usage": int(metadata.get("tokens_used") or 0),

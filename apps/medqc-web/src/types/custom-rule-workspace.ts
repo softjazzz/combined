@@ -197,6 +197,14 @@ export interface CustomRuleBatchJobSummary {
   compliant_records: number
   total_tokens: number
   total_processing_time: number
+  executor_breakdown?: {
+    program: number
+    llm: number
+  }
+  cache_breakdown?: {
+    hit: number
+    miss: number
+  }
   progress?: CustomRuleBatchJobProgress
   rule_results?: CustomRuleBatchJobRuleResult[]
   updated_at?: string
@@ -224,6 +232,14 @@ export interface CustomRuleBatchJobRuleResult {
   compliant_records?: number
   total_tokens?: number
   total_processing_time?: number
+  executor_breakdown?: {
+    program: number
+    llm: number
+  }
+  cache_breakdown?: {
+    hit: number
+    miss: number
+  }
   items?: CustomRuleBatchIssueItem[]
   failed_records?: CustomRuleBatchFailedRecord[]
   updated_at?: string
@@ -236,6 +252,15 @@ export interface CustomRuleBatchIssueItem extends CustomRuleBatchIssueBase {
   draft_id?: string
   rule_code?: string
   rule_name?: string
+  metadata?: Record<string, unknown>
+  executor_breakdown?: {
+    program: number
+    llm: number
+  }
+  cache_breakdown?: {
+    hit: number
+    miss: number
+  }
 }
 
 export interface CustomRuleBatchFailedRecord extends CustomRuleBatchFailedRecordBase {

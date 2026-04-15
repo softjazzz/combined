@@ -12,7 +12,7 @@ from ..core.security import get_current_user, require_roles
 from ..services.custom_qc_service import (
     create_custom_qc_service,
     ensure_record_medical_text,
-    evaluate_inline_rule,
+    evaluate_inline_rule_orchestrated,
     generate_custom_prompt,
 )
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
@@ -231,6 +231,8 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                 "compliant_records": total_records,
                 "total_tokens": 0,
                 "total_processing_time": 0.0,
+                "executor_breakdown": {"program": 0, "llm": 0},
+                "cache_breakdown": {"hit": 0, "miss": 0},
             },
         )
         qc_service = await create_custom_qc_service()
@@ -242,6 +244,10 @@ async def _run_workspace_batch_job(job_id: str) -> None:
         failed_record_ids: set[str] = set()
         total_tokens = 0
         total_processing_time = 0.0
+        executor_program = 0
+        executor_llm = 0
+        cache_hit_count = 0
+        cache_miss_count = 0
 
         for rule_index, draft in enumerate(drafts, start=1):
             latest = workspace.get_batch_job_for_processing(job_id=job_id)
@@ -255,6 +261,10 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             rule_failed: List[Dict[str, Any]] = []
             rule_tokens = 0
             rule_processing_time = 0.0
+            rule_executor_program = 0
+            rule_executor_llm = 0
+            rule_cache_hit = 0
+            rule_cache_miss = 0
 
             workspace.update_batch_job_progress(
                 job_id=job_id,
@@ -276,6 +286,14 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                     ),
                     "total_tokens": int(total_tokens),
                     "total_processing_time": float(total_processing_time),
+                    "executor_breakdown": {
+                        "program": executor_program,
+                        "llm": executor_llm,
+                    },
+                    "cache_breakdown": {
+                        "hit": cache_hit_count,
+                        "miss": cache_miss_count,
+                    },
                 },
             )
 
@@ -287,7 +305,7 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                 record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
                 try:
                     ensure_record_medical_text([record])
-                    result = await evaluate_inline_rule(
+                    result = await evaluate_inline_rule_orchestrated(
                         qc_service=qc_service,
                         rule=rule_payload,
                         record=record,
@@ -301,6 +319,7 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                         "rule_name": rule_name,
                         "draft_id": str(draft.get("id") or ""),
                     }
+                    metadata = dict(enriched_result.get("metadata") or {})
                     total_tokens += int((enriched_result.get("performance") or {}).get("token_usage") or 0)
                     total_processing_time += float(
                         (enriched_result.get("performance") or {}).get("processing_time") or 0.0
@@ -309,6 +328,19 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                     rule_processing_time += float(
                         (enriched_result.get("performance") or {}).get("processing_time") or 0.0
                     )
+                    executor_type = str(metadata.get("executor_type") or "llm").strip().lower()
+                    if executor_type == "program":
+                        executor_program += 1
+                        rule_executor_program += 1
+                    else:
+                        executor_llm += 1
+                        rule_executor_llm += 1
+                    if metadata.get("cache_hit") is True:
+                        cache_hit_count += 1
+                        rule_cache_hit += 1
+                    else:
+                        cache_miss_count += 1
+                        rule_cache_miss += 1
                     if str(enriched_result.get("status") or "").lower() == "non_compliant":
                         issue_record_ids.add(record_id)
                     items.append(enriched_result)
@@ -349,6 +381,14 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                         ),
                         "total_tokens": int(total_tokens),
                         "total_processing_time": float(total_processing_time),
+                        "executor_breakdown": {
+                            "program": executor_program,
+                            "llm": executor_llm,
+                        },
+                        "cache_breakdown": {
+                            "hit": cache_hit_count,
+                            "miss": cache_miss_count,
+                        },
                     },
                 )
             rule_summary = {
@@ -361,6 +401,14 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                 ),
                 "total_tokens": int(rule_tokens),
                 "total_processing_time": float(rule_processing_time),
+                "executor_breakdown": {
+                    "program": rule_executor_program,
+                    "llm": rule_executor_llm,
+                },
+                "cache_breakdown": {
+                    "hit": rule_cache_hit,
+                    "miss": rule_cache_miss,
+                },
             }
             rule_results.append(
                 {
@@ -400,6 +448,14 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                     ),
                     "total_tokens": int(total_tokens),
                     "total_processing_time": float(total_processing_time),
+                    "executor_breakdown": {
+                        "program": executor_program,
+                        "llm": executor_llm,
+                    },
+                    "cache_breakdown": {
+                        "hit": cache_hit_count,
+                        "miss": cache_miss_count,
+                    },
                 },
                 items=items,
                 failed_records=failed_records,
@@ -416,6 +472,14 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             "compliant_records": max(0, total_records - len(issue_record_ids) - len(failed_record_ids)),
             "total_tokens": int(total_tokens),
             "total_processing_time": float(total_processing_time),
+            "executor_breakdown": {
+                "program": executor_program,
+                "llm": executor_llm,
+            },
+            "cache_breakdown": {
+                "hit": cache_hit_count,
+                "miss": cache_miss_count,
+            },
             "rule_results": rule_results,
             "processed_rule_count": len(rule_results),
             "progress": {
@@ -470,7 +534,7 @@ async def test_custom_qc_single(
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
     ensure_record_medical_text([record.model_dump() for record in payload.records])
     record = payload.records[0]
-    result = await evaluate_inline_rule(
+    result = await evaluate_inline_rule_orchestrated(
         qc_service=qc_service,
         rule=payload.rule.model_dump(),
         record=record.model_dump(),
@@ -513,10 +577,14 @@ async def test_custom_qc_batch(
     failed_records: List[Dict[str, Any]] = []
     total_tokens = 0
     total_processing_time = 0.0
+    executor_program = 0
+    executor_llm = 0
+    cache_hit_count = 0
+    cache_miss_count = 0
 
     for record in record_dicts:
         try:
-            result = await evaluate_inline_rule(
+            result = await evaluate_inline_rule_orchestrated(
                 qc_service=qc_service,
                 rule=payload.rule.model_dump(),
                 record=record,
@@ -528,6 +596,15 @@ async def test_custom_qc_batch(
             total_processing_time += float(
                 (result.get("performance") or {}).get("processing_time") or 0.0
             )
+            metadata = dict(result.get("metadata") or {})
+            if str(metadata.get("executor_type") or "llm").strip().lower() == "program":
+                executor_program += 1
+            else:
+                executor_llm += 1
+            if metadata.get("cache_hit") is True:
+                cache_hit_count += 1
+            else:
+                cache_miss_count += 1
             items.append(result)
         except Exception as exc:
             logger.warning("custom-qc 批量测试单条病历失败: %s", exc)
@@ -550,6 +627,14 @@ async def test_custom_qc_batch(
         ),
         "total_tokens": total_tokens,
         "total_processing_time": total_processing_time,
+        "executor_breakdown": {
+            "program": executor_program,
+            "llm": executor_llm,
+        },
+        "cache_breakdown": {
+            "hit": cache_hit_count,
+            "miss": cache_miss_count,
+        },
     }
 
     response = {
@@ -775,6 +860,7 @@ async def get_workspace_filters(
 
 def _workspace_rule_payload_from_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
     return {
+        "rule_code": str(draft.get("rule_code") or draft.get("id") or "INLINE-DRAFT"),
         "name": str(draft.get("name") or ""),
         "description": str(draft.get("description") or ""),
         "prompt_template": str(draft.get("prompt_template") or ""),
@@ -804,7 +890,7 @@ async def test_workspace_single(
     ensure_record_medical_text(hydrated)
     target_record = hydrated[0]
     rule_payload = _workspace_rule_payload_from_draft(draft)
-    result = await evaluate_inline_rule(
+    result = await evaluate_inline_rule_orchestrated(
         qc_service=qc_service,
         rule=rule_payload,
         record=target_record,
@@ -868,11 +954,15 @@ async def test_workspace_batch(
     failed_records: List[Dict[str, Any]] = []
     total_tokens = 0
     total_processing_time = 0.0
+    executor_program = 0
+    executor_llm = 0
+    cache_hit_count = 0
+    cache_miss_count = 0
 
     for record in records:
         try:
             ensure_record_medical_text([record])
-            result = await evaluate_inline_rule(
+            result = await evaluate_inline_rule_orchestrated(
                 qc_service=qc_service,
                 rule=rule_payload,
                 record=record,
@@ -884,6 +974,15 @@ async def test_workspace_batch(
             total_processing_time += float(
                 (result.get("performance") or {}).get("processing_time") or 0.0
             )
+            metadata = dict(result.get("metadata") or {})
+            if str(metadata.get("executor_type") or "llm").strip().lower() == "program":
+                executor_program += 1
+            else:
+                executor_llm += 1
+            if metadata.get("cache_hit") is True:
+                cache_hit_count += 1
+            else:
+                cache_miss_count += 1
             items.append(result)
         except Exception as exc:
             logger.warning("workspace 批量测试单条病历失败: %s", exc)
@@ -907,6 +1006,14 @@ async def test_workspace_batch(
         ),
         "total_tokens": total_tokens,
         "total_processing_time": total_processing_time,
+        "executor_breakdown": {
+            "program": executor_program,
+            "llm": executor_llm,
+        },
+        "cache_breakdown": {
+            "hit": cache_hit_count,
+            "miss": cache_miss_count,
+        },
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     workspace.save_last_test_summary(
@@ -1149,3 +1256,4 @@ async def export_workspace_batch_job(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+

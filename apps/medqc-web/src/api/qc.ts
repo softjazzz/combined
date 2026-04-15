@@ -47,9 +47,7 @@ export interface TestQCRuleResponse {
   raw?: unknown
 }
 
-type NormalizedResponse<T> =
-  | NormalizedSuccessResponse<T>
-  | NormalizedFailedResponse
+type NormalizedResponse<T> = NormalizedSuccessResponse<T> | NormalizedFailedResponse
 
 interface NormalizedSuccessResponse<T> {
   ok: true
@@ -72,10 +70,7 @@ function isNormalizedFailedResponse<T>(
 }
 
 function extractNormalizedMessage(raw: unknown, fallbackMessage: string): string {
-  return extractApiErrorMessageFromError(
-    { response: { data: raw } },
-    fallbackMessage,
-  )
+  return extractApiErrorMessageFromError({ response: { data: raw } }, fallbackMessage)
 }
 
 async function requestNormalized<T = unknown>(
@@ -247,6 +242,57 @@ export async function batchEvaluateQC(
         prompt_mode: payloadData.prompt_mode || payload.prompt_mode,
         llm_info: payloadData.llm_info,
       },
+      message: normalized.message,
+    }
+  } catch (error: any) {
+    return {
+      success: false,
+      message: error?.message || '网络异常或服务器不可用',
+    }
+  }
+}
+
+export interface SichuanBundleEvaluatePayload {
+  scene?: 'running' | 'final' | string
+  institute_id?: string
+  patient_id?: string
+  visit_id?: string
+  bundle_input?: Record<string, any>
+  rule_ids?: string[]
+  model?: string
+  schema?: string
+}
+
+export async function evaluateSichuanBundleQC(
+  payload: SichuanBundleEvaluatePayload,
+): Promise<BatchQCEvaluateResponse> {
+  try {
+    const response = await requestNormalized<any>({
+      method: 'POST',
+      url: '/api/v1/qc/sichuan/evaluate-bundle',
+      data: payload,
+    })
+
+    if (isNormalizedFailedResponse(response)) {
+      return {
+        success: false,
+        message: response.message,
+        status: response.status,
+      }
+    }
+
+    const normalized = response.normalized
+    if (!normalized.success) {
+      return {
+        success: false,
+        message: extractNormalizedMessage(response.raw, 'Bundle 质控评估失败'),
+        status: response.status,
+      }
+    }
+
+    return {
+      success: true,
+      data: (normalized.data || {}) as BatchQCEvaluateResponse['data'],
       message: normalized.message,
     }
   } catch (error: any) {

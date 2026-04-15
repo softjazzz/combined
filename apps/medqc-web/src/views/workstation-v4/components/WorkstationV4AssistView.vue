@@ -18,6 +18,7 @@
         :patient-id="selectedRecord?.patientId"
         :visit-id="selectedRecord?.id"
         :institute-id="selectedRecord?.instituteId"
+        :scene="resolveContentScene(selectedRecord)"
         :documents="documentsList"
         @issues-change="emit('content-issues-change', $event)"
       />
@@ -749,6 +750,11 @@ const emit = defineEmits<{
 }>()
 
 const qcResultTabRef = ref<InstanceType<typeof QCResultTab> | null>(null)
+
+function resolveContentScene(record?: PatientRecord | null): 'running' | 'final' {
+  const dischargeDate = String(record?.dischargeDate || '').trim()
+  return dischargeDate ? 'final' : 'running'
+}
 
 defineExpose({
   runFormQC: () => qcResultTabRef.value?.runFormQC(),

@@ -45,10 +45,10 @@
         </div>
         <div>
           <div class="progress-title">
-            正在逐文书质控分析
+            正在执行整份病历质控评估
           </div>
           <div class="progress-sub">
-            已完成 {{ completedSections.length }} / {{ totalSections }} 个文书
+            已完成 {{ completedSections.length }} / {{ totalSections }} 个阶段
           </div>
         </div>
         <a-spin class="ml-auto" />
@@ -202,7 +202,7 @@
               本次内涵质控
             </div>
             <div class="summary-card__title">
-              逐文书语义校验结果
+              病历语义校验结果
             </div>
           </div>
           <div class="summary-card__progress">
@@ -303,7 +303,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   SafetyCertificateOutlined,
@@ -312,6 +312,7 @@ import {
   CheckCircleOutlined,
 } from '@ant-design/icons-vue'
 import axios from 'axios'
+import { evaluateSichuanBundleQC } from '@/api/qc'
 import { extractApiData } from '@/utils/api-helpers'
 
 // ==================== 类型 ====================
@@ -377,6 +378,7 @@ const props = defineProps<{
   patientId?: string
   visitId?: string
   instituteId?: string
+  scene?: 'running' | 'final' | string
   documents?: DocItem[] // 从 PG 各文书表查出的文书列表
 }>()
 
@@ -449,7 +451,8 @@ function parseEvalResults(data: any, docLabel: string): ContentIssue[] {
               ? 'info'
               : 'warning',
         group: docLabel,
-        description: result.issue_description || result.analysis || '未提供详细说明',
+        description:
+          result.findings || result.issue_description || result.analysis || '未提供详细说明',
         suggestion: result.improvement_suggestion || result.suggestion || '',
       })
     }
@@ -457,31 +460,19 @@ function parseEvalResults(data: any, docLabel: string): ContentIssue[] {
   return newIssues
 }
 
-// ==================== 核心：逐文书质控（从 PG 分表数据） ====================
+function resolveScene(): 'running' | 'final' {
+  const rawScene = String(props.scene || '')
+    .trim()
+    .toLowerCase()
+  if (rawScene === 'running') return 'running'
+  if (rawScene === 'final') return 'final'
+  return 'final'
+}
 
-async function runContentQC() {
-  if (!props.patientId) {
-    message.warning('请先选择病历')
-    return
-  }
+// ==================== 回退链路：逐文书质控（旧模式） ====================
 
-  // 直接使用 PG 数据库按表存储的文书列表（每个 DocItem 自带 type/label/content）
-  const docs = (props.documents || []).filter((d) => d.has_content && d.content)
-  if (docs.length === 0) {
-    message.warning('该患者暂无病历文书内容，请先加载文书')
-    return
-  }
-
-  // 重置状态
-  loading.value = true
-  analyzed.value = false
-  issues.value = []
-  summary.value = null
-  completedSections.value = []
-
+async function runContentQCLegacy(docs: DocItem[]) {
   totalSections.value = docs.length
-
-  // 初始化时间线（直接使用 PG 表的 type 和 label）
   sectionTimeline.value = docs.map((d) => ({
     type: d.type,
     label: d.label,
@@ -489,13 +480,10 @@ async function runContentQC() {
     status: 'pending' as const,
   }))
 
-  // 所有文书类型清单（用于告知 LLM 患者有哪些文书）
   const allDocLabels = docs.map((d) => d.label).join('、')
-
-  // 逐文书调用后端 LLM 质控
   let allIssues: ContentIssue[] = []
-  const allRuleIds = new Set<string>() // 按 rule_id 去重
-  const nonCompliantRuleIds = new Set<string>() // 不合规的 rule_id
+  const allRuleIds = new Set<string>()
+  const nonCompliantRuleIds = new Set<string>()
   const startTime = Date.now()
 
   for (let i = 0; i < sectionTimeline.value.length; i++) {
@@ -606,6 +594,130 @@ async function runContentQC() {
   } else {
     message.warning(`发现 ${allIssues.length} 个问题（${totalDuration}s）`)
   }
+}
+
+// ==================== 主链路：单次 bundle 评估 ====================
+
+async function runContentQCBundle(docs: DocItem[]): Promise<boolean> {
+  if (!props.instituteId || !props.patientId || !props.visitId) {
+    return false
+  }
+
+  loading.value = true
+  analyzed.value = false
+  issues.value = []
+  summary.value = null
+  completedSections.value = []
+  totalSections.value = 1
+  sectionTimeline.value = [
+    {
+      type: 'bundle',
+      label: 'Bundle 证据链',
+      content: '',
+      status: 'pending',
+    },
+  ]
+  const bundleSection = sectionTimeline.value[0]
+  if (bundleSection) {
+    bundleSection.status = 'active'
+  }
+  const startTime = Date.now()
+
+  try {
+    const response = await evaluateSichuanBundleQC({
+      scene: resolveScene(),
+      institute_id: props.instituteId,
+      patient_id: props.patientId,
+      visit_id: props.visitId,
+    })
+
+    if (!response.success || !response.data) {
+      throw new Error(response.message || 'Bundle 质控失败')
+    }
+
+    const data = response.data as any
+    const evalResults = data.evaluation_results || []
+    const evalSummary = data.evaluation_summary || {}
+    const allIssues = parseEvalResults(data, '整份病历')
+    const uniqueRuleIds = new Set<string>()
+    const nonCompliantRuleIds = new Set<string>()
+    for (const item of evalResults) {
+      const ruleId = String(item?.rule_id || '').trim()
+      if (ruleId) uniqueRuleIds.add(ruleId)
+      if (item?.status === 'non_compliant' || item?.is_compliant === false) {
+        if (ruleId) nonCompliantRuleIds.add(ruleId)
+      }
+    }
+    const totalRules = Number(
+      evalSummary.total_rules || uniqueRuleIds.size || evalResults.length || 0,
+    )
+    const complianceRate = Number(
+      evalSummary.compliance_rate ??
+        (totalRules > 0
+          ? Math.round(((totalRules - nonCompliantRuleIds.size) / totalRules) * 10000) / 100
+          : 100),
+    )
+
+    if (bundleSection) {
+      bundleSection.status = 'done'
+      bundleSection.ruleCount = totalRules
+      bundleSection.issueCount = allIssues.length
+      bundleSection.duration = ((Date.now() - startTime) / 1000).toFixed(1)
+      bundleSection.issues = allIssues.slice(0, 3)
+      completedSections.value = [{ ...bundleSection }]
+    }
+
+    issues.value = allIssues
+    summary.value = {
+      totalRules,
+      complianceRate,
+      issuesFound: allIssues.length,
+      docCount: docs.length,
+    }
+    analyzed.value = true
+    loading.value = false
+    emit('issues-change', allIssues.length)
+    if (allIssues.length === 0) {
+      message.success('内涵质控通过（Bundle）')
+    } else {
+      message.warning(`发现 ${allIssues.length} 个问题（Bundle）`)
+    }
+    return true
+  } catch (error: any) {
+    console.error('Bundle 质控失败，准备回退旧链路:', error)
+    loading.value = false
+    sectionTimeline.value = []
+    totalSections.value = 0
+    return false
+  }
+}
+
+// ==================== 统一入口 ====================
+
+async function runContentQC() {
+  if (!props.patientId) {
+    message.warning('请先选择病历')
+    return
+  }
+
+  const docs = (props.documents || []).filter((d) => d.has_content && d.content)
+  if (docs.length === 0) {
+    message.warning('该患者暂无病历文书内容，请先加载文书')
+    return
+  }
+
+  const bundleDone = await runContentQCBundle(docs)
+  if (bundleDone) {
+    return
+  }
+
+  message.warning('Bundle 评估不可用，已回退逐文书模式')
+  loading.value = true
+  analyzed.value = false
+  issues.value = []
+  summary.value = null
+  completedSections.value = []
+  await runContentQCLegacy(docs)
 }
 
 // 切换患者时重置
