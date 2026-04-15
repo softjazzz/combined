@@ -3,6 +3,7 @@ import json
 import hashlib
 import logging
 import time
+import re
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -101,9 +102,16 @@ class SichuanQCService:
             )
         normalized["executor_type"] = executor_type
 
+        routing_decision = route_rule_to_domain(normalized)
         execution_domain = str(normalized.get("execution_domain") or "").strip().lower()
-        if not execution_domain:
-            execution_domain = route_rule_to_domain(normalized).execution_domain
+        doc_count = len(set(normalized.get("applicable_documents") or []))
+        # 规则文书只有单一类型时，若仍标注 generic，按文书路由自动收敛到具体执行域，
+        # 避免分包时把会诊/交接班/术后病程等规则混入 generic 桶。
+        if (
+            not execution_domain
+            or (execution_domain == "generic" and doc_count == 1)
+        ):
+            execution_domain = routing_decision.execution_domain
         normalized["execution_domain"] = execution_domain
 
         doc_scope = str(normalized.get("doc_scope") or "").strip().lower()
@@ -126,7 +134,28 @@ class SichuanQCService:
             cost_class = "low" if executor_type == "program" else "medium"
         normalized["cost_class"] = cost_class
 
+        custom_prompt = str(normalized.get("custom_prompt") or "")
+        if custom_prompt:
+            normalized["custom_prompt"] = self._sync_prompt_doc_hint(
+                custom_prompt=custom_prompt,
+                applicable_documents=[str(item) for item in (normalized.get("applicable_documents") or []) if str(item).strip()],
+            )
+
         return normalized
+
+    @staticmethod
+    def _sync_prompt_doc_hint(*, custom_prompt: str, applicable_documents: List[str]) -> str:
+        """
+        运行时同步 prompt 中“适用文书”提示，避免历史写死的 operation_record/progress_note
+        与当前规则文书标签不一致。
+        """
+        if not custom_prompt or "{applicable_documents}" in custom_prompt:
+            return custom_prompt
+        docs_text = "、".join(applicable_documents) if applicable_documents else "未指定"
+        pattern = re.compile(r"(适用文书[:：]\s*)([^\n]+)")
+        if not pattern.search(custom_prompt):
+            return custom_prompt
+        return pattern.sub(rf"\1{docs_text}", custom_prompt, count=1)
 
     async def reload_config(self, config_name: str = "default", user_id: Optional[str] = None) -> bool:
         """
@@ -213,10 +242,19 @@ class SichuanQCService:
         normalized = dict(rule or {})
         applicable_docs = normalized.get("applicable_documents", [])
         if applicable_docs:
-            normalized["applicable_documents"] = [
+            mapped_docs = [
                 self.doc_type_mapping.get(doc, doc)
                 for doc in applicable_docs
             ]
+            dedup_docs: List[str] = []
+            seen_docs: set[str] = set()
+            for doc in mapped_docs:
+                doc_text = str(doc)
+                if doc_text in seen_docs:
+                    continue
+                seen_docs.add(doc_text)
+                dedup_docs.append(doc_text)
+            normalized["applicable_documents"] = dedup_docs
         return self._ensure_rule_execution_meta(normalized)
 
     @staticmethod
