@@ -23,6 +23,7 @@
       >
         <CodingRulesTab v-if="activeTab === 'coding'" />
         <FrontpageRulesTab v-else-if="activeTab === 'frontpage'" />
+        <WorkstationSemanticRulesView v-else-if="activeTab === 'semantic'" />
         <SettlementRulesTab v-else />
       </div>
     </div>
@@ -35,11 +36,12 @@ import { useRoute } from 'vue-router'
 import CodingRulesTab from '@/components/rules/CodingRulesTab.vue'
 import FrontpageRulesTab from '@/components/rules/FrontpageRulesTab.vue'
 import SettlementRulesTab from '@/components/rules/SettlementRulesTab.vue'
+import WorkstationSemanticRulesView from '@/views/workstation-v4/WorkstationSemanticRulesView.vue'
 
 const route = useRoute()
 
-type TabKey = 'coding' | 'frontpage' | 'settlement'
-const SUPPORTED_TABS: TabKey[] = ['coding', 'frontpage', 'settlement']
+type TabKey = 'coding' | 'frontpage' | 'settlement' | 'semantic'
+const SUPPORTED_TABS: TabKey[] = ['coding', 'frontpage', 'settlement', 'semantic']
 
 const activeTab = ref<TabKey>('coding')
 

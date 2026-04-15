@@ -163,6 +163,12 @@
               </template>
               <span>编码质控规则</span>
             </a-menu-item>
+            <a-menu-item key="/workstation-v4/rules?tab=semantic">
+              <template #icon>
+                <BranchesOutlined />
+              </template>
+              <span>全病历质控规则</span>
+            </a-menu-item>
             <a-menu-item key="/workstation-v4/rules?tab=frontpage">
               <template #icon>
                 <FileSearchOutlined />
@@ -414,6 +420,7 @@ import {
   MedicineBoxOutlined,
   SafetyCertificateOutlined,
   ForkOutlined,
+  BranchesOutlined,
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -522,6 +529,14 @@ watch(
   () => route.fullPath,
   () => {
     const base = route.path === '/workstation-v4/qc-overview' ? '/workstation-v4' : route.path
+    const tab = String(route.query.tab || '').trim()
+    if (
+      base === '/workstation-v4/rules' &&
+      ['coding', 'semantic', 'frontpage', 'settlement'].includes(tab)
+    ) {
+      selectedKeys.value = [`/workstation-v4/rules?tab=${tab}`]
+      return
+    }
     const stage = String(route.query.stage || '').trim()
     if (
       (base === '/workstation-v4' || base === '/workstation-v4/worklist') &&
