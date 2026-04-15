@@ -164,7 +164,7 @@
             <div class="flex-1 flex items-center justify-center relative">
               <!-- Body Image -->
               <img
-                src="/human_body_schematic.png"
+                :src="bodySchematicPng"
                 class="h-[85%] object-contain opacity-90 drop-shadow-lg"
                 alt="Body Map"
               >
@@ -637,6 +637,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { getAccessToken } from '@/utils/auth-token'
+import bodySchematicPng from '@/assets/images/lx-logo.png'
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
