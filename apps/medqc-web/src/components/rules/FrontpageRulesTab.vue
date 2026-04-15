@@ -123,6 +123,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { ApiService } from '@/services/apiService'
 
 import RulesCodingHeaderBar from './coding/RulesCodingHeaderBar.vue'
 import RulesCodingMetrics from './coding/RulesCodingMetrics.vue'
@@ -499,12 +500,19 @@ async function handlePublish() {
 async function fetchRules() {
   loading.value = true
   try {
-    const response = await fetch('/api/v1/qc/formal-qc/rules')
-    const payload = await response.json()
-    if (payload?.success && payload?.data) {
-      allRules.value = (payload.data as FrontpageRuleApi[]).map(toListItem)
+    const response = await ApiService.get<FrontpageRuleApi[] | { items?: FrontpageRuleApi[] }>(
+      '/api/v1/qc/formal-qc/rules',
+    )
+    const payload = response.data
+    if (response.success && Array.isArray(payload)) {
+      allRules.value = payload.map(toListItem)
+    } else if (response.success && payload && 'items' in payload && Array.isArray(payload.items)) {
+      allRules.value = payload.items.map(toListItem)
     } else {
       allRules.value = []
+      if (!response.success) {
+        message.error(response.error || '加载首页质控规则失败')
+      }
     }
   } catch (error) {
     console.error(error)

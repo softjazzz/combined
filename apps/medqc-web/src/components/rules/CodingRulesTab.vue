@@ -106,6 +106,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { ApiService } from '@/services/apiService'
 
 import RulesCodingHeaderBar from './coding/RulesCodingHeaderBar.vue'
 import RulesCodingMetrics from './coding/RulesCodingMetrics.vue'
@@ -312,18 +313,23 @@ function toDetail(item: RuleListItem): RuleDetail {
 async function fetchRules() {
   loading.value = true
   try {
-    const params = new URLSearchParams()
-    if (query.searchKeyword) params.set('keyword', query.searchKeyword)
-    if (query.ruleType !== 'all') params.set('category', query.ruleType)
-    const response = await fetch(`/api/v1/qc/coding-rules?${params.toString()}`)
-    const payload = await response.json()
-    if (payload?.success && payload?.data?.items) {
-      allRules.value = (payload.data.items as CodingRuleApiItem[]).map(mapApiItem)
+    const params: Record<string, string> = {}
+    if (query.searchKeyword) params.keyword = query.searchKeyword
+    if (query.ruleType !== 'all') params.category = query.ruleType
+    const response = await ApiService.get<{ items?: CodingRuleApiItem[] }>(
+      '/api/v1/qc/coding-rules',
+      params,
+    )
+    if (response.success && response.data?.items) {
+      allRules.value = (response.data.items as CodingRuleApiItem[]).map(mapApiItem)
       ownerOptions.value = [...new Set(allRules.value.map((item) => item.updatedBy))]
         .filter(Boolean)
         .map((name) => ({ label: name, value: name }))
     } else {
       allRules.value = []
+      if (!response.success) {
+        message.error(response.error || '加载编码规则失败')
+      }
     }
   } catch (error) {
     console.error(error)
