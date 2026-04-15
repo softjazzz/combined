@@ -3,14 +3,14 @@
  * 替换原有的传统质控引擎，全面使用KAG进行质控分析
  */
 
-import { supabase } from '@/lib/supabase'
-import type { Database } from '@/types/supabase'
+import { supabase } from '@/lib/backend-store'
+import type { Database } from '@/types/database-schema'
 
 // KAG API配置
 const KAG_API_CONFIG = {
-  baseUrl: 'http://localhost:8000',  // KAG API Gateway地址
+  baseUrl: 'http://localhost:8000', // KAG API Gateway地址
   timeout: 30000,
-  retryAttempts: 3
+  retryAttempts: 3,
 }
 
 // 类型定义
@@ -120,7 +120,7 @@ export class KAGQCService {
         content: request.content,
         metadata: request.metadata,
         analysis_mode: request.analysisMode || 'comprehensive',
-        selected_rules: request.selectedRules
+        selected_rules: request.selectedRules,
       })
 
       console.log('KAG质控分析完成:', response.analysisId)
@@ -143,13 +143,13 @@ export class KAGQCService {
       console.log('开始批量KAG质控分析:', request.records.length, '份病历')
 
       const response = await this.request<{ batchId: string }>('POST', '/api/qc/batch-analyze', {
-        records: request.records.map(r => ({
+        records: request.records.map((r) => ({
           record_id: r.recordId,
           content: r.content,
-          metadata: r.metadata
+          metadata: r.metadata,
         })),
         batch_id: request.batchId,
-        analysis_mode: request.analysisMode || 'comprehensive'
+        analysis_mode: request.analysisMode || 'comprehensive',
       })
 
       console.log('批量分析任务已提交:', response.batchId)
@@ -193,7 +193,10 @@ export class KAGQCService {
    */
   async getBatchResults(batchId: string): Promise<KAGBatchResponse> {
     try {
-      const response = await this.request<KAGBatchResponse>('GET', `/api/qc/batch-results/${batchId}`)
+      const response = await this.request<KAGBatchResponse>(
+        'GET',
+        `/api/qc/batch-results/${batchId}`,
+      )
 
       // 保存批量结果到Supabase
       for (const result of response.results) {
@@ -258,20 +261,20 @@ export class KAGQCService {
           record_id: result.recordId,
           score: result.summary.totalScore,
           grade: result.summary.grade,
-          issues: result.defects.map(d => ({
+          issues: result.defects.map((d) => ({
             code: d.ruleId,
             description: d.description,
             severity: d.severity,
             deduction: d.deductionScore,
             location: d.location,
             suggestion: d.suggestion,
-            source: 'kag'
+            source: 'kag',
           })),
           suggestions: result.recommendations.join('; '),
           analysis_time: new Date(result.summary.analysisTime),
           processing_duration: result.processingTime,
           analysis_method: 'kag',
-          kag_analysis_id: result.analysisId
+          kag_analysis_id: result.analysisId,
         })
         .select()
         .single()
@@ -282,7 +285,7 @@ export class KAGQCService {
       }
 
       // 保存详细的规则执行结果
-      const ruleExecutions = result.defects.map(defect => ({
+      const ruleExecutions = result.defects.map((defect) => ({
         record_id: result.recordId,
         rule_id: defect.ruleId,
         rule_name: defect.ruleName,
@@ -298,8 +301,8 @@ export class KAGQCService {
           evidenceText: defect.evidenceText,
           location: defect.location,
           suggestion: defect.suggestion,
-          detectionTime: defect.detectionTime
-        }
+          detectionTime: defect.detectionTime,
+        },
       }))
 
       if (ruleExecutions.length > 0) {
@@ -330,9 +333,9 @@ export class KAGQCService {
           method,
           headers: {
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            Accept: 'application/json',
           },
-          signal: AbortSignal.timeout(this.timeout)
+          signal: AbortSignal.timeout(this.timeout),
         }
 
         if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
@@ -356,7 +359,7 @@ export class KAGQCService {
         }
 
         // 等待后重试
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
       }
     }
 
@@ -374,10 +377,10 @@ export class KAGQCService {
         grade: kagResult.summary.grade,
         overallAssessment: `基于KAG框架的智能质控分析，发现${kagResult.summary.defectsCount}个问题`,
         aiAnalysisScore: kagResult.summary.totalScore,
-        combinedScore: kagResult.summary.totalScore
+        combinedScore: kagResult.summary.totalScore,
       },
       itemScores: this.generateItemScores(kagResult),
-      issues: kagResult.defects.map(defect => ({
+      issues: kagResult.defects.map((defect) => ({
         code: defect.ruleId,
         description: defect.description,
         severity: defect.severity as any,
@@ -385,15 +388,15 @@ export class KAGQCService {
         deduction: defect.deductionScore,
         location: defect.location,
         suggestion: defect.suggestion,
-        source: 'kag' as const
+        source: 'kag' as const,
       })),
       strengths: this.extractStrengths(kagResult),
       recommendations: kagResult.recommendations,
       analysisTime: kagResult.summary.analysisTime,
       processingStats: {
         aiAnalysisTime: kagResult.processingTime,
-        totalProcessingTime: kagResult.processingTime
-      }
+        totalProcessingTime: kagResult.processingTime,
+      },
     }
   }
 
@@ -402,17 +405,17 @@ export class KAGQCService {
    */
   private generateItemScores(kagResult: KAGQCResponse): unknown[] {
     const categories = {
-      'completeness': '完整性',
-      'consistency': '一致性',
-      'rationality': '合理性',
-      'timeliness': '时效性'
+      completeness: '完整性',
+      consistency: '一致性',
+      rationality: '合理性',
+      timeliness: '时效性',
     }
 
     const itemScores: unknown[] = []
 
     for (const [categoryKey, categoryName] of Object.entries(categories)) {
-      const categoryDefects = kagResult.defects.filter(d =>
-        d.ruleId.toLowerCase().includes(categoryKey)
+      const categoryDefects = kagResult.defects.filter((d) =>
+        d.ruleId.toLowerCase().includes(categoryKey),
       )
 
       const totalDeduction = categoryDefects.reduce((sum, d) => sum + d.deductionScore, 0)
@@ -425,7 +428,7 @@ export class KAGQCService {
         totalScore: baseScore,
         actualScore,
         deduction: totalDeduction,
-        assessment: actualScore >= 20 ? '良好' : actualScore >= 15 ? '一般' : '需改进'
+        assessment: actualScore >= 20 ? '良好' : actualScore >= 15 ? '一般' : '需改进',
       })
     }
 
@@ -449,10 +452,13 @@ export class KAGQCService {
     }
 
     // 根据缺陷类型分析优势
-    const severityCount = kagResult.defects.reduce((acc, d) => {
-      acc[d.severity] = (acc[d.severity] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
+    const severityCount = kagResult.defects.reduce(
+      (acc, d) => {
+        acc[d.severity] = (acc[d.severity] || 0) + 1
+        return acc
+      },
+      {} as Record<string, number>,
+    )
 
     if (!severityCount.critical) {
       strengths.push('无严重质控问题')

@@ -8,10 +8,10 @@ import type {
   RecipientType,
   MessageAction,
   NotificationRelatedData,
-  UserNotificationPreferences
+  UserNotificationPreferences,
 } from '@/types/audit-module'
 
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 import { dynamicPromptGenerator } from './dynamic-prompt-generator'
 import { intelligentQCCache } from './intelligent-cache'
 
@@ -29,30 +29,41 @@ class IntelligentMessageGenerator {
     type: MessageType,
     recipientType: RecipientType,
     relatedData: NotificationRelatedData,
-    context?: Record<string, unknown>
+    context?: Record<string, unknown>,
   ): Promise<Partial<QCNotification>> {
-    
     console.log(`生成智能消息: ${type} -> ${recipientType}`)
 
     try {
       // 使用现有的DynamicPromptGenerator生成消息内容
-      const prompt = await dynamicPromptGenerator.generatePrompt({
-        id: 'notification-gen',
-        rule_code: 'NOTIFICATION_GEN',
-        name: '智能消息生成',
-        category: 'notification',
-        quality_logic: {
-          check_type: 'content_analysis',
-          llm_prompt_template: this.buildNotificationPrompt(type, recipientType, relatedData, context)
-        }
-      } as any, { patientId: relatedData.patient_id || 'unknown',
-        documents: Array.isArray(context?.documents) ? context.documents : [],
-        executionId: 'notification-gen'
-      })
+      const prompt = await dynamicPromptGenerator.generatePrompt(
+        {
+          id: 'notification-gen',
+          rule_code: 'NOTIFICATION_GEN',
+          name: '智能消息生成',
+          category: 'notification',
+          quality_logic: {
+            check_type: 'content_analysis',
+            llm_prompt_template: this.buildNotificationPrompt(
+              type,
+              recipientType,
+              relatedData,
+              context,
+            ),
+          },
+        } as any,
+        {
+          patientId: relatedData.patient_id || 'unknown',
+          documents: Array.isArray(context?.documents) ? context.documents : [],
+          executionId: 'notification-gen',
+        },
+      )
 
       // 解析生成的内容
-      const generatedContent = await this.parseGeneratedContent(prompt.userPrompt, type) as GeneratedNotificationContent
-      
+      const generatedContent = (await this.parseGeneratedContent(
+        prompt.userPrompt,
+        type,
+      )) as GeneratedNotificationContent
+
       return {
         type,
         title: generatedContent.title,
@@ -60,9 +71,8 @@ class IntelligentMessageGenerator {
         summary: generatedContent.summary,
         priority: generatedContent.priority,
         actions: generatedContent.actions,
-        related_data: relatedData
+        related_data: relatedData,
       }
-
     } catch (error) {
       console.warn('智能消息生成失败，使用默认模板:', error)
       return this.generateDefaultNotification(type, recipientType, relatedData)
@@ -73,9 +83,8 @@ class IntelligentMessageGenerator {
     type: MessageType,
     recipientType: RecipientType,
     relatedData: NotificationRelatedData,
-    context?: Record<string, unknown>
+    context?: Record<string, unknown>,
   ): string {
-    
     const basePrompt = `
 请生成一条专业的医疗质控消息通知：
 
@@ -85,7 +94,7 @@ class IntelligentMessageGenerator {
 `
 
     const typeSpecificPrompts: Partial<Record<MessageType, string>> = {
-      'rectification_required': `
+      rectification_required: `
 这是一条整改要求通知，需要包含：
 1. 明确的问题描述
 2. 具体的整改要求
@@ -95,7 +104,7 @@ class IntelligentMessageGenerator {
 
 请生成专业、清晰、有建设性的通知内容。
 `,
-      'audit_result': `
+      audit_result: `
 这是一条审核结果通知，需要包含：
 1. 审核结论概述
 2. 主要发现和问题
@@ -104,7 +113,7 @@ class IntelligentMessageGenerator {
 
 请保持客观、专业的语调。
 `,
-      'task_assigned': `
+      task_assigned: `
 这是一条任务分配通知，需要包含：
 1. 任务基本信息
 2. 工作要求和标准
@@ -112,7 +121,7 @@ class IntelligentMessageGenerator {
 4. 注意事项
 
 请使用鼓励性和指导性的语言。
-`
+`,
     }
 
     const specificPrompt = typeSpecificPrompts[type] || '请生成相应的通知内容。'
@@ -143,7 +152,7 @@ class IntelligentMessageGenerator {
   private async parseGeneratedContent(content: string, type: MessageType): Promise<unknown> {
     try {
       // 尝试解析JSON响应
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const jsonMatch = content.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         return JSON.parse(jsonMatch[0])
       }
@@ -156,49 +165,53 @@ class IntelligentMessageGenerator {
   }
 
   private extractContentFromText(content: string, type: MessageType): Record<string, unknown> {
-    const lines = content.split('\n').filter(line => line.trim())
-    
+    const lines = content.split('\n').filter((line) => line.trim())
+
     return {
       title: lines[0] || `${type}通知`,
       content: content,
       summary: lines[0]?.substring(0, 50) || '',
       priority: 'normal' as MessagePriority,
-      actions: this.getDefaultActions(type)
+      actions: this.getDefaultActions(type),
     }
   }
 
   private generateDefaultNotification(
     type: MessageType,
     recipientType: RecipientType,
-    relatedData: NotificationRelatedData
+    relatedData: NotificationRelatedData,
   ): Partial<QCNotification> {
-    
-    const templates: Partial<Record<MessageType, {
-      title: string
-      content: string
-      priority: MessagePriority
-    }>> = {
-      'rectification_required': {
+    const templates: Partial<
+      Record<
+        MessageType,
+        {
+          title: string
+          content: string
+          priority: MessagePriority
+        }
+      >
+    > = {
+      rectification_required: {
         title: '病历整改通知',
         content: '您的病历存在质控问题，请及时整改。',
-        priority: 'high' as MessagePriority
+        priority: 'high' as MessagePriority,
       },
-      'audit_result': {
+      audit_result: {
         title: '审核结果通知',
         content: '您的病历审核已完成，请查看结果。',
-        priority: 'normal' as MessagePriority
+        priority: 'normal' as MessagePriority,
       },
-      'task_assigned': {
+      task_assigned: {
         title: '审核任务分配',
         content: '您有新的审核任务，请及时处理。',
-        priority: 'normal' as MessagePriority
-      }
+        priority: 'normal' as MessagePriority,
+      },
     }
 
     const template = templates[type] || {
       title: '系统通知',
       content: '您有新的消息。',
-      priority: 'normal' as MessagePriority
+      priority: 'normal' as MessagePriority,
     }
 
     return {
@@ -206,13 +219,13 @@ class IntelligentMessageGenerator {
       ...template,
       summary: template.content.substring(0, 50),
       actions: this.getDefaultActions(type),
-      related_data: relatedData
+      related_data: relatedData,
     }
   }
 
   private getDefaultActions(type: MessageType): MessageAction[] {
     const actionMap: Partial<Record<MessageType, MessageAction[]>> = {
-      'rectification_required': [
+      rectification_required: [
         {
           id: 'view_defects',
           label: '查看详情',
@@ -220,11 +233,11 @@ class IntelligentMessageGenerator {
           action: 'navigate',
           config: {
             url: '/clinical/rectification',
-            params: {}
-          }
-        }
+            params: {},
+          },
+        },
       ],
-      'audit_result': [
+      audit_result: [
         {
           id: 'view_result',
           label: '查看结果',
@@ -232,11 +245,11 @@ class IntelligentMessageGenerator {
           action: 'navigate',
           config: {
             url: '/clinical/audit-result',
-            params: {}
-          }
-        }
+            params: {},
+          },
+        },
       ],
-      'task_assigned': [
+      task_assigned: [
         {
           id: 'view_task',
           label: '查看任务',
@@ -244,10 +257,10 @@ class IntelligentMessageGenerator {
           action: 'navigate',
           config: {
             url: '/reviewer/audit-tasks',
-            params: {}
-          }
-        }
-      ]
+            params: {},
+          },
+        },
+      ],
     }
 
     return actionMap[type] || []
@@ -260,7 +273,7 @@ class SupabaseRealtimeManager {
 
   async initializeUserChannel(userId: string, userType: RecipientType): Promise<void> {
     const channelName = `user_notifications_${userId}`
-    
+
     if (this.channels.has(channelName)) {
       return
     }
@@ -273,9 +286,9 @@ class SupabaseRealtimeManager {
           event: 'INSERT',
           schema: 'public',
           table: 'qc_notifications',
-          filter: `recipient_id=eq.${userId}`
+          filter: `recipient_id=eq.${userId}`,
         },
-        (payload) => this.handleNewNotification(payload.new as QCNotification)
+        (payload) => this.handleNewNotification(payload.new as QCNotification),
       )
       .on(
         'postgres_changes',
@@ -283,9 +296,9 @@ class SupabaseRealtimeManager {
           event: 'UPDATE',
           schema: 'public',
           table: 'qc_notifications',
-          filter: `recipient_id=eq.${userId}`
+          filter: `recipient_id=eq.${userId}`,
         },
-        (payload) => this.handleNotificationUpdate(payload.new as QCNotification)
+        (payload) => this.handleNotificationUpdate(payload.new as QCNotification),
       )
       .subscribe()
 
@@ -295,11 +308,13 @@ class SupabaseRealtimeManager {
 
   private handleNewNotification(notification: QCNotification): void {
     console.log('收到新消息:', notification.title)
-    
+
     // 触发前端事件
-    window.dispatchEvent(new CustomEvent('new-notification', {
-      detail: notification
-    }))
+    window.dispatchEvent(
+      new CustomEvent('new-notification', {
+        detail: notification,
+      }),
+    )
 
     // 显示浏览器通知
     if (notification.priority === 'urgent' || notification.priority === 'high') {
@@ -308,9 +323,11 @@ class SupabaseRealtimeManager {
   }
 
   private handleNotificationUpdate(notification: QCNotification): void {
-    window.dispatchEvent(new CustomEvent('notification-updated', {
-      detail: notification
-    }))
+    window.dispatchEvent(
+      new CustomEvent('notification-updated', {
+        detail: notification,
+      }),
+    )
   }
 
   private showBrowserNotification(notification: QCNotification): void {
@@ -318,7 +335,7 @@ class SupabaseRealtimeManager {
       new Notification(notification.title, {
         body: notification.summary || notification.content.substring(0, 100),
         icon: '/favicon.svg',
-        tag: notification.id
+        tag: notification.id,
       })
     }
   }
@@ -347,9 +364,8 @@ export class NotificationService {
     recipientType: RecipientType,
     type: MessageType,
     relatedData: NotificationRelatedData,
-    customContent?: Partial<QCNotification>
+    customContent?: Partial<QCNotification>,
   ): Promise<QCNotification> {
-    
     console.log(`发送通知: ${type} -> ${recipientId}`)
 
     try {
@@ -357,7 +373,7 @@ export class NotificationService {
       const generatedContent = await this.messageGenerator.generateSmartNotification(
         type,
         recipientType,
-        relatedData
+        relatedData,
       )
 
       // 2. 合并自定义内容
@@ -369,7 +385,7 @@ export class NotificationService {
         status: 'pending' as const,
         auto_expire: this.shouldAutoExpire(type),
         expires_at: this.calculateExpiryTime(type),
-        delivery_attempts: 0
+        delivery_attempts: 0,
       }
 
       // 3. 保存到数据库
@@ -390,7 +406,6 @@ export class NotificationService {
       await this.logNotificationDelivery(data.id, 'sent')
 
       return data
-
     } catch (error) {
       console.error('发送通知失败:', error)
       throw error
@@ -404,23 +419,22 @@ export class NotificationService {
     }>,
     type: MessageType,
     relatedData: NotificationRelatedData,
-    customContent?: Partial<QCNotification>
+    customContent?: Partial<QCNotification>,
   ): Promise<QCNotification[]> {
-    
     const results: QCNotification[] = []
     const batchSize = 10 // 批量处理大小
 
     for (let i = 0; i < recipients.length; i += batchSize) {
       const batch = recipients.slice(i, i + batchSize)
-      
-      const batchPromises = batch.map(recipient =>
+
+      const batchPromises = batch.map((recipient) =>
         this.sendNotification(
           recipient.userId,
           recipient.userType,
           type,
           relatedData,
-          customContent
-        )
+          customContent,
+        ),
       )
 
       try {
@@ -432,7 +446,7 @@ export class NotificationService {
 
       // 避免过载，添加延迟
       if (i + batchSize < recipients.length) {
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 100))
       }
     }
 
@@ -446,21 +460,17 @@ export class NotificationService {
       types?: MessageType[]
       limit?: number
       offset?: number
-    }
+    },
   ): Promise<QCNotification[]> {
-    
     // 尝试从缓存获取
     const cacheKey = `user_notifications_${userId}_${JSON.stringify(options || {})}`
     const cached = await intelligentQCCache.getCachedResult<QCNotification[]>(cacheKey)
-    
+
     if (Array.isArray(cached)) {
       return cached
     }
 
-    let query = supabase
-      .from('qc_notifications')
-      .select('*')
-      .eq('recipient_id', userId)
+    let query = supabase.from('qc_notifications').select('*').eq('recipient_id', userId)
 
     if (options?.status) {
       query = query.in('status', options.status)
@@ -489,7 +499,7 @@ export class NotificationService {
       .from('qc_notifications')
       .update({
         status: 'read',
-        read_at: new Date().toISOString()
+        read_at: new Date().toISOString(),
       })
       .eq('id', notificationId)
 
@@ -503,7 +513,7 @@ export class NotificationService {
       .from('qc_notifications')
       .update({
         status: 'processed',
-        processed_at: new Date().toISOString()
+        processed_at: new Date().toISOString(),
       })
       .eq('id', notificationId)
 
@@ -526,10 +536,7 @@ export class NotificationService {
   }
 
   private shouldAutoExpire(type: MessageType): boolean {
-    const autoExpireTypes: MessageType[] = [
-      'deadline_reminder',
-      'system_announcement'
-    ]
+    const autoExpireTypes: MessageType[] = ['deadline_reminder', 'system_announcement']
     return autoExpireTypes.includes(type)
   }
 
@@ -539,33 +546,31 @@ export class NotificationService {
     }
 
     const expiryHours: Partial<Record<MessageType, number>> = {
-      'deadline_reminder': 24,
-      'system_announcement': 72
+      deadline_reminder: 24,
+      system_announcement: 72,
     }
 
     const hours = expiryHours[type] || 24
     const expiryTime = new Date()
     expiryTime.setHours(expiryTime.getHours() + hours)
-    
+
     return expiryTime.toISOString()
   }
 
   private async logNotificationDelivery(
     notificationId: string,
     status: string,
-    error?: string
+    error?: string,
   ): Promise<void> {
     try {
-      await supabase
-        .from('message_distribution_logs')
-        .insert({
-          message_id: notificationId,
-          distribution_channel: 'supabase_realtime',
-          attempt_number: 1,
-          status,
-          error_message: error,
-          response_time: 0
-        })
+      await supabase.from('message_distribution_logs').insert({
+        message_id: notificationId,
+        distribution_channel: 'supabase_realtime',
+        attempt_number: 1,
+        status,
+        error_message: error,
+        response_time: 0,
+      })
     } catch (logError) {
       console.warn('记录通知日志失败:', logError)
     }

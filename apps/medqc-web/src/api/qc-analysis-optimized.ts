@@ -1,12 +1,16 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 /**
  * 优化版质控分析API
  * 集成性能优化、缓存、错误处理等功能
  */
 
-import { optimizedQCAnalysisService, type OptimizedQCRequest, type OptimizedQCResult } from '../lib/qc-analysis-optimized'
+import {
+  optimizedQCAnalysisService,
+  type OptimizedQCRequest,
+  type OptimizedQCResult,
+} from '../lib/qc-analysis-optimized'
 import { databaseOptimizer } from '../lib/database-optimizer'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../lib/backend-store'
 import type { ApiResponse } from '../utils/api-wrapper'
 
 type OptimizedQCStoredResult = OptimizedQCResult & {
@@ -55,21 +59,21 @@ export interface BatchQCAnalysisRequest {
  * 执行单个病案质控分析
  */
 export async function analyzeRecord(
-  request: QCAnalysisApiRequest
+  request: QCAnalysisApiRequest,
 ): Promise<ApiResponse<OptimizedQCResult>> {
   try {
     // 验证输入
     if (!request.recordId || !request.content) {
       return {
         success: false,
-        error: new Error('病案ID和内容不能为空')
+        error: new Error('病案ID和内容不能为空'),
       }
     }
 
     if (request.content.length > 50000) {
       return {
         success: false,
-        error: new Error('病案内容过长，请确保小于50000字符')
+        error: new Error('病案内容过长，请确保小于50000字符'),
       }
     }
 
@@ -81,7 +85,7 @@ export async function analyzeRecord(
       enableRulesEngine: request.options?.enableRulesEngine !== false,
       enableCache: request.options?.enableCache !== false,
       priority: request.options?.priority || 'normal',
-      selectedRuleCategories: request.options?.selectedCategories as any
+      selectedRuleCategories: request.options?.selectedCategories as any,
     }
 
     // 执行分析
@@ -92,13 +96,13 @@ export async function analyzeRecord(
 
     return {
       success: true,
-      data: result
+      data: result,
     }
   } catch (error) {
     console.error('质控分析API错误:', error)
     return {
       success: false,
-      error: error as Error
+      error: error as Error,
     }
   }
 }
@@ -106,41 +110,41 @@ export async function analyzeRecord(
 /**
  * 批量质控分析
  */
-export async function batchAnalyzeRecords(
-  request: BatchQCAnalysisRequest
-): Promise<ApiResponse<{
-  results: Array<OptimizedQCResult | Error>
-  summary: {
-    total: number
-    successful: number
-    failed: number
-    averageTime: number
-  }
-}>> {
+export async function batchAnalyzeRecords(request: BatchQCAnalysisRequest): Promise<
+  ApiResponse<{
+    results: Array<OptimizedQCResult | Error>
+    summary: {
+      total: number
+      successful: number
+      failed: number
+      averageTime: number
+    }
+  }>
+> {
   try {
     // 验证输入
     if (!request.records || request.records.length === 0) {
       return {
         success: false,
-        error: new Error('批量分析记录不能为空')
+        error: new Error('批量分析记录不能为空'),
       }
     }
 
     if (request.records.length > 50) {
       return {
         success: false,
-        error: new Error('批量分析最多支持50条记录')
+        error: new Error('批量分析最多支持50条记录'),
       }
     }
 
     // 构建分析请求
-    const analysisRequests: OptimizedQCRequest[] = request.records.map(record => ({
+    const analysisRequests: OptimizedQCRequest[] = request.records.map((record) => ({
       recordId: record.recordId,
       content: record.content,
       analysisMode: request.options?.analysisMode || 'comprehensive',
       enableRulesEngine: request.options?.enableRulesEngine !== false,
       enableCache: request.options?.enableCache !== false,
-      priority: record.priority || 'normal'
+      priority: record.priority || 'normal',
     }))
 
     // 执行批量分析
@@ -148,22 +152,20 @@ export async function batchAnalyzeRecords(
 
     // 保存成功的分析结果
     const successfulResults = batchResult.results.filter(
-      (result): result is OptimizedQCResult => !(result instanceof Error)
+      (result): result is OptimizedQCResult => !(result instanceof Error),
     )
 
-    await Promise.all(
-      successfulResults.map(result => saveAnalysisResult(result))
-    )
+    await Promise.all(successfulResults.map((result) => saveAnalysisResult(result)))
 
     return {
       success: true,
-      data: batchResult
+      data: batchResult,
     }
   } catch (error) {
     console.error('批量质控分析API错误:', error)
     return {
       success: false,
-      error: error as Error
+      error: error as Error,
     }
   }
 }
@@ -178,49 +180,40 @@ export async function getAnalysisHistory(
     offset?: number
     orderBy?: 'analysis_time' | 'overall_score'
     order?: 'asc' | 'desc'
-  } = {}
-): Promise<ApiResponse<{
-  data: OptimizedQCStoredResult[]
-  total: number
-  hasMore: boolean
-}>> {
+  } = {},
+): Promise<
+  ApiResponse<{
+    data: OptimizedQCStoredResult[]
+    total: number
+    hasMore: boolean
+  }>
+> {
   try {
-    const {
-      limit = 10,
-      offset = 0,
-      orderBy = 'analysis_time',
-      order = 'desc'
-    } = options
+    const { limit = 10, offset = 0, orderBy = 'analysis_time', order = 'desc' } = options
 
     // 使用优化的查询
-    const historyResponse = await databaseOptimizer.executeOptimizedQuery(
-      async () => {
-        const response = await supabase
-          .from('qc_results')
-          .select('*')
-          .eq('record_id', recordId)
-          .order(orderBy, { ascending: order === 'asc' })
-          .range(offset, offset + limit - 1)
+    const historyResponse = await databaseOptimizer.executeOptimizedQuery(async () => {
+      const response = await supabase
+        .from('qc_results')
+        .select('*')
+        .eq('record_id', recordId)
+        .order(orderBy, { ascending: order === 'asc' })
+        .range(offset, offset + limit - 1)
 
-        if (response.error) throw response.error
-        return response
-      },
-      `analysis_history_${recordId}_${limit}_${offset}_${orderBy}_${order}`
-    )
+      if (response.error) throw response.error
+      return response
+    }, `analysis_history_${recordId}_${limit}_${offset}_${orderBy}_${order}`)
 
     // 获取总数
-    const countResponse = await databaseOptimizer.executeOptimizedQuery(
-      async () => {
-        const response = await supabase
-          .from('qc_results')
-          .select('*', { count: 'exact', head: true })
-          .eq('record_id', recordId)
+    const countResponse = await databaseOptimizer.executeOptimizedQuery(async () => {
+      const response = await supabase
+        .from('qc_results')
+        .select('*', { count: 'exact', head: true })
+        .eq('record_id', recordId)
 
-        if (response.error) throw response.error
-        return response
-      },
-      `analysis_count_${recordId}`
-    )
+      if (response.error) throw response.error
+      return response
+    }, `analysis_count_${recordId}`)
 
     const total = countResponse.count || 0
     const hasMore = offset + limit < total
@@ -230,14 +223,14 @@ export async function getAnalysisHistory(
       data: {
         data: (historyResponse.data || []).map(convertRowToOptimizedResult),
         total,
-        hasMore
-      }
+        hasMore,
+      },
     }
   } catch (error) {
     console.error('获取分析历史错误:', error)
     return {
       success: false,
-      error: error as Error
+      error: error as Error,
     }
   }
 }
@@ -245,11 +238,13 @@ export async function getAnalysisHistory(
 /**
  * 获取性能统计
  */
-export async function getPerformanceStats(): Promise<ApiResponse<{
-  analysis: Record<string, unknown>
-  database: Record<string, unknown>
-  cache: Record<string, unknown>
-}>> {
+export async function getPerformanceStats(): Promise<
+  ApiResponse<{
+    analysis: Record<string, unknown>
+    database: Record<string, unknown>
+    cache: Record<string, unknown>
+  }>
+> {
   try {
     const analysisStats = optimizedQCAnalysisService.getPerformanceStats()
     const databaseStats = databaseOptimizer.getQueryStats()
@@ -260,14 +255,14 @@ export async function getPerformanceStats(): Promise<ApiResponse<{
       data: {
         analysis: analysisStats,
         database: databaseStats,
-        cache: cacheStats
-      }
+        cache: cacheStats,
+      },
     }
   } catch (error) {
     console.error('获取性能统计错误:', error)
     return {
       success: false,
-      error: error as Error
+      error: error as Error,
     }
   }
 }
@@ -282,13 +277,13 @@ export async function clearAllCaches(): Promise<ApiResponse<{ message: string }>
 
     return {
       success: true,
-      data: { message: '所有缓存已清空' }
+      data: { message: '所有缓存已清空' },
     }
   } catch (error) {
     console.error('清空缓存错误:', error)
     return {
       success: false,
-      error: error as Error
+      error: error as Error,
     }
   }
 }
@@ -306,14 +301,14 @@ async function saveAnalysisResult(result: OptimizedQCStoredResult): Promise<void
         completeness: result.completenessScore,
         consistency: result.consistencyScore,
         rationality: result.rationalityScore,
-        timeliness: result.timelinessScore
+        timeliness: result.timelinessScore,
       } as Record<string, unknown>,
       issues: { items: result.issues } as Record<string, unknown>,
       suggestions: { list: result.suggestions } as Record<string, unknown>,
       analysis_time: String(result.analysisTime),
       raw_analysis: JSON.stringify(result),
       rule_version: 'optimized-1.0',
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     }
 
     await supabase.from('qc_results').upsert(insertData, { onConflict: 'record_id' })
@@ -323,9 +318,16 @@ async function saveAnalysisResult(result: OptimizedQCStoredResult): Promise<void
 }
 
 function convertRowToOptimizedResult(row: any): OptimizedQCStoredResult {
-  const raw = typeof row.raw_analysis === 'string'
-    ? (() => { try { return JSON.parse(row.raw_analysis) } catch { return {} } })()
-    : {}
+  const raw =
+    typeof row.raw_analysis === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(row.raw_analysis)
+          } catch {
+            return {}
+          }
+        })()
+      : {}
 
   return {
     recordId: row.record_id,
@@ -336,14 +338,15 @@ function convertRowToOptimizedResult(row: any): OptimizedQCStoredResult {
     rationalityScore: row.category_scores?.rationality ?? raw.rationalityScore ?? 0,
     timelinessScore: row.category_scores?.timeliness ?? raw.timelinessScore ?? 0,
     issues: Array.isArray(row.issues?.items) ? row.issues.items : raw.issues || [],
-    suggestions: Array.isArray(row.suggestions?.list) ? row.suggestions.list : raw.suggestions || [],
+    suggestions: Array.isArray(row.suggestions?.list)
+      ? row.suggestions.list
+      : raw.suggestions || [],
     analysisMode: raw.analysisMode || 'comprehensive',
     priority: raw.priority || 'normal',
     analysisTime: String(Number(row.analysis_time ?? raw.analysisTime ?? 0) || 0),
     processingStats: raw.processingStats || {},
     rulesEngineResults: raw.rulesEngineResults || {},
     rawResponse: row.raw_response || raw.rawResponse || {},
-    createdAt: row.updated_at || raw.createdAt || new Date().toISOString()
+    createdAt: row.updated_at || raw.createdAt || new Date().toISOString(),
   }
 }
-

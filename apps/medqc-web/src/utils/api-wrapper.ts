@@ -1,12 +1,17 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 /**
  * API包装器工具
  * 统一处理API调用、错误处理和响应格式
  */
 
-import { supabase } from '../lib/supabase'
+import { supabase } from '../lib/backend-store'
 import { handleDatabaseError, handleNetworkError, handleBusinessError } from './error-handler'
-import type { PostgrestError } from '@supabase/supabase-js'
+interface BackendStoreError {
+  code?: string
+  details?: Record<string, unknown> | string | null
+  hint?: string | null
+  message?: string
+}
 
 // 统一的API响应格式
 export interface ApiResponse<T = any> {
@@ -32,49 +37,51 @@ export interface QueryOptions {
 
 // API包装器类
 export class ApiWrapper {
-  
   /**
    * 包装数据库查询操作
    */
   static async query<T>(
-    operation: () => Promise<{ data: T | null; error: PostgrestError | null; count?: number | null }>
+    operation: () => Promise<{
+      data: T | null
+      error: BackendStoreError | null
+      count?: number | null
+    }>,
   ): Promise<ApiResponse<T>> {
     try {
       const result = await operation()
-      
+
       if (result.error) {
-        const errorMessage = this.parsePostgrestError(result.error)
+        const errorMessage = this.parseBackendStoreError(result.error)
         handleDatabaseError(new Error(errorMessage), {
           code: result.error.code,
           details: result.error.details,
-          hint: result.error.hint
+          hint: result.error.hint,
         })
-        
+
         return {
           success: false,
           error: {
             message: errorMessage,
             code: result.error.code,
-            details: result.error.details
-          }
+            details: result.error.details,
+          },
         }
       }
-      
+
       return {
         success: true,
         data: result.data || undefined,
-        count: result.count || undefined
+        count: result.count || undefined,
       }
-      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误'
       handleNetworkError(error as Error, { operation: 'database_query' })
-      
+
       return {
         success: false,
         error: {
-          message: errorMessage
-        }
+          message: errorMessage,
+        },
       }
     }
   }
@@ -83,44 +90,43 @@ export class ApiWrapper {
    * 包装数据库插入操作
    */
   static async insert<T>(
-    operation: () => Promise<{ data: T | null; error: PostgrestError | null }>
+    operation: () => Promise<{ data: T | null; error: BackendStoreError | null }>,
   ): Promise<ApiResponse<T>> {
     try {
       const result = await operation()
-      
+
       if (result.error) {
-        const errorMessage = this.parsePostgrestError(result.error)
+        const errorMessage = this.parseBackendStoreError(result.error)
         handleDatabaseError(new Error(errorMessage), {
           code: result.error.code,
           details: result.error.details,
-          hint: result.error.hint
+          hint: result.error.hint,
         })
-        
+
         return {
           success: false,
           error: {
             message: errorMessage,
             code: result.error.code,
-            details: result.error.details
-          }
+            details: result.error.details,
+          },
         }
       }
-      
+
       return {
         success: true,
         data: result.data || undefined,
-        message: '创建成功'
+        message: '创建成功',
       }
-      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '创建失败'
       handleNetworkError(error as Error, { operation: 'database_insert' })
-      
+
       return {
         success: false,
         error: {
-          message: errorMessage
-        }
+          message: errorMessage,
+        },
       }
     }
   }
@@ -129,44 +135,43 @@ export class ApiWrapper {
    * 包装数据库更新操作
    */
   static async update<T>(
-    operation: () => Promise<{ data: T | null; error: PostgrestError | null }>
+    operation: () => Promise<{ data: T | null; error: BackendStoreError | null }>,
   ): Promise<ApiResponse<T>> {
     try {
       const result = await operation()
-      
+
       if (result.error) {
-        const errorMessage = this.parsePostgrestError(result.error)
+        const errorMessage = this.parseBackendStoreError(result.error)
         handleDatabaseError(new Error(errorMessage), {
           code: result.error.code,
           details: result.error.details,
-          hint: result.error.hint
+          hint: result.error.hint,
         })
-        
+
         return {
           success: false,
           error: {
             message: errorMessage,
             code: result.error.code,
-            details: result.error.details
-          }
+            details: result.error.details,
+          },
         }
       }
-      
+
       return {
         success: true,
         data: result.data || undefined,
-        message: '更新成功'
+        message: '更新成功',
       }
-      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '更新失败'
       handleNetworkError(error as Error, { operation: 'database_update' })
-      
+
       return {
         success: false,
         error: {
-          message: errorMessage
-        }
+          message: errorMessage,
+        },
       }
     }
   }
@@ -175,44 +180,43 @@ export class ApiWrapper {
    * 包装数据库删除操作
    */
   static async delete<T>(
-    operation: () => Promise<{ data: T | null; error: PostgrestError | null }>
+    operation: () => Promise<{ data: T | null; error: BackendStoreError | null }>,
   ): Promise<ApiResponse<T>> {
     try {
       const result = await operation()
-      
+
       if (result.error) {
-        const errorMessage = this.parsePostgrestError(result.error)
+        const errorMessage = this.parseBackendStoreError(result.error)
         handleDatabaseError(new Error(errorMessage), {
           code: result.error.code,
           details: result.error.details,
-          hint: result.error.hint
+          hint: result.error.hint,
         })
-        
+
         return {
           success: false,
           error: {
             message: errorMessage,
             code: result.error.code,
-            details: result.error.details
-          }
+            details: result.error.details,
+          },
         }
       }
-      
+
       return {
         success: true,
         data: result.data || undefined,
-        message: '删除成功'
+        message: '删除成功',
       }
-      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '删除失败'
       handleNetworkError(error as Error, { operation: 'database_delete' })
-      
+
       return {
         success: false,
         error: {
-          message: errorMessage
-        }
+          message: errorMessage,
+        },
       }
     }
   }
@@ -220,7 +224,7 @@ export class ApiWrapper {
   /**
    * 解析 Postgrest 错误信息
    */
-  private static parsePostgrestError(error: PostgrestError): string {
+  private static parseBackendStoreError(error: BackendStoreError): string {
     // 常见错误码映射
     const errorMessages: Record<string, string> = {
       '23505': '数据已存在，请检查输入信息',
@@ -233,9 +237,9 @@ export class ApiWrapper {
       '08003': '数据库连接已关闭',
       '08006': '数据库连接失败',
       '53300': '数据库连接过多',
-      'PGRST116': '请求格式错误',
-      'PGRST301': '无权限访问',
-      'PGRST302': '资源不存在'
+      PGRST116: '请求格式错误',
+      PGRST301: '无权限访问',
+      PGRST302: '资源不存在',
     }
 
     // 根据错误码返回友好信息
@@ -245,23 +249,23 @@ export class ApiWrapper {
 
     // 根据错误信息关键词判断
     const message = error.message.toLowerCase()
-    
+
     if (message.includes('duplicate') || message.includes('unique')) {
       return '数据已存在，请检查输入信息'
     }
-    
+
     if (message.includes('foreign key') || message.includes('violates')) {
       return '数据关联错误，请检查相关记录'
     }
-    
+
     if (message.includes('not null') || message.includes('required')) {
       return '必填字段不能为空'
     }
-    
+
     if (message.includes('permission') || message.includes('denied')) {
       return '权限不足，无法执行此操作'
     }
-    
+
     if (message.includes('connection') || message.includes('timeout')) {
       return '数据库连接失败，请稍后重试'
     }
@@ -278,7 +282,7 @@ export class ApiWrapper {
 
     // 添加过滤条件
     if (options?.filters) {
-      Object.entries(options.filters).forEach(([key,  value]) => {
+      Object.entries(options.filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
           if (typeof value === 'string' && value.includes('%')) {
             query = query.ilike(key, value)
@@ -323,52 +327,47 @@ export class ApiWrapper {
   static async uploadFile(
     file: File,
     bucket: string,
-    path: string
+    path: string,
   ): Promise<ApiResponse<{ url: string; path: string }>> {
     try {
       // 验证文件
       if (!file) {
         return {
           success: false,
-          error: { message: '请选择要上传的文件' }
+          error: { message: '请选择要上传的文件' },
         }
       }
 
       // 上传文件
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(path, file, {
-          cacheControl: '3600',
-          upsert: false
-        })
+      const { data, error } = await supabase.storage.from(bucket).upload(path, file, {
+        cacheControl: '3600',
+        upsert: false,
+      })
 
       if (error) {
         handleDatabaseError(error, { operation: 'file_upload' })
         return {
           success: false,
-          error: { message: '文件上传失败' }
+          error: { message: '文件上传失败' },
         }
       }
 
       // 获取公共URL
-      const { data: urlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(path)
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path)
 
       return {
         success: true,
         data: {
           url: urlData.publicUrl,
-          path: data.path
+          path: data.path,
         },
-        message: '文件上传成功'
+        message: '文件上传成功',
       }
-
     } catch (error) {
       handleNetworkError(error as Error, { operation: 'file_upload' })
       return {
         success: false,
-        error: { message: '文件上传失败' }
+        error: { message: '文件上传失败' },
       }
     }
   }
@@ -381,7 +380,7 @@ export class ApiWrapper {
     options?: {
       continueOnError?: boolean
       maxConcurrency?: number
-    }
+    },
   ): Promise<{
     success: boolean
     results: ApiResponse<T>[]
@@ -397,14 +396,14 @@ export class ApiWrapper {
     // 分批执行操作
     for (let i = 0; i < operations.length; i += maxConcurrency) {
       const batch = operations.slice(i, i + maxConcurrency)
-      
+
       const batchPromises = batch.map(async (operation) => {
         try {
           return await operation()
         } catch (error) {
           return {
             success: false,
-            error: { message: error instanceof Error ? error.message : '操作失败' }
+            error: { message: error instanceof Error ? error.message : '操作失败' },
           }
         }
       })
@@ -413,12 +412,12 @@ export class ApiWrapper {
       results.push(...batchResults)
 
       // 如果不继续错误且有失败的操作，则停止
-      if (!continueOnError && batchResults.some(r => !r.success)) {
+      if (!continueOnError && batchResults.some((r) => !r.success)) {
         break
       }
     }
 
-    const successful = results.filter(r => r.success).length
+    const successful = results.filter((r) => r.success).length
     const failed = results.length - successful
 
     return {
@@ -427,12 +426,20 @@ export class ApiWrapper {
       summary: {
         total: results.length,
         successful,
-        failed
-      }
+        failed,
+      },
     }
   }
 }
 
 // 导出便捷函数
-export const { query, insert, update, delete: remove, buildQuery, validateBusinessRule, uploadFile, batchOperation } = ApiWrapper 
-
+export const {
+  query,
+  insert,
+  update,
+  delete: remove,
+  buildQuery,
+  validateBusinessRule,
+  uploadFile,
+  batchOperation,
+} = ApiWrapper

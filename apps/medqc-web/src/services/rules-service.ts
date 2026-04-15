@@ -1,5 +1,5 @@
-import { supabase } from '@/lib/supabase'
-import type { Database } from '@/types/supabase'
+import { supabase } from '@/lib/backend-store'
+import type { Database } from '@/types/database-schema'
 
 // 类型定义
 type QCRule = Database['public']['Tables']['qc_rules']['Row']

@@ -3,7 +3,7 @@
  * 管理文书类别配置和质控规则的文书类别映射
  */
 
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 import { DocumentCategory, DOCUMENT_CATEGORY_CONFIG } from '@/types/medical'
 import { DocumentCategoryConfig, EnhancedQCRule, QCRuleFilterParams } from '@/types/quality-control'
 import { lookupRuleCategories, normalizeCategories } from '@/qc/ruleDocumentMapping'

@@ -13,7 +13,7 @@
           type="info"
           show-icon
         />
-        
+
         <!-- 操作按钮 -->
         <a-space>
           <a-button
@@ -149,7 +149,7 @@ const initDatabase = async () => {
 const cleanupDuplicates = async () => {
   loading.value = true
   try {
-    const { supabase } = await import('@/lib/supabase')
+    const { supabase } = await import('@/lib/backend-store')
 
     // 查询所有default配置
     const { data: configs } = await supabase
@@ -161,12 +161,9 @@ const cleanupDuplicates = async () => {
 
     if (configs && configs.length > 1) {
       // 保留第一个，删除其他的
-      const toDelete = configs.slice(1).map(c => c.id)
+      const toDelete = configs.slice(1).map((c) => c.id)
 
-      const { error } = await supabase
-        .from('user_llm_configs')
-        .delete()
-        .in('id', toDelete)
+      const { error } = await supabase.from('user_llm_configs').delete().in('id', toDelete)
 
       if (error) {
         throw error
@@ -190,7 +187,7 @@ const debugDatabase = async () => {
   loading.value = true
   try {
     // 直接查询数据库
-    const { supabase } = await import('@/lib/supabase')
+    const { supabase } = await import('@/lib/backend-store')
 
     // 查询所有配置
     const { data: configs, error: configError } = await supabase
@@ -203,9 +200,7 @@ const debugDatabase = async () => {
       .select('*')
 
     // 查询所有模型
-    const { data: models, error: modelError } = await supabase
-      .from('llm_models')
-      .select('*')
+    const { data: models, error: modelError } = await supabase.from('llm_models').select('*')
 
     testResult.value = `🔍 数据库调试信息:
 

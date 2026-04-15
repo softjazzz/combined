@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { supabase, TABLES } from '@/lib/supabase'
+import { supabase, TABLES } from '@/lib/backend-store'
 import { createMedicalRecord } from '@/api/medical-records'
 
 // 批量上传文件接口

@@ -1,5 +1,5 @@
 /**
- * 兼容层：项目已下线 Supabase，旧代码仍有 import '@/lib/supabase'。
+ * 兼容层：项目已下线 Supabase，旧代码仍有 import '@/lib/backend-store'。
  * 此文件仅用于保证编译和历史功能回退，不再发起真实 Supabase 连接。
  */
 

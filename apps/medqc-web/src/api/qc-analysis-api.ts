@@ -2,7 +2,7 @@
  * QC分析API服务
  * 通过后端代理进行智能质控分析
  */
-import { supabase, TABLES } from '../lib/supabase'
+import { supabase, TABLES } from '../lib/backend-store'
 import { updateMedicalRecord } from './medical-records'
 import { ApiService } from '@/services/apiService'
 import type { Database } from '../types/database'

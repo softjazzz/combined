@@ -3,7 +3,7 @@
  * 用于在前端直接初始化LLM提供商和模型数据
  */
 
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 
 // LLM提供商数据
 const LLM_PROVIDERS = [

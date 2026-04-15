@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <!-- 面包屑导航 -->
     <a-breadcrumb class="breadcrumb">
@@ -51,8 +51,8 @@
               label="病历编号"
               name="recordNumber"
             >
-              <a-input 
-                v-model:value="formData.recordNumber" 
+              <a-input
+                v-model:value="formData.recordNumber"
                 disabled
               />
             </a-form-item>
@@ -62,8 +62,8 @@
               label="病历名称"
               name="recordName"
             >
-              <a-input 
-                v-model:value="formData.recordName" 
+              <a-input
+                v-model:value="formData.recordName"
                 placeholder="请输入病历名称"
               />
             </a-form-item>
@@ -257,36 +257,36 @@
         >
           <a-empty description="暂无文书，请添加文书信息" />
         </div>
-        
+
         <div
           v-else
           class="documents-list"
         >
-          <div 
-            v-for="(document, index) in formData.documents" 
+          <div
+            v-for="(document, index) in formData.documents"
             :key="document.id"
             class="document-item"
           >
             <div class="document-header">
               <h4>文书{{ index + 1 }}: {{ document.type }}</h4>
-              <a-button 
-                type="text" 
-                danger 
+              <a-button
+                type="text"
+                danger
                 size="small"
                 @click="removeDocument(index)"
               >
                 删除文书
               </a-button>
             </div>
-            
+
             <a-row :gutter="16">
               <a-col :span="8">
                 <a-form-item
                   :name="['documents', index, 'type']"
                   label="文书类型"
                 >
-                  <a-select 
-                    v-model:value="document.type" 
+                  <a-select
+                    v-model:value="document.type"
                     placeholder="请选择文书类型"
                   >
                     <!-- 标准六大类文书分类 -->
@@ -394,20 +394,20 @@
                   :name="['documents', index, 'title']"
                   label="文书标题"
                 >
-                  <a-input 
-                    v-model:value="document.title" 
+                  <a-input
+                    v-model:value="document.title"
                     placeholder="请输入文书标题"
                   />
                 </a-form-item>
               </a-col>
             </a-row>
-            
+
             <a-form-item
               :name="['documents', index, 'content']"
               label="文书内容"
             >
-              <a-textarea 
-                v-model:value="document.content" 
+              <a-textarea
+                v-model:value="document.content"
                 placeholder="请输入文书内容"
                 :rows="6"
               />
@@ -422,8 +422,8 @@
         class="form-card"
       >
         <div class="history-list">
-          <div 
-            v-for="(history, index) in modificationHistory" 
+          <div
+            v-for="(history, index) in modificationHistory"
             :key="index"
             class="history-item"
           >
@@ -443,8 +443,8 @@
       <!-- 操作按钮 -->
       <div class="form-actions">
         <div class="left-actions">
-          <a-button 
-            type="dashed" 
+          <a-button
+            type="dashed"
             @click="addDocument"
           >
             <template #icon>
@@ -453,14 +453,14 @@
             新建文书
           </a-button>
         </div>
-        
+
         <div class="right-actions">
           <a-space>
             <a-button @click="handleCancel">
               取消
             </a-button>
-            <a-button 
-              type="primary" 
+            <a-button
+              type="primary"
               html-type="submit"
               :loading="submitting"
             >
@@ -480,7 +480,6 @@ import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import type { FormInstance, FormProps } from 'ant-design-vue'
 import dayjs from 'dayjs'
-import { supabaseMedicalRecordService } from '@/services/supabaseMedicalRecordService'
 import { getAccessToken } from '@/utils/auth-token'
 
 interface EditableDocument {
@@ -549,7 +548,8 @@ const submitting = ref(false)
 const originalData = ref<RecordPayload | null>(null) // 用于并发编辑检测
 
 // 表单数据
-const formData = reactive<EditableFormData>({ recordNumber: '',
+const formData = reactive<EditableFormData>({
+  recordNumber: '',
   recordName: '',
   patientName: '',
   patientAge: null as number | null,
@@ -564,7 +564,7 @@ const formData = reactive<EditableFormData>({ recordNumber: '',
     type: string
     title: string
     content: string
-  }>
+  }>,
 })
 
 // 修改历史
@@ -572,44 +572,32 @@ const modificationHistory = ref([
   {
     timestamp: '2024-08-27T10:30:00Z',
     user: '张医生',
-    action: '创建病历'
+    action: '创建病历',
   },
   {
     timestamp: '2024-08-27T14:20:00Z',
     user: '李医生',
-    action: '修改主诊断信息'
+    action: '修改主诊断信息',
   },
   {
     timestamp: '2024-08-27T16:45:00Z',
     user: '王医生',
-    action: '添加出院记录'
-  }
+    action: '添加出院记录',
+  },
 ])
 
 // 表单验证规则
 const formRules = {
-  recordName: [
-    { required: true, message: '请输入病历名称', trigger: 'blur' }
-  ],
-  patientName: [
-    { required: true, message: '请输入患者姓名', trigger: 'blur' }
-  ],
+  recordName: [{ required: true, message: '请输入病历名称', trigger: 'blur' }],
+  patientName: [{ required: true, message: '请输入患者姓名', trigger: 'blur' }],
   patientAge: [
     { required: true, message: '请输入患者年龄', trigger: 'blur' },
-    { type: 'number', min: 0, max: 150, message: '年龄必须在0-150之间', trigger: 'blur' }
+    { type: 'number', min: 0, max: 150, message: '年龄必须在0-150之间', trigger: 'blur' },
   ],
-  patientGender: [
-    { required: true, message: '请选择患者性别', trigger: 'change' }
-  ],
-  department: [
-    { required: true, message: '请选择出院科室', trigger: 'change' }
-  ],
-  primaryDiagnosis: [
-    { required: true, message: '请输入主诊断', trigger: 'blur' }
-  ],
-  status: [
-    { required: true, message: '请选择状态', trigger: 'change' }
-  ]
+  patientGender: [{ required: true, message: '请选择患者性别', trigger: 'change' }],
+  department: [{ required: true, message: '请选择出院科室', trigger: 'change' }],
+  primaryDiagnosis: [{ required: true, message: '请输入主诊断', trigger: 'blur' }],
+  status: [{ required: true, message: '请选择状态', trigger: 'change' }],
 } satisfies NonNullable<FormProps['rules']>
 
 // 生命周期
@@ -618,7 +606,8 @@ onMounted(async () => {
 })
 
 // 加载病历数据
-const loadRecordData = async () => { try {
+const loadRecordData = async () => {
+  try {
     loading.value = true
     const recordId = route.params.id as string
 
@@ -639,9 +628,9 @@ const loadRecordData = async () => { try {
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     })
 
     console.log(`📊 API响应状态: ${response.status} ${response.statusText}`)
@@ -652,7 +641,7 @@ const loadRecordData = async () => { try {
       throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`)
     }
 
-    const record = await response.json() as RecordPayload
+    const record = (await response.json()) as RecordPayload
     console.log('加载的病历数据:', record)
 
     // 转换数据格式以适配表单 - 适配medical_records表结构
@@ -666,33 +655,37 @@ const loadRecordData = async () => { try {
       primaryDiagnosis: record.diagnosis_primary || record.primary_diagnosis || '',
       secondaryDiagnosis: record.diagnosis_secondary || record.secondary_diagnosis || [],
       majorSurgery: record.major_surgery || '',
-      status: (record.status === 'draft' || record.status === 'archived' ? record.status : 'active'),
-      documents: []
+      status: record.status === 'draft' || record.status === 'archived' ? record.status : 'active',
+      documents: [],
     }
 
     // 处理文档数据 - 从content_sections或documents字段中提取
     if (record.content_sections?.documents && Array.isArray(record.content_sections.documents)) {
-      formattedData.documents = record.content_sections.documents.map((doc: EditableDocument, index: number) => ({
-        id: doc.id || `doc_${index}`,
-        type: doc.type || '病程记录',
-        title: doc.title || doc.name || `文档${index + 1}`,
-        content: doc.content || ''
-      }))
+      formattedData.documents = record.content_sections.documents.map(
+        (doc: EditableDocument, index: number) => ({
+          id: doc.id || `doc_${index}`,
+          type: doc.type || '病程记录',
+          title: doc.title || doc.name || `文档${index + 1}`,
+          content: doc.content || '',
+        }),
+      )
     } else if (record.documents && Array.isArray(record.documents)) {
       formattedData.documents = record.documents.map((doc: EditableDocument, index: number) => ({
         id: doc.id || `doc_${index}`,
         type: doc.type || '病程记录',
         title: doc.title || doc.name || `文档${index + 1}`,
-        content: doc.content || ''
+        content: doc.content || '',
       }))
     } else if (record.content) {
       // 如果只有content字段，创建一个默认文档
-      formattedData.documents = [{
-        id: 'main_content',
-        type: '病历内容',
-        title: '主要内容',
-        content: record.content
-      }]
+      formattedData.documents = [
+        {
+          id: 'main_content',
+          type: '病历内容',
+          title: '主要内容',
+          content: record.content,
+        },
+      ]
     }
 
     console.log('转换后的表单数据:', formattedData)
@@ -728,7 +721,7 @@ const addDocument = () => {
     id: `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     type: '入院记录',
     title: '',
-    content: ''
+    content: '',
   }
   formData.documents.push(newDocument)
 }
@@ -757,18 +750,18 @@ const handleSubmit = async () => {
           const checkResponse = await fetch(`${API_BASE_URL}/api/medical-records/${recordId}`, {
             method: 'GET',
             headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
           })
 
           if (checkResponse.ok) {
-            const currentRecord = await checkResponse.json() as RecordPayload
+            const currentRecord = (await checkResponse.json()) as RecordPayload
             if (currentRecord.updated_at !== originalData.value.updated_at) {
               const confirmed = window.confirm(
                 '检测到此病历已被其他用户修改。\n\n' +
-                '继续保存将覆盖其他用户的修改。\n\n' +
-                '是否继续保存？'
+                  '继续保存将覆盖其他用户的修改。\n\n' +
+                  '是否继续保存？',
               )
               if (!confirmed) {
                 submitting.value = false
@@ -790,7 +783,7 @@ const handleSubmit = async () => {
       content: doc.content,
       ai_classified: false, // 手动编辑的文书
       ai_confidence: 0,
-      sort_order: index
+      sort_order: index,
     }))
 
     // 准备更新数据 - 适配medical_records表结构
@@ -804,8 +797,8 @@ const handleSubmit = async () => {
       major_surgery: formData.majorSurgery,
       status: formData.status,
       content_sections: {
-        documents: documents
-      }
+        documents: documents,
+      },
     }
 
     // 获取认证token
@@ -820,10 +813,10 @@ const handleSubmit = async () => {
     const updateResponse = await fetch(`${API_BASE_URL}/api/medical-records/${recordId}`, {
       method: 'PUT',
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(updateData)
+      body: JSON.stringify(updateData),
     })
 
     console.log(`📊 更新API响应状态: ${updateResponse.status} ${updateResponse.statusText}`)

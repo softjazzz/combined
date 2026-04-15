@@ -1,10 +1,10 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 /**
  * LLM质控演示数据服务
  * 负责从Supabase数据库获取真实的测试病历和质控规则数据
  */
 
-import { supabase, TABLES, checkSupabaseConnection } from '@/lib/supabase'
+import { supabase, TABLES, checkSupabaseConnection } from '@/lib/backend-store'
 import { DOCUMENT_TYPE_LABELS } from '@/utils/documentTypeUtils'
 import { getDocumentTypeCode, getDocumentBaseCode } from '@/constants/documentTypes'
 import type { MedicalRecord } from '@/types/medical-records'
@@ -42,7 +42,13 @@ export interface DatabaseQCRule {
   rule_code: string
   name: string
   description: string
-  category: 'completeness' | 'consistency' | 'rationality' | 'timeliness' | 'similarity' | 'compliance'
+  category:
+    | 'completeness'
+    | 'consistency'
+    | 'rationality'
+    | 'timeliness'
+    | 'similarity'
+    | 'compliance'
   rule_type: 'objective' | 'subjective' | 'hybrid'
   severity: 'critical' | 'major' | 'minor'
   max_score: number
@@ -53,7 +59,7 @@ export interface DatabaseQCRule {
   version: string
   created_at: string
   updated_at: string
-  applicable_documents?: string[]  // 适用的文书类型列表
+  applicable_documents?: string[] // 适用的文书类型列表
 }
 
 interface DepartmentRow {
@@ -89,7 +95,9 @@ export class DemoDataService {
   /**
    * 检查数据库连接状态
    */
-  async checkConnection(opts: { timeoutMs?: number; forceRefresh?: boolean } = {}): Promise<boolean> {
+  async checkConnection(
+    opts: { timeoutMs?: number; forceRefresh?: boolean } = {},
+  ): Promise<boolean> {
     const timeoutMs = opts.timeoutMs ?? 5000 // 增加超时时间到5秒，适应跨国网络延迟
     const forceRefresh = opts.forceRefresh ?? false
 
@@ -109,9 +117,11 @@ export class DemoDataService {
       console.log(`[DemoDataService] 连接尝试 ${attempt}/${maxRetries}...`)
 
       // 快速返回策略：超过 timeoutMs 立即降级为未连接，同时在后台继续真实检测
-      const timeoutPromise = new Promise<boolean>(resolve => {
+      const timeoutPromise = new Promise<boolean>((resolve) => {
         setTimeout(() => {
-          console.log(`[DemoDataService] 连接检查超时 (${timeoutMs}ms)，尝试 ${attempt}/${maxRetries}`)
+          console.log(
+            `[DemoDataService] 连接检查超时 (${timeoutMs}ms)，尝试 ${attempt}/${maxRetries}`,
+          )
           resolve(false)
         }, timeoutMs)
       })
@@ -127,8 +137,10 @@ export class DemoDataService {
           console.log(`[DemoDataService] ✅ 数据库连接成功 (尝试 ${attempt}/${maxRetries})`)
           return true
         } else if (attempt < maxRetries) {
-          console.log(`[DemoDataService] ⚠️ 连接超时，可能是网络延迟导致，等待重试... (尝试 ${attempt}/${maxRetries})`)
-          await new Promise(resolve => setTimeout(resolve, 1000)) // 等待1秒后重试
+          console.log(
+            `[DemoDataService] ⚠️ 连接超时，可能是网络延迟导致，等待重试... (尝试 ${attempt}/${maxRetries})`,
+          )
+          await new Promise((resolve) => setTimeout(resolve, 1000)) // 等待1秒后重试
           continue
         } else {
           console.log('[DemoDataService] ⚠️ 网络连接超时，可能是跨国网络延迟，将使用模拟数据')
@@ -140,7 +152,7 @@ export class DemoDataService {
         lastError = error
         if (attempt < maxRetries) {
           console.log(`[DemoDataService] 连接异常，准备重试: ${error}`)
-          await new Promise(resolve => setTimeout(resolve, 1000))
+          await new Promise((resolve) => setTimeout(resolve, 1000))
           continue
         }
       }
@@ -165,12 +177,14 @@ export class DemoDataService {
   /**
    * 获取测试病历列表
    */
-  async getMedicalRecords(params: {
-    limit?: number
-    search?: string
-    department?: string
-    status?: string
-  } = {}): Promise<MedicalRecord[]> {
+  async getMedicalRecords(
+    params: {
+      limit?: number
+      search?: string
+      department?: string
+      status?: string
+    } = {},
+  ): Promise<MedicalRecord[]> {
     console.log('[DemoDataService] 开始获取医疗记录，参数:', params)
     // 先用缓存提升首次打开速度
     const now = Date.now()
@@ -183,12 +197,14 @@ export class DemoDataService {
     return this.refreshMedicalRecords(params)
   }
 
-  private async refreshMedicalRecords(params: {
-    limit?: number
-    search?: string
-    department?: string
-    status?: string
-  } = {}): Promise<MedicalRecord[]> {
+  private async refreshMedicalRecords(
+    params: {
+      limit?: number
+      search?: string
+      department?: string
+      status?: string
+    } = {},
+  ): Promise<MedicalRecord[]> {
     const isConnected = await this.checkConnection()
     if (!isConnected) {
       const mock = this.getMockMedicalRecords()
@@ -196,13 +212,12 @@ export class DemoDataService {
       return mock
     }
     try {
-      let query = supabase
-        .from(TABLES.MEDICAL_RECORDS_TEST)
-        .select('*')
-        .eq('status', 'active')
+      let query = supabase.from(TABLES.MEDICAL_RECORDS_TEST).select('*').eq('status', 'active')
 
       if (params.search) {
-        query = query.or(`record_name.ilike.%${params.search}%,primary_diagnosis.ilike.%${params.search}%`)
+        query = query.or(
+          `record_name.ilike.%${params.search}%,primary_diagnosis.ilike.%${params.search}%`,
+        )
       }
       if (params.department) query = query.eq('department', params.department)
       if (params.status) query = query.eq('status', params.status)
@@ -237,7 +252,7 @@ export class DemoDataService {
     if (!isUuid || !isConnected) {
       if (!isConnected) console.warn('[DemoDataService] 数据库未连接，返回模拟数据')
       const mockRecords = this.getMockMedicalRecords()
-      return mockRecords.find(record => record.id === id) || null
+      return mockRecords.find((record) => record.id === id) || null
     }
 
     try {
@@ -263,12 +278,14 @@ export class DemoDataService {
   /**
    * 获取质控规则列表
    */
-  async getQCRules(params: {
-    limit?: number
-    category?: string
-    severity?: string
-    isActive?: boolean
-  } = {}): Promise<QualityControlRule[]> {
+  async getQCRules(
+    params: {
+      limit?: number
+      category?: string
+      severity?: string
+      isActive?: boolean
+    } = {},
+  ): Promise<QualityControlRule[]> {
     const isConnected = await this.checkConnection()
     if (!isConnected) {
       console.warn('[DemoDataService] 数据库未连接，返回模拟数据')
@@ -276,9 +293,7 @@ export class DemoDataService {
     }
 
     try {
-      let query = supabase
-        .from(TABLES.QC_RULES)
-        .select('*')
+      let query = supabase.from(TABLES.QC_RULES).select('*')
 
       // 应用筛选条件
       if (params.category) {
@@ -317,11 +332,13 @@ export class DemoDataService {
    * @param params 查询参数
    * @returns 四川省质控规则列表
    */
-  async getSichuanQCRules(params: {
-    document_type?: string
-    document_types?: string
-    grouped?: boolean
-  } = {}): Promise<QualityControlRule[]> {
+  async getSichuanQCRules(
+    params: {
+      document_type?: string
+      document_types?: string
+      grouped?: boolean
+    } = {},
+  ): Promise<QualityControlRule[]> {
     console.log('[DemoDataService] 开始获取四川省质控规则，参数:', params)
 
     try {
@@ -379,7 +396,7 @@ export class DemoDataService {
    * 转换四川规则格式为演示系统使用的格式
    */
   private transformSichuanRules(rules: any[]): QualityControlRule[] {
-    return rules.map(rule => ({
+    return rules.map((rule) => ({
       id: rule.rule_id || rule.id,
       pointId: rule.rule_id || rule.id,
       conditions: [],
@@ -406,7 +423,7 @@ export class DemoDataService {
       requires_rag: rule.requires_rag || false,
       requires_cot: rule.requires_cot || false,
       medical_domain: rule.medical_domain || '通用',
-      score_deduction: rule.score_deduction || 0
+      score_deduction: rule.score_deduction || 0,
     }))
   }
 
@@ -456,7 +473,9 @@ export class DemoDataService {
         this.departmentsCache = { data: fallback, ts: Date.now() }
         return fallback
       }
-      const departments = [...new Set((data || []).map((item: DepartmentRow) => item.department).filter(Boolean))].sort()
+      const departments = [
+        ...new Set((data || []).map((item: DepartmentRow) => item.department).filter(Boolean)),
+      ].sort()
       this.departmentsCache = { data: departments, ts: Date.now() }
       return departments
     } catch (error) {
@@ -499,13 +518,16 @@ export class DemoDataService {
             title: doc.title || '未命名文书',
             type,
             created_at: doc.created_at,
-            content: doc.content
+            content: doc.content,
           }
         })
         return normalized
       }
     } catch (apiError) {
-      console.warn('[DemoDataService] ⚠️ 后端API获取文书失败，准备回退到Supabase/Mock数据', apiError)
+      console.warn(
+        '[DemoDataService] ⚠️ 后端API获取文书失败，准备回退到Supabase/Mock数据',
+        apiError,
+      )
     }
 
     const isConnected = await this.checkConnection()
@@ -533,7 +555,7 @@ export class DemoDataService {
             // 标题优先：已有标题 -> 中文类型名 -> 英文代码 -> 兜底
             title: d.title || chineseLabel || typeCode || '未命名文书',
             type: typeCode || 'unknown',
-            created_at: d.created_at || data.updated_at
+            created_at: d.created_at || data.updated_at,
           }
         })
       }
@@ -545,27 +567,28 @@ export class DemoDataService {
     }
   }
 
-
-
   /**
    * 转换数据库医疗记录格式
    */
   private transformDatabaseRecords(records: DatabaseMedicalRecord[]): MedicalRecord[] {
-    return records.map(record => ({
+    return records.map((record) => ({
       id: record.id,
       patient_name: record.patient_info?.name || '未知患者',
       patient_age: record.patient_info?.age || 0,
-      patient_gender: (record.patient_info?.gender === '男' ? 'M' :
-                      record.patient_info?.gender === '女' ? 'F' : 'U') as 'M' | 'F' | 'U',
+      patient_gender: (record.patient_info?.gender === '男'
+        ? 'M'
+        : record.patient_info?.gender === '女'
+          ? 'F'
+          : 'U') as 'M' | 'F' | 'U',
       department: record.department || '未知科室',
       admission_date: record.created_at,
       record_type: 'inpatient' as const,
       content: record.raw_text || this.generateContentFromRecord(record),
-      status: record.status === 'active' ? 'completed' as const : 'pending' as const,
+      status: record.status === 'active' ? ('completed' as const) : ('pending' as const),
       created_at: record.created_at,
       updated_at: record.updated_at,
       qc_score: record.ai_confidence_score,
-      qc_grade: this.calculateGrade(record.ai_confidence_score)
+      qc_grade: this.calculateGrade(record.ai_confidence_score),
     }))
   }
 
@@ -573,7 +596,7 @@ export class DemoDataService {
    * 转换数据库质控规则格式
    */
   private transformDatabaseRules(rules: DatabaseQCRule[]): QualityControlRule[] {
-    return rules.map(rule => ({
+    return rules.map((rule) => ({
       id: rule.id,
       pointId: rule.id, // 使用相同ID
       conditions: [], // 简化处理
@@ -594,7 +617,7 @@ export class DemoDataService {
       version: rule.version,
       ruleCode: rule.rule_code,
       // 添加 applicable_documents 字段映射
-      applicable_documents: rule.applicable_documents || []
+      applicable_documents: rule.applicable_documents || [],
     }))
   }
 
@@ -652,7 +675,7 @@ ${record.raw_text || '病历内容暂无'}
         created_at: '2024-01-15T08:30:00Z',
         updated_at: '2024-01-15T10:30:00Z',
         qc_score: 92,
-        qc_grade: 'A'
+        qc_grade: 'A',
       },
       {
         id: 'mock-record-002',
@@ -689,7 +712,7 @@ ${record.raw_text || '病历内容暂无'}
         created_at: '2024-01-16T09:15:00Z',
         updated_at: '2024-01-16T11:15:00Z',
         qc_score: 88,
-        qc_grade: 'B'
+        qc_grade: 'B',
       },
       {
         id: 'mock-record-003',
@@ -714,11 +737,10 @@ ${record.raw_text || '病历内容暂无'}
         created_at: '2024-01-17T14:20:00Z',
         updated_at: '2024-01-17T16:20:00Z',
         qc_score: 85,
-        qc_grade: 'B'
-      }
+        qc_grade: 'B',
+      },
     ]
   }
-
 
   /** 获取模拟文书列表（当数据库不可用时使用） */
   private getMockDocuments(recordId: string): RecordDocumentInfo[] {
@@ -727,11 +749,11 @@ ${record.raw_text || '病历内容暂无'}
       { id: `${recordId}-doc-1`, title: '入院记录', type: 'admission', created_at: now },
       { id: `${recordId}-doc-2`, title: '首次病程', type: 'first_course', created_at: now },
       { id: `${recordId}-doc-3`, title: '出院记录', type: 'discharge', created_at: now },
-      { id: `${recordId}-doc-4`, title: '手术记录', type: 'surgery', created_at: now }
+      { id: `${recordId}-doc-4`, title: '手术记录', type: 'surgery', created_at: now },
     ]
   }
 
-/**
+  /**
    * 获取模拟质控规则数据（当数据库不可用时使用）
    */
   private getMockQCRules(): QualityControlRule[] {
@@ -754,11 +776,12 @@ ${record.raw_text || '病历内容暂无'}
         checkLogic: {
           type: 'content_check',
           required_sections: ['主诉'],
-          min_length: 5
+          min_length: 5,
         },
-        promptTemplate: '请检查以下病历的主诉部分是否完整：\n\n{content}\n\n评估标准：\n1. 主诉是否存在\n2. 主诉是否简明扼要\n3. 主诉是否描述了主要症状',
+        promptTemplate:
+          '请检查以下病历的主诉部分是否完整：\n\n{content}\n\n评估标准：\n1. 主诉是否存在\n2. 主诉是否简明扼要\n3. 主诉是否描述了主要症状',
         version: '1.0',
-        ruleCode: 'COMP-001'
+        ruleCode: 'COMP-001',
       },
       {
         id: 'mock-rule-002',
@@ -777,11 +800,12 @@ ${record.raw_text || '病历内容暂无'}
         isActive: true,
         checkLogic: {
           type: 'llm_analysis',
-          criteria: ['时间逻辑', '症状关联', '病程发展']
+          criteria: ['时间逻辑', '症状关联', '病程发展'],
         },
-        promptTemplate: '请分析以下现病史的逻辑性：\n\n{content}\n\n评估要点：\n1. 时间顺序是否合理\n2. 症状发展是否符合逻辑\n3. 病程描述是否完整',
+        promptTemplate:
+          '请分析以下现病史的逻辑性：\n\n{content}\n\n评估要点：\n1. 时间顺序是否合理\n2. 症状发展是否符合逻辑\n3. 病程描述是否完整',
         version: '1.0',
-        ruleCode: 'CONS-001'
+        ruleCode: 'CONS-001',
       },
       {
         id: 'mock-rule-003',
@@ -801,13 +825,13 @@ ${record.raw_text || '病历内容暂无'}
         checkLogic: {
           type: 'hybrid',
           patterns: ['诊断', '症状', '检查'],
-          criteria: ['症状匹配', '检查支持', '诊断准确']
+          criteria: ['症状匹配', '检查支持', '诊断准确'],
         },
-        promptTemplate: '请评估诊断的合理性：\n\n{content}\n\n评估标准：\n1. 诊断是否与症状相符\n2. 是否有检查结果支持\n3. 诊断是否准确完整',
+        promptTemplate:
+          '请评估诊断的合理性：\n\n{content}\n\n评估标准：\n1. 诊断是否与症状相符\n2. 是否有检查结果支持\n3. 诊断是否准确完整',
         version: '1.0',
-        ruleCode: 'RATI-001'
-      }
+        ruleCode: 'RATI-001',
+      },
     ]
   }
 }
-

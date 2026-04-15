@@ -3,7 +3,7 @@
  * 提供基于语义的中文医疗文档搜索功能
  */
 
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 import type { Database } from '@/types/database'
 
 // 搜索结果类型
@@ -55,14 +55,14 @@ export class VectorSearchService {
       maxResults?: number
       contentTypes?: string[]
       userId?: string
-    } = {}
+    } = {},
   ): Promise<VectorSearchResult[]> {
     try {
       const {
         similarityThreshold = 0.7,
         maxResults = 10,
         contentTypes = ['full_content', 'diagnosis', 'summary'],
-        userId
+        userId,
       } = options
 
       // 首先需要生成查询向量（这里需要调用后端API）
@@ -73,7 +73,7 @@ export class VectorSearchService {
         query_embedding: queryEmbedding,
         similarity_threshold: similarityThreshold,
         max_results: maxResults,
-        content_types: contentTypes
+        content_types: contentTypes,
       })
 
       if (error) {
@@ -102,15 +102,10 @@ export class VectorSearchService {
       keywordWeight?: number
       maxResults?: number
       userId?: string
-    } = {}
+    } = {},
   ): Promise<HybridSearchResult[]> {
     try {
-      const {
-        vectorWeight = 0.7,
-        keywordWeight = 0.3,
-        maxResults = 10,
-        userId
-      } = options
+      const { vectorWeight = 0.7, keywordWeight = 0.3, maxResults = 10, userId } = options
 
       // 生成查询向量
       const queryEmbedding = await this.generateQueryEmbedding(query)
@@ -121,7 +116,7 @@ export class VectorSearchService {
         search_keywords: query,
         vector_weight: vectorWeight,
         keyword_weight: keywordWeight,
-        max_results: maxResults
+        max_results: maxResults,
       })
 
       if (error) {
@@ -148,18 +143,15 @@ export class VectorSearchService {
     options: {
       similarityThreshold?: number
       maxResults?: number
-    } = {}
+    } = {},
   ): Promise<SimilarCaseResult[]> {
     try {
-      const {
-        similarityThreshold = 0.8,
-        maxResults = 5
-      } = options
+      const { similarityThreshold = 0.8, maxResults = 5 } = options
 
       const { data, error } = await supabase.rpc('find_similar_cases', {
         source_record_id: recordId,
         similarity_threshold: similarityThreshold,
-        max_results: maxResults
+        max_results: maxResults,
       })
 
       if (error) {
@@ -185,7 +177,7 @@ export class VectorSearchService {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text: query })
+        body: JSON.stringify({ text: query }),
       })
 
       if (!response.ok) {
@@ -207,17 +199,17 @@ export class VectorSearchService {
     userId: string,
     query: string,
     searchType: string,
-    resultsCount: number
+    resultsCount: number,
   ): Promise<void> {
     try {
       const startTime = Date.now()
-      
+
       await supabase.rpc('log_vector_search', {
         p_user_id: userId,
         p_search_query: query,
         p_search_type: searchType,
         p_results_count: resultsCount,
-        p_search_time_ms: Date.now() - startTime
+        p_search_time_ms: Date.now() - startTime,
       })
     } catch (error) {
       console.warn('记录搜索历史失败:', error)
@@ -230,7 +222,7 @@ export class VectorSearchService {
   static async getSearchStatistics(daysBack: number = 30): Promise<SearchStatistics | null> {
     try {
       const { data, error } = await supabase.rpc('get_search_statistics', {
-        days_back: daysBack
+        days_back: daysBack,
       })
 
       if (error) {
@@ -261,7 +253,7 @@ export class VectorSearchService {
         return []
       }
 
-      return data?.map(item => item.search_query) || []
+      return data?.map((item) => item.search_query) || []
     } catch (error) {
       console.error('获取搜索建议错误:', error)
       return []
@@ -271,12 +263,14 @@ export class VectorSearchService {
   /**
    * 批量创建文档向量（管理员功能）
    */
-  static async batchCreateEmbeddings(records: Array<{
-    record_id: string
-    content: string
-    content_type?: string
-    section_name?: string
-  }>): Promise<string[]> {
+  static async batchCreateEmbeddings(
+    records: Array<{
+      record_id: string
+      content: string
+      content_type?: string
+      section_name?: string
+    }>,
+  ): Promise<string[]> {
     try {
       // 调用后端API进行批量处理
       const response = await fetch('/api/batch-create-embeddings', {
@@ -284,7 +278,7 @@ export class VectorSearchService {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ records   })
+        body: JSON.stringify({ records }),
       })
 
       if (!response.ok) {
@@ -325,15 +319,15 @@ export const searchUtils = {
    */
   highlightKeywords(text: string, keywords: string): string {
     if (!keywords.trim()) return text
-    
-    const keywordList = keywords.split(/\s+/).filter(k => k.length > 0)
+
+    const keywordList = keywords.split(/\s+/).filter((k) => k.length > 0)
     let highlightedText = text
-    
-    keywordList.forEach(keyword => {
+
+    keywordList.forEach((keyword) => {
       const regex = new RegExp(`(${keyword})`, 'gi')
       highlightedText = highlightedText.replace(regex, '<mark>$1</mark>')
     })
-    
+
     return highlightedText
   },
 
@@ -351,8 +345,8 @@ export const searchUtils = {
     if (results.length === 0) {
       return `未找到与"${query}"相关的医疗记录`
     }
-    
+
     const avgScore = results.reduce((sum, r) => sum + r.similarity_score, 0) / results.length
     return `找到 ${results.length} 条相关记录，平均相似度 ${this.formatSimilarityScore(avgScore)}`
-  }
+  },
 }

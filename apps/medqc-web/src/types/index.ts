@@ -1,9 +1,9 @@
-import type { MedicalRecord, QCResult, QCRule, UserRole } from './supabase'
+import type { MedicalRecord, QCResult, QCRule, UserRole } from './database-schema'
 import type { User as AuthUser } from './auth'
 import type {
   CreateMedicalRecordRequest as CreateMedicalRecordRequestCompat,
   UpdateMedicalRecordRequest as UpdateMedicalRecordRequestCompat,
-} from '@/services/supabaseMedicalRecordService'
+} from '@/services/medical-record-persistence-service'
 
 // 重新导出auth类型
 export * from './auth'
@@ -256,8 +256,8 @@ export interface RouteMeta {
   hidden?: boolean
   keepAlive?: boolean
   breadcrumb?: BreadcrumbItem[]
-  requiresAuth?: boolean  // 是否需要认证（默认true）
-  allowDemo?: boolean     // 是否允许演示模式访问（通过?demo=true参数）
+  requiresAuth?: boolean // 是否需要认证（默认true）
+  allowDemo?: boolean // 是否允许演示模式访问（通过?demo=true参数）
 }
 
 // 导出格式
@@ -329,5 +329,5 @@ export type {
   QCSuggestion,
   QCStatistics,
   MedicalRecordWithQC,
-  QCResultWithRecord
-} from './supabase' 
+  QCResultWithRecord,
+} from './database-schema'

@@ -1,9 +1,13 @@
-﻿<template>
+<template>
   <div class="min-h-screen p-4 md:p-6 bg-gradient-to-br from-blue-50 via-blue-50 to-indigo-100">
-    <a-card class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all ring-1 ring-blue-100/70 border md:border-2 border-gray-200 max-w-7xl mx-auto">
+    <a-card
+      class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg hover:shadow-xl transition-all ring-1 ring-blue-100/70 border md:border-2 border-gray-200 max-w-7xl mx-auto"
+    >
       <template #title>
         <div class="flex items-center gap-3">
-          <div class="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-100 text-blue-600 ring-1 ring-blue-200">
+          <div
+            class="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-100 text-blue-600 ring-1 ring-blue-200"
+          >
             <RobotOutlined />
           </div>
           <div>
@@ -60,7 +64,9 @@
           key="text"
           tab="文本输入"
         >
-          <div class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-blue-100/50 via-sky-100/40 to-indigo-100/50">
+          <div
+            class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-blue-100/50 via-sky-100/40 to-indigo-100/50"
+          >
             <a-card
               size="small"
               title="直接输入医疗文本"
@@ -119,7 +125,9 @@
           key="file"
           tab="文件上传"
         >
-          <div class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-blue-100/50 via-sky-100/40 to-indigo-100/50">
+          <div
+            class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-blue-100/50 via-sky-100/40 to-indigo-100/50"
+          >
             <a-card
               size="small"
               title="上传医疗文档"
@@ -154,7 +162,9 @@
                 <a-divider>已上传文件 ({{ uploadedFiles.length }})</a-divider>
 
                 <!-- 批量操作增强 -->
-                <div class="mb-3 text-center p-4 bg-white/95 rounded-xl border md:border-2 border-blue-300 hover:border-blue-400 shadow-md hover:shadow-lg transition-all">
+                <div
+                  class="mb-3 text-center p-4 bg-white/95 rounded-xl border md:border-2 border-blue-300 hover:border-blue-400 shadow-md hover:shadow-lg transition-all"
+                >
                   <a-space size="large">
                     <a-button
                       :loading="batchParsing"
@@ -220,18 +230,24 @@
                     <span class="text-sm font-medium text-blue-800">批量处理进度</span>
                     <span class="text-xs text-blue-600">
                       {{ batchProgress.completed }} / {{ batchProgress.total }}
-                      {{ batchProgress.currentFile ? `(正在处理: ${batchProgress.currentFile})` : '' }}
+                      {{
+                        batchProgress.currentFile ? `(正在处理: ${batchProgress.currentFile})` : ''
+                      }}
                     </span>
                   </div>
                   <a-progress
                     :percent="batchProgressPercent"
-                    :status="batchParsing ? 'active' : (batchProgress.hasErrors ? 'exception' : 'success')"
+                    :status="
+                      batchParsing ? 'active' : batchProgress.hasErrors ? 'exception' : 'success'
+                    "
                     size="small"
                   />
                 </div>
 
                 <!-- 简洁文件列表 -->
-                <div class="bg-white rounded-xl p-3 border md:border-2 border-gray-300 hover:border-gray-400 shadow-sm mb-4">
+                <div
+                  class="bg-white rounded-xl p-3 border md:border-2 border-gray-300 hover:border-gray-400 shadow-sm mb-4"
+                >
                   <a-list
                     :data-source="uploadedFiles"
                     size="small"
@@ -241,7 +257,9 @@
                       <a-list-item
                         :class="[
                           'cursor-pointer transition-transform rounded-xl px-3 py-2 mb-2 ui-card ui-card-muted hover:border-blue-400 hover:shadow-md hover:-translate-y-[1px] duration-200 ease-out',
-                          currentFileIndex === index ? 'ring-2 ring-blue-300 border-blue-500 bg-blue-50/60 shadow-md' : ''
+                          currentFileIndex === index
+                            ? 'ring-2 ring-blue-300 border-blue-500 bg-blue-50/60 shadow-md'
+                            : '',
                         ]"
                         @click="selectFile(index)"
                       >
@@ -333,7 +351,9 @@
         v-if="currentFile && currentFile.parsed && currentFile.parseResult"
         class="mt-4 border-t-2 border-blue-100/70 pt-4"
       >
-        <div class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-sky-100/40 via-blue-100/30 to-indigo-100/40">
+        <div
+          class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-sky-100/40 via-blue-100/30 to-indigo-100/40"
+        >
           <a-card
             size="small"
             class="rounded-2xl shadow-md ring-1 ring-slate-200/70"
@@ -403,13 +423,21 @@
                   :md="12"
                   :lg="12"
                 >
-                  <div class="rounded-xl border border-slate-200 bg-white hover:shadow-sm transition p-3">
+                  <div
+                    class="rounded-xl border border-slate-200 bg-white hover:shadow-sm transition p-3"
+                  >
                     <div class="flex flex-col gap-1">
                       <div class="text-[13px] text-gray-500 font-medium">
                         内容长度
                       </div>
                       <div class="text-[15px] font-semibold text-gray-900 truncate">
-                        {{ ((currentFile.parseResult && currentFile.parseResult.content ? currentFile.parseResult.content.length : 0)).toLocaleString() }} 字符
+                        {{
+                          (currentFile.parseResult && currentFile.parseResult.content
+                            ? currentFile.parseResult.content.length
+                            : 0
+                          ).toLocaleString()
+                        }}
+                        字符
                       </div>
                     </div>
                   </div>
@@ -420,7 +448,9 @@
                   :md="12"
                   :lg="12"
                 >
-                  <div class="rounded-xl border border-slate-200 bg-white hover:shadow-sm transition p-3">
+                  <div
+                    class="rounded-xl border border-slate-200 bg-white hover:shadow-sm transition p-3"
+                  >
                     <div class="flex flex-col gap-1">
                       <div class="text-[13px] text-gray-500 font-medium">
                         页数
@@ -448,7 +478,9 @@
                     </div>
                   </template>
                   <div class="max-h-96 overflow-y-auto bg-gray-50 border rounded p-4">
-                    <pre class="content-text font-sans text-[13px] leading-6 text-gray-800 whitespace-pre-wrap break-words m-0">{{ currentFile.parseResult.content || '无内容' }}</pre>
+                    <pre
+                      class="content-text font-sans text-[13px] leading-6 text-gray-800 whitespace-pre-wrap break-words m-0"
+                    >{{ currentFile.parseResult.content || '无内容' }}</pre>
                   </div>
                 </a-collapse-panel>
 
@@ -465,9 +497,13 @@
                     </div>
                   </template>
                   <div class="bg-gray-50 p-4 rounded-md border">
-                    <div class="mb-2 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div
+                      class="mb-2 flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-sm"
+                    >
                       <a-space>
-                        <span class="text-sm text-gray-600 font-medium truncate max-w-[200px]">{{ currentFile.name }}</span>
+                        <span class="text-sm text-gray-600 font-medium truncate max-w-[200px]">{{
+                          currentFile.name
+                        }}</span>
                         <a-divider type="vertical" />
                         <a-button
                           size="small"
@@ -499,7 +535,9 @@
                         </a-button>
                       </a-space>
                     </div>
-                    <div class="mt-3 rounded-2xl overflow-hidden bg-gradient-to-br from-sky-100/30 via-blue-100/20 to-indigo-100/30">
+                    <div
+                      class="mt-3 rounded-2xl overflow-hidden bg-gradient-to-br from-sky-100/30 via-blue-100/20 to-indigo-100/30"
+                    >
                       <iframe
                         :src="currentFile.previewUrl"
                         :style="{ transform: `scale(${pdfScale})`, transformOrigin: 'top left' }"
@@ -521,7 +559,9 @@
         v-if="importResult"
         class="mt-4"
       >
-        <div class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-green-100/60 via-emerald-100/50 to-teal-100/60">
+        <div
+          class="rounded-2xl p-2 md:p-3 bg-gradient-to-br from-green-100/60 via-emerald-100/50 to-teal-100/60"
+        >
           <a-card
             size="small"
             class="rounded-2xl shadow-md ring-1 ring-emerald-200/60"
@@ -616,7 +656,12 @@
               {{ (parseResult.data && parseResult.data.primaryDiagnosis) || '未识别' }}
             </a-descriptions-item>
             <a-descriptions-item label="文书数量">
-              {{ (parseResult.data && parseResult.data.documents && parseResult.data.documents.length) || 0 }}个
+              {{
+                (parseResult.data &&
+                  parseResult.data.documents &&
+                  parseResult.data.documents.length) ||
+                  0
+              }}个
             </a-descriptions-item>
           </a-descriptions>
 
@@ -658,7 +703,9 @@
         class="mb-4 bg-white rounded-2xl shadow-lg border md:border-2 border-gray-300 hover:border-gray-400"
       >
         <div class="bg-gray-50 rounded p-3">
-          <pre class="bg-gray-900 text-white p-3 rounded max-h-52 overflow-y-auto font-mono text-xs leading-5 m-0">{{ operationLog }}</pre>
+          <pre
+            class="bg-gray-900 text-white p-3 rounded max-h-52 overflow-y-auto font-mono text-xs leading-5 m-0"
+          >{{ operationLog }}</pre>
           <div class="text-right mt-2">
             <a-button
               size="small"
@@ -719,13 +766,13 @@ import {
   EyeOutlined,
   PauseCircleOutlined,
   StopOutlined,
-  AppstoreOutlined
+  AppstoreOutlined,
 } from '@ant-design/icons-vue'
 import { Empty } from 'ant-design-vue'
 import MedicalDocumentResultModal from '@/components/MedicalDocumentResultModal.vue'
 // import { type UserLLMConfig } from '@/services/llmConfigService'
 // import LLMApiConfigStudio from '@/components/LLMApiConfigStudio.vue'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 
 // 临时类型定义
 interface UserLLMConfig {
@@ -767,7 +814,8 @@ const modalOriginalText = ref('')
 function isCrossOrigin(url: string): boolean {
   try {
     const u = new URL(url)
-    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+    const currentOrigin =
+      typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
     return u.origin !== currentOrigin
   } catch {
     return true
@@ -808,7 +856,7 @@ const batchProgress = ref({
   total: 0,
   completed: 0,
   currentFile: '',
-  hasErrors: false
+  hasErrors: false,
 })
 const parsingFileIndex = ref(-1)
 const llmAnalyzing = ref(false)
@@ -850,13 +898,13 @@ const beforeUpload = (file: File) => {
     'application/pdf',
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/plain'
+    'text/plain',
   ]
 
   // 也检查文件扩展名，以防MIME类型不准确
   const fileName = file.name.toLowerCase()
   const validExtensions = ['.pdf', '.doc', '.docx', '.txt']
-  const hasValidExtension = validExtensions.some(ext => fileName.endsWith(ext))
+  const hasValidExtension = validExtensions.some((ext) => fileName.endsWith(ext))
 
   const isValidType = validTypes.includes(file.type) || hasValidExtension
   if (!isValidType) {
@@ -887,8 +935,8 @@ const handleUploadChange = (info: any) => {
     const file = fileItem.originFileObj || fileItem
 
     // 检查是否已经添加过这个文件
-    const exists = uploadedFiles.value.some(existingFile =>
-      existingFile.name === file.name && existingFile.size === file.size
+    const exists = uploadedFiles.value.some(
+      (existingFile) => existingFile.name === file.name && existingFile.size === file.size,
     )
 
     if (!exists && file) {
@@ -916,7 +964,7 @@ const addFileToList = (file: File) => {
       error: null,
       previewUrl: null, // 用于PDF预览
       imported: false,
-      importResult: null
+      importResult: null,
     }
 
     // 为PDF文件创建预览URL
@@ -934,7 +982,6 @@ const addFileToList = (file: File) => {
 
     operationLog.value += `\n文件上传成功: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`
     message.success(`文件 ${file.name} 上传成功`, 2)
-
   } catch (error: any) {
     console.error('文件处理失败:', error)
     operationLog.value += `\n文件处理失败: ${error}`
@@ -953,7 +1000,7 @@ const handleFileUpload = async (options: any) => {
 const selectFile = (index: number) => {
   currentFileIndex.value = index
   resetZoom()
-  console.log('选择文件:', index, (uploadedFiles.value[index] && uploadedFiles.value[index].name))
+  console.log('选择文件:', index, uploadedFiles.value[index] && uploadedFiles.value[index].name)
 }
 
 const removeFile = (index: number) => {
@@ -977,7 +1024,7 @@ const removeFile = (index: number) => {
 
 const clearAllFiles = () => {
   // 清理所有预览URL
-  uploadedFiles.value.forEach(file => {
+  uploadedFiles.value.forEach((file) => {
     if (file.previewUrl) {
       URL.revokeObjectURL(file.previewUrl)
     }
@@ -1015,7 +1062,7 @@ const parseFile = async (index: number) => {
 
     const response = await fetch(`${API_BASE_URL}/api/parse-medical-file-public`, {
       method: 'POST',
-      body: formData
+      body: formData,
     })
 
     if (!response.ok) {
@@ -1023,7 +1070,7 @@ const parseFile = async (index: number) => {
       throw new Error(`HTTP ${response.status}: ${errorText}`)
     }
 
-    const result = await response.json() as any
+    const result = (await response.json()) as any
 
     if (result.success) {
       // 更新文件状态
@@ -1068,7 +1115,7 @@ const parseCurrentFile = async () => {
 
     const response = await fetch(`${API_BASE_URL}/api/parse-medical-file-public`, {
       method: 'POST',
-      body: formData
+      body: formData,
     })
 
     if (!response.ok) {
@@ -1114,7 +1161,7 @@ const parseAllFiles = async () => {
     total: uploadedFiles.value.length,
     completed: 0,
     currentFile: '',
-    hasErrors: false
+    hasErrors: false,
   }
 
   operationLog.value += `\n开始批量解析 ${uploadedFiles.value.length} 个文件...`
@@ -1131,7 +1178,7 @@ const parseAllFiles = async () => {
 
     // 检查是否暂停
     while (batchPaused.value && batchParsing.value) {
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100))
     }
 
     const file = uploadedFiles.value[i]
@@ -1164,7 +1211,7 @@ const parseAllFiles = async () => {
 
     // 添加延迟避免请求过快
     if (i < uploadedFiles.value.length - 1 && batchParsing.value) {
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise((resolve) => setTimeout(resolve, 500))
     }
   }
 
@@ -1200,9 +1247,10 @@ const smartImportToDatabase = async () => {
     const medicalInfo = parseResult.medical_info || {}
 
     // 提取患者姓名（优先从医疗信息中获取，否则使用默认值）
-    const patientName = getMedicalInfoString(medicalInfo, 'patient_name') ||
-                       extractPatientNameFromContent(parseResult.content || '') ||
-                       '未知患者'
+    const patientName =
+      getMedicalInfoString(medicalInfo, 'patient_name') ||
+      extractPatientNameFromContent(parseResult.content || '') ||
+      '未知患者'
 
     const importData = {
       patient_name: patientName,
@@ -1211,20 +1259,20 @@ const smartImportToDatabase = async () => {
         filename: currentFile.value.name,
         size: currentFile.value.size,
         type: currentFile.value.type,
-        pages: parseResult.pages
+        pages: parseResult.pages,
       },
       parse_result: {
         method: parseResult.method,
-        medical_info: medicalInfo
-      }
+        medical_info: medicalInfo,
+      },
     }
 
     const response = await fetch(`${API_BASE_URL}/api/smart-import`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(importData)
+      body: JSON.stringify(importData),
     })
 
     if (!response.ok) {
@@ -1260,7 +1308,7 @@ const extractPatientNameFromContent = (content: string): string | null => {
   const patterns = [
     /患者[：:]\s*([^\s，,。.]{2,4})/,
     /姓名[：:]\s*([^\s，,。.]{2,4})/,
-    /病人[：:]\s*([^\s，,。.]{2,4})/
+    /病人[：:]\s*([^\s，,。.]{2,4})/,
   ]
 
   for (const pattern of patterns) {
@@ -1275,7 +1323,9 @@ const extractPatientNameFromContent = (content: string): string | null => {
 
 // LLM精确解析
 const showLLMAnalysis = async () => {
-  if (!(currentFile.value && currentFile.value.parseResult && currentFile.value.parseResult.content)) {
+  if (
+    !(currentFile.value && currentFile.value.parseResult && currentFile.value.parseResult.content)
+  ) {
     message.warning('请先解析文件获取文本内容')
     return
   }
@@ -1298,7 +1348,7 @@ const showLLMAnalysis = async () => {
 
     const result = await llmService.extractMedicalData(currentFile.value.parseResult.content, {
       extractPatientInfo: true,
-      extractDiagnosis: true
+      extractDiagnosis: true,
     })
     parseResult.value = result
 
@@ -1344,7 +1394,7 @@ const parseText = async () => {
 
     const response = await fetch(`${API_BASE_URL}/api/parse-medical-file-public`, {
       method: 'POST',
-      body: formData
+      body: formData,
     })
 
     if (!response.ok) {
@@ -1359,7 +1409,7 @@ const parseText = async () => {
         data: result.data,
         content: result.data.content,
         method: result.data.method,
-        medical_info: result.data.medical_info
+        medical_info: result.data.medical_info,
       }
 
       operationLog.value += `\n解析完成: 成功`
@@ -1399,31 +1449,32 @@ const smartImportTextResult = async () => {
     const medicalInfo = data.medical_info || {}
 
     // 提取患者姓名
-    const patientName = getMedicalInfoString(medicalInfo, 'patient_name') ||
-                       extractPatientNameFromContent(data.content) ||
-                       '文本导入患者'
+    const patientName =
+      getMedicalInfoString(medicalInfo, 'patient_name') ||
+      extractPatientNameFromContent(data.content) ||
+      '文本导入患者'
 
     const importData = {
       patient_name: patientName,
       content: data.content,
       file_info: {
         filename: 'text_input.txt',
-        size: (data.content ? data.content.length : 0),
+        size: data.content ? data.content.length : 0,
         type: 'text/plain',
-        pages: 1
+        pages: 1,
       },
       parse_result: {
         method: data.method,
-        medical_info: medicalInfo
-      }
+        medical_info: medicalInfo,
+      },
     }
 
     const response = await fetch(`${API_BASE_URL}/api/smart-import`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(importData)
+      body: JSON.stringify(importData),
     })
 
     if (!response.ok) {
@@ -1470,7 +1521,7 @@ const testAddFile = () => {
     error: null,
     previewUrl: null,
     imported: false,
-    importResult: null
+    importResult: null,
   }
   uploadedFiles.value.push(testFile)
   console.log('测试文件已添加，当前数量:', uploadedFiles.value.length)
@@ -1521,24 +1572,28 @@ const saveRecord = async () => {
 
   try {
     // 导入数据库服务
-    const { supabaseMedicalRecordService } = await import('@/services/supabaseMedicalRecordService')
+    const { medicalRecordPersistenceService } = await import(
+      '@/services/medical-record-persistence-service'
+    )
 
     // 准备保存的数据
     const recordData = Object.assign({}, parseResult.value.data, {
       source: 'smart_import',
       importedAt: new Date().toISOString(),
-      originalText: (currentFile.value && currentFile.value.parseResult && currentFile.value.parseResult.content) ? currentFile.value.parseResult.content : inputText.value
+      originalText:
+        currentFile.value && currentFile.value.parseResult && currentFile.value.parseResult.content
+          ? currentFile.value.parseResult.content
+          : inputText.value,
     })
 
     // 保存到数据库
-    const savedRecord = await supabaseMedicalRecordService.createMedicalRecord(recordData)
+    const savedRecord = await medicalRecordPersistenceService.createMedicalRecord(recordData)
 
     message.success('记录保存成功')
     operationLog.value += `\n记录已保存到数据库，ID: ${savedRecord.id}`
 
     // 可选：跳转到记录详情页
     // router.push(`/medical-records/${savedRecord.id}`)
-
   } catch (error: any) {
     console.error('保存失败:', error)
     message.error(`保存失败: ${error.message || error}`)
@@ -1621,12 +1676,12 @@ const getConfidenceColor = (confidence: number) => {
 // 获取文档类型颜色
 const getDocumentTypeColor = (type: string) => {
   const colorMap: Record<string, string> = {
-    'admission_record': 'blue',
-    'progress_note': 'green',
-    'operation_record': 'red',
-    'discharge_record': 'purple',
-    'auxiliary_examination': 'orange',
-    'informed_consent': 'cyan'
+    admission_record: 'blue',
+    progress_note: 'green',
+    operation_record: 'red',
+    discharge_record: 'purple',
+    auxiliary_examination: 'orange',
+    informed_consent: 'cyan',
   }
   return colorMap[type] || 'default'
 }
@@ -1634,12 +1689,12 @@ const getDocumentTypeColor = (type: string) => {
 // 获取文档类型名称
 const getDocumentTypeName = (type: string) => {
   const nameMap: Record<string, string> = {
-    'admission_record': '入院记录',
-    'progress_note': '病程记录',
-    'operation_record': '手术记录',
-    'discharge_record': '出院记录',
-    'auxiliary_examination': '辅助检查',
-    'informed_consent': '知情同意书'
+    admission_record: '入院记录',
+    progress_note: '病程记录',
+    operation_record: '手术记录',
+    discharge_record: '出院记录',
+    auxiliary_examination: '辅助检查',
+    informed_consent: '知情同意书',
   }
   return nameMap[type] || type
 }
@@ -1652,20 +1707,22 @@ const setupRealtimeSubscription = () => {
 
   realtimeSubscription.value = supabase
     .channel('medical_records_changes')
-    .on('postgres_changes',
+    .on(
+      'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'medical_records' },
       (payload) => {
         console.log('新的医疗记录创建:', payload.new)
         operationLog.value += `\n实时更新: 新记录已创建 (ID: ${payload.new.id})`
         message.info('检测到新的医疗记录创建')
-      }
+      },
     )
-    .on('postgres_changes',
+    .on(
+      'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'medical_records' },
       (payload) => {
         console.log('医疗记录更新:', payload.new)
         operationLog.value += `\n实时更新: 记录已更新 (ID: ${payload.new.id})`
-      }
+      },
     )
     .subscribe()
 }
@@ -1731,7 +1788,7 @@ onUnmounted(() => {
   console.log('SmartImportMedicalRecordNew 组件即将卸载')
 
   // 清理所有预览URL
-  uploadedFiles.value.forEach(file => {
+  uploadedFiles.value.forEach((file) => {
     if (file.previewUrl) {
       URL.revokeObjectURL(file.previewUrl)
     }
@@ -1758,7 +1815,7 @@ const handleModalConfirmOnly = (data: any) => {
     data: data,
     content: data.content,
     method: data.method || 'LLM解析',
-    medical_info: data.medical_info || {}
+    medical_info: data.medical_info || {},
   }
 
   // 切换到结果标签页，显示简化的结果信息
@@ -1810,7 +1867,7 @@ const autoSaveAndRedirect = async (data: any) => {
       confidence: data.confidence || 0,
       content: data.content || '',
       method: data.method || 'LLM解析',
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     }
 
     const response = await fetch(`${API_BASE_URL}/api/medical-records`, {
@@ -1818,14 +1875,14 @@ const autoSaveAndRedirect = async (data: any) => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(saveData)
+      body: JSON.stringify(saveData),
     })
 
     if (!response.ok) {
       throw new Error(`保存失败: ${response.status}`)
     }
 
-    const savedRecord = await response.json() as SavedRecord
+    const savedRecord = (await response.json()) as SavedRecord
     operationLog.value += `\n保存成功，记录ID: ${savedRecord.id}`
 
     message.success('解析结果已保存，正在跳转到详情页面...')
@@ -1834,7 +1891,6 @@ const autoSaveAndRedirect = async (data: any) => {
     setTimeout(() => {
       router.push(`/dashboard/medical-records/${savedRecord.id}`)
     }, 1500)
-
   } catch (error: any) {
     console.error('自动保存失败:', error)
     message.error(`自动保存失败: ${error.message}`)
@@ -1879,22 +1935,21 @@ const showBatchImportView = () => {
   This block is intentionally commented out to prioritize Tailwind utility classes.
 */
 
-
 .smart-import-page {
   /* Design tokens for this page */
-  --color-primary: #2563eb;        /* indigo-600 */
-  --color-primary-hover: #1d4ed8;  /* indigo-700 */
-  --color-primary-weak: #e8f1ff;   /* light bg */
+  --color-primary: #2563eb; /* indigo-600 */
+  --color-primary-hover: #1d4ed8; /* indigo-700 */
+  --color-primary-weak: #e8f1ff; /* light bg */
   --color-border: #e6eaf2;
   --color-surface: #ffffff;
   --color-surface-muted: #f7f9fc;
-  --color-text: #0f172a;           /* slate-900 */
-  --color-text-muted: #6b7280;     /* slate-500 */
+  --color-text: #0f172a; /* slate-900 */
+  --color-text-muted: #6b7280; /* slate-500 */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 14px;
-  --shadow-1: 0 1px 3px rgba(16, 24, 40, .06);
-  --shadow-2: 0 4px 12px rgba(16, 24, 40, .08);
+  --shadow-1: 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-2: 0 4px 12px rgba(16, 24, 40, 0.08);
   padding: 20px;
   background: linear-gradient(180deg, #f8fbff 0%, #fbfdff 100%);
 }
@@ -1929,15 +1984,19 @@ const showBatchImportView = () => {
 }
 
 /* Tabs */
-.smart-import-page :deep(.ant-tabs-nav::before) { border: none; }
-.smart-import-page :deep(.ant-tabs-tab) { border-radius: var(--radius-sm); }
+.smart-import-page :deep(.ant-tabs-nav::before) {
+  border: none;
+}
+.smart-import-page :deep(.ant-tabs-tab) {
+  border-radius: var(--radius-sm);
+}
 .smart-import-page :deep(.ant-tabs-tab-active) {
   background: var(--color-surface-muted);
 }
 
 /* Upload */
 .smart-import-page :deep(.ant-upload-drag) {
-  background: linear-gradient(135deg, rgba(237,248,255,.6), rgba(238,242,255,.6));
+  background: linear-gradient(135deg, rgba(237, 248, 255, 0.6), rgba(238, 242, 255, 0.6));
   border-radius: var(--radius-lg);
 }
 
@@ -1950,7 +2009,6 @@ const showBatchImportView = () => {
 .smart-import-page .main-card {
   max-width: 1320px;
 }
-
 
 .main-card {
   max-width: 1400px;
@@ -2083,7 +2141,8 @@ const showBatchImportView = () => {
   text-align: center;
 }
 
-.pdf-toolbar, .text-toolbar {
+.pdf-toolbar,
+.text-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2182,7 +2241,7 @@ const showBatchImportView = () => {
   font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.5;
-  box-shadow: inset 0 1px 3px rgba(0,0,0,.25);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 .log-actions {
@@ -2563,7 +2622,7 @@ pre {
 }
 
 .parse-stats {
-  background: linear-gradient(135deg, rgba(239,246,255,0.6), rgba(238,242,255,0.4));
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.6), rgba(238, 242, 255, 0.4));
   padding: 16px;
   border-radius: 14px;
   border: 1px solid #e9ecef;
@@ -2657,7 +2716,7 @@ pre {
 }
 
 .pdf-preview-container {
-  background: linear-gradient(135deg, rgba(255,255,255,0.8), rgba(239,246,255,0.6));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(239, 246, 255, 0.6));
   padding: 16px;
   border-radius: 14px;
   border: 1px solid #e8e8e8;
@@ -2731,5 +2790,4 @@ pre {
 .mb-4 {
   margin-bottom: 16px;
 }
-
-</stylex>
+</style>

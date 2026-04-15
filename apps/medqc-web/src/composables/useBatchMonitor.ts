@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { supabase, TABLES } from '@/lib/supabase'
+import { supabase, TABLES } from '@/lib/backend-store'
 import { message } from 'ant-design-vue'
 
 // 批量任务接口

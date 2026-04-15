@@ -1,10 +1,4 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export interface Database {
   public: {
@@ -60,11 +54,11 @@ export interface Database {
         }
         Relationships: [
           {
-            foreignKeyName: "medical_records_doctor_id_fkey"
-            columns: ["doctor_id"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
+            foreignKeyName: 'medical_records_doctor_id_fkey'
+            columns: ['doctor_id']
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
         ]
       }
       qc_results: {
@@ -121,17 +115,17 @@ export interface Database {
         }
         Relationships: [
           {
-            foreignKeyName: "qc_results_record_id_fkey"
-            columns: ["record_id"]
-            referencedRelation: "medical_records"
-            referencedColumns: ["id"]
+            foreignKeyName: 'qc_results_record_id_fkey'
+            columns: ['record_id']
+            referencedRelation: 'medical_records'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "qc_results_reviewer_id_fkey"
-            columns: ["reviewer_id"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
+            foreignKeyName: 'qc_results_reviewer_id_fkey'
+            columns: ['reviewer_id']
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
         ]
       }
       qc_rules: {
@@ -188,11 +182,11 @@ export interface Database {
         }
         Relationships: [
           {
-            foreignKeyName: "qc_rules_created_by_fkey"
-            columns: ["created_by"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
+            foreignKeyName: 'qc_rules_created_by_fkey'
+            columns: ['created_by']
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
         ]
       }
       user_roles: {
@@ -222,11 +216,11 @@ export interface Database {
         }
         Relationships: [
           {
-            foreignKeyName: "user_roles_user_id_fkey"
-            columns: ["user_id"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
+            foreignKeyName: 'user_roles_user_id_fkey'
+            columns: ['user_id']
+            referencedRelation: 'users'
+            referencedColumns: ['id']
+          },
         ]
       }
       qc_rules_embeddings: {
@@ -253,11 +247,11 @@ export interface Database {
         }
         Relationships: [
           {
-            foreignKeyName: "qc_rules_embeddings_id_fkey"
-            columns: ["id"]
-            referencedRelation: "qc_rules"
-            referencedColumns: ["id"]
-          }
+            foreignKeyName: 'qc_rules_embeddings_id_fkey'
+            columns: ['id']
+            referencedRelation: 'qc_rules'
+            referencedColumns: ['id']
+          },
         ]
       }
       qc_analysis_cache: {
@@ -329,11 +323,11 @@ export interface Database {
         }
         Relationships: [
           {
-            foreignKeyName: "qc_analysis_history_record_id_fkey"
-            columns: ["record_id"]
-            referencedRelation: "medical_records"
-            referencedColumns: ["id"]
-          }
+            foreignKeyName: 'qc_analysis_history_record_id_fkey'
+            columns: ['record_id']
+            referencedRelation: 'medical_records'
+            referencedColumns: ['id']
+          },
         ]
       }
     }
@@ -363,8 +357,7 @@ export type TablesInsert<T extends keyof Database['public']['Tables']> =
 export type TablesUpdate<T extends keyof Database['public']['Tables']> =
   Database['public']['Tables'][T]['Update']
 
-export type Enums<T extends keyof Database['public']['Enums']> =
-  Database['public']['Enums'][T]
+export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T]
 
 // 具体类型别名
 export type MedicalRecord = Tables<'medical_records'>
@@ -423,7 +416,7 @@ export interface QCStatistics {
     count: number
     average_score: number
   }>
-} 
+}
 
 // 增强的质控规则类型
 export interface EnhancedQCRule extends Omit<QCRule, 'check_logic'> {

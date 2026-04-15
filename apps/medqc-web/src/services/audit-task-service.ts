@@ -12,7 +12,7 @@ import type {
   RiskLevel,
 } from '@/types/audit-module'
 
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 import { integratedQCEngine } from './integrated-qc-engine'
 import { intelligentQCCache } from './intelligent-cache'
 

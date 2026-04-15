@@ -58,7 +58,7 @@ eggs/
 .eggs/
 lib/
 !src/lib/
-!src/lib/supabase.ts
+!src/lib/backend-store.ts
 lib64/
 parts/
 sdist/

@@ -4,7 +4,7 @@
  */
 
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { supabase, TABLES } from '@/lib/supabase'
+import { supabase, TABLES } from '@/lib/backend-store'
 import { analyzeWithDeepSeek } from '@/api/deepseek-api'
 import { wsManager } from '@/utils/websocket-manager'
 import { message } from 'ant-design-vue'
@@ -96,10 +96,12 @@ interface CombinedAnalysisResult {
 }
 
 const isAnalyzableRecord = (value: unknown): value is AnalyzableRecord => {
-  return typeof value === 'object'
-    && value !== null
-    && typeof (value as { id?: unknown }).id === 'string'
-    && typeof (value as { content?: unknown }).content === 'string'
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { id?: unknown }).id === 'string' &&
+    typeof (value as { content?: unknown }).content === 'string'
+  )
 }
 
 export function useRealTimeQC() {
@@ -111,7 +113,7 @@ export function useRealTimeQC() {
     activeAnalyses: 0,
     totalAnalysesToday: 0,
     averageResponseTime: 0,
-    systemLoad: 0
+    systemLoad: 0,
   })
 
   const activeAnalyses = ref<Map<string, RealTimeQCResult>>(new Map())
@@ -124,12 +126,12 @@ export function useRealTimeQC() {
   let messageUnsubscribe: (() => void) | null = null
 
   // 计算属性
-  const criticalIssues = computed(() => 
-    alertQueue.value.filter(issue => issue.severity === 'critical')
+  const criticalIssues = computed(() =>
+    alertQueue.value.filter((issue) => issue.severity === 'critical'),
   )
 
-  const warningIssues = computed(() => 
-    alertQueue.value.filter(issue => issue.severity === 'warning')
+  const warningIssues = computed(() =>
+    alertQueue.value.filter((issue) => issue.severity === 'warning'),
   )
 
   const systemHealth = computed(() => {
@@ -145,10 +147,10 @@ export function useRealTimeQC() {
   const startRealTimeMonitoring = async () => {
     try {
       console.log('🚀 启动实时质控监控...')
-      
+
       // 初始化WebSocket连接
       await initializeWebSocket()
-      
+
       // 加载质控规则
       await loadQCRules()
 
@@ -157,7 +159,7 @@ export function useRealTimeQC() {
 
       isMonitoring.value = true
       monitorStatus.value.isActive = true
-      
+
       message.success('实时质控监控已启动')
       console.log('✅ 实时质控监控启动成功')
     } catch (error) {
@@ -207,7 +209,7 @@ export function useRealTimeQC() {
         retryDelay: 2000,
         heartbeatInterval: 30000,
         reconnectOnError: true,
-        bufferSize: 50
+        bufferSize: 50,
       })
 
       // 监听消息
@@ -269,16 +271,17 @@ export function useRealTimeQC() {
       console.log(`🔍 开始实时质控分析: ${analysisId}`)
 
       // 创建分析记录
-      const analysis: RealTimeQCResult = { id: analysisId,
+      const analysis: RealTimeQCResult = {
+        id: analysisId,
         recordId: record.id,
         content: record.content,
         analysisResult: {},
         alertLevel: 'info',
         issues: [],
-        suggestions:  [],
+        suggestions: [],
         confidence: 0,
         timestamp: new Date().toISOString(),
-        processingTime: 0
+        processingTime: 0,
       }
 
       // 添加到活跃分析列表
@@ -287,16 +290,16 @@ export function useRealTimeQC() {
 
       // 应用质控规则
       const ruleResults = await applyQCRules(record.content)
-      
+
       // 执行AI分析
       const aiAnalysis = await analyzeWithDeepSeek(record.content)
-      
+
       // 合并分析结果
       const finalResult = mergeAnalysisResults(ruleResults, aiAnalysis)
-      
+
       // 计算处理时间
       const processingTime = Date.now() - startTime
-      
+
       // 更新分析结果
       analysis.analysisResult = finalResult
       analysis.alertLevel = determineAlertLevel(finalResult)
@@ -308,7 +311,7 @@ export function useRealTimeQC() {
       // 移除活跃分析，添加到结果列表
       activeAnalyses.value.delete(analysisId)
       recentResults.value.unshift(analysis)
-      
+
       // 保持最近结果列表大小
       if (recentResults.value.length > 100) {
         recentResults.value = recentResults.value.slice(0, 100)
@@ -325,11 +328,11 @@ export function useRealTimeQC() {
       return analysis
     } catch (error) {
       console.error(`❌ 实时质控分析失败: ${analysisId}`, error)
-      
+
       // 清理失败的分析
       activeAnalyses.value.delete(analysisId)
       monitorStatus.value.activeAnalyses = activeAnalyses.value.size
-      
+
       throw error
     }
   }
@@ -339,8 +342,8 @@ export function useRealTimeQC() {
    */
   const applyQCRules = async (content: string): Promise<RuleResultItem[]> => {
     const results: RuleResultItem[] = []
-    
-    for (const rule of qcRules.value.filter(r => r.isActive)) {
+
+    for (const rule of qcRules.value.filter((r) => r.isActive)) {
       try {
         const result = await applyRule(rule, content)
         if (result) {
@@ -350,7 +353,7 @@ export function useRealTimeQC() {
         console.error(`规则应用失败: ${rule.id}`, error)
       }
     }
-    
+
     return results
   }
 
@@ -377,20 +380,20 @@ export function useRealTimeQC() {
    */
   const applyContentRule = (rule: QCRule, content: string): RuleResultItem | null => {
     if (!rule.pattern) return null
-    
+
     const regex = new RegExp(rule.pattern, 'gi')
     const matches = content.match(regex)
-    
+
     if (matches) {
       return {
         ruleId: rule.id,
         type: rule.type,
         severity: rule.severity,
         message: `发现${matches.length}处内容问题: ${rule.description}`,
-        matches: matches
+        matches: matches,
       }
     }
-    
+
     return null
   }
 
@@ -400,7 +403,7 @@ export function useRealTimeQC() {
   const applyFormatRule = (rule: QCRule, content: string): RuleResultItem | null => {
     // 实现格式检查逻辑
     const issues: QCIssue[] = []
-    
+
     // 检查必要的格式要素
     const requiredSections = ['主诉', '现病史', '既往史', '体格检查']
     for (const section of requiredSections) {
@@ -408,18 +411,20 @@ export function useRealTimeQC() {
         issues.push({
           type: 'missing_section',
           message: `缺少必要章节: ${section}`,
-          severity: 'warning' as QCAlertLevel
+          severity: 'warning' as QCAlertLevel,
         })
       }
     }
-    
-    return issues.length > 0 ? {
-      ruleId: rule.id,
-      type: rule.type,
-      severity: rule.severity,
-      message: `发现${issues.length}个格式问题`,
-      issues: issues
-    } : null
+
+    return issues.length > 0
+      ? {
+          ruleId: rule.id,
+          type: rule.type,
+          severity: rule.severity,
+          message: `发现${issues.length}个格式问题`,
+          issues: issues,
+        }
+      : null
   }
 
   /**
@@ -428,28 +433,30 @@ export function useRealTimeQC() {
   const applyLogicRule = (rule: QCRule, content: string): RuleResultItem | null => {
     // 实现逻辑一致性检查
     const issues: QCIssue[] = []
-    
+
     // 检查年龄和疾病的逻辑一致性
     const ageMatch = content.match(/年龄[：:]\s*(\d+)/i)
     const age = ageMatch ? parseInt(ageMatch[1]) : null
-    
+
     if (age !== null) {
       if (age < 18 && content.includes('高血压')) {
         issues.push({
           type: 'logic_inconsistency',
           message: '年龄与疾病不符：未成年人患高血压较少见',
-          severity: 'warning' as QCAlertLevel
+          severity: 'warning' as QCAlertLevel,
         })
       }
     }
-    
-    return issues.length > 0 ? {
-      ruleId: rule.id,
-      type: rule.type,
-      severity: rule.severity,
-      message: `发现${issues.length}个逻辑问题`,
-      issues: issues
-    } : null
+
+    return issues.length > 0
+      ? {
+          ruleId: rule.id,
+          type: rule.type,
+          severity: rule.severity,
+          message: `发现${issues.length}个逻辑问题`,
+          issues: issues,
+        }
+      : null
   }
 
   /**
@@ -458,7 +465,7 @@ export function useRealTimeQC() {
   const applyCompletenessRule = (rule: QCRule, content: string): RuleResultItem | null => {
     // 实现完整性检查
     const issues: QCIssue[] = []
-    
+
     // 检查基本信息完整性
     const requiredInfo = ['姓名', '性别', '年龄', '科室']
     for (const info of requiredInfo) {
@@ -466,34 +473,36 @@ export function useRealTimeQC() {
         issues.push({
           type: 'missing_info',
           message: `缺少基本信息: ${info}`,
-          severity: 'error' as QCAlertLevel
+          severity: 'error' as QCAlertLevel,
         })
       }
     }
-    
-    return issues.length > 0 ? {
-      ruleId: rule.id,
-      type: rule.type,
-      severity: rule.severity,
-      message: `发现${issues.length}个完整性问题`,
-      issues: issues
-    } : null
+
+    return issues.length > 0
+      ? {
+          ruleId: rule.id,
+          type: rule.type,
+          severity: rule.severity,
+          message: `发现${issues.length}个完整性问题`,
+          issues: issues,
+        }
+      : null
   }
 
   /**
    * 合并分析结果
    */
-  const mergeAnalysisResults = (ruleResults: RuleResultItem[], aiAnalysis: unknown): CombinedAnalysisResult => {
-    const normalizedAIAnalysis: AIAnalysisLike = (
-      typeof aiAnalysis === 'object' && aiAnalysis !== null
-    )
-      ? (aiAnalysis as AIAnalysisLike)
-      : {}
+  const mergeAnalysisResults = (
+    ruleResults: RuleResultItem[],
+    aiAnalysis: unknown,
+  ): CombinedAnalysisResult => {
+    const normalizedAIAnalysis: AIAnalysisLike =
+      typeof aiAnalysis === 'object' && aiAnalysis !== null ? (aiAnalysis as AIAnalysisLike) : {}
 
     return {
       ruleResults,
       aiAnalysis: normalizedAIAnalysis,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     }
   }
 
@@ -502,7 +511,7 @@ export function useRealTimeQC() {
    */
   const determineAlertLevel = (analysisResult: CombinedAnalysisResult): QCAlertLevel => {
     const { ruleResults } = analysisResult
-    
+
     if (ruleResults.some((r) => r.severity === 'critical')) return 'critical'
     if (ruleResults.some((r) => r.severity === 'error')) return 'error'
     if (ruleResults.some((r) => r.severity === 'warning')) return 'warning'
@@ -514,7 +523,7 @@ export function useRealTimeQC() {
    */
   const extractIssues = (analysisResult: CombinedAnalysisResult): QCIssue[] => {
     const issues: QCIssue[] = []
-    
+
     // 从规则结果中提取问题
     for (const result of analysisResult.ruleResults) {
       if (result.issues) {
@@ -524,11 +533,11 @@ export function useRealTimeQC() {
           type: result.type,
           severity: result.severity,
           message: result.message,
-          ruleId: result.ruleId
+          ruleId: result.ruleId,
         })
       }
     }
-    
+
     return issues
   }
 
@@ -537,12 +546,12 @@ export function useRealTimeQC() {
    */
   const extractSuggestions = (analysisResult: CombinedAnalysisResult): string[] => {
     const suggestions: string[] = []
-    
+
     // 从AI分析结果中提取建议
     if (analysisResult.aiAnalysis?.suggestions) {
       suggestions.push(...analysisResult.aiAnalysis.suggestions)
     }
-    
+
     return suggestions
   }
 
@@ -553,9 +562,9 @@ export function useRealTimeQC() {
     // 基于规则匹配和AI分析结果计算置信度
     const ruleCount = analysisResult.ruleResults.length
     const aiConfidence = analysisResult.aiAnalysis?.confidence || 0.5
-    
+
     // 简单的置信度计算
-    return Math.min(0.5 + (ruleCount * 0.1) + (aiConfidence * 0.4), 1.0)
+    return Math.min(0.5 + ruleCount * 0.1 + aiConfidence * 0.4, 1.0)
   }
 
   /**
@@ -563,11 +572,11 @@ export function useRealTimeQC() {
    */
   const updateAnalysisStats = (processingTime: number) => {
     monitorStatus.value.totalAnalysesToday++
-    
+
     // 更新平均响应时间
     const currentAvg = monitorStatus.value.averageResponseTime
     const totalCount = monitorStatus.value.totalAnalysesToday
-    monitorStatus.value.averageResponseTime = 
+    monitorStatus.value.averageResponseTime =
       (currentAvg * (totalCount - 1) + processingTime) / totalCount
   }
 
@@ -578,12 +587,12 @@ export function useRealTimeQC() {
     for (const issue of analysis.issues) {
       // 添加到预警队列
       alertQueue.value.unshift(issue)
-      
+
       // 保持预警队列大小
       if (alertQueue.value.length > 50) {
         alertQueue.value = alertQueue.value.slice(0, 50)
       }
-      
+
       // 根据严重程度发送通知
       if (issue.severity === 'critical') {
         message.error(`严重质控问题: ${issue.message}`)
@@ -629,7 +638,7 @@ export function useRealTimeQC() {
         type: 'completeness',
         severity: 'error',
         isActive: true,
-        priority: 10
+        priority: 10,
       },
       {
         id: 'rule_002',
@@ -638,7 +647,7 @@ export function useRealTimeQC() {
         type: 'format',
         severity: 'warning',
         isActive: true,
-        priority: 8
+        priority: 8,
       },
       {
         id: 'rule_003',
@@ -647,8 +656,8 @@ export function useRealTimeQC() {
         type: 'logic',
         severity: 'warning',
         isActive: true,
-        priority: 6
-      }
+        priority: 6,
+      },
     ]
   }
 
@@ -668,9 +677,9 @@ export function useRealTimeQC() {
     // 模拟系统负载计算
     const activeCount = activeAnalyses.value.size
     const recentCount = recentResults.value.length
-    
+
     monitorStatus.value.activeAnalyses = activeCount
-    monitorStatus.value.systemLoad = Math.min((activeCount * 10) + (recentCount * 0.5), 100)
+    monitorStatus.value.systemLoad = Math.min(activeCount * 10 + recentCount * 0.5, 100)
   }
 
   /**
@@ -690,16 +699,16 @@ export function useRealTimeQC() {
     recentResults,
     qcRules,
     alertQueue,
-    
+
     // 计算属性
     criticalIssues,
     warningIssues,
     systemHealth,
-    
+
     // 方法
     startRealTimeMonitoring,
     stopRealTimeMonitoring,
     performRealTimeAnalysis,
-    loadQCRules
+    loadQCRules,
   }
 }

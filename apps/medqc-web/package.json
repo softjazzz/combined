@@ -62,7 +62,6 @@
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
-    "@supabase/supabase-js": "^2.57.4",
     "@types/crypto-js": "^4.2.2",
     "ant-design-vue": "^4.2.6",
     "axios": "^1.11.0",

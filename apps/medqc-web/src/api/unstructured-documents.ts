@@ -3,7 +3,7 @@
  * 用于处理复制粘贴的原始病历文本
  */
 
-import { supabase, TABLES } from '@/lib/supabase'
+import { supabase, TABLES } from '@/lib/backend-store'
 import { ApiWrapper } from '@/utils/api-wrapper'
 import type { ApiResponse } from '@/utils/api-wrapper'
 import type { Database } from '@/types/database'

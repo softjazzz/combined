@@ -2,12 +2,12 @@
  * 医疗记录API服务
  * 处理病案记录的增删改查操作
  */
-import { supabase, TABLES, STORAGE_BUCKETS } from '../lib/supabase'
+import { supabase, TABLES, STORAGE_BUCKETS } from '../lib/backend-store'
 import type { Database } from '../types/database'
-import type { 
-  MedicalRecord, 
+import type {
+  MedicalRecord,
   CreateMedicalRecordRequest,
-  MedicalRecordStatus 
+  MedicalRecordStatus,
 } from '../types/medical-records'
 import { ApiWrapper } from '../utils/api-wrapper'
 import type { ApiResponse } from '../utils/api-wrapper'
@@ -31,21 +31,25 @@ export async function getMedicalRecords(options?: {
     .order('created_at', { ascending: false })
 
   const queryOptions = {
-    page: options?.offset && options?.limit ? Math.floor(options.offset / options.limit) + 1 : undefined,
+    page:
+      options?.offset && options?.limit
+        ? Math.floor(options.offset / options.limit) + 1
+        : undefined,
     pageSize: options?.limit,
     filters: {
       status: options?.status,
-      department: options?.department
-    }
+      department: options?.department,
+    },
   }
 
   const query = ApiWrapper.buildQuery(baseQuery, queryOptions)
 
-  return ApiWrapper.query(async () => { const result = await query
+  return ApiWrapper.query(async () => {
+    const result = await query
     return {
       data: result.data?.map(convertRowToMedicalRecord) || [],
       error: result.error,
-      count: result.count
+      count: result.count,
     }
   })
 }
@@ -53,20 +57,14 @@ export async function getMedicalRecords(options?: {
 /**
  * 根据ID获取医疗记录
  */
-export async function getMedicalRecordById(
-  id: string
-): Promise<ApiResponse<MedicalRecord>> {
+export async function getMedicalRecordById(id: string): Promise<ApiResponse<MedicalRecord>> {
   return ApiWrapper.query(async () => {
-    const result = await supabase
-      .from(TABLES.MEDICAL_RECORDS)
-      .select('*')
-      .eq('id', id)
-      .single()
+    const result = await supabase.from(TABLES.MEDICAL_RECORDS).select('*').eq('id', id).single()
 
     return {
       data: result.data ? convertRowToMedicalRecord(result.data) : null,
       error: result.error,
-      count: null
+      count: null,
     }
   })
 }
@@ -75,7 +73,7 @@ export async function getMedicalRecordById(
  * 创建医疗记录
  */
 export async function createMedicalRecord(
-  request: CreateMedicalRecordRequest
+  request: CreateMedicalRecordRequest,
 ): Promise<ApiResponse<MedicalRecord>> {
   try {
     // 处理文件上传
@@ -86,9 +84,13 @@ export async function createMedicalRecord(
     if (request.file) {
       const file = request.file
       const filePath = `${Date.now()}-${file.name}`
-      
-      const uploadResult = await ApiWrapper.uploadFile(file, STORAGE_BUCKETS.MEDICAL_FILES, filePath)
-      
+
+      const uploadResult = await ApiWrapper.uploadFile(
+        file,
+        STORAGE_BUCKETS.MEDICAL_FILES,
+        filePath,
+      )
+
       if (!uploadResult.success) {
         throw new Error(`文件上传失败: ${uploadResult.error?.message}`)
       }
@@ -112,7 +114,7 @@ export async function createMedicalRecord(
       file_size: fileSize,
       status: 'pending',
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     }
 
     return ApiWrapper.insert(async () => {
@@ -124,16 +126,15 @@ export async function createMedicalRecord(
 
       return {
         data: result.data ? convertRowToMedicalRecord(result.data) : null,
-        error: result.error
+        error: result.error,
       }
     })
-
   } catch (error) {
     return {
       success: false,
       error: {
-        message: error instanceof Error ? error.message : '创建医疗记录失败'
-      }
+        message: error instanceof Error ? error.message : '创建医疗记录失败',
+      },
     }
   }
 }
@@ -143,11 +144,11 @@ export async function createMedicalRecord(
  */
 export async function updateMedicalRecord(
   id: string,
-  updates: Partial<MedicalRecordUpdate>
+  updates: Partial<MedicalRecordUpdate>,
 ): Promise<ApiResponse<MedicalRecord>> {
   const updateData: MedicalRecordUpdate = {
     ...updates,
-    updated_at: new Date().toISOString()
+    updated_at: new Date().toISOString(),
   }
 
   return ApiWrapper.update(async () => {
@@ -160,7 +161,7 @@ export async function updateMedicalRecord(
 
     return {
       data: result.data ? convertRowToMedicalRecord(result.data) : null,
-      error: result.error
+      error: result.error,
     }
   })
 }
@@ -170,14 +171,11 @@ export async function updateMedicalRecord(
  */
 export async function deleteMedicalRecord(id: string): Promise<ApiResponse<boolean>> {
   return ApiWrapper.delete(async () => {
-    const result = await supabase
-      .from(TABLES.MEDICAL_RECORDS)
-      .delete()
-      .eq('id', id)
+    const result = await supabase.from(TABLES.MEDICAL_RECORDS).delete().eq('id', id)
 
     return {
       data: !result.error,
-      error: result.error
+      error: result.error,
     }
   })
 }
@@ -185,16 +183,18 @@ export async function deleteMedicalRecord(id: string): Promise<ApiResponse<boole
 /**
  * 批量删除医疗记录
  */
-export async function batchDeleteMedicalRecords(ids: string[]): Promise<ApiResponse<{
-  deleted: number
-  failed: number
-  errors: string[]
-}>> {
-  const operations = ids.map(id => () => deleteMedicalRecord(id))
-  
+export async function batchDeleteMedicalRecords(ids: string[]): Promise<
+  ApiResponse<{
+    deleted: number
+    failed: number
+    errors: string[]
+  }>
+> {
+  const operations = ids.map((id) => () => deleteMedicalRecord(id))
+
   const result = await ApiWrapper.batchOperation(operations, {
     continueOnError: true,
-    maxConcurrency: 3
+    maxConcurrency: 3,
   })
 
   return {
@@ -202,10 +202,8 @@ export async function batchDeleteMedicalRecords(ids: string[]): Promise<ApiRespo
     data: {
       deleted: result.summary.successful,
       failed: result.summary.failed,
-      errors: result.results
-        .filter(r => !r.success)
-        .map(r => r.error?.message || '未知错误')
-    }
+      errors: result.results.filter((r) => !r.success).map((r) => r.error?.message || '未知错误'),
+    },
   }
 }
 
@@ -217,7 +215,7 @@ export async function searchMedicalRecords(
   options?: {
     limit?: number
     offset?: number
-  }
+  },
 ): Promise<ApiResponse<MedicalRecord[]>> {
   const searchQuery = supabase
     .from(TABLES.MEDICAL_RECORDS)
@@ -226,17 +224,21 @@ export async function searchMedicalRecords(
     .order('created_at', { ascending: false })
 
   const queryOptions = {
-    page: options?.offset && options?.limit ? Math.floor(options.offset / options.limit) + 1 : undefined,
-    pageSize: options?.limit
+    page:
+      options?.offset && options?.limit
+        ? Math.floor(options.offset / options.limit) + 1
+        : undefined,
+    pageSize: options?.limit,
   }
 
   const finalQuery = ApiWrapper.buildQuery(searchQuery, queryOptions)
 
-  return ApiWrapper.query(async () => { const result = await finalQuery
+  return ApiWrapper.query(async () => {
+    const result = await finalQuery
     return {
       data: result.data?.map(convertRowToMedicalRecord) || [],
       error: result.error,
-      count: result.count
+      count: result.count,
     }
   })
 }
@@ -244,15 +246,15 @@ export async function searchMedicalRecords(
 /**
  * 获取医疗记录统计
  */
-export async function getMedicalRecordStats(): Promise<ApiResponse<{
-  total: number
-  byStatus: Record<MedicalRecordStatus, number>
-  byDepartment: Record<string, number>
-}>> {
+export async function getMedicalRecordStats(): Promise<
+  ApiResponse<{
+    total: number
+    byStatus: Record<MedicalRecordStatus, number>
+    byDepartment: Record<string, number>
+  }>
+> {
   return ApiWrapper.query(async () => {
-    const result = await supabase
-      .from(TABLES.MEDICAL_RECORDS)
-      .select('status, department')
+    const result = await supabase.from(TABLES.MEDICAL_RECORDS).select('status, department')
 
     if (result.error) {
       return { data: null, error: result.error, count: null }
@@ -261,20 +263,27 @@ export async function getMedicalRecordStats(): Promise<ApiResponse<{
     const records = result.data || []
     const total = records.length
 
-    const byStatus = records.reduce((acc, record) => {
-      acc[record.status as MedicalRecordStatus] = (acc[record.status as MedicalRecordStatus] || 0) + 1
-      return acc
-    }, {} as Record<MedicalRecordStatus, number>)
+    const byStatus = records.reduce(
+      (acc, record) => {
+        acc[record.status as MedicalRecordStatus] =
+          (acc[record.status as MedicalRecordStatus] || 0) + 1
+        return acc
+      },
+      {} as Record<MedicalRecordStatus, number>,
+    )
 
-    const byDepartment = records.reduce((acc, record) => {
-      acc[record.department] = (acc[record.department] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
+    const byDepartment = records.reduce(
+      (acc, record) => {
+        acc[record.department] = (acc[record.department] || 0) + 1
+        return acc
+      },
+      {} as Record<string, number>,
+    )
 
     return {
       data: { total, byStatus, byDepartment },
       error: null,
-      count: null
+      count: null,
     }
   })
 }
@@ -299,9 +308,9 @@ function convertRowToMedicalRecord(row: MedicalRecordRow): MedicalRecord {
     qc_score: row.qc_score || undefined,
     qc_grade: row.qc_grade as 'A' | 'B' | 'C' | undefined,
     created_at: row.created_at,
-    updated_at: row.updated_at
+    updated_at: row.updated_at,
   }
-} 
+}
 
 // ===== Compatibility exports for legacy doctor workstation =====
 export type { MedicalRecord }
@@ -318,11 +327,15 @@ export interface QCAnalysisResult {
   suggestions?: string[]
 }
 
-export async function getDemoMedicalRecords(_scenario?: string): Promise<ApiResponse<MedicalRecord[]>> {
+export async function getDemoMedicalRecords(
+  _scenario?: string,
+): Promise<ApiResponse<MedicalRecord[]>> {
   return getMedicalRecords({ limit: 20, offset: 0 })
 }
 
-export async function getDoctorWorkstationTemplates(): Promise<ApiResponse<MedicalRecordTemplate[]>> {
+export async function getDoctorWorkstationTemplates(): Promise<
+  ApiResponse<MedicalRecordTemplate[]>
+> {
   return {
     success: true,
     data: [],
@@ -331,14 +344,14 @@ export async function getDoctorWorkstationTemplates(): Promise<ApiResponse<Medic
 
 export async function saveMedicalRecordDraft(
   id: string,
-  updates: Partial<MedicalRecordUpdate>
+  updates: Partial<MedicalRecordUpdate>,
 ): Promise<ApiResponse<MedicalRecord>> {
   return updateMedicalRecord(id, updates)
 }
 
 export async function submitRecordForQCAnalysis(
   _recordId: string,
-  _content: string
+  _content: string,
 ): Promise<ApiResponse<QCAnalysisResult>> {
   return {
     success: true,

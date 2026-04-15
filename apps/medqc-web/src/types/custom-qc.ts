@@ -1,4 +1,4 @@
-import type { Database } from '@/types/supabase'
+import type { Database } from '@/types/database-schema'
 
 export type QCRuleInsert = Database['public']['Tables']['qc_rules']['Insert']
 

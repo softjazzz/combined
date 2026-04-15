@@ -3,7 +3,7 @@
  * 在浏览器控制台中调用此函数来创建表
  */
 
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 
 // 创建表的SQL语句
 const CREATE_TABLE_SQL = `
@@ -59,7 +59,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.batch_processing_tasks TO authent
 export async function createBatchTable() {
   try {
     console.log('🔄 开始创建批量处理任务表...')
-    
+
     // 尝试直接插入一条测试记录来检查表是否存在
     const { data: user } = await supabase.auth.getUser()
     if (!user.user) {
@@ -84,7 +84,7 @@ export async function createBatchTable() {
     console.log(CREATE_TABLE_SQL)
     console.log('-----------------------------------')
     console.log('🔗 Supabase控制台地址：https://supabase.com/dashboard/project/YOUR_PROJECT/sql')
-    
+
     return false
   } catch (error) {
     console.error('❌ 检查表失败:', error)
@@ -114,7 +114,7 @@ export async function createTestData() {
         failed_items: 0,
         status: 'completed',
         progress_percentage: 100,
-        completed_at: new Date().toISOString()
+        completed_at: new Date().toISOString(),
       },
       {
         user_id: user.user.id,
@@ -123,14 +123,11 @@ export async function createTestData() {
         processed_items: 3,
         failed_items: 1,
         status: 'processing',
-        progress_percentage: 60
-      }
+        progress_percentage: 60,
+      },
     ]
 
-    const { data, error } = await supabase
-      .from('batch_processing_tasks')
-      .insert(testTasks)
-      .select()
+    const { data, error } = await supabase.from('batch_processing_tasks').insert(testTasks).select()
 
     if (error) {
       console.error('❌ 创建测试数据失败:', error)
@@ -161,10 +158,7 @@ export async function testTableAccess() {
     console.log('👤 当前用户ID:', user.user.id)
 
     // 测试查询
-    const { data, error } = await supabase
-      .from('batch_processing_tasks')
-      .select('*')
-      .limit(5)
+    const { data, error } = await supabase.from('batch_processing_tasks').select('*').limit(5)
 
     if (error) {
       console.error('❌ 查询失败:', error)

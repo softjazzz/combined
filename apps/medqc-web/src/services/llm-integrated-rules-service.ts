@@ -21,7 +21,7 @@ import type {
   ValidationResult,
 } from '@/types/llm-integration'
 
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 
 type ImportedRule = Partial<EnhancedQCRule> & { id: string; rule_code?: string }
 type RpcRuleLike = {

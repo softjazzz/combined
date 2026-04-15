@@ -3,7 +3,7 @@
  * 优化实时质控监控的WebSocket连接性能
  */
 
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 
 // WebSocket连接状态
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'

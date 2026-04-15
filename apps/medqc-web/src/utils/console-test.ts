@@ -3,13 +3,13 @@
  * 直接在浏览器控制台中使用
  */
 
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 
 // 测试表访问权限
 async function testBatchTable() {
   try {
     console.log('🔍 测试批量处理任务表访问...')
-    
+
     const { data: user } = await supabase.auth.getUser()
     if (!user.user) {
       console.error('❌ 用户未登录')
@@ -51,7 +51,7 @@ async function testBatchTable() {
         user_id: user.user.id,
         task_type: 'upload',
         total_items: 1,
-        status: 'pending'
+        status: 'pending',
       })
       .select()
       .single()
@@ -73,7 +73,7 @@ async function testBatchTable() {
 async function testBatchUpload() {
   try {
     console.log('🚀 测试批量上传功能...')
-    
+
     // 创建测试文件
     const testContent = `患者姓名：测试患者
 性别：男
@@ -83,7 +83,7 @@ async function testBatchUpload() {
 主诉：测试主诉`
 
     const testFile = new File([testContent], '测试病案.txt', { type: 'text/plain' })
-    
+
     console.log('📁 创建测试文件:', testFile)
 
     // 这里可以测试文件处理逻辑
@@ -105,7 +105,7 @@ async function testBatchUpload() {
 async function checkBatchMonitor() {
   try {
     console.log('📊 检查批量监控组件状态...')
-    
+
     // 查找批量监控组件
     const monitorElement = document.querySelector('.batch-progress-monitor')
     if (monitorElement) {
@@ -134,7 +134,7 @@ if (typeof window !== 'undefined') {
   ;(window as any).testBatchTable = testBatchTable
   ;(window as any).testBatchUpload = testBatchUpload
   ;(window as any).checkBatchMonitor = checkBatchMonitor
-  
+
   console.log('🧪 控制台测试工具已加载')
   console.log('📝 可用命令：')
   console.log('   testBatchTable() - 测试批量任务表')

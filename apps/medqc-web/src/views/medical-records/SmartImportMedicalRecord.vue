@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <!-- 面包屑导航 -->
     <a-breadcrumb class="breadcrumb">
@@ -686,8 +686,8 @@ const MedicalDocumentTree = defineAsyncComponent(
 )
 
 let llmServicePromise: Promise<typeof import('@/services/llmServiceNew')> | null = null
-let supabaseMedicalRecordServicePromise: Promise<
-  typeof import('@/services/supabaseMedicalRecordService')
+let medicalRecordPersistenceServicePromise: Promise<
+  typeof import('@/services/medical-record-persistence-service')
 > | null = null
 let documentParserPromise: Promise<typeof import('@/utils/documentParser')> | null = null
 
@@ -696,11 +696,11 @@ const getLLMService = async () => {
   return module.llmService
 }
 
-const getSupabaseMedicalRecordService = async () => {
-  const module = await (supabaseMedicalRecordServicePromise ??= import(
-    '@/services/supabaseMedicalRecordService'
+const getMedicalRecordPersistenceService = async () => {
+  const module = await (medicalRecordPersistenceServicePromise ??= import(
+    '@/services/medical-record-persistence-service'
   ))
-  return module.supabaseMedicalRecordService
+  return module.medicalRecordPersistenceService
 }
 
 const getDocumentParser = async () => {
@@ -1537,9 +1537,9 @@ const handleConfirmImport = async () => {
       confidence: averageConfidence.value,
     }
 
-    // 保存到Supabase数据库（测试表）
-    const supabaseMedicalRecordService = await getSupabaseMedicalRecordService()
-    const savedRecord = await supabaseMedicalRecordService.saveAIExtractionResult(
+    // 保存到后端数据库
+    const medicalRecordPersistenceService = await getMedicalRecordPersistenceService()
+    const savedRecord = await medicalRecordPersistenceService.saveAIExtractionResult(
       extractedMedicalData,
       rawText,
       inputMethodUsed,

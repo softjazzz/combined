@@ -4,14 +4,17 @@
  * 病案质控系统 - 用户认证与权限控制
  */
 
-import type { User as SupabaseUser } from '@supabase/supabase-js'
+interface BaseAuthUser {
+  id: string
+  email?: string
+}
 
 // 用户角色枚举
 export enum UserRole {
   ADMIN = 'admin',
   QC_MANAGER = 'qc_manager',
   QC_STAFF = 'qc_staff',
-  DOCTOR = 'doctor'
+  DOCTOR = 'doctor',
 }
 
 // 权限操作枚举
@@ -23,7 +26,7 @@ export enum PermissionAction {
   ANALYZE = 'analyze',
   REVIEW = 'review',
   MANAGE = 'manage',
-  EXPORT = 'export'
+  EXPORT = 'export',
 }
 
 // 资源类型枚举
@@ -33,11 +36,11 @@ export enum ResourceType {
   QC_RULES = 'qc_rules',
   USERS = 'users',
   STATISTICS = 'statistics',
-  SETTINGS = 'settings'
+  SETTINGS = 'settings',
 }
 
 // 扩展的用户信息接口
-export interface User extends SupabaseUser {
+export interface User extends BaseAuthUser {
   id: string
   email?: string
   display_name?: string
@@ -97,7 +100,7 @@ export interface LoginRequest {
   account: string
   email?: string
   password: string
-  role?: string  // 改为字符串类型，与后端API保持一致
+  role?: string // 改为字符串类型，与后端API保持一致
   remember_me?: boolean
 }
 
@@ -197,7 +200,7 @@ export enum UserStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
   LOCKED = 'locked',
-  SUSPENDED = 'suspended'
+  SUSPENDED = 'suspended',
 }
 
 // 用户管理相关
@@ -234,7 +237,7 @@ export type PermissionChecker = (
   user: User,
   resource: ResourceType,
   action: PermissionAction,
-  context?: Record<string, unknown>
+  context?: Record<string, unknown>,
 ) => Promise<PermissionCheckResult>
 
 // 认证状态

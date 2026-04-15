@@ -3,7 +3,7 @@
  * 用于创建批量处理任务表和相关配置
  */
 
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/backend-store'
 
 // 批量处理任务表创建SQL
 const CREATE_BATCH_TASKS_TABLE = `
@@ -93,7 +93,6 @@ export async function initBatchTasksTable(): Promise<boolean> {
     console.log('-----------------------------------')
 
     return false
-
   } catch (error) {
     console.error('❌ 初始化批量处理任务表失败:', error)
     return false
@@ -105,10 +104,7 @@ export async function initBatchTasksTable(): Promise<boolean> {
  */
 export async function checkBatchTasksTable(): Promise<boolean> {
   try {
-    const { error } = await supabase
-      .from('batch_processing_tasks')
-      .select('count(*)')
-      .limit(1)
+    const { error } = await supabase.from('batch_processing_tasks').select('count(*)').limit(1)
 
     return !error
   } catch (error) {
@@ -137,7 +133,7 @@ export async function createTestBatchTasks(): Promise<boolean> {
         failed_items: 0,
         status: 'completed',
         progress_percentage: 100,
-        completed_at: new Date().toISOString()
+        completed_at: new Date().toISOString(),
       },
       {
         user_id: user.user.id,
@@ -146,13 +142,11 @@ export async function createTestBatchTasks(): Promise<boolean> {
         processed_items: 3,
         failed_items: 1,
         status: 'processing',
-        progress_percentage: 60
-      }
+        progress_percentage: 60,
+      },
     ]
 
-    const { error } = await supabase
-      .from('batch_processing_tasks')
-      .insert(testTasks)
+    const { error } = await supabase.from('batch_processing_tasks').insert(testTasks)
 
     if (error) {
       console.error('创建测试数据失败:', error)
@@ -176,14 +170,14 @@ export async function autoInitDatabase(): Promise<void> {
   }
 
   console.log('🚀 开发环境：自动初始化数据库...')
-  
+
   // 检查表是否存在
   const tableExists = await checkBatchTasksTable()
-  
+
   if (!tableExists) {
     console.log('⚠️ 批量处理任务表不存在，尝试初始化...')
     const initSuccess = await initBatchTasksTable()
-    
+
     if (!initSuccess) {
       console.error('❌ 自动初始化失败，请手动执行 database-init.sql 脚本')
       console.log('📝 请在Supabase控制台的SQL编辑器中执行以下脚本：')
