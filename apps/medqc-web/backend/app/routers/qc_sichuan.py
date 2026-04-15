@@ -805,7 +805,6 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
         all_items: List[Dict[str, Any]] = []
         all_failed_records: List[Dict[str, Any]] = []
-        rule_results: List[Dict[str, Any]] = []
         issue_record_ids: set[str] = set()
         failed_record_ids: set[str] = set()
         total_tokens = 0
@@ -815,23 +814,30 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         cache_hit = 0
         cache_miss = 0
 
-        for rule_index, rule_id in enumerate(rule_ids):
-            latest = workspace.get_batch_job_for_processing(job_id=job_id)
-            if not latest or str(latest.get("status") or "").lower() == "canceled":
-                logger.info("四川批量任务 %s 已取消，停止执行", job_id)
-                return
-
+        # 预加载规则，后续按病历一次性评估全部规则，再回填到每条规则结果。
+        # 这样可触发 orchestrator 的分桶并发，避免规则级外层串行瓶颈。
+        rule_states: Dict[str, Dict[str, Any]] = {}
+        valid_rule_ids: List[str] = []
+        for rule_id in rule_ids:
             rule = qc_service.get_rule_by_id(rule_id)
             rule_name = str((rule or {}).get("name") or rule_id)
             rule_code = str((rule or {}).get("rule_code") or rule_id)
             rule_job_id = str(uuid.uuid4())
-            rule_items: List[Dict[str, Any]] = []
-            rule_failed: List[Dict[str, Any]] = []
-            rule_tokens = 0
-            rule_processing_time = 0.0
-
+            state = {
+                "rule_id": rule_id,
+                "rule": rule,
+                "rule_name": rule_name,
+                "rule_code": rule_code,
+                "rule_job_id": rule_job_id,
+                "items": [],
+                "failed_records": [],
+                "total_tokens": 0,
+                "total_processing_time": 0.0,
+                "executor_program": 0,
+                "executor_llm": 0,
+            }
             if not rule:
-                rule_failed.append(
+                state["failed_records"].append(
                     {
                         "rule_job_id": rule_job_id,
                         "rule_id": rule_id,
@@ -842,107 +848,140 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     }
                 )
             else:
-                for record in hydrated_records:
-                    record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
-                    try:
-                        document_type = _resolve_document_type(
-                            str(current.get("scope") or "all"),
-                            str(record.get("scope") or ""),
-                        )
-                        result = await qc_service.evaluate_document(
-                            document_id=record_id or "unknown",
-                            content=str(record.get("medical_text") or ""),
-                            document_type=document_type,
-                            rule_ids=[rule_id],
-                        )
-                        eval_items = list(result.get("evaluation_results") or [])
-                        eval_item = eval_items[0] if eval_items else {}
-                        status = str(eval_item.get("status") or "")
-                        metadata = dict(eval_item.get("metadata") or {})
-                        if status == "non_compliant":
-                            issue_record_ids.add(record_id)
-                        tokens_used = int(metadata.get("tokens_used") or 0)
-                        api_time = float(metadata.get("api_time") or 0.0)
-                        total_tokens += tokens_used
-                        total_processing_time += api_time
-                        rule_tokens += tokens_used
-                        rule_processing_time += api_time
-                        executor_type = str(metadata.get("executor_type") or "llm").lower()
-                        if executor_type == "program":
-                            executor_program += 1
-                        else:
-                            executor_llm += 1
-                        if metadata.get("cache_hit") is True:
-                            cache_hit += 1
-                        else:
-                            cache_miss += 1
+                valid_rule_ids.append(rule_id)
+            rule_states[rule_id] = state
 
-                        issue_item = {
-                            "rule_job_id": rule_job_id,
-                            "rule_id": str(eval_item.get("rule_id") or rule_id),
-                            "rule_code": rule_code,
-                            "rule_name": str(eval_item.get("rule_name") or rule_name),
-                            "record_id": record_id,
-                            "visit_id": str(record.get("visit_id") or ""),
-                            "patient_name": str(record.get("patient_name") or ""),
-                            "department": str(record.get("department") or ""),
-                            "status": status or ("compliant" if eval_item.get("is_compliant") else "non_compliant"),
-                            "is_compliant": bool(eval_item.get("is_compliant") is True),
-                            "findings": str(eval_item.get("findings") or ""),
-                            "evidence": str(eval_item.get("evidence") or ""),
-                            "suggestion": str(eval_item.get("suggestion") or ""),
-                            "confidence": float(eval_item.get("confidence") or 0),
-                            "executor_type": executor_type,
-                            "rule_version": str(metadata.get("rule_version") or ""),
-                            "prompt_version": str(metadata.get("prompt_version") or ""),
-                            "model_version": str(metadata.get("model_version") or ""),
-                            "evidence_source": str(metadata.get("evidence_source") or ""),
-                            "cache_hit": bool(metadata.get("cache_hit") is True),
-                            "trace_id": str(metadata.get("trace_id") or ""),
-                            "cache_key": str(metadata.get("cache_key") or ""),
-                            "execution_domain": str(metadata.get("execution_domain") or ""),
-                            "doc_scope": str(metadata.get("doc_scope") or ""),
-                            "cost_class": str(metadata.get("cost_class") or ""),
-                            "document_type": document_type,
-                            "defect_level": str(rule.get("defect_level") or ""),
-                            "llm_fallback": bool(metadata.get("llm_fallback") is True),
-                        }
-                        if issue_item["status"] == "non_compliant":
-                            rule_items.append(issue_item)
-                            all_items.append(issue_item)
-                    except Exception as exc:
-                        failed_record_ids.add(record_id)
-                        failed_payload = {
-                            "rule_job_id": rule_job_id,
-                            "rule_id": rule_id,
-                            "rule_code": rule_code,
-                            "rule_name": rule_name,
-                            "record_id": record_id,
-                            "visit_id": str(record.get("visit_id") or ""),
-                            "patient_name": str(record.get("patient_name") or ""),
-                            "department": str(record.get("department") or ""),
-                            "error_phase": "evaluate_document",
-                            "error": str(exc),
-                        }
-                        rule_failed.append(failed_payload)
-                        all_failed_records.append(failed_payload)
+        for record in hydrated_records:
+            latest = workspace.get_batch_job_for_processing(job_id=job_id)
+            if not latest or str(latest.get("status") or "").lower() == "canceled":
+                logger.info("四川批量任务 %s 已取消，停止执行", job_id)
+                return
 
+            record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
+            document_type = _resolve_document_type(
+                str(current.get("scope") or "all"),
+                str(record.get("scope") or ""),
+            )
+            try:
+                result = await qc_service.evaluate_document(
+                    document_id=record_id or "unknown",
+                    content=str(record.get("medical_text") or ""),
+                    document_type=document_type,
+                    rule_ids=valid_rule_ids,
+                )
+                eval_items = list(result.get("evaluation_results") or [])
+                eval_map: Dict[str, Dict[str, Any]] = {}
+                for eval_item in eval_items:
+                    key = str(eval_item.get("rule_id") or eval_item.get("rule_code") or "").strip().upper()
+                    if key and key not in eval_map:
+                        eval_map[key] = dict(eval_item)
+
+                for rule_id in valid_rule_ids:
+                    state = rule_states[rule_id]
+                    rule = state["rule"]
+                    rule_name = str(state["rule_name"])
+                    rule_code = str(state["rule_code"])
+                    rule_job_id = str(state["rule_job_id"])
+                    eval_item = eval_map.get(str(rule_id).strip().upper()) or {}
+                    status = str(eval_item.get("status") or "")
+                    metadata = dict(eval_item.get("metadata") or {})
+                    if status == "non_compliant":
+                        issue_record_ids.add(record_id)
+
+                    tokens_used = int(metadata.get("tokens_used") or 0)
+                    api_time = float(metadata.get("api_time") or 0.0)
+                    total_tokens += tokens_used
+                    total_processing_time += api_time
+                    state["total_tokens"] = int(state["total_tokens"] or 0) + tokens_used
+                    state["total_processing_time"] = float(state["total_processing_time"] or 0.0) + api_time
+
+                    executor_type = str(metadata.get("executor_type") or "llm").lower()
+                    if executor_type == "program":
+                        executor_program += 1
+                        state["executor_program"] = int(state["executor_program"] or 0) + 1
+                    else:
+                        executor_llm += 1
+                        state["executor_llm"] = int(state["executor_llm"] or 0) + 1
+                    if metadata.get("cache_hit") is True:
+                        cache_hit += 1
+                    else:
+                        cache_miss += 1
+
+                    issue_item = {
+                        "rule_job_id": rule_job_id,
+                        "rule_id": str(eval_item.get("rule_id") or rule_id),
+                        "rule_code": rule_code,
+                        "rule_name": str(eval_item.get("rule_name") or rule_name),
+                        "record_id": record_id,
+                        "visit_id": str(record.get("visit_id") or ""),
+                        "patient_name": str(record.get("patient_name") or ""),
+                        "department": str(record.get("department") or ""),
+                        "status": status or ("compliant" if eval_item.get("is_compliant") else "non_compliant"),
+                        "is_compliant": bool(eval_item.get("is_compliant") is True),
+                        "findings": str(eval_item.get("findings") or ""),
+                        "evidence": str(eval_item.get("evidence") or ""),
+                        "suggestion": str(eval_item.get("suggestion") or ""),
+                        "confidence": float(eval_item.get("confidence") or 0),
+                        "executor_type": executor_type,
+                        "rule_version": str(metadata.get("rule_version") or ""),
+                        "prompt_version": str(metadata.get("prompt_version") or ""),
+                        "model_version": str(metadata.get("model_version") or ""),
+                        "evidence_source": str(metadata.get("evidence_source") or ""),
+                        "cache_hit": bool(metadata.get("cache_hit") is True),
+                        "trace_id": str(metadata.get("trace_id") or ""),
+                        "cache_key": str(metadata.get("cache_key") or ""),
+                        "execution_domain": str(metadata.get("execution_domain") or ""),
+                        "doc_scope": str(metadata.get("doc_scope") or ""),
+                        "cost_class": str(metadata.get("cost_class") or ""),
+                        "document_type": document_type,
+                        "defect_level": str((rule or {}).get("defect_level") or ""),
+                        "llm_fallback": bool(metadata.get("llm_fallback") is True),
+                    }
+                    if issue_item["status"] == "non_compliant":
+                        state["items"].append(issue_item)
+                        all_items.append(issue_item)
+            except Exception as exc:
+                failed_record_ids.add(record_id)
+                for rule_id in valid_rule_ids:
+                    state = rule_states[rule_id]
+                    failed_payload = {
+                        "rule_job_id": str(state["rule_job_id"]),
+                        "rule_id": rule_id,
+                        "rule_code": str(state["rule_code"]),
+                        "rule_name": str(state["rule_name"]),
+                        "record_id": record_id,
+                        "visit_id": str(record.get("visit_id") or ""),
+                        "patient_name": str(record.get("patient_name") or ""),
+                        "department": str(record.get("department") or ""),
+                        "error_phase": "evaluate_document",
+                        "error": str(exc),
+                    }
+                    state["failed_records"].append(failed_payload)
+                    all_failed_records.append(failed_payload)
+
+        rule_results: List[Dict[str, Any]] = []
+        for rule_index, rule_id in enumerate(rule_ids):
+            state = rule_states[rule_id]
+            rule_items = list(state.get("items") or [])
+            rule_failed = list(state.get("failed_records") or [])
             rule_summary = {
                 "total_records": total_records,
                 "success_count": max(0, total_records - len(rule_failed)),
                 "failed_count": len(rule_failed),
                 "issue_records": len({str(item.get("record_id") or "") for item in rule_items}),
                 "compliant_records": max(0, total_records - len(rule_failed) - len({str(item.get("record_id") or "") for item in rule_items})),
-                "total_tokens": int(rule_tokens),
-                "total_processing_time": float(rule_processing_time),
+                "total_tokens": int(state.get("total_tokens") or 0),
+                "total_processing_time": float(state.get("total_processing_time") or 0.0),
             }
+            has_valid_rule = state.get("rule") is not None
+            rule_status = "failed" if (not has_valid_rule or (rule_failed and len(rule_failed) >= total_records)) else "completed"
             rule_results.append(
                 {
-                    "id": rule_job_id,
+                    "id": state.get("rule_job_id"),
                     "job_id": job_id,
-                    "rule_code": rule_code,
-                    "rule_name": rule_name,
-                    "status": "failed" if rule_failed and len(rule_failed) >= total_records else "completed",
+                    "rule_code": state.get("rule_code"),
+                    "rule_name": state.get("rule_name"),
+                    "status": rule_status,
                     "items": rule_items,
                     "failed_records": rule_failed,
                     "total_records": rule_summary["total_records"],
@@ -960,8 +999,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     },
                     "debug": {
                         "executor_breakdown": {
-                            "program": executor_program,
-                            "llm": executor_llm,
+                            "program": int(state.get("executor_program") or 0),
+                            "llm": int(state.get("executor_llm") or 0),
                         }
                     },
                 }
