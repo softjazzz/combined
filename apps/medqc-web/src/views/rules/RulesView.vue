@@ -935,6 +935,19 @@ const route = useRoute()
 const router = useRouter()
 
 // 响应式数据
+const RULE_TABS = [
+  'coding',
+  'traditional',
+  'semantic',
+  'custom',
+  'lx_legacy',
+  'department',
+  'frontpage',
+  'settlement',
+] as const
+type RuleTabKey = (typeof RULE_TABS)[number]
+const isRuleTabKey = (tab: string): tab is RuleTabKey => RULE_TABS.includes(tab as RuleTabKey)
+
 const activeTab = ref('coding') // 默认显示编码质控规则
 const TAB_DESCRIPTIONS: Record<string, string> = {
   coding: '编码质控规则：基于ICD编码规范的18类质控规则，覆盖4万+条编码数据。',
@@ -2256,20 +2269,8 @@ const exportRules = async () => {
 // 生命周期
 onMounted(async () => {
   // 从 query 参数中读取标签页
-  const tabFromQuery = route.query.tab as string
-  if (
-    tabFromQuery &&
-    [
-      'coding',
-      'traditional',
-      'semantic',
-      'custom',
-      'lx_legacy',
-      'department',
-      'frontpage',
-      'settlement',
-    ].includes(tabFromQuery)
-  ) {
+  const tabFromQuery = String(route.query.tab || '')
+  if (tabFromQuery && isRuleTabKey(tabFromQuery)) {
     activeTab.value = tabFromQuery
   }
 
@@ -2288,6 +2289,16 @@ onMounted(async () => {
 })
 
 const showFilters = ref(false)
+
+watch(
+  () => route.query.tab,
+  (tabValue) => {
+    const nextTab = String(tabValue || '')
+    if (nextTab && isRuleTabKey(nextTab) && activeTab.value !== nextTab) {
+      activeTab.value = nextTab
+    }
+  },
+)
 
 // 监听标签页切换，更新 URL query 参数
 watch(activeTab, (newTab) => {
