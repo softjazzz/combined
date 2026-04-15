@@ -3,21 +3,6 @@
     class="rules-shell min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] px-4 pb-6 pt-4 font-sans xl:px-5"
   >
     <div class="mx-auto w-full max-w-[1440px]">
-      <section class="wv4-analysis-overview mb-4">
-        <div class="wv4-analysis-overview__header">
-          <div>
-            <div class="wv4-analysis-overview__eyebrow">
-              Workstation / Rules
-            </div>
-            <h2 class="wv4-analysis-overview__title">
-              规则工作台
-            </h2>
-            <p class="wv4-analysis-overview__subtitle">
-              统一维护编码、首页与结算规则，保持规则库质量和执行一致性。
-            </p>
-          </div>
-        </div>
-      </section>
       <div
         class="rounded-3xl border border-slate-200/85 bg-white p-4 shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
       >
