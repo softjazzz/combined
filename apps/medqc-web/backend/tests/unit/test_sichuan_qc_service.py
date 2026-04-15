@@ -400,7 +400,10 @@ class TestEvaluation:
                 "metadata": {"tokens_used": 100, "api_time": 0.3}
             }
 
-        with patch.object(service.rule_engine, 'evaluate', side_effect=mock_evaluate):
+        with (
+            patch.object(service.rule_orchestrator._program_executor, "can_execute", return_value=False),
+            patch.object(service.rule_engine, 'evaluate', side_effect=mock_evaluate),
+        ):
             result = await service.evaluate_document(
                 document_id="test-compliance-001",
                 content="入院记录内容...",

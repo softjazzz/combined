@@ -230,7 +230,11 @@ class UnifiedRuleEngine:
         # if (rule_id or "").upper() == "LX-003":
         #     return self._evaluate_lx003(rule, medical_record, applicability)
 
-        prompt = self._build_prompt(rule, medical_record["content"])
+        prompt = self._build_prompt(
+            rule,
+            medical_record["content"],
+            evidence_payload=medical_record.get("evidence_payload"),
+        )
         llm_result = await self._llm_generate(prompt)
         raw_output = (
             llm_result.get("choices", [{}])[0]
@@ -295,13 +299,66 @@ class UnifiedRuleEngine:
             }
         }
 
-    def _build_prompt(self, rule: Dict[str, Any], medical_text: str) -> str:
+    @staticmethod
+    def _format_evidence_payload(evidence_payload: Dict[str, Any]) -> str:
+        supporting_documents = evidence_payload.get("supporting_documents") or []
+        timeline_facts = evidence_payload.get("timeline_facts") or []
+        document_hits = evidence_payload.get("document_hits") or {}
+        data_quality_flags = evidence_payload.get("data_quality_flags") or []
+
+        lines: List[str] = []
+        if isinstance(document_hits, dict) and document_hits:
+            hit_parts = [f"{k}={'Y' if bool(v) else 'N'}" for k, v in document_hits.items()]
+            lines.append("命中文书：" + "，".join(hit_parts))
+
+        if isinstance(data_quality_flags, list) and data_quality_flags:
+            lines.append("数据质量标记：" + "，".join([str(item) for item in data_quality_flags if str(item).strip()]))
+
+        if isinstance(supporting_documents, list) and supporting_documents:
+            lines.append("辅助证据：")
+            for idx, item in enumerate(supporting_documents[:5], start=1):
+                if not isinstance(item, dict):
+                    continue
+                doc_type = str(item.get("document_type") or item.get("source_table") or f"doc_{idx}")
+                evidence_text = str(
+                    item.get("evidence_text")
+                    or item.get("content")
+                    or item.get("text_preview")
+                    or ""
+                ).strip()
+                if evidence_text:
+                    lines.append(f"{idx}. [{doc_type}] {evidence_text}")
+
+        if isinstance(timeline_facts, list) and timeline_facts:
+            lines.append("时间线事实：")
+            for idx, item in enumerate(timeline_facts[:10], start=1):
+                lines.append(f"{idx}. {str(item)}")
+
+        if not lines:
+            return ""
+        return (
+            "\n\n==================== 结构化证据上下文（Bundle）====================\n"
+            + "\n".join(lines)
+            + "\n==================== 证据上下文结束 ====================\n"
+        )
+
+    def _build_prompt(
+        self,
+        rule: Dict[str, Any],
+        medical_text: str,
+        *,
+        evidence_payload: Optional[Dict[str, Any]] = None,
+    ) -> str:
         template = rule.get("custom_prompt")
+        evidence_context = ""
+        if isinstance(evidence_payload, dict) and evidence_payload:
+            evidence_context = self._format_evidence_payload(evidence_payload)
         marked_medical_text = (
             "\n\n==================== 以下是待评估的实际病历文本 ====================\n"
-            f"{medical_text[:2000]}\n"
+            f"{medical_text}\n"
             "==================== 病历文本结束 ====================\n"
         )
+        prompt_input_text = f"{marked_medical_text}{evidence_context}"
 
         if template:
             applicable_docs = rule.get("applicable_documents")
@@ -314,7 +371,7 @@ class UnifiedRuleEngine:
                 applicable_documents=applicable_docs or "",
                 defect_level=rule.get("defect_level", ""),
                 complexity=rule.get("complexity", ""),
-                medical_text=marked_medical_text
+                medical_text=prompt_input_text
             )
             # 兜底：如果模板中没有 {medical_text} 占位符，强制追加病历文本
             if "{medical_text}" not in template:
@@ -322,7 +379,7 @@ class UnifiedRuleEngine:
                     "custom_prompt for rule %s is missing {medical_text} placeholder; appending medical text block.",
                     rule.get("rule_id")
                 )
-                prompt += f"\n\n【病历文本】\n{marked_medical_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
+                prompt += f"\n\n【病历文本】\n{prompt_input_text}\n\n请根据上述病历文本进行质控评估，严格按照JSON格式输出结果。"
             return prompt
 
         # 默认提示词（与历史逻辑保持一致）
@@ -333,7 +390,7 @@ class UnifiedRuleEngine:
 规则描述：{rule.get("description", "")}
 缺陷等级：{rule.get("defect_level", "")}
 
-{marked_medical_text}
+{prompt_input_text}
 """
 
     @staticmethod

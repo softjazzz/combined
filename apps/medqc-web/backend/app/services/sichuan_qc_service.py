@@ -296,6 +296,7 @@ class SichuanQCService:
         document_type: str,
         rules: List[Dict[str, Any]],
         evidence_source: str = "medical_text",
+        evidence_payload: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
         model_version = str(self.client.model or "")
@@ -304,13 +305,17 @@ class SichuanQCService:
         async def _llm_evaluate(rule: Dict[str, Any], medical_record: Dict[str, Any]) -> Dict[str, Any]:
             return await self.rule_engine.evaluate(rule, medical_record=medical_record)
 
+        medical_record: Dict[str, Any] = {
+            "id": document_id,
+            "content": content,
+            "document_type": document_type,
+        }
+        if isinstance(evidence_payload, dict) and evidence_payload:
+            medical_record["evidence_payload"] = dict(evidence_payload)
+
         return await self.rule_orchestrator.evaluate_rules(
             rules=prepared_rules,
-            medical_record={
-                "id": document_id,
-                "content": content,
-                "document_type": document_type,
-            },
+            medical_record=medical_record,
             llm_evaluate=_llm_evaluate,
             evidence_source=evidence_source,
             llm_concurrency=llm_concurrency,
@@ -318,6 +323,102 @@ class SichuanQCService:
             execution_cache=self.execution_cache,
             cache_ttl_seconds=1800,
         )
+
+    async def _resolve_rules_for_document(
+        self,
+        *,
+        document_type: str,
+        rule_ids: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        rules = await self._load_applicable_rules(document_type)
+        if not rule_ids:
+            return rules
+
+        selected_rules: List[Dict[str, Any]] = []
+        for rid in rule_ids:
+            try:
+                rule = self.get_rule_by_id(str(rid))
+                if rule:
+                    selected_rules.append(rule)
+            except Exception as e:
+                logger.warning(f"get_rule_by_id 失败: {rid} -> {e}")
+
+        if selected_rules:
+            logger.info(f"Selected {len(selected_rules)} rules via get_rule_by_id from IDs: {rule_ids}")
+            return selected_rules
+
+        filtered_rules = [
+            r for r in rules
+            if r.get("rule_id") in rule_ids or r.get("rule_code") in rule_ids or r.get("id") in rule_ids
+        ]
+        logger.info(f"Filtered to {len(filtered_rules)} rules based on rule_ids within loaded set: {rule_ids}")
+        return filtered_rules
+
+    def _build_document_evaluation_result(
+        self,
+        *,
+        document_id: str,
+        document_type: str,
+        rules: List[Dict[str, Any]],
+        orchestrated: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        rule_results = list(orchestrated.get("results") or [])
+        total_tokens = int(orchestrated.get("total_tokens") or 0)
+        total_api_time = float(orchestrated.get("total_api_time") or 0.0)
+
+        total_rules = len(rules)
+        compliant_rules = sum(
+            1 for r in rule_results
+            if r.get("status") in ("compliant", "not_applicable")
+        )
+        not_applicable_count = sum(1 for r in rule_results if r.get("status") == "not_applicable")
+        issues_found = sum(1 for r in rule_results if r.get("status") == "non_compliant")
+        compliance_rate = (compliant_rules / total_rules * 100.0) if total_rules else 100.0
+
+        evaluation_results = []
+        for item in rule_results:
+            evaluation_results.append({
+                "rule_id": item.get("rule_id"),
+                "rule_name": item.get("rule_name"),
+                "is_compliant": item.get("is_compliant"),
+                "status": item.get("status"),
+                "findings": item.get("findings"),
+                "evidence": item.get("evidence"),
+                "suggestion": item.get("suggestion"),
+                "confidence": item.get("confidence"),
+                "applicability": item.get("applicability"),
+                "evidence_verified": item.get("evidence_verified"),
+                "metadata": item.get("metadata"),
+            })
+
+        logger.info(
+            f"质控评估完成: {compliant_rules}/{total_rules} 条规则符合（含不适用），合规率 {compliance_rate:.1f}%"
+        )
+
+        return {
+            "document_id": document_id,
+            "document_type": document_type,
+            "total_rules": total_rules,
+            "applicable_rules": [r.get("rule_code", r.get("id", "")) for r in rules],
+            "evaluation_summary": {
+                "compliance_rate": round(compliance_rate, 2),
+                "issues_found": issues_found,
+                "not_applicable": not_applicable_count,
+                "total_rules": total_rules,
+                "compliant_rules": compliant_rules,
+                "model": self.client.model,
+                "executor_breakdown": orchestrated.get("executor_breakdown") or {},
+                "cache_breakdown": orchestrated.get("cache_breakdown") or {},
+            },
+            "parsed_evaluation_results": rule_results,
+            "evaluation_results": evaluation_results,
+            "llm_output": None,
+            "token_usage": {"total_tokens": total_tokens},
+            "api_time": total_api_time,
+            "executor_breakdown": orchestrated.get("executor_breakdown") or {},
+            "cache_breakdown": orchestrated.get("cache_breakdown") or {},
+            "trace": orchestrated.get("trace") or [],
+        }
 
     async def _evaluate_rules_with_engine(
         self,
@@ -611,7 +712,10 @@ class SichuanQCService:
         document_id: str,
         content: str,
         document_type: str = "病程记录",
-        rule_ids: Optional[List[str]] = None
+        rule_ids: Optional[List[str]] = None,
+        *,
+        evidence_source: str = "medical_text",
+        evidence_payload: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         对单个病历文档进行质控评估。
@@ -633,94 +737,25 @@ class SichuanQCService:
             - token_usage: Token 使用量
             - api_time: API 调用时间
         """
-        # P0 任务 1: 从数据库加载规则（按文书类型）
-        rules = await self._load_applicable_rules(document_type)
-
-        # 如果指定了 rule_ids，优先按 ID 精确取规则（支持 SC-/LX- 前缀跨来源）
-        if rule_ids and len(rule_ids) > 0:
-            selected_rules: List[Dict[str, Any]] = []
-            for rid in rule_ids:
-                try:
-                    rule = self.get_rule_by_id(str(rid))
-                    if rule:
-                        selected_rules.append(rule)
-                except Exception as e:
-                    logger.warning(f"get_rule_by_id 失败: {rid} -> {e}")
-            if selected_rules:
-                rules = selected_rules
-                logger.info(f"Selected {len(rules)} rules via get_rule_by_id from IDs: {rule_ids}")
-            else:
-                # 回退：在已加载的规则集中按 ID 过滤（保持与旧行为兼容）
-                rules = [
-                    r for r in rules
-                    if r.get("rule_id") in rule_ids or r.get("rule_code") in rule_ids or r.get("id") in rule_ids
-                ]
-                logger.info(f"Filtered to {len(rules)} rules based on rule_ids within loaded set: {rule_ids}")
+        rules = await self._resolve_rules_for_document(
+            document_type=document_type,
+            rule_ids=rule_ids,
+        )
 
         orchestrated = await self._evaluate_rules_orchestrated(
             document_id=document_id,
             content=content,
             document_type=document_type,
             rules=rules,
-            evidence_source="medical_text",
+            evidence_source=evidence_source,
+            evidence_payload=evidence_payload,
         )
-        rule_results = list(orchestrated.get("results") or [])
-        total_tokens = int(orchestrated.get("total_tokens") or 0)
-        total_api_time = float(orchestrated.get("total_api_time") or 0.0)
-
-        total_rules = len(rules)
-        compliant_rules = sum(
-            1 for r in rule_results
-            if r.get("status") in ("compliant", "not_applicable")
+        return self._build_document_evaluation_result(
+            document_id=document_id,
+            document_type=document_type,
+            rules=rules,
+            orchestrated=orchestrated,
         )
-        not_applicable_count = sum(1 for r in rule_results if r.get("status") == "not_applicable")
-        issues_found = sum(1 for r in rule_results if r.get("status") == "non_compliant")
-        compliance_rate = (compliant_rules / total_rules * 100.0) if total_rules else 100.0
-
-        evaluation_results = []
-        for item in rule_results:
-            evaluation_results.append({
-                "rule_id": item.get("rule_id"),
-                "rule_name": item.get("rule_name"),
-                "is_compliant": item.get("is_compliant"),
-                "status": item.get("status"),
-                "findings": item.get("findings"),
-                "evidence": item.get("evidence"),
-                "suggestion": item.get("suggestion"),
-                "confidence": item.get("confidence"),
-                "applicability": item.get("applicability"),
-                "evidence_verified": item.get("evidence_verified"),
-                "metadata": item.get("metadata"),
-            })
-
-        logger.info(
-            f"质控评估完成: {compliant_rules}/{total_rules} 条规则符合（含不适用），合规率 {compliance_rate:.1f}%"
-        )
-
-        return {
-            "document_id": document_id,
-            "document_type": document_type,
-            "total_rules": total_rules,
-            "applicable_rules": [r.get("rule_code", r.get("id", "")) for r in rules],
-            "evaluation_summary": {
-                "compliance_rate": round(compliance_rate, 2),
-                "issues_found": issues_found,
-                "not_applicable": not_applicable_count,
-                "total_rules": total_rules,
-                "compliant_rules": compliant_rules,
-                "model": self.client.model,
-                "executor_breakdown": orchestrated.get("executor_breakdown") or {},
-                "cache_breakdown": orchestrated.get("cache_breakdown") or {},
-            },
-            "parsed_evaluation_results": rule_results,
-            "evaluation_results": evaluation_results,
-            "llm_output": None,
-            "token_usage": {"total_tokens": total_tokens},
-            "api_time": total_api_time,
-            "executor_breakdown": orchestrated.get("executor_breakdown") or {},
-            "cache_breakdown": orchestrated.get("cache_breakdown") or {},
-            "trace": orchestrated.get("trace") or [],
-        }
 
     async def evaluate_running_final_bundle_input(
         self,
@@ -743,11 +778,29 @@ class SichuanQCService:
             raise ValueError(f"仅支持 running/final bundle，当前 scene={scene or 'unknown'}")
 
         eval_args = adapt_bundle_to_sichuan_eval_args(bundle, rule_ids=rule_ids or [])
-        result = await self.evaluate_document(
-            document_id=str(eval_args["document_id"]),
-            content=str(eval_args["content"]),
-            document_type=str(eval_args["document_type"]),
-            rule_ids=list(eval_args.get("rule_ids") or []),
+        document_id = str(eval_args["document_id"])
+        document_type = str(eval_args["document_type"])
+        content = str(eval_args["content"])
+        resolved_rule_ids = list(eval_args.get("rule_ids") or [])
+        evidence_payload = dict(eval_args.get("evidence_payload") or {})
+
+        rules = await self._resolve_rules_for_document(
+            document_type=document_type,
+            rule_ids=resolved_rule_ids,
+        )
+        orchestrated = await self._evaluate_rules_orchestrated(
+            document_id=document_id,
+            content=content,
+            document_type=document_type,
+            rules=rules,
+            evidence_source="bundle",
+            evidence_payload=evidence_payload,
+        )
+        result = self._build_document_evaluation_result(
+            document_id=document_id,
+            document_type=document_type,
+            rules=rules,
+            orchestrated=orchestrated,
         )
         result["bundle_metadata"] = {
             "scene": scene,
@@ -759,6 +812,7 @@ class SichuanQCService:
             "adapter_version": str((eval_args.get("metadata") or {}).get("adapter_version") or ""),
             "compat_strategy": str((eval_args.get("metadata") or {}).get("compat_strategy") or ""),
         }
+        result["evidence_payload"] = evidence_payload
         return result
 
     async def evaluate_rule_for_visit(
