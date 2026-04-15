@@ -77,6 +77,16 @@ class Settings(BaseSettings):
     # Environment
     ENV: str = os.getenv("ENV", "development")
 
+    # SC 规则来源治理（生产硬约束）
+    # - strict: true 时要求 SC 规则必须来自 pg_governance，否则阻断执行
+    # - block_batch_on_fallback: 即便非 strict，也可在 source 回退时阻断批量任务
+    # - monitor_enabled: 启用后端内置周期巡检（等价持续监控 /rules/source）
+    QC_SC_RULE_SOURCE_STRICT: bool = False
+    QC_SC_RULE_SOURCE_BLOCK_BATCH_ON_FALLBACK: bool = False
+    QC_SC_RULE_SOURCE_MONITOR_ENABLED: bool = False
+    QC_SC_RULE_SOURCE_MONITOR_INTERVAL_SECONDS: int = 60
+    QC_SC_RULE_SOURCE_ALERT_DEDUP_SECONDS: int = 300
+
     # ICD semantic retrieval fallback (exact match still first)
     ICD_SEMANTIC_ENABLED: bool = False
     ICD_SEMANTIC_TOP_K: int = 5

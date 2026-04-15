@@ -10,6 +10,7 @@ import pytest
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 from app.routers import qc_sichuan
+from app.services.sichuan_qc_service import RuleSourceGuardError
 
 
 def _now_iso() -> str:
@@ -390,3 +391,25 @@ def test_sichuan_workspace_batch_cancel_and_retry_flow(client, sichuan_workspace
     assert detail_resp.status_code == 200
     detail = _extract_data(detail_resp)
     assert detail.get("status") in {"queued", "running", "completed"}
+
+
+def test_workspace_batch_create_should_block_when_sc_source_not_pg(client, sichuan_workspace_stub):
+    class _GuardFailService:
+        def assert_sc_rule_source_ready(self, *, context: str, block_batch: bool = False):
+            raise RuleSourceGuardError("SC 规则来源异常，当前请求已被阻断。")
+
+    client.app.dependency_overrides[qc_sichuan.get_qc_service] = lambda: _GuardFailService()
+    try:
+        resp = client.post(
+            "/api/v1/qc/sichuan/workspace/batch-jobs",
+            json={
+                "rule_ids": ["SC-001"],
+                "scope": "final",
+                "record_ids": ["visit-3001"],
+            },
+        )
+        assert resp.status_code == 503
+        body = resp.json()
+        assert "阻断" in str(body.get("error") or body.get("detail") or "")
+    finally:
+        client.app.dependency_overrides.pop(qc_sichuan.get_qc_service, None)

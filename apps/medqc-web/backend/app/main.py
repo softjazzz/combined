@@ -338,11 +338,21 @@ def create_app() -> FastAPI:
 
             get_smart_upload_async_service()
             get_batch_task_manager()
+            # 生产可启用 SC 规则来源持续巡检（巡检接口等价 /rules/source）
+            qc_sichuan_router.start_rule_source_monitor()
             logger.info("ℹ️ 跳过启动阶段的四川质控服务初始化（将按需懒加载）")
         except Exception as exc:
             logger.error(f"❌ 启动初始化失败: {exc}")
             if strict_startup_checks:
                 raise
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """应用关闭时清理后台任务。"""
+        try:
+            await qc_sichuan_router.stop_rule_source_monitor()
+        except Exception:
+            logger.warning("停止 SC 规则来源巡检任务失败", exc_info=True)
 
     return app
 

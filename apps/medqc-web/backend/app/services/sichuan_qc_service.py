@@ -2,6 +2,9 @@ from typing import Dict, Any, List, Optional, Tuple
 import json
 import hashlib
 import logging
+import time
+from pathlib import Path
+from datetime import datetime, timezone
 
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
@@ -30,6 +33,10 @@ logger = logging.getLogger(__name__)
 
 
 
+class RuleSourceGuardError(RuntimeError):
+    """规则来源不满足生产治理约束时抛出。"""
+
+
 class SichuanQCService:
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         """
@@ -49,6 +56,11 @@ class SichuanQCService:
         self._active_sc_rules_checksum: str = ""
         self._last_registry_error: Optional[str] = None
         self.rule_registry = QCRuleRegistryService()
+        data_dir = Path(__file__).resolve().parent.parent / "data"
+        self._sc_rules_json_path = data_dir / "sichuan_rules_146.json"
+        self._custom_rules_json_path = data_dir / "custom_rules_33.json"
+        self._last_source_alert_key: str = ""
+        self._last_source_alert_at: float = 0.0
 
         # 统一规则引擎 (用于串行模式)
         self.rule_engine = UnifiedRuleEngine(self.client.generate)
@@ -144,16 +156,8 @@ class SichuanQCService:
         if self._rules_cache is not None:
             return self._rules_cache
 
-        import json
-        import os
-
-        json_path = os.path.join(
-            os.path.dirname(__file__),
-            "..", "data", "sichuan_rules_146.json"
-        )
-
         try:
-            with open(json_path, "r", encoding="utf-8") as f:
+            with self._sc_rules_json_path.open("r", encoding="utf-8") as f:
                 rules = json.load(f)
 
             # 转换 applicable_documents 从英文到中文
@@ -182,16 +186,8 @@ class SichuanQCService:
         if self._custom_rules_cache is not None:
             return self._custom_rules_cache
 
-        import json
-        import os
-
-        json_path = os.path.join(
-            os.path.dirname(__file__),
-            "..", "data", "custom_rules_33.json"
-        )
-
         try:
-            with open(json_path, "r", encoding="utf-8") as f:
+            with self._custom_rules_json_path.open("r", encoding="utf-8") as f:
                 rules = json.load(f)
 
             # 转换 applicable_documents 从英文到中文
@@ -236,6 +232,58 @@ class SichuanQCService:
         payload.sort(key=lambda item: item["rule_id"])
         raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _is_prod_env(self) -> bool:
+        return str(get_settings().ENV or "").strip().lower() == "production"
+
+    def _is_sc_source_strict_enabled(self) -> bool:
+        settings = get_settings()
+        strict_flag = bool(getattr(settings, "QC_SC_RULE_SOURCE_STRICT", False))
+        return self._is_prod_env() or strict_flag
+
+    def _should_block_batch_on_fallback(self) -> bool:
+        settings = get_settings()
+        block_flag = bool(getattr(settings, "QC_SC_RULE_SOURCE_BLOCK_BATCH_ON_FALLBACK", False))
+        return self._is_prod_env() or block_flag
+
+    def _emit_sc_source_alert(self, message: str, *, source: str, context: str) -> None:
+        settings = get_settings()
+        dedup_seconds = max(0, int(getattr(settings, "QC_SC_RULE_SOURCE_ALERT_DEDUP_SECONDS", 300) or 0))
+        now = time.time()
+        alert_key = f"{context}|{source}|{self._active_sc_rules_checksum[:16]}|{self._last_registry_error or ''}"
+        if dedup_seconds > 0 and alert_key == self._last_source_alert_key and (now - self._last_source_alert_at) < dedup_seconds:
+            return
+
+        self._last_source_alert_key = alert_key
+        self._last_source_alert_at = now
+        logger.error(
+            "【规则来源告警】%s | context=%s source=%s checksum=%s registry_error=%s",
+            message,
+            context,
+            source,
+            self._active_sc_rules_checksum[:12],
+            self._last_registry_error or "",
+        )
+
+    def assert_sc_rule_source_ready(self, *, context: str, block_batch: bool = False) -> Dict[str, Any]:
+        overview = self.get_rule_source_overview()
+        source = str(overview.get("sc_source") or "").strip() or "unknown"
+        strict_mode = self._is_sc_source_strict_enabled()
+        batch_block_enabled = self._should_block_batch_on_fallback()
+        healthy = source == "pg_governance"
+
+        if healthy:
+            return overview
+
+        reason = (
+            f"SC 规则来源异常（source={source}），期望 pg_governance；"
+            "已触发治理告警。"
+        )
+        self._emit_sc_source_alert(reason, source=source, context=context)
+        should_block = strict_mode or (block_batch and batch_block_enabled)
+        if should_block:
+            raise RuleSourceGuardError(f"{reason} 当前请求已被阻断。")
+        return overview
 
     def _load_active_sc_rules(self) -> List[Dict[str, Any]]:
         """
@@ -288,20 +336,46 @@ class SichuanQCService:
 
     def get_rule_source_overview(self) -> Dict[str, Any]:
         self._load_active_sc_rules()
+        strict_mode = self._is_sc_source_strict_enabled()
+        batch_block_enabled = self._should_block_batch_on_fallback()
+        source = str(self._active_sc_rules_source or "").strip() or "unknown"
+        healthy = source == "pg_governance"
         return {
-            "sc_source": self._active_sc_rules_source,
+            "sc_source": source,
+            "sc_source_expected": "pg_governance",
+            "sc_source_healthy": healthy,
             "sc_rule_count": len(self._active_sc_rules_cache or []),
             "sc_checksum": self._active_sc_rules_checksum,
             "last_registry_error": self._last_registry_error,
+            "strict_mode": strict_mode,
+            "batch_block_on_fallback": batch_block_enabled,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
         }
 
     async def bootstrap_rule_registry(self, *, operator: str = "system", mark_published: bool = True) -> Dict[str, int]:
-        result = self.rule_registry.bootstrap_rules_from_json_to_pg(
+        result_sc = self.rule_registry.bootstrap_rules_from_json_to_pg(
+            operator=operator,
+            mark_published=mark_published,
+        )
+        custom_registry = QCRuleRegistryService(
+            json_path=self._custom_rules_json_path,
+        )
+        result_custom = custom_registry.bootstrap_rules_from_json_to_pg(
             operator=operator,
             mark_published=mark_published,
         )
         self.invalidate_rule_cache()
-        return result
+        return {
+            "inserted": int(result_sc.get("inserted", 0)) + int(result_custom.get("inserted", 0)),
+            "skipped": int(result_sc.get("skipped", 0)) + int(result_custom.get("skipped", 0)),
+            "published": int(result_sc.get("published", 0)) + int(result_custom.get("published", 0)),
+            "inserted_sc": int(result_sc.get("inserted", 0)),
+            "inserted_lx_lxe": int(result_custom.get("inserted", 0)),
+            "skipped_sc": int(result_sc.get("skipped", 0)),
+            "skipped_lx_lxe": int(result_custom.get("skipped", 0)),
+            "published_sc": int(result_sc.get("published", 0)),
+            "published_lx_lxe": int(result_custom.get("published", 0)),
+        }
 
     def list_rule_versions(self, *, rule_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         return self.rule_registry.list_rule_versions(rule_id=rule_id, limit=limit)
@@ -344,6 +418,110 @@ class SichuanQCService:
         if ok:
             self.invalidate_rule_cache()
         return ok
+
+    @staticmethod
+    def _rule_id_prefix(rule_id: str) -> str:
+        rid = str(rule_id or "").strip().upper()
+        if rid.startswith("SC-"):
+            return "SC"
+        if rid.startswith("LXE-"):
+            return "LXE"
+        if rid.startswith("LX-"):
+            return "LX"
+        return "OTHER"
+
+    def _family_counts(self, rule_ids: List[str]) -> Dict[str, int]:
+        counts = {"SC": 0, "LX": 0, "LXE": 0, "OTHER": 0}
+        for rule_id in rule_ids:
+            key = self._rule_id_prefix(rule_id)
+            counts[key] = int(counts.get(key, 0)) + 1
+        return counts
+
+    @staticmethod
+    def _rule_payload_digest(rule: Dict[str, Any]) -> str:
+        normalized = {
+            "rule_id": str(rule.get("rule_id") or "").strip().upper(),
+            "name": str(rule.get("name") or "").strip(),
+            "description": str(rule.get("description") or "").strip(),
+            "category": str(rule.get("category") or "").strip(),
+            "defect_level": str(rule.get("defect_level") or "").strip(),
+            "complexity": str(rule.get("complexity") or "").strip(),
+            "applicable_documents": list(rule.get("applicable_documents") or []),
+            "custom_prompt": str(rule.get("custom_prompt") or "").strip(),
+            "executor_type": str(rule.get("executor_type") or "").strip().lower(),
+            "execution_domain": str(rule.get("execution_domain") or "").strip().lower(),
+            "doc_scope": str(rule.get("doc_scope") or "").strip().lower(),
+            "rule_version": str(rule.get("rule_version") or "").strip(),
+            "prompt_version": str(rule.get("prompt_version") or "").strip(),
+            "cost_class": str(rule.get("cost_class") or "").strip().lower(),
+        }
+        raw = json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def check_rule_registry_consistency(
+        self,
+        *,
+        include_custom_rules: bool = True,
+        sample_limit: int = 100,
+    ) -> Dict[str, Any]:
+        """
+        发布前后规则一致性校验：
+        - active(治理表) 与 baseline(JSON) 的 rule_id 集合差异
+        - 重叠规则 payload 摘要差异（checksum）
+        """
+        sample_n = max(10, min(500, int(sample_limit or 100)))
+        active_rules, active_source = self.rule_registry.load_active_rules()
+        active_map: Dict[str, Dict[str, Any]] = {}
+        for rule in active_rules:
+            rid = str(rule.get("rule_id") or "").strip().upper()
+            if rid:
+                active_map[rid] = self._normalize_rule_documents(rule)
+
+        baseline_map: Dict[str, Dict[str, Any]] = {}
+        for rule in self._load_rules_from_json():
+            rid = str(rule.get("rule_id") or "").strip().upper()
+            if rid:
+                baseline_map[rid] = self._normalize_rule_documents(rule)
+        if include_custom_rules:
+            for rule in self._load_custom_rules_from_json():
+                rid = str(rule.get("rule_id") or "").strip().upper()
+                if rid:
+                    baseline_map[rid] = self._normalize_rule_documents(rule)
+
+        baseline_ids = set(baseline_map.keys())
+        active_ids = set(active_map.keys())
+        missing_in_registry = sorted(baseline_ids - active_ids)
+        extra_in_registry = sorted(active_ids - baseline_ids)
+
+        changed_payload_ids: List[str] = []
+        for rid in sorted(baseline_ids.intersection(active_ids)):
+            baseline_digest = self._rule_payload_digest(baseline_map[rid])
+            active_digest = self._rule_payload_digest(active_map[rid])
+            if baseline_digest != active_digest:
+                changed_payload_ids.append(rid)
+
+        is_consistent = (
+            active_source == "pg_governance"
+            and not missing_in_registry
+            and not extra_in_registry
+            and not changed_payload_ids
+        )
+
+        return {
+            "ok": bool(is_consistent),
+            "active_source": str(active_source),
+            "active_rule_count": len(active_ids),
+            "baseline_rule_count": len(baseline_ids),
+            "family_counts_active": self._family_counts(list(active_ids)),
+            "family_counts_baseline": self._family_counts(list(baseline_ids)),
+            "missing_in_registry_count": len(missing_in_registry),
+            "extra_in_registry_count": len(extra_in_registry),
+            "changed_payload_count": len(changed_payload_ids),
+            "missing_in_registry_samples": missing_in_registry[:sample_n],
+            "extra_in_registry_samples": extra_in_registry[:sample_n],
+            "changed_payload_samples": changed_payload_ids[:sample_n],
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     async def _load_applicable_rules(self, document_type: str) -> List[Dict[str, Any]]:
         """
@@ -1350,8 +1528,8 @@ class SichuanQCService:
             return None
 
         # 根据规则ID前缀明确区分规则来源
-        # SC- 开头：优先治理表，再回退 JSON
-        # LX- / LXE- 开头：泸县自定义规则（custom_rules_33.json）
+        # SC- 开头：优先治理表，再回退 JSON（但生产可被 strict guard 阻断）
+        # LX- / LXE- 开头：优先治理表（若已纳管），否则回退 custom JSON
         if normalized_rule_id.startswith("SC-"):
             rule, source = self.rule_registry.load_rule_by_id(normalized_rule_id)
             if rule:
@@ -1360,6 +1538,11 @@ class SichuanQCService:
                 return normalized
             all_rules = self._load_active_sc_rules()
         elif normalized_rule_id.startswith("LX-") or normalized_rule_id.startswith("LXE-"):
+            rule, source = self.rule_registry.load_rule_by_id(normalized_rule_id)
+            if rule and source == "pg_governance":
+                normalized = self._normalize_rule_documents(rule)
+                logger.info("按 rule_id 命中 LX/LXE 规则（source=%s）: %s", source, normalized_rule_id)
+                return normalized
             all_rules = self._load_custom_rules_from_json()
         else:
             # 兼容旧调用：允许传入 rule_code/original_id，再从两套规则里回查
@@ -1396,18 +1579,21 @@ class SichuanQCService:
         if not normalized_rule_id:
             return False
 
-        # SC 规则优先写治理表（版本化发布），仅在治理表不可用时回退 JSON 兼容。
-        if normalized_rule_id.startswith("SC-"):
-            updated = self.rule_registry.update_rule_prompt_version(
-                rule_id=normalized_rule_id,
-                custom_prompt=custom_prompt,
-                operator=operator,
-            )
-            if updated:
-                self.invalidate_rule_cache()
-                logger.info("成功更新 SC 规则提示词（治理表）: %s", normalized_rule_id)
-                return True
-            logger.warning("治理表更新 SC 提示词失败，回退 JSON 文件兼容路径: %s", normalized_rule_id)
+        # 规则优先写治理表（版本化发布）。SC 在 strict/生产下不允许回退 JSON。
+        updated_in_registry = self.rule_registry.update_rule_prompt_version(
+            rule_id=normalized_rule_id,
+            custom_prompt=custom_prompt,
+            operator=operator,
+        )
+        if updated_in_registry:
+            self.invalidate_rule_cache()
+            logger.info("成功更新规则提示词（治理表）: %s", normalized_rule_id)
+            return True
+
+        if normalized_rule_id.startswith("SC-") and self._is_sc_source_strict_enabled():
+            logger.error("SC 规则提示词更新失败且 strict_mode 开启，拒绝回退 JSON: %s", normalized_rule_id)
+            return False
+        logger.warning("治理表更新提示词失败，回退 JSON 文件兼容路径: %s", normalized_rule_id)
 
         def _rule_file_and_id(target: str) -> tuple[str, str] | None:
             if target.startswith("SC-"):

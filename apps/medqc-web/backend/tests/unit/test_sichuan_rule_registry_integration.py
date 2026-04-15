@@ -2,7 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.sichuan_qc_service import SichuanQCService
+from app.services.sichuan_qc_service import SichuanQCService, RuleSourceGuardError
 
 
 def _build_sc_rule(rule_id: str = "SC-001") -> dict:
@@ -64,3 +64,27 @@ async def test_load_applicable_rules_should_use_registry_active_sc_rules():
     assert source["sc_source"] == "pg_governance"
     assert source["sc_rule_count"] >= 1
 
+
+def test_sc_source_guard_should_block_when_strict_and_source_is_not_pg(monkeypatch):
+    service = SichuanQCService()
+    service.rule_registry.load_active_rules = MagicMock(return_value=([_build_sc_rule("SC-001")], "json_file"))
+    monkeypatch.setenv("QC_SC_RULE_SOURCE_STRICT", "true")
+    monkeypatch.setenv("ENV", "development")
+
+    with pytest.raises(RuleSourceGuardError):
+        service.assert_sc_rule_source_ready(context="unit_test", block_batch=False)
+
+
+def test_consistency_check_should_report_missing_rules():
+    service = SichuanQCService()
+    service.rule_registry.load_active_rules = MagicMock(
+        return_value=([_build_sc_rule("SC-001")], "pg_governance")
+    )
+    service._rules_cache = [_build_sc_rule("SC-001"), _build_sc_rule("SC-002")]
+    service._custom_rules_cache = []
+
+    result = service.check_rule_registry_consistency(include_custom_rules=True, sample_limit=20)
+
+    assert result["ok"] is False
+    assert result["missing_in_registry_count"] >= 1
+    assert "SC-002" in set(result["missing_in_registry_samples"])

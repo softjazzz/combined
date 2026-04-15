@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Optional
+import asyncio
 import uuid
 import json
 import logging
@@ -9,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from datetime import datetime, timezone
 
 from ..core.response import success_response, paginated_response, error_response, get_trace_id, ErrorCode, StatusCode
-from ..services.sichuan_qc_service import SichuanQCService
+from ..services.sichuan_qc_service import SichuanQCService, RuleSourceGuardError
 from ..services.llm_config_loader import LLMConfigLoader
 from ..services.qc_input_adapters import evaluate_running_final_bundle
 from ..core.supabase_client import get_supabase
@@ -23,6 +24,75 @@ router = APIRouter(prefix="/api/v1/qc/sichuan", tags=["qc-sichuan"])
 
 # 全局服务实例（将在启动时初始化）
 service: Optional[SichuanQCService] = None
+_rule_source_monitor_task: Optional[asyncio.Task] = None
+
+
+def _should_guard_sc_source(rule_ids: Optional[List[str]]) -> bool:
+    normalized = [str(item or "").strip().upper() for item in (rule_ids or []) if str(item or "").strip()]
+    if not normalized:
+        # 未显式传 rule_ids，默认会走 SC 规则集，仍需校验来源。
+        return True
+    return any(item.startswith("SC-") for item in normalized)
+
+
+def _enforce_sc_source_guard(
+    qc_service: SichuanQCService,
+    *,
+    context: str,
+    rule_ids: Optional[List[str]] = None,
+    block_batch: bool = False,
+) -> Dict[str, Any]:
+    if not _should_guard_sc_source(rule_ids):
+        return {}
+    try:
+        return qc_service.assert_sc_rule_source_ready(context=context, block_batch=block_batch)
+    except RuleSourceGuardError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+async def _rule_source_monitor_loop() -> None:
+    while True:
+        try:
+            settings = get_settings()
+            interval_seconds = max(15, int(getattr(settings, "QC_SC_RULE_SOURCE_MONITOR_INTERVAL_SECONDS", 60) or 60))
+            qc_service = await get_qc_service()
+            # 监控任务仅告警，不在此处阻断请求。
+            qc_service.assert_sc_rule_source_ready(
+                context="rules_source_monitor",
+                block_batch=False,
+            )
+            await asyncio.sleep(interval_seconds)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("规则来源巡检异常: %s", exc, exc_info=True)
+            await asyncio.sleep(30)
+
+
+def start_rule_source_monitor() -> None:
+    global _rule_source_monitor_task
+    settings = get_settings()
+    enabled = bool(getattr(settings, "QC_SC_RULE_SOURCE_MONITOR_ENABLED", False)) or str(settings.ENV or "").strip().lower() == "production"
+    if not enabled:
+        return
+    if _rule_source_monitor_task and not _rule_source_monitor_task.done():
+        return
+    loop = asyncio.get_running_loop()
+    _rule_source_monitor_task = loop.create_task(_rule_source_monitor_loop(), name="qc-rule-source-monitor")
+    logger.info("已启动 SC 规则来源巡检任务")
+
+
+async def stop_rule_source_monitor() -> None:
+    global _rule_source_monitor_task
+    task = _rule_source_monitor_task
+    _rule_source_monitor_task = None
+    if not task:
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 async def init_qc_service():
     """初始化质控服务，从数据库加载配置"""
@@ -363,6 +433,12 @@ async def evaluate(
         # Allow runtime override of model (for A/B testing different LLMs)
         if req.model:
             qc_service.client.model = req.model
+        _enforce_sc_source_guard(
+            qc_service,
+            context="evaluate",
+            rule_ids=req.rule_ids,
+            block_batch=False,
+        )
         # running/final bundle 直入旧规则链入口（不依赖独立 runtime）
         if isinstance(req.bundle_input, dict) and req.bundle_input:
             bundle_result = await evaluate_running_final_bundle(
@@ -539,6 +615,12 @@ async def evaluate_bundle(
     try:
         if req.model:
             qc_service.client.model = req.model
+        _enforce_sc_source_guard(
+            qc_service,
+            context="evaluate_bundle",
+            rule_ids=req.rule_ids,
+            block_batch=False,
+        )
         result = await evaluate_running_final_bundle(
             qc_service=qc_service,
             scene=req.scene,
@@ -573,6 +655,12 @@ async def evaluate_rule_for_visit(
     try:
         if req.model:
             qc_service.client.model = req.model
+        _enforce_sc_source_guard(
+            qc_service,
+            context="evaluate_rule_for_visit",
+            rule_ids=[req.rule_id],
+            block_batch=False,
+        )
         result = await qc_service.evaluate_rule_for_visit(
             rule_id=req.rule_id,
             institute_id=req.institute_id,
@@ -604,6 +692,12 @@ async def evaluate_batch(
     qc_service: SichuanQCService = Depends(get_qc_service)
 ):
     try:
+        _enforce_sc_source_guard(
+            qc_service,
+            context="evaluate_batch",
+            rule_ids=None,
+            block_batch=False,
+        )
         payloads = [
             {
                 "document_id": d.document_id,
@@ -691,6 +785,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         rule_ids = [str(item).strip() for item in (filters.get("rule_ids") or []) if str(item).strip()]
         if not rule_ids:
             raise ValueError("批量任务缺少 rule_ids")
+        qc_service.assert_sc_rule_source_ready(
+            context=f"workspace_batch_job:{job_id}",
+            block_batch=True,
+        )
 
         records = workspace.collect_records(
             scope=str(current.get("scope") or "all"),
@@ -908,11 +1006,18 @@ async def create_workspace_batch_job(
     request: Request,
     payload: SichuanWorkspaceBatchJobCreateRequest,
     background_tasks: BackgroundTasks,
+    qc_service: SichuanQCService = Depends(get_qc_service),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     rule_ids = [str(item).strip() for item in (payload.rule_ids or []) if str(item).strip()]
     if not rule_ids:
         raise HTTPException(status_code=422, detail="rule_ids 不能为空")
+    _enforce_sc_source_guard(
+        qc_service,
+        context="workspace_batch_create",
+        rule_ids=rule_ids,
+        block_batch=True,
+    )
 
     workspace = _sichuan_workspace_service()
     records = workspace.collect_records(
@@ -1794,6 +1899,36 @@ async def get_rule_source(
         )
 
 
+@router.get("/rules/consistency-check")
+async def check_rule_consistency(
+    request: Request,
+    include_custom_rules: bool = Query(default=True),
+    sample_limit: int = Query(default=100, ge=10, le=500),
+    admin_user: dict = Depends(require_admin),
+    qc_service: SichuanQCService = Depends(get_qc_service),
+):
+    """
+    发布前后规则一致性校验：
+    对比治理表 active 规则与本地基线 JSON（SC + 可选 LX/LXE）。
+    """
+    try:
+        result = qc_service.check_rule_registry_consistency(
+            include_custom_rules=bool(include_custom_rules),
+            sample_limit=sample_limit,
+        )
+        return success_response(
+            data=result,
+            message="规则一致性校验完成",
+            trace_id=get_trace_id(request),
+        )
+    except Exception as e:
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"规则一致性校验失败: {str(e)}",
+            trace_id=get_trace_id(request),
+        )
+
+
 @router.post("/rules/bootstrap")
 async def bootstrap_rules_to_registry(
     request: Request,
@@ -1802,7 +1937,7 @@ async def bootstrap_rules_to_registry(
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     """
-    将本地 JSON 四川规则增量导入治理表（幂等）。
+    将本地 JSON 规则（SC + LX/LXE）增量导入治理表（幂等）。
     """
     try:
         result = await qc_service.bootstrap_rule_registry(
