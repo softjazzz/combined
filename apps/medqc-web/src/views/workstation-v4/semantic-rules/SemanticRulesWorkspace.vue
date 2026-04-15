@@ -140,7 +140,7 @@ import SemanticRulesBatchPanel from './components/SemanticRulesBatchPanel.vue'
 import SemanticRulesBatchResultDrawer from './components/SemanticRulesBatchResultDrawer.vue'
 import SemanticRuleDetailModal from './components/modals/SemanticRuleDetailModal.vue'
 import SemanticRuleTestModal from './components/modals/SemanticRuleTestModal.vue'
-import CustomQcBatchLaunchModal from '@/views/rules/components/workspace/CustomQcBatchLaunchModal.vue'
+import CustomQcBatchLaunchModal from '@/views/rules/components/CustomQcBatchLaunchModal.vue'
 import {
   getBatchJobStatusTagClass,
   getBatchJobStatusText,
