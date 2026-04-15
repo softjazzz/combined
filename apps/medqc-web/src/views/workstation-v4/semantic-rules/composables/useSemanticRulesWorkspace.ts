@@ -3,7 +3,6 @@ import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiService } from '@/services/apiService'
-import { toWsPath } from '@/router/workstation-v4/registry'
 import { UserRole } from '@/types/auth'
 import type { User } from '@/types/auth'
 import type { WorkspaceScope } from '@/types/custom-rule-workspace'
@@ -561,7 +560,7 @@ export function useSemanticRulesWorkspace() {
   }
 
   async function goCustomWorkspace() {
-    await router.push(toWsPath('customRulesExecute'))
+    await router.push('/workstation-v4/rules/custom-workspace')
   }
 
   async function initialize() {
