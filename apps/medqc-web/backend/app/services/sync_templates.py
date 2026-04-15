@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 from typing import Any, Optional
 
 TemplateId = str
@@ -120,7 +121,7 @@ def build_template_overrides(
     *,
     template_id: TemplateId,
     departments: Optional[list[str]],
-    current_config: dict[str, Any],
+    current_config: dict[str, Any] | Any,
 ) -> dict[str, Any]:
     template = _find_template(template_id)
     normalized = _normalize_departments(departments)
@@ -143,7 +144,14 @@ def build_template_overrides(
         if "*" in normalized:
             raise ValueError("多科模板不允许使用 *")
 
-    payload = dict(current_config)
+    if isinstance(current_config, dict):
+        payload = dict(current_config)
+    elif is_dataclass(current_config):
+        payload = asdict(current_config)
+    elif hasattr(current_config, "model_dump") and callable(getattr(current_config, "model_dump")):
+        payload = dict(current_config.model_dump())  # type: ignore[attr-defined]
+    else:
+        payload = {}
     for key, value in template["defaults"].items():
         payload[key] = value
 

@@ -75,6 +75,8 @@ export interface SyncPolicyForm {
   night_window_end: string
 }
 
+type SyncLoadSection = 'connection' | 'policy' | 'history'
+
 function nowTimestamp(): string {
   return new Date().toLocaleTimeString('zh-CN', { hour12: false })
 }
@@ -185,6 +187,11 @@ function createInitialState() {
     selectedTemplateDepartments: [] as string[],
     showAdvancedPolicy: false,
     availableDepartments: [] as string[],
+    loadErrors: {
+      connection: null as string | null,
+      policy: null as string | null,
+      history: null as string | null,
+    },
 
     currentRunLog: [] as SyncRuntimeLogItem[],
   }
@@ -199,6 +206,12 @@ function pushLog(level: SyncRuntimeLogItem['level'], text: string) {
     level,
     message: text,
   })
+}
+
+function toErrorMessage(error: any): string {
+  return (
+    error?.response?.data?.detail || error?.response?.data?.error || error?.message || '未知错误'
+  )
 }
 
 function patchSyncPolicy(payload: SyncPolicyConfig) {
@@ -721,20 +734,70 @@ function clearLogs() {
 
 async function initialize() {
   globalSyncState.isInitializing = true
+  globalSyncState.loadErrors.connection = null
+  globalSyncState.loadErrors.policy = null
+  globalSyncState.loadErrors.history = null
   try {
-    await Promise.all([
-      loadPgConfig(),
-      loadPgSyncTables(),
-      loadPgSyncTableGroups(),
-      loadSyncPolicy(),
-      loadTemplates(),
-      loadDepartments(),
-      loadStatusAndStats(),
-      loadRunHistory(),
-    ])
-    pushLog('info', '数据同步控制台已加载')
+    const tasks: Array<{
+      section: SyncLoadSection
+      label: string
+      run: () => Promise<unknown>
+    }> = [
+      {
+        section: 'connection',
+        label: '连接配置',
+        run: () =>
+          Promise.all([
+            loadPgConfig(),
+            loadPgSyncTables(),
+            loadPgSyncTableGroups(),
+            loadDepartments(),
+            loadStatusAndStats(),
+          ]),
+      },
+      {
+        section: 'policy',
+        label: '策略模板',
+        run: () => Promise.all([loadSyncPolicy(), loadTemplates()]),
+      },
+      {
+        section: 'history',
+        label: '运行历史',
+        run: () => loadRunHistory(),
+      },
+    ]
+
+    const results = await Promise.allSettled(tasks.map((item) => item.run()))
+    let failedCount = 0
+
+    results.forEach((result, index) => {
+      const task = tasks[index]
+      if (!task) {
+        return
+      }
+      if (result.status === 'fulfilled') {
+        globalSyncState.loadErrors[task.section] = null
+        return
+      }
+      failedCount += 1
+      const detail = toErrorMessage(result.reason)
+      const errorText = `${task.label}加载失败：${detail}`
+      if (!globalSyncState.loadErrors[task.section]) {
+        globalSyncState.loadErrors[task.section] = errorText
+      }
+      pushLog('warn', errorText)
+    })
+
+    if (failedCount === 0) {
+      pushLog('info', '数据同步控制台已加载')
+    } else {
+      message.warning(
+        `数据同步配置部分加载失败（${failedCount}/${tasks.length}），可继续操作已就绪模块`,
+      )
+      pushLog('warn', '控制台已降级加载，可继续使用已就绪功能')
+    }
   } catch (error: any) {
-    const errMsg = error?.response?.data?.detail || error?.message || '加载失败'
+    const errMsg = toErrorMessage(error)
     message.error(`数据同步配置加载失败：${errMsg}`)
     pushLog('error', `控制台初始化失败：${errMsg}`)
   } finally {

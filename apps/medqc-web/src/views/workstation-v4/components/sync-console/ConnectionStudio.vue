@@ -37,6 +37,13 @@
         v-if="state.activeTab === 'pg_remote'"
         class="space-y-4"
       >
+        <a-alert
+          v-if="state.loadErrors.connection"
+          type="warning"
+          show-icon
+          :message="state.loadErrors.connection"
+        />
+
         <section class="rounded-xl border border-slate-200/80 bg-white p-3 space-y-3">
           <div class="pt-2 pb-3 border-b border-slate-100">
             <div class="text-[13px] font-semibold text-slate-800">
@@ -141,6 +148,13 @@
             </button>
           </div>
         </section>
+
+        <a-alert
+          v-if="state.loadErrors.policy"
+          type="warning"
+          show-icon
+          :message="state.loadErrors.policy"
+        />
 
         <section class="rounded-xl border border-slate-200/80 bg-white p-3 space-y-3">
           <div class="flex items-start justify-between gap-3">

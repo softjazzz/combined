@@ -219,7 +219,11 @@ def reset_sync_idempotency_for_testing() -> None:
                 return
         except OperationalError as exc:
             message = str(exc).lower()
-            is_lock_contention = "deadlock detected" in message or "lock timeout" in message
+            is_lock_contention = (
+                "deadlock detected" in message
+                or "lock timeout" in message
+                or "死锁" in message
+            )
             if not is_lock_contention or attempt == max_attempts:
                 raise
             logger.warning(

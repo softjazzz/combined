@@ -19,6 +19,12 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import OperationalError as SAOperationalError
+
+try:
+    from psycopg2 import OperationalError as PGOperationalError
+except Exception:  # pragma: no cover - 防御性兜底
+    PGOperationalError = tuple()  # type: ignore[assignment]
 
 from ..core.audit import audit_event
 from ..core.security import get_current_user
@@ -284,39 +290,63 @@ def _normalize_target_departments(values: Optional[list[str]]) -> Optional[list[
     return dedup or None
 
 
+def _raise_mapped_service_error(exc: Exception) -> None:
+    if isinstance(exc, HTTPException):
+        raise exc
+    message = str(exc) or "请求处理失败"
+    if isinstance(exc, ValueError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=message)
+    if isinstance(exc, RuntimeError):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=message)
+    if isinstance(exc, SAOperationalError) or (
+        PGOperationalError and isinstance(exc, PGOperationalError)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"数据源连接不可用：{message}",
+        )
+    raise exc
+
+
 # ==================== 状态查询 ====================
 
 @router.get("/status")
 async def get_sync_status(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取同步状态（仅 PG）"""
-    from ..services.etl_sync import get_sync_state
+    try:
+        from ..services.etl_sync import get_sync_state
 
-    return _ok(request, {
-        "pg_sync": get_sync_state(),
-    })
+        return _ok(request, {
+            "pg_sync": get_sync_state(),
+        })
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 @router.get("/statistics")
 async def get_statistics(request: Request, _: dict = Depends(require_sync_read_access)):
     """同步统计（PG 口径，保留旧字段形状）"""
-    from ..services.etl_sync import get_sync_state
+    try:
+        from ..services.etl_sync import get_sync_state
 
-    sync_state = get_sync_state()
-    is_running = bool(sync_state.get("is_running"))
-    logs = sync_state.get("logs") if isinstance(sync_state.get("logs"), list) else []
-    failed = sum(1 for item in logs if isinstance(item, dict) and str(item.get("status")) == "failed")
-    partial = 1 if str(sync_state.get("last_sync_status")) == "partial" else 0
-    pending = 1 if is_running else 0
-    return _ok(
-        request,
-        {
-            "PENDING": pending,
-            "PARTIAL": partial,
-            "SYNCED": int(sync_state.get("total_records_synced") or 0),
-            "STALE": 0,
-            "FAILED": failed,
-        },
-    )
+        sync_state = get_sync_state()
+        is_running = bool(sync_state.get("is_running"))
+        logs = sync_state.get("logs") if isinstance(sync_state.get("logs"), list) else []
+        failed = sum(1 for item in logs if isinstance(item, dict) and str(item.get("status")) == "failed")
+        partial = 1 if str(sync_state.get("last_sync_status")) == "partial" else 0
+        pending = 1 if is_running else 0
+        return _ok(
+            request,
+            {
+                "PENDING": pending,
+                "PARTIAL": partial,
+                "SYNCED": int(sync_state.get("total_records_synced") or 0),
+                "STALE": 0,
+                "FAILED": failed,
+            },
+        )
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 # ==================== PG 配置 ====================
@@ -324,10 +354,13 @@ async def get_statistics(request: Request, _: dict = Depends(require_sync_read_a
 @router.get("/config/pg")
 async def get_pg_config(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取 PG 同步配置（密码脱敏）"""
-    from ..services.etl_sync import load_db_config
+    try:
+        from ..services.etl_sync import load_db_config
 
-    config = load_db_config()
-    return _ok(request, _mask_pg_config(config))
+        config = load_db_config()
+        return _ok(request, _mask_pg_config(config))
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 @router.put("/config/pg")
@@ -337,51 +370,57 @@ async def update_pg_config(
     current_user: dict = Depends(require_sync_write_access),
 ):
     """更新 PG 同步配置（仅 admin）"""
-    from ..services.etl_sync import load_db_config, save_db_config, test_remote_connection
+    try:
+        from ..services.etl_sync import load_db_config, save_db_config, test_remote_connection
 
-    current = load_db_config()
-    incoming = update.model_dump(exclude_none=True)
+        current = load_db_config()
+        incoming = update.model_dump(exclude_none=True)
 
-    if "remote_port" in incoming:
-        incoming["remote_port"] = str(incoming["remote_port"])
+        if "remote_port" in incoming:
+            incoming["remote_port"] = str(incoming["remote_port"])
 
-    remote_password = incoming.get("remote_password")
-    if remote_password is not None and remote_password == "":
-        incoming.pop("remote_password", None)
-        remote_password = None
+        remote_password = incoming.get("remote_password")
+        if remote_password is not None and remote_password == "":
+            incoming.pop("remote_password", None)
+            remote_password = None
 
-    merged = {**current, **incoming}
-    save_db_config(merged, runtime_password=remote_password)
-    conn_result = test_remote_connection()
-    audit_event(
-        request,
-        action="sync.config.pg.update",
-        resource="/api/v1/sync/config/pg",
-        outcome="success" if bool(conn_result.get("connected")) else "degraded",
-        current_user=current_user,
-        details={
-            "changed_fields": sorted(update.model_dump(exclude_none=True).keys()),
-            "remote_host": merged.get("remote_host"),
-            "remote_port": merged.get("remote_port"),
-            "connection_ok": bool(conn_result.get("connected")),
-        },
-    )
-    return _ok(
-        request,
-        {
-            "config": _mask_pg_config(merged),
-            "connection": conn_result,
-        },
-    )
+        merged = {**current, **incoming}
+        save_db_config(merged, runtime_password=remote_password)
+        conn_result = test_remote_connection()
+        audit_event(
+            request,
+            action="sync.config.pg.update",
+            resource="/api/v1/sync/config/pg",
+            outcome="success" if bool(conn_result.get("connected")) else "degraded",
+            current_user=current_user,
+            details={
+                "changed_fields": sorted(update.model_dump(exclude_none=True).keys()),
+                "remote_host": merged.get("remote_host"),
+                "remote_port": merged.get("remote_port"),
+                "connection_ok": bool(conn_result.get("connected")),
+            },
+        )
+        return _ok(
+            request,
+            {
+                "config": _mask_pg_config(merged),
+                "connection": conn_result,
+            },
+        )
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 @router.get("/config/policy")
 async def get_sync_policy(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取 PG 抽取策略（scope/日期窗口/调度/夜间窗口）。"""
-    from ..services.sync_policy import load_sync_policy
+    try:
+        from ..services.sync_policy import load_sync_policy
 
-    policy = load_sync_policy()
-    return _ok(request, policy)
+        policy = load_sync_policy()
+        return _ok(request, policy)
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 @router.put("/config/policy")
@@ -391,14 +430,16 @@ async def update_sync_policy(
     current_user: dict = Depends(require_sync_write_access),
 ):
     """更新 PG 抽取策略（仅 admin）。"""
-    from ..services.sync_policy import save_sync_policy
-
-    payload = update.model_dump(exclude_none=True)
-    keep_policy_version = bool(payload.pop("keep_policy_version", False))
     try:
+        from ..services.sync_policy import save_sync_policy
+
+        payload = update.model_dump(exclude_none=True)
+        keep_policy_version = bool(payload.pop("keep_policy_version", False))
         saved = save_sync_policy(payload, keep_policy_version=keep_policy_version)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
     audit_event(
         request,
@@ -418,19 +459,25 @@ async def update_sync_policy(
 @router.get("/config/pg/tables")
 async def get_pg_sync_tables(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取 PG 表直连同步配置（分阶段启用）"""
-    from ..services.etl_sync import list_sync_tables
+    try:
+        from ..services.etl_sync import list_sync_tables
 
-    items = list_sync_tables()
-    return _ok(request, {"items": items, "total": len(items)})
+        items = list_sync_tables()
+        return _ok(request, {"items": items, "total": len(items)})
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 @router.get("/config/pg/table-groups")
 async def get_pg_sync_table_groups(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取 PG 同步表分组（核心8/扩展分组/全量56）。"""
-    from ..services.etl_sync import list_sync_table_groups
+    try:
+        from ..services.etl_sync import list_sync_table_groups
 
-    items = list_sync_table_groups()
-    return _ok(request, {"items": items, "total": len(items)})
+        items = list_sync_table_groups()
+        return _ok(request, {"items": items, "total": len(items)})
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 @router.put("/config/pg/tables")
@@ -440,13 +487,15 @@ async def update_pg_sync_tables(
     current_user: dict = Depends(require_sync_write_access),
 ):
     """更新 PG 表直连同步配置（仅 admin）"""
-    from ..services.etl_sync import save_sync_tables_config
-
-    updates = [item.model_dump(exclude_none=True) for item in payload.items]
     try:
+        from ..services.etl_sync import save_sync_tables_config
+
+        updates = [item.model_dump(exclude_none=True) for item in payload.items]
         items = save_sync_tables_config(updates)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
     audit_event(
         request,
@@ -467,56 +516,68 @@ async def update_pg_sync_tables(
 @router.post("/test-connection/pg-remote")
 async def test_pg_remote(request: Request, _: dict = Depends(require_sync_write_access)):
     """测试远端 PG 连接（仅 admin）"""
-    from ..services.etl_sync import test_remote_connection
+    try:
+        from ..services.etl_sync import test_remote_connection
 
-    return _ok(request, test_remote_connection())
+        return _ok(request, test_remote_connection())
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 @router.post("/test-connection/pg-local")
 async def test_pg_local(request: Request, _: dict = Depends(require_sync_write_access)):
     """测试本地 PG 连接（仅 admin）"""
-    from ..services.etl_sync import test_local_connection
+    try:
+        from ..services.etl_sync import test_local_connection
 
-    return _ok(request, test_local_connection())
+        return _ok(request, test_local_connection())
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 @router.post("/test-connection/all")
 async def test_all_connections(request: Request, _: dict = Depends(require_sync_write_access)):
     """测试全连接（远端 PG + 本地 PG）"""
-    from ..services.etl_sync import test_local_connection, test_remote_connection
+    try:
+        from ..services.etl_sync import test_local_connection, test_remote_connection
 
-    pg_remote = test_remote_connection()
-    pg_local = test_local_connection()
-    all_connected = bool(pg_remote.get("connected")) and bool(pg_local.get("connected"))
-    connected_count = int(bool(pg_remote.get("connected"))) + int(bool(pg_local.get("connected")))
-    return _ok(request, {
-        "all_connected": all_connected,
-        "connected_count": connected_count,
-        "total_sources": 2,
-        "pg_remote": pg_remote,
-        "pg_local": pg_local,
-    })
+        pg_remote = test_remote_connection()
+        pg_local = test_local_connection()
+        all_connected = bool(pg_remote.get("connected")) and bool(pg_local.get("connected"))
+        connected_count = int(bool(pg_remote.get("connected"))) + int(bool(pg_local.get("connected")))
+        return _ok(request, {
+            "all_connected": all_connected,
+            "connected_count": connected_count,
+            "total_sources": 2,
+            "pg_remote": pg_remote,
+            "pg_local": pg_local,
+        })
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 @router.get("/departments")
 async def get_departments(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取科室列表（仅源 PG 口径）。"""
-    from ..services.etl_sync import list_remote_departments
-    result = list_remote_departments(limit=500)
-    items = list(result.get("items") or [])
-    return _ok(
-        request,
-        {
-            "items": items,
-            "total": len(items),
-            "source": "pg",
-            "meta": {
-                "schema": result.get("schema"),
-                "source_table": result.get("source_table"),
-                "source_column": result.get("source_column"),
+    try:
+        from ..services.etl_sync import list_remote_departments
+        result = list_remote_departments(limit=500)
+        items = list(result.get("items") or [])
+        return _ok(
+            request,
+            {
+                "items": items,
+                "total": len(items),
+                "source": "pg",
+                "meta": {
+                    "schema": result.get("schema"),
+                    "source_table": result.get("source_table"),
+                    "source_column": result.get("source_column"),
+                },
             },
-        },
-    )
+        )
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 # ==================== 试运行预检 ====================
@@ -530,67 +591,70 @@ async def run_preflight(
     """
     试运行预检（不落库、不触发实际同步）
     """
-    from ..services.etl_sync import (
-        get_sync_state,
-        test_local_connection,
-        test_remote_connection,
-        validate_pg_sync_plan,
-    )
+    try:
+        from ..services.etl_sync import (
+            get_sync_state,
+            test_local_connection,
+            test_remote_connection,
+            validate_pg_sync_plan,
+        )
 
-    local_result = test_local_connection()
-    remote_result = test_remote_connection()
-    blockers: list[str] = []
-    warnings: list[str] = []
+        local_result = test_local_connection()
+        remote_result = test_remote_connection()
+        blockers: list[str] = []
+        warnings: list[str] = []
 
-    if not local_result.get("connected"):
-        blockers.append(f"本地 PG 未连通: {local_result.get('error', '未知错误')}")
-    if not remote_result.get("connected"):
-        blockers.append(f"远端 PG 未连通: {remote_result.get('error', '未知错误')}")
+        if not local_result.get("connected"):
+            blockers.append(f"本地 PG 未连通: {local_result.get('error', '未知错误')}")
+        if not remote_result.get("connected"):
+            blockers.append(f"远端 PG 未连通: {remote_result.get('error', '未知错误')}")
 
-    if req.tables and len(req.tables) > 10:
-        warnings.append("本次指定同步表数量较多，建议分批执行。")
+        if req.tables and len(req.tables) > 10:
+            warnings.append("本次指定同步表数量较多，建议分批执行。")
 
-    selected_tables, missing_groups = _resolve_selected_tables(req.tables, req.table_groups)
-    if missing_groups:
-        blockers.append(f"未知同步分组: {', '.join(missing_groups)}")
+        selected_tables, missing_groups = _resolve_selected_tables(req.tables, req.table_groups)
+        if missing_groups:
+            blockers.append(f"未知同步分组: {', '.join(missing_groups)}")
 
-    execution_plan = validate_pg_sync_plan(tables=selected_tables, include_disabled=False)
-    full_matrix_plan = validate_pg_sync_plan(tables=selected_tables, include_disabled=True)
-    blockers.extend([str(item) for item in execution_plan.get("blockers", [])])
-    warnings.extend([str(item) for item in execution_plan.get("warnings", [])])
-    warnings.extend([str(item) for item in full_matrix_plan.get("warnings", [])])
-    warnings = list(dict.fromkeys([w for w in warnings if str(w).strip()]))
+        execution_plan = validate_pg_sync_plan(tables=selected_tables, include_disabled=False)
+        full_matrix_plan = validate_pg_sync_plan(tables=selected_tables, include_disabled=True)
+        blockers.extend([str(item) for item in execution_plan.get("blockers", [])])
+        warnings.extend([str(item) for item in execution_plan.get("warnings", [])])
+        warnings.extend([str(item) for item in full_matrix_plan.get("warnings", [])])
+        warnings = list(dict.fromkeys([w for w in warnings if str(w).strip()]))
 
-    sync_state = get_sync_state()
-    estimated_impact = int(sync_state.get("total_records_synced") or 0)
-    return _ok(request, {
-        "source": "pg",
-        "tier": "all",
-        "mode": execution_plan.get("mode"),
-        "remote_schema": execution_plan.get("remote_schema"),
-        "executable": len(blockers) == 0,
-        "blockers": blockers,
-        "warnings": warnings,
-        "estimated_impact": estimated_impact,
-        "risk_level": "low" if len(blockers) == 0 else "high",
-        "matrix_scope": {
-            "execution": execution_plan.get("matrix_scope", "enabled"),
-            "full": full_matrix_plan.get("matrix_scope", "all"),
-        },
-        "table_validations": full_matrix_plan.get("table_validations", []),
-        "target_tables": full_matrix_plan.get("target_tables", []),
-        "execution_table_validations": execution_plan.get("table_validations", []),
-        "execution_target_tables": execution_plan.get("target_tables", []),
-        "scene": req.scene,
-        "date_window": _normalize_date_window_payload(req.date_window),
-        "target_departments": _normalize_target_departments(req.target_departments) or ["*"],
-        "policy_version": str(req.policy_version or ""),
-        "table_groups": req.table_groups or [],
-        "connections": {
-            "pg_remote": remote_result,
-            "pg_local": local_result,
-        },
-    })
+        sync_state = get_sync_state()
+        estimated_impact = int(sync_state.get("total_records_synced") or 0)
+        return _ok(request, {
+            "source": "pg",
+            "tier": "all",
+            "mode": execution_plan.get("mode"),
+            "remote_schema": execution_plan.get("remote_schema"),
+            "executable": len(blockers) == 0,
+            "blockers": blockers,
+            "warnings": warnings,
+            "estimated_impact": estimated_impact,
+            "risk_level": "low" if len(blockers) == 0 else "high",
+            "matrix_scope": {
+                "execution": execution_plan.get("matrix_scope", "enabled"),
+                "full": full_matrix_plan.get("matrix_scope", "all"),
+            },
+            "table_validations": full_matrix_plan.get("table_validations", []),
+            "target_tables": full_matrix_plan.get("target_tables", []),
+            "execution_table_validations": execution_plan.get("table_validations", []),
+            "execution_target_tables": execution_plan.get("target_tables", []),
+            "scene": req.scene,
+            "date_window": _normalize_date_window_payload(req.date_window),
+            "target_departments": _normalize_target_departments(req.target_departments) or ["*"],
+            "policy_version": str(req.policy_version or ""),
+            "table_groups": req.table_groups or [],
+            "connections": {
+                "pg_remote": remote_result,
+                "pg_local": local_result,
+            },
+        })
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
 
 # ==================== 触发同步 ====================
@@ -670,16 +734,25 @@ async def trigger_sync(
     policy_version = str(req.policy_version or "").strip()
     scene = str(req.scene or "both")
 
-    from ..services.etl_sync import run_sync
-    result = run_sync(
-        sync_date=effective_sync_date,
-        tables=selected_tables,
-        scene=scene,
-        policy_version=policy_version,
-        date_window=date_window_payload,
-        target_departments=target_departments,
-        run_id=run_id,
-    )
+    try:
+        from ..services.etl_sync import run_sync
+        result = run_sync(
+            sync_date=effective_sync_date,
+            tables=selected_tables,
+            scene=scene,
+            policy_version=policy_version,
+            date_window=date_window_payload,
+            target_departments=target_departments,
+            run_id=run_id,
+        )
+    except Exception as exc:
+        complete_sync_trigger(
+            idempotency_key=idempotency_key,
+            status="failed",
+            result=None,
+            error=str(exc),
+        )
+        _raise_mapped_service_error(exc)
 
     finished_at = datetime.now(timezone.utc)
     status_name = _infer_trigger_status(req.source, result)
@@ -862,8 +935,11 @@ async def apply_sync_template(
     current_user: dict = Depends(require_sync_write_access),
 ):
     """应用同步模板（仅 admin，PG 策略口径）。"""
-    from ..services.sync_policy import save_sync_policy
-    from ..services.sync_templates import list_sync_templates
+    try:
+        from ..services.sync_policy import save_sync_policy
+        from ..services.sync_templates import list_sync_templates
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
 
     template = next((item for item in list_sync_templates() if item.get("id") == req.template_id), None)
     if not template:
@@ -902,7 +978,10 @@ async def apply_sync_template(
             "end": str(night_end or "06:00"),
         }
 
-    saved = save_sync_policy(payload, keep_policy_version=False)
+    try:
+        saved = save_sync_policy(payload, keep_policy_version=False)
+    except Exception as exc:
+        _raise_mapped_service_error(exc)
     audit_event(
         request,
         action="sync.template.apply",

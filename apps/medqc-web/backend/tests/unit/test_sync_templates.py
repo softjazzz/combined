@@ -46,6 +46,16 @@ def test_build_hospital_standard_template():
 
 
 @pytest.mark.unit
+def test_build_template_supports_dict_current_config():
+    payload = build_template_overrides(
+        template_id="hospital_standard",
+        departments=None,
+        current_config={"scope": "both", "target_departments": ["骨科"]},
+    )
+    assert payload["target_departments"] == ["*"]
+
+
+@pytest.mark.unit
 def test_build_template_invalid_departments():
     cfg = MongoSyncConfig()
 

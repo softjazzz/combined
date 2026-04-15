@@ -184,6 +184,13 @@
       v-else
       class="flex-1 flex flex-col min-h-0"
     >
+      <div
+        v-if="state.loadErrors.history"
+        class="px-5 py-2 border-b border-amber-200 bg-amber-50 text-[12px] text-amber-700"
+      >
+        {{ state.loadErrors.history }}
+      </div>
+
       <div class="px-5 py-2 border-b border-slate-100 flex items-center gap-2 history-toolbar">
         <a-select
           v-model:value="state.runHistorySourceFilter"
