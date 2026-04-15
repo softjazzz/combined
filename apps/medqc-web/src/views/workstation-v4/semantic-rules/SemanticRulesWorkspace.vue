@@ -1,21 +1,6 @@
 <template>
   <div class="semantic-rules-page">
     <div class="semantic-rules-content">
-      <SemanticRulesOverviewPanels
-        :loading="loading"
-        :kpi-cards="heroKpiCards"
-        :critical-defect-count="criticalDefectCount"
-        :major-defect-count="majorDefectCount"
-        :minor-defect-count="minorDefectCount"
-        :risk-density="riskDensity"
-        :top-categories="topCategories"
-        :get-defect-rate="getDefectRate"
-        :get-category-ratio="getCategoryRatio"
-        @query="applyFilterQuery()"
-        @reset="resetFilters()"
-        @refresh="refreshRules()"
-      />
-
       <SemanticRulesTableSection
         :loading="loading"
         :rules="tableRules"
@@ -37,26 +22,6 @@
         @table-change="handleTableChange"
         @view-detail="openRuleDetail"
         @start-test="startRuleTest"
-      />
-
-      <SemanticRulesBatchPanel
-        :loading="batchJobLoading"
-        :batch-jobs="batchJobs"
-        :total="Number(batchJobPagination.total || 0)"
-        :pagination="batchJobPagination"
-        :query="batchJobQuery"
-        :status-options="batchJobStatusOptions"
-        :scope-options="batchJobScopeOptions"
-        :cancelling-batch-job-id="cancellingBatchJobId"
-        :retrying-batch-job-id="retryingBatchJobId"
-        :format-date-time="formatDateTime"
-        @open-batch-launch="openBatchLaunchModal()"
-        @search-batch-jobs="searchBatchJobs"
-        @table-change="handleBatchJobTableChange"
-        @open-batch-job-drawer="openBatchJobDrawer"
-        @cancel-batch-job="executeCancelBatchJob"
-        @retry-batch-job="executeRetryBatchJob"
-        @update-query="(value) => Object.assign(batchJobQuery, value)"
       />
     </div>
 
@@ -115,47 +80,18 @@
       @update:open="(value) => (batchLaunchModalOpen = value)"
       @update:batch-launch-filters="(value) => Object.assign(batchLaunchFilters, value)"
     />
-
-    <SemanticRulesBatchResultDrawer
-      :open="resultDrawerOpen"
-      :batch-job-detail="batchJobDetail"
-      :batch-job-debug-snapshot="batchJobDebugSnapshot"
-      :batch-job-debug-loading="batchJobDebugLoading"
-      :batch-job-detail-loading="batchJobDetailLoading"
-      :fetch-batch-job-debug-snapshot="fetchBatchJobDebugSnapshot"
-      :close="closeBatchJobDrawer"
-      :export-batch-job-report="exportBatchJobReport"
-      :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
-      :get-batch-job-status-text="getBatchJobStatusText"
-      :format-date-time="formatDateTime"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { useSemanticRulesWorkspace } from './composables/useSemanticRulesWorkspace'
-import SemanticRulesOverviewPanels from './components/SemanticRulesOverviewPanels.vue'
 import SemanticRulesTableSection from './components/SemanticRulesTableSection.vue'
-import SemanticRulesBatchPanel from './components/SemanticRulesBatchPanel.vue'
-import SemanticRulesBatchResultDrawer from './components/SemanticRulesBatchResultDrawer.vue'
 import SemanticRuleDetailModal from './components/modals/SemanticRuleDetailModal.vue'
 import SemanticRuleTestModal from './components/modals/SemanticRuleTestModal.vue'
 import CustomQcBatchLaunchModal from '@/views/rules/components/CustomQcBatchLaunchModal.vue'
-import {
-  getBatchJobStatusTagClass,
-  getBatchJobStatusText,
-} from '@/views/rules/utils/customQcWorkspacePresentation'
 
 const {
   loading,
-  criticalDefectCount,
-  majorDefectCount,
-  minorDefectCount,
-  riskDensity,
-  topCategories,
-  heroKpiCards,
-  getDefectRate,
-  getCategoryRatio,
   queryState,
   keywordInput,
   filteredRules,
@@ -164,9 +100,6 @@ const {
   complexityOptions,
   defectOptions,
   documentOptions,
-  refreshRules,
-  resetFilters,
-  applyFilterQuery,
   handleTableChange,
   showRuleDetail,
   selectedRule,
@@ -201,28 +134,7 @@ const {
   openBatchLaunchModal,
   confirmBatchLaunch,
   testingBatch,
-  batchJobLoading,
-  batchJobDetailLoading,
-  batchJobDebugLoading,
-  cancellingBatchJobId,
-  retryingBatchJobId,
-  batchJobs,
-  batchJobDetail,
-  batchJobDebugSnapshot,
-  batchJobPagination,
-  batchJobQuery,
-  batchJobStatusOptions,
   batchJobScopeOptions,
-  handleBatchJobTableChange,
-  searchBatchJobs,
-  openBatchJobDrawer,
-  closeBatchJobDrawer,
-  fetchBatchJobDebugSnapshot,
-  executeCancelBatchJob,
-  executeRetryBatchJob,
-  exportBatchJobReport,
-  resultDrawerOpen,
-  formatDateTime,
 } = useSemanticRulesWorkspace()
 
 function handleDetailOpenChange(value: boolean) {
