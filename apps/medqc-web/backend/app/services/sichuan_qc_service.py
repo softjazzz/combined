@@ -1,4 +1,6 @@
 from typing import Dict, Any, List, Optional, Tuple
+import json
+import hashlib
 import logging
 
 from ..core.settings import get_settings
@@ -19,6 +21,7 @@ from .rule_domain_router import (
 from .programmatic_rule_executor import PROGRAMMATIC_RULE_SPECS
 from .qc_execution_cache import QCExecutionCache
 from .qc_rule_orchestrator import QCRuleOrchestrator
+from .qc_rule_registry_service import QCRuleRegistryService
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,11 @@ class SichuanQCService:
         # 规则缓存
         self._rules_cache: Optional[List[Dict[str, Any]]] = None
         self._custom_rules_cache: Optional[List[Dict[str, Any]]] = None
+        self._active_sc_rules_cache: Optional[List[Dict[str, Any]]] = None
+        self._active_sc_rules_source: str = "json_file"
+        self._active_sc_rules_checksum: str = ""
+        self._last_registry_error: Optional[str] = None
+        self.rule_registry = QCRuleRegistryService()
 
         # 统一规则引擎 (用于串行模式)
         self.rule_engine = UnifiedRuleEngine(self.client.generate)
@@ -205,9 +213,141 @@ class SichuanQCService:
             logger.error(f"从 JSON 文件加载自定义规则失败: {e}", exc_info=True)
             return []
 
+    def _normalize_rule_documents(self, rule: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = dict(rule or {})
+        applicable_docs = normalized.get("applicable_documents", [])
+        if applicable_docs:
+            normalized["applicable_documents"] = [
+                self.doc_type_mapping.get(doc, doc)
+                for doc in applicable_docs
+            ]
+        return self._ensure_rule_execution_meta(normalized)
+
+    @staticmethod
+    def _rule_asset_checksum(rules: List[Dict[str, Any]]) -> str:
+        payload = []
+        for rule in rules:
+            payload.append({
+                "rule_id": str(rule.get("rule_id") or ""),
+                "rule_version": str(rule.get("rule_version") or ""),
+                "prompt_version": str(rule.get("prompt_version") or ""),
+                "executor_type": str(rule.get("executor_type") or ""),
+            })
+        payload.sort(key=lambda item: item["rule_id"])
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _load_active_sc_rules(self) -> List[Dict[str, Any]]:
+        """
+        优先从规则治理表加载 SC 规则；不可用时回退本地 JSON。
+        """
+        if self._active_sc_rules_cache is not None:
+            return self._active_sc_rules_cache
+
+        rules: List[Dict[str, Any]] = []
+        source = "json_file"
+        try:
+            loaded_rules, source = self.rule_registry.load_active_rules()
+            for rule in loaded_rules:
+                rule_id = str(rule.get("rule_id") or "").strip().upper()
+                if not rule_id.startswith("SC-"):
+                    continue
+                rules.append(self._normalize_rule_documents(rule))
+        except Exception as exc:
+            self._last_registry_error = str(exc)
+            logger.warning("从规则治理表加载 SC 规则失败，回退 JSON: %s", exc, exc_info=True)
+            rules = []
+            source = "json_file"
+
+        if not rules:
+            rules = [
+                self._normalize_rule_documents(rule)
+                for rule in self._load_rules_from_json()
+                if str(rule.get("rule_id") or "").strip().upper().startswith("SC-")
+            ]
+            source = "json_file"
+
+        checksum = self._rule_asset_checksum(rules)
+        if self._active_sc_rules_checksum and checksum != self._active_sc_rules_checksum:
+            logger.warning(
+                "SC 规则资产版本变化: source=%s old=%s new=%s",
+                source,
+                self._active_sc_rules_checksum[:12],
+                checksum[:12],
+            )
+        self._active_sc_rules_checksum = checksum
+        self._active_sc_rules_source = source
+        self._active_sc_rules_cache = rules
+        logger.info("已加载 %s 条 SC 规则（source=%s）", len(rules), source)
+        return rules
+
+    def invalidate_rule_cache(self) -> None:
+        self._active_sc_rules_cache = None
+        self._rules_cache = None
+        self._custom_rules_cache = None
+
+    def get_rule_source_overview(self) -> Dict[str, Any]:
+        self._load_active_sc_rules()
+        return {
+            "sc_source": self._active_sc_rules_source,
+            "sc_rule_count": len(self._active_sc_rules_cache or []),
+            "sc_checksum": self._active_sc_rules_checksum,
+            "last_registry_error": self._last_registry_error,
+        }
+
+    async def bootstrap_rule_registry(self, *, operator: str = "system", mark_published: bool = True) -> Dict[str, int]:
+        result = self.rule_registry.bootstrap_rules_from_json_to_pg(
+            operator=operator,
+            mark_published=mark_published,
+        )
+        self.invalidate_rule_cache()
+        return result
+
+    def list_rule_versions(self, *, rule_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        return self.rule_registry.list_rule_versions(rule_id=rule_id, limit=limit)
+
+    def list_rule_publish_history(self, *, rule_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        return self.rule_registry.list_publish_history(rule_id=rule_id, limit=limit)
+
+    def publish_rule_version(
+        self,
+        *,
+        rule_id: str,
+        version_no: int,
+        operator: str = "system",
+        reason: str = "manual publish",
+    ) -> bool:
+        ok = self.rule_registry.publish_rule_version(
+            rule_id=rule_id,
+            version_no=version_no,
+            operator=operator,
+            reason=reason,
+        )
+        if ok:
+            self.invalidate_rule_cache()
+        return ok
+
+    def rollback_rule_version(
+        self,
+        *,
+        rule_id: str,
+        version_no: int,
+        operator: str = "system",
+        reason: str = "manual rollback",
+    ) -> bool:
+        ok = self.rule_registry.rollback_rule_version(
+            rule_id=rule_id,
+            version_no=version_no,
+            operator=operator,
+            reason=reason,
+        )
+        if ok:
+            self.invalidate_rule_cache()
+        return ok
+
     async def _load_applicable_rules(self, document_type: str) -> List[Dict[str, Any]]:
         """
-        加载适用于指定文书类型的质控规则（统一从 JSON 文件加载）。
+        加载适用于指定文书类型的质控规则。
 
         Args:
             document_type: 文书类型（如 "病程记录"、"入院记录" 等）
@@ -219,7 +359,7 @@ class SichuanQCService:
         1. 通用规则（applicable_documents 为空）会被包含
         2. 特定规则（applicable_documents 包含指定的 document_type）会被包含
         """
-        sc_rules = self._load_rules_from_json()
+        sc_rules = self._load_active_sc_rules()
         custom_rules = self._load_custom_rules_from_json()
         # 合并并按 rule_id 去重，避免 LX 规则在两份文件中重复执行。
         merged_rules: Dict[str, Dict[str, Any]] = {}
@@ -253,8 +393,12 @@ class SichuanQCService:
         ]
 
         logger.info(
-            f"从 JSON 加载了 {len(applicable_rules)}/{len(all_rules)} 条适用于 '{document_type}' 的规则"
-            f"（匹配类型: {sorted(target_doc_types)}）"
+            "加载了 %s/%s 条适用于 '%s' 的规则（SC source=%s, 匹配类型=%s）",
+            len(applicable_rules),
+            len(all_rules),
+            document_type,
+            self._active_sc_rules_source,
+            sorted(target_doc_types),
         )
         return applicable_rules
 
@@ -1206,15 +1350,20 @@ class SichuanQCService:
             return None
 
         # 根据规则ID前缀明确区分规则来源
-        # SC- 开头：四川省规则（sichuan_rules_146.json）
+        # SC- 开头：优先治理表，再回退 JSON
         # LX- / LXE- 开头：泸县自定义规则（custom_rules_33.json）
         if normalized_rule_id.startswith("SC-"):
-            all_rules = self._load_rules_from_json()
+            rule, source = self.rule_registry.load_rule_by_id(normalized_rule_id)
+            if rule:
+                normalized = self._normalize_rule_documents(rule)
+                logger.info("按 rule_id 命中 SC 规则（source=%s）: %s", source, normalized_rule_id)
+                return normalized
+            all_rules = self._load_active_sc_rules()
         elif normalized_rule_id.startswith("LX-") or normalized_rule_id.startswith("LXE-"):
             all_rules = self._load_custom_rules_from_json()
         else:
             # 兼容旧调用：允许传入 rule_code/original_id，再从两套规则里回查
-            all_rules = [*self._load_rules_from_json(), *self._load_custom_rules_from_json()]
+            all_rules = [*self._load_active_sc_rules(), *self._load_custom_rules_from_json()]
 
         for rule in all_rules:
             candidate_ids = {
@@ -1229,7 +1378,7 @@ class SichuanQCService:
         logger.warning(f"未找到规则: {rule_id}")
         return None
 
-    def update_rule_prompt(self, rule_id: str, custom_prompt: Optional[str]) -> bool:
+    def update_rule_prompt(self, rule_id: str, custom_prompt: Optional[str], *, operator: str = "system") -> bool:
         """
         更新规则的自定义提示词（支持四川省规则和自定义规则）
 
@@ -1246,6 +1395,19 @@ class SichuanQCService:
         normalized_rule_id = str(rule_id or "").strip().upper()
         if not normalized_rule_id:
             return False
+
+        # SC 规则优先写治理表（版本化发布），仅在治理表不可用时回退 JSON 兼容。
+        if normalized_rule_id.startswith("SC-"):
+            updated = self.rule_registry.update_rule_prompt_version(
+                rule_id=normalized_rule_id,
+                custom_prompt=custom_prompt,
+                operator=operator,
+            )
+            if updated:
+                self.invalidate_rule_cache()
+                logger.info("成功更新 SC 规则提示词（治理表）: %s", normalized_rule_id)
+                return True
+            logger.warning("治理表更新 SC 提示词失败，回退 JSON 文件兼容路径: %s", normalized_rule_id)
 
         def _rule_file_and_id(target: str) -> tuple[str, str] | None:
             if target.startswith("SC-"):
@@ -1302,8 +1464,7 @@ class SichuanQCService:
                 json.dump(rules, f, ensure_ascii=False, indent=2)
 
             # 清除缓存，强制下次重新加载
-            if persisted_rule_id.startswith("SC-"):
-                self._rules_cache = None
+            self.invalidate_rule_cache()
 
             logger.info(f"成功更新规则 {persisted_rule_id} 的提示词（文件：{json_filename}）")
             return True

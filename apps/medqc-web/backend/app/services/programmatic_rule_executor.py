@@ -12,6 +12,11 @@ class ProgrammaticRuleSpec:
     strategy: str
     description: str
     keywords: tuple[str, ...] = ()
+    keywords_all: tuple[str, ...] = ()
+    max_hours: Optional[int] = None
+    anchor_labels: tuple[str, ...] = ()
+    completion_labels: tuple[str, ...] = ()
+    rule_hint: str = ""
 
 
 PROGRAMMATIC_RULE_SPECS: dict[str, ProgrammaticRuleSpec] = {
@@ -41,6 +46,119 @@ PROGRAMMATIC_RULE_SPECS: dict[str, ProgrammaticRuleSpec] = {
         strategy="doctor_signature_required",
         description="入院记录医师签名",
     ),
+    "SC-021": ProgrammaticRuleSpec(
+        rule_id="SC-021",
+        strategy="exists_any",
+        description="首次病程记录存在性",
+        keywords=("首次病程记录",),
+    ),
+    "SC-022": ProgrammaticRuleSpec(
+        rule_id="SC-022",
+        strategy="time_within_hours_between_labels",
+        description="首次病程记录 8 小时时效",
+        max_hours=8,
+        anchor_labels=("入院日期", "入院时间"),
+        completion_labels=("记录时间", "记录日期", "书写时间", "完成时间"),
+        rule_hint="入院后8小时内完成",
+    ),
+    "SC-028": ProgrammaticRuleSpec(
+        rule_id="SC-028",
+        strategy="doctor_signature_required",
+        description="病程记录经治医师签名",
+    ),
+    "SC-045": ProgrammaticRuleSpec(
+        rule_id="SC-045",
+        strategy="exists_any",
+        description="有创诊疗操作记录存在性",
+        keywords=("有创诊疗操作记录", "穿刺记录", "操作记录"),
+    ),
+    "SC-051": ProgrammaticRuleSpec(
+        rule_id="SC-051",
+        strategy="exists_any",
+        description="上级医师查房记录存在性",
+        keywords=("主任医师查房记录", "副主任医师查房记录", "查房记录"),
+    ),
+    "SC-052": ProgrammaticRuleSpec(
+        rule_id="SC-052",
+        strategy="doctor_signature_required",
+        description="上级医师查房记录签名",
+    ),
+    "SC-056": ProgrammaticRuleSpec(
+        rule_id="SC-056",
+        strategy="exists_any",
+        description="疑难病例讨论记录存在性",
+        keywords=("疑难病例讨论", "疑难讨论"),
+    ),
+    "SC-067": ProgrammaticRuleSpec(
+        rule_id="SC-067",
+        strategy="exists_any",
+        description="会诊记录存在性",
+        keywords=("会诊记录", "会诊单"),
+    ),
+    "SC-071": ProgrammaticRuleSpec(
+        rule_id="SC-071",
+        strategy="time_within_hours_between_labels",
+        description="常规会诊 24 小时时效",
+        max_hours=24,
+        anchor_labels=("会诊申请时间", "申请时间"),
+        completion_labels=("会诊时间", "记录时间", "完成时间"),
+        rule_hint="会诊申请后24小时内完成",
+    ),
+    "SC-082": ProgrammaticRuleSpec(
+        rule_id="SC-082",
+        strategy="exists_any",
+        description="术前讨论记录存在性",
+        keywords=("术前讨论",),
+    ),
+    "SC-087": ProgrammaticRuleSpec(
+        rule_id="SC-087",
+        strategy="exists_any",
+        description="手术同意书存在性",
+        keywords=("手术同意书", "手术知情同意"),
+    ),
+    "SC-090": ProgrammaticRuleSpec(
+        rule_id="SC-090",
+        strategy="exists_any",
+        description="麻醉同意书存在性",
+        keywords=("麻醉同意书", "麻醉知情同意"),
+    ),
+    "SC-095": ProgrammaticRuleSpec(
+        rule_id="SC-095",
+        strategy="exists_any",
+        description="手术记录存在性",
+        keywords=("手术记录",),
+    ),
+    "SC-096": ProgrammaticRuleSpec(
+        rule_id="SC-096",
+        strategy="time_within_hours_between_labels",
+        description="手术记录 24 小时时效",
+        max_hours=24,
+        anchor_labels=("手术结束时间", "手术时间", "手术日期"),
+        completion_labels=("记录时间", "记录日期", "书写时间", "完成时间"),
+        rule_hint="术后24小时内完成",
+    ),
+    "SC-098": ProgrammaticRuleSpec(
+        rule_id="SC-098",
+        strategy="doctor_signature_required",
+        description="主刀医师签名",
+    ),
+    "SC-104": ProgrammaticRuleSpec(
+        rule_id="SC-104",
+        strategy="exists_all",
+        description="术后首次病程与麻醉术后访视记录完整性",
+        keywords_all=("术后首次病程记录", "麻醉术后访视记录"),
+    ),
+    "SC-111": ProgrammaticRuleSpec(
+        rule_id="SC-111",
+        strategy="exists_any",
+        description="手术风险评估表存在性",
+        keywords=("手术风险评估表", "手术风险评估"),
+    ),
+    "SC-112": ProgrammaticRuleSpec(
+        rule_id="SC-112",
+        strategy="doctor_signature_required",
+        description="手术风险评估表签名",
+    ),
     "SC-116": ProgrammaticRuleSpec(
         rule_id="SC-116",
         strategy="exists_any",
@@ -67,6 +185,55 @@ PROGRAMMATIC_RULE_SPECS: dict[str, ProgrammaticRuleSpec] = {
         strategy="exists_any",
         description="死亡证明书存在性",
         keywords=("死亡证明书", "死亡医学证明", "居民死亡医学证明"),
+    ),
+    "SC-122": ProgrammaticRuleSpec(
+        rule_id="SC-122",
+        strategy="exists_any",
+        description="出院医嘱存在性",
+        keywords=("出院医嘱",),
+    ),
+    "SC-124": ProgrammaticRuleSpec(
+        rule_id="SC-124",
+        strategy="exists_any",
+        description="出院/死亡诊断存在性",
+        keywords=("出院诊断", "死亡诊断"),
+    ),
+    "SC-126": ProgrammaticRuleSpec(
+        rule_id="SC-126",
+        strategy="doctor_signature_required",
+        description="出院/死亡记录医师签名",
+    ),
+    "SC-133": ProgrammaticRuleSpec(
+        rule_id="SC-133",
+        strategy="exists_any",
+        description="输血知情同意书存在性",
+        keywords=("输血治疗知情同意书", "输血同意书"),
+    ),
+    "LX-019": ProgrammaticRuleSpec(
+        rule_id="LX-019",
+        strategy="exists_any",
+        description="手术患者术前讨论记录存在性",
+        keywords=("术前讨论",),
+    ),
+    "LX-022": ProgrammaticRuleSpec(
+        rule_id="LX-022",
+        strategy="exists_any",
+        description="麻醉知情同意书存在性",
+        keywords=("麻醉同意书", "麻醉知情同意"),
+    ),
+    "LX-026": ProgrammaticRuleSpec(
+        rule_id="LX-026",
+        strategy="time_within_hours_between_labels",
+        description="手术记录 24 小时时效",
+        max_hours=24,
+        anchor_labels=("手术结束时间", "手术时间", "手术日期"),
+        completion_labels=("记录时间", "记录日期", "书写时间", "完成时间"),
+        rule_hint="术后24小时内完成",
+    ),
+    "LX-029": ProgrammaticRuleSpec(
+        rule_id="LX-029",
+        strategy="time_within_24h_after_discharge_or_death",
+        description="出院记录 24 小时时效",
     ),
 }
 
@@ -145,6 +312,8 @@ class ProgrammaticRuleExecutor:
     ) -> tuple[str, bool, str, str, str, float, dict[str, Any]]:
         if spec.strategy == "exists_any":
             return self._evaluate_exists_any(spec=spec, content=content)
+        if spec.strategy == "exists_all":
+            return self._evaluate_exists_all(spec=spec, content=content)
         if spec.strategy == "doctor_signature_required":
             return self._evaluate_doctor_signature(content=content)
         if spec.strategy == "non_licensed_review_signature":
@@ -162,6 +331,14 @@ class ProgrammaticRuleExecutor:
                 anchor_labels=self._DISCHARGE_TIME_LABELS,
                 completion_labels=self._COMPLETION_TIME_LABELS,
                 rule_hint="出院(死亡)后24小时内完成",
+            )
+        if spec.strategy == "time_within_hours_between_labels":
+            return self._evaluate_time_window(
+                content=content,
+                anchor_labels=spec.anchor_labels or self._ADMISSION_TIME_LABELS,
+                completion_labels=spec.completion_labels or self._COMPLETION_TIME_LABELS,
+                rule_hint=spec.rule_hint or "规定时限内完成",
+                max_hours=max(1, int(spec.max_hours or 24)),
             )
         if spec.strategy == "required_fields_from_title":
             return self._evaluate_required_fields_from_title(rule=rule, content=content)
@@ -193,6 +370,36 @@ class ProgrammaticRuleExecutor:
             "请补充对应文书并完成签署。",
             0.92,
             {"is_applicable": True, "reason": "", "method": "program_exists"},
+        )
+
+    def _evaluate_exists_all(
+        self,
+        *,
+        spec: ProgrammaticRuleSpec,
+        content: str,
+    ) -> tuple[str, bool, str, str, str, float, dict[str, Any]]:
+        required_keywords = tuple(kw for kw in spec.keywords_all if kw)
+        if not required_keywords:
+            return self._evaluate_exists_any(spec=spec, content=content)
+        missing_keywords = [kw for kw in required_keywords if kw not in content]
+        if not missing_keywords:
+            return (
+                "compliant",
+                True,
+                "文书完整性检查通过。",
+                f"已命中关键词: {', '.join(required_keywords[:4])}",
+                "",
+                0.94,
+                {"is_applicable": True, "reason": "", "method": "program_exists_all"},
+            )
+        return (
+            "non_compliant",
+            False,
+            "规则要求的关联文书不完整。",
+            f"缺失关键词: {', '.join(missing_keywords)}",
+            "请补充缺失记录并补齐对应签署信息。",
+            0.9,
+            {"is_applicable": True, "reason": "", "method": "program_exists_all"},
         )
 
     def _evaluate_doctor_signature(
@@ -274,6 +481,7 @@ class ProgrammaticRuleExecutor:
         anchor_labels: tuple[str, ...],
         completion_labels: tuple[str, ...],
         rule_hint: str,
+        max_hours: int = 24,
     ) -> tuple[str, bool, str, str, str, float, dict[str, Any]]:
         anchor_dt, anchor_raw = self._extract_labeled_datetime(content, anchor_labels)
         completion_dt, completion_raw = self._extract_labeled_datetime(content, completion_labels)
@@ -289,7 +497,7 @@ class ProgrammaticRuleExecutor:
             )
         delta_hours = (completion_dt - anchor_dt).total_seconds() / 3600
         evidence = f"锚点={anchor_raw}；完成={completion_raw}；间隔={delta_hours:.1f}h"
-        if delta_hours <= 24:
+        if delta_hours <= max_hours:
             return (
                 "compliant",
                 True,

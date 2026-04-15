@@ -1762,6 +1762,184 @@ class UpdatePromptRequest(BaseModel):
     custom_prompt: Optional[str] = None
 
 
+class RuleVersionActionRequest(BaseModel):
+    version_no: int
+    reason: Optional[str] = None
+
+
+class RuleRegistryBootstrapRequest(BaseModel):
+    mark_published: bool = True
+
+
+@router.get("/rules/source")
+async def get_rule_source(
+    request: Request,
+    qc_service: SichuanQCService = Depends(get_qc_service),
+):
+    """
+    获取当前四川规则来源与版本摘要（PG 治理表 / JSON 回退）。
+    """
+    try:
+        overview = qc_service.get_rule_source_overview()
+        return success_response(
+            data=overview,
+            message="获取规则来源成功",
+            trace_id=get_trace_id(request),
+        )
+    except Exception as e:
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"获取规则来源失败: {str(e)}",
+            trace_id=get_trace_id(request),
+        )
+
+
+@router.post("/rules/bootstrap")
+async def bootstrap_rules_to_registry(
+    request: Request,
+    req: RuleRegistryBootstrapRequest,
+    admin_user: dict = Depends(require_admin),
+    qc_service: SichuanQCService = Depends(get_qc_service),
+):
+    """
+    将本地 JSON 四川规则增量导入治理表（幂等）。
+    """
+    try:
+        result = await qc_service.bootstrap_rule_registry(
+            operator=_current_user_id(admin_user),
+            mark_published=bool(req.mark_published),
+        )
+        return success_response(
+            data=result,
+            message="规则导入治理表完成",
+            trace_id=get_trace_id(request),
+        )
+    except Exception as e:
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"规则导入治理表失败: {str(e)}",
+            trace_id=get_trace_id(request),
+        )
+
+
+@router.get("/rules/{rule_id}/versions")
+async def list_rule_versions(
+    request: Request,
+    rule_id: str,
+    limit: int = Query(default=20, ge=1, le=200),
+    admin_user: dict = Depends(require_admin),
+    qc_service: SichuanQCService = Depends(get_qc_service),
+):
+    try:
+        versions = qc_service.list_rule_versions(rule_id=rule_id, limit=limit)
+        return success_response(
+            data={
+                "rule_id": rule_id,
+                "items": versions,
+                "total": len(versions),
+            },
+            message="获取规则版本成功",
+            trace_id=get_trace_id(request),
+        )
+    except Exception as e:
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"获取规则版本失败: {str(e)}",
+            trace_id=get_trace_id(request),
+        )
+
+
+@router.get("/rules/{rule_id}/publish-history")
+async def list_rule_publish_history(
+    request: Request,
+    rule_id: str,
+    limit: int = Query(default=50, ge=1, le=500),
+    admin_user: dict = Depends(require_admin),
+    qc_service: SichuanQCService = Depends(get_qc_service),
+):
+    try:
+        history = qc_service.list_rule_publish_history(rule_id=rule_id, limit=limit)
+        return success_response(
+            data={
+                "rule_id": rule_id,
+                "items": history,
+                "total": len(history),
+            },
+            message="获取发布历史成功",
+            trace_id=get_trace_id(request),
+        )
+    except Exception as e:
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"获取发布历史失败: {str(e)}",
+            trace_id=get_trace_id(request),
+        )
+
+
+@router.post("/rules/{rule_id}/publish")
+async def publish_rule_version(
+    request: Request,
+    rule_id: str,
+    req: RuleVersionActionRequest,
+    admin_user: dict = Depends(require_admin),
+    qc_service: SichuanQCService = Depends(get_qc_service),
+):
+    try:
+        ok = qc_service.publish_rule_version(
+            rule_id=rule_id,
+            version_no=req.version_no,
+            operator=_current_user_id(admin_user),
+            reason=str(req.reason or "manual publish"),
+        )
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"规则版本不存在或发布失败: {rule_id} v{req.version_no}")
+        return success_response(
+            data={"rule_id": rule_id, "version_no": req.version_no},
+            message="发布规则版本成功",
+            trace_id=get_trace_id(request),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"发布规则版本失败: {str(e)}",
+            trace_id=get_trace_id(request),
+        )
+
+
+@router.post("/rules/{rule_id}/rollback")
+async def rollback_rule_version(
+    request: Request,
+    rule_id: str,
+    req: RuleVersionActionRequest,
+    admin_user: dict = Depends(require_admin),
+    qc_service: SichuanQCService = Depends(get_qc_service),
+):
+    try:
+        ok = qc_service.rollback_rule_version(
+            rule_id=rule_id,
+            version_no=req.version_no,
+            operator=_current_user_id(admin_user),
+            reason=str(req.reason or "manual rollback"),
+        )
+        if not ok:
+            raise HTTPException(status_code=404, detail=f"规则版本不存在或回滚失败: {rule_id} v{req.version_no}")
+        return success_response(
+            data={"rule_id": rule_id, "version_no": req.version_no},
+            message="回滚规则版本成功",
+            trace_id=get_trace_id(request),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"回滚规则版本失败: {str(e)}",
+            trace_id=get_trace_id(request),
+        )
+
+
 @router.get("/rules/{rule_id}/prompt")
 async def get_rule_prompt(
     request: Request,
@@ -1891,7 +2069,11 @@ async def update_rule_prompt(
     """
     try:
         # 更新提示词
-        success = qc_service.update_rule_prompt(rule_id, req.custom_prompt)
+        success = qc_service.update_rule_prompt(
+            rule_id,
+            req.custom_prompt,
+            operator=_current_user_id(admin_user),
+        )
 
         if not success:
             raise HTTPException(
