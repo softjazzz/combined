@@ -639,11 +639,30 @@ class SichuanQCService:
             rules=prepared_rules,
             medical_record=medical_record,
             llm_evaluate=_llm_evaluate,
+            llm_batch_evaluate=self._llm_evaluate_batch_compact,
+            prompt_strategy="batch_compact_v1",
+            batch_pack_candidates=(3, 5, 8, 10, 12, 15),
+            batch_pack_max_size=15,
             evidence_source=evidence_source,
             llm_concurrency=llm_concurrency,
             model_version=model_version,
             execution_cache=self.execution_cache,
             cache_ttl_seconds=1800,
+        )
+
+    async def _llm_evaluate_batch_compact(
+        self,
+        rules: List[Dict[str, Any]],
+        medical_record: Dict[str, Any],
+        options: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return await self.rule_engine.evaluate_batch_compact(
+            rules=rules,
+            medical_record=medical_record,
+            pack_id=str(options.get("pack_id") or ""),
+            pack_size=int(options.get("pack_size") or len(rules)),
+            low_confidence_threshold=0.45,
+            context_token_budget=7000,
         )
 
     async def _resolve_rules_for_document(
@@ -731,6 +750,7 @@ class SichuanQCService:
                 "model": self.client.model,
                 "executor_breakdown": orchestrated.get("executor_breakdown") or {},
                 "cache_breakdown": orchestrated.get("cache_breakdown") or {},
+                "pack_metrics": orchestrated.get("pack_metrics") or {},
             },
             "parsed_evaluation_results": rule_results,
             "evaluation_results": evaluation_results,
@@ -739,6 +759,7 @@ class SichuanQCService:
             "api_time": total_api_time,
             "executor_breakdown": orchestrated.get("executor_breakdown") or {},
             "cache_breakdown": orchestrated.get("cache_breakdown") or {},
+            "pack_metrics": orchestrated.get("pack_metrics") or {},
             "trace": orchestrated.get("trace") or [],
         }
 
@@ -1239,6 +1260,7 @@ class SichuanQCService:
             ).to_dict(),
             "executor_breakdown": orchestrated.get("executor_breakdown") or {},
             "cache_breakdown": orchestrated.get("cache_breakdown") or {},
+            "pack_metrics": orchestrated.get("pack_metrics") or {},
             "trace": orchestrated.get("trace") or [],
             "bundle_metadata": {
                 "execution_domain": routing.execution_domain,

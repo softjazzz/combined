@@ -131,7 +131,17 @@ class _ServiceStub:
                     },
                 }
             )
-        return {"evaluation_results": evals}
+        return {
+            "evaluation_results": evals,
+            "pack_metrics": {
+                "total_packs": 2,
+                "avg_pack_size": 5.0,
+                "fallback_packs": 0,
+                "single_rule_retries": 0,
+                "pack_parse_retry_count": 0,
+                "context_tokens_estimate": 700,
+            },
+        }
 
 
 @pytest.mark.asyncio
@@ -154,3 +164,4 @@ async def test_workspace_batch_should_call_evaluate_once_per_record(monkeypatch)
     assert int(workspace.summary.get("total_records") or 0) == 2
     assert int(workspace.summary.get("rule_count") or 0) == 3
     assert int(workspace.summary.get("processed_rule_count") or 0) == 3
+    assert int(((workspace.summary.get("pack_metrics") or {}).get("total_packs")) or 0) >= 1

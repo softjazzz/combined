@@ -299,6 +299,420 @@ class UnifiedRuleEngine:
             }
         }
 
+    async def evaluate_batch_compact(
+        self,
+        rules: List[Dict[str, Any]],
+        medical_record: Dict[str, Any],
+        *,
+        pack_id: str = "",
+        pack_size: int = 0,
+        low_confidence_threshold: float = 0.45,
+        context_token_budget: int = 7000,
+    ) -> Dict[str, Any]:
+        effective_rules = list(rules or [])
+        if not effective_rules:
+            return {
+                "results": [],
+                "tokens_used": 0,
+                "api_time": 0.0,
+                "raw_output": "",
+                "parse_error": False,
+                "missing_rule_ids": [],
+                "low_confidence_rule_ids": [],
+                "context_tokens_estimate": 0,
+            }
+
+        not_applicable_results: List[Dict[str, Any]] = []
+        applicable_rules: List[Dict[str, Any]] = []
+        for rule in effective_rules:
+            applicability = self._app_checker.check(rule, medical_record)
+            if applicability.is_applicable:
+                applicable_rules.append(rule)
+                continue
+            not_applicable_results.append(
+                {
+                    "rule_id": rule.get("rule_id"),
+                    "rule_name": rule.get("name"),
+                    "status": "not_applicable",
+                    "is_compliant": True,
+                    "issues": [],
+                    "findings": applicability.reason or "本规则不适用，判定为合规。",
+                    "evidence": "",
+                    "suggestion": "",
+                    "confidence": 0.9,
+                    "llm_raw_output": None,
+                    "applicability": {
+                        "is_applicable": False,
+                        "reason": applicability.reason,
+                        "method": applicability.method,
+                    },
+                    "evidence_verified": True,
+                    "metadata": {
+                        "tokens_used": 0,
+                        "api_time": 0.0,
+                        "prompt_strategy": "batch_compact_v1",
+                        "pack_id": pack_id,
+                        "pack_size": int(pack_size or len(effective_rules)),
+                        "pack_fallback": False,
+                        "context_tokens_estimate": 0,
+                    },
+                }
+            )
+
+        if not applicable_rules:
+            return {
+                "results": not_applicable_results,
+                "tokens_used": 0,
+                "api_time": 0.0,
+                "raw_output": "",
+                "parse_error": False,
+                "missing_rule_ids": [],
+                "low_confidence_rule_ids": [],
+                "context_tokens_estimate": 0,
+            }
+
+        prompt, context_tokens_estimate = self._build_batch_prompt_compact(
+            applicable_rules,
+            medical_record,
+            context_token_budget=context_token_budget,
+        )
+        llm_result = await self._llm_generate(prompt)
+        raw_output = (
+            llm_result.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
+        usage = llm_result.get("usage", {})
+        tokens_used = int(usage.get("total_tokens", 0) or 0)
+        api_time = float(llm_result.get("_api_time", 0.0) or 0.0)
+
+        parsed = self._parse_batch_llm_response(raw_output)
+        parsed_items = parsed.get("items") or []
+        parsed_map: Dict[str, Dict[str, Any]] = {}
+        for item in parsed_items:
+            rid = str(item.get("rule_id") or "").strip().upper()
+            if rid and rid not in parsed_map:
+                parsed_map[rid] = item
+
+        expected_ids = {str(rule.get("rule_id") or "").strip().upper() for rule in applicable_rules if str(rule.get("rule_id") or "").strip()}
+        missing_ids = sorted(expected_ids - set(parsed_map.keys()))
+        low_confidence_ids: List[str] = []
+        distributed_tokens = int(tokens_used / max(1, len(applicable_rules)))
+        distributed_api_time = float(api_time / max(1, len(applicable_rules)))
+
+        llm_results: List[Dict[str, Any]] = []
+        for rule in applicable_rules:
+            rule_id = str(rule.get("rule_id") or "").strip().upper()
+            rule_name = str(rule.get("name") or "")
+            parsed_item = dict(parsed_map.get(rule_id) or {})
+
+            if not parsed_item:
+                llm_results.append(
+                    {
+                        "rule_id": rule.get("rule_id"),
+                        "rule_name": rule_name,
+                        "status": "uncertain",
+                        "is_compliant": False,
+                        "issues": [],
+                        "findings": "批量响应缺少该规则结果，待回退重试。",
+                        "evidence": "",
+                        "suggestion": "",
+                        "confidence": 0.0,
+                        "llm_raw_output": raw_output,
+                        "applicability": {
+                            "is_applicable": True,
+                            "reason": "",
+                            "method": "default",
+                        },
+                        "evidence_verified": False,
+                        "metadata": {
+                            "tokens_used": distributed_tokens,
+                            "api_time": distributed_api_time,
+                            "prompt_strategy": "batch_compact_v1",
+                            "pack_id": pack_id,
+                            "pack_size": int(pack_size or len(effective_rules)),
+                            "pack_fallback": False,
+                            "context_tokens_estimate": context_tokens_estimate,
+                        },
+                    }
+                )
+                continue
+
+            confidence = float(parsed_item.get("confidence") or 0.7)
+            evidence_text = str(parsed_item.get("evidence") or "")
+            evidence_info = self._evidence_verifier.verify(
+                evidence_text,
+                str(medical_record.get("content") or ""),
+            )
+            if not evidence_info.get("verified"):
+                confidence = min(confidence, 0.5)
+            if confidence < low_confidence_threshold:
+                low_confidence_ids.append(rule_id)
+
+            status = str(parsed_item.get("status") or "").strip().lower()
+            is_compliant = bool(parsed_item.get("is_compliant") is True)
+            if status not in {"compliant", "non_compliant", "not_applicable", "uncertain"}:
+                status = "compliant" if is_compliant else "non_compliant"
+            if status == "not_applicable":
+                is_compliant = True
+
+            llm_results.append(
+                {
+                    "rule_id": rule.get("rule_id"),
+                    "rule_name": rule_name,
+                    "status": status,
+                    "is_compliant": is_compliant,
+                    "issues": parsed_item.get("issues") or [],
+                    "findings": parsed_item.get("findings") or "",
+                    "evidence": evidence_text,
+                    "suggestion": parsed_item.get("suggestion") or "",
+                    "confidence": confidence,
+                    "llm_raw_output": raw_output,
+                    "applicability": {
+                        "is_applicable": True,
+                        "reason": "",
+                        "method": "default",
+                    },
+                    "evidence_verified": bool(evidence_info.get("verified") is True),
+                    "evidence_span": evidence_info.get("span"),
+                    "metadata": {
+                        "tokens_used": distributed_tokens,
+                        "api_time": distributed_api_time,
+                        "prompt_strategy": "batch_compact_v1",
+                        "pack_id": pack_id,
+                        "pack_size": int(pack_size or len(effective_rules)),
+                        "pack_fallback": False,
+                        "context_tokens_estimate": context_tokens_estimate,
+                    },
+                }
+            )
+
+        return {
+            "results": [*not_applicable_results, *llm_results],
+            "tokens_used": tokens_used,
+            "api_time": api_time,
+            "raw_output": raw_output,
+            "parse_error": bool(parsed.get("parse_error") is True),
+            "missing_rule_ids": missing_ids,
+            "low_confidence_rule_ids": sorted(set(low_confidence_ids)),
+            "context_tokens_estimate": context_tokens_estimate,
+        }
+
+    def _build_batch_prompt_compact(
+        self,
+        rules: List[Dict[str, Any]],
+        medical_record: Dict[str, Any],
+        *,
+        context_token_budget: int = 7000,
+    ) -> Tuple[str, int]:
+        content = str(medical_record.get("content") or "")
+        evidence_payload = medical_record.get("evidence_payload")
+        context_text, context_tokens = self._build_compact_context(
+            content=content,
+            evidence_payload=evidence_payload if isinstance(evidence_payload, dict) else {},
+            context_token_budget=context_token_budget,
+        )
+
+        card_lines: List[str] = []
+        for idx, rule in enumerate(rules, start=1):
+            rule_id = str(rule.get("rule_id") or rule.get("rule_code") or f"RULE-{idx}")
+            rule_name = str(rule.get("name") or "")
+            defect_level = str(rule.get("defect_level") or "")
+            checks = self._extract_compact_checks(
+                str(rule.get("custom_prompt") or rule.get("prompt_template") or ""),
+                rule=rule,
+            )
+            checks = re.sub(r"\s+", " ", checks).strip()
+            if len(checks) > 200:
+                checks = checks[:200] + "..."
+            card_lines.append(
+                f"- rule_id: {rule_id}\n"
+                f"  rule_name: {rule_name}\n"
+                f"  defect_level: {defect_level}\n"
+                f"  checks: {checks}"
+            )
+
+        prompt = (
+            "你是资深病历质控专家。请基于下方病历证据，对规则列表逐条判定。\n"
+            "要求：\n"
+            "1. 只输出 JSON，不要解释。\n"
+            "2. 必须覆盖全部 rule_id，每条只输出一次。\n"
+            "3. 若证据不足，status=uncertain，is_compliant=false，并说明缺失证据。\n"
+            "4. evidence 尽量引用原文短句。\n\n"
+            f"适用规则数 {len(rules)}\n"
+            "规则卡片：\n"
+            f"{chr(10).join(card_lines)}\n\n"
+            "病历证据上下文：\n"
+            f"{context_text}\n\n"
+            "输出格式：\n"
+            "{\n"
+            "  \"results\": [\n"
+            "    {\n"
+            "      \"rule_id\": \"SC-001\",\n"
+            "      \"is_compliant\": true,\n"
+            "      \"status\": \"compliant|non_compliant|uncertain|not_applicable\",\n"
+            "      \"findings\": \"结论\",\n"
+            "      \"evidence\": \"证据\",\n"
+            "      \"suggestion\": \"建议\",\n"
+            "      \"confidence\": 0.0,\n"
+            "      \"issues\": []\n"
+            "    }\n"
+            "  ]\n"
+            "}"
+        )
+        return prompt, context_tokens
+
+    def _build_compact_context(
+        self,
+        *,
+        content: str,
+        evidence_payload: Dict[str, Any],
+        context_token_budget: int,
+    ) -> Tuple[str, int]:
+        budget = max(1200, int(context_token_budget or 7000))
+        primary = str(content or "").strip()
+        primary_limit = min(len(primary), 12000)
+        primary_text = primary[:primary_limit]
+
+        supporting = list(evidence_payload.get("supporting_documents") or [])
+        timeline = list(evidence_payload.get("timeline_facts") or [])
+        document_hits = evidence_payload.get("document_hits") or {}
+        quality_flags = list(evidence_payload.get("data_quality_flags") or [])
+
+        support_limit = min(len(supporting), 6)
+        timeline_limit = min(len(timeline), 12)
+
+        def _render_ctx() -> str:
+            lines: List[str] = []
+            lines.append("【主文书】")
+            lines.append(primary_text)
+            if document_hits:
+                hit_parts = [f"{k}:{'Y' if bool(v) else 'N'}" for k, v in document_hits.items()]
+                lines.append("【文书命中】" + "；".join(hit_parts))
+            if quality_flags:
+                lines.append("【数据质量】" + "；".join([str(x) for x in quality_flags if str(x).strip()]))
+            if support_limit > 0:
+                lines.append("【辅助证据】")
+                for item in supporting[:support_limit]:
+                    if not isinstance(item, dict):
+                        continue
+                    doc_type = str(item.get("document_type") or item.get("source_table") or "辅助文书")
+                    snippet = str(item.get("evidence_text") or item.get("content") or item.get("text_preview") or "").strip()
+                    if len(snippet) > 500:
+                        snippet = snippet[:500] + "..."
+                    if snippet:
+                        lines.append(f"- [{doc_type}] {snippet}")
+            if timeline_limit > 0:
+                lines.append("【时间线事实】")
+                for fact in timeline[:timeline_limit]:
+                    text = str(fact).strip()
+                    if not text:
+                        continue
+                    if len(text) > 220:
+                        text = text[:220] + "..."
+                    lines.append(f"- {text}")
+            return "\n".join(lines)
+
+        context_text = _render_ctx()
+        estimated_tokens = self._estimate_tokens(context_text)
+        # 预算降级顺序：先减辅助证据，再减时间线，再缩主文书
+        while estimated_tokens > budget and support_limit > 0:
+            support_limit -= 1
+            context_text = _render_ctx()
+            estimated_tokens = self._estimate_tokens(context_text)
+        while estimated_tokens > budget and timeline_limit > 0:
+            timeline_limit -= 1
+            context_text = _render_ctx()
+            estimated_tokens = self._estimate_tokens(context_text)
+        while estimated_tokens > budget and len(primary_text) > 1500:
+            primary_text = primary_text[: max(1500, int(len(primary_text) * 0.8))]
+            context_text = _render_ctx()
+            estimated_tokens = self._estimate_tokens(context_text)
+
+        return context_text, estimated_tokens
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        return int(max(1, len(text or "")) / 4)
+
+    @staticmethod
+    def _extract_compact_checks(custom_prompt: str, *, rule: Dict[str, Any]) -> str:
+        source = str(custom_prompt or "").strip()
+        if not source:
+            return str(rule.get("description") or "")
+        source = source.replace("{medical_text}", "")
+        source = source.replace("{rule_id}", str(rule.get("rule_id") or ""))
+        source = source.replace("{name}", str(rule.get("name") or ""))
+        source = re.sub(r"\s+", " ", source).strip()
+        if not source:
+            return str(rule.get("description") or "")
+        pattern = re.compile(r"(检查|判定|不合规|需满足|必须|缺失|禁止)")
+        snippets: List[str] = []
+        for part in re.split(r"[。；;]\s*", source):
+            cleaned = part.strip()
+            if not cleaned:
+                continue
+            if pattern.search(cleaned):
+                snippets.append(cleaned)
+            if len(snippets) >= 3:
+                break
+        if snippets:
+            return "；".join(snippets)
+        return source[:260]
+
+    def _parse_batch_llm_response(self, raw_output: str) -> Dict[str, Any]:
+        if not raw_output:
+            return {"items": [], "parse_error": True}
+
+        cleaned = re.sub(r"<think>[\s\S]*?</think>", "", raw_output or "", flags=re.IGNORECASE).strip()
+        payload: Any = None
+
+        object_match = re.search(r"\{[\s\S]*\}", cleaned)
+        array_match = re.search(r"\[[\s\S]*\]", cleaned)
+        candidates: List[str] = []
+        if object_match:
+            candidates.append(object_match.group(0))
+        if array_match:
+            candidates.append(array_match.group(0))
+
+        for candidate in candidates:
+            try:
+                payload = json.loads(candidate)
+                break
+            except Exception:
+                continue
+
+        if payload is None:
+            return {"items": [], "parse_error": True}
+
+        items_raw: List[Any]
+        if isinstance(payload, dict):
+            maybe_items = payload.get("results")
+            items_raw = maybe_items if isinstance(maybe_items, list) else []
+        elif isinstance(payload, list):
+            items_raw = payload
+        else:
+            items_raw = []
+
+        items: List[Dict[str, Any]] = []
+        for item in items_raw:
+            if not isinstance(item, dict):
+                continue
+            items.append(
+                {
+                    "rule_id": str(item.get("rule_id") or item.get("rule_code") or "").strip(),
+                    "is_compliant": bool(item.get("is_compliant") is True),
+                    "status": str(item.get("status") or "").strip().lower(),
+                    "findings": str(item.get("findings") or ""),
+                    "evidence": str(item.get("evidence") or ""),
+                    "suggestion": str(item.get("suggestion") or ""),
+                    "confidence": float(item.get("confidence") or 0.7),
+                    "issues": item.get("issues") or [],
+                }
+            )
+
+        return {"items": items, "parse_error": False}
+
     @staticmethod
     def _format_evidence_payload(evidence_payload: Dict[str, Any]) -> str:
         supporting_documents = evidence_payload.get("supporting_documents") or []

@@ -69,3 +69,66 @@ async def test_evaluate_should_include_bundle_evidence_context_in_prompt():
     assert "结构化证据上下文（Bundle）" in prompt
     assert "辅助证据-病程记录片段" in prompt
     assert "2026-04-15 入院" in prompt
+
+
+@pytest.mark.asyncio
+async def test_evaluate_batch_compact_should_return_all_rule_results():
+    async def _fake_llm(prompt: str):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"results": ['
+                            '{"rule_id":"SC-001","is_compliant":true,"status":"compliant","findings":"合规","evidence":"主文书正文","suggestion":"","confidence":0.9},'
+                            '{"rule_id":"SC-002","is_compliant":false,"status":"non_compliant","findings":"不合规","evidence":"主文书正文","suggestion":"补充","confidence":0.88}'
+                            ']}'
+                        )
+                    }
+                }
+            ],
+            "usage": {"total_tokens": 40},
+            "_api_time": 0.2,
+        }
+
+    engine = UnifiedRuleEngine(_fake_llm)
+    result = await engine.evaluate_batch_compact(
+        rules=[
+            {"rule_id": "SC-001", "name": "规则1", "description": "描述1"},
+            {"rule_id": "SC-002", "name": "规则2", "description": "描述2"},
+        ],
+        medical_record={"content": "主文书正文", "document_type": "病程记录"},
+        pack_id="pack-1",
+        pack_size=2,
+    )
+
+    assert result["parse_error"] is False
+    assert len(result["results"]) == 2
+    assert result["missing_rule_ids"] == []
+    assert result["low_confidence_rule_ids"] == []
+    assert result["context_tokens_estimate"] > 0
+    assert all((item.get("metadata") or {}).get("prompt_strategy") == "batch_compact_v1" for item in result["results"])
+
+
+@pytest.mark.asyncio
+async def test_evaluate_batch_compact_should_report_missing_when_parse_failed():
+    async def _fake_llm(prompt: str):
+        return {
+            "choices": [{"message": {"content": "非JSON输出"}}],
+            "usage": {"total_tokens": 10},
+            "_api_time": 0.05,
+        }
+
+    engine = UnifiedRuleEngine(_fake_llm)
+    result = await engine.evaluate_batch_compact(
+        rules=[
+            {"rule_id": "SC-201", "name": "规则201", "description": "描述201"},
+            {"rule_id": "SC-202", "name": "规则202", "description": "描述202"},
+        ],
+        medical_record={"content": "主文书正文", "document_type": "病程记录"},
+        pack_id="pack-fail",
+        pack_size=2,
+    )
+
+    assert result["parse_error"] is True
+    assert sorted(result["missing_rule_ids"]) == ["SC-201", "SC-202"]

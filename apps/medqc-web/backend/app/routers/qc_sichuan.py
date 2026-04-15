@@ -571,6 +571,7 @@ async def evaluate(
                     "model": summary.get("model", qc_service.client.model),
                     "executor_breakdown": summary.get("executor_breakdown") or {},
                     "cache_breakdown": summary.get("cache_breakdown") or {},
+                    "pack_metrics": summary.get("pack_metrics") or {},
                 },
                 "performance_metrics": {
                     "processing_time": processing_time,
@@ -589,6 +590,7 @@ async def evaluate(
                 "trace": result.get("trace") or [],
                 "executor_breakdown": result.get("executor_breakdown") or {},
                 "cache_breakdown": result.get("cache_breakdown") or {},
+                "pack_metrics": result.get("pack_metrics") or {},
                 "llm_info": {
                     "model": qc_service.client.model,
                     "api_endpoint": qc_service.client.api_endpoint,
@@ -813,6 +815,12 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         executor_llm = 0
         cache_hit = 0
         cache_miss = 0
+        total_pack_count = 0
+        total_pack_size_weighted = 0
+        total_pack_fallback_count = 0
+        total_pack_parse_retry_count = 0
+        total_single_rule_retries = 0
+        total_context_tokens_estimate = 0
 
         # 预加载规则，后续按病历一次性评估全部规则，再回填到每条规则结果。
         # 这样可触发 orchestrator 的分桶并发，避免规则级外层串行瓶颈。
@@ -869,6 +877,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     document_type=document_type,
                     rule_ids=valid_rule_ids,
                 )
+                record_pack_metrics = dict(result.get("pack_metrics") or {})
+                pack_count = int(record_pack_metrics.get("total_packs") or 0)
+                avg_pack_size = float(record_pack_metrics.get("avg_pack_size") or 0.0)
+                total_pack_count += pack_count
+                total_pack_size_weighted += (avg_pack_size * pack_count)
+                total_pack_fallback_count += int(record_pack_metrics.get("fallback_packs") or 0)
+                total_pack_parse_retry_count += int(record_pack_metrics.get("pack_parse_retry_count") or 0)
+                total_single_rule_retries += int(record_pack_metrics.get("single_rule_retries") or 0)
+                total_context_tokens_estimate += int(record_pack_metrics.get("context_tokens_estimate") or 0)
                 eval_items = list(result.get("evaluation_results") or [])
                 eval_map: Dict[str, Dict[str, Any]] = {}
                 for eval_item in eval_items:
@@ -933,6 +950,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "execution_domain": str(metadata.get("execution_domain") or ""),
                         "doc_scope": str(metadata.get("doc_scope") or ""),
                         "cost_class": str(metadata.get("cost_class") or ""),
+                        "prompt_strategy": str(metadata.get("prompt_strategy") or ""),
+                        "pack_size": int(metadata.get("pack_size") or 1),
+                        "pack_id": str(metadata.get("pack_id") or ""),
+                        "pack_fallback": bool(metadata.get("pack_fallback") is True),
+                        "context_tokens_estimate": int(metadata.get("context_tokens_estimate") or 0),
                         "document_type": document_type,
                         "defect_level": str((rule or {}).get("defect_level") or ""),
                         "llm_fallback": bool(metadata.get("llm_fallback") is True),
@@ -1024,6 +1046,14 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "cache_breakdown": {
                 "hit": cache_hit,
                 "miss": cache_miss,
+            },
+            "pack_metrics": {
+                "total_packs": total_pack_count,
+                "avg_pack_size": round((total_pack_size_weighted / total_pack_count), 2) if total_pack_count else 0.0,
+                "fallback_packs": total_pack_fallback_count,
+                "single_rule_retries": total_single_rule_retries,
+                "pack_parse_retry_count": total_pack_parse_retry_count,
+                "context_tokens_estimate": int(total_context_tokens_estimate / total_pack_count) if total_pack_count else 0,
             },
             "result_aggregation": _build_result_aggregation(all_items),
             "rule_results": rule_results,
