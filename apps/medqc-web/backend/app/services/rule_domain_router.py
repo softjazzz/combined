@@ -15,6 +15,13 @@ DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "daily_course_record",
         "senior_course_record",
         "rescue_record",
+        "summary_record",
+        "transfer_in_record",
+        "transfer_out_record",
+        "newborn_record",
+        "medical_order",
+        "exam_item_report",
+        "labtest_item_report",
     ),
     "surgery": (
         "presurg_summary",
@@ -24,6 +31,7 @@ DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "consent_form",
         "postsurg_firstcourse_record",
         "surgery_safecheck_record",
+        "surgery_risk_assessment",
     ),
     "consult_discussion": (
         "consultation_record",

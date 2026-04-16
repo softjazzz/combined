@@ -105,12 +105,11 @@ class SichuanQCService:
         routing_decision = route_rule_to_domain(normalized)
         execution_domain = str(normalized.get("execution_domain") or "").strip().lower()
         doc_count = len(set(normalized.get("applicable_documents") or []))
-        # 规则文书只有单一类型时，若仍标注 generic，按文书路由自动收敛到具体执行域，
-        # 避免分包时把会诊/交接班/术后病程等规则混入 generic 桶。
-        if (
-            not execution_domain
-            or (execution_domain == "generic" and doc_count == 1)
-        ):
+        # 单文书规则：强制按文书路由对齐执行域，消除历史 execution_domain 漂移。
+        # 多文书规则：保留已标注域，仅在缺失时回填路由域。
+        if doc_count == 1:
+            execution_domain = routing_decision.execution_domain
+        elif not execution_domain:
             execution_domain = routing_decision.execution_domain
         normalized["execution_domain"] = execution_domain
 
