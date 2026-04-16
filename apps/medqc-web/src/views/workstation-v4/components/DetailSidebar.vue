@@ -206,8 +206,8 @@ watch(
       kept.push(activeGroup)
     }
     if (!kept.length) {
-      if (keys.includes('course')) kept.push('course')
-      else kept.push(keys[0])
+      expandedGroupKeys.value = keys
+      return
     }
     expandedGroupKeys.value = kept
   },

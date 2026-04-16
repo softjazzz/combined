@@ -36,6 +36,31 @@ export interface RuleStatistics {
 
 const RULE_CODE_PATTERN = /^(?:\d+(?:\.\d+)*|(?:SC|LXE|LX)-\d+)$/i
 
+function getSupabaseErrorMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return '未知错误'
+}
+
+function isSupabaseErrorWithCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof (error as { code?: unknown }).code === 'string' &&
+    (error as { code: string }).code === code
+  )
+}
+
 export class RulesService {
   /**
    * 获取所有规则
@@ -47,10 +72,10 @@ export class RulesService {
       .order('rule_code', { ascending: true })
 
     if (error) {
-      throw new Error(`获取规则失败: ${error.message}`)
+      throw new Error(`获取规则失败: ${getSupabaseErrorMessage(error)}`)
     }
 
-    return data || []
+    return (data ?? []) as QCRule[]
   }
 
   /**
@@ -88,10 +113,10 @@ export class RulesService {
     const { data, error } = await query
 
     if (error) {
-      throw new Error(`筛选规则失败: ${error.message}`)
+      throw new Error(`筛选规则失败: ${getSupabaseErrorMessage(error)}`)
     }
 
-    return data || []
+    return (data ?? []) as QCRule[]
   }
 
   /**
@@ -101,13 +126,13 @@ export class RulesService {
     const { data, error } = await supabase.from('qc_rules').select('*').eq('id', id).single()
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (isSupabaseErrorWithCode(error, 'PGRST116')) {
         return null // 未找到记录
       }
-      throw new Error(`获取规则失败: ${error.message}`)
+      throw new Error(`获取规则失败: ${getSupabaseErrorMessage(error)}`)
     }
 
-    return data
+    return data as QCRule
   }
 
   /**
@@ -126,10 +151,10 @@ export class RulesService {
     const { data, error } = await supabase.from('qc_rules').insert([rule]).select().single()
 
     if (error) {
-      throw new Error(`创建规则失败: ${error.message}`)
+      throw new Error(`创建规则失败: ${getSupabaseErrorMessage(error)}`)
     }
 
-    return data
+    return data as QCRule
   }
 
   /**
@@ -152,10 +177,10 @@ export class RulesService {
       .single()
 
     if (error) {
-      throw new Error(`更新规则失败: ${error.message}`)
+      throw new Error(`更新规则失败: ${getSupabaseErrorMessage(error)}`)
     }
 
-    return data
+    return data as QCRule | null
   }
 
   /**
@@ -169,14 +194,15 @@ export class RulesService {
       .eq('rule_id', id)
       .limit(1)
 
-    if (executions && executions.length > 0) {
+    const executionRows = (executions ?? []) as Array<{ id: string }>
+    if (executionRows.length > 0) {
       throw new Error('该规则已有执行记录，不能删除。建议停用规则。')
     }
 
     const { error } = await supabase.from('qc_rules').delete().eq('id', id)
 
     if (error) {
-      throw new Error(`删除规则失败: ${error.message}`)
+      throw new Error(`删除规则失败: ${getSupabaseErrorMessage(error)}`)
     }
   }
 
@@ -190,15 +216,16 @@ export class RulesService {
       .select('rule_id')
       .in('rule_id', ids)
 
-    if (executions && executions.length > 0) {
-      const referencedIds = [...new Set(executions.map((e) => e.rule_id))]
+    const executionRows = (executions ?? []) as Array<{ rule_id: string }>
+    if (executionRows.length > 0) {
+      const referencedIds = [...new Set(executionRows.map((e) => e.rule_id))]
       throw new Error(`规则 ${referencedIds.join(', ')} 已有执行记录，不能删除`)
     }
 
     const { error } = await supabase.from('qc_rules').delete().in('id', ids)
 
     if (error) {
-      throw new Error(`批量删除规则失败: ${error.message}`)
+      throw new Error(`批量删除规则失败: ${getSupabaseErrorMessage(error)}`)
     }
   }
 
@@ -216,7 +243,7 @@ export class RulesService {
     const { error } = await supabase.from('qc_rules').update({ is_active: isActive }).in('id', ids)
 
     if (error) {
-      throw new Error(`批量更新规则状态失败: ${error.message}`)
+      throw new Error(`批量更新规则状态失败: ${getSupabaseErrorMessage(error)}`)
     }
   }
 
@@ -231,13 +258,13 @@ export class RulesService {
       .single()
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (isSupabaseErrorWithCode(error, 'PGRST116')) {
         return null
       }
-      throw new Error(`获取规则失败: ${error.message}`)
+      throw new Error(`获取规则失败: ${getSupabaseErrorMessage(error)}`)
     }
 
-    return data
+    return data as QCRule | null
   }
 
   /**

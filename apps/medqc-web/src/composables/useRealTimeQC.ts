@@ -617,7 +617,7 @@ export function useRealTimeQC() {
         throw error
       }
 
-      qcRules.value = data || []
+      qcRules.value = Array.isArray(data) ? (data as QCRule[]) : []
       console.log(`✅ 加载了 ${qcRules.value.length} 条质控规则`)
     } catch (error) {
       console.error('❌ 加载质控规则失败:', error)

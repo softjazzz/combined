@@ -119,6 +119,12 @@ import { message } from 'ant-design-vue'
 import { llmConfigService, type UserLLMConfig } from '@/services/llmConfigService'
 import { initLLMDatabase } from '@/utils/initLLMDatabase'
 
+type LLMConfigRow = {
+  id: string
+}
+
+const toArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : [])
+
 const loading = ref(false)
 const parsing = ref(false)
 const testResult = ref('')
@@ -159,9 +165,10 @@ const cleanupDuplicates = async () => {
       .is('user_id', null)
       .order('created_at', { ascending: true })
 
-    if (configs && configs.length > 1) {
+    const configRows = toArray<LLMConfigRow>(configs)
+    if (configRows.length > 1) {
       // 保留第一个，删除其他的
-      const toDelete = configs.slice(1).map((c) => c.id)
+      const toDelete = configRows.slice(1).map((c) => c.id)
 
       const { error } = await supabase.from('user_llm_configs').delete().in('id', toDelete)
 
@@ -202,14 +209,18 @@ const debugDatabase = async () => {
     // 查询所有模型
     const { data: models, error: modelError } = await supabase.from('llm_models').select('*')
 
+    const configRows = toArray<LLMConfigRow>(configs)
+    const providerRows = toArray<LLMConfigRow>(providers)
+    const modelRows = toArray<LLMConfigRow>(models)
+
     testResult.value = `🔍 数据库调试信息:
 
-配置数量: ${configs?.length || 0}
-提供商数量: ${providers?.length || 0}
-模型数量: ${models?.length || 0}
+配置数量: ${configRows.length}
+提供商数量: ${providerRows.length}
+模型数量: ${modelRows.length}
 
 配置详情:
-${JSON.stringify(configs, null, 2)}
+${JSON.stringify(configRows, null, 2)}
 
 错误信息:
 配置错误: ${configError?.message || '无'}

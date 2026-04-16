@@ -573,7 +573,14 @@ const radarChartIndicators = ref<
 // 报表相关
 const showReportModal = ref(false)
 const generatingReport = ref(false)
-const reportForm = ref({
+type ReportOutputFormat = 'pdf' | 'excel' | 'word'
+
+const reportForm = ref<{
+  template_id: string
+  date_range: [Dayjs, Dayjs] | null
+  department: string
+  output_format: ReportOutputFormat
+}>({
   template_id: '',
   date_range: null as [Dayjs, Dayjs] | null,
   department: '',

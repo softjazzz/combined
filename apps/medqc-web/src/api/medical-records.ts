@@ -16,6 +16,30 @@ type MedicalRecordRow = Database['public']['Tables']['medical_records']['Row']
 type MedicalRecordInsert = Database['public']['Tables']['medical_records']['Insert']
 type MedicalRecordUpdate = Database['public']['Tables']['medical_records']['Update']
 
+const MEDICAL_RECORD_STATUSES: MedicalRecordStatus[] = ['pending', 'analyzing', 'completed', 'failed']
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeMedicalRecordRow(value: unknown): MedicalRecordRow | null {
+  return isRecordLike(value) ? (value as MedicalRecordRow) : null
+}
+
+function normalizeMedicalRecordRows(value: unknown): MedicalRecordRow[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.map(normalizeMedicalRecordRow).filter((row): row is MedicalRecordRow => row !== null)
+}
+
+function normalizeMedicalRecordStatus(value: unknown): MedicalRecordStatus | null {
+  return MEDICAL_RECORD_STATUSES.includes(value as MedicalRecordStatus)
+    ? (value as MedicalRecordStatus)
+    : null
+}
+
 /**
  * 获取医疗记录列表
  */
@@ -46,8 +70,9 @@ export async function getMedicalRecords(options?: {
 
   return ApiWrapper.query(async () => {
     const result = await query
+    const records = normalizeMedicalRecordRows(result.data)
     return {
-      data: result.data?.map(convertRowToMedicalRecord) || [],
+      data: records.map(convertRowToMedicalRecord),
       error: result.error,
       count: result.count,
     }
@@ -60,9 +85,10 @@ export async function getMedicalRecords(options?: {
 export async function getMedicalRecordById(id: string): Promise<ApiResponse<MedicalRecord>> {
   return ApiWrapper.query(async () => {
     const result = await supabase.from(TABLES.MEDICAL_RECORDS).select('*').eq('id', id).single()
+    const row = normalizeMedicalRecordRow(result.data)
 
     return {
-      data: result.data ? convertRowToMedicalRecord(result.data) : null,
+      data: row ? convertRowToMedicalRecord(row) : null,
       error: result.error,
       count: null,
     }
@@ -123,9 +149,10 @@ export async function createMedicalRecord(
         .insert(insertData)
         .select()
         .single()
+      const row = normalizeMedicalRecordRow(result.data)
 
       return {
-        data: result.data ? convertRowToMedicalRecord(result.data) : null,
+        data: row ? convertRowToMedicalRecord(row) : null,
         error: result.error,
       }
     })
@@ -158,9 +185,10 @@ export async function updateMedicalRecord(
       .eq('id', id)
       .select()
       .single()
+    const row = normalizeMedicalRecordRow(result.data)
 
     return {
-      data: result.data ? convertRowToMedicalRecord(result.data) : null,
+      data: row ? convertRowToMedicalRecord(row) : null,
       error: result.error,
     }
   })
@@ -235,8 +263,9 @@ export async function searchMedicalRecords(
 
   return ApiWrapper.query(async () => {
     const result = await finalQuery
+    const records = normalizeMedicalRecordRows(result.data)
     return {
-      data: result.data?.map(convertRowToMedicalRecord) || [],
+      data: records.map(convertRowToMedicalRecord),
       error: result.error,
       count: result.count,
     }
@@ -260,25 +289,29 @@ export async function getMedicalRecordStats(): Promise<
       return { data: null, error: result.error, count: null }
     }
 
-    const records = result.data || []
+    const records = normalizeMedicalRecordRows(result.data)
     const total = records.length
 
-    const byStatus = records.reduce(
-      (acc, record) => {
-        acc[record.status as MedicalRecordStatus] =
-          (acc[record.status as MedicalRecordStatus] || 0) + 1
-        return acc
-      },
-      {} as Record<MedicalRecordStatus, number>,
-    )
+    const byStatus: Record<MedicalRecordStatus, number> = {
+      pending: 0,
+      analyzing: 0,
+      completed: 0,
+      failed: 0,
+    }
 
-    const byDepartment = records.reduce(
-      (acc, record) => {
-        acc[record.department] = (acc[record.department] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
+    for (const record of records) {
+      const status = normalizeMedicalRecordStatus(record.status)
+      if (status) {
+        byStatus[status] += 1
+      }
+    }
+
+    const byDepartment = records.reduce((acc, record) => {
+      const department =
+        typeof record.department === 'string' && record.department ? record.department : '未分类'
+      acc[department] = (acc[department] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
 
     return {
       data: { total, byStatus, byDepartment },
@@ -362,3 +395,4 @@ export async function submitRecordForQCAnalysis(
     },
   }
 }
+

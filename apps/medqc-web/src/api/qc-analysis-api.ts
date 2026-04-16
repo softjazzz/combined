@@ -18,6 +18,80 @@ type LLMProxyResponse = {
   }>
 }
 
+type UnknownRecord = Record<string, unknown>
+
+function isRecordLike(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeQCResultRow(value: unknown): QCResultRow | null {
+  return isRecordLike(value) ? (value as QCResultRow) : null
+}
+
+function normalizeQCResultRows(value: unknown): QCResultRow[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.map(normalizeQCResultRow).filter((row): row is QCResultRow => row !== null)
+}
+
+function readJsonLike<T>(value: unknown): T | undefined {
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T
+    } catch {
+      return undefined
+    }
+  }
+
+  if (Array.isArray(value) || isRecordLike(value)) {
+    return value as T
+  }
+
+  return undefined
+}
+
+function normalizeRecordList(value: unknown): UnknownRecord[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.filter(isRecordLike)
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.map((item) => (typeof item === 'string' ? item : String(item))).filter(Boolean)
+}
+
+function getIssueList(value: unknown): UnknownRecord[] {
+  if (Array.isArray(value)) {
+    return normalizeRecordList(value)
+  }
+
+  if (isRecordLike(value)) {
+    return normalizeRecordList(value.items)
+  }
+
+  return []
+}
+
+function getSuggestionList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return normalizeStringList(value)
+  }
+
+  if (isRecordLike(value)) {
+    return normalizeStringList(value.list)
+  }
+
+  return []
+}
+
 /**
  * 分析单个医疗记录
  */
@@ -35,13 +109,16 @@ export async function analyzeRecord(
     if (recordError || !record) {
       throw new Error(`获取医疗记录失败: ${recordError?.message}`)
     }
+    const recordRow = isRecordLike(record) ? record : null
+    const medicalContent =
+      typeof recordRow?.content === 'string' ? recordRow.content : String(recordRow?.content || '')
 
     // 2. 更新状态为分析中
     await updateMedicalRecord(recordId, { status: 'analyzing' })
 
     try {
       // 3. 调用DeepSeek进行分析
-      const analysisResult = await callDeepSeekAnalysis(record.content)
+      const analysisResult = await callDeepSeekAnalysis(medicalContent)
       analysisResult.recordId = recordId
 
       // 4. 保存分析结果到数据库
@@ -134,8 +211,8 @@ export async function getQCResult(
       throw new Error(`获取质控结果失败: ${error.message}`)
     }
 
-    const result = convertRowToQCResult(data)
-    return { data: result, error: null }
+    const result = normalizeQCResultRow(data)
+    return { data: result ? convertRowToQCResult(result) : null, error: null }
   } catch (error) {
     console.error('获取质控结果失败:', error)
     return {
@@ -162,7 +239,7 @@ export async function getMultipleQCResults(
       throw new Error(`获取质控结果失败: ${error.message}`)
     }
 
-    const results = (data || []).map((row) => convertRowToQCResult(row as QCResultRow))
+    const results = normalizeQCResultRows(data).map((row) => convertRowToQCResult(row))
     return { data: results, error: null }
   } catch (error) {
     console.error('获取质控结果失败:', error)
@@ -244,8 +321,19 @@ ${content}
       throw new Error('AI响应格式错误，无法解析JSON')
     }
 
-    const analysisData = JSON.parse(jsonMatch[0])
+    const analysisData = JSON.parse(jsonMatch[0]) as {
+      overall_score?: number
+      grade?: 'A' | 'B' | 'C'
+      completeness_score?: number
+      consistency_score?: number
+      rationality_score?: number
+      timeliness_score?: number
+      issues?: unknown[]
+      suggestions?: unknown[]
+    }
     const analysisTime = Date.now() - startTime
+    const issueList = Array.isArray(analysisData.issues) ? analysisData.issues : []
+    const suggestions = Array.isArray(analysisData.suggestions) ? analysisData.suggestions : []
 
     // 构造标准化结果
     const qcResult: QCAnalysisResult = {
@@ -262,12 +350,12 @@ ${content}
       },
       summary: {
         totalRules: 18,
-        violatedRules: analysisData.issues?.length || 0,
-        criticalIssues: Math.min(analysisData.issues?.length || 0, 2),
-        majorIssues: Math.max(0, (analysisData.issues?.length || 0) - 2),
+        violatedRules: issueList.length,
+        criticalIssues: Math.min(issueList.length, 2),
+        majorIssues: Math.max(0, issueList.length - 2),
         minorIssues: 0,
       },
-      suggestions: analysisData.suggestions || [],
+      suggestions: suggestions.map(String),
       analysisTime: analysisTime,
       createdAt: new Date().toISOString(),
     }
@@ -337,7 +425,12 @@ async function saveQCResult(
       throw new Error(`保存质控结果失败: ${error.message}`)
     }
 
-    return data
+    const saved = normalizeQCResultRow(data)
+    if (!saved) {
+      throw new Error('保存质控结果失败: 返回数据格式异常')
+    }
+
+    return saved
   } catch (error) {
     console.error('保存质控结果失败:', error)
     throw error
@@ -348,54 +441,25 @@ async function saveQCResult(
  * 转换数据库行为QCAnalysisResult类型
  */
 function convertRowToQCResult(row: QCResultRow): QCAnalysisResult {
-  const categoryScoresRecord = (row.category_scores ?? {}) as Record<string, unknown>
+  const categoryScoresRecord = isRecordLike(row.category_scores) ? row.category_scores : {}
   const parseCategoryScore = (key: string): number => {
     const value = categoryScoresRecord[key]
     return typeof value === 'number' ? value : 0
   }
 
-  const issuesSource = row.issues as Record<string, unknown> | null
-  const issueList = Array.isArray((issuesSource as any)?.items)
-    ? ((issuesSource as any).items as any[])
-    : Array.isArray(issuesSource)
-      ? (issuesSource as any[])
-      : []
+  const issueList = getIssueList(row.issues)
+  const suggestionList = getSuggestionList(row.suggestions)
+  const summary = readJsonLike<QCAnalysisResult['summary']>(row.summary)
+  const rawAnalysis = readJsonLike<Partial<QCAnalysisResult>>(row.raw_analysis)
 
-  const suggestionsSource = row.suggestions as Record<string, unknown> | null
-  const suggestionList = Array.isArray((suggestionsSource as any)?.list)
-    ? ((suggestionsSource as any).list as string[])
-    : Array.isArray(suggestionsSource)
-      ? (suggestionsSource as string[])
-      : []
-
-  const summary =
-    typeof row.summary === 'string'
-      ? (() => {
-          try {
-            return JSON.parse(row.summary) as QCAnalysisResult['summary']
-          } catch {
-            return undefined
-          }
-        })()
-      : undefined
-
-  const rawAnalysis =
-    typeof row.raw_analysis === 'string'
-      ? (() => {
-          try {
-            return JSON.parse(row.raw_analysis) as Partial<QCAnalysisResult>
-          } catch {
-            return undefined
-          }
-        })()
-      : undefined
+  const rawRuleResults = Array.isArray(rawAnalysis?.ruleResults) ? rawAnalysis.ruleResults : []
 
   return {
     recordId: row.record_id,
     overallScore: typeof row.score === 'number' ? row.score : rawAnalysis?.overallScore || 0,
     grade: row.grade || rawAnalysis?.grade || 'C',
     status: 'completed',
-    ruleResults: Array.isArray(rawAnalysis?.ruleResults) ? rawAnalysis!.ruleResults : [],
+    ruleResults: rawRuleResults,
     categoryScores: {
       completeness: parseCategoryScore('completeness'),
       consistency: parseCategoryScore('consistency'),
@@ -405,9 +469,9 @@ function convertRowToQCResult(row: QCResultRow): QCAnalysisResult {
     summary: summary || {
       totalRules: 18,
       violatedRules: issueList.length,
-      criticalIssues: issueList.filter((item) => item?.severity === 'critical').length,
-      majorIssues: issueList.filter((item) => item?.severity === 'major').length,
-      minorIssues: issueList.filter((item) => item?.severity === 'minor').length,
+      criticalIssues: issueList.filter((item) => typeof item.severity === 'string' && item.severity === 'critical').length,
+      majorIssues: issueList.filter((item) => typeof item.severity === 'string' && item.severity === 'major').length,
+      minorIssues: issueList.filter((item) => typeof item.severity === 'string' && item.severity === 'minor').length,
     },
     suggestions: suggestionList.map(String),
     analysisTime: Number(row.analysis_time ?? rawAnalysis?.analysisTime ?? 0) || 0,
@@ -455,3 +519,5 @@ export async function healthCheck(): Promise<{
     }
   }
 }
+
+

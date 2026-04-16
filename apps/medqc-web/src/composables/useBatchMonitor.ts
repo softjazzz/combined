@@ -106,7 +106,7 @@ export function useBatchMonitor() {
         throw new Error(`获取任务失败: ${fetchError.message}`)
       }
 
-      allTasks.value = data || []
+      allTasks.value = Array.isArray(data) ? (data as BatchTask[]) : []
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '获取任务失败'
       error.value = errorMessage
@@ -294,11 +294,14 @@ export function useBatchMonitor() {
       const cutoffDate = new Date()
       cutoffDate.setDate(cutoffDate.getDate() - daysToKeep)
 
-      const { error: deleteError } = await supabase
+      const cleanupQuery = (supabase
         .from(TABLES.BATCH_PROCESSING_TASKS)
         .delete()
-        .in('status', ['completed', 'failed'])
-        .lt('completed_at', cutoffDate.toISOString())
+        .in('status', ['completed', 'failed']) as unknown) as {
+        lt: (column: string, value: string) => Promise<{ error?: { message: string } | null }>
+      }
+
+      const { error: deleteError } = await cleanupQuery.lt('completed_at', cutoffDate.toISOString())
 
       if (deleteError) {
         throw new Error(`清理任务失败: ${deleteError.message}`)

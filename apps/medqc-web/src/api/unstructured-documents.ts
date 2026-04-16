@@ -13,6 +13,43 @@ type CreateUnstructuredDocument =
   Database['public']['Tables']['unstructured_medical_documents']['Insert']
 type UpdateUnstructuredDocument =
   Database['public']['Tables']['unstructured_medical_documents']['Update']
+type UnknownRecord = Record<string, unknown>
+
+function isRecordLike(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeUnstructuredDocument(value: unknown): UnstructuredDocument | null {
+  return isRecordLike(value) ? (value as UnstructuredDocument) : null
+}
+
+function normalizeUnstructuredDocuments(value: unknown): UnstructuredDocument[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map(normalizeUnstructuredDocument)
+    .filter((document): document is UnstructuredDocument => document !== null)
+}
+
+function normalizeRecordRows(value: unknown): UnknownRecord[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.filter(isRecordLike)
+}
+
+function normalizeCategory(value: unknown): string {
+  return typeof value === 'string' && value ? value : '未分类'
+}
+
+function normalizeStatus(value: unknown): 'pending' | 'processing' | 'completed' | 'failed' {
+  return value === 'processing' || value === 'completed' || value === 'failed'
+    ? value
+    : 'pending'
+}
 
 /**
  * 创建非结构化文档
@@ -27,7 +64,11 @@ export async function createUnstructuredDocument(
       .select()
       .single()
 
-    return result
+    return {
+      data: normalizeUnstructuredDocument(result.data),
+      error: result.error,
+      count: null,
+    }
   })
 }
 
@@ -95,7 +136,11 @@ export async function getUnstructuredDocuments(options?: {
     }
 
     const result = await query
-    return result
+    return {
+      data: normalizeUnstructuredDocuments(result.data),
+      error: result.error,
+      count: result.count ?? null,
+    }
   })
 }
 
@@ -113,7 +158,11 @@ export async function getUnstructuredDocument(
       .eq('is_deleted', false)
       .single()
 
-    return result
+    return {
+      data: normalizeUnstructuredDocument(result.data),
+      error: result.error,
+      count: null,
+    }
   })
 }
 
@@ -132,7 +181,11 @@ export async function updateUnstructuredDocument(
       .select()
       .single()
 
-    return result
+    return {
+      data: normalizeUnstructuredDocument(result.data),
+      error: result.error,
+      count: null,
+    }
   })
 }
 
@@ -199,7 +252,11 @@ export async function searchUnstructuredDocuments(
     }
 
     const result = await query
-    return result
+    return {
+      data: normalizeUnstructuredDocuments(result.data),
+      error: result.error,
+      count: result.count ?? null,
+    }
   })
 }
 
@@ -273,28 +330,27 @@ export async function getUnstructuredDocumentsStats(): Promise<
     }
 
     // 统计处理
-    const total = statusStats.length
-    const pending = statusStats.filter((s) => s.processing_status === 'pending').length
-    const processing = statusStats.filter((s) => s.processing_status === 'processing').length
-    const completed = statusStats.filter((s) => s.processing_status === 'completed').length
-    const failed = statusStats.filter((s) => s.processing_status === 'failed').length
+    const statusRows = normalizeRecordRows(statusStats)
+    const typeRows = normalizeRecordRows(typeStats)
+    const categoryRows = normalizeRecordRows(categoryStats)
 
-    const by_type = typeStats.reduce(
-      (acc, item) => {
-        acc[item.document_type] = (acc[item.document_type] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
+    const total = statusRows.length
+    const pending = statusRows.filter((row) => normalizeStatus(row.processing_status) === 'pending').length
+    const processing = statusRows.filter((row) => normalizeStatus(row.processing_status) === 'processing').length
+    const completed = statusRows.filter((row) => normalizeStatus(row.processing_status) === 'completed').length
+    const failed = statusRows.filter((row) => normalizeStatus(row.processing_status) === 'failed').length
 
-    const by_category = categoryStats.reduce(
-      (acc, item) => {
-        const category = item.category || '未分类'
-        acc[category] = (acc[category] || 0) + 1
-        return acc
-      },
-      {} as Record<string, number>,
-    )
+    const by_type = typeRows.reduce<Record<string, number>>((acc, item) => {
+      const documentType = normalizeCategory(item.document_type)
+      acc[documentType] = (acc[documentType] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+
+    const by_category = categoryRows.reduce<Record<string, number>>((acc, item) => {
+      const category = normalizeCategory(item.category)
+      acc[category] = (acc[category] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
 
     return {
       data: {
@@ -310,3 +366,4 @@ export async function getUnstructuredDocumentsStats(): Promise<
     }
   })
 }
+

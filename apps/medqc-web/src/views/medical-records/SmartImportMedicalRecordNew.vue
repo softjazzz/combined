@@ -1699,6 +1699,12 @@ const getDocumentTypeName = (type: string) => {
   return nameMap[type] || type
 }
 
+type RealtimeChangePayload = {
+  new?: {
+    id?: string
+  }
+}
+
 // Supabase Realtime 监听
 const setupRealtimeSubscription = () => {
   if (realtimeSubscription.value) {
@@ -1710,18 +1716,22 @@ const setupRealtimeSubscription = () => {
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'medical_records' },
-      (payload) => {
-        console.log('新的医疗记录创建:', payload.new)
-        operationLog.value += `\n实时更新: 新记录已创建 (ID: ${payload.new.id})`
+      (payload: RealtimeChangePayload) => {
+        const created = payload.new
+        if (!created?.id) return
+        console.log('新的医疗记录创建:', created)
+        operationLog.value += `\n实时更新: 新记录已创建 (ID: ${created.id})`
         message.info('检测到新的医疗记录创建')
       },
     )
     .on(
       'postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'medical_records' },
-      (payload) => {
-        console.log('医疗记录更新:', payload.new)
-        operationLog.value += `\n实时更新: 记录已更新 (ID: ${payload.new.id})`
+      (payload: RealtimeChangePayload) => {
+        const updated = payload.new
+        if (!updated?.id) return
+        console.log('医疗记录更新:', updated)
+        operationLog.value += `\n实时更新: 记录已更新 (ID: ${updated.id})`
       },
     )
     .subscribe()

@@ -6,7 +6,32 @@
 import { supabase } from '@/lib/backend-store'
 import { DocumentCategory, DOCUMENT_CATEGORY_CONFIG } from '@/types/medical'
 import { DocumentCategoryConfig, EnhancedQCRule, QCRuleFilterParams } from '@/types/quality-control'
-import { lookupRuleCategories, normalizeCategories } from '@/qc/ruleDocumentMapping'
+import {
+  lookupRuleCategories,
+  normalizeCategories,
+  type DocumentCategoryCode,
+} from '@/qc/ruleDocumentMapping'
+
+type RuleCategoryRow = {
+  id?: string
+  rule_code?: string
+  name?: string
+  category_name?: string
+  primary_document_category?: DocumentCategoryCode | string | null
+  document_categories?: DocumentCategoryCode[]
+  check_logic?: {
+    applicable_documents?: string[]
+  } | null
+  _resolved_primary_category?: DocumentCategoryCode
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function toRuleCategoryRow(row: unknown): RuleCategoryRow {
+  return isRecord(row) ? (row as RuleCategoryRow) : {}
+}
 
 export class DocumentCategoryService {
   /**
@@ -28,7 +53,7 @@ export class DocumentCategoryService {
       return defaultEntries
         .sort(([, a], [, b]) => a.sortOrder - b.sortOrder)
         .map(([code, config]) => ({
-          category_code: code as unknown as DocumentCategoryConfig['category_code'],
+          category_code: code,
           category_name: config.label,
           category_description: config.description,
           sort_order: config.sortOrder,
@@ -50,12 +75,13 @@ export class DocumentCategoryService {
         'examination_report',
         'consent_form',
       ])
-      const codes = (data || []).map((r: any) => r.category_code)
-      const extras = Array.from(new Set(codes.filter((c: any) => !canonical.has(String(c)))))
+      const rows = (data ?? []) as DocumentCategoryConfig[]
+      const codes = rows.map((r) => r.category_code)
+      const extras = Array.from(new Set(codes.filter((c) => !canonical.has(String(c)))))
       console.warn(
         '📚 从数据库加载到的文书类别 config count=',
-        data?.length || 0,
-        (data || []).map((r: any) => ({ code: r.category_code, name: r.category_name })),
+        rows.length,
+        rows.map((r) => ({ code: r.category_code, name: r.category_name })),
       )
       if (extras.length > 0) {
         console.warn('⚠️ 发现非标准文书类别(应当仅为6大类):', extras)
@@ -64,7 +90,7 @@ export class DocumentCategoryService {
       // 忽略调试信息统计异常，不影响主流程
     }
 
-    return data || []
+    return (data ?? []) as DocumentCategoryConfig[]
   }
 
   /**
@@ -113,7 +139,12 @@ export class DocumentCategoryService {
       stats[category] = 0
     })
 
-    data?.forEach((rule) => {
+    const rows = (data ?? []) as Array<{
+      primary_document_category?: string | null
+      document_categories?: string[] | null
+    }>
+
+    rows.forEach((rule) => {
       const primaryCategory = rule.primary_document_category
       const documentCategories = rule.document_categories || []
 
@@ -201,7 +232,7 @@ export class DocumentCategoryService {
       throw new Error(`获取质控规则失败: ${error.message}`)
     }
 
-    return data || []
+    return (data ?? []) as EnhancedQCRule[]
   }
 
   /**
@@ -274,9 +305,10 @@ export class DocumentCategoryService {
     }
 
     // 调试：检查原始数据结构
-    console.warn('🔍 [原始数据] 查询返回条数:', (data || []).length)
-    if (data && data.length > 0) {
-      const sample = data[0]
+    const sourceRows = (data ?? []) as RuleCategoryRow[]
+    console.warn('🔍 [原始数据] 查询返回条数:', sourceRows.length)
+    if (sourceRows.length > 0) {
+      const sample = sourceRows[0]
       console.warn('🔍 [原始数据] 第一条记录 sample=', {
         id: sample.id,
         rule_code: sample.rule_code,
@@ -292,38 +324,39 @@ export class DocumentCategoryService {
     }
 
     // 归一化：确保 document_categories 是数组；缺失时基于名称/描述做兜底推断，填充 primary/document_categories（仅内存，不改库）
-    console.warn('🔍 [DocumentCategoryService] 开始归一化处理，原始数据条数:', (data || []).length)
+    console.warn('🔍 [DocumentCategoryService] 开始归一化处理，原始数据条数:', sourceRows.length)
 
-    const normalized: any[] = (data || []).map((r: any, index: number) => {
-      const originalPrimary = r?.primary_document_category
-      const originalCategories = r?.document_categories
+    const normalized = sourceRows.map((row, index) => {
+      const r = toRuleCategoryRow(row)
+      const originalPrimary = r.primary_document_category
+      const originalCategories = r.document_categories
 
-      const categories = normalizeCategories(r?.document_categories)
+      const categories = normalizeCategories(r.document_categories)
       r.document_categories = categories
 
       const normalizedPrimary = normalizeCategories(
-        r?.primary_document_category ? [r.primary_document_category] : [],
+        r.primary_document_category ? [r.primary_document_category] : [],
       )
-      let primary = normalizedPrimary[0] as DocumentCategory | undefined
+      let primary = normalizedPrimary[0] as DocumentCategoryCode | undefined
       if (primary) {
         r.primary_document_category = primary
-        ;(r as any)._resolved_primary_category = primary
+        r._resolved_primary_category = primary
       }
 
       if (!primary && categories.length > 0) {
-        primary = categories[0] as DocumentCategory
+        primary = categories[0] as DocumentCategoryCode
         r.primary_document_category = primary
-        ;(r as any)._resolved_primary_category = primary
+        r._resolved_primary_category = primary
       }
 
       if (!primary) {
-        const inferred = lookupRuleCategories(r)
+        const inferred = lookupRuleCategories(r as Record<string, unknown>)
         if (inferred && inferred.length > 0) {
-          primary = inferred[0] as DocumentCategory
+          primary = inferred[0] as DocumentCategoryCode
           r.primary_document_category = primary
           const merged = new Set([...(categories || []), ...inferred])
           r.document_categories = Array.from(merged)
-          ;(r as any)._resolved_primary_category = primary
+          r._resolved_primary_category = primary
 
           if (index < 5) {
             console.warn(`🔧 [推断] 规则 ${r.rule_code || r.id}: "${r.name}" -> ${primary}`, {
@@ -340,7 +373,7 @@ export class DocumentCategoryService {
         if (merged.size !== (r.document_categories?.length || 0)) {
           r.document_categories = Array.from(merged)
         }
-        ;(r as any)._resolved_primary_category = primary
+        r._resolved_primary_category = primary
       }
 
       return r
@@ -359,7 +392,7 @@ export class DocumentCategoryService {
         normalized.length > 0 ? `${Math.round((withPrimary / normalized.length) * 100)}%` : '0%',
     })
 
-    const debugSample = normalized.slice(0, 20).map((r: any) => ({
+    const debugSample = normalized.slice(0, 20).map((r) => ({
       rule_code: r.rule_code,
       name: r.name,
       primary: r.primary_document_category,
@@ -367,7 +400,7 @@ export class DocumentCategoryService {
     }))
     console.warn('👁 [归一化示例]', debugSample)
 
-    const resolvedSummary = normalized.reduce<Record<string, number>>((acc, r: any) => {
+    const resolvedSummary = normalized.reduce<Record<string, number>>((acc, r) => {
       const key = r._resolved_primary_category || r.primary_document_category || 'unknown'
       acc[key] = (acc[key] || 0) + 1
       return acc
@@ -378,7 +411,7 @@ export class DocumentCategoryService {
     if (missingPrimary.length > 0) {
       console.warn(
         '⚠️ [归一化] 仍有缺失 primary 的规则:',
-        missingPrimary.map((r: any) => r.rule_code),
+        missingPrimary.map((r) => r.rule_code),
       )
     }
 
@@ -392,9 +425,9 @@ export class DocumentCategoryService {
         'consent_form',
       ])
       const primaries = Array.from(
-        new Set((normalized || []).map((r: any) => r.primary_document_category).filter(Boolean)),
+        new Set((normalized || []).map((r) => r.primary_document_category).filter(Boolean)),
       )
-      const nonCanonicalPrim = primaries.filter((c: any) => !canonical.has(String(c)))
+      const nonCanonicalPrim = primaries.filter((c) => !canonical.has(String(c)))
       if (nonCanonicalPrim.length > 0) {
         console.warn('⚠️ 非标准 primary_document_category 值:', nonCanonicalPrim)
       }
@@ -402,19 +435,14 @@ export class DocumentCategoryService {
       const rawFromJson = Array.from(
         new Set(
           sample
-            .flatMap((r: any) => {
-              try {
-                const arr = r?.check_logic?.applicable_documents || []
-                return Array.isArray(arr) ? arr : []
-              } catch {
-                // check_logic 结构异常时按空数组处理
-                return []
-              }
+            .flatMap((r) => {
+              const arr = r.check_logic?.applicable_documents || []
+              return Array.isArray(arr) ? arr : []
             })
             .filter(Boolean),
         ),
       )
-      const suspicious = rawFromJson.filter((v: any) => !canonical.has(String(v)))
+      const suspicious = rawFromJson.filter((v) => !canonical.has(String(v)))
       if (suspicious.length > 0) {
         console.warn(
           '🔍 check_logic.applicable_documents 中的非标准值(示例):',
@@ -426,7 +454,7 @@ export class DocumentCategoryService {
     }
 
     return {
-      data: normalized || [],
+      data: normalized as EnhancedQCRule[],
       total: count || 0,
     }
   }

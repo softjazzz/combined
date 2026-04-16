@@ -181,7 +181,7 @@
           @tab-change="handleAssistTabChange"
           @refresh-tab="handleAssistTabRefresh"
           @content-issues-change="contentQCCount = $event"
-          @qc-issues-change="handleAssistIssuesChange($event as any)"
+          @qc-issues-change="(issues) => handleAssistIssuesChange(issues)"
           @locate-field="handleLocateFromQC"
           @jump-evidence="handleJumpEvidenceFromQC"
           @open-ai-profile="openAiProfilePanel"
@@ -1031,7 +1031,7 @@ function handleGenerateFrontpage() {
       cancelText: '取消',
       onOk: () => {
         detailMainTab.value = 'frontpage'
-        generateFrontpage({ forceRegenerate: true })
+        generateFrontpage()
       },
     })
   } else {

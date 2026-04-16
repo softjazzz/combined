@@ -2,8 +2,8 @@
 import { h, ref, onMounted, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { useNotificationStore } from '../../stores/notification'
-import { getRealtimeService } from '../../lib/realtime/realtime-service'
-import type { RealtimeEvent } from '../../lib/realtime/realtime-service'
+import { getRealtimeService } from '@/lib/realtime/realtime-service'
+import type { RealtimeEvent } from '@/lib/realtime/realtime-service'
 import { supabase } from '../../lib/backend-store'
 import {
   ThunderboltOutlined,
@@ -32,6 +32,13 @@ const eventStats = ref({
   updates: 0,
   deletes: 0,
 })
+
+type MedicalRecordRow = {
+  id: string
+}
+
+const toMedicalRecordRows = (value: unknown): MedicalRecordRow[] =>
+  Array.isArray(value) ? (value as MedicalRecordRow[]) : []
 
 // 检查连接状态
 const checkConnection = () => {
@@ -129,7 +136,8 @@ const updateLatestRecord = async () => {
       .order('created_at', { ascending: false })
       .limit(1)
 
-    if (fetchError || !records || records.length === 0) {
+    const recordRows = toMedicalRecordRows(records)
+    if (fetchError || recordRows.length === 0) {
       message.warning('没有找到可更新的记录')
       return
     }
@@ -140,7 +148,7 @@ const updateLatestRecord = async () => {
         status: ['pending', 'analyzing', 'completed'][Math.floor(Math.random() * 3)],
         qc_score: Math.floor(Math.random() * 100),
       })
-      .eq('id', records[0].id)
+      .eq('id', recordRows[0].id)
 
     if (updateError) {
       throw updateError
@@ -163,7 +171,8 @@ const deleteTestRecord = async () => {
       .order('created_at', { ascending: false })
       .limit(1)
 
-    if (fetchError || !records || records.length === 0) {
+    const recordRows = toMedicalRecordRows(records)
+    if (fetchError || recordRows.length === 0) {
       message.warning('没有找到测试记录')
       return
     }
@@ -171,7 +180,7 @@ const deleteTestRecord = async () => {
     const { error: deleteError } = await supabase
       .from('medical_records')
       .delete()
-      .eq('id', records[0].id)
+      .eq('id', recordRows[0].id)
 
     if (deleteError) {
       throw deleteError

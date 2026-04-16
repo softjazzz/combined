@@ -127,6 +127,15 @@ const LLM_MODELS = [
   },
 ]
 
+type ProviderRow = {
+  id: string
+  provider_code: string
+}
+
+type ModelRow = {
+  id: string
+}
+
 /**
  * 初始化LLM提供商数据
  */
@@ -164,7 +173,8 @@ export async function initLLMModels(): Promise<void> {
     throw providerError
   }
 
-  const providerMap = new Map(providers?.map((p) => [p.provider_code, p.id]) || [])
+  const providerRows = (providers ?? []) as ProviderRow[]
+  const providerMap = new Map(providerRows.map((provider) => [provider.provider_code, provider.id]))
 
   // 插入模型数据
   for (const model of LLM_MODELS) {
@@ -197,12 +207,14 @@ export async function initLLMModels(): Promise<void> {
     }
 
     let error
-    if (existingModel) {
+    const existingModelRow = existingModel as ModelRow | null
+
+    if (existingModelRow) {
       // 更新现有模型
       const { error: updateError } = await supabase
         .from('llm_models')
         .update(modelData)
-        .eq('id', existingModel.id)
+        .eq('id', existingModelRow.id)
       error = updateError
     } else {
       // 如果是默认模型，先清除该提供商的其他默认模型
@@ -241,7 +253,9 @@ export async function createDefaultConfig(): Promise<void> {
     .eq('provider_code', 'alibaba')
     .single()
 
-  if (!provider) {
+  const providerRow = provider as ProviderRow | null
+
+  if (!providerRow) {
     console.warn('未找到阿里通义提供商（alibaba），跳过创建默认配置')
     return
   }
@@ -249,11 +263,13 @@ export async function createDefaultConfig(): Promise<void> {
   const { data: model } = await supabase
     .from('llm_models')
     .select('id')
-    .eq('provider_id', provider.id)
+    .eq('provider_id', providerRow.id)
     .eq('model_code', 'qwen-plus')
     .single()
 
-  if (!model) {
+  const modelRow = model as ModelRow | null
+
+  if (!modelRow) {
     console.warn('未找到 qwen-plus 模型，跳过创建默认配置')
     return
   }
@@ -263,8 +279,8 @@ export async function createDefaultConfig(): Promise<void> {
     {
       user_id: null, // 全局配置
       config_name: 'default',
-      provider_id: provider.id,
-      model_id: model.id,
+      provider_id: providerRow.id,
+      model_id: modelRow.id,
       is_active: true,
     },
     {

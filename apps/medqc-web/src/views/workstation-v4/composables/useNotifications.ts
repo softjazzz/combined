@@ -4,16 +4,22 @@ import { ApiService } from '@/services/apiService'
 import { normalizeNotification } from '../normalize'
 import type { NotificationOverviewItem, NotificationVM, PatientRecord } from '../types'
 
+type NotificationPayload = {
+  items?: unknown[]
+  unread_count?: number
+}
+
 interface NotificationListResponse {
-  data?: {
-    items?: unknown[]
-    unread_count?: number
-  }
+  data?: NotificationPayload
 }
 
 interface NotificationOverviewResponse {
   items?: unknown[]
   date?: string
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
 function isAuthError(err: unknown): boolean {
@@ -28,23 +34,22 @@ function isBatchSummaryType(type: string | undefined): boolean {
     .endsWith('_batch_summary')
 }
 
-function extractListPayload(
-  payload: NotificationListResponse | NotificationListResponse['data'] | undefined,
-) {
-  if (payload && typeof payload === 'object' && 'items' in payload) {
-    const direct = payload as NotificationListResponse['data']
-    return direct
-  }
-  return payload?.data
+function extractListPayload(payload: unknown): NotificationPayload | undefined {
+  if (!isPlainObject(payload)) return undefined
+  if (Array.isArray(payload.items)) return payload as NotificationPayload
+  const nested = payload.data
+  if (isPlainObject(nested)) return nested as NotificationPayload
+  return undefined
 }
 
-function extractOverviewPayload(
-  payload: NotificationOverviewResponse | { data?: NotificationOverviewResponse } | undefined,
-) {
-  if (payload && typeof payload === 'object' && 'items' in payload) {
-    return payload as NotificationOverviewResponse
+function extractOverviewPayload(payload: unknown): NotificationOverviewResponse | undefined {
+  if (!isPlainObject(payload)) return undefined
+  if (Array.isArray(payload.items)) return payload as NotificationOverviewResponse
+  const nested = payload.data
+  if (isPlainObject(nested) && Array.isArray(nested.items)) {
+    return nested as NotificationOverviewResponse
   }
-  return payload?.data
+  return undefined
 }
 
 export function useNotifications(

@@ -54,7 +54,7 @@
               <a-select
                 :value="batchLaunchFilters.date_field"
                 :options="dateFieldOptions"
-                @update:value="(value) => patchFilters({ date_field: value })"
+                @update:value="handleDateFieldUpdate"
               />
             </a-form-item>
           </a-col>
@@ -81,7 +81,7 @@
                 :loading="batchLaunchFiltersLoading"
                 :options="batchLaunchDoctorOptions"
                 placeholder="全部医生"
-                @update:value="(value) => patchFilters({ doctor: value })"
+                @update:value="handleDoctorUpdate"
               />
             </a-form-item>
           </a-col>
@@ -93,7 +93,7 @@
               <a-range-picker
                 :value="batchLaunchFilters.dateRange"
                 class="w-full"
-                @update:value="(value) => patchFilters({ dateRange: value })"
+                @update:value="handleDateRangeUpdate"
               />
             </a-form-item>
           </a-col>
@@ -103,7 +103,7 @@
                 :value="batchLaunchFilters.keyword"
                 allow-clear
                 placeholder="姓名/住院号/visit"
-                @update:value="(value) => patchFilters({ keyword: String(value || '') })"
+                @update:value="handleKeywordUpdate"
               />
             </a-form-item>
           </a-col>
@@ -114,10 +114,12 @@
 </template>
 
 <script setup lang="ts">
-import type { Dayjs } from 'dayjs'
+import dayjs, { type Dayjs } from 'dayjs'
 import type { WorkspaceScope } from '@/types/custom-rule-workspace'
 
 type DateRangeValue = [Dayjs, Dayjs] | null
+type DateRangeInput = [Dayjs, Dayjs] | [string, string] | null
+type SelectInputValue = string | number | undefined
 
 type BatchLaunchFilters = {
   scope: WorkspaceScope
@@ -162,21 +164,64 @@ function patchFilters(partial: Partial<BatchLaunchFilters>) {
   })
 }
 
-async function handleScopeUpdate(value: WorkspaceScope) {
+function normalizeScope(value: SelectInputValue): WorkspaceScope {
+  return value === 'running' || value === 'final' ? value : 'all'
+}
+
+function normalizeTextValue(value: SelectInputValue): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  return String(value)
+}
+
+function normalizeDateRange(value: DateRangeInput): [Dayjs, Dayjs] | null {
+  if (!value) return null
+  const [start, end] = value
+  if (typeof start === 'string' || typeof end === 'string') {
+    return [dayjs(start), dayjs(end)]
+  }
+  return value as [Dayjs, Dayjs]
+}
+
+async function handleScopeUpdate(value: SelectInputValue) {
+  const scope = normalizeScope(value)
   patchFilters({
-    scope: value,
+    scope,
     department: undefined,
     doctor: undefined,
   })
-  await props.handleBatchLaunchScopeChange(value)
+  await props.handleBatchLaunchScopeChange(scope)
 }
 
-async function handleDepartmentUpdate(value?: string) {
+async function handleDepartmentUpdate(value: SelectInputValue) {
   patchFilters({
-    department: value || undefined,
+    department: normalizeTextValue(value),
     doctor: undefined,
   })
-  await props.handleBatchLaunchDepartmentChange(value || undefined)
+  await props.handleBatchLaunchDepartmentChange(normalizeTextValue(value))
+}
+
+function handleDoctorUpdate(value: SelectInputValue) {
+  patchFilters({
+    doctor: normalizeTextValue(value),
+  })
+}
+
+function handleDateFieldUpdate(value: SelectInputValue) {
+  patchFilters({
+    date_field: value === 'discharge' ? 'discharge' : 'admission',
+  })
+}
+
+function handleDateRangeUpdate(value: DateRangeInput) {
+  patchFilters({
+    dateRange: normalizeDateRange(value),
+  })
+}
+
+function handleKeywordUpdate(value: SelectInputValue) {
+  patchFilters({
+    keyword: String(value || ''),
+  })
 }
 
 async function handleConfirm() {

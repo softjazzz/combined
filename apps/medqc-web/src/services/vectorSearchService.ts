@@ -4,7 +4,6 @@
  */
 
 import { supabase } from '@/lib/backend-store'
-import type { Database } from '@/types/database'
 
 // 搜索结果类型
 export interface VectorSearchResult {
@@ -44,6 +43,18 @@ export interface SearchStatistics {
   popular_queries: string[]
 }
 
+type EmbeddingResponse = {
+  embedding?: number[]
+}
+
+type BatchEmbeddingResponse = {
+  embedding_ids?: string[]
+}
+
+type SearchHistoryRow = {
+  search_query?: string | null
+}
+
 export class VectorSearchService {
   /**
    * 语义搜索医疗记录
@@ -81,11 +92,12 @@ export class VectorSearchService {
       }
 
       // 记录搜索历史
+      const results = (data ?? []) as VectorSearchResult[]
       if (userId) {
-        await this.logSearchHistory(userId, query, 'semantic', data?.length || 0)
+        await this.logSearchHistory(userId, query, 'semantic', results.length)
       }
 
-      return data || []
+      return results
     } catch (error) {
       console.error('语义搜索错误:', error)
       throw error
@@ -124,11 +136,12 @@ export class VectorSearchService {
       }
 
       // 记录搜索历史
+      const results = (data ?? []) as HybridSearchResult[]
       if (userId) {
-        await this.logSearchHistory(userId, query, 'hybrid', data?.length || 0)
+        await this.logSearchHistory(userId, query, 'hybrid', results.length)
       }
 
-      return data || []
+      return results
     } catch (error) {
       console.error('混合搜索错误:', error)
       throw error
@@ -158,7 +171,7 @@ export class VectorSearchService {
         throw new Error(`查找相似病例失败: ${error.message}`)
       }
 
-      return data || []
+      return (data ?? []) as SimilarCaseResult[]
     } catch (error) {
       console.error('查找相似病例错误:', error)
       throw error
@@ -184,8 +197,8 @@ export class VectorSearchService {
         throw new Error(`生成向量失败: ${response.statusText}`)
       }
 
-      const result = await response.json()
-      return result.embedding
+      const result = (await response.json()) as EmbeddingResponse
+      return result.embedding || []
     } catch (error) {
       console.error('生成查询向量错误:', error)
       throw error
@@ -253,7 +266,8 @@ export class VectorSearchService {
         return []
       }
 
-      return data?.map((item) => item.search_query) || []
+      const rows = (data || []) as SearchHistoryRow[]
+      return rows.map((item) => item.search_query || '').filter(Boolean)
     } catch (error) {
       console.error('获取搜索建议错误:', error)
       return []
@@ -285,7 +299,7 @@ export class VectorSearchService {
         throw new Error(`批量创建向量失败: ${response.statusText}`)
       }
 
-      const result = await response.json()
+      const result = (await response.json()) as BatchEmbeddingResponse
       return result.embedding_ids || []
     } catch (error) {
       console.error('批量创建向量错误:', error)
@@ -304,7 +318,7 @@ export class VectorSearchService {
         throw new Error(`清理向量数据失败: ${error.message}`)
       }
 
-      return data || 0
+      return (data ?? 0) as number
     } catch (error) {
       console.error('清理向量数据错误:', error)
       return 0

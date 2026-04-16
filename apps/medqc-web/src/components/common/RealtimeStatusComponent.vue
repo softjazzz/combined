@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { getRealtimeService } from '../../lib/realtime/realtime-service'
+import { getRealtimeService } from '@/lib/realtime/realtime-service'
 import { 
   WifiOutlined, 
   DisconnectOutlined, 

@@ -137,7 +137,7 @@ export function useBatchUpload() {
       throw new Error(`创建批量任务失败: ${error.message}`)
     }
 
-    return data.id
+    return (data as { id: string }).id
   }
 
   /**

@@ -5,10 +5,8 @@ import type {
   EnhancedQCRule,
   CreateEnhancedRuleRequest,
   EnhancedRuleFilter,
-  BatchUpdateRequest,
   BatchUpdateResult,
   ImportResult,
-  RuleExportConfig,
   RuleImportConfig,
 } from '@/types/enhanced-qc-rule'
 
@@ -18,7 +16,6 @@ import type {
   RuleTestResult,
   ConfigurationCache,
   RealTimeSyncManager,
-  ValidationResult,
 } from '@/types/llm-integration'
 
 import { supabase } from '@/lib/backend-store'
@@ -30,9 +27,63 @@ type RpcRuleLike = {
   core_system_related?: boolean
   department_overrides?: Array<{ department_id?: string }>
 }
+type SupabaseErrorLike = {
+  message?: unknown
+  code?: unknown
+}
+
+const createConfigurationCache = (): ConfigurationCache => {
+  const store = new Map<string, unknown>()
+
+  return {
+    get: (key: string) => store.get(key),
+    set: (key: string, value: unknown) => {
+      store.set(key, value)
+    },
+    invalidate: (key: string) => {
+      store.delete(key)
+    },
+    invalidateRule: (ruleId: string) => {
+      for (const key of store.keys()) {
+        if (key.includes(ruleId)) {
+          store.delete(key)
+        }
+      }
+    },
+    clear: () => {
+      store.clear()
+    },
+  }
+}
+
+const createRealTimeSyncManager = (): RealTimeSyncManager => ({
+  notifyRuleUpdate: (rule: EnhancedQCRule) => console.log('Rule updated:', rule.id),
+  notifyRuleDelete: (ruleId: string) => console.log('Rule deleted:', ruleId),
+  subscribeToUpdates: (_callback: (event: unknown) => void) => {
+    console.log('Subscribed to rule updates')
+  },
+  unsubscribe: (_callback: (event: unknown) => void) => {
+    console.log('Unsubscribed from rule updates')
+  },
+})
 
 function getErrorMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as SupabaseErrorLike).message
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+
   return error instanceof Error ? error.message : String(error)
+}
+
+function getSupabaseErrorCode(error: unknown): string | undefined {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as SupabaseErrorLike).code
+    return typeof code === 'string' ? code : undefined
+  }
+  return undefined
 }
 
 // Base Enhanced Rules Service (to be extended)
@@ -67,11 +118,11 @@ class BaseEnhancedRulesService {
 
         if (filter?.department_id) {
           rules = rules.filter((r: RpcRuleLike) =>
-            r.department_overrides?.some((d: any) => d.department_id === filter.department_id),
+            r.department_overrides?.some((d) => d.department_id === filter.department_id),
           )
         }
 
-        return rules as unknown as EnhancedQCRule[]
+        return rules.map((rule) => rule as EnhancedQCRule)
       } catch (error) {
         console.warn('RPC function not available, falling back to query:', error)
       }
@@ -122,10 +173,10 @@ class BaseEnhancedRulesService {
 
     if (error) {
       console.error('Error fetching enhanced rules:', error)
-      throw new Error(`Failed to fetch rules: ${error.message}`)
+      throw new Error(`Failed to fetch rules: ${getErrorMessage(error)}`)
     }
 
-    return data || []
+    return (data ?? []) as EnhancedQCRule[]
   }
 
   async createEnhancedRule(ruleData: CreateEnhancedRuleRequest): Promise<EnhancedQCRule> {
@@ -144,10 +195,10 @@ class BaseEnhancedRulesService {
 
     if (error) {
       console.error('Error creating enhanced rule:', error)
-      throw new Error(`Failed to create rule: ${error.message}`)
+      throw new Error(`Failed to create rule: ${getErrorMessage(error)}`)
     }
 
-    return data
+    return data as EnhancedQCRule
   }
 
   async updateEnhancedRule(id: string, updates: Partial<EnhancedQCRule>): Promise<EnhancedQCRule> {
@@ -163,10 +214,10 @@ class BaseEnhancedRulesService {
 
     if (error) {
       console.error('Error updating enhanced rule:', error)
-      throw new Error(`Failed to update rule: ${error.message}`)
+      throw new Error(`Failed to update rule: ${getErrorMessage(error)}`)
     }
 
-    return data
+    return data as EnhancedQCRule
   }
 
   async deleteRule(id: string): Promise<void> {
@@ -174,7 +225,7 @@ class BaseEnhancedRulesService {
 
     if (error) {
       console.error('Error deleting rule:', error)
-      throw new Error(`Failed to delete rule: ${error.message}`)
+      throw new Error(`Failed to delete rule: ${getErrorMessage(error)}`)
     }
   }
 
@@ -182,14 +233,14 @@ class BaseEnhancedRulesService {
     const { data, error } = await supabase.from('qc_rules').select('*').eq('id', id).single()
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (getSupabaseErrorCode(error) === 'PGRST116') {
         return null // Rule not found
       }
       console.error('Error fetching rule by ID:', error)
-      throw new Error(`Failed to fetch rule: ${error.message}`)
+      throw new Error(`Failed to fetch rule: ${getErrorMessage(error)}`)
     }
 
-    return data
+    return data as EnhancedQCRule
   }
 
   async batchUpdateRuleStatus(
@@ -206,13 +257,19 @@ class BaseEnhancedRulesService {
 
     if (error) {
       console.error('Error in batch update:', error)
-      throw new Error(`Batch update failed: ${error.message}`)
+      throw new Error(`Batch update failed: ${getErrorMessage(error)}`)
+    }
+
+    const batchResult = (data ?? {}) as {
+      success_count?: number
+      error_count?: number
+      errors?: string[]
     }
 
     return {
-      successCount: data?.success_count || 0,
-      errorCount: data?.error_count || 0,
-      errors: data?.errors || [],
+      successCount: batchResult.success_count || 0,
+      errorCount: batchResult.error_count || 0,
+      errors: batchResult.errors || [],
       updatedRules: ruleIds,
     }
   }
@@ -299,11 +356,8 @@ export class LLMIntegratedRulesService extends BaseEnhancedRulesService {
 
   constructor() {
     super()
-    this.configurationCache = new Map() as any // Simplified implementation
-    this.realTimeSync = {
-      notifyRuleUpdate: (rule: EnhancedQCRule) => console.log('Rule updated:', rule.id),
-      notifyRuleDelete: (ruleId: string) => console.log('Rule deleted:', ruleId),
-    } as any // Simplified implementation
+    this.configurationCache = createConfigurationCache()
+    this.realTimeSync = createRealTimeSyncManager()
   }
 
   async updateEnhancedRule(id: string, updates: Partial<EnhancedQCRule>): Promise<EnhancedQCRule> {

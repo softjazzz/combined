@@ -19,8 +19,6 @@ import type {
   MedicalRecord,
   CreateMedicalRecordRequest,
   UpdateMedicalRecordRequest,
-  QCResult,
-  User,
   SearchParams,
 } from '@/types'
 
@@ -41,8 +39,56 @@ interface CachedMedicalRecords {
   count: number
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function toStringValue(value: unknown): string | undefined {
+  return typeof value === 'string'
+    ? value
+    : typeof value === 'number' || typeof value === 'boolean'
+      ? String(value)
+      : undefined
+}
+
+function toNumberValue(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function toSupabaseErrorInfo(error: unknown): {
+  message: string
+  code?: string
+  details?: Record<string, unknown>
+} {
+  if (isRecord(error)) {
+    const message = toStringValue(error.message) || '未知错误'
+    const code = toStringValue(error.code)
+    const details = error.details
+
+    if (isRecord(details)) {
+      return { message, code, details }
+    }
+
+    if (typeof details === 'string' && details.trim()) {
+      return { message, code, details: { message: details } }
+    }
+
+    if (details !== undefined && details !== null) {
+      return { message, code, details: { message: String(details) } }
+    }
+
+    return { message, code }
+  }
+
+  if (error instanceof Error) {
+    return { message: error.message }
+  }
+
+  return { message: String(error) }
+}
+
 // 统一响应格式
-export interface UnifiedApiResponse<T = any> {
+export interface UnifiedApiResponse<T = unknown> {
   success: boolean
   data?: T
   error?: {
@@ -186,28 +232,29 @@ export class UnifiedDataService {
       const { data, error, count } = await query
 
       if (error) {
-        await AuditLogger.log('get_medical_records_error', { error: error.message, params })
+        const errorInfo = toSupabaseErrorInfo(error)
+        await AuditLogger.log('get_medical_records_error', { error: errorInfo.message, params })
         return {
           success: false,
           error: {
             message: '获取医疗记录失败',
-            code: error.code,
-            details: error.details ? { message: error.details } : undefined,
+            code: errorInfo.code,
+            details: errorInfo.details,
           },
         }
       }
 
       // 数据脱敏
-      const user = await supabase.auth.getUser()
+      const records = (data ?? []) as unknown[]
       const userRole = 'doctor' // TODO: 从用户信息中获取实际角色
-      const sanitizedData = (data?.map((record) =>
+      const sanitizedData = records.map((record) =>
         SecurityUtils.sanitizePatientData(record, userRole),
-      ) || []) as MedicalRecord[]
+      ) as MedicalRecord[]
 
       // 缓存结果
       this.cache.set(cacheKey, { data: sanitizedData, count })
 
-      await AuditLogger.log('get_medical_records', { count: data?.length, params })
+      await AuditLogger.log('get_medical_records', { count: records.length, params })
 
       return {
         success: true,
@@ -237,11 +284,13 @@ export class UnifiedDataService {
         .single()
 
       if (error) {
+        const errorInfo = toSupabaseErrorInfo(error)
         return {
           success: false,
           error: {
             message: '获取医疗记录失败',
-            code: error.code,
+            code: errorInfo.code,
+            details: errorInfo.details,
           },
         }
       }
@@ -274,10 +323,18 @@ export class UnifiedDataService {
   ): Promise<UnifiedApiResponse<MedicalRecord>> {
     try {
       // 数据验证
-      const payload = request as Record<string, any>
-      const patientInfo = (payload.patient_info || {}) as Record<string, any>
-      const patientName = payload.patient_name ?? patientInfo.name ?? payload.record_name
-      const content = payload.content ?? payload.raw_text ?? payload.primary_diagnosis
+      const payload = request as unknown as Record<string, unknown>
+      const patientInfo = isRecord(payload.patient_info)
+        ? payload.patient_info
+        : ({} as Record<string, unknown>)
+      const patientName =
+        toStringValue(payload.patient_name) ??
+        toStringValue(patientInfo.name) ??
+        toStringValue(payload.record_name)
+      const content =
+        toStringValue(payload.content) ??
+        toStringValue(payload.raw_text) ??
+        toStringValue(payload.primary_diagnosis)
 
       if (!patientName || !content) {
         return {
@@ -289,18 +346,33 @@ export class UnifiedDataService {
       }
 
       // 构建插入数据
-      const insertData = {
+      const insertData: MedicalRecordInsert = {
         patient_name: patientName,
-        patient_age: payload.patient_age ?? patientInfo.age ?? 0,
-        patient_gender: payload.patient_gender ?? patientInfo.gender ?? 'U',
-        department: payload.department ?? '',
-        admission_date: payload.admission_date ?? new Date().toISOString().split('T')[0],
-        record_type: payload.record_type ?? 'inpatient',
+        patient_age: toNumberValue(payload.patient_age ?? patientInfo.age, 0),
+        patient_gender:
+          payload.patient_gender === 'M' || payload.patient_gender === 'F' || payload.patient_gender === 'U'
+            ? payload.patient_gender
+            : 'U',
+        department: toStringValue(payload.department) || '',
+        admission_date:
+          toStringValue(payload.admission_date) ?? new Date().toISOString().split('T')[0],
+        record_type:
+          payload.record_type === 'outpatient' ||
+          payload.record_type === 'emergency' ||
+          payload.record_type === 'inpatient'
+            ? payload.record_type
+            : 'inpatient',
         content,
-        status: payload.status ?? 'pending',
+        status:
+          payload.status === 'pending' ||
+          payload.status === 'analyzing' ||
+          payload.status === 'completed' ||
+          payload.status === 'failed'
+            ? payload.status
+            : 'pending',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      } as any
+      }
 
       const { data, error } = await supabase
         .from('medical_records')
@@ -309,12 +381,17 @@ export class UnifiedDataService {
         .single()
 
       if (error) {
-        await AuditLogger.log('create_medical_record_error', { error: error.message, request })
+        const errorInfo = toSupabaseErrorInfo(error)
+        await AuditLogger.log('create_medical_record_error', {
+          error: errorInfo.message,
+          request,
+        })
         return {
           success: false,
           error: {
             message: '创建医疗记录失败',
-            code: error.code,
+            code: errorInfo.code,
+            details: errorInfo.details,
           },
         }
       }
@@ -322,11 +399,13 @@ export class UnifiedDataService {
       // 清除相关缓存
       this.cache.clear()
 
-      await AuditLogger.log('create_medical_record', { record_id: data.id })
+      const createdRecord = data as MedicalRecord
+
+      await AuditLogger.log('create_medical_record', { record_id: createdRecord.id })
 
       return {
         success: true,
-        data: data as MedicalRecord,
+        data: createdRecord,
         message: '医疗记录创建成功',
       }
     } catch (error) {
@@ -347,10 +426,85 @@ export class UnifiedDataService {
     request: UpdateMedicalRecordRequest,
   ): Promise<UnifiedApiResponse<MedicalRecord>> {
     try {
-      const updateData = {
-        ...(request as Record<string, unknown>),
+      const payload = request as unknown as Record<string, unknown>
+      const updateData: MedicalRecordUpdate = {
         updated_at: new Date().toISOString(),
-      } as any
+      }
+
+      const patientName = toStringValue(payload.patient_name)
+      if (patientName) {
+        updateData.patient_name = patientName
+      }
+
+      const patientAge = payload.patient_age
+      if (typeof patientAge === 'number' && Number.isFinite(patientAge)) {
+        updateData.patient_age = patientAge
+      }
+
+      const patientGender = payload.patient_gender
+      if (patientGender === 'M' || patientGender === 'F' || patientGender === 'U') {
+        updateData.patient_gender = patientGender
+      }
+
+      const department = toStringValue(payload.department)
+      if (department) {
+        updateData.department = department
+      }
+
+      const admissionDate = toStringValue(payload.admission_date)
+      if (admissionDate) {
+        updateData.admission_date = admissionDate
+      }
+
+      const recordType = payload.record_type
+      if (recordType === 'inpatient' || recordType === 'outpatient' || recordType === 'emergency') {
+        updateData.record_type = recordType
+      }
+
+      const content = toStringValue(payload.content)
+      if (content) {
+        updateData.content = content
+      }
+
+      const fileUrl = toStringValue(payload.file_url)
+      if (fileUrl) {
+        updateData.file_url = fileUrl
+      }
+
+      const fileName = toStringValue(payload.file_name)
+      if (fileName) {
+        updateData.file_name = fileName
+      }
+
+      const fileSize = payload.file_size
+      if (typeof fileSize === 'number' && Number.isFinite(fileSize)) {
+        updateData.file_size = fileSize
+      }
+
+      const status = toStringValue(payload.status)
+      if (status === 'pending' || status === 'analyzing' || status === 'completed' || status === 'failed') {
+        updateData.status = status
+      }
+
+      const hospitalId = toStringValue(payload.hospital_id)
+      if (hospitalId) {
+        updateData.hospital_id = hospitalId
+      }
+
+      const doctorId = toStringValue(payload.doctor_id)
+      if (doctorId) {
+        updateData.doctor_id = doctorId
+      }
+
+      const qcScore = payload.qc_score
+      if (typeof qcScore === 'number' && Number.isFinite(qcScore)) {
+        updateData.qc_score = qcScore
+      }
+
+      const qcGrade = toStringValue(payload.qc_grade)
+      if (qcGrade === 'A' || qcGrade === 'B' || qcGrade === 'C') {
+        updateData.qc_grade = qcGrade
+      }
 
       const { data, error } = await supabase
         .from('medical_records')
@@ -360,11 +514,13 @@ export class UnifiedDataService {
         .single()
 
       if (error) {
+        const errorInfo = toSupabaseErrorInfo(error)
         return {
           success: false,
           error: {
             message: '更新医疗记录失败',
-            code: error.code,
+            code: errorInfo.code,
+            details: errorInfo.details,
           },
         }
       }
@@ -374,9 +530,11 @@ export class UnifiedDataService {
 
       await AuditLogger.log('update_medical_record', { record_id: id, changes: request })
 
+      const updatedRecord = data as MedicalRecord
+
       return {
         success: true,
-        data: data as MedicalRecord,
+        data: updatedRecord,
         message: '医疗记录更新成功',
       }
     } catch (error) {
@@ -397,11 +555,13 @@ export class UnifiedDataService {
       const { error } = await supabase.from('medical_records').delete().eq('id', id)
 
       if (error) {
+        const errorInfo = toSupabaseErrorInfo(error)
         return {
           success: false,
           error: {
             message: '删除医疗记录失败',
-            code: error.code,
+            code: errorInfo.code,
+            details: errorInfo.details,
           },
         }
       }

@@ -280,7 +280,7 @@ import {
 import { message } from 'ant-design-vue'
 import { globalErrorHandler } from '@/lib/error-handler'
 import { apiFallbackManager } from '@/lib/api-fallback'
-import { optimizedQCAnalysisService } from '@/lib/qc-analysis-optimized'
+import { getPerformanceStats } from '@/api/qc-analysis-optimized'
 import { formatDateTime } from '@/utils/date'
 
 interface MonitorError {
@@ -354,11 +354,18 @@ const refreshData = async () => {
   
   try {
     // 获取性能统计
-    const perfStats = optimizedQCAnalysisService.getPerformanceStats()
+    const perfResponse = await getPerformanceStats()
+    const perfStats = (perfResponse.success ? perfResponse.data?.analysis : undefined) as
+      | {
+          averageResponseTime?: number
+          cacheHitRate?: number
+          totalRequests?: number
+        }
+      | undefined
     performanceStats.value = {
-      averageResponseTime: perfStats.optimizer.averageResponseTime,
-      cacheHitRate: perfStats.optimizer.cacheHitRate,
-      totalRequests: perfStats.optimizer.totalRequests
+      averageResponseTime: perfStats?.averageResponseTime || 0,
+      cacheHitRate: perfStats?.cacheHitRate || 0,
+      totalRequests: perfStats?.totalRequests || 0,
     }
 
     // 获取错误统计

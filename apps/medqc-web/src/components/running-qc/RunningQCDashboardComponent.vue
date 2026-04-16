@@ -195,8 +195,8 @@ import { ref, reactive, onMounted, h } from 'vue'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined, UserOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue'
 import * as echarts from 'echarts'
-import { runningQCService } from '../../lib/running-qc-service'
-import type { RunningQCResultComponent as RunningQCResultType } from '../../lib/running-qc-service'
+import { runningQCService } from '@/lib/running-qc-service'
+import type { RunningQCResultComponent as RunningQCResultType } from '@/lib/running-qc-service'
 import RunningQCResultComponent from './RunningQCResultComponent.vue'
 
 // 在院病人接口
