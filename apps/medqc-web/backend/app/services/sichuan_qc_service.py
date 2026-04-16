@@ -693,9 +693,13 @@ class SichuanQCService:
         medical_record: Dict[str, Any],
         options: Dict[str, Any],
     ) -> Dict[str, Any]:
+        enriched_record = dict(medical_record or {})
+        enriched_record["execution_domain"] = str(options.get("execution_domain") or enriched_record.get("execution_domain") or "")
+        enriched_record["doc_scope"] = str(options.get("doc_scope") or enriched_record.get("doc_scope") or "")
+        enriched_record["model_version"] = str(options.get("model_version") or self.client.model or "")
         return await self.rule_engine.evaluate_batch_compact(
             rules=rules,
-            medical_record=medical_record,
+            medical_record=enriched_record,
             pack_id=str(options.get("pack_id") or ""),
             pack_size=int(options.get("pack_size") or len(rules)),
             low_confidence_threshold=0.45,

@@ -196,6 +196,16 @@ class UnifiedRuleEngine:
         self._app_checker = ApplicabilityChecker()
         self._evidence_verifier = EvidenceVerifier()
 
+    _DOMAIN_CONTEXT_BUDGET_DELTA: Dict[str, int] = {
+        "admission": 200,
+        "course": 300,
+        "surgery": 900,
+        "consult_discussion": 500,
+        "terminal": 0,
+        "index_coding_settlement": -700,
+        "generic": 0,
+    }
+
     async def evaluate(self, rule: Dict[str, Any], medical_record: Dict[str, Any]) -> Dict[str, Any]:
         applicability = self._app_checker.check(rule, medical_record)
         rule_id = rule.get("rule_id")
@@ -371,10 +381,15 @@ class UnifiedRuleEngine:
                 "context_tokens_estimate": 0,
             }
 
+        resolved_budget = self._resolve_context_token_budget(
+            rules=applicable_rules,
+            medical_record=medical_record,
+            base_budget=context_token_budget,
+        )
         prompt, context_tokens_estimate = self._build_batch_prompt_compact(
             applicable_rules,
             medical_record,
-            context_token_budget=context_token_budget,
+            context_token_budget=resolved_budget,
         )
         llm_result = await self._llm_generate(prompt)
         raw_output = (
@@ -631,9 +646,62 @@ class UnifiedRuleEngine:
 
         return context_text, estimated_tokens
 
+    def _resolve_context_token_budget(
+        self,
+        *,
+        rules: List[Dict[str, Any]],
+        medical_record: Dict[str, Any],
+        base_budget: int,
+    ) -> int:
+        budget = max(4500, int(base_budget or 7000))
+
+        execution_domain = str(medical_record.get("execution_domain") or "").strip().lower()
+        if not execution_domain:
+            for rule in rules:
+                execution_domain = str(rule.get("execution_domain") or "").strip().lower()
+                if execution_domain:
+                    break
+        if not execution_domain:
+            execution_domain = "generic"
+
+        doc_scope = str(medical_record.get("doc_scope") or "").strip().lower()
+        if not doc_scope:
+            for rule in rules:
+                doc_scope = str(rule.get("doc_scope") or "").strip().lower()
+                if doc_scope:
+                    break
+        if not doc_scope:
+            doc_scope = "primary"
+
+        budget += int(self._DOMAIN_CONTEXT_BUDGET_DELTA.get(execution_domain, 0))
+        if doc_scope not in {"", "primary"}:
+            budget += 400
+
+        model_version = str(medical_record.get("model_version") or "").strip().lower()
+        if model_version:
+            if any(token in model_version for token in ("7b", "8b", "13b", "14b", "mini", "small")):
+                budget -= 900
+            elif any(token in model_version for token in ("32b", "34b", "35b", "70b", "72b", "110b", "gpt-4", "gpt-5", "claude-3-opus")):
+                budget += 500
+
+        return max(4500, min(9800, int(budget)))
+
     @staticmethod
     def _estimate_tokens(text: str) -> int:
-        return int(max(1, len(text or "")) / 4)
+        if not text:
+            return 1
+        cjk_count = len(re.findall(r"[\u4e00-\u9fff]", text))
+        latin_digit_count = len(re.findall(r"[A-Za-z0-9]", text))
+        whitespace_count = len(re.findall(r"\s", text))
+        other_count = max(0, len(text) - cjk_count - latin_digit_count - whitespace_count)
+
+        # 中文 token 密度高于英文；这里做混合估算，便于预算裁剪更接近真实开销。
+        estimate = (
+            cjk_count * 0.95
+            + latin_digit_count / 3.6
+            + other_count / 2.1
+        )
+        return max(1, int(estimate))
 
     @staticmethod
     def _extract_compact_checks(custom_prompt: str, *, rule: Dict[str, Any]) -> str:

@@ -132,3 +132,22 @@ async def test_evaluate_batch_compact_should_report_missing_when_parse_failed():
 
     assert result["parse_error"] is True
     assert sorted(result["missing_rule_ids"]) == ["SC-201", "SC-202"]
+
+
+def test_resolve_context_token_budget_should_adapt_by_domain_and_model():
+    capture = {}
+    engine = _make_engine(capture)
+
+    surgery_budget = engine._resolve_context_token_budget(
+        rules=[{"rule_id": "SC-900", "execution_domain": "surgery", "doc_scope": "primary"}],
+        medical_record={"execution_domain": "surgery", "doc_scope": "primary", "model_version": "qwen3.5-35b-a3b"},
+        base_budget=7000,
+    )
+    coding_budget = engine._resolve_context_token_budget(
+        rules=[{"rule_id": "SC-901", "execution_domain": "index_coding_settlement", "doc_scope": "primary"}],
+        medical_record={"execution_domain": "index_coding_settlement", "doc_scope": "primary", "model_version": "qwen2.5-7b-instruct"},
+        base_budget=7000,
+    )
+
+    assert surgery_budget > 7000
+    assert coding_budget < 7000

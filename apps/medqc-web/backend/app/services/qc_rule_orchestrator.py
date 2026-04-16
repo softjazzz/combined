@@ -159,6 +159,7 @@ class QCRuleOrchestrator:
             "context_tokens_estimate": 0,
             "probe_calls": 0,
             "selected_pack_size": 1,
+            "selected_pack_size_by_bucket": {},
         }
         pack_size_sum = 0
         context_tokens_sum = 0
@@ -319,6 +320,7 @@ class QCRuleOrchestrator:
             *,
             pack_size: int,
             pack_id_prefix: str,
+            bucket_key: tuple[str, str] = ("generic", "primary"),
             force_pack_fallback: bool = False,
         ) -> None:
             nonlocal pack_call_counter, total_tokens, total_api_time
@@ -342,6 +344,9 @@ class QCRuleOrchestrator:
                         "pack_id": pack_id,
                         "pack_size": int(pack_size or len(entries)),
                         "prompt_strategy": prompt_strategy_normalized,
+                        "execution_domain": str(bucket_key[0] or "generic"),
+                        "doc_scope": str(bucket_key[1] or "primary"),
+                        "model_version": str(model_version or ""),
                         "mode": "execute",
                     },
                 )
@@ -379,16 +384,22 @@ class QCRuleOrchestrator:
                 entries[:mid],
                 pack_size=max(1, min(pack_size, mid)),
                 pack_id_prefix=f"{pack_id}-L",
+                bucket_key=bucket_key,
                 force_pack_fallback=True,
             )
             await _execute_pack(
                 entries[mid:],
                 pack_size=max(1, min(pack_size, len(entries) - mid)),
                 pack_id_prefix=f"{pack_id}-R",
+                bucket_key=bucket_key,
                 force_pack_fallback=True,
             )
 
-        async def _probe_best_pack_size(entries: list[dict[str, Any]]) -> int:
+        async def _probe_best_pack_size(
+            entries: list[dict[str, Any]],
+            *,
+            bucket_key: tuple[str, str] = ("generic", "primary"),
+        ) -> int:
             nonlocal total_tokens, total_api_time
             if llm_batch_evaluate is None:
                 return 1
@@ -415,9 +426,12 @@ class QCRuleOrchestrator:
                     probe_response = await run_llm_pack(
                         probe_rules,
                         options={
-                            "pack_id": f"probe-{candidate}",
+                            "pack_id": f"probe-{bucket_key[0]}-{bucket_key[1]}-{candidate}",
                             "pack_size": candidate,
                             "prompt_strategy": prompt_strategy_normalized,
+                            "execution_domain": str(bucket_key[0] or "generic"),
+                            "doc_scope": str(bucket_key[1] or "primary"),
+                            "model_version": str(model_version or ""),
                             "mode": "probe",
                         },
                     )
@@ -445,24 +459,33 @@ class QCRuleOrchestrator:
         )
 
         if use_batch_mode:
-            largest_bucket_entries = []
-            for entries in llm_buckets.values():
-                if len(entries) > len(largest_bucket_entries):
-                    largest_bucket_entries = entries
-            selected_pack_size = await _probe_best_pack_size(largest_bucket_entries)
-            pack_metrics["selected_pack_size"] = int(selected_pack_size)
+            selected_by_bucket: dict[str, int] = {}
+            max_selected_pack_size = 1
 
-            for bucket_entries in llm_buckets.values():
+            for bucket_key, bucket_entries in llm_buckets.items():
                 if not bucket_entries:
                     continue
+
+                selected_pack_size = await _probe_best_pack_size(
+                    bucket_entries,
+                    bucket_key=bucket_key,
+                )
+                max_selected_pack_size = max(max_selected_pack_size, int(selected_pack_size))
+                bucket_metric_key = f"{bucket_key[0]}::{bucket_key[1]}"
+                selected_by_bucket[bucket_metric_key] = int(selected_pack_size)
+
                 chunk_size = max(1, min(int(selected_pack_size), len(bucket_entries)))
                 for start in range(0, len(bucket_entries), chunk_size):
                     chunk = bucket_entries[start : start + chunk_size]
                     await _execute_pack(
                         chunk,
                         pack_size=chunk_size,
-                        pack_id_prefix="pack",
+                        pack_id_prefix=f"pack-{bucket_key[0]}-{bucket_key[1]}",
+                        bucket_key=bucket_key,
                     )
+
+            pack_metrics["selected_pack_size"] = int(max_selected_pack_size)
+            pack_metrics["selected_pack_size_by_bucket"] = selected_by_bucket
         else:
             llm_tasks: list[Awaitable[tuple[int, dict[str, Any], RuleExecutionMeta, bool]]] = []
             for entries in llm_buckets.values():
