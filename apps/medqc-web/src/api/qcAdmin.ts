@@ -112,6 +112,17 @@ export interface AdminRecordItem {
   created_at: string
 }
 
+/** 终末病历列表查询参数 */
+export interface FinalRecordListQuery {
+  keyword?: string
+  department?: string
+  status?: 'passed' | 'failed' | 'pending' | string
+  start_date?: string
+  end_date?: string
+  page?: number
+  page_size?: number
+}
+
 /** 管理员统计概览（KPI 卡片） */
 export interface AdminOverviewStats {
   total_records: number
@@ -161,6 +172,23 @@ export async function getAdminRecordList(params?: {
   const targetBaseUrl =
     params?.scene === 'outpatient_emergency' ? `${RECORDS_URL}/outpatient-emergency` : TASKS_URL
   const url = `${targetBaseUrl}${queryParams.toString() ? '?' + queryParams.toString() : ''}`
+  return request<{ items: AdminRecordItem[]; total: number; page: number; page_size: number }>({
+    method: 'GET',
+    url,
+  })
+}
+
+/** 获取终末病历分页列表（专用于终末病历页） */
+export async function getFinalRecordList(params?: FinalRecordListQuery) {
+  const queryParams = new URLSearchParams()
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        queryParams.append(key, String(value))
+      }
+    })
+  }
+  const url = `${RECORDS_URL}/final${queryParams.toString() ? '?' + queryParams.toString() : ''}`
   return request<{ items: AdminRecordItem[]; total: number; page: number; page_size: number }>({
     method: 'GET',
     url,

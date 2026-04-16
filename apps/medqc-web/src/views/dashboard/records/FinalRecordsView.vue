@@ -144,10 +144,20 @@
             <a-button
               type="primary"
               class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9"
-              @click="handleBatchArchive"
+              @click="openBatchLaunchModal"
             >
-              <FolderOutlined /> 批量归档
+              <FileSearchOutlined /> 发起批量质控
             </a-button>
+
+            <a-tooltip title="归档能力待后端路由接入">
+              <a-button
+                class="!rounded-xl !border-slate-200 text-slate-400 !h-9 !flex items-center gap-1"
+                :disabled="!archiveFeatureEnabled"
+                @click="handleBatchArchive"
+              >
+                <FolderOutlined /> 批量归档
+              </a-button>
+            </a-tooltip>
 
             <a-button
               class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9 !flex items-center gap-1"
@@ -177,7 +187,24 @@
 
       <!-- 表格区域 -->
       <div class="flex-1 overflow-hidden px-6 py-2">
+        <a-result
+          v-if="recordListError"
+          status="warning"
+          title="终末病历加载失败"
+          :sub-title="recordListError"
+          class="mt-6"
+        >
+          <template #extra>
+            <a-button
+              type="primary"
+              @click="fetchRecords"
+            >
+              重试
+            </a-button>
+          </template>
+        </a-result>
         <ProStandardTable
+          v-else
           :columns="columns"
           :data-source="records"
           :loading="loading"
@@ -334,10 +361,11 @@
                 </a-tooltip>
                 <a-tooltip
                   v-if="record.status === 'pending'"
-                  title="归档"
+                  title="归档能力待后端路由接入"
                 >
                   <button
-                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-all"
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 transition-all cursor-not-allowed"
+                    :disabled="!archiveFeatureEnabled"
                     @click="handleArchive(record as AdminRecordItem)"
                   >
                     <FolderOutlined />
@@ -361,9 +389,9 @@
           <div class="flex items-center gap-2">
             <button
               class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-medium transition-colors flex items-center gap-2"
-              @click="handleBatchArchive"
+              @click="openBatchLaunchModal"
             >
-              <FolderOutlined /> 批量归档
+              <FileSearchOutlined /> 发起批量质控
             </button>
             <button
               class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors ml-2"
@@ -375,6 +403,152 @@
         </div>
       </transition>
     </div>
+
+    <a-collapse
+      v-model:active-key="batchTaskPanelOpenKeys"
+      class="mt-4 rounded-2xl overflow-hidden border border-slate-100 bg-white shadow-sm"
+      ghost
+    >
+      <a-collapse-panel
+        key="final-batch-jobs"
+        header="终末病历批量任务"
+      >
+        <SemanticRulesBatchPanel
+          :loading="batchJobLoading"
+          :batch-jobs="batchJobs"
+          :total="batchJobPagination.total"
+          :pagination="{
+            current: batchJobPagination.current,
+            pageSize: batchJobPagination.pageSize,
+            total: batchJobPagination.total,
+            showSizeChanger: true,
+            showQuickJumper: true,
+          }"
+          :query="batchJobQuery"
+          :status-options="batchJobStatusOptions"
+          :scope-options="batchScopeOptions"
+          :cancelling-batch-job-id="cancellingBatchJobId"
+          :retrying-batch-job-id="retryingBatchJobId"
+          :format-date-time="formatDateTime"
+          @open-batch-launch="openBatchLaunchModal"
+          @search-batch-jobs="searchFinalBatchJobs"
+          @table-change="handleFinalBatchJobTableChange"
+          @open-batch-job-drawer="openBatchJobDrawer"
+          @cancel-batch-job="executeCancelBatchJob"
+          @retry-batch-job="executeRetryBatchJob"
+          @update-query="updateBatchJobQuery"
+        />
+      </a-collapse-panel>
+    </a-collapse>
+
+    <a-modal
+      :open="launchModalOpen"
+      title="发起终末病历批量质控"
+      width="960px"
+      ok-text="创建任务"
+      cancel-text="取消"
+      :confirm-loading="launchingBatch"
+      @ok="confirmBatchLaunch"
+      @cancel="launchModalOpen = false"
+    >
+      <div class="space-y-4">
+        <a-alert
+          type="info"
+          show-icon
+          message="流程：选择规则子集 → 确认病历范围 → 创建任务"
+        />
+        <div class="grid grid-cols-3 gap-3">
+          <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <div class="text-xs text-slate-500">
+              已选规则
+            </div>
+            <div class="text-lg font-semibold text-slate-800">
+              {{ selectedRuleCount }}
+            </div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <div class="text-xs text-slate-500">
+              当前筛选病历
+            </div>
+            <div class="text-lg font-semibold text-slate-800">
+              {{ pagination.total }}
+            </div>
+          </div>
+          <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <div class="text-xs text-slate-500">
+              已勾选病历
+            </div>
+            <div class="text-lg font-semibold text-slate-800">
+              {{ selectedRecordIds.length }}
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <a-input
+            v-model:value="ruleKeyword"
+            allow-clear
+            class="w-96"
+            placeholder="搜索规则编码/名称/文书域"
+          />
+          <div class="flex items-center gap-2">
+            <a-button @click="selectAllFilteredRules">
+              全选当前过滤
+            </a-button>
+            <a-button @click="clearSelectedRules">
+              清空
+            </a-button>
+          </div>
+        </div>
+
+        <a-table
+          row-key="rule_id"
+          size="small"
+          :columns="launchRuleColumns"
+          :data-source="filteredRules"
+          :loading="ruleLoading"
+          :row-selection="launchRuleRowSelection"
+          :pagination="{ pageSize: 8, showSizeChanger: false }"
+          :scroll="{ y: 320 }"
+        />
+
+        <a-divider class="!my-2" />
+
+        <div class="space-y-2">
+          <div class="text-sm font-medium text-slate-700">
+            病历范围
+          </div>
+          <a-radio-group v-model:value="launchOnlySelectedRecords">
+            <a-radio :value="false">
+              当前筛选结果（科室/状态/日期/关键词）
+            </a-radio>
+            <a-radio
+              :value="true"
+              :disabled="selectedRecordIds.length === 0"
+            >
+              仅当前勾选病历（{{ selectedRecordIds.length }}）
+            </a-radio>
+          </a-radio-group>
+          <div class="text-xs text-slate-500">
+            固定范围：终末病历（scope=final），日期字段按出院日期。
+          </div>
+        </div>
+      </div>
+    </a-modal>
+
+    <SemanticRulesBatchResultDrawer
+      :open="batchResultDrawerOpen"
+      :batch-job-detail="batchJobDetail"
+      :batch-job-detail-loading="batchJobDetailLoading"
+      :batch-job-debug-snapshot="batchJobDebugSnapshot"
+      :batch-job-debug-loading="batchJobDebugLoading"
+      :fetch-batch-job-debug-snapshot="fetchBatchJobDebugSnapshot"
+      :close="closeBatchJobDrawer"
+      :export-batch-job-report="handleExportBatchReport"
+      :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
+      :get-batch-job-status-text="getBatchJobStatusText"
+      :format-date-time="formatDateTime"
+    />
 
     <!-- 联审详情抽屉 -->
     <QCReviewDrawer
@@ -388,7 +562,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
@@ -408,11 +582,10 @@ import {
   CloseOutlined,
 } from '@ant-design/icons-vue'
 import {
-  getAdminRecordList,
+  getFinalRecordList,
   getAdminOverview,
   getDepartmentList,
   exportDefects,
-  batchDefectAction,
   type AdminRecordItem,
   type AdminOverviewStats,
 } from '@/api/qcAdmin'
@@ -420,6 +593,16 @@ import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 import ProQueryBar from '@/components/pro/ProQueryBar.vue'
 import ProTableToolbar from '@/components/pro/ProTableToolbar.vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
+import SemanticRulesBatchPanel from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchPanel.vue'
+import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
+import { useSichuanBatchJobs } from '@/views/workstation-v4/semantic-rules/composables/useSichuanBatchJobs'
+import type { SemanticRuleItem, SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
+import { fetchSemanticRulesFromBackend } from '@/views/workstation-v4/semantic-rules/service'
+import { createSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
+import {
+  getBatchJobStatusTagClass,
+  getBatchJobStatusText,
+} from '@/views/rules/utils/customQcWorkspacePresentation'
 
 const route = useRoute()
 const router = useRouter()
@@ -435,6 +618,43 @@ const records = ref<AdminRecordItem[]>([])
 const selectedRowKeys = ref<string[]>([])
 const drawerVisible = ref(false)
 const drawerRecord = ref<AdminRecordItem | null>(null)
+const recordListError = ref('')
+
+const archiveFeatureEnabled = false
+
+const batchTaskPanelOpenKeys = ref<string[]>(['final-batch-jobs'])
+const batchResultDrawerOpen = ref(false)
+const launchModalOpen = ref(false)
+const launchingBatch = ref(false)
+
+const ruleLoading = ref(false)
+const allRules = ref<SemanticRuleItem[]>([])
+const ruleKeyword = ref('')
+const selectedRuleIds = ref<string[]>([])
+const launchOnlySelectedRecords = ref(true)
+
+const {
+  batchJobLoading,
+  batchJobDetailLoading,
+  batchJobDebugLoading,
+  cancellingBatchJobId,
+  retryingBatchJobId,
+  batchJobs,
+  batchJobDetail,
+  batchJobDebugSnapshot,
+  batchJobPagination,
+  batchJobQuery,
+  batchJobStatusOptions,
+  loadBatchJobs,
+  handleBatchJobTableChange,
+  searchBatchJobs,
+  stopBatchJobPolling,
+  startBatchJobPolling,
+  fetchBatchJobDetail,
+  fetchBatchJobDebugSnapshot,
+  executeCancelBatchJob,
+  executeRetryBatchJob,
+} = useSichuanBatchJobs()
 
 // KPI 卡片数据
 const overviewStats = ref<AdminOverviewStats>({
@@ -461,6 +681,54 @@ const rowSelection = computed<TableProps['rowSelection']>(() => ({
   selectedRowKeys: selectedRowKeys.value,
   onChange: (keys: Array<string | number>) => {
     selectedRowKeys.value = keys.map((key) => String(key))
+  },
+}))
+
+const selectedRecords = computed(() =>
+  records.value.filter((item) => selectedRowKeys.value.includes(String(item.id))),
+)
+
+const selectedRecordIds = computed(() =>
+  selectedRecords.value
+    .map((item) => String(item.record_id || '').trim())
+    .filter((item) => Boolean(item)),
+)
+
+const filteredRules = computed(() => {
+  const keyword = ruleKeyword.value.trim().toLowerCase()
+  if (!keyword) return allRules.value
+  return allRules.value.filter((rule) => {
+    const docs = (rule.applicable_documents || []).join(',').toLowerCase()
+    return (
+      String(rule.rule_id || '').toLowerCase().includes(keyword) ||
+      String(rule.rule_code || '').toLowerCase().includes(keyword) ||
+      String(rule.name || '').toLowerCase().includes(keyword) ||
+      String(rule.description || '').toLowerCase().includes(keyword) ||
+      docs.includes(keyword)
+    )
+  })
+})
+
+const selectedRuleCount = computed(() => selectedRuleIds.value.length)
+
+const batchScopeOptions = [{ label: '终末病历', value: 'final' as const }]
+
+const launchRuleColumns: TableColumnsType<SemanticRuleItem> = [
+  { title: '规则编码', dataIndex: 'rule_id', key: 'rule_id', width: 140 },
+  { title: '规则名称', dataIndex: 'name', key: 'name', width: 260 },
+  { title: '缺陷等级', dataIndex: 'defect_level', key: 'defect_level', width: 120 },
+  {
+    title: '文书域',
+    key: 'docs',
+    width: 220,
+    customRender: ({ record }) => (record.applicable_documents || []).join(' / ') || '-',
+  },
+]
+
+const launchRuleRowSelection = computed<TableProps['rowSelection']>(() => ({
+  selectedRowKeys: selectedRuleIds.value,
+  onChange: (keys: Array<string | number>) => {
+    selectedRuleIds.value = keys.map((key) => String(key))
   },
 }))
 
@@ -596,8 +864,9 @@ const loadOverview = async () => {
 /** 加载病历列表 */
 const fetchRecords = async () => {
   loading.value = true
+  recordListError.value = ''
   try {
-    const res = await getAdminRecordList({
+    const res = await getFinalRecordList({
       department: selectedDepartment.value,
       status: selectedQCStatus.value,
       keyword: searchKeyword.value || undefined,
@@ -609,64 +878,137 @@ const fetchRecords = async () => {
     if (res.success && res.data) {
       records.value = res.data.items || []
       pagination.value.total = res.data.total || 0
-    } else {
-      // API 未就绪时使用 mock 数据兜底
-      records.value = [
-        {
-          id: '1',
-          task_id: '',
-          record_id: 'F2024001',
-          patient_name: '王五',
-          department: '内科',
-          discharge_date: '2024-01-10',
-          status: 'completed',
-          defect_count: 2,
-          score: 95,
-          created_at: '',
-        },
-        {
-          id: '2',
-          task_id: '',
-          record_id: 'F2024002',
-          patient_name: '赵六',
-          department: '外科',
-          discharge_date: '2024-01-12',
-          status: 'failed',
-          defect_count: 5,
-          score: 72,
-          created_at: '',
-        },
-        {
-          id: '3',
-          task_id: '',
-          record_id: 'F2024003',
-          patient_name: '李四',
-          department: '儿科',
-          discharge_date: '2024-01-15',
-          status: 'completed',
-          defect_count: 1,
-          score: 88,
-          created_at: '',
-        },
-        {
-          id: '4',
-          task_id: '',
-          record_id: 'F2024004',
-          patient_name: '张三',
-          department: '内科',
-          discharge_date: '2024-01-18',
-          status: 'pending',
-          defect_count: 0,
-          score: undefined,
-          created_at: '',
-        },
-      ] as any[]
-      pagination.value.total = 4
+      return
     }
-  } catch (error) {
-    message.error('获取数据失败')
+    records.value = []
+    pagination.value.total = 0
+    recordListError.value = res.message || '获取终末病历失败'
+  } catch (error: any) {
+    records.value = []
+    pagination.value.total = 0
+    recordListError.value = error?.message || '获取终末病历失败'
   } finally {
     loading.value = false
+  }
+}
+
+const formatDateTime = (value?: string | Date | null) => {
+  if (!value) return '-'
+  try {
+    const date = typeof value === 'string' ? new Date(value) : value
+    return date.toLocaleString('zh-CN', { hour12: false })
+  } catch {
+    return String(value)
+  }
+}
+
+const ensureFinalBatchScope = () => {
+  batchJobQuery.scope = 'final'
+}
+
+const loadFinalBatchJobs = async () => {
+  ensureFinalBatchScope()
+  await loadBatchJobs()
+}
+
+const searchFinalBatchJobs = () => {
+  ensureFinalBatchScope()
+  searchBatchJobs()
+}
+
+const updateBatchJobQuery = (nextQuery: Record<string, unknown>) => {
+  const normalizedScope = 'final'
+  Object.assign(batchJobQuery, nextQuery, { scope: normalizedScope })
+}
+
+const handleFinalBatchJobTableChange = (paginationConfig: {
+  current?: number
+  pageSize?: number
+}) => {
+  ensureFinalBatchScope()
+  handleBatchJobTableChange(paginationConfig)
+}
+
+const openBatchJobDrawer = async (job: { id: string }) => {
+  batchResultDrawerOpen.value = true
+  await fetchBatchJobDetail(job.id, { includeDebugSnapshot: true })
+  startBatchJobPolling(job.id)
+}
+
+const closeBatchJobDrawer = () => {
+  batchResultDrawerOpen.value = false
+  stopBatchJobPolling()
+}
+
+const handleExportBatchReport = () => {
+  message.info('终末页暂未开放任务导出，可在规则工作台导出')
+}
+
+const loadRulesForLaunch = async () => {
+  if (allRules.value.length > 0 || ruleLoading.value) return
+  ruleLoading.value = true
+  try {
+    const response = await fetchSemanticRulesFromBackend()
+    allRules.value = response.rules || []
+  } catch (error: any) {
+    message.error(error?.message || '加载四川规则失败')
+  } finally {
+    ruleLoading.value = false
+  }
+}
+
+const selectAllFilteredRules = () => {
+  const merged = new Set<string>(selectedRuleIds.value)
+  filteredRules.value.forEach((rule) => {
+    const ruleId = String(rule.rule_id || '').trim()
+    if (ruleId) merged.add(ruleId)
+  })
+  selectedRuleIds.value = Array.from(merged)
+}
+
+const clearSelectedRules = () => {
+  selectedRuleIds.value = []
+}
+
+const openBatchLaunchModal = async () => {
+  launchModalOpen.value = true
+  launchOnlySelectedRecords.value = selectedRecordIds.value.length > 0
+  await loadRulesForLaunch()
+}
+
+const confirmBatchLaunch = async () => {
+  if (!selectedRuleIds.value.length) {
+    message.warning('请至少选择一条质控规则')
+    return
+  }
+  if (launchOnlySelectedRecords.value && selectedRecordIds.value.length === 0) {
+    message.warning('当前未勾选病历，无法按“仅选中病历”执行')
+    return
+  }
+
+  launchingBatch.value = true
+  try {
+    const response = await createSichuanWorkspaceBatchJob({
+      rule_ids: selectedRuleIds.value,
+      scope: 'final',
+      department: selectedDepartment.value,
+      date_field: 'discharge',
+      start_date: dateRange.value?.[0]?.format('YYYY-MM-DD'),
+      end_date: dateRange.value?.[1]?.format('YYYY-MM-DD'),
+      keyword: searchKeyword.value || undefined,
+      record_ids: launchOnlySelectedRecords.value ? selectedRecordIds.value : undefined,
+    })
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '创建批量任务失败')
+    }
+    message.success('终末病历批量质控任务已创建')
+    launchModalOpen.value = false
+    await loadFinalBatchJobs()
+    await openBatchJobDrawer(response.data)
+  } catch (error: any) {
+    message.error(error?.message || '创建批量任务失败')
+  } finally {
+    launchingBatch.value = false
   }
 }
 
@@ -680,6 +1022,7 @@ const handleSearch = () => {
 const handleRefresh = () => {
   fetchRecords()
   loadOverview()
+  void loadFinalBatchJobs()
 }
 
 const handleBatchArchive = () => {
@@ -687,9 +1030,7 @@ const handleBatchArchive = () => {
     message.warning('请选择要操作的病历')
     return
   }
-  // TODO: 对接批量归档 API
-  message.success(`批量归档 ${selectedRowKeys.value.length} 条病历成功`)
-  selectedRowKeys.value = []
+  message.warning('批量归档接口未接入，已禁用此功能')
 }
 
 const handleExport = async () => {
@@ -771,13 +1112,26 @@ const openCustomQCExperience = (record?: any) => {
 }
 
 const handleQCReport = (record: AdminRecordItem) => {
-  // TODO: 导航到质控报告页
-  message.info(`查看质控报告: ${record.record_id}`)
+  const matchedJob = batchJobs.value.find((job) => {
+    const issues =
+      job.items ||
+      job.rule_results?.flatMap((ruleResult) => ruleResult.items || []) ||
+      ([] as Array<{ record_id?: string }>)
+    return issues.some((item) => String(item.record_id || '').trim() === record.record_id)
+  })
+  if (matchedJob?.id) {
+    void openBatchJobDrawer(matchedJob)
+    return
+  }
+  if (batchJobs.value.length > 0) {
+    void openBatchJobDrawer(batchJobs.value[0] as SichuanBatchJob)
+    return
+  }
+  message.warning('暂无可查看的终末病历批量质控任务，请先发起批量质控')
 }
 
 const handleArchive = (record: AdminRecordItem) => {
-  // TODO: 对接单条归档 API
-  message.success(`归档成功: ${record.record_id}`)
+  message.warning(`归档接口未接入，当前无法归档病历 ${record.record_id}`)
 }
 
 const handleTableChange = (pag: any) => {
@@ -829,9 +1183,15 @@ watch(
 )
 
 onMounted(() => {
+  ensureFinalBatchScope()
   loadDepartments()
   loadOverview()
   fetchRecords()
+  void loadFinalBatchJobs()
+})
+
+onBeforeUnmount(() => {
+  stopBatchJobPolling()
 })
 </script>
 

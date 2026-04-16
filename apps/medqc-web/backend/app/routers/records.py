@@ -1,10 +1,11 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any, Dict, Optional, List
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request, Query
 from pydantic import BaseModel
+from sqlalchemy import and_, desc, func, or_
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.security import get_current_user
@@ -12,6 +13,9 @@ from ..core.response import success_response, paginated_response, get_trace_id, 
 from ..schemas.records import MedicalRecordResponse
 from ..storage.memory import medical_records_db
 from ..core.settings import get_settings
+from ..database.connection import SessionLocal
+from ..database.models.cdm import MedicalRecordFrontpage
+from ..database.models.qc import QCDefect, QCResultBiz
 from ..core.permissions import (
     require_permission,
     ResourceType,
@@ -131,6 +135,35 @@ def _pick_document_content(documents: List[Dict[str, Any]], keywords: List[str])
             if content:
                 return str(content)
     return ""
+
+
+def _parse_iso_date_or_422(value: Optional[str], field_name: str) -> Optional[date]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text[:10], "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{field_name} 格式无效，应为 YYYY-MM-DD",
+        ) from exc
+
+
+def _normalize_final_status(status_value: Optional[str]) -> Optional[str]:
+    raw = str(status_value or "").strip().lower()
+    if not raw:
+        return None
+    if raw in {"passed", "completed"}:
+        return "passed"
+    if raw == "failed":
+        return "failed"
+    if raw == "pending":
+        return "pending"
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail="status 仅支持 passed|failed|pending",
+    )
 
 
 @router.get("")
@@ -340,6 +373,264 @@ async def get_outpatient_emergency_records(
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,
             detail=f"获取门急诊病历失败: {e}",
+        )
+
+
+@router.get("/final")
+@require_permission(ResourceType.MEDICAL_RECORDS, PermissionAction.READ)
+async def get_final_records(
+    request: Request,
+    keyword: Optional[str] = Query(None, description="关键字（病历号/住院号/姓名）"),
+    department: Optional[str] = Query(None, description="科室"),
+    qc_status: Optional[str] = Query(None, alias="status", description="状态 passed|failed|pending"),
+    start_date: Optional[str] = Query(None, description="出院日期开始 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="出院日期结束 YYYY-MM-DD"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=200, description="每页数量"),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    终末病历分页列表（已出院病历）。
+
+    返回契约对齐 AdminRecordItem：
+    id/task_id/record_id/patient_name/department/discharge_date/status/score/defect_count/created_at
+    """
+    normalized_status = _normalize_final_status(qc_status)
+    start_dt = _parse_iso_date_or_422(start_date, "start_date")
+    end_dt = _parse_iso_date_or_422(end_date, "end_date")
+    if start_dt and end_dt and start_dt > end_dt:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="start_date 不能晚于 end_date",
+        )
+
+    if SessionLocal is None:
+        # 数据库不可用时降级为内存数据（仅用于保证接口可用性）
+        rows = [row for row in medical_records_db.values() if str(row.get("discharge_date") or "").strip()]
+        if keyword:
+            kw = keyword.strip().lower()
+            rows = [
+                row
+                for row in rows
+                if kw in str(row.get("record_id") or row.get("mr_no") or "").lower()
+                or kw in str(row.get("inpat_no") or "").lower()
+                or kw in str(row.get("patient_name") or row.get("name") or "").lower()
+            ]
+        if department:
+            rows = [row for row in rows if str(row.get("department") or "").strip() == department]
+        if normalized_status:
+            rows = [row for row in rows if normalized_status == "pending"]
+        total = len(rows)
+        page_data = rows[(page - 1) * page_size : (page - 1) * page_size + page_size]
+        items = [
+            {
+                "id": str(row.get("record_id") or row.get("id") or ""),
+                "task_id": "",
+                "record_id": str(row.get("record_id") or row.get("mr_no") or row.get("id") or ""),
+                "visit_type": str(row.get("visit_type") or ""),
+                "patient_name": str(row.get("patient_name") or row.get("name") or ""),
+                "department": str(row.get("department") or ""),
+                "discharge_date": _normalize_date_only(row.get("discharge_date")),
+                "status": "pending",
+                "score": None,
+                "defect_count": 0,
+                "created_at": str(row.get("created_at") or ""),
+            }
+            for row in page_data
+        ]
+        return paginated_response(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            message="获取终末病历成功（降级数据源）",
+            trace_id=get_trace_id(request),
+        )
+
+    with SessionLocal() as session:
+        dept_expr = func.coalesce(
+            MedicalRecordFrontpage.discharge_dept_name,
+            MedicalRecordFrontpage.admission_dept_name,
+        )
+        try:
+            latest_qc_time_subquery = (
+                session.query(
+                    QCResultBiz.record_id.label("record_id"),
+                    func.max(QCResultBiz.created_at).label("latest_created_at"),
+                )
+                .group_by(QCResultBiz.record_id)
+                .subquery()
+            )
+            latest_qc_score_subquery = (
+                session.query(
+                    QCResultBiz.record_id.label("record_id"),
+                    QCResultBiz.overall_score.label("overall_score"),
+                )
+                .join(
+                    latest_qc_time_subquery,
+                    and_(
+                        QCResultBiz.record_id == latest_qc_time_subquery.c.record_id,
+                        QCResultBiz.created_at == latest_qc_time_subquery.c.latest_created_at,
+                    ),
+                )
+                .subquery()
+            )
+            defect_count_subquery = (
+                session.query(
+                    QCDefect.record_id.label("record_id"),
+                    func.count(QCDefect.id).label("defect_count"),
+                )
+                .group_by(QCDefect.record_id)
+                .subquery()
+            )
+
+            query = (
+                session.query(
+                    MedicalRecordFrontpage,
+                    latest_qc_score_subquery.c.overall_score.label("overall_score"),
+                    func.coalesce(defect_count_subquery.c.defect_count, 0).label("defect_count"),
+                )
+                .outerjoin(
+                    latest_qc_score_subquery,
+                    latest_qc_score_subquery.c.record_id == MedicalRecordFrontpage.visit_id,
+                )
+                .outerjoin(
+                    defect_count_subquery,
+                    defect_count_subquery.c.record_id == MedicalRecordFrontpage.visit_id,
+                )
+                .filter(MedicalRecordFrontpage.discharge_datetime.is_not(None))
+            )
+
+            if keyword:
+                kw = f"%{keyword.strip()}%"
+                query = query.filter(
+                    or_(
+                        MedicalRecordFrontpage.visit_id.ilike(kw),
+                        MedicalRecordFrontpage.mr_no.ilike(kw),
+                        MedicalRecordFrontpage.inpat_no.ilike(kw),
+                        MedicalRecordFrontpage.name.ilike(kw),
+                    )
+                )
+            if department:
+                query = query.filter(dept_expr == department)
+            if start_dt:
+                query = query.filter(func.date(MedicalRecordFrontpage.discharge_datetime) >= start_dt)
+            if end_dt:
+                query = query.filter(func.date(MedicalRecordFrontpage.discharge_datetime) <= end_dt)
+            if normalized_status == "pending":
+                query = query.filter(
+                    and_(
+                        latest_qc_score_subquery.c.overall_score.is_(None),
+                        func.coalesce(defect_count_subquery.c.defect_count, 0) == 0,
+                    )
+                )
+            elif normalized_status == "passed":
+                query = query.filter(
+                    and_(
+                        latest_qc_score_subquery.c.overall_score.is_not(None),
+                        func.coalesce(defect_count_subquery.c.defect_count, 0) == 0,
+                    )
+                )
+            elif normalized_status == "failed":
+                query = query.filter(func.coalesce(defect_count_subquery.c.defect_count, 0) > 0)
+
+            total = int(query.count() or 0)
+            rows = (
+                query.order_by(
+                    desc(MedicalRecordFrontpage.discharge_datetime),
+                    desc(MedicalRecordFrontpage.update_time),
+                )
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+                .all()
+            )
+            items = []
+            for row, overall_score, defect_count in rows:
+                score = _to_float(overall_score)
+                final_defect_count = _to_int(defect_count, 0)
+                final_status = "pending"
+                if final_defect_count > 0:
+                    final_status = "failed"
+                elif score is not None:
+                    final_status = "passed"
+                items.append(
+                    {
+                        "id": str(row.visit_id or ""),
+                        "task_id": "",
+                        "record_id": str(row.visit_id or ""),
+                        "visit_type": str(row.visit_type or ""),
+                        "patient_name": str(row.name or ""),
+                        "department": str(row.discharge_dept_name or row.admission_dept_name or ""),
+                        "discharge_date": _normalize_date_only(row.discharge_datetime),
+                        "status": final_status,
+                        "score": score,
+                        "defect_count": final_defect_count,
+                        "created_at": str(row.update_time or row.discharge_datetime or ""),
+                    }
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning("查询终末病历列表失败，降级无质控聚合: %s", exc)
+            session.rollback()
+            query = session.query(MedicalRecordFrontpage).filter(
+                MedicalRecordFrontpage.discharge_datetime.is_not(None)
+            )
+            if keyword:
+                kw = f"%{keyword.strip()}%"
+                query = query.filter(
+                    or_(
+                        MedicalRecordFrontpage.visit_id.ilike(kw),
+                        MedicalRecordFrontpage.mr_no.ilike(kw),
+                        MedicalRecordFrontpage.inpat_no.ilike(kw),
+                        MedicalRecordFrontpage.name.ilike(kw),
+                    )
+                )
+            if department:
+                query = query.filter(dept_expr == department)
+            if start_dt:
+                query = query.filter(func.date(MedicalRecordFrontpage.discharge_datetime) >= start_dt)
+            if end_dt:
+                query = query.filter(func.date(MedicalRecordFrontpage.discharge_datetime) <= end_dt)
+
+            if normalized_status in {"passed", "failed"}:
+                total = 0
+                items = []
+            else:
+                total = int(query.count() or 0)
+                rows = (
+                    query.order_by(
+                        desc(MedicalRecordFrontpage.discharge_datetime),
+                        desc(MedicalRecordFrontpage.update_time),
+                    )
+                    .offset((page - 1) * page_size)
+                    .limit(page_size)
+                    .all()
+                )
+                items = [
+                    {
+                        "id": str(row.visit_id or ""),
+                        "task_id": "",
+                        "record_id": str(row.visit_id or ""),
+                        "visit_type": str(row.visit_type or ""),
+                        "patient_name": str(row.name or ""),
+                        "department": str(row.discharge_dept_name or row.admission_dept_name or ""),
+                        "discharge_date": _normalize_date_only(row.discharge_datetime),
+                        "status": "pending",
+                        "score": None,
+                        "defect_count": 0,
+                        "created_at": str(row.update_time or row.discharge_datetime or ""),
+                    }
+                    for row in rows
+                ]
+
+        return paginated_response(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            message="获取终末病历成功",
+            trace_id=get_trace_id(request),
         )
 
 
