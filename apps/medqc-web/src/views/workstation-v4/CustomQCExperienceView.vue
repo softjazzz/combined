@@ -463,6 +463,11 @@ import {
   testCustomQcBatch,
   testCustomQcSingle,
 } from '@/services/custom-qc-experience-service'
+import {
+  STANDARD_DOCUMENT_TYPE_OPTIONS,
+  defaultDocumentTypeByScene,
+  normalizeWorkspaceDocumentType,
+} from '@/constants/standard-document-types'
 import type {
   CustomQcBatchTestResult,
   CustomQcCandidateRecord,
@@ -501,7 +506,7 @@ const draftRule = reactive<CustomQcDraftRule>({
   description: '',
   prompt_template: '',
   severity: 'major',
-  document_type: scene.value === 'final' ? '出院记录' : '病程记录',
+  document_type: defaultDocumentTypeByScene(scene.value),
   scene: scene.value,
   check_logic: {},
 })
@@ -522,14 +527,7 @@ const pagination = reactive({
   showTotal: (total: number) => `共 ${total} 条病历`,
 })
 
-const documentTypeOptions = [
-  { label: '入院记录', value: '入院记录' },
-  { label: '病程记录', value: '病程记录' },
-  { label: '首次病程记录', value: '首次病程记录' },
-  { label: '出院记录', value: '出院记录' },
-  { label: '死亡记录', value: '死亡记录' },
-  { label: '手术记录', value: '手术记录' },
-]
+const documentTypeOptions = STANDARD_DOCUMENT_TYPE_OPTIONS
 
 const severityOptions = [
   { label: '严重', value: 'critical' },
@@ -673,8 +671,8 @@ function selectCurrentPage() {
 }
 
 function applyExample() {
-  draftRule.name = scene.value === 'final' ? '出院记录未写出院带药用法' : '病程记录未写当日处理意见'
-  draftRule.document_type = scene.value === 'final' ? '出院记录' : '病程记录'
+  draftRule.name = scene.value === 'final' ? '出院记录未写出院带药用法' : '日常病程记录未写当日处理意见'
+  draftRule.document_type = defaultDocumentTypeByScene(scene.value)
   draftRule.severity = 'major'
   draftRule.description =
     scene.value === 'final'
@@ -713,11 +711,15 @@ async function handleGeneratePrompt() {
 }
 
 function buildCheckLogic() {
+  const normalizedDocumentType = normalizeWorkspaceDocumentType(
+    draftRule.document_type,
+    defaultDocumentTypeByScene(scene.value),
+  )
   return {
     source: 'workstation_experience',
     scene: scene.value,
-    document_type: draftRule.document_type,
-    applicable_documents: [draftRule.document_type],
+    document_type: normalizedDocumentType,
+    applicable_documents: [normalizedDocumentType],
     generation_mode: generationMode.value,
     generated_check_points: generatedCheckPoints.value,
     examples: generatedExamples.value,
@@ -726,12 +728,16 @@ function buildCheckLogic() {
 }
 
 function buildDraftRulePayload(): CustomQcDraftRule {
+  const normalizedDocumentType = normalizeWorkspaceDocumentType(
+    draftRule.document_type,
+    defaultDocumentTypeByScene(scene.value),
+  )
   return {
     name: draftRule.name.trim(),
     description: draftRule.description.trim(),
     prompt_template: draftRule.prompt_template.trim(),
     severity: draftRule.severity,
-    document_type: draftRule.document_type,
+    document_type: normalizedDocumentType,
     scene: scene.value,
     check_logic: buildCheckLogic(),
   }
@@ -930,7 +936,7 @@ watch(
   () => {
     draftRule.scene = scene.value
     if (!draftRule.name && !draftRule.description && !draftRule.prompt_template) {
-      draftRule.document_type = scene.value === 'final' ? '出院记录' : '病程记录'
+      draftRule.document_type = defaultDocumentTypeByScene(scene.value)
     }
     fetchRecords()
   },

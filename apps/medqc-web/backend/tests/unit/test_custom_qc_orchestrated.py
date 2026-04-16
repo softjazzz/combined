@@ -99,6 +99,27 @@ def test_build_inline_rule_should_fill_execution_meta_defaults():
     assert inline_rule["doc_scope"] == "primary"
     assert inline_rule["rule_version"] == "workspace-v1"
     assert inline_rule["prompt_version"] == "workspace-prompt-v1"
+    assert inline_rule["execution_domain"] == "course"
+    assert inline_rule["applicable_documents"] == ["daily_course_record"]
+
+
+def test_build_inline_rule_should_align_from_applicable_documents():
+    inline_rule = build_inline_rule(
+        {
+            "rule_code": "LXE-0099",
+            "name": "规则B",
+            "description": "描述B",
+            "document_type": "病程记录",
+            "applicable_documents": ["术前讨论"],
+            "prompt_template": "请分析：{medical_text}",
+            "check_logic": {"doc_scope": "strict_primary"},
+        }
+    )
+
+    assert inline_rule["category"] == "日常病程记录"
+    assert inline_rule["applicable_documents"] == ["presurg_discussion"]
+    assert inline_rule["execution_domain"] == "surgery"
+    assert inline_rule["doc_scope"] == "strict_primary"
 
 
 @pytest.mark.asyncio

@@ -1069,6 +1069,11 @@ import {
   runWorkspaceSingleTest,
   updateWorkspaceDraft,
 } from '@/services/custom-rule-workspace-service'
+import {
+  STANDARD_DOCUMENT_TYPE_OPTIONS,
+  defaultDocumentTypeByScene,
+  normalizeWorkspaceDocumentType,
+} from '@/constants/standard-document-types'
 import type {
   CustomRuleBatchJob,
   CustomRuleBatchJobProgress,
@@ -1124,7 +1129,7 @@ const draftPagination = reactive({
 const createForm = reactive({
   name: '',
   source_requirement: '',
-  document_type: '入院记录',
+  document_type: defaultDocumentTypeByScene('running'),
   scene: 'running' as 'running' | 'final',
   severity: 'major' as WorkspaceSeverity,
   defect_level: '一般缺陷',
@@ -1136,7 +1141,7 @@ const editorForm = reactive({
   description: '',
   prompt_template: '',
   source_requirement: '',
-  document_type: '入院记录',
+  document_type: defaultDocumentTypeByScene('running'),
   scene: 'running' as 'running' | 'final',
   severity: 'major' as WorkspaceSeverity,
   defect_level: '一般缺陷',
@@ -1155,13 +1160,7 @@ const draftStatusOptions = [
   { label: '已发布', value: 'published' },
 ]
 
-const documentTypeOptions = [
-  { label: '入院记录', value: '入院记录' },
-  { label: '病程记录', value: '病程记录' },
-  { label: '首次病程记录', value: '首次病程记录' },
-  { label: '出院记录', value: '出院记录' },
-  { label: '手术记录', value: '手术记录' },
-]
+const documentTypeOptions = STANDARD_DOCUMENT_TYPE_OPTIONS
 
 const sceneOptions = [
   { label: '运行病历', value: 'running' },
@@ -1333,7 +1332,10 @@ function hydrateEditorFromDraft(draft: CustomRuleDraft) {
   editorForm.description = draft.description || ''
   editorForm.prompt_template = draft.prompt_template || ''
   editorForm.source_requirement = draft.source_requirement || ''
-  editorForm.document_type = draft.document_type || '入院记录'
+  editorForm.document_type = normalizeWorkspaceDocumentType(
+    draft.document_type || '',
+    defaultDocumentTypeByScene(draft.scene || 'running'),
+  )
   editorForm.scene = draft.scene || 'running'
   editorForm.severity = draft.severity || 'major'
   editorForm.defect_level = draft.defect_level || '一般缺陷'
@@ -1442,23 +1444,27 @@ async function createDraft() {
     return
   }
 
+  const normalizedDocumentType = normalizeWorkspaceDocumentType(
+    createForm.document_type,
+    defaultDocumentTypeByScene(createForm.scene),
+  )
   creatingDraft.value = true
   try {
     const payload: CustomRuleDraftPayload = {
       name,
       description: requirement,
       source_requirement: requirement,
-      document_type: createForm.document_type,
+      document_type: normalizedDocumentType,
       severity: createForm.severity || mapDefectLevelToSeverity(createForm.defect_level),
       defect_level: createForm.defect_level,
       complexity: createForm.complexity,
       scene: createForm.scene,
-      applicable_documents: [createForm.document_type],
+      applicable_documents: [normalizedDocumentType],
       generation_mode: 'fallback_template',
       check_logic: {
         source: 'custom_rule_workspace',
         scene: createForm.scene,
-        applicable_documents: [createForm.document_type],
+        applicable_documents: [normalizedDocumentType],
       },
     }
     const response = await createWorkspaceDraft(payload)
@@ -1511,12 +1517,16 @@ async function saveDraftEditor() {
   }
   savingDraft.value = true
   try {
+    const normalizedDocumentType = normalizeWorkspaceDocumentType(
+      editorForm.document_type,
+      defaultDocumentTypeByScene(editorForm.scene),
+    )
     const response = await updateWorkspaceDraft(selectedDraft.value.id, {
       name: editorForm.name.trim(),
       description: editorForm.description.trim(),
       source_requirement: editorForm.source_requirement || editorForm.description,
       prompt_template: editorForm.prompt_template.trim(),
-      document_type: editorForm.document_type,
+      document_type: normalizedDocumentType,
       scene: editorForm.scene,
       severity: editorForm.severity,
       defect_level: editorForm.defect_level,
@@ -1528,7 +1538,7 @@ async function saveDraftEditor() {
         last_prompt_summary: editorPromptSummary.value,
         generated_check_points: editorCheckPoints.value,
       },
-      applicable_documents: [editorForm.document_type],
+      applicable_documents: [normalizedDocumentType],
     })
     if (!response.success || !response.data) {
       throw new Error(response.message || '保存草稿失败')
@@ -1575,19 +1585,23 @@ async function generatePromptForDraft() {
 }
 
 async function copyDraft(record: CustomRuleDraft) {
+  const normalizedDocumentType = normalizeWorkspaceDocumentType(
+    record.document_type,
+    defaultDocumentTypeByScene(record.scene || 'running'),
+  )
   try {
     const response = await createWorkspaceDraft({
       name: `${record.name}-副本`,
       description: record.description,
       source_requirement: record.source_requirement,
       prompt_template: record.prompt_template,
-      document_type: record.document_type,
+      document_type: normalizedDocumentType,
       severity: record.severity,
       defect_level: record.defect_level,
       complexity: record.complexity,
       scene: record.scene,
       generation_mode: record.generation_mode,
-      applicable_documents: record.applicable_documents,
+      applicable_documents: [normalizedDocumentType],
       examples: record.examples,
       check_logic: record.check_logic,
     })

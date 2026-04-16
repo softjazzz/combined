@@ -11,6 +11,7 @@ from starlette import status
 from ..core.http import safe_post_json
 from ..core.settings import get_settings
 from .llm_config_loader import LLMConfigLoader
+from .document_domain_alignment import align_document_domain_fields
 from .sichuan_qc_service import SichuanQCService
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ SEVERITY_TO_DEFECT_LEVEL = {
 
 
 def normalize_document_type(document_type: Optional[str]) -> str:
-    return (document_type or "病程记录").strip() or "病程记录"
+    return (document_type or "日常病程记录").strip() or "日常病程记录"
 
 
 def severity_to_defect_level(severity: Optional[str]) -> str:
@@ -37,9 +38,13 @@ def severity_to_defect_level(severity: Optional[str]) -> str:
 
 
 def build_inline_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
-    document_type = normalize_document_type(rule.get("document_type"))
-    prompt_template = str(rule.get("prompt_template") or "").strip()
     check_logic = dict(rule.get("check_logic") or {})
+    document_type, applicable_documents, aligned_check_logic = align_document_domain_fields(
+        document_type=rule.get("document_type"),
+        applicable_documents=rule.get("applicable_documents") or check_logic.get("applicable_documents"),
+        check_logic=check_logic,
+    )
+    prompt_template = str(rule.get("prompt_template") or "").strip()
     raw_executor_type = str(rule.get("executor_type") or "").strip().lower()
     executor_type = raw_executor_type if raw_executor_type in {"llm", "program"} else "llm"
 
@@ -51,7 +56,7 @@ def build_inline_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
         "category": document_type,
         "defect_level": severity_to_defect_level(rule.get("severity")),
         "complexity": "中复杂度",
-        "applicable_documents": [document_type],
+        "applicable_documents": applicable_documents,
         "custom_prompt": prompt_template or build_fallback_prompt(
             scene=str(rule.get("scene") or ""),
             document_type=document_type,
@@ -59,10 +64,12 @@ def build_inline_rule(rule: Dict[str, Any]) -> Dict[str, Any]:
             description=str(rule.get("description") or "").strip(),
             check_points=[],
         )["prompt_template"],
-        "check_logic": check_logic,
+        "check_logic": aligned_check_logic,
         "executor_type": executor_type,
-        "execution_domain": str(rule.get("execution_domain") or check_logic.get("execution_domain") or "").strip(),
-        "doc_scope": str(rule.get("doc_scope") or check_logic.get("doc_scope") or "primary").strip(),
+        "execution_domain": str(
+            rule.get("execution_domain") or aligned_check_logic.get("execution_domain") or ""
+        ).strip(),
+        "doc_scope": str(rule.get("doc_scope") or aligned_check_logic.get("doc_scope") or "primary").strip(),
         "rule_version": str(rule.get("rule_version") or "workspace-v1").strip(),
         "prompt_version": str(rule.get("prompt_version") or "workspace-prompt-v1").strip(),
         "cost_class": str(rule.get("cost_class") or ("low" if executor_type == "program" else "medium")).strip(),
@@ -325,7 +332,7 @@ async def evaluate_inline_rule_orchestrated(
     medical_record = {
         "id": str(record.get("record_id") or record.get("visit_id") or record.get("id") or ""),
         "content": str(record.get("medical_text") or ""),
-        "document_type": normalize_document_type(rule.get("document_type")),
+        "document_type": str(inline_rule.get("category") or normalize_document_type(rule.get("document_type"))),
     }
 
     async def _llm_evaluate(candidate_rule: Dict[str, Any], candidate_record: Dict[str, Any]) -> Dict[str, Any]:
@@ -357,7 +364,7 @@ async def evaluate_inline_rule_orchestrated(
         "visit_id": str(record.get("visit_id") or ""),
         "patient_name": str(record.get("patient_name") or ""),
         "department": str(record.get("department") or ""),
-        "document_type": normalize_document_type(rule.get("document_type")),
+        "document_type": str(inline_rule.get("category") or normalize_document_type(rule.get("document_type"))),
         "status": result.get("status"),
         "is_compliant": result.get("is_compliant", True),
         "issues": result.get("issues", []),

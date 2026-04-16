@@ -25,11 +25,15 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session
 
+from .document_domain_alignment import (
+    align_document_domain_fields,
+    normalize_document_label,
+)
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import MedicalRecordFrontpage
 
 
-DEFAULT_DOCUMENT_TYPE = "病程记录"
+DEFAULT_DOCUMENT_TYPE = "日常病程记录"
 DEFAULT_COMPLEXITY = "中复杂度"
 DEFAULT_DEFECT_LEVEL = "一般缺陷"
 DEFAULT_BATCH_JOB_PAGE_SIZE = 10
@@ -263,6 +267,7 @@ def _row_to_draft(row: Dict[str, Any]) -> Dict[str, Any]:
     check_logic = _safe_json_loads(row.get("check_logic"), {})
     examples = _safe_json_loads(row.get("examples"), [])
     applicable_documents = _safe_json_loads(row.get("applicable_documents"), [])
+    document_type = normalize_document_label(row.get("document_type"), DEFAULT_DOCUMENT_TYPE)
     last_test_summary = _safe_json_loads(row.get("last_test_summary"), None)
     return {
         "id": _safe_text(row.get("id")),
@@ -271,7 +276,7 @@ def _row_to_draft(row: Dict[str, Any]) -> Dict[str, Any]:
         "description": _safe_text(row.get("description")),
         "source_requirement": _safe_text(row.get("source_requirement")),
         "prompt_template": _safe_text(row.get("prompt_template")),
-        "document_type": _safe_text(row.get("document_type"), DEFAULT_DOCUMENT_TYPE),
+        "document_type": document_type,
         "applicable_documents": applicable_documents if isinstance(applicable_documents, list) else [],
         "severity": _safe_text(row.get("severity"), "major"),
         "defect_level": _safe_text(row.get("defect_level"), DEFAULT_DEFECT_LEVEL),
@@ -557,10 +562,11 @@ class CustomQCWorkspaceService:
         try:
             now = _now_utc()
             severity = _safe_text(payload.get("severity"), "major").lower()
-            document_type = _safe_text(payload.get("document_type"), DEFAULT_DOCUMENT_TYPE)
-            applicable_documents = payload.get("applicable_documents")
-            if not isinstance(applicable_documents, list) or not applicable_documents:
-                applicable_documents = [document_type]
+            document_type, applicable_documents, check_logic = align_document_domain_fields(
+                document_type=payload.get("document_type"),
+                applicable_documents=payload.get("applicable_documents"),
+                check_logic=payload.get("check_logic") or {},
+            )
             draft_id = str(uuid.uuid4())
             row_payload = {
                 "id": draft_id,
@@ -581,7 +587,7 @@ class CustomQCWorkspaceService:
                 "scene": _safe_text(payload.get("scene"), "running"),
                 "generation_mode": _safe_text(payload.get("generation_mode"), "fallback_template"),
                 "examples": _safe_json_dumps(payload.get("examples") or []),
-                "check_logic": _safe_json_dumps(payload.get("check_logic") or {}),
+                "check_logic": _safe_json_dumps(check_logic),
                 "last_test_summary": _safe_json_dumps(payload.get("last_test_summary") or None),
                 "status": "draft",
                 "published_rule_id": None,
@@ -624,12 +630,26 @@ class CustomQCWorkspaceService:
                 if key in payload and payload[key] is not None:
                     patch[key] = payload[key]
 
-            if "applicable_documents" in payload:
-                patch["applicable_documents"] = _safe_json_dumps(payload.get("applicable_documents") or [])
+            existing_check_logic = _safe_json_loads(existing.get("check_logic"), {})
+            aligned_document_type, aligned_applicable_documents, aligned_check_logic = align_document_domain_fields(
+                document_type=patch.get("document_type", existing.get("document_type")),
+                applicable_documents=(
+                    payload.get("applicable_documents")
+                    if "applicable_documents" in payload
+                    else _safe_json_loads(existing.get("applicable_documents"), [])
+                ),
+                check_logic=(
+                    payload.get("check_logic")
+                    if "check_logic" in payload
+                    else existing_check_logic
+                ),
+            )
+            patch["document_type"] = aligned_document_type
+            patch["applicable_documents"] = _safe_json_dumps(aligned_applicable_documents)
+            patch["check_logic"] = _safe_json_dumps(aligned_check_logic)
+
             if "examples" in payload:
                 patch["examples"] = _safe_json_dumps(payload.get("examples") or [])
-            if "check_logic" in payload:
-                patch["check_logic"] = _safe_json_dumps(payload.get("check_logic") or {})
             if "last_test_summary" in payload:
                 patch["last_test_summary"] = _safe_json_dumps(payload.get("last_test_summary"))
 
@@ -1562,14 +1582,21 @@ class CustomQCWorkspaceService:
 
             qc_rules_table = _qc_rules_table()
             now = _now_utc()
+            draft_check_logic = dict(draft.get("check_logic") or {})
+            aligned_document_type, aligned_applicable_documents, aligned_check_logic = align_document_domain_fields(
+                document_type=draft.get("document_type"),
+                applicable_documents=draft.get("applicable_documents"),
+                check_logic=draft_check_logic,
+            )
             check_logic = {
+                **aligned_check_logic,
                 "source": "custom_rule_workspace",
                 "workspace_draft_id": draft["id"],
-                "applicable_documents": draft.get("applicable_documents") or [draft.get("document_type")],
+                "applicable_documents": aligned_applicable_documents,
                 "generation_mode": draft.get("generation_mode") or "fallback_template",
                 "examples": draft.get("examples") or [],
                 "last_test_summary": draft.get("last_test_summary"),
-                "document_type": draft.get("document_type"),
+                "document_type": aligned_document_type,
                 "scene": draft.get("scene"),
             }
             values: Dict[str, Any] = {
@@ -1587,7 +1614,7 @@ class CustomQCWorkspaceService:
                 "is_active": True,
                 "prompt_template": draft.get("prompt_template"),
                 "check_logic": check_logic,
-                "applicable_documents": draft.get("applicable_documents") or [draft.get("document_type")],
+                "applicable_documents": aligned_applicable_documents,
                 "metadata": {
                     "source": "custom_rule_workspace",
                     "workspace_draft_id": draft["id"],

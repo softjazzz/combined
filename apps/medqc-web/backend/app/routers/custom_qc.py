@@ -56,7 +56,7 @@ class DraftRulePayload(BaseModel):
     description: str
     prompt_template: str
     severity: str = "major"
-    document_type: str = "病程记录"
+    document_type: str = "日常病程记录"
     scene: Optional[str] = None
     check_logic: Dict[str, Any] = Field(default_factory=dict)
 
@@ -82,7 +82,7 @@ class WorkspaceDraftCreateRequest(BaseModel):
     description: str
     source_requirement: Optional[str] = None
     prompt_template: str = ""
-    document_type: str = "病程记录"
+    document_type: str = "日常病程记录"
     severity: str = "major"
     defect_level: Optional[str] = None
     complexity: str = "中复杂度"
@@ -754,7 +754,7 @@ async def generate_workspace_draft_prompt(
 
     prompt_result = await generate_custom_prompt(
         scene=str(draft.get("scene") or "running"),
-        document_type=str(draft.get("document_type") or "病程记录"),
+        document_type=str(draft.get("document_type") or "日常病程记录"),
         rule_name=str(draft.get("name") or "未命名规则"),
         description=str(draft.get("description") or ""),
         severity=str(draft.get("severity") or "major"),
@@ -859,15 +859,25 @@ async def get_workspace_filters(
 
 
 def _workspace_rule_payload_from_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
+    check_logic = dict(draft.get("check_logic") or {})
+    applicable_documents = draft.get("applicable_documents")
+    if not isinstance(applicable_documents, list) or not applicable_documents:
+        applicable_documents = check_logic.get("applicable_documents")
+    if not isinstance(applicable_documents, list):
+        applicable_documents = []
+
     return {
         "rule_code": str(draft.get("rule_code") or draft.get("id") or "INLINE-DRAFT"),
         "name": str(draft.get("name") or ""),
         "description": str(draft.get("description") or ""),
         "prompt_template": str(draft.get("prompt_template") or ""),
         "severity": str(draft.get("severity") or "major"),
-        "document_type": str(draft.get("document_type") or "病程记录"),
+        "document_type": str(draft.get("document_type") or "日常病程记录"),
+        "applicable_documents": applicable_documents,
         "scene": str(draft.get("scene") or "running"),
-        "check_logic": dict(draft.get("check_logic") or {}),
+        "execution_domain": str(check_logic.get("execution_domain") or "").strip(),
+        "doc_scope": str(check_logic.get("doc_scope") or "primary").strip(),
+        "check_logic": check_logic,
     }
 
 
@@ -1256,4 +1266,3 @@ async def export_workspace_batch_job(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
-
