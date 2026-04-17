@@ -701,10 +701,18 @@ const filteredRules = computed(() => {
   return allRules.value.filter((rule) => {
     const docs = (rule.applicable_documents || []).join(',').toLowerCase()
     return (
-      String(rule.rule_id || '').toLowerCase().includes(keyword) ||
-      String(rule.rule_code || '').toLowerCase().includes(keyword) ||
-      String(rule.name || '').toLowerCase().includes(keyword) ||
-      String(rule.description || '').toLowerCase().includes(keyword) ||
+      String(rule.rule_id || '')
+        .toLowerCase()
+        .includes(keyword) ||
+      String(rule.rule_code || '')
+        .toLowerCase()
+        .includes(keyword) ||
+      String(rule.name || '')
+        .toLowerCase()
+        .includes(keyword) ||
+      String(rule.description || '')
+        .toLowerCase()
+        .includes(keyword) ||
       docs.includes(keyword)
     )
   })
