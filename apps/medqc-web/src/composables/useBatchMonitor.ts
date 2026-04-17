@@ -294,10 +294,10 @@ export function useBatchMonitor() {
       const cutoffDate = new Date()
       cutoffDate.setDate(cutoffDate.getDate() - daysToKeep)
 
-      const cleanupQuery = (supabase
+      const cleanupQuery = supabase
         .from(TABLES.BATCH_PROCESSING_TASKS)
         .delete()
-        .in('status', ['completed', 'failed']) as unknown) as {
+        .in('status', ['completed', 'failed']) as unknown as {
         lt: (column: string, value: string) => Promise<{ error?: { message: string } | null }>
       }
 

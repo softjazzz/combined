@@ -46,9 +46,7 @@ function normalizeCategory(value: unknown): string {
 }
 
 function normalizeStatus(value: unknown): 'pending' | 'processing' | 'completed' | 'failed' {
-  return value === 'processing' || value === 'completed' || value === 'failed'
-    ? value
-    : 'pending'
+  return value === 'processing' || value === 'completed' || value === 'failed' ? value : 'pending'
 }
 
 /**
@@ -335,22 +333,36 @@ export async function getUnstructuredDocumentsStats(): Promise<
     const categoryRows = normalizeRecordRows(categoryStats)
 
     const total = statusRows.length
-    const pending = statusRows.filter((row) => normalizeStatus(row.processing_status) === 'pending').length
-    const processing = statusRows.filter((row) => normalizeStatus(row.processing_status) === 'processing').length
-    const completed = statusRows.filter((row) => normalizeStatus(row.processing_status) === 'completed').length
-    const failed = statusRows.filter((row) => normalizeStatus(row.processing_status) === 'failed').length
+    const pending = statusRows.filter(
+      (row) => normalizeStatus(row.processing_status) === 'pending',
+    ).length
+    const processing = statusRows.filter(
+      (row) => normalizeStatus(row.processing_status) === 'processing',
+    ).length
+    const completed = statusRows.filter(
+      (row) => normalizeStatus(row.processing_status) === 'completed',
+    ).length
+    const failed = statusRows.filter(
+      (row) => normalizeStatus(row.processing_status) === 'failed',
+    ).length
 
-    const by_type = typeRows.reduce<Record<string, number>>((acc, item) => {
-      const documentType = normalizeCategory(item.document_type)
-      acc[documentType] = (acc[documentType] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
+    const by_type = typeRows.reduce<Record<string, number>>(
+      (acc, item) => {
+        const documentType = normalizeCategory(item.document_type)
+        acc[documentType] = (acc[documentType] || 0) + 1
+        return acc
+      },
+      {} as Record<string, number>,
+    )
 
-    const by_category = categoryRows.reduce<Record<string, number>>((acc, item) => {
-      const category = normalizeCategory(item.category)
-      acc[category] = (acc[category] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
+    const by_category = categoryRows.reduce<Record<string, number>>(
+      (acc, item) => {
+        const category = normalizeCategory(item.category)
+        acc[category] = (acc[category] || 0) + 1
+        return acc
+      },
+      {} as Record<string, number>,
+    )
 
     return {
       data: {
@@ -366,4 +378,3 @@ export async function getUnstructuredDocumentsStats(): Promise<
     }
   })
 }
-

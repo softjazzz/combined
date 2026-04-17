@@ -350,7 +350,9 @@ export class UnifiedDataService {
         patient_name: patientName,
         patient_age: toNumberValue(payload.patient_age ?? patientInfo.age, 0),
         patient_gender:
-          payload.patient_gender === 'M' || payload.patient_gender === 'F' || payload.patient_gender === 'U'
+          payload.patient_gender === 'M' ||
+          payload.patient_gender === 'F' ||
+          payload.patient_gender === 'U'
             ? payload.patient_gender
             : 'U',
         department: toStringValue(payload.department) || '',
@@ -482,7 +484,12 @@ export class UnifiedDataService {
       }
 
       const status = toStringValue(payload.status)
-      if (status === 'pending' || status === 'analyzing' || status === 'completed' || status === 'failed') {
+      if (
+        status === 'pending' ||
+        status === 'analyzing' ||
+        status === 'completed' ||
+        status === 'failed'
+      ) {
         updateData.status = status
       }
 

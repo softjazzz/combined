@@ -572,6 +572,7 @@ class QCRuleRegistryService:
                 "executor_type": executor_type,
                 "execution_domain": str(normalized.get("execution_domain") or "").strip(),
                 "doc_scope": str(normalized.get("doc_scope") or "").strip() or "primary",
+                "rule_family": str(normalized.get("rule_family") or "").strip(),
                 "rule_version": rule_version,
                 "prompt_version": prompt_version,
                 "cost_class": cost_class,

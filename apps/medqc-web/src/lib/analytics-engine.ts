@@ -64,4 +64,3 @@ export const analyticsEngine = {
     return buildInsights(range, department)
   },
 }
-

@@ -151,4 +151,3 @@ class GlobalErrorHandler {
 }
 
 export const globalErrorHandler = new GlobalErrorHandler()
-

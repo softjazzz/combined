@@ -72,7 +72,10 @@ export const reportEngine = {
     return defaultTemplates.filter((item) => item.enabled)
   },
 
-  async getReportInstances(options?: { limit?: number; status?: ReportStatus }): Promise<ReportInstance[]> {
+  async getReportInstances(options?: {
+    limit?: number
+    status?: ReportStatus
+  }): Promise<ReportInstance[]> {
     const limit = options?.limit && options.limit > 0 ? options.limit : reportStore.length
     const filtered = options?.status
       ? reportStore.filter((item) => item.status === options.status)
@@ -80,7 +83,10 @@ export const reportEngine = {
     return filtered.slice(0, limit)
   },
 
-  async generateReport(templateId: string, payload: ReportGeneratePayload): Promise<ReportInstance> {
+  async generateReport(
+    templateId: string,
+    payload: ReportGeneratePayload,
+  ): Promise<ReportInstance> {
     const template = defaultTemplates.find((item) => item.id === templateId)
     if (!template) {
       throw new Error('未找到对应报表模板')
@@ -109,4 +115,3 @@ export const reportEngine = {
     return true
   },
 }
-

@@ -50,7 +50,11 @@ class DatabaseOptimizer {
 
   private lastUpdated: string | null = null
 
-  async executeOptimizedQuery<T>(queryFn: QueryFn<T>, cacheKey?: string, ttlMs = 30_000): Promise<T> {
+  async executeOptimizedQuery<T>(
+    queryFn: QueryFn<T>,
+    cacheKey?: string,
+    ttlMs = 30_000,
+  ): Promise<T> {
     this.totalQueries += 1
     const startedAt = Date.now()
 
@@ -87,7 +91,8 @@ class DatabaseOptimizer {
 
   getQueryStats(): DatabaseQueryStats {
     const hitRate = this.totalQueries > 0 ? this.cacheHits / this.totalQueries : 0
-    const averageResponseTime = this.totalQueries > 0 ? this.totalResponseTime / this.totalQueries : 0
+    const averageResponseTime =
+      this.totalQueries > 0 ? this.totalResponseTime / this.totalQueries : 0
 
     return {
       totalQueries: this.totalQueries,

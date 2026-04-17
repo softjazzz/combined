@@ -1,4 +1,8 @@
-import type { QCAnalysisRequest, QCAnalysisResult, RuleAnalysisResult } from '../../types/ai-service'
+import type {
+  QCAnalysisRequest,
+  QCAnalysisResult,
+  RuleAnalysisResult,
+} from '../../types/ai-service'
 
 type CategoryScoreKey = 'completeness' | 'consistency' | 'rationality' | 'timeliness'
 
@@ -80,8 +84,15 @@ function buildRuleResult(
   }
 }
 
-function aggregateCategoryScores(ruleResults: RuleAnalysisResult[]): Record<CategoryScoreKey, number> {
-  const categories: CategoryScoreKey[] = ['completeness', 'consistency', 'rationality', 'timeliness']
+function aggregateCategoryScores(
+  ruleResults: RuleAnalysisResult[],
+): Record<CategoryScoreKey, number> {
+  const categories: CategoryScoreKey[] = [
+    'completeness',
+    'consistency',
+    'rationality',
+    'timeliness',
+  ]
   const categoryScores = {
     completeness: 100,
     consistency: 100,
@@ -95,7 +106,9 @@ function aggregateCategoryScores(ruleResults: RuleAnalysisResult[]): Record<Cate
       categoryScores[category] = 100
       return
     }
-    const avg = scoped.reduce((sum, item) => sum + (item.score ?? (item.hasViolation ? 60 : 95)), 0) / scoped.length
+    const avg =
+      scoped.reduce((sum, item) => sum + (item.score ?? (item.hasViolation ? 60 : 95)), 0) /
+      scoped.length
     categoryScores[category] = clampScore(avg)
   })
 
@@ -172,4 +185,3 @@ export const qcAnalysisEngine = {
     }
   },
 }
-

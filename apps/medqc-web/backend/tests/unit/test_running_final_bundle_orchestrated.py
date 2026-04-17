@@ -80,10 +80,14 @@ async def test_running_final_bundle_should_drive_orchestrator_with_evidence(monk
             "text_available": True,
         },
         rule_ids=["SC-001"],
+        bucket_strategy="domain_family",
+        use_execution_cache=False,
     )
 
     assert called["evidence_source"] == "bundle"
     assert called["evidence_payload"]["supporting_documents"][0]["evidence_text"] == "辅助证据"
+    assert called["bucket_strategy"] == "domain_family"
+    assert called["use_execution_cache"] is False
     assert result["total_rules"] == 1
     assert result["bundle_metadata"]["scene"] == "running"
     assert result["bundle_metadata"]["adapter_version"] == "running-final-adapter-v1"

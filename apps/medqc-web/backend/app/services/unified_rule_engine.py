@@ -297,11 +297,7 @@ class UnifiedRuleEngine:
             "issues": parsed["issues"],
             "findings": parsed["findings"],
             "evidence": parsed["evidence"],
-            "suggestion": self._normalize_suggestion_by_status(
-                status=status,
-                suggestion=parsed["suggestion"],
-                rule_name=str(rule_name or ""),
-            ),
+            "suggestion": parsed["suggestion"],
             "confidence": parsed["confidence"],
             "llm_raw_output": raw_output,
             "applicability": applicability_data,
@@ -484,11 +480,7 @@ class UnifiedRuleEngine:
                     "issues": parsed_item.get("issues") or [],
                     "findings": parsed_item.get("findings") or "",
                     "evidence": evidence_text,
-                    "suggestion": self._normalize_suggestion_by_status(
-                        status=status,
-                        suggestion=str(parsed_item.get("suggestion") or ""),
-                        rule_name=str(rule_name or ""),
-                    ),
+                    "suggestion": parsed_item.get("suggestion") or "",
                     "confidence": confidence,
                     "llm_raw_output": raw_output,
                     "applicability": {
@@ -925,45 +917,6 @@ class UnifiedRuleEngine:
             default_result["confidence"] = 0.7
 
         return default_result
-
-    @staticmethod
-    def _is_no_change_suggestion(text: str) -> bool:
-        normalized = str(text or "").strip().replace(" ", "")
-        if not normalized:
-            return False
-        patterns = (
-            r"(无需|无须).{0,4}(修改|调整|处理|整改|更改|改动|补充)",
-            r"无需整改",
-            r"无需处理",
-            r"无需完善",
-            r"符合规则要求",
-            r"符合要求",
-            r"无明显问题",
-        )
-        return any(re.search(pattern, normalized) for pattern in patterns)
-
-    @classmethod
-    def _normalize_suggestion_by_status(
-        cls,
-        *,
-        status: str,
-        suggestion: str,
-        rule_name: str = "",
-    ) -> str:
-        normalized_status = str(status or "").strip().lower()
-        suggestion_text = str(suggestion or "").strip()
-
-        if normalized_status == "non_compliant":
-            if (not suggestion_text) or cls._is_no_change_suggestion(suggestion_text):
-                if rule_name:
-                    return f"请按“{rule_name}”规则补充或修正相关记录。"
-                return "请根据规则要求补充或修正相关记录。"
-            return suggestion_text
-
-        if normalized_status == "uncertain" and cls._is_no_change_suggestion(suggestion_text):
-            return "证据不足，建议人工复核相关文书并补充佐证。"
-
-        return suggestion_text
 
     def _evaluate_lx003(
         self,

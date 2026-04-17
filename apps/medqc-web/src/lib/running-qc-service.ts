@@ -129,22 +129,26 @@ function buildDepartmentSpecificIssues(
 
   const firstIssue = issues[0]
   if (!firstIssue) {
-    return [{
-      qualityPointId: `${department}-qc-001`,
-      qualityPointName: `${department}常规关注项`,
-      content: `${department}当前未见明显实时缺陷，建议持续关注病历结构完整性。`,
-      isEffectiveToDoctor: true,
-      suggestion: '保持病程记录、出院记录与医嘱执行的一致性。',
-    }]
+    return [
+      {
+        qualityPointId: `${department}-qc-001`,
+        qualityPointName: `${department}常规关注项`,
+        content: `${department}当前未见明显实时缺陷，建议持续关注病历结构完整性。`,
+        isEffectiveToDoctor: true,
+        suggestion: '保持病程记录、出院记录与医嘱执行的一致性。',
+      },
+    ]
   }
 
-  return [{
-    qualityPointId: firstIssue.qualityPointId,
-    qualityPointName: `${department}重点关注 - ${firstIssue.qualityPointName}`,
-    content: firstIssue.content,
-    isEffectiveToDoctor: true,
-    suggestion: firstIssue.suggestion,
-  }]
+  return [
+    {
+      qualityPointId: firstIssue.qualityPointId,
+      qualityPointName: `${department}重点关注 - ${firstIssue.qualityPointName}`,
+      content: firstIssue.content,
+      isEffectiveToDoctor: true,
+      suggestion: firstIssue.suggestion,
+    },
+  ]
 }
 
 function buildTimelinessChecks(request: RunningQCRequest): RunningQCTimelinessCheck[] {
@@ -209,7 +213,10 @@ class RunningQCService {
 
     const score = clampScore(result.overallScore)
     const realTimeIssues = buildRealTimeIssues(request.department, result.ruleResults)
-    const departmentSpecificIssues = buildDepartmentSpecificIssues(request.department, realTimeIssues)
+    const departmentSpecificIssues = buildDepartmentSpecificIssues(
+      request.department,
+      realTimeIssues,
+    )
     const timelinessChecks = buildTimelinessChecks(request)
 
     const recommendations = [...result.suggestions]
@@ -238,8 +245,11 @@ class RunningQCService {
       realTimeIssues,
       departmentSpecificIssues,
       timelinessChecks,
-      recommendations: recommendations.length > 0 ? recommendations : ['当前质控结果正常，建议保持现有记录规范。'],
-      nextCheckTime: new Date(parseDateTime(request.currentDate) + 12 * 60 * 60 * 1000).toISOString(),
+      recommendations:
+        recommendations.length > 0 ? recommendations : ['当前质控结果正常，建议保持现有记录规范。'],
+      nextCheckTime: new Date(
+        parseDateTime(request.currentDate) + 12 * 60 * 60 * 1000,
+      ).toISOString(),
     }
   }
 

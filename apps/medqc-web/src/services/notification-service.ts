@@ -64,27 +64,25 @@ function toGeneratedContent(content: unknown, type: MessageType): GeneratedNotif
 function toMedicalDocuments(context?: Record<string, unknown>): MedicalDocument[] {
   const documents = Array.isArray(context?.documents) ? context.documents : []
 
-  return documents
-    .filter(isRecord)
-    .map((document, index) => ({
-      id: toStringValue(document.id) || `notification-doc-${index}`,
-      type: (toStringValue(document.type) || 'progress_note') as MedicalDocument['type'],
-      content: toStringValue(document.content) || '',
-      timestamp: toStringValue(document.timestamp) || new Date().toISOString(),
-      author: toStringValue(document.author),
-      status: toStringValue(document.status) || 'completed',
-      sections: Array.isArray(document.sections)
-        ? document.sections.filter(isRecord).map((section, sectionIndex) => ({
-            name: toStringValue(section.name) || `section-${sectionIndex}`,
-            content: toStringValue(section.content) || '',
-            required: Boolean(section.required),
-            order:
-              typeof section.order === 'number' && Number.isFinite(section.order)
-                ? section.order
-                : sectionIndex,
-          }))
-        : undefined,
-    }))
+  return documents.filter(isRecord).map((document, index) => ({
+    id: toStringValue(document.id) || `notification-doc-${index}`,
+    type: (toStringValue(document.type) || 'progress_note') as MedicalDocument['type'],
+    content: toStringValue(document.content) || '',
+    timestamp: toStringValue(document.timestamp) || new Date().toISOString(),
+    author: toStringValue(document.author),
+    status: toStringValue(document.status) || 'completed',
+    sections: Array.isArray(document.sections)
+      ? document.sections.filter(isRecord).map((section, sectionIndex) => ({
+          name: toStringValue(section.name) || `section-${sectionIndex}`,
+          content: toStringValue(section.content) || '',
+          required: Boolean(section.required),
+          order:
+            typeof section.order === 'number' && Number.isFinite(section.order)
+              ? section.order
+              : sectionIndex,
+        }))
+      : undefined,
+  }))
 }
 
 function toQCNotification(value: unknown): QCNotification {
@@ -227,10 +225,7 @@ class IntelligentMessageGenerator {
       }
 
       // 使用现有的DynamicPromptGenerator生成消息内容
-      const prompt = await dynamicPromptGenerator.generatePrompt(
-        notificationRule,
-        executionContext,
-      )
+      const prompt = await dynamicPromptGenerator.generatePrompt(notificationRule, executionContext)
 
       // 解析生成的内容
       const generatedContent = await this.parseGeneratedContent(prompt.userPrompt, type)
@@ -277,10 +272,7 @@ class IntelligentMessageGenerator {
     return this.extractContentFromText(content, type)
   }
 
-  private extractContentFromText(
-    content: string,
-    type: MessageType,
-  ): GeneratedNotificationContent {
+  private extractContentFromText(content: string, type: MessageType): GeneratedNotificationContent {
     const lines = content.split('\n').filter((line) => line.trim())
 
     return {
@@ -408,7 +400,8 @@ class SupabaseRealtimeManager {
           table: 'qc_notifications',
           filter: `recipient_id=eq.${userId}`,
         },
-        (payload) => this.handleNewNotification(toQCNotification((payload as { new: unknown }).new)),
+        (payload) =>
+          this.handleNewNotification(toQCNotification((payload as { new: unknown }).new)),
       )
       .on(
         'postgres_changes',
@@ -418,9 +411,8 @@ class SupabaseRealtimeManager {
           table: 'qc_notifications',
           filter: `recipient_id=eq.${userId}`,
         },
-        (payload) => this.handleNotificationUpdate(
-          toQCNotification((payload as { new: unknown }).new),
-        ),
+        (payload) =>
+          this.handleNotificationUpdate(toQCNotification((payload as { new: unknown }).new)),
       )
       .subscribe()
 

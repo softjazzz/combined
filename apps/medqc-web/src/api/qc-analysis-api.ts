@@ -469,9 +469,15 @@ function convertRowToQCResult(row: QCResultRow): QCAnalysisResult {
     summary: summary || {
       totalRules: 18,
       violatedRules: issueList.length,
-      criticalIssues: issueList.filter((item) => typeof item.severity === 'string' && item.severity === 'critical').length,
-      majorIssues: issueList.filter((item) => typeof item.severity === 'string' && item.severity === 'major').length,
-      minorIssues: issueList.filter((item) => typeof item.severity === 'string' && item.severity === 'minor').length,
+      criticalIssues: issueList.filter(
+        (item) => typeof item.severity === 'string' && item.severity === 'critical',
+      ).length,
+      majorIssues: issueList.filter(
+        (item) => typeof item.severity === 'string' && item.severity === 'major',
+      ).length,
+      minorIssues: issueList.filter(
+        (item) => typeof item.severity === 'string' && item.severity === 'minor',
+      ).length,
     },
     suggestions: suggestionList.map(String),
     analysisTime: Number(row.analysis_time ?? rawAnalysis?.analysisTime ?? 0) || 0,
@@ -519,5 +525,3 @@ export async function healthCheck(): Promise<{
     }
   }
 }
-
-

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { getRealtimeService } from '@/lib/realtime/realtime-service'
-import { 
-  WifiOutlined, 
-  DisconnectOutlined, 
+import {
+  WifiOutlined,
+  DisconnectOutlined,
   LoadingOutlined,
-  CheckCircleOutlined
+  CheckCircleOutlined,
 } from '@ant-design/icons-vue'
 
 // 连接状态
@@ -73,7 +73,7 @@ let statusCheckInterval: NodeJS.Timeout | null = null
 
 onMounted(() => {
   checkConnectionStatus()
-  
+
   // 每5秒检查一次连接状态
   statusCheckInterval = setInterval(checkConnectionStatus, 5000)
 })
@@ -88,16 +88,16 @@ onUnmounted(() => {
 <template>
   <div class="realtime-status">
     <a-tooltip :title="getStatusText()">
-      <div 
+      <div
         class="status-indicator"
-        :class="{ 
-          'connected': isConnected,
-          'connecting': isConnecting,
-          'disconnected': !isConnected && !isConnecting
+        :class="{
+          connected: isConnected,
+          connecting: isConnecting,
+          disconnected: !isConnected && !isConnecting,
         }"
         @click="!isConnected && !isConnecting ? handleReconnect() : null"
       >
-        <component 
+        <component
           :is="getStatusIcon()"
           :style="{ color: getStatusColor() }"
           :spin="isConnecting"
@@ -156,11 +156,12 @@ onUnmounted(() => {
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
     opacity: 0.5;
   }
 }
-</style> 
+</style>

@@ -19,6 +19,7 @@ def _build_rules(count: int) -> List[Dict[str, Any]]:
                 "executor_type": "llm",
                 "execution_domain": "course",
                 "doc_scope": "primary",
+                "rule_family": "content_completeness",
                 "rule_version": "v1",
                 "prompt_version": "p1",
                 "cost_class": "standard",
@@ -89,6 +90,9 @@ async def test_batch_compact_should_return_pack_metrics_and_metadata():
     assert first_metadata.get("prompt_strategy") == "batch_compact_v1"
     assert int(first_metadata.get("pack_size") or 0) >= 1
     assert str(first_metadata.get("pack_id") or "").strip() != ""
+    assert first_metadata.get("bucket_strategy") == "domain_only"
+    assert first_metadata.get("bucket_key") == "course::primary"
+    assert first_metadata.get("rule_family") == "content_completeness"
 
 
 @pytest.mark.asyncio
@@ -155,6 +159,7 @@ async def test_batch_compact_should_probe_pack_size_per_bucket():
                 "executor_type": "llm",
                 "execution_domain": "course",
                 "doc_scope": "primary",
+                "rule_family": "content_completeness",
                 "rule_version": "v1",
                 "prompt_version": "p1",
                 "cost_class": "standard",
@@ -170,6 +175,7 @@ async def test_batch_compact_should_probe_pack_size_per_bucket():
                 "executor_type": "llm",
                 "execution_domain": "surgery",
                 "doc_scope": "primary",
+                "rule_family": "procedure_order_linkage",
                 "rule_version": "v1",
                 "prompt_version": "p1",
                 "cost_class": "standard",
@@ -276,3 +282,92 @@ async def test_batch_compact_should_probe_pack_size_per_bucket():
     selected_by_bucket = dict(pack_metrics.get("selected_pack_size_by_bucket") or {})
     assert int(selected_by_bucket.get("course::primary") or 0) == 5
     assert int(selected_by_bucket.get("surgery::primary") or 0) == 3
+
+
+@pytest.mark.asyncio
+async def test_batch_compact_should_split_same_domain_by_rule_family_when_enabled():
+    orchestrator = QCRuleOrchestrator()
+    medical_record = {"id": "V004", "content": "病历正文", "document_type": "病程记录"}
+    rules = [
+        {
+            "rule_id": "SC-001",
+            "rule_code": "SC-001",
+            "name": "规则1",
+            "description": "测试规则",
+            "executor_type": "llm",
+            "execution_domain": "terminal",
+            "doc_scope": "primary",
+            "rule_family": "presence_required",
+            "rule_version": "v1",
+            "prompt_version": "p1",
+            "cost_class": "standard",
+        },
+        {
+            "rule_id": "SC-002",
+            "rule_code": "SC-002",
+            "name": "规则2",
+            "description": "测试规则",
+            "executor_type": "llm",
+            "execution_domain": "terminal",
+            "doc_scope": "primary",
+            "rule_family": "timeliness",
+            "rule_version": "v1",
+            "prompt_version": "p1",
+            "cost_class": "standard",
+        },
+    ]
+
+    async def _single_llm(rule: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "rule_id": rule["rule_id"],
+            "rule_name": rule["name"],
+            "status": "compliant",
+            "is_compliant": True,
+            "findings": "合规",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.9,
+            "metadata": {"tokens_used": 10, "api_time": 0.01},
+        }
+
+    async def _batch_llm(batch_rules: List[Dict[str, Any]], record: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "results": [
+                {
+                    "rule_id": rule["rule_id"],
+                    "rule_name": rule["name"],
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "findings": "执行通过",
+                    "evidence": "病历正文",
+                    "suggestion": "",
+                    "confidence": 0.9,
+                    "metadata": {},
+                }
+                for rule in batch_rules
+            ],
+            "tokens_used": 20,
+            "api_time": 0.05,
+            "parse_error": False,
+            "missing_rule_ids": [],
+            "low_confidence_rule_ids": [],
+            "context_tokens_estimate": 200,
+        }
+
+    result = await orchestrator.evaluate_rules(
+        rules=rules,
+        medical_record=medical_record,
+        llm_evaluate=_single_llm,
+        llm_batch_evaluate=_batch_llm,
+        prompt_strategy="batch_compact_v1",
+        bucket_strategy="domain_family",
+    )
+
+    pack_metrics = result.get("pack_metrics") or {}
+    selected_by_bucket = dict(pack_metrics.get("selected_pack_size_by_bucket") or {})
+    assert int(pack_metrics.get("bucket_count") or 0) == 2
+    assert "terminal::primary::presence_required" in selected_by_bucket
+    assert "terminal::primary::timeliness" in selected_by_bucket
+    bucket_keys = {(item.get("metadata") or {}).get("bucket_key") for item in result["results"]}
+    assert "terminal::primary::presence_required" in bucket_keys
+    assert "terminal::primary::timeliness" in bucket_keys

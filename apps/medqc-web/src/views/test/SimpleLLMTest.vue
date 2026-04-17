@@ -123,7 +123,7 @@ type LLMConfigRow = {
   id: string
 }
 
-const toArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : [])
+const toArray = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : [])
 
 const loading = ref(false)
 const parsing = ref(false)

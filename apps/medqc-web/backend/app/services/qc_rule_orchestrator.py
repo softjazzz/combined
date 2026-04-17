@@ -23,6 +23,7 @@ class RuleExecutionMeta:
     executor_type: str
     execution_domain: str
     doc_scope: str
+    rule_family: str
     rule_version: str
     prompt_version: str
     cost_class: str
@@ -74,6 +75,8 @@ LLMBatchEvaluateFn = Callable[
 
 DEFAULT_PACK_CANDIDATES: tuple[int, ...] = (3, 5, 8, 10, 12, 15)
 LOW_CONFIDENCE_THRESHOLD = 0.45
+DEFAULT_BUCKET_STRATEGY = "domain_only"
+ALLOWED_BUCKET_STRATEGIES = {"domain_only", "domain_family"}
 
 
 def _rule_identity(rule: dict[str, Any]) -> str:
@@ -100,6 +103,7 @@ def resolve_rule_execution_meta(rule: dict[str, Any]) -> RuleExecutionMeta:
         executor_type = "llm"
     execution_domain = str(rule.get("execution_domain") or "generic").strip().lower() or "generic"
     doc_scope = str(rule.get("doc_scope") or "primary").strip().lower() or "primary"
+    rule_family = str(rule.get("rule_family") or "general").strip().lower() or "general"
     rule_version = str(rule.get("rule_version") or "v1").strip() or "v1"
     prompt_version = str(rule.get("prompt_version") or "v1").strip() or "v1"
     cost_class = str(rule.get("cost_class") or "standard").strip().lower() or "standard"
@@ -107,10 +111,30 @@ def resolve_rule_execution_meta(rule: dict[str, Any]) -> RuleExecutionMeta:
         executor_type=executor_type,
         execution_domain=execution_domain,
         doc_scope=doc_scope,
+        rule_family=rule_family,
         rule_version=rule_version,
         prompt_version=prompt_version,
         cost_class=cost_class,
     )
+
+
+def _normalize_bucket_strategy(bucket_strategy: str) -> str:
+    normalized = str(bucket_strategy or DEFAULT_BUCKET_STRATEGY).strip().lower() or DEFAULT_BUCKET_STRATEGY
+    if normalized not in ALLOWED_BUCKET_STRATEGIES:
+        return DEFAULT_BUCKET_STRATEGY
+    return normalized
+
+
+def _build_bucket_key(meta: RuleExecutionMeta, bucket_strategy: str) -> tuple[str, str, str]:
+    if bucket_strategy == "domain_family":
+        return (meta.execution_domain, meta.doc_scope, meta.rule_family)
+    return (meta.execution_domain, meta.doc_scope, "")
+
+
+def _bucket_metric_key(bucket_key: tuple[str, str, str]) -> str:
+    if str(bucket_key[2] or "").strip():
+        return f"{bucket_key[0]}::{bucket_key[1]}::{bucket_key[2]}"
+    return f"{bucket_key[0]}::{bucket_key[1]}"
 
 
 class QCRuleOrchestrator:
@@ -130,6 +154,7 @@ class QCRuleOrchestrator:
         evidence_source: str = "medical_text",
         llm_concurrency: int = 6,
         model_version: str = "",
+        bucket_strategy: str = DEFAULT_BUCKET_STRATEGY,
         execution_cache: Optional[QCExecutionCache] = None,
         cache_ttl_seconds: int = 1800,
     ) -> dict[str, Any]:
@@ -142,13 +167,16 @@ class QCRuleOrchestrator:
         llm_fallback_count = 0
         cache_hit_count = 0
         prompt_strategy_normalized = str(prompt_strategy or "single_rule_v1").strip().lower() or "single_rule_v1"
+        bucket_strategy_normalized = _normalize_bucket_strategy(bucket_strategy)
 
         program_results: dict[int, dict[str, Any]] = {}
         cached_results: dict[int, tuple[dict[str, Any], RuleExecutionMeta, str]] = {}
-        llm_buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        llm_buckets: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
         llm_results: dict[int, tuple[dict[str, Any], RuleExecutionMeta, bool]] = {}
         pack_metrics = {
             "prompt_strategy": prompt_strategy_normalized,
+            "bucket_strategy": bucket_strategy_normalized,
+            "bucket_count": 0,
             "total_packs": 0,
             "avg_pack_size": 0.0,
             "fallback_packs": 0,
@@ -156,6 +184,9 @@ class QCRuleOrchestrator:
             "pack_parse_retry_count": 0,
             "pack_fallback_count": 0,
             "pack_parse_failures": 0,
+            "pack_parse_error_count": 0,
+            "missing_rule_items": 0,
+            "low_confidence_items": 0,
             "context_tokens_estimate": 0,
             "probe_calls": 0,
             "selected_pack_size": 1,
@@ -224,7 +255,7 @@ class QCRuleOrchestrator:
                         rule.get("rule_id"),
                     )
                 llm_count += 1
-                bucket_key = (meta.execution_domain, meta.doc_scope)
+                bucket_key = _build_bucket_key(meta, bucket_strategy_normalized)
                 llm_buckets.setdefault(bucket_key, []).append(
                     {
                         "idx": idx,
@@ -251,18 +282,16 @@ class QCRuleOrchestrator:
                 metadata["pack_size"] = 1
                 metadata["pack_fallback"] = True
                 metadata["pack_id"] = f"single-fallback-{idx}"
+                metadata["bucket_strategy"] = bucket_strategy_normalized
+                metadata["bucket_key"] = _bucket_metric_key(_build_bucket_key(meta, bucket_strategy_normalized))
+                metadata["rule_family"] = meta.rule_family
                 single_payload["metadata"] = metadata
             llm_results[idx] = (single_payload, meta, is_fallback)
 
-        async def _accept_pack_results(
+        def _summarize_pack_response(
             entries: list[dict[str, Any]],
             response: dict[str, Any],
-            *,
-            pack_id: str,
-            pack_size: int,
-            force_pack_fallback: bool,
-        ) -> bool:
-            nonlocal total_tokens, total_api_time, pack_size_sum, context_tokens_sum
+        ) -> dict[str, Any]:
             response_items = list(response.get("results") or [])
             expected_keys: dict[str, dict[str, Any]] = {}
             for entry in entries:
@@ -280,15 +309,37 @@ class QCRuleOrchestrator:
                 if str(item).strip()
             }
             missing_rule_ids.update(set(expected_keys.keys()) - set(parsed_by_rule.keys()))
-
             low_confidence_rule_ids = {
                 str(item).strip().upper()
                 for item in (response.get("low_confidence_rule_ids") or [])
                 if str(item).strip()
             }
             parse_error = bool(response.get("parse_error") is True)
-            if parse_error or missing_rule_ids or low_confidence_rule_ids:
-                return False
+            return {
+                "expected_keys": expected_keys,
+                "parsed_by_rule": parsed_by_rule,
+                "missing_rule_ids": missing_rule_ids,
+                "low_confidence_rule_ids": low_confidence_rule_ids,
+                "parse_error": parse_error,
+            }
+
+        async def _accept_pack_results(
+            entries: list[dict[str, Any]],
+            response: dict[str, Any],
+            *,
+            pack_id: str,
+            pack_size: int,
+            bucket_key: tuple[str, str, str],
+            force_pack_fallback: bool,
+        ) -> tuple[bool, dict[str, Any]]:
+            nonlocal total_tokens, total_api_time, pack_size_sum, context_tokens_sum
+            response_summary = _summarize_pack_response(entries, response)
+            if (
+                response_summary["parse_error"]
+                or response_summary["missing_rule_ids"]
+                or response_summary["low_confidence_rule_ids"]
+            ):
+                return False, response_summary
 
             tokens_used = _safe_int(response.get("tokens_used"))
             api_time = _safe_float(response.get("api_time"))
@@ -299,10 +350,10 @@ class QCRuleOrchestrator:
             pack_size_sum += int(pack_size or len(entries))
             context_tokens_sum += context_tokens
 
-            for key, entry in expected_keys.items():
+            for key, entry in response_summary["expected_keys"].items():
                 idx = int(entry["idx"])
                 meta = entry["meta"]
-                rule_result = parsed_by_rule.get(key) or {}
+                rule_result = response_summary["parsed_by_rule"].get(key) or {}
                 metadata = dict(rule_result.get("metadata") or {})
                 metadata.setdefault("tokens_used", _safe_int(tokens_used / max(1, len(entries))))
                 metadata.setdefault("api_time", _safe_float(api_time / max(1, len(entries))))
@@ -311,16 +362,19 @@ class QCRuleOrchestrator:
                 metadata["pack_id"] = pack_id
                 metadata["pack_fallback"] = bool(force_pack_fallback)
                 metadata["context_tokens_estimate"] = context_tokens
+                metadata["bucket_strategy"] = bucket_strategy_normalized
+                metadata["bucket_key"] = _bucket_metric_key(bucket_key)
+                metadata["rule_family"] = meta.rule_family
                 rule_result["metadata"] = metadata
                 llm_results[idx] = (rule_result, meta, bool(entry.get("is_fallback") is True))
-            return True
+            return True, response_summary
 
         async def _execute_pack(
             entries: list[dict[str, Any]],
             *,
             pack_size: int,
             pack_id_prefix: str,
-            bucket_key: tuple[str, str] = ("generic", "primary"),
+            bucket_key: tuple[str, str, str] = ("generic", "primary", ""),
             force_pack_fallback: bool = False,
         ) -> None:
             nonlocal pack_call_counter, total_tokens, total_api_time
@@ -346,6 +400,7 @@ class QCRuleOrchestrator:
                         "prompt_strategy": prompt_strategy_normalized,
                         "execution_domain": str(bucket_key[0] or "generic"),
                         "doc_scope": str(bucket_key[1] or "primary"),
+                        "rule_family": str(bucket_key[2] or ""),
                         "model_version": str(model_version or ""),
                         "mode": "execute",
                     },
@@ -359,11 +414,12 @@ class QCRuleOrchestrator:
                     "low_confidence_rule_ids": [],
                 }
 
-            accepted = await _accept_pack_results(
+            accepted, response_summary = await _accept_pack_results(
                 entries,
                 response,
                 pack_id=pack_id,
                 pack_size=pack_size,
+                bucket_key=bucket_key,
                 force_pack_fallback=force_pack_fallback,
             )
             if accepted:
@@ -372,6 +428,10 @@ class QCRuleOrchestrator:
             pack_metrics["pack_parse_retry_count"] = int(pack_metrics.get("pack_parse_retry_count") or 0) + 1
             pack_metrics["pack_fallback_count"] = int(pack_metrics.get("pack_fallback_count") or 0) + 1
             pack_metrics["pack_parse_failures"] = int(pack_metrics.get("pack_parse_failures") or 0) + 1
+            if response_summary["parse_error"]:
+                pack_metrics["pack_parse_error_count"] = int(pack_metrics.get("pack_parse_error_count") or 0) + 1
+            pack_metrics["missing_rule_items"] = int(pack_metrics.get("missing_rule_items") or 0) + len(response_summary["missing_rule_ids"])
+            pack_metrics["low_confidence_items"] = int(pack_metrics.get("low_confidence_items") or 0) + len(response_summary["low_confidence_rule_ids"])
 
             if len(entries) <= 1:
                 pack_metrics["single_rule_retries"] = int(pack_metrics.get("single_rule_retries") or 0) + 1
@@ -398,7 +458,7 @@ class QCRuleOrchestrator:
         async def _probe_best_pack_size(
             entries: list[dict[str, Any]],
             *,
-            bucket_key: tuple[str, str] = ("generic", "primary"),
+            bucket_key: tuple[str, str, str] = ("generic", "primary", ""),
         ) -> int:
             nonlocal total_tokens, total_api_time
             if llm_batch_evaluate is None:
@@ -426,11 +486,12 @@ class QCRuleOrchestrator:
                     probe_response = await run_llm_pack(
                         probe_rules,
                         options={
-                            "pack_id": f"probe-{bucket_key[0]}-{bucket_key[1]}-{candidate}",
+                            "pack_id": f"probe-{bucket_key[0]}-{bucket_key[1]}-{bucket_key[2] or 'general'}-{candidate}",
                             "pack_size": candidate,
                             "prompt_strategy": prompt_strategy_normalized,
                             "execution_domain": str(bucket_key[0] or "generic"),
                             "doc_scope": str(bucket_key[1] or "primary"),
+                            "rule_family": str(bucket_key[2] or ""),
                             "model_version": str(model_version or ""),
                             "mode": "probe",
                         },
@@ -461,6 +522,7 @@ class QCRuleOrchestrator:
         if use_batch_mode:
             selected_by_bucket: dict[str, int] = {}
             max_selected_pack_size = 1
+            pack_metrics["bucket_count"] = len(llm_buckets)
 
             for bucket_key, bucket_entries in llm_buckets.items():
                 if not bucket_entries:
@@ -471,7 +533,7 @@ class QCRuleOrchestrator:
                     bucket_key=bucket_key,
                 )
                 max_selected_pack_size = max(max_selected_pack_size, int(selected_pack_size))
-                bucket_metric_key = f"{bucket_key[0]}::{bucket_key[1]}"
+                bucket_metric_key = _bucket_metric_key(bucket_key)
                 selected_by_bucket[bucket_metric_key] = int(selected_pack_size)
 
                 chunk_size = max(1, min(int(selected_pack_size), len(bucket_entries)))
@@ -480,13 +542,14 @@ class QCRuleOrchestrator:
                     await _execute_pack(
                         chunk,
                         pack_size=chunk_size,
-                        pack_id_prefix=f"pack-{bucket_key[0]}-{bucket_key[1]}",
+                        pack_id_prefix=f"pack-{bucket_key[0]}-{bucket_key[1]}-{bucket_key[2] or 'general'}",
                         bucket_key=bucket_key,
                     )
 
             pack_metrics["selected_pack_size"] = int(max_selected_pack_size)
             pack_metrics["selected_pack_size_by_bucket"] = selected_by_bucket
         else:
+            pack_metrics["bucket_count"] = len(llm_buckets)
             llm_tasks: list[Awaitable[tuple[int, dict[str, Any], RuleExecutionMeta, bool]]] = []
             for entries in llm_buckets.values():
                 for entry in entries:
@@ -533,12 +596,15 @@ class QCRuleOrchestrator:
             metadata.setdefault("cost_class", meta.cost_class)
             metadata.setdefault("execution_domain", meta.execution_domain)
             metadata.setdefault("doc_scope", meta.doc_scope)
+            metadata.setdefault("rule_family", meta.rule_family)
             metadata.setdefault("evidence_source", evidence_source)
             metadata.setdefault("model_version", str(model_version or ""))
             metadata["llm_fallback"] = llm_fallback
             metadata["cache_hit"] = is_cache_hit
             metadata.setdefault("cache_key", cache_key)
             metadata.setdefault("prompt_strategy", prompt_strategy_normalized)
+            metadata.setdefault("bucket_strategy", bucket_strategy_normalized)
+            metadata.setdefault("bucket_key", _bucket_metric_key(_build_bucket_key(meta, bucket_strategy_normalized)))
             metadata.setdefault("pack_size", int(metadata.get("pack_size") or 1))
             metadata.setdefault("pack_id", "")
             metadata.setdefault("pack_fallback", bool(metadata.get("pack_fallback") is True))

@@ -26,6 +26,12 @@ from .programmatic_rule_executor import PROGRAMMATIC_RULE_SPECS
 from .qc_execution_cache import QCExecutionCache
 from .qc_rule_orchestrator import QCRuleOrchestrator
 from .qc_rule_registry_service import QCRuleRegistryService
+from .sc_rule_family import (
+    DEFAULT_RULE_FAMILY,
+    load_sc_rule_family_map,
+    resolve_rule_family,
+    validate_sc_rule_family_map,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +61,7 @@ class SichuanQCService:
         self._active_sc_rules_cache: Optional[List[Dict[str, Any]]] = None
         self._active_sc_rules_source: str = "json_file"
         self._active_sc_rules_checksum: str = ""
+        self._sc_rule_family_map_cache: Optional[Dict[str, str]] = None
         self._last_registry_error: Optional[str] = None
         self.rule_registry = QCRuleRegistryService()
         data_dir = Path(__file__).resolve().parent.parent / "data"
@@ -132,6 +139,12 @@ class SichuanQCService:
         if not cost_class:
             cost_class = "low" if executor_type == "program" else "medium"
         normalized["cost_class"] = cost_class
+
+        rule_family = resolve_rule_family(
+            normalized,
+            sc_mapping=self._load_sc_rule_family_map(),
+        )
+        normalized["rule_family"] = rule_family or DEFAULT_RULE_FAMILY
 
         custom_prompt = str(normalized.get("custom_prompt") or "")
         if custom_prompt:
@@ -283,6 +296,11 @@ class SichuanQCService:
         block_flag = bool(getattr(settings, "QC_SC_RULE_SOURCE_BLOCK_BATCH_ON_FALLBACK", False))
         return self._is_prod_env() or block_flag
 
+    def _load_sc_rule_family_map(self) -> Dict[str, str]:
+        if self._sc_rule_family_map_cache is None:
+            self._sc_rule_family_map_cache = load_sc_rule_family_map()
+        return dict(self._sc_rule_family_map_cache)
+
     def _emit_sc_source_alert(self, message: str, *, source: str, context: str) -> None:
         settings = get_settings()
         dedup_seconds = max(0, int(getattr(settings, "QC_SC_RULE_SOURCE_ALERT_DEDUP_SECONDS", 300) or 0))
@@ -370,6 +388,7 @@ class SichuanQCService:
         self._active_sc_rules_cache = None
         self._rules_cache = None
         self._custom_rules_cache = None
+        self._sc_rule_family_map_cache = None
 
     def get_rule_source_overview(self) -> Dict[str, Any]:
         self._load_active_sc_rules()
@@ -388,6 +407,34 @@ class SichuanQCService:
             "batch_block_on_fallback": batch_block_enabled,
             "checked_at": datetime.now(timezone.utc).isoformat(),
         }
+
+    def get_sc_rules_for_rule_family_poc(self) -> List[Dict[str, Any]]:
+        self.assert_sc_rule_source_ready(context="rule_family_ab_poc", block_batch=True)
+        sc_mapping = self._load_sc_rule_family_map()
+        report = validate_sc_rule_family_map(sc_mapping)
+        if not report["ok"]:
+            raise ValueError(
+                "SC rule_family 映射未准备好: "
+                f"missing={len(report['missing_rule_ids'])} "
+                f"invalid={len(report['invalid_families'])} "
+                f"extra={len(report['extra_rule_ids'])}"
+            )
+
+        rules: List[Dict[str, Any]] = []
+        seen_rule_ids: set[str] = set()
+        for rule in self._load_active_sc_rules():
+            rule_id = str(rule.get("rule_id") or "").strip().upper()
+            if rule_id not in sc_mapping or rule_id in seen_rule_ids:
+                continue
+            seen_rule_ids.add(rule_id)
+            rules.append(self._normalize_rule_documents(rule))
+
+        missing_active = sorted(set(sc_mapping.keys()) - seen_rule_ids)
+        if missing_active:
+            raise ValueError(f"治理表缺少 POC 规则: {', '.join(missing_active[:10])}")
+
+        rules.sort(key=lambda item: str(item.get("rule_id") or ""))
+        return rules
 
     async def bootstrap_rule_registry(self, *, operator: str = "system", mark_published: bool = True) -> Dict[str, int]:
         result_sc = self.rule_registry.bootstrap_rules_from_json_to_pg(
@@ -656,6 +703,8 @@ class SichuanQCService:
         rules: List[Dict[str, Any]],
         evidence_source: str = "medical_text",
         evidence_payload: Optional[Dict[str, Any]] = None,
+        bucket_strategy: str = "domain_only",
+        use_execution_cache: bool = True,
     ) -> Dict[str, Any]:
         prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
         model_version = str(self.client.model or "")
@@ -683,7 +732,8 @@ class SichuanQCService:
             evidence_source=evidence_source,
             llm_concurrency=llm_concurrency,
             model_version=model_version,
-            execution_cache=self.execution_cache,
+            bucket_strategy=bucket_strategy,
+            execution_cache=self.execution_cache if use_execution_cache else None,
             cache_ttl_seconds=1800,
         )
 
@@ -1146,6 +1196,8 @@ class SichuanQCService:
         bundle: Dict[str, Any],
         *,
         rule_ids: Optional[List[str]] = None,
+        bucket_strategy: str = "domain_only",
+        use_execution_cache: bool = True,
     ) -> Dict[str, Any]:
         """
         通过 running/final bundle 输入复用旧规则链入口（evaluate_document）。
@@ -1179,6 +1231,8 @@ class SichuanQCService:
             rules=rules,
             evidence_source="bundle",
             evidence_payload=evidence_payload,
+            bucket_strategy=bucket_strategy,
+            use_execution_cache=use_execution_cache,
         )
         result = self._build_document_evaluation_result(
             document_id=document_id,

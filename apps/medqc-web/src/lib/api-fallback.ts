@@ -59,7 +59,8 @@ class ApiFallbackManager {
 
   recordFailure(service: string, error: string, responseTime = 0): void {
     const previous = this.serviceHealth.get(service)
-    const nextStatus: ServiceHealthStatus = previous?.status === 'unavailable' ? 'unavailable' : 'degraded'
+    const nextStatus: ServiceHealthStatus =
+      previous?.status === 'unavailable' ? 'unavailable' : 'degraded'
     this.serviceHealth.set(service, {
       service,
       status: nextStatus,
@@ -81,4 +82,3 @@ class ApiFallbackManager {
 }
 
 export const apiFallbackManager = new ApiFallbackManager()
-

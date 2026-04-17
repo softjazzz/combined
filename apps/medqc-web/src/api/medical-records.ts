@@ -16,7 +16,12 @@ type MedicalRecordRow = Database['public']['Tables']['medical_records']['Row']
 type MedicalRecordInsert = Database['public']['Tables']['medical_records']['Insert']
 type MedicalRecordUpdate = Database['public']['Tables']['medical_records']['Update']
 
-const MEDICAL_RECORD_STATUSES: MedicalRecordStatus[] = ['pending', 'analyzing', 'completed', 'failed']
+const MEDICAL_RECORD_STATUSES: MedicalRecordStatus[] = [
+  'pending',
+  'analyzing',
+  'completed',
+  'failed',
+]
 
 function isRecordLike(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -306,12 +311,15 @@ export async function getMedicalRecordStats(): Promise<
       }
     }
 
-    const byDepartment = records.reduce((acc, record) => {
-      const department =
-        typeof record.department === 'string' && record.department ? record.department : '未分类'
-      acc[department] = (acc[department] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
+    const byDepartment = records.reduce(
+      (acc, record) => {
+        const department =
+          typeof record.department === 'string' && record.department ? record.department : '未分类'
+        acc[department] = (acc[department] || 0) + 1
+        return acc
+      },
+      {} as Record<string, number>,
+    )
 
     return {
       data: { total, byStatus, byDepartment },
@@ -395,4 +403,3 @@ export async function submitRecordForQCAnalysis(
     },
   }
 }
-

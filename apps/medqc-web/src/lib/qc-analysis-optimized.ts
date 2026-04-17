@@ -116,9 +116,7 @@ function buildCacheKey(request: OptimizedQCRequest): string {
 }
 
 function normalizeCategories(categories?: string[]): string[] {
-  const normalized = (categories ?? [])
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
+  const normalized = (categories ?? []).map((item) => item.trim()).filter((item) => item.length > 0)
   return Array.from(new Set(normalized))
 }
 
@@ -132,30 +130,36 @@ function filterRuleResults(
   return ruleResults.filter((item) => selectedCategories.includes(item.category))
 }
 
-function aggregateCategoryScores(ruleResults: RuleAnalysisResult[]): QCAnalysisResult['categoryScores'] {
+function aggregateCategoryScores(
+  ruleResults: RuleAnalysisResult[],
+): QCAnalysisResult['categoryScores'] {
   const categories: Array<keyof QCAnalysisResult['categoryScores']> = [
     'completeness',
     'consistency',
     'rationality',
     'timeliness',
   ]
-  return categories.reduce((accumulator, category) => {
-    const scoped = ruleResults.filter((item) => item.category === category)
-    if (scoped.length === 0) {
-      accumulator[category] = 100
-      return accumulator
-    }
+  return categories.reduce(
+    (accumulator, category) => {
+      const scoped = ruleResults.filter((item) => item.category === category)
+      if (scoped.length === 0) {
+        accumulator[category] = 100
+        return accumulator
+      }
 
-    const average =
-      scoped.reduce((sum, item) => sum + (item.score ?? (item.hasViolation ? 60 : 95)), 0) / scoped.length
-    accumulator[category] = clampScore(average)
-    return accumulator
-  }, {
-    completeness: 100,
-    consistency: 100,
-    rationality: 100,
-    timeliness: 100,
-  })
+      const average =
+        scoped.reduce((sum, item) => sum + (item.score ?? (item.hasViolation ? 60 : 95)), 0) /
+        scoped.length
+      accumulator[category] = clampScore(average)
+      return accumulator
+    },
+    {
+      completeness: 100,
+      consistency: 100,
+      rationality: 100,
+      timeliness: 100,
+    },
+  )
 }
 
 function buildIssues(ruleResults: RuleAnalysisResult[]): OptimizedQCIssue[] {
@@ -165,11 +169,7 @@ function buildIssues(ruleResults: RuleAnalysisResult[]): OptimizedQCIssue[] {
       code: item.ruleCode,
       description: item.reasoning,
       severity:
-        item.severity === 'critical'
-          ? 'critical'
-          : item.severity === 'major'
-            ? 'major'
-            : 'minor',
+        item.severity === 'critical' ? 'critical' : item.severity === 'major' ? 'major' : 'minor',
       deduction: Math.max(0, 100 - (item.score ?? 60)),
       location: item.location,
       suggestion: item.evidence[0] || item.reasoning,
@@ -233,14 +233,18 @@ class OptimizedQCAnalysisService {
     const ruleResults = filterRuleResults(baseResult.ruleResults, selectedCategories)
     const categoryScores = aggregateCategoryScores(ruleResults)
     const overallScore = clampScore(
-      (categoryScores.completeness + categoryScores.consistency + categoryScores.rationality + categoryScores.timeliness) /
+      (categoryScores.completeness +
+        categoryScores.consistency +
+        categoryScores.rationality +
+        categoryScores.timeliness) /
         4,
     )
     const violatedRules = ruleResults.filter((item) => item.hasViolation)
     const issues = buildIssues(ruleResults)
-    const suggestions = baseResult.suggestions.length > 0
-      ? [...baseResult.suggestions]
-      : ['当前病历质控表现稳定，建议继续保持结构化记录习惯。']
+    const suggestions =
+      baseResult.suggestions.length > 0
+        ? [...baseResult.suggestions]
+        : ['当前病历质控表现稳定，建议继续保持结构化记录习惯。']
 
     const result: OptimizedQCResult = {
       recordId: request.recordId,
@@ -252,7 +256,8 @@ class OptimizedQCAnalysisService {
       rationalityScore: categoryScores.rationality,
       timelinessScore: categoryScores.timeliness,
       issues,
-      suggestions: violatedRules.length > 0 ? suggestions : ['当前病历无明显缺陷，建议保持现有执行标准。'],
+      suggestions:
+        violatedRules.length > 0 ? suggestions : ['当前病历无明显缺陷，建议保持现有执行标准。'],
       analysisTime: Date.now() - startedAt,
       createdAt: new Date().toISOString(),
       analysisMode: request.analysisMode,
@@ -334,7 +339,8 @@ class OptimizedQCAnalysisService {
         cacheHits: this.cacheHits,
         cacheMisses: this.cacheMisses,
         cacheHitRate: this.totalRequests > 0 ? this.cacheHits / this.totalRequests : 0,
-        averageResponseTime: this.totalRequests > 0 ? this.totalResponseTime / this.totalRequests : 0,
+        averageResponseTime:
+          this.totalRequests > 0 ? this.totalResponseTime / this.totalRequests : 0,
         cacheSize: this.cache.size,
         lastUpdated: this.lastUpdated,
       },

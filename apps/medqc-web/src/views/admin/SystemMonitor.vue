@@ -12,9 +12,9 @@
           </template>
           刷新
         </a-button>
-        <a-switch 
-          v-model:checked="autoRefresh" 
-          checked-children="自动刷新" 
+        <a-switch
+          v-model:checked="autoRefresh"
+          checked-children="自动刷新"
           un-checked-children="手动刷新"
         />
       </div>
@@ -35,12 +35,14 @@
               :value-style="{ color: systemStatus === '正常' ? '#3f8600' : '#cf1322' }"
             >
               <template #prefix>
-                <component :is="systemStatus === '正常' ? CheckCircleOutlined : ExclamationCircleOutlined" />
+                <component
+                  :is="systemStatus === '正常' ? CheckCircleOutlined : ExclamationCircleOutlined"
+                />
               </template>
             </a-statistic>
           </a-card>
         </a-col>
-        
+
         <a-col
           :xs="24"
           :sm="12"
@@ -51,7 +53,9 @@
               title="平均响应时间"
               :value="performanceStats.averageResponseTime"
               suffix="ms"
-              :value-style="{ color: performanceStats.averageResponseTime < 2000 ? '#3f8600' : '#faad14' }"
+              :value-style="{
+                color: performanceStats.averageResponseTime < 2000 ? '#3f8600' : '#faad14',
+              }"
             >
               <template #prefix>
                 <ClockCircleOutlined />
@@ -59,7 +63,7 @@
             </a-statistic>
           </a-card>
         </a-col>
-        
+
         <a-col
           :xs="24"
           :sm="12"
@@ -79,7 +83,7 @@
             </a-statistic>
           </a-card>
         </a-col>
-        
+
         <a-col
           :xs="24"
           :sm="12"
@@ -109,8 +113,8 @@
         class="section-card"
       >
         <a-row :gutter="[16, 16]">
-          <a-col 
-            v-for="service in serviceHealth" 
+          <a-col
+            v-for="service in serviceHealth"
             :key="service.name"
             :xs="24"
             :sm="12"
@@ -168,7 +172,7 @@
             />
           </a-card>
         </a-col>
-        
+
         <a-col
           :xs="24"
           :lg="12"
@@ -275,7 +279,7 @@ import {
   ExclamationCircleOutlined,
   ClockCircleOutlined,
   DatabaseOutlined,
-  WarningOutlined
+  WarningOutlined,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { globalErrorHandler } from '@/lib/error-handler'
@@ -320,13 +324,13 @@ const systemStatus = ref('正常')
 const performanceStats = ref({
   averageResponseTime: 0,
   cacheHitRate: 0,
-  totalRequests: 0
+  totalRequests: 0,
 })
 const errorStats = ref({
   totalErrors: 0,
   errorRate: 0,
   errorsByType: {} as Record<string, number>,
-  errorsBySeverity: {} as Record<string, number>
+  errorsBySeverity: {} as Record<string, number>,
 })
 const serviceHealth = ref<ServiceHealthItem[]>([])
 const recentErrors = ref<MonitorError[]>([])
@@ -345,13 +349,13 @@ const errorColumns = [
   { title: '类型', dataIndex: 'type', key: 'type', width: 120 },
   { title: '严重程度', dataIndex: 'severity', key: 'severity', width: 100 },
   { title: '消息', dataIndex: 'message', key: 'message', ellipsis: true },
-  { title: '操作', key: 'actions', width: 80 }
+  { title: '操作', key: 'actions', width: 80 },
 ]
 
 // 方法
 const refreshData = async () => {
   loading.value = true
-  
+
   try {
     // 获取性能统计
     const perfResponse = await getPerformanceStats()
@@ -372,28 +376,31 @@ const refreshData = async () => {
     const errStats = globalErrorHandler.getStats()
     errorStats.value = {
       totalErrors: errStats.totalErrors,
-      errorRate: errStats.totalErrors > 0 ? errStats.totalErrors / (errStats.totalErrors + performanceStats.value.totalRequests) : 0,
+      errorRate:
+        errStats.totalErrors > 0
+          ? errStats.totalErrors / (errStats.totalErrors + performanceStats.value.totalRequests)
+          : 0,
       errorsByType: errStats.errorsByType,
-      errorsBySeverity: errStats.errorsBySeverity
+      errorsBySeverity: errStats.errorsBySeverity,
     }
 
     // 获取服务健康状态
     const healthMap = apiFallbackManager.getServiceHealth()
-    serviceHealth.value = Array.from(healthMap.values()).map(rawHealth => {
+    serviceHealth.value = Array.from(healthMap.values()).map((rawHealth) => {
       const health = rawHealth as RawServiceHealth
       return {
         name: getServiceDisplayName(health.service || 'unknown'),
         status: health.status || 'unknown',
         responseTime: health.responseTime,
         lastCheck: health.lastCheck,
-        error: health.error
+        error: health.error,
       }
     })
 
     // 获取最近错误
     recentErrors.value = errStats.recentErrors.slice(0, 20).map((error, index) => ({
       key: index,
-      ...error
+      ...error,
     }))
 
     // 更新系统状态
@@ -409,7 +416,7 @@ const refreshData = async () => {
 }
 
 const updateSystemStatus = () => {
-  const hasUnhealthyServices = serviceHealth.value.some(s => s.status !== 'healthy')
+  const hasUnhealthyServices = serviceHealth.value.some((s) => s.status !== 'healthy')
   const highErrorRate = errorStats.value.errorRate > 0.1
   const slowResponse = performanceStats.value.averageResponseTime > 5000
 
@@ -424,7 +431,7 @@ const getServiceDisplayName = (serviceName: string): string => {
   const nameMap: Record<string, string> = {
     'deepseek-api': 'AI分析服务',
     'supabase-db': '数据库服务',
-    'file-storage': '文件存储服务'
+    'file-storage': '文件存储服务',
   }
   return nameMap[serviceName] || serviceName
 }
@@ -433,7 +440,7 @@ const getServiceStatusColor = (status: string): string => {
   const colorMap: Record<string, string> = {
     healthy: 'green',
     degraded: 'orange',
-    unavailable: 'red'
+    unavailable: 'red',
   }
   return colorMap[status] || 'default'
 }
@@ -442,7 +449,7 @@ const getServiceStatusText = (status: string): string => {
   const textMap: Record<string, string> = {
     healthy: '正常',
     degraded: '降级',
-    unavailable: '不可用'
+    unavailable: '不可用',
   }
   return textMap[status] || status
 }
@@ -452,7 +459,7 @@ const getErrorSeverityColor = (severity: string): string => {
     critical: 'red',
     high: 'orange',
     medium: 'gold',
-    low: 'blue'
+    low: 'blue',
   }
   return colorMap[severity] || 'default'
 }
@@ -461,7 +468,7 @@ const formatTime = (timestamp: number): string => {
   if (!timestamp) return '未知'
   const now = Date.now()
   const diff = now - timestamp
-  
+
   if (diff < 60000) return '刚刚'
   if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
@@ -477,7 +484,7 @@ const startAutoRefresh = () => {
   if (refreshTimer.value) {
     clearInterval(refreshTimer.value)
   }
-  
+
   if (autoRefresh.value) {
     refreshTimer.value = setInterval(() => {
       refreshData()
@@ -498,9 +505,12 @@ onUnmounted(() => {
 })
 
 // 监听自动刷新开关
-watch(() => autoRefresh.value, () => {
-  startAutoRefresh()
-})
+watch(
+  () => autoRefresh.value,
+  () => {
+    startAutoRefresh()
+  },
+)
 </script>
 
 <style scoped>
@@ -652,21 +662,21 @@ watch(() => autoRefresh.value, () => {
   .system-monitor {
     padding: 16px;
   }
-  
+
   .monitor-header {
     flex-direction: column;
     gap: 16px;
     text-align: center;
   }
-  
+
   .monitor-header h1 {
     font-size: 24px;
   }
-  
+
   .service-metrics {
     gap: 6px;
   }
-  
+
   .metric {
     font-size: 13px;
   }
