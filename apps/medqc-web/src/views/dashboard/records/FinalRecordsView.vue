@@ -654,6 +654,7 @@ const {
   fetchBatchJobDebugSnapshot,
   executeCancelBatchJob,
   executeRetryBatchJob,
+  exportBatchJobReport,
 } = useSichuanBatchJobs()
 
 // KPI 卡片数据
@@ -940,8 +941,8 @@ const closeBatchJobDrawer = () => {
   stopBatchJobPolling()
 }
 
-const handleExportBatchReport = () => {
-  message.info('终末页暂未开放任务导出，可在规则工作台导出')
+const handleExportBatchReport = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+  await exportBatchJobReport(format)
 }
 
 const loadRulesForLaunch = async () => {

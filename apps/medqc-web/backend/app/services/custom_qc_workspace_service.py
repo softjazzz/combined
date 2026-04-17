@@ -388,6 +388,92 @@ def _session() -> Session:
     return SessionLocal()
 
 
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(value)
+    except Exception:
+        return default
+
+
+def _to_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+
+def _map_scene_label(scene: Any) -> str:
+    mapping = {
+        "running": "运行病历",
+        "final": "终末病历",
+        "all": "全病历",
+    }
+    key = _safe_text(scene).lower()
+    return mapping.get(key, _safe_text(scene, "-"))
+
+
+def _map_scope_label(scope: Any) -> str:
+    return _map_scene_label(scope)
+
+
+def _map_job_status_label(status: Any) -> str:
+    mapping = {
+        "queued": "排队中",
+        "running": "执行中",
+        "completed": "已完成",
+        "failed": "执行失败",
+        "canceled": "已取消",
+    }
+    key = _safe_text(status).lower()
+    return mapping.get(key, _safe_text(status, "-"))
+
+
+def _map_item_status_label(status: Any, is_compliant: Any) -> str:
+    key = _safe_text(status).lower()
+    if key == "non_compliant":
+        return "不合规"
+    if key == "uncertain":
+        return "待复核"
+    if key == "compliant":
+        return "合规"
+    if key == "failed":
+        return "失败"
+    if is_compliant is True:
+        return "合规"
+    if is_compliant is False:
+        return "不合规"
+    return _safe_text(status, "未判定")
+
+
+def _build_filter_text(filters: Dict[str, Any]) -> str:
+    if not isinstance(filters, dict):
+        return "未设置筛选条件"
+    parts: List[str] = []
+    department = _safe_text(filters.get("department"))
+    doctor = _safe_text(filters.get("doctor"))
+    keyword = _safe_text(filters.get("keyword"))
+    start_date = _safe_text(filters.get("start_date"))
+    end_date = _safe_text(filters.get("end_date"))
+    date_field = _safe_text(filters.get("date_field"))
+
+    if department:
+        parts.append(f"科室：{department}")
+    if doctor:
+        parts.append(f"医生：{doctor}")
+    if keyword:
+        parts.append(f"关键字：{keyword}")
+    if start_date or end_date:
+        date_field_zh = "出院日期" if date_field == "discharge" else "入院日期"
+        parts.append(f"{date_field_zh}：{start_date or '-'} ~ {end_date or '-'}")
+    if not parts:
+        return "未设置筛选条件"
+    return "；".join(parts)
+
+
 @dataclass
 class WorkspaceListResult:
     items: List[Dict[str, Any]]
@@ -909,6 +995,8 @@ class CustomQCWorkspaceService:
             )
             rows = (
                 session.query(
+                    MedicalRecordFrontpage.institute_id,
+                    MedicalRecordFrontpage.patient_id,
                     MedicalRecordFrontpage.visit_id,
                     MedicalRecordFrontpage.name,
                     dept_expr.label("department"),
@@ -931,6 +1019,8 @@ class CustomQCWorkspaceService:
                 medical_text = _safe_text(source.record_content)
             hydrated.append(
                 {
+                    "institute_id": _safe_text(item.get("institute_id") or (source.institute_id if source else "")),
+                    "patient_id": _safe_text(item.get("patient_id") or (source.patient_id if source else "")),
                     "record_id": _safe_text(item.get("record_id") or visit_id),
                     "visit_id": visit_id,
                     "patient_name": _safe_text(item.get("patient_name") or (source.name if source else "")),
@@ -1467,56 +1557,167 @@ class CustomQCWorkspaceService:
 
         output = BytesIO()
         workbook = Workbook()
-        ws_summary = workbook.active
-        ws_summary.title = "汇总"
-        ws_summary.append(["任务ID", job.get("id")])
-        ws_summary.append(["规则编码", job.get("rule_code")])
-        ws_summary.append(["规则名称", job.get("rule_name")])
-        ws_summary.append(["场景", job.get("scene")])
-        ws_summary.append(["范围", job.get("scope")])
-        ws_summary.append(["状态", job.get("status")])
-        ws_summary.append(["创建时间", str(job.get("created_at") or "")])
-        ws_summary.append(["开始时间", str(job.get("started_at") or "")])
-        ws_summary.append(["结束时间", str(job.get("finished_at") or "")])
-        ws_summary.append(["筛选条件", _safe_json_dumps(job.get("filters") or {})])
         summary = job.get("summary") or {}
-        for label, key in [
-            ("总病历数", "total_records"),
-            ("成功数", "success_count"),
-            ("失败数", "failed_count"),
-            ("命中数", "issue_records"),
-            ("合规数", "compliant_records"),
-            ("总 token", "total_tokens"),
-            ("总耗时", "total_processing_time"),
-        ]:
-            ws_summary.append([label, summary.get(key) or job.get(key) or 0])
+        items = job.get("items") or []
+        failed_records = job.get("failed_records") or []
+        status_breakdown = summary.get("status_breakdown") or {}
+        rule_name_map: Dict[str, str] = {}
+        for rr in summary.get("rule_results") or []:
+            if not isinstance(rr, dict):
+                continue
+            rule_code = _safe_text(rr.get("rule_code"))
+            rule_name = _safe_text(rr.get("rule_name"))
+            if rule_code and rule_name:
+                rule_name_map[rule_code] = rule_name
 
-        ws_items = workbook.create_sheet("命中明细")
-        ws_items.append(["病历ID", "visit", "患者", "科室", "状态", "是否合规", "Findings", "Evidence", "Suggestion", "Confidence"])
-        for item in job.get("items") or []:
-            ws_items.append([
-                item.get("record_id") or "",
-                item.get("visit_id") or "",
-                item.get("patient_name") or "",
-                item.get("department") or "",
-                item.get("status") or "",
-                "是" if item.get("is_compliant") else "否",
-                item.get("findings") or "",
-                item.get("evidence") or "",
-                item.get("suggestion") or "",
-                item.get("confidence") or 0,
-            ])
+        issue_items: List[Dict[str, Any]] = []
+        for item in items:
+            status_key = _safe_text((item or {}).get("status")).lower()
+            is_compliant = (item or {}).get("is_compliant")
+            if status_key in {"non_compliant", "uncertain"} or is_compliant is False:
+                issue_items.append(item or {})
 
+        # 1) 管理摘要（面向行政管理）
+        ws_summary = workbook.active
+        ws_summary.title = "管理摘要"
+        ws_summary.append(["报告项", "内容"])
+        summary_rows = [
+            ("任务编号", _safe_text(job.get("id"), "-")),
+            ("任务名称", _safe_text(job.get("rule_name"), "终末病历批量质控任务")),
+            ("适用场景", _map_scene_label(job.get("scene"))),
+            ("覆盖范围", _map_scope_label(job.get("scope"))),
+            ("当前状态", _map_job_status_label(job.get("status"))),
+            ("发起时间", str(job.get("created_at") or "-")),
+            ("开始执行时间", str(job.get("started_at") or "-")),
+            ("完成时间", str(job.get("finished_at") or "-")),
+            ("筛选范围说明", _build_filter_text(job.get("filters") or {})),
+            ("纳入病历数", _to_int(summary.get("total_records"), _to_int(job.get("total_records")))),
+            ("完成病历数", _to_int(summary.get("success_count"), _to_int(job.get("success_count")))),
+            ("执行失败病历数", _to_int(summary.get("failed_record_count"), _to_int(job.get("failed_count")))),
+            ("发现问题病历数", _to_int(summary.get("issue_records"), _to_int(job.get("issue_records")))),
+            ("待复核病历数", _to_int(summary.get("uncertain_records"), _to_int(status_breakdown.get("uncertain")))),
+            ("合规病历数", _to_int(summary.get("compliant_records"), _to_int(job.get("compliant_records")))),
+            ("执行规则数", _to_int(summary.get("rule_count"), 1)),
+        ]
+        for label, value in summary_rows:
+            ws_summary.append([label, value])
+        ws_summary.column_dimensions["A"].width = 24
+        ws_summary.column_dimensions["B"].width = 80
+
+        # 2) 问题明细（业务重点）
+        ws_items = workbook.create_sheet("问题明细")
+        ws_items.append(
+            [
+                "病历号",
+                "患者姓名",
+                "科室",
+                "质控点编码",
+                "质控点名称",
+                "判定结果",
+                "问题结论",
+                "整改建议",
+                "证据摘要",
+                "置信度",
+            ]
+        )
+        for item in issue_items:
+            ws_items.append(
+                [
+                    item.get("record_id") or "",
+                    item.get("patient_name") or "",
+                    item.get("department") or "",
+                    item.get("rule_code") or "",
+                    item.get("rule_name") or rule_name_map.get(_safe_text(item.get("rule_code")), ""),
+                    _map_item_status_label(item.get("status"), item.get("is_compliant")),
+                    item.get("findings") or "",
+                    item.get("suggestion") or "",
+                    item.get("evidence") or "",
+                    _to_float(item.get("confidence"), 0.0),
+                ]
+            )
+        ws_items.freeze_panes = "A2"
+        ws_items.column_dimensions["A"].width = 16
+        ws_items.column_dimensions["B"].width = 14
+        ws_items.column_dimensions["C"].width = 14
+        ws_items.column_dimensions["D"].width = 12
+        ws_items.column_dimensions["E"].width = 32
+        ws_items.column_dimensions["F"].width = 10
+        ws_items.column_dimensions["G"].width = 42
+        ws_items.column_dimensions["H"].width = 38
+        ws_items.column_dimensions["I"].width = 38
+        ws_items.column_dimensions["J"].width = 10
+
+        # 3) 全部明细（含合规、待复核、不合规）
+        ws_all = workbook.create_sheet("全部明细")
+        ws_all.append(
+            [
+                "病历号",
+                "患者姓名",
+                "科室",
+                "质控点编码",
+                "质控点名称",
+                "判定结果",
+                "是否合规",
+                "问题结论",
+                "整改建议",
+                "证据摘要",
+                "置信度",
+            ]
+        )
+        for item in items:
+            ws_all.append(
+                [
+                    item.get("record_id") or "",
+                    item.get("patient_name") or "",
+                    item.get("department") or "",
+                    item.get("rule_code") or "",
+                    item.get("rule_name") or rule_name_map.get(_safe_text(item.get("rule_code")), ""),
+                    _map_item_status_label(item.get("status"), item.get("is_compliant")),
+                    "是" if item.get("is_compliant") is True else "否",
+                    item.get("findings") or "",
+                    item.get("suggestion") or "",
+                    item.get("evidence") or "",
+                    _to_float(item.get("confidence"), 0.0),
+                ]
+            )
+        ws_all.freeze_panes = "A2"
+
+        # 4) 失败明细
         ws_failed = workbook.create_sheet("失败明细")
-        ws_failed.append(["病历ID", "visit", "患者", "科室", "失败原因"])
-        for item in job.get("failed_records") or []:
-            ws_failed.append([
-                item.get("record_id") or "",
-                item.get("visit_id") or "",
-                item.get("patient_name") or "",
-                item.get("department") or "",
-                item.get("error") or "",
-            ])
+        ws_failed.append(["病历号", "患者姓名", "科室", "失败原因"])
+        for item in failed_records:
+            ws_failed.append(
+                [
+                    item.get("record_id") or "",
+                    item.get("patient_name") or "",
+                    item.get("department") or "",
+                    item.get("error") or "",
+                ]
+            )
+        ws_failed.freeze_panes = "A2"
+        ws_failed.column_dimensions["A"].width = 16
+        ws_failed.column_dimensions["B"].width = 14
+        ws_failed.column_dimensions["C"].width = 14
+        ws_failed.column_dimensions["D"].width = 64
+
+        # 5) 技术信息（默认不看，给研发定位问题）
+        ws_tech = workbook.create_sheet("技术信息")
+        ws_tech.append(["技术字段", "值"])
+        tech_rows = [
+            ("任务ID", _safe_text(job.get("id"), "-")),
+            ("规则编码", _safe_text(job.get("rule_code"), "-")),
+            ("场景(raw)", _safe_text(job.get("scene"), "-")),
+            ("范围(raw)", _safe_text(job.get("scope"), "-")),
+            ("状态(raw)", _safe_text(job.get("status"), "-")),
+            ("总 token", _to_int(summary.get("total_tokens"), _to_int(job.get("total_tokens")))),
+            ("总耗时(秒)", round(_to_float(summary.get("total_processing_time"), _to_float(job.get("total_processing_time"))), 4)),
+            ("筛选条件(raw)", _safe_json_dumps(job.get("filters") or {})),
+            ("summary(raw)", _safe_json_dumps(summary)),
+        ]
+        for label, value in tech_rows:
+            ws_tech.append([label, value])
+        ws_tech.column_dimensions["A"].width = 24
+        ws_tech.column_dimensions["B"].width = 96
 
         workbook.save(output)
         output.seek(0)
@@ -1527,34 +1728,56 @@ class CustomQCWorkspaceService:
 
         output = StringIO()
         writer = csv.writer(output)
-        writer.writerow(["任务ID", job.get("id")])
-        writer.writerow(["规则编码", job.get("rule_code")])
-        writer.writerow(["规则名称", job.get("rule_name")])
-        writer.writerow(["场景", job.get("scene")])
-        writer.writerow(["范围", job.get("scope")])
+        summary = job.get("summary") or {}
+        items = job.get("items") or []
+        rule_name_map: Dict[str, str] = {}
+        for rr in summary.get("rule_results") or []:
+            if not isinstance(rr, dict):
+                continue
+            rule_code = _safe_text(rr.get("rule_code"))
+            rule_name = _safe_text(rr.get("rule_name"))
+            if rule_code and rule_name:
+                rule_name_map[rule_code] = rule_name
+        issue_items: List[Dict[str, Any]] = []
+        for item in items:
+            status_key = _safe_text((item or {}).get("status")).lower()
+            is_compliant = (item or {}).get("is_compliant")
+            if status_key in {"non_compliant", "uncertain"} or is_compliant is False:
+                issue_items.append(item or {})
+
+        writer.writerow(["管理摘要"])
+        writer.writerow(["任务编号", _safe_text(job.get("id"), "-")])
+        writer.writerow(["任务名称", _safe_text(job.get("rule_name"), "终末病历批量质控任务")])
+        writer.writerow(["适用场景", _map_scene_label(job.get("scene"))])
+        writer.writerow(["覆盖范围", _map_scope_label(job.get("scope"))])
+        writer.writerow(["当前状态", _map_job_status_label(job.get("status"))])
+        writer.writerow(["纳入病历数", _to_int(summary.get("total_records"), _to_int(job.get("total_records")))])
+        writer.writerow(["发现问题病历数", _to_int(summary.get("issue_records"), _to_int(job.get("issue_records")))])
+        writer.writerow(["待复核病历数", _to_int(summary.get("uncertain_records"))])
+        writer.writerow(["合规病历数", _to_int(summary.get("compliant_records"), _to_int(job.get("compliant_records")))])
+        writer.writerow(["执行规则数", _to_int(summary.get("rule_count"), 1)])
         writer.writerow([])
-        writer.writerow(["命中明细"])
-        writer.writerow(["病历ID", "visit", "患者", "科室", "状态", "是否合规", "Findings", "Evidence", "Suggestion", "Confidence"])
-        for item in job.get("items") or []:
+        writer.writerow(["问题明细"])
+        writer.writerow(["病历号", "患者姓名", "科室", "质控点编码", "质控点名称", "判定结果", "问题结论", "整改建议", "证据摘要", "置信度"])
+        for item in issue_items:
             writer.writerow([
                 item.get("record_id") or "",
-                item.get("visit_id") or "",
                 item.get("patient_name") or "",
                 item.get("department") or "",
-                item.get("status") or "",
-                "是" if item.get("is_compliant") else "否",
+                item.get("rule_code") or "",
+                item.get("rule_name") or rule_name_map.get(_safe_text(item.get("rule_code")), ""),
+                _map_item_status_label(item.get("status"), item.get("is_compliant")),
                 item.get("findings") or "",
-                item.get("evidence") or "",
                 item.get("suggestion") or "",
-                item.get("confidence") or 0,
+                item.get("evidence") or "",
+                _to_float(item.get("confidence"), 0.0),
             ])
         writer.writerow([])
         writer.writerow(["失败明细"])
-        writer.writerow(["病历ID", "visit", "患者", "科室", "失败原因"])
+        writer.writerow(["病历号", "患者姓名", "科室", "失败原因"])
         for item in job.get("failed_records") or []:
             writer.writerow([
                 item.get("record_id") or "",
-                item.get("visit_id") or "",
                 item.get("patient_name") or "",
                 item.get("department") or "",
                 item.get("error") or "",
