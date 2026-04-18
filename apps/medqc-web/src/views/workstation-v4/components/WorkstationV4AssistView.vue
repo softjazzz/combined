@@ -16,7 +16,7 @@
     <template #content>
       <ContentQCTab
         :patient-id="selectedRecord?.patientId"
-        :visit-id="selectedRecord?.id"
+        :visit-id="selectedRecord?.visitId || selectedRecord?.id"
         :institute-id="selectedRecord?.instituteId"
         :scene="resolveContentScene(selectedRecord)"
         :documents="documentsList"

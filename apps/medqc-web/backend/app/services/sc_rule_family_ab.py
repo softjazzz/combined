@@ -5,7 +5,7 @@ import csv
 import json
 import statistics
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -15,6 +15,11 @@ from sqlalchemy import text
 from ..database.connection import engine
 from .sc_rule_family import DEFAULT_RULE_FAMILY
 from .sichuan_qc_service import SichuanQCService
+from .effect_priority_qc import (
+    DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+    QUALITY_PROFILE_EFFECT_PRIORITY,
+    QUALITY_PROFILE_THROUGHPUT,
+)
 
 SC_RULE_FAMILY_POC_COHORTS: tuple[str, ...] = (
     "running_admission_course",
@@ -302,6 +307,9 @@ async def _evaluate_manifest_entry(
     manifest_entry: dict[str, Any],
     rule_ids: list[str],
     bucket_strategy: str,
+    quality_profile: str,
+    enable_selective_refine: bool,
+    refine_confidence_threshold: float,
     schema: str,
 ) -> dict[str, Any]:
     from .qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
@@ -318,6 +326,9 @@ async def _evaluate_manifest_entry(
         bundle=bundle,
         rule_ids=rule_ids,
         bucket_strategy=bucket_strategy,
+        quality_profile=quality_profile,
+        enable_selective_refine=enable_selective_refine,
+        refine_confidence_threshold=refine_confidence_threshold,
         use_execution_cache=False,
     )
     result["_wall_clock_time"] = round(time.perf_counter() - started_at, 4)
@@ -363,6 +374,12 @@ def _collect_rule_rows(
                 "pack_id": str(metadata.get("pack_id") or ""),
                 "pack_size": _safe_int(metadata.get("pack_size")),
                 "prompt_strategy": str(metadata.get("prompt_strategy") or ""),
+                "quality_profile": str(metadata.get("quality_profile") or ""),
+                "qc_stage": str(metadata.get("qc_stage") or ""),
+                "refined": bool(metadata.get("refined") is True),
+                "refine_reason": str(metadata.get("refine_reason") or ""),
+                "screening_status": str(metadata.get("screening_status") or ""),
+                "final_decision_source": str(metadata.get("final_decision_source") or "batch"),
                 "record_excerpt": primary_excerpt,
             }
         )
@@ -396,6 +413,10 @@ def summarize_arm_round(
     pack_fallback_count = 0
     failed_records = 0
     low_confidence_count = 0
+    refined_rule_count = 0
+    refine_failed_count = 0
+    refine_candidate_count = 0
+    refine_reasons = Counter()
     status_counts = defaultdict(int)
     family_status_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     selected_pack_size_by_bucket: dict[str, list[int]] = defaultdict(list)
@@ -427,6 +448,12 @@ def summarize_arm_round(
         missing_rule_items += _safe_int(pack_metrics.get("missing_rule_items"))
         pack_parse_retry_count += _safe_int(pack_metrics.get("pack_parse_retry_count"))
         pack_fallback_count += _safe_int(pack_metrics.get("pack_fallback_count"))
+        refine_summary = dict(result.get("refine_summary") or {})
+        refine_candidate_count += _safe_int(refine_summary.get("candidate_count"))
+        refined_rule_count += _safe_int(refine_summary.get("refined_rule_count"))
+        refine_failed_count += _safe_int(refine_summary.get("refine_failed_count"))
+        for reason, count in dict(refine_summary.get("refine_reasons") or {}).items():
+            refine_reasons[str(reason)] += _safe_int(count)
         for bucket_key, pack_size in dict(pack_metrics.get("selected_pack_size_by_bucket") or {}).items():
             selected_pack_size_by_bucket[str(bucket_key)].append(_safe_int(pack_size))
 
@@ -446,6 +473,7 @@ def summarize_arm_round(
         "arm": arm_name,
         "round_index": int(round_index),
         "bucket_strategy": bucket_strategy,
+        "quality_profile": str((record_outputs[0].get("result") or {}).get("quality_profile") or "") if record_outputs else "",
         "sc_source": sc_source,
         "model_version": model_version,
         "manifest_size": len(manifest),
@@ -466,6 +494,10 @@ def summarize_arm_round(
         "missing_rule_items": missing_rule_items,
         "pack_parse_retry_count": pack_parse_retry_count,
         "pack_fallback_count": pack_fallback_count,
+        "refine_candidate_count": refine_candidate_count,
+        "refined_rule_count": refined_rule_count,
+        "refine_failed_count": refine_failed_count,
+        "refine_reasons": dict(refine_reasons),
         "non_compliant_count": non_compliant_count,
         "uncertain_count": uncertain_count,
         "low_confidence_rate": round((low_confidence_count / observed_rules) * 100, 2) if observed_rules else 0.0,
@@ -637,6 +669,9 @@ def build_ab_summary(
                 "bucket_count": _median("bucket_count", rounds),
                 "parse_error_count": _median("parse_error_count", rounds),
                 "missing_rule_items": _median("missing_rule_items", rounds),
+                "refine_candidate_count": _median("refine_candidate_count", rounds),
+                "refined_rule_count": _median("refined_rule_count", rounds),
+                "refine_failed_count": _median("refine_failed_count", rounds),
                 "non_compliant_count": _median("non_compliant_count", rounds),
                 "uncertain_count": _median("uncertain_count", rounds),
                 "low_confidence_rate": _median("low_confidence_rate", rounds),
@@ -651,11 +686,13 @@ def write_ab_outputs(
     summary: dict[str, Any],
     diff_rows: list[dict[str, Any]],
     review_queue: list[dict[str, Any]],
+    refine_detail_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     summary_path = output_dir / "ab_summary.json"
     diff_path = output_dir / "ab_rule_level_diff.csv"
     review_path = output_dir / "ab_review_queue.csv"
+    refine_path = output_dir / "refine_detail.csv"
 
     summary_path.write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
@@ -675,10 +712,12 @@ def write_ab_outputs(
 
     _write_csv(diff_path, diff_rows)
     _write_csv(review_path, review_queue)
+    _write_csv(refine_path, list(refine_detail_rows or []))
     return {
         "ab_summary.json": str(summary_path),
         "ab_rule_level_diff.csv": str(diff_path),
         "ab_review_queue.csv": str(review_path),
+        "refine_detail.csv": str(refine_path),
     }
 
 
@@ -707,13 +746,29 @@ async def run_sc_rule_family_ab_experiment(
 
     eval_fn = evaluator or _evaluate_manifest_entry
     arm_configs = {
-        "A": "domain_only",
-        "B": "domain_family",
+        "A": {
+            "bucket_strategy": "domain_only",
+            "quality_profile": QUALITY_PROFILE_THROUGHPUT,
+            "enable_selective_refine": False,
+        },
+        "B": {
+            "bucket_strategy": "domain_family",
+            "quality_profile": QUALITY_PROFILE_EFFECT_PRIORITY,
+            "enable_selective_refine": False,
+        },
+        "C": {
+            "bucket_strategy": "domain_family",
+            "quality_profile": QUALITY_PROFILE_EFFECT_PRIORITY,
+            "enable_selective_refine": True,
+        },
     }
     arm_round_summaries: dict[str, list[dict[str, Any]]] = defaultdict(list)
     latest_rows_by_arm: dict[str, list[dict[str, Any]]] = {}
 
-    for arm_name, bucket_strategy in arm_configs.items():
+    for arm_name, arm_config in arm_configs.items():
+        bucket_strategy = str(arm_config["bucket_strategy"])
+        quality_profile = str(arm_config["quality_profile"])
+        enable_selective_refine = bool(arm_config["enable_selective_refine"] is True)
         for round_index in range(1, max(1, int(rounds or DEFAULT_REPLAY_ROUNDS)) + 1):
             record_outputs: list[dict[str, Any]] = []
             for manifest_entry in manifest:
@@ -723,6 +778,9 @@ async def run_sc_rule_family_ab_experiment(
                         manifest_entry=dict(manifest_entry),
                         rule_ids=rule_ids,
                         bucket_strategy=bucket_strategy,
+                        quality_profile=quality_profile,
+                        enable_selective_refine=enable_selective_refine,
+                        refine_confidence_threshold=DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
                         schema=schema,
                     )
                     record_outputs.append(
@@ -757,6 +815,11 @@ async def run_sc_rule_family_ab_experiment(
         arm_b_rows=latest_rows_by_arm.get("B", []),
     )
     review_queue = build_review_queue(diff_rows)
+    refine_detail_rows = [
+        row
+        for row in latest_rows_by_arm.get("C", [])
+        if bool(row.get("refined") is True) or str(row.get("refine_reason") or "").strip()
+    ]
     summary = build_ab_summary(
         manifest=manifest,
         rule_ids=rule_ids,
@@ -777,11 +840,13 @@ async def run_sc_rule_family_ab_experiment(
         summary=summary,
         diff_rows=diff_rows,
         review_queue=review_queue,
+        refine_detail_rows=refine_detail_rows,
     )
     return {
         "summary": summary,
         "diff_rows": diff_rows,
         "review_queue": review_queue,
+        "refine_detail_rows": refine_detail_rows,
         "paths": written_paths,
         "manifest_size": len(manifest),
         "rule_count": len(rule_ids),

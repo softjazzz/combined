@@ -63,6 +63,18 @@
               </template>
               <span>病历池</span>
             </a-menu-item>
+            <a-menu-item key="/workstation-v4/records/running">
+              <template #icon>
+                <PlayCircleOutlined />
+              </template>
+              <span>运行病历质控</span>
+            </a-menu-item>
+            <a-menu-item key="/workstation-v4/records/final">
+              <template #icon>
+                <CheckCircleOutlined />
+              </template>
+              <span>终末病历质控</span>
+            </a-menu-item>
             <a-menu-item
               key="ws-stage-frontpage-generate"
               @click="goStageMenu('frontpage_generate')"
@@ -408,6 +420,8 @@ import {
   ClusterOutlined,
   FileSearchOutlined,
   DashboardOutlined,
+  PlayCircleOutlined,
+  CheckCircleOutlined,
   AlertOutlined,
   DollarOutlined,
   BarChartOutlined,

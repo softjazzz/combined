@@ -260,7 +260,17 @@ async def test_run_sc_rule_family_ab_experiment_should_write_outputs(tmp_path: P
                 {"rule_id": "SC-002"},
             ]
 
-    async def _fake_evaluator(*, service, manifest_entry, rule_ids, bucket_strategy, schema) -> dict[str, Any]:
+    async def _fake_evaluator(
+        *,
+        service,
+        manifest_entry,
+        rule_ids,
+        bucket_strategy,
+        quality_profile,
+        enable_selective_refine,
+        refine_confidence_threshold,
+        schema,
+    ) -> dict[str, Any]:
         results = []
         for rule_id in rule_ids:
             status = "non_compliant" if bucket_strategy == "domain_family" and rule_id == "SC-002" else "compliant"
@@ -287,6 +297,10 @@ async def test_run_sc_rule_family_ab_experiment_should_write_outputs(tmp_path: P
                         "pack_id": f"{bucket_strategy}-pack",
                         "pack_size": 2 if bucket_strategy == "domain_family" else 5,
                         "prompt_strategy": "batch_compact_v1",
+                        "quality_profile": quality_profile,
+                        "refined": bool(enable_selective_refine and rule_id == "SC-002"),
+                        "refine_reason": "low_confidence" if enable_selective_refine and rule_id == "SC-002" else "",
+                        "final_decision_source": "single_refine" if enable_selective_refine and rule_id == "SC-002" else "batch",
                     },
                 }
             )
@@ -296,6 +310,14 @@ async def test_run_sc_rule_family_ab_experiment_should_write_outputs(tmp_path: P
             "token_usage": {"total_tokens": 80 if bucket_strategy == "domain_only" else 60},
             "api_time": 1.1 if bucket_strategy == "domain_only" else 0.8,
             "_wall_clock_time": 2.1 if bucket_strategy == "domain_only" else 1.6,
+            "quality_profile": quality_profile,
+            "refine_summary": {
+                "enabled": enable_selective_refine,
+                "candidate_count": 1 if enable_selective_refine else 0,
+                "refined_rule_count": 1 if enable_selective_refine else 0,
+                "refine_failed_count": 0,
+                "refine_reasons": {"low_confidence": 1} if enable_selective_refine else {},
+            },
             "pack_metrics": {
                 "total_packs": 1,
                 "avg_pack_size": 5 if bucket_strategy == "domain_only" else 2,
@@ -321,5 +343,8 @@ async def test_run_sc_rule_family_ab_experiment_should_write_outputs(tmp_path: P
     assert (tmp_path / "ab_summary.json").exists()
     assert (tmp_path / "ab_rule_level_diff.csv").exists()
     assert (tmp_path / "ab_review_queue.csv").exists()
+    assert (tmp_path / "refine_detail.csv").exists()
     assert result["summary"]["arms"]["A"]["medians"]["rule_coverage"] == 100.0
     assert result["summary"]["arms"]["B"]["medians"]["bucket_count"] == 2.0
+    assert result["summary"]["arms"]["C"]["medians"]["refined_rule_count"] == 1.0
+    assert result["refine_detail_rows"]
