@@ -53,12 +53,13 @@ const ASelectStub = defineComponent({
     },
   },
   emits: ['change'],
-  setup(props, { emit }) {
+  setup(props, { emit, attrs }) {
     return () =>
       h(
         'select',
         {
-          class: 'a-select-stub',
+          ...attrs,
+          class: ['a-select-stub', attrs.class],
           value: props.value,
           onChange: (event: Event) => {
             const target = event.target as HTMLSelectElement
@@ -94,6 +95,68 @@ const ATagStub = defineComponent({
   name: 'ATagStub',
   setup(_, { slots }) {
     return () => h('span', { class: 'a-tag-stub' }, slots.default?.())
+  },
+})
+
+const AProgressStub = defineComponent({
+  name: 'AProgressStub',
+  setup() {
+    return () => h('div', { class: 'a-progress-stub' })
+  },
+})
+
+const ARadioGroupStub = defineComponent({
+  name: 'ARadioGroupStub',
+  props: {
+    value: {
+      type: String,
+      default: '',
+    },
+  },
+  emits: ['update:value'],
+  setup(_, { slots }) {
+    return () => h('div', { class: 'a-radio-group-stub' }, slots.default?.())
+  },
+})
+
+const ARadioButtonStub = defineComponent({
+  name: 'ARadioButtonStub',
+  setup(_, { slots }) {
+    return () => h('button', { class: 'a-radio-button-stub' }, slots.default?.())
+  },
+})
+
+const ASwitchStub = defineComponent({
+  name: 'ASwitchStub',
+  props: {
+    checked: Boolean,
+  },
+  emits: ['update:checked'],
+  setup() {
+    return () => h('button', { class: 'a-switch-stub' })
+  },
+})
+
+const AInputStub = defineComponent({
+  name: 'AInputStub',
+  props: {
+    value: {
+      type: String,
+      default: '',
+    },
+  },
+  emits: ['update:value', 'change'],
+  setup(props, { emit }) {
+    return () =>
+      h('input', {
+        class: 'a-input-stub',
+        value: props.value,
+        onInput: (event: Event) => {
+          const target = event.target as HTMLInputElement
+          emit('update:value', target.value)
+          emit('change', event)
+        },
+      })
   },
 })
 
@@ -148,7 +211,7 @@ function buildProps() {
             rule_id: 'SC-001',
             rule_code: 'SC-001',
             record_id: 'record-1',
-            status: 'issue',
+            status: 'non_compliant',
             is_compliant: false,
             findings: '规则一命中',
           },
@@ -168,7 +231,7 @@ function buildProps() {
             rule_id: 'SC-002',
             rule_code: 'SC-002',
             record_id: 'record-2',
-            status: 'issue',
+            status: 'non_compliant',
             is_compliant: false,
             findings: '规则二命中',
           },
@@ -251,6 +314,11 @@ describe('SemanticRulesBatchResultDrawer', () => {
           'a-select': ASelectStub,
           'a-button': AButtonStub,
           'a-tag': ATagStub,
+          'a-progress': AProgressStub,
+          'a-radio-group': ARadioGroupStub,
+          'a-radio-button': ARadioButtonStub,
+          'a-switch': ASwitchStub,
+          'a-input': AInputStub,
         },
       },
     })
@@ -272,11 +340,16 @@ describe('SemanticRulesBatchResultDrawer', () => {
           'a-select': ASelectStub,
           'a-button': AButtonStub,
           'a-tag': ATagStub,
+          'a-progress': AProgressStub,
+          'a-radio-group': ARadioGroupStub,
+          'a-radio-button': ARadioButtonStub,
+          'a-switch': ASwitchStub,
+          'a-input': AInputStub,
         },
       },
     })
 
-    await wrapper.find('.a-select-stub').setValue('rule-job-2')
+    await wrapper.find('.debug-rule-select.a-select-stub').setValue('rule-job-2')
     await flushPromises()
     await wrapper.vm.$nextTick()
 

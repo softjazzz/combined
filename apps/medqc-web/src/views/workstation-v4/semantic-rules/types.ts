@@ -17,6 +17,7 @@ export interface SemanticRuleItem {
   rule_version?: string
   prompt_version?: string
   cost_class?: string
+  rule_family?: string
 }
 
 export interface SemanticRuleStats {
@@ -54,6 +55,7 @@ export interface SichuanBatchJobSummary {
   failed_count: number
   failed_record_count?: number
   issue_records: number
+  uncertain_records?: number
   compliant_records: number
   total_tokens: number
   total_processing_time: number
@@ -61,7 +63,33 @@ export interface SichuanBatchJobSummary {
   processed_rule_count?: number
   progress_percent?: number
   retryable_rule_count?: number
+  progress?: Record<string, unknown>
   status_breakdown?: Record<string, number>
+  rule_set_key?: string
+  rule_set_name?: string
+  rule_set_version?: string
+  quality_profile?: string
+  bucket_strategy?: string
+  enable_selective_refine?: boolean
+  refine_confidence_threshold?: number
+  refined_rule_count?: number
+  refine_summary?: {
+    enabled?: boolean
+    candidate_count?: number
+    refined_rule_count?: number
+    refine_failed_count?: number
+    refine_reasons?: Record<string, number>
+  }
+  pack_metrics?: {
+    quality_profile?: string
+    bucket_strategy?: string
+    total_packs?: number
+    avg_pack_size?: number
+    fallback_packs?: number
+    single_rule_retries?: number
+    pack_parse_retry_count?: number
+    context_tokens_estimate?: number
+  }
   current_rule?: {
     rule_job_id?: string
     rule_code?: string
@@ -91,6 +119,7 @@ export interface SichuanBatchAggregationCluster {
   document_types?: Record<string, number>
   executor_types?: Record<string, number>
   defect_levels?: Record<string, number>
+  status_breakdown?: Record<string, number>
 }
 
 export interface SichuanBatchAggregationBreakdownItem {
@@ -110,6 +139,7 @@ export interface SichuanBatchResultAggregation {
   executor_breakdown?: SichuanBatchAggregationBreakdownItem[]
   document_breakdown?: SichuanBatchAggregationBreakdownItem[]
   defect_level_breakdown?: SichuanBatchAggregationBreakdownItem[]
+  status_breakdown?: SichuanBatchAggregationBreakdownItem[]
 }
 
 export interface SichuanBatchIssueItem {
@@ -139,10 +169,17 @@ export interface SichuanBatchIssueItem {
   cache_key?: string
   execution_domain?: string
   doc_scope?: string
+  rule_family?: string
   cost_class?: string
   document_type?: string
   defect_level?: string
   llm_fallback?: boolean
+  quality_profile?: string
+  bucket_strategy?: string
+  refined?: boolean
+  refine_reason?: string
+  screening_status?: string
+  final_decision_source?: string
 }
 
 export interface SichuanBatchFailedItem {
@@ -232,7 +269,14 @@ export interface SichuanBatchJob {
   status: SichuanBatchJobStatus
   filters?: Record<string, unknown>
   record_ids?: string[]
+  progress?: Record<string, unknown>
   summary?: SichuanBatchJobSummary | null
+  rule_set_key?: string
+  rule_set_name?: string
+  rule_set_version?: string
+  quality_profile?: string
+  bucket_strategy?: string
+  refine_summary?: SichuanBatchJobSummary['refine_summary'] | null
   items?: SichuanBatchIssueItem[]
   failed_records?: SichuanBatchFailedItem[]
   error_message?: string

@@ -455,8 +455,31 @@
         <a-alert
           type="info"
           show-icon
-          message="流程：选择规则子集 → 确认病历范围 → 创建任务"
+          message="流程：选择规则集 → 确认病历范围 → 创建任务"
         />
+        <div class="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
+          <div class="mb-2 text-sm font-semibold text-slate-800">
+            规则集选择
+          </div>
+          <a-radio-group
+            v-model:value="launchRuleMode"
+            class="flex flex-wrap gap-2"
+            button-style="solid"
+          >
+            <a-radio-button value="content_v1">
+              内涵质控首批 v1（推荐）
+            </a-radio-button>
+            <a-radio-button value="manual">
+              手工选择规则
+            </a-radio-button>
+            <a-radio-button value="all">
+              全部四川规则（高级/调试）
+            </a-radio-button>
+          </a-radio-group>
+          <div class="mt-2 text-xs leading-5 text-slate-600">
+            {{ launchRuleModeDescription }}
+          </div>
+        </div>
         <div class="grid grid-cols-3 gap-3">
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <div class="text-xs text-slate-500">
@@ -492,10 +515,16 @@
             placeholder="搜索规则编码/名称/文书域"
           />
           <div class="flex items-center gap-2">
-            <a-button @click="selectAllFilteredRules">
+            <a-button
+              :disabled="launchRuleMode !== 'manual'"
+              @click="selectAllFilteredRules"
+            >
               全选当前过滤
             </a-button>
-            <a-button @click="clearSelectedRules">
+            <a-button
+              :disabled="launchRuleMode !== 'manual'"
+              @click="clearSelectedRules"
+            >
               清空
             </a-button>
           </div>
@@ -604,6 +633,24 @@ import {
   getBatchJobStatusText,
 } from '@/views/rules/utils/customQcWorkspacePresentation'
 
+const CONTENT_RULE_SET_KEY = 'sc_content_v1'
+const CONTENT_RULE_SET_IDS = [
+  'SC-023',
+  'SC-024',
+  'SC-025',
+  'SC-026',
+  'SC-027',
+  'SC-032',
+  'SC-033',
+  'SC-036',
+  'SC-121',
+  'SC-122',
+  'SC-123',
+  'SC-125',
+] as const
+
+type LaunchRuleMode = 'content_v1' | 'manual' | 'all'
+
 const route = useRoute()
 const router = useRouter()
 
@@ -631,6 +678,7 @@ const ruleLoading = ref(false)
 const allRules = ref<SemanticRuleItem[]>([])
 const ruleKeyword = ref('')
 const selectedRuleIds = ref<string[]>([])
+const launchRuleMode = ref<LaunchRuleMode>('content_v1')
 const launchOnlySelectedRecords = ref(true)
 
 const {
@@ -654,6 +702,7 @@ const {
   fetchBatchJobDebugSnapshot,
   executeCancelBatchJob,
   executeRetryBatchJob,
+  exportBatchJobReport,
 } = useSichuanBatchJobs()
 
 // KPI 卡片数据
@@ -694,22 +743,62 @@ const selectedRecordIds = computed(() =>
     .filter((item) => Boolean(item)),
 )
 
+const normalizeRuleId = (value: unknown) =>
+  String(value || '')
+    .trim()
+    .toUpperCase()
+
+const contentRuleSetIdSet = new Set<string>(CONTENT_RULE_SET_IDS)
+
+const contentRuleSetRules = computed(() =>
+  allRules.value.filter((rule) =>
+    contentRuleSetIdSet.has(normalizeRuleId(rule.rule_id || rule.rule_code)),
+  ),
+)
+
+const baseRulesForLaunch = computed(() => {
+  if (launchRuleMode.value === 'content_v1') return contentRuleSetRules.value
+  return allRules.value
+})
+
 const filteredRules = computed(() => {
   const keyword = ruleKeyword.value.trim().toLowerCase()
-  if (!keyword) return allRules.value
-  return allRules.value.filter((rule) => {
+  if (!keyword) return baseRulesForLaunch.value
+  return baseRulesForLaunch.value.filter((rule) => {
     const docs = (rule.applicable_documents || []).join(',').toLowerCase()
     return (
-      String(rule.rule_id || '').toLowerCase().includes(keyword) ||
-      String(rule.rule_code || '').toLowerCase().includes(keyword) ||
-      String(rule.name || '').toLowerCase().includes(keyword) ||
-      String(rule.description || '').toLowerCase().includes(keyword) ||
+      String(rule.rule_id || '')
+        .toLowerCase()
+        .includes(keyword) ||
+      String(rule.rule_code || '')
+        .toLowerCase()
+        .includes(keyword) ||
+      String(rule.name || '')
+        .toLowerCase()
+        .includes(keyword) ||
+      String(rule.description || '')
+        .toLowerCase()
+        .includes(keyword) ||
       docs.includes(keyword)
     )
   })
 })
 
-const selectedRuleCount = computed(() => selectedRuleIds.value.length)
+const selectedRuleCount = computed(() => {
+  if (launchRuleMode.value === 'content_v1') return CONTENT_RULE_SET_IDS.length
+  if (launchRuleMode.value === 'all') return allRules.value.length
+  return selectedRuleIds.value.length
+})
+
+const launchRuleModeDescription = computed(() => {
+  if (launchRuleMode.value === 'content_v1') {
+    return '仅执行 12 条首批内涵质控规则，默认启用效果优先、文书域/规则族分桶和低置信单条精审。'
+  }
+  if (launchRuleMode.value === 'all') {
+    return '高级调试入口：执行当前四川规则全集，耗时和 token 成本会明显增加，不建议作为首批上线默认。'
+  }
+  return '手工选择本次要执行的规则，适合临时验证单个规则或小规则组。'
+})
 
 const batchScopeOptions = [{ label: '终末病历', value: 'final' as const }]
 
@@ -723,13 +812,25 @@ const launchRuleColumns: TableColumnsType<SemanticRuleItem> = [
     width: 220,
     customRender: ({ record }) => (record.applicable_documents || []).join(' / ') || '-',
   },
+  {
+    title: '规则族',
+    dataIndex: 'rule_family',
+    key: 'rule_family',
+    width: 160,
+    customRender: ({ record }) => record.rule_family || '-',
+  },
 ]
 
 const launchRuleRowSelection = computed<TableProps['rowSelection']>(() => ({
+  hideSelectAll: launchRuleMode.value !== 'manual',
   selectedRowKeys: selectedRuleIds.value,
   onChange: (keys: Array<string | number>) => {
+    if (launchRuleMode.value !== 'manual') return
     selectedRuleIds.value = keys.map((key) => String(key))
   },
+  getCheckboxProps: () => ({
+    disabled: launchRuleMode.value !== 'manual',
+  }),
 }))
 
 // 科室选项 — 动态加载
@@ -940,8 +1041,8 @@ const closeBatchJobDrawer = () => {
   stopBatchJobPolling()
 }
 
-const handleExportBatchReport = () => {
-  message.info('终末页暂未开放任务导出，可在规则工作台导出')
+const handleExportBatchReport = async (format: 'xlsx' | 'csv' = 'xlsx') => {
+  await exportBatchJobReport(format)
 }
 
 const loadRulesForLaunch = async () => {
@@ -958,6 +1059,7 @@ const loadRulesForLaunch = async () => {
 }
 
 const selectAllFilteredRules = () => {
+  if (launchRuleMode.value !== 'manual') return
   const merged = new Set<string>(selectedRuleIds.value)
   filteredRules.value.forEach((rule) => {
     const ruleId = String(rule.rule_id || '').trim()
@@ -967,17 +1069,41 @@ const selectAllFilteredRules = () => {
 }
 
 const clearSelectedRules = () => {
+  if (launchRuleMode.value !== 'manual') return
   selectedRuleIds.value = []
+}
+
+const syncRuleSelectionByMode = () => {
+  if (launchRuleMode.value === 'content_v1') {
+    selectedRuleIds.value = [...CONTENT_RULE_SET_IDS]
+    return
+  }
+  if (launchRuleMode.value === 'all') {
+    selectedRuleIds.value = allRules.value
+      .map((rule) => String(rule.rule_id || rule.rule_code || '').trim())
+      .filter(Boolean)
+  }
 }
 
 const openBatchLaunchModal = async () => {
   launchModalOpen.value = true
   launchOnlySelectedRecords.value = selectedRecordIds.value.length > 0
+  launchRuleMode.value = 'content_v1'
   await loadRulesForLaunch()
+  syncRuleSelectionByMode()
 }
 
 const confirmBatchLaunch = async () => {
-  if (!selectedRuleIds.value.length) {
+  const effectiveRuleIds =
+    launchRuleMode.value === 'content_v1'
+      ? [...CONTENT_RULE_SET_IDS]
+      : launchRuleMode.value === 'all'
+        ? allRules.value
+            .map((rule) => String(rule.rule_id || rule.rule_code || '').trim())
+            .filter(Boolean)
+        : selectedRuleIds.value
+
+  if (!effectiveRuleIds.length) {
     message.warning('请至少选择一条质控规则')
     return
   }
@@ -989,7 +1115,8 @@ const confirmBatchLaunch = async () => {
   launchingBatch.value = true
   try {
     const response = await createSichuanWorkspaceBatchJob({
-      rule_ids: selectedRuleIds.value,
+      rule_ids: launchRuleMode.value === 'content_v1' ? undefined : effectiveRuleIds,
+      rule_set_key: launchRuleMode.value === 'content_v1' ? CONTENT_RULE_SET_KEY : undefined,
       scope: 'final',
       department: selectedDepartment.value,
       date_field: 'discharge',
@@ -1181,6 +1308,11 @@ watch(
   },
   { immediate: true },
 )
+
+watch([launchRuleMode, allRules], () => {
+  if (!launchModalOpen.value) return
+  syncRuleSelectionByMode()
+})
 
 onMounted(() => {
   ensureFinalBatchScope()

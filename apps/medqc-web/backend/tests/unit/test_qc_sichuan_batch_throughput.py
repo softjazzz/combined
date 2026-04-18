@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from types import SimpleNamespace
 
 import pytest
+from fastapi import BackgroundTasks
 
 from app.routers import qc_sichuan
+from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
 
 
 class _WorkspaceStub:
@@ -22,6 +25,7 @@ class _WorkspaceStub:
         self.summary: Optional[Dict[str, Any]] = None
         self.items: List[Dict[str, Any]] = []
         self.failed_records: List[Dict[str, Any]] = []
+        self.created_job: Optional[Dict[str, Any]] = None
 
     def get_batch_job_for_processing(self, *, job_id: str) -> Optional[Dict[str, Any]]:
         if job_id != self.job["id"]:
@@ -59,6 +63,31 @@ class _WorkspaceStub:
     def hydrate_records_with_medical_text(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         return [{**item, "medical_text": f"病历文本-{item.get('record_id')}"} for item in records]
 
+    def create_batch_job(
+        self,
+        *,
+        draft: Dict[str, Any],
+        created_by: str,
+        scope: str,
+        filters: Dict[str, Any],
+        record_ids: List[str],
+        total_records: int,
+    ) -> Dict[str, Any]:
+        self.created_job = {
+            "id": self.job["id"],
+            "draft_id": draft.get("id"),
+            "rule_code": draft.get("rule_code"),
+            "rule_name": draft.get("name"),
+            "scene": draft.get("scene"),
+            "created_by": created_by,
+            "scope": scope,
+            "filters": filters,
+            "record_ids": record_ids,
+            "total_records": total_records,
+            "status": "queued",
+        }
+        return dict(self.created_job)
+
     def complete_batch_job(
         self,
         *,
@@ -78,8 +107,11 @@ class _WorkspaceStub:
 
 
 class _ServiceStub:
-    def __init__(self) -> None:
+    def __init__(self, status_by_rule: Optional[Dict[str, str]] = None) -> None:
         self.evaluate_calls = 0
+        self.evaluate_rule_for_visit_calls = 0
+        self.evaluate_rule_for_visit_args: List[Dict[str, Any]] = []
+        self.status_by_rule = {str(k).upper(): str(v).lower() for k, v in (status_by_rule or {}).items()}
 
     def assert_sc_rule_source_ready(self, *, context: str, block_batch: bool = False) -> Dict[str, Any]:
         return {"sc_source": "pg_governance"}
@@ -103,16 +135,19 @@ class _ServiceStub:
         self.evaluate_calls += 1
         evals: List[Dict[str, Any]] = []
         for rid in list(rule_ids or []):
+            normalized_rid = str(rid).upper()
+            status = self.status_by_rule.get(normalized_rid, "compliant")
+            is_compliant = status in {"compliant", "not_applicable"}
             evals.append(
                 {
                     "rule_id": rid,
                     "rule_name": f"规则-{rid}",
-                    "status": "compliant",
-                    "is_compliant": True,
-                    "findings": "",
+                    "status": status,
+                    "is_compliant": is_compliant,
+                    "findings": "" if status == "compliant" else f"命中状态: {status}",
                     "evidence": "",
-                    "suggestion": "",
-                    "confidence": 0.9,
+                    "suggestion": "" if status == "compliant" else "请人工复核",
+                    "confidence": 0.9 if status == "compliant" else 0.6,
                     "metadata": {
                         "executor_type": "program",
                         "tokens_used": 0,
@@ -143,6 +178,74 @@ class _ServiceStub:
             },
         }
 
+    async def evaluate_rule_for_visit(
+        self,
+        *,
+        rule_id: str,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
+        source_schema: Optional[str] = None,
+        bundle_schema: str = "public",
+        force_refresh_bundle: bool = False,
+    ) -> Dict[str, Any]:
+        self.evaluate_rule_for_visit_calls += 1
+        self.evaluate_rule_for_visit_args.append(
+            {
+                "rule_id": rule_id,
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+                "source_schema": source_schema,
+                "bundle_schema": bundle_schema,
+                "force_refresh_bundle": force_refresh_bundle,
+            }
+        )
+        normalized_rid = str(rule_id).upper()
+        status = self.status_by_rule.get(normalized_rid, "compliant")
+        is_compliant = status in {"compliant", "not_applicable"}
+        document_type = "病程记录" if normalized_rid == "SC-002" else "出院记录"
+        return {
+            "document_id": visit_id,
+            "document_type": document_type,
+            "evaluation_results": [
+                {
+                    "rule_id": rule_id,
+                    "rule_name": f"规则-{rule_id}",
+                    "status": status,
+                    "is_compliant": is_compliant,
+                    "findings": "" if status == "compliant" else f"分域命中状态: {status}",
+                    "evidence": f"bundle-evidence-{rule_id}",
+                    "suggestion": "" if status == "compliant" else "请人工复核",
+                    "confidence": 0.82 if status == "compliant" else 0.61,
+                    "metadata": {
+                        "executor_type": "llm",
+                        "tokens_used": 120,
+                        "api_time": 0.12,
+                        "cache_hit": False,
+                        "rule_version": "v1",
+                        "prompt_version": "batch_compact_v1",
+                        "model_version": "test-model",
+                        "evidence_source": "bundle",
+                        "trace_id": f"trace-{rule_id}",
+                        "cache_key": "",
+                        "execution_domain": "terminal",
+                        "doc_scope": "primary",
+                        "cost_class": "standard",
+                        "llm_fallback": False,
+                    },
+                }
+            ],
+            "pack_metrics": {
+                "total_packs": 1,
+                "avg_pack_size": 1.0,
+                "fallback_packs": 0,
+                "single_rule_retries": 0,
+                "pack_parse_retry_count": 0,
+                "context_tokens_estimate": 240,
+            },
+        }
+
 
 @pytest.mark.asyncio
 async def test_workspace_batch_should_call_evaluate_once_per_record(monkeypatch):
@@ -159,9 +262,163 @@ async def test_workspace_batch_should_call_evaluate_once_per_record(monkeypatch)
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
     assert service.evaluate_calls == 2
+    assert service.evaluate_rule_for_visit_calls == 0
     assert workspace.job["status"] == "completed"
     assert workspace.summary is not None
     assert int(workspace.summary.get("total_records") or 0) == 2
     assert int(workspace.summary.get("rule_count") or 0) == 3
     assert int(workspace.summary.get("processed_rule_count") or 0) == 3
     assert int(((workspace.summary.get("pack_metrics") or {}).get("total_packs")) or 0) >= 1
+
+
+@pytest.mark.asyncio
+async def test_workspace_batch_should_keep_uncertain_items_in_detail(monkeypatch):
+    workspace = _WorkspaceStub()
+    service = _ServiceStub(
+        status_by_rule={
+            "SC-001": "uncertain",
+            "SC-002": "non_compliant",
+            "SC-003": "compliant",
+        }
+    )
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.summary is not None
+    assert int(workspace.summary.get("issue_records") or 0) == 2
+    assert int(workspace.summary.get("uncertain_records") or 0) == 2
+    status_breakdown = dict(workspace.summary.get("status_breakdown") or {})
+    assert int(status_breakdown.get("non_compliant") or 0) == 2
+    assert int(status_breakdown.get("uncertain") or 0) == 2
+    assert len(workspace.items) == 4
+    assert {str(item.get("status") or "") for item in workspace.items} == {
+        "non_compliant",
+        "uncertain",
+    }
+    assert service.evaluate_rule_for_visit_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_workspace_batch_final_should_prefer_bundle_path(monkeypatch):
+    workspace = _WorkspaceStub()
+    service = _ServiceStub(
+        status_by_rule={
+            "SC-001": "non_compliant",
+            "SC-002": "uncertain",
+            "SC-003": "compliant",
+        }
+    )
+
+    def _hydrate_with_bundle_keys(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        hydrated: List[Dict[str, Any]] = []
+        for item in records:
+            hydrated.append(
+                {
+                    **item,
+                    "institute_id": "HOSP-001",
+                    "patient_id": f"PAT-{item.get('visit_id')}",
+                    "medical_text": f"fallback-text-{item.get('visit_id')}",
+                }
+            )
+        return hydrated
+
+    workspace.hydrate_records_with_medical_text = _hydrate_with_bundle_keys  # type: ignore[assignment]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    async def _fake_evaluate_running_final_bundle(
+        *,
+        qc_service,
+        scene: str,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
+        rule_ids: List[str],
+        schema: str = "public",
+        **_: Any,
+    ) -> Dict[str, Any]:
+        evaluation_results: List[Dict[str, Any]] = []
+        total_tokens = 0
+        total_api_time = 0.0
+        for rule_id in rule_ids:
+            rule_result = await qc_service.evaluate_rule_for_visit(
+                rule_id=rule_id,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                bundle_schema=schema,
+            )
+            evaluation_results.extend(list(rule_result.get("evaluation_results") or []))
+            total_tokens += int(((rule_result.get("token_usage") or {}).get("total_tokens")) or 0)
+            total_api_time += float(rule_result.get("api_time") or 0.0)
+        return {
+            "evaluation_results": evaluation_results,
+            "token_usage": {"total_tokens": total_tokens},
+            "api_time": total_api_time,
+            "pack_metrics": {
+                "total_packs": 1,
+                "avg_pack_size": max(1, len(rule_ids)),
+                "fallback_packs": 0,
+                "pack_parse_retry_count": 0,
+                "single_rule_retries": 0,
+                "context_tokens_estimate": 240,
+            },
+        }
+
+    monkeypatch.setattr(qc_sichuan, "evaluate_running_final_bundle", _fake_evaluate_running_final_bundle)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.summary is not None
+    assert service.evaluate_calls == 0
+    assert service.evaluate_rule_for_visit_calls == 6
+    assert {str(call.get("bundle_schema") or "") for call in service.evaluate_rule_for_visit_args} == {"public"}
+    assert int(workspace.summary.get("issue_records") or 0) == 2
+    assert int(workspace.summary.get("uncertain_records") or 0) == 2
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkeypatch):
+    workspace = _WorkspaceStub()
+    service = _ServiceStub()
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    request = SimpleNamespace(state=SimpleNamespace())
+    payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+        rule_set_key="sc_content_v1",
+        rule_ids=["SC-999"],
+        scope="final",
+        date_field="discharge",
+        record_ids=["visit-001"],
+    )
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=request,  # type: ignore[arg-type]
+        payload=payload,
+        background_tasks=BackgroundTasks(),
+        qc_service=service,  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert workspace.created_job is not None
+    filters = dict(workspace.created_job.get("filters") or {})
+    assert filters["rule_set_key"] == "sc_content_v1"
+    assert filters["rule_set_name"] == "内涵质控首批 v1"
+    assert filters["quality_profile"] == "effect_priority_v1"
+    assert filters["bucket_strategy"] == "domain_family"
+    assert filters["enable_selective_refine"] is True
+    assert filters["rule_ids"] == list(SC_CONTENT_V1_RULE_IDS)
+    assert response["data"]["draft_ids"] == list(SC_CONTENT_V1_RULE_IDS)

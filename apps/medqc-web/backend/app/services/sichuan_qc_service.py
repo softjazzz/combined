@@ -26,6 +26,14 @@ from .programmatic_rule_executor import PROGRAMMATIC_RULE_SPECS
 from .qc_execution_cache import QCExecutionCache
 from .qc_rule_orchestrator import QCRuleOrchestrator
 from .qc_rule_registry_service import QCRuleRegistryService
+from .effect_priority_qc import (
+    DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+    QUALITY_PROFILE_EFFECT_PRIORITY,
+    QUALITY_PROFILE_THROUGHPUT,
+    merge_refined_results,
+    normalize_quality_profile,
+    select_refine_candidates,
+)
 from .sc_rule_family import (
     DEFAULT_RULE_FAMILY,
     load_sc_rule_family_map,
@@ -704,9 +712,13 @@ class SichuanQCService:
         evidence_source: str = "medical_text",
         evidence_payload: Optional[Dict[str, Any]] = None,
         bucket_strategy: str = "domain_only",
+        quality_profile: str = QUALITY_PROFILE_THROUGHPUT,
+        enable_selective_refine: bool = False,
+        refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         use_execution_cache: bool = True,
     ) -> Dict[str, Any]:
         prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
+        quality_profile_normalized = normalize_quality_profile(quality_profile)
         model_version = str(self.client.model or "")
         llm_concurrency = 6
 
@@ -721,7 +733,7 @@ class SichuanQCService:
         if isinstance(evidence_payload, dict) and evidence_payload:
             medical_record["evidence_payload"] = dict(evidence_payload)
 
-        return await self.rule_orchestrator.evaluate_rules(
+        orchestrated = await self.rule_orchestrator.evaluate_rules(
             rules=prepared_rules,
             medical_record=medical_record,
             llm_evaluate=_llm_evaluate,
@@ -733,9 +745,32 @@ class SichuanQCService:
             llm_concurrency=llm_concurrency,
             model_version=model_version,
             bucket_strategy=bucket_strategy,
+            quality_profile=quality_profile_normalized,
+            refine_confidence_threshold=refine_confidence_threshold,
             execution_cache=self.execution_cache if use_execution_cache else None,
             cache_ttl_seconds=1800,
         )
+        orchestrated["quality_profile"] = quality_profile_normalized
+
+        if enable_selective_refine:
+            refined = await self._apply_selective_refine(
+                orchestrated=orchestrated,
+                rules=prepared_rules,
+                medical_record=medical_record,
+                refine_confidence_threshold=refine_confidence_threshold,
+            )
+            return refined
+        orchestrated.setdefault(
+            "refine_summary",
+            {
+                "enabled": False,
+                "candidate_count": 0,
+                "refined_rule_count": 0,
+                "refine_failed_count": 0,
+                "refine_reasons": {},
+            },
+        )
+        return orchestrated
 
     async def _llm_evaluate_batch_compact(
         self,
@@ -746,15 +781,113 @@ class SichuanQCService:
         enriched_record = dict(medical_record or {})
         enriched_record["execution_domain"] = str(options.get("execution_domain") or enriched_record.get("execution_domain") or "")
         enriched_record["doc_scope"] = str(options.get("doc_scope") or enriched_record.get("doc_scope") or "")
+        enriched_record["quality_profile"] = str(options.get("quality_profile") or enriched_record.get("quality_profile") or "")
         enriched_record["model_version"] = str(options.get("model_version") or self.client.model or "")
         return await self.rule_engine.evaluate_batch_compact(
             rules=rules,
             medical_record=enriched_record,
             pack_id=str(options.get("pack_id") or ""),
             pack_size=int(options.get("pack_size") or len(rules)),
-            low_confidence_threshold=0.45,
-            context_token_budget=7000,
+            low_confidence_threshold=float(options.get("low_confidence_threshold") or 0.45),
+            context_token_budget=8600 if normalize_quality_profile(options.get("quality_profile")) == QUALITY_PROFILE_EFFECT_PRIORITY else 7000,
+            quality_profile=normalize_quality_profile(options.get("quality_profile")),
         )
+
+    async def _apply_selective_refine(
+        self,
+        *,
+        orchestrated: Dict[str, Any],
+        rules: List[Dict[str, Any]],
+        medical_record: Dict[str, Any],
+        refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+    ) -> Dict[str, Any]:
+        results = list(orchestrated.get("results") or [])
+        rules_by_id = {
+            str(rule.get("rule_id") or rule.get("rule_code") or "").strip().upper(): dict(rule)
+            for rule in list(rules or [])
+            if str(rule.get("rule_id") or rule.get("rule_code") or "").strip()
+        }
+        candidates = select_refine_candidates(
+            results,
+            rules_by_id=rules_by_id,
+            confidence_threshold=refine_confidence_threshold,
+        )
+
+        refined_by_rule: Dict[str, Dict[str, Any]] = {}
+        refine_reasons_by_rule: Dict[str, str] = {}
+        refine_details: List[Dict[str, Any]] = []
+        extra_tokens = 0
+        extra_api_time = 0.0
+
+        for candidate in candidates:
+            rule_id = str(candidate.get("rule_id") or "").strip().upper()
+            rule = dict(candidate.get("rule") or rules_by_id.get(rule_id) or {})
+            reason = str(candidate.get("refine_reason") or "")
+            refine_reasons_by_rule[rule_id] = reason
+            try:
+                refined = await self.rule_engine.evaluate(rule, medical_record=medical_record)
+                metadata = dict(refined.get("metadata") or {})
+                metadata["qc_stage"] = "refine"
+                metadata["refined"] = True
+                metadata["refine_reason"] = reason
+                metadata["screening_status"] = str((candidate.get("screening_result") or {}).get("status") or "")
+                metadata["final_decision_source"] = "single_refine"
+                metadata.setdefault("quality_profile", QUALITY_PROFILE_EFFECT_PRIORITY)
+                refined["metadata"] = metadata
+                refined_by_rule[rule_id] = refined
+                extra_tokens += int(metadata.get("tokens_used") or 0)
+                extra_api_time += float(metadata.get("api_time") or 0.0)
+                refine_details.append(
+                    {
+                        "rule_id": rule_id,
+                        "refine_reason": reason,
+                        "screening_status": metadata.get("screening_status"),
+                        "refined_status": refined.get("status"),
+                        "refine_failed": False,
+                    }
+                )
+            except Exception as exc:
+                logger.warning("选择性精审失败，保留批量筛查结论: rule_id=%s", rule_id, exc_info=True)
+                for item in results:
+                    if str(item.get("rule_id") or "").strip().upper() == rule_id:
+                        metadata = dict(item.get("metadata") or {})
+                        metadata["qc_stage"] = "screening"
+                        metadata["refined"] = False
+                        metadata["refine_failed"] = True
+                        metadata["refine_error"] = str(exc)
+                        metadata["refine_reason"] = reason
+                        metadata["final_decision_source"] = "batch"
+                        item["metadata"] = metadata
+                        break
+                refine_details.append(
+                    {
+                        "rule_id": rule_id,
+                        "refine_reason": reason,
+                        "screening_status": str((candidate.get("screening_result") or {}).get("status") or ""),
+                        "refined_status": "",
+                        "refine_failed": True,
+                        "error": str(exc),
+                    }
+                )
+
+        merged_results, merge_summary = merge_refined_results(
+            screening_results=results,
+            refined_results_by_rule=refined_by_rule,
+            refine_reasons_by_rule=refine_reasons_by_rule,
+        )
+        refined = dict(orchestrated)
+        refined["results"] = merged_results
+        refined["total_tokens"] = int(orchestrated.get("total_tokens") or 0) + extra_tokens
+        refined["total_api_time"] = float(orchestrated.get("total_api_time") or 0.0) + extra_api_time
+        refined["refine_details"] = refine_details
+        refined["refine_summary"] = {
+            "enabled": True,
+            "candidate_count": len(candidates),
+            **merge_summary,
+        }
+        refined["refined_rule_count"] = int(merge_summary.get("refined_rule_count") or 0)
+        refined["refine_reasons"] = dict(merge_summary.get("refine_reasons") or {})
+        return refined
 
     async def _resolve_rules_for_document(
         self,
@@ -842,6 +975,10 @@ class SichuanQCService:
                 "executor_breakdown": orchestrated.get("executor_breakdown") or {},
                 "cache_breakdown": orchestrated.get("cache_breakdown") or {},
                 "pack_metrics": orchestrated.get("pack_metrics") or {},
+                "quality_profile": orchestrated.get("quality_profile") or QUALITY_PROFILE_THROUGHPUT,
+                "refine_summary": orchestrated.get("refine_summary") or {},
+                "refined_rule_count": int(orchestrated.get("refined_rule_count") or 0),
+                "refine_reasons": orchestrated.get("refine_reasons") or {},
             },
             "parsed_evaluation_results": rule_results,
             "evaluation_results": evaluation_results,
@@ -851,6 +988,11 @@ class SichuanQCService:
             "executor_breakdown": orchestrated.get("executor_breakdown") or {},
             "cache_breakdown": orchestrated.get("cache_breakdown") or {},
             "pack_metrics": orchestrated.get("pack_metrics") or {},
+            "quality_profile": orchestrated.get("quality_profile") or QUALITY_PROFILE_THROUGHPUT,
+            "refine_summary": orchestrated.get("refine_summary") or {},
+            "refined_rule_count": int(orchestrated.get("refined_rule_count") or 0),
+            "refine_reasons": orchestrated.get("refine_reasons") or {},
+            "refine_details": orchestrated.get("refine_details") or [],
             "trace": orchestrated.get("trace") or [],
         }
 
@@ -1150,6 +1292,11 @@ class SichuanQCService:
         *,
         evidence_source: str = "medical_text",
         evidence_payload: Optional[Dict[str, Any]] = None,
+        bucket_strategy: str = "domain_only",
+        quality_profile: str = QUALITY_PROFILE_THROUGHPUT,
+        enable_selective_refine: bool = False,
+        refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+        use_execution_cache: bool = True,
     ) -> Dict[str, Any]:
         """
         对单个病历文档进行质控评估。
@@ -1183,6 +1330,11 @@ class SichuanQCService:
             rules=rules,
             evidence_source=evidence_source,
             evidence_payload=evidence_payload,
+            bucket_strategy=bucket_strategy,
+            quality_profile=quality_profile,
+            enable_selective_refine=enable_selective_refine,
+            refine_confidence_threshold=refine_confidence_threshold,
+            use_execution_cache=use_execution_cache,
         )
         return self._build_document_evaluation_result(
             document_id=document_id,
@@ -1197,6 +1349,9 @@ class SichuanQCService:
         *,
         rule_ids: Optional[List[str]] = None,
         bucket_strategy: str = "domain_only",
+        quality_profile: str = QUALITY_PROFILE_THROUGHPUT,
+        enable_selective_refine: bool = False,
+        refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         use_execution_cache: bool = True,
     ) -> Dict[str, Any]:
         """
@@ -1232,6 +1387,9 @@ class SichuanQCService:
             evidence_source="bundle",
             evidence_payload=evidence_payload,
             bucket_strategy=bucket_strategy,
+            quality_profile=quality_profile,
+            enable_selective_refine=enable_selective_refine,
+            refine_confidence_threshold=refine_confidence_threshold,
             use_execution_cache=use_execution_cache,
         )
         result = self._build_document_evaluation_result(

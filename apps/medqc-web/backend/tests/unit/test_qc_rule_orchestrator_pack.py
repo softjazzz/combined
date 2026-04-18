@@ -371,3 +371,85 @@ async def test_batch_compact_should_split_same_domain_by_rule_family_when_enable
     bucket_keys = {(item.get("metadata") or {}).get("bucket_key") for item in result["results"]}
     assert "terminal::primary::presence_required" in bucket_keys
     assert "terminal::primary::timeliness" in bucket_keys
+
+
+@pytest.mark.asyncio
+async def test_effect_priority_should_use_family_specific_pack_candidates():
+    orchestrator = QCRuleOrchestrator()
+    medical_record = {"id": "V005", "content": "病历正文", "document_type": "病程记录"}
+    rules: List[Dict[str, Any]] = []
+    for index in range(1, 7):
+        rules.append(
+            {
+                "rule_id": f"SC-T-{index}",
+                "rule_code": f"SC-T-{index}",
+                "name": f"时限规则{index}",
+                "description": "测试规则",
+                "executor_type": "llm",
+                "execution_domain": "terminal",
+                "doc_scope": "primary",
+                "rule_family": "timeliness",
+                "rule_version": "v1",
+                "prompt_version": "p1",
+                "cost_class": "standard",
+            }
+        )
+
+    seen_probe_pack_sizes: List[int] = []
+
+    async def _single_llm(rule: Dict[str, Any], record: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "rule_id": rule["rule_id"],
+            "rule_name": rule["name"],
+            "status": "compliant",
+            "is_compliant": True,
+            "findings": "合规",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.9,
+            "metadata": {"tokens_used": 10, "api_time": 0.01},
+        }
+
+    async def _batch_llm(batch_rules: List[Dict[str, Any]], record: Dict[str, Any], options: Dict[str, Any]) -> Dict[str, Any]:
+        if str(options.get("mode") or "") == "probe":
+            seen_probe_pack_sizes.append(int(options.get("pack_size") or 0))
+        return {
+            "results": [
+                {
+                    "rule_id": rule["rule_id"],
+                    "rule_name": rule["name"],
+                    "status": "compliant",
+                    "is_compliant": True,
+                    "findings": "执行通过",
+                    "evidence": "病历正文",
+                    "suggestion": "",
+                    "confidence": 0.9,
+                    "metadata": {},
+                }
+                for rule in batch_rules
+            ],
+            "tokens_used": 20,
+            "api_time": 0.05,
+            "parse_error": False,
+            "missing_rule_ids": [],
+            "low_confidence_rule_ids": [],
+            "context_tokens_estimate": 200,
+        }
+
+    result = await orchestrator.evaluate_rules(
+        rules=rules,
+        medical_record=medical_record,
+        llm_evaluate=_single_llm,
+        llm_batch_evaluate=_batch_llm,
+        prompt_strategy="batch_compact_v1",
+        bucket_strategy="domain_family",
+        quality_profile="effect_priority_v1",
+        refine_confidence_threshold=0.75,
+    )
+
+    assert seen_probe_pack_sizes
+    assert max(seen_probe_pack_sizes) <= 5
+    metadata = result["results"][0]["metadata"]
+    assert metadata["quality_profile"] == "effect_priority_v1"
+    assert int(metadata["pack_size"]) <= 5
+    assert result["pack_metrics"]["quality_profile"] == "effect_priority_v1"

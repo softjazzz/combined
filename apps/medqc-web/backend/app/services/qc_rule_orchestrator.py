@@ -13,6 +13,11 @@ from .qc_execution_cache import (
     build_prompt_hash,
     build_record_snapshot_hash,
 )
+from .effect_priority_qc import (
+    DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+    family_pack_candidates,
+    normalize_quality_profile,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -155,6 +160,8 @@ class QCRuleOrchestrator:
         llm_concurrency: int = 6,
         model_version: str = "",
         bucket_strategy: str = DEFAULT_BUCKET_STRATEGY,
+        quality_profile: str = "throughput_v1",
+        refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         execution_cache: Optional[QCExecutionCache] = None,
         cache_ttl_seconds: int = 1800,
     ) -> dict[str, Any]:
@@ -168,6 +175,8 @@ class QCRuleOrchestrator:
         cache_hit_count = 0
         prompt_strategy_normalized = str(prompt_strategy or "single_rule_v1").strip().lower() or "single_rule_v1"
         bucket_strategy_normalized = _normalize_bucket_strategy(bucket_strategy)
+        quality_profile_normalized = normalize_quality_profile(quality_profile)
+        low_confidence_threshold = float(refine_confidence_threshold or LOW_CONFIDENCE_THRESHOLD)
 
         program_results: dict[int, dict[str, Any]] = {}
         cached_results: dict[int, tuple[dict[str, Any], RuleExecutionMeta, str]] = {}
@@ -175,6 +184,7 @@ class QCRuleOrchestrator:
         llm_results: dict[int, tuple[dict[str, Any], RuleExecutionMeta, bool]] = {}
         pack_metrics = {
             "prompt_strategy": prompt_strategy_normalized,
+            "quality_profile": quality_profile_normalized,
             "bucket_strategy": bucket_strategy_normalized,
             "bucket_count": 0,
             "total_packs": 0,
@@ -279,6 +289,7 @@ class QCRuleOrchestrator:
             if force_pack_fallback:
                 metadata = dict(single_payload.get("metadata") or {})
                 metadata["prompt_strategy"] = prompt_strategy_normalized
+                metadata["quality_profile"] = quality_profile_normalized
                 metadata["pack_size"] = 1
                 metadata["pack_fallback"] = True
                 metadata["pack_id"] = f"single-fallback-{idx}"
@@ -358,6 +369,7 @@ class QCRuleOrchestrator:
                 metadata.setdefault("tokens_used", _safe_int(tokens_used / max(1, len(entries))))
                 metadata.setdefault("api_time", _safe_float(api_time / max(1, len(entries))))
                 metadata["prompt_strategy"] = prompt_strategy_normalized
+                metadata["quality_profile"] = quality_profile_normalized
                 metadata["pack_size"] = int(pack_size or len(entries))
                 metadata["pack_id"] = pack_id
                 metadata["pack_fallback"] = bool(force_pack_fallback)
@@ -398,6 +410,8 @@ class QCRuleOrchestrator:
                         "pack_id": pack_id,
                         "pack_size": int(pack_size or len(entries)),
                         "prompt_strategy": prompt_strategy_normalized,
+                        "quality_profile": quality_profile_normalized,
+                        "low_confidence_threshold": low_confidence_threshold,
                         "execution_domain": str(bucket_key[0] or "generic"),
                         "doc_scope": str(bucket_key[1] or "primary"),
                         "rule_family": str(bucket_key[2] or ""),
@@ -466,7 +480,13 @@ class QCRuleOrchestrator:
             if not entries:
                 return 1
 
-            candidate_raw = list(batch_pack_candidates or DEFAULT_PACK_CANDIDATES)
+            candidate_raw = list(
+                family_pack_candidates(
+                    bucket_key[2] or "general",
+                    quality_profile=quality_profile_normalized,
+                    default_candidates=batch_pack_candidates or DEFAULT_PACK_CANDIDATES,
+                )
+            )
             normalized_candidates: list[int] = []
             max_pack_size = max(1, int(batch_pack_max_size or 1))
             for candidate in candidate_raw:
@@ -489,6 +509,8 @@ class QCRuleOrchestrator:
                             "pack_id": f"probe-{bucket_key[0]}-{bucket_key[1]}-{bucket_key[2] or 'general'}-{candidate}",
                             "pack_size": candidate,
                             "prompt_strategy": prompt_strategy_normalized,
+                            "quality_profile": quality_profile_normalized,
+                            "low_confidence_threshold": low_confidence_threshold,
                             "execution_domain": str(bucket_key[0] or "generic"),
                             "doc_scope": str(bucket_key[1] or "primary"),
                             "rule_family": str(bucket_key[2] or ""),
@@ -603,6 +625,7 @@ class QCRuleOrchestrator:
             metadata["cache_hit"] = is_cache_hit
             metadata.setdefault("cache_key", cache_key)
             metadata.setdefault("prompt_strategy", prompt_strategy_normalized)
+            metadata.setdefault("quality_profile", quality_profile_normalized)
             metadata.setdefault("bucket_strategy", bucket_strategy_normalized)
             metadata.setdefault("bucket_key", _bucket_metric_key(_build_bucket_key(meta, bucket_strategy_normalized)))
             metadata.setdefault("pack_size", int(metadata.get("pack_size") or 1))

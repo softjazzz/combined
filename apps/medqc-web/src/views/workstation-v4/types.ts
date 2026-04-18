@@ -255,3 +255,83 @@ export interface WorkstationSnapshotState {
   latestResult?: Record<string, unknown> | null
   latestNotification?: Record<string, unknown> | null
 }
+
+export type StructuredQCStatus =
+  | 'non_compliant'
+  | 'uncertain'
+  | 'compliant'
+  | 'not_applicable'
+  | 'failed'
+  | 'error'
+
+export interface StructuredQCOverview {
+  totalRules: number
+  complianceRate: number
+  issueCount: number
+  uncertainCount: number
+  compliantCount: number
+  notApplicableCount: number
+  failedCount: number
+  docCount: number
+  processingTimeSeconds: number
+}
+
+export interface StructuredQCIssue {
+  id: string
+  status: StructuredQCStatus
+  statusLabel: string
+  ruleJobId: string
+  ruleId: string
+  ruleCode: string
+  ruleName: string
+  findings: string
+  evidence: string
+  suggestion: string
+  confidence: number
+  documentType: string
+  executionDomain: string
+  ruleFamily: string
+  defectLevel: string
+  executorType: string
+  recordId: string
+  visitId: string
+  patientName: string
+  department: string
+  metadata: {
+    traceId: string
+    cacheHit: boolean | null
+    promptVersion: string
+    modelVersion: string
+    ruleVersion: string
+    evidenceSource: string
+    cacheKey: string
+    docScope: string
+    costClass: string
+    llmFallback: boolean | null
+    refined: boolean | null
+    refineReason: string
+    screeningStatus: string
+    finalDecisionSource: string
+  }
+}
+
+export interface StructuredQCGroup {
+  key: string
+  label: string
+  count: number
+  kind: 'status' | 'document' | 'domain' | 'defect' | 'rule'
+}
+
+export interface StructuredQCFilterState {
+  keyword: string
+  statusList: StructuredQCStatus[]
+  documentType: string
+  executionDomain: string
+  defectLevel: string
+}
+
+export interface StructuredQCResult {
+  overview: StructuredQCOverview
+  issues: StructuredQCIssue[]
+  groups: StructuredQCGroup[]
+}

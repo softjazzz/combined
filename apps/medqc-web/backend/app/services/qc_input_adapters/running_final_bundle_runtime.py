@@ -107,6 +107,11 @@ async def evaluate_running_final_bundle(
     bundle_input: dict[str, Any] | None = None,
     rule_ids: list[str] | None = None,
     schema: str = "public",
+    bucket_strategy: str = "domain_only",
+    quality_profile: str = "throughput_v1",
+    enable_selective_refine: bool = False,
+    refine_confidence_threshold: float = 0.75,
+    use_execution_cache: bool = True,
 ) -> dict[str, Any]:
     if isinstance(bundle_input, dict) and bundle_input:
         bundle = dict(bundle_input)
@@ -125,6 +130,11 @@ async def evaluate_running_final_bundle(
     result = await qc_service.evaluate_running_final_bundle_input(
         bundle=bundle,
         rule_ids=list(rule_ids or []),
+        bucket_strategy=bucket_strategy,
+        quality_profile=quality_profile,
+        enable_selective_refine=enable_selective_refine,
+        refine_confidence_threshold=refine_confidence_threshold,
+        use_execution_cache=use_execution_cache,
     )
     eval_args = adapt_bundle_to_sichuan_eval_args(bundle, rule_ids=rule_ids or [])
     result["bundle_metadata"] = {

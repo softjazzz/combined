@@ -13,10 +13,16 @@ from ..core.response import success_response, paginated_response, error_response
 from ..services.sichuan_qc_service import SichuanQCService, RuleSourceGuardError
 from ..services.llm_config_loader import LLMConfigLoader
 from ..services.qc_input_adapters import evaluate_running_final_bundle
+from ..services.qc_rule_sets import get_sichuan_rule_set, list_sichuan_rule_sets
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..core.security import require_admin, get_current_user
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+from ..services.effect_priority_qc import (
+    DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+    QUALITY_PROFILE_EFFECT_PRIORITY,
+    QUALITY_PROFILE_THROUGHPUT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +188,12 @@ class SichuanRuleVisitEvaluateRequest(BaseModel):
 
 
 class SichuanWorkspaceBatchJobCreateRequest(BaseModel):
-    rule_ids: List[str]
+    rule_ids: Optional[List[str]] = None
+    rule_set_key: Optional[str] = None
+    quality_profile: Optional[str] = None
+    bucket_strategy: Optional[str] = None
+    enable_selective_refine: Optional[bool] = None
+    refine_confidence_threshold: Optional[float] = None
     scope: str = "final"
     department: Optional[str] = None
     doctor: Optional[str] = None
@@ -220,6 +231,30 @@ def _current_user_id(current_user: Dict[str, Any]) -> str:
     )
 
 
+def _normalize_quality_profile(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized == QUALITY_PROFILE_EFFECT_PRIORITY:
+        return QUALITY_PROFILE_EFFECT_PRIORITY
+    return QUALITY_PROFILE_THROUGHPUT
+
+
+def _normalize_bucket_strategy(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized == "domain_family":
+        return "domain_family"
+    return "domain_only"
+
+
+def _normalize_refine_threshold(value: Any) -> float:
+    try:
+        number = float(value)
+    except Exception:
+        return DEFAULT_REFINE_CONFIDENCE_THRESHOLD
+    if number <= 0 or number > 1:
+        return DEFAULT_REFINE_CONFIDENCE_THRESHOLD
+    return number
+
+
 def _normalize_scope(scope: Optional[str]) -> str:
     value = str(scope or "").strip().lower()
     if value not in {"all", "running", "final"}:
@@ -243,10 +278,17 @@ def _resolve_document_type(scope: str, record_scope: Optional[str]) -> str:
 
 
 def _build_cluster_key(item: Dict[str, Any]) -> str:
+    status = str(item.get("status") or "").strip().lower()
+    if status == "non_compliant":
+        status_label = "不合规"
+    elif status == "uncertain":
+        status_label = "待复核"
+    else:
+        status_label = "其他"
     evidence = str(item.get("evidence") or "").strip()
     findings = str(item.get("findings") or "").strip()
     base = evidence or findings or str(item.get("rule_name") or item.get("rule_code") or "命中项")
-    return base[:64]
+    return f"[{status_label}] {base[:64]}"
 
 
 def _to_breakdown_list(counter: Dict[str, int], top_n: int = 8) -> List[Dict[str, Any]]:
@@ -260,6 +302,7 @@ def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     executor_counter: Dict[str, int] = {}
     doc_counter: Dict[str, int] = {}
     defect_counter: Dict[str, int] = {}
+    status_counter: Dict[str, int] = {}
 
     for item in items:
         cluster_key = _build_cluster_key(item)
@@ -273,6 +316,7 @@ def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "document_types": {},
                 "executor_types": {},
                 "defect_levels": {},
+                "status_breakdown": {},
             },
         )
         cluster["records"] += 1
@@ -292,6 +336,9 @@ def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         if defect_level:
             cluster["defect_levels"][defect_level] = int(cluster["defect_levels"].get(defect_level) or 0) + 1
             defect_counter[defect_level] = int(defect_counter.get(defect_level) or 0) + 1
+        status = str(item.get("status") or "").strip().lower() or "unknown"
+        cluster["status_breakdown"][status] = int(cluster["status_breakdown"].get(status) or 0) + 1
+        status_counter[status] = int(status_counter.get(status) or 0) + 1
 
     cluster_list: List[Dict[str, Any]] = []
     for cluster in clusters.values():
@@ -304,6 +351,7 @@ def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
                 "document_types": cluster["document_types"],
                 "executor_types": cluster["executor_types"],
                 "defect_levels": cluster["defect_levels"],
+                "status_breakdown": cluster["status_breakdown"],
             }
         )
     cluster_list.sort(key=lambda it: int(it.get("records") or 0), reverse=True)
@@ -323,6 +371,7 @@ def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         "executor_breakdown": _to_breakdown_list(executor_counter, top_n=6),
         "document_breakdown": _to_breakdown_list(doc_counter, top_n=8),
         "defect_level_breakdown": _to_breakdown_list(defect_counter, top_n=8),
+        "status_breakdown": _to_breakdown_list(status_counter, top_n=6),
     }
 
 
@@ -787,6 +836,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         rule_ids = [str(item).strip() for item in (filters.get("rule_ids") or []) if str(item).strip()]
         if not rule_ids:
             raise ValueError("批量任务缺少 rule_ids")
+        rule_set_key = str(filters.get("rule_set_key") or "").strip()
+        rule_set_name = str(filters.get("rule_set_name") or "").strip()
+        rule_set_version = str(filters.get("rule_set_version") or "").strip()
+        quality_profile = _normalize_quality_profile(filters.get("quality_profile"))
+        bucket_strategy = _normalize_bucket_strategy(filters.get("bucket_strategy"))
+        enable_selective_refine = bool(filters.get("enable_selective_refine") is True)
+        refine_confidence_threshold = _normalize_refine_threshold(filters.get("refine_confidence_threshold"))
         qc_service.assert_sc_rule_source_ready(
             context=f"workspace_batch_job:{job_id}",
             block_batch=True,
@@ -808,6 +864,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         all_items: List[Dict[str, Any]] = []
         all_failed_records: List[Dict[str, Any]] = []
         issue_record_ids: set[str] = set()
+        uncertain_record_ids: set[str] = set()
         failed_record_ids: set[str] = set()
         total_tokens = 0
         total_processing_time = 0.0
@@ -821,6 +878,14 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         total_pack_parse_retry_count = 0
         total_single_rule_retries = 0
         total_context_tokens_estimate = 0
+        total_refined_rule_count = 0
+        refine_summary_total: Dict[str, Any] = {
+            "enabled": enable_selective_refine,
+            "candidate_count": 0,
+            "refined_rule_count": 0,
+            "refine_failed_count": 0,
+            "refine_reasons": {},
+        }
 
         # 预加载规则，后续按病历一次性评估全部规则，再回填到每条规则结果。
         # 这样可触发 orchestrator 的分桶并发，避免规则级外层串行瓶颈。
@@ -866,44 +931,162 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 return
 
             record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
+            visit_id = str(record.get("visit_id") or record_id).strip()
+            institute_id = str(record.get("institute_id") or "").strip()
+            patient_id = str(record.get("patient_id") or "").strip()
+            current_scope = str(current.get("scope") or "all").strip().lower()
             document_type = _resolve_document_type(
-                str(current.get("scope") or "all"),
+                current_scope,
                 str(record.get("scope") or ""),
             )
             try:
-                result = await qc_service.evaluate_document(
-                    document_id=record_id or "unknown",
-                    content=str(record.get("medical_text") or ""),
-                    document_type=document_type,
-                    rule_ids=valid_rule_ids,
-                )
-                record_pack_metrics = dict(result.get("pack_metrics") or {})
-                pack_count = int(record_pack_metrics.get("total_packs") or 0)
-                avg_pack_size = float(record_pack_metrics.get("avg_pack_size") or 0.0)
-                total_pack_count += pack_count
-                total_pack_size_weighted += (avg_pack_size * pack_count)
-                total_pack_fallback_count += int(record_pack_metrics.get("fallback_packs") or 0)
-                total_pack_parse_retry_count += int(record_pack_metrics.get("pack_parse_retry_count") or 0)
-                total_single_rule_retries += int(record_pack_metrics.get("single_rule_retries") or 0)
-                total_context_tokens_estimate += int(record_pack_metrics.get("context_tokens_estimate") or 0)
-                eval_items = list(result.get("evaluation_results") or [])
+                used_bundle_path = False
+                bundle_fallback_reason = ""
+                eval_items: List[Dict[str, Any]] = []
+                record_total_tokens = 0
+                record_total_api_time = 0.0
+                record_pack_metrics: Dict[str, Any] = {}
+
+                if current_scope == "final" and institute_id and patient_id and visit_id:
+                    used_bundle_path = True
+                    try:
+                        # 终末批量任务改为“单病历一次性评估全部规则”，让 orchestrator 启用动态分包。
+                        # 文书域约束通过规则元数据 execution_domain/doc_scope 在分桶时生效。
+                        single_result = await evaluate_running_final_bundle(
+                            qc_service=qc_service,
+                            scene="final",
+                            institute_id=institute_id,
+                            patient_id=patient_id,
+                            visit_id=visit_id,
+                            rule_ids=valid_rule_ids,
+                            schema="public",
+                            bucket_strategy=bucket_strategy,
+                            quality_profile=quality_profile,
+                            enable_selective_refine=enable_selective_refine,
+                            refine_confidence_threshold=refine_confidence_threshold,
+                        )
+                        eval_items = list(
+                            single_result.get("evaluation_results")
+                            or single_result.get("parsed_evaluation_results")
+                            or []
+                        )
+                        if not eval_items:
+                            raise ValueError("evaluate_running_final_bundle 未返回 evaluation_results")
+                        record_total_tokens = int(((single_result.get("token_usage") or {}).get("total_tokens")) or 0)
+                        record_total_api_time = float(single_result.get("api_time") or 0.0)
+                        record_pack_metrics = dict(single_result.get("pack_metrics") or {})
+                        record_refine_summary = dict(single_result.get("refine_summary") or {})
+                        if record_refine_summary:
+                            refine_summary_total["enabled"] = bool(record_refine_summary.get("enabled") is True)
+                            refine_summary_total["candidate_count"] = int(refine_summary_total.get("candidate_count") or 0) + int(record_refine_summary.get("candidate_count") or 0)
+                            refine_summary_total["refined_rule_count"] = int(refine_summary_total.get("refined_rule_count") or 0) + int(record_refine_summary.get("refined_rule_count") or 0)
+                            refine_summary_total["refine_failed_count"] = int(refine_summary_total.get("refine_failed_count") or 0) + int(record_refine_summary.get("refine_failed_count") or 0)
+                            total_refined_rule_count += int(record_refine_summary.get("refined_rule_count") or 0)
+                            reasons = dict(record_refine_summary.get("refine_reasons") or {})
+                            target_reasons = dict(refine_summary_total.get("refine_reasons") or {})
+                            for reason_key, reason_count in reasons.items():
+                                key = str(reason_key or "").strip() or "unknown"
+                                target_reasons[key] = int(target_reasons.get(key) or 0) + int(reason_count or 0)
+                            refine_summary_total["refine_reasons"] = target_reasons
+                        pack_count = int(record_pack_metrics.get("total_packs") or 0)
+                        avg_pack_size = float(record_pack_metrics.get("avg_pack_size") or 0.0)
+                        total_pack_count += pack_count
+                        total_pack_size_weighted += (avg_pack_size * pack_count)
+                        total_pack_fallback_count += int(record_pack_metrics.get("fallback_packs") or 0)
+                        total_pack_parse_retry_count += int(record_pack_metrics.get("pack_parse_retry_count") or 0)
+                        total_single_rule_retries += int(record_pack_metrics.get("single_rule_retries") or 0)
+                        total_context_tokens_estimate += int(record_pack_metrics.get("context_tokens_estimate") or 0)
+                    except Exception as bundle_exc:
+                        used_bundle_path = False
+                        bundle_fallback_reason = f"bundle 一次性评估失败: {bundle_exc}"
+                        logger.warning(
+                            "终末批量任务 %s 病历 %s bundle 一次性评估失败，回退长文本评估",
+                            job_id,
+                            record_id or visit_id or "unknown",
+                            exc_info=True,
+                        )
+                elif current_scope == "final":
+                    bundle_fallback_reason = "缺少 bundle 主键(institute_id/patient_id/visit_id)"
+
+                if not used_bundle_path:
+                    result = await qc_service.evaluate_document(
+                        document_id=record_id or "unknown",
+                        content=str(record.get("medical_text") or ""),
+                        document_type=document_type,
+                        rule_ids=valid_rule_ids,
+                        bucket_strategy=bucket_strategy,
+                        quality_profile=quality_profile,
+                        enable_selective_refine=enable_selective_refine,
+                        refine_confidence_threshold=refine_confidence_threshold,
+                    )
+                    record_total_tokens = int(((result.get("token_usage") or {}).get("total_tokens")) or 0)
+                    record_total_api_time = float(result.get("api_time") or 0.0)
+                    record_pack_metrics = dict(result.get("pack_metrics") or {})
+                    pack_count = int(record_pack_metrics.get("total_packs") or 0)
+                    avg_pack_size = float(record_pack_metrics.get("avg_pack_size") or 0.0)
+                    total_pack_count += pack_count
+                    total_pack_size_weighted += (avg_pack_size * pack_count)
+                    total_pack_fallback_count += int(record_pack_metrics.get("fallback_packs") or 0)
+                    total_pack_parse_retry_count += int(record_pack_metrics.get("pack_parse_retry_count") or 0)
+                    total_single_rule_retries += int(record_pack_metrics.get("single_rule_retries") or 0)
+                    total_context_tokens_estimate += int(record_pack_metrics.get("context_tokens_estimate") or 0)
+                    eval_items = list(result.get("evaluation_results") or [])
                 eval_map: Dict[str, Dict[str, Any]] = {}
                 for eval_item in eval_items:
                     key = str(eval_item.get("rule_id") or eval_item.get("rule_code") or "").strip().upper()
                     if key and key not in eval_map:
                         eval_map[key] = dict(eval_item)
 
+                fallback_tokens_per_rule = int(record_total_tokens / max(1, len(valid_rule_ids)))
+                fallback_api_per_rule = float(record_total_api_time / max(1, len(valid_rule_ids)))
                 for rule_id in valid_rule_ids:
+                    normalized_rule_id = str(rule_id).strip().upper()
                     state = rule_states[rule_id]
                     rule = state["rule"]
                     rule_name = str(state["rule_name"])
                     rule_code = str(state["rule_code"])
                     rule_job_id = str(state["rule_job_id"])
-                    eval_item = eval_map.get(str(rule_id).strip().upper()) or {}
-                    status = str(eval_item.get("status") or "")
+                    eval_item = eval_map.get(normalized_rule_id) or {}
+                    if not eval_item:
+                        failed_record_ids.add(record_id)
+                        failed_payload = {
+                            "rule_job_id": rule_job_id,
+                            "rule_id": rule_id,
+                            "rule_code": rule_code,
+                            "rule_name": rule_name,
+                            "record_id": record_id,
+                            "visit_id": str(record.get("visit_id") or ""),
+                            "patient_name": str(record.get("patient_name") or ""),
+                            "department": str(record.get("department") or ""),
+                            "error_phase": "result_missing",
+                            "error": "规则执行未返回结果",
+                        }
+                        state["failed_records"].append(failed_payload)
+                        all_failed_records.append(failed_payload)
+                        continue
+                    status = str(eval_item.get("status") or "").strip().lower()
+                    if status not in {"compliant", "non_compliant", "not_applicable", "uncertain"}:
+                        status = "compliant" if eval_item.get("is_compliant") else "non_compliant"
                     metadata = dict(eval_item.get("metadata") or {})
+                    metadata.setdefault("tokens_used", fallback_tokens_per_rule)
+                    metadata.setdefault("api_time", fallback_api_per_rule)
+                    metadata.setdefault("execution_domain", str((rule or {}).get("execution_domain") or ""))
+                    metadata.setdefault("doc_scope", str((rule or {}).get("doc_scope") or ""))
+                    metadata.setdefault("rule_family", str((rule or {}).get("rule_family") or ""))
+                    metadata.setdefault("executor_type", str((rule or {}).get("executor_type") or "llm"))
+                    metadata.setdefault("prompt_strategy", str(record_pack_metrics.get("prompt_strategy") or "batch_compact_v1"))
+                    metadata.setdefault("pack_size", int(record_pack_metrics.get("selected_pack_size") or 1))
+                    metadata.setdefault("quality_profile", quality_profile)
+                    metadata.setdefault("bucket_strategy", bucket_strategy)
+                    if current_scope == "final" and not used_bundle_path:
+                        metadata.setdefault("bundle_fallback", True)
+                        if bundle_fallback_reason:
+                            metadata.setdefault("bundle_fallback_reason", bundle_fallback_reason)
+                        metadata.setdefault("evidence_source", "medical_text_fallback")
                     if status == "non_compliant":
                         issue_record_ids.add(record_id)
+                    elif status == "uncertain":
+                        uncertain_record_ids.add(record_id)
 
                     tokens_used = int(metadata.get("tokens_used") or 0)
                     api_time = float(metadata.get("api_time") or 0.0)
@@ -933,7 +1116,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "visit_id": str(record.get("visit_id") or ""),
                         "patient_name": str(record.get("patient_name") or ""),
                         "department": str(record.get("department") or ""),
-                        "status": status or ("compliant" if eval_item.get("is_compliant") else "non_compliant"),
+                        "status": status,
                         "is_compliant": bool(eval_item.get("is_compliant") is True),
                         "findings": str(eval_item.get("findings") or ""),
                         "evidence": str(eval_item.get("evidence") or ""),
@@ -949,17 +1132,29 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "cache_key": str(metadata.get("cache_key") or ""),
                         "execution_domain": str(metadata.get("execution_domain") or ""),
                         "doc_scope": str(metadata.get("doc_scope") or ""),
+                        "rule_family": str(metadata.get("rule_family") or ""),
                         "cost_class": str(metadata.get("cost_class") or ""),
                         "prompt_strategy": str(metadata.get("prompt_strategy") or ""),
+                        "quality_profile": str(metadata.get("quality_profile") or ""),
+                        "bucket_strategy": str(metadata.get("bucket_strategy") or ""),
                         "pack_size": int(metadata.get("pack_size") or 1),
                         "pack_id": str(metadata.get("pack_id") or ""),
                         "pack_fallback": bool(metadata.get("pack_fallback") is True),
                         "context_tokens_estimate": int(metadata.get("context_tokens_estimate") or 0),
-                        "document_type": document_type,
+                        "refined": bool(metadata.get("refined") is True),
+                        "refine_reason": str(metadata.get("refine_reason") or ""),
+                        "screening_status": str(metadata.get("screening_status") or ""),
+                        "final_decision_source": str(metadata.get("final_decision_source") or ""),
+                        "document_type": str(
+                            eval_item.get("_document_type")
+                            or eval_item.get("document_type")
+                            or metadata.get("document_type")
+                            or document_type
+                        ),
                         "defect_level": str((rule or {}).get("defect_level") or ""),
                         "llm_fallback": bool(metadata.get("llm_fallback") is True),
                     }
-                    if issue_item["status"] == "non_compliant":
+                    if issue_item["status"] in {"non_compliant", "uncertain"}:
                         state["items"].append(issue_item)
                         all_items.append(issue_item)
             except Exception as exc:
@@ -990,8 +1185,19 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "total_records": total_records,
                 "success_count": max(0, total_records - len(rule_failed)),
                 "failed_count": len(rule_failed),
-                "issue_records": len({str(item.get("record_id") or "") for item in rule_items}),
-                "compliant_records": max(0, total_records - len(rule_failed) - len({str(item.get("record_id") or "") for item in rule_items})),
+                "issue_records": len(
+                    {str(item.get("record_id") or "") for item in rule_items if str(item.get("status") or "") == "non_compliant"}
+                ),
+                "uncertain_records": len(
+                    {str(item.get("record_id") or "") for item in rule_items if str(item.get("status") or "") == "uncertain"}
+                ),
+                "compliant_records": max(
+                    0,
+                    total_records
+                    - len(rule_failed)
+                    - len({str(item.get("record_id") or "") for item in rule_items if str(item.get("status") or "") == "non_compliant"})
+                    - len({str(item.get("record_id") or "") for item in rule_items if str(item.get("status") or "") == "uncertain"}),
+                ),
                 "total_tokens": int(state.get("total_tokens") or 0),
                 "total_processing_time": float(state.get("total_processing_time") or 0.0),
             }
@@ -1010,6 +1216,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "success_count": rule_summary["success_count"],
                     "failed_count": rule_summary["failed_count"],
                     "issue_records": rule_summary["issue_records"],
+                    "uncertain_records": rule_summary["uncertain_records"],
                     "compliant_records": rule_summary["compliant_records"],
                     "total_tokens": rule_summary["total_tokens"],
                     "total_processing_time": rule_summary["total_processing_time"],
@@ -1029,12 +1236,29 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             )
 
         summary = {
+            "rule_set_key": rule_set_key,
+            "rule_set_name": rule_set_name,
+            "rule_set_version": rule_set_version,
+            "quality_profile": quality_profile,
+            "bucket_strategy": bucket_strategy,
+            "enable_selective_refine": enable_selective_refine,
+            "refine_confidence_threshold": refine_confidence_threshold,
             "total_records": total_records,
             "success_count": max(0, total_records - len(failed_record_ids)),
             "failed_record_count": len(failed_record_ids),
             "failed_count": len(all_failed_records),
             "issue_records": len(issue_record_ids),
-            "compliant_records": max(0, total_records - len(issue_record_ids) - len(failed_record_ids)),
+            "uncertain_records": len(uncertain_record_ids),
+            "compliant_records": max(
+                0,
+                total_records - len(issue_record_ids) - len(uncertain_record_ids) - len(failed_record_ids),
+            ),
+            "status_breakdown": {
+                "non_compliant": len(issue_record_ids),
+                "uncertain": len(uncertain_record_ids),
+                "failed": len(failed_record_ids),
+                "compliant": max(0, total_records - len(issue_record_ids) - len(uncertain_record_ids) - len(failed_record_ids)),
+            },
             "total_tokens": int(total_tokens),
             "total_processing_time": float(total_processing_time),
             "rule_count": len(rule_ids),
@@ -1048,6 +1272,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "miss": cache_miss,
             },
             "pack_metrics": {
+                "quality_profile": quality_profile,
+                "bucket_strategy": bucket_strategy,
                 "total_packs": total_pack_count,
                 "avg_pack_size": round((total_pack_size_weighted / total_pack_count), 2) if total_pack_count else 0.0,
                 "fallback_packs": total_pack_fallback_count,
@@ -1055,6 +1281,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "pack_parse_retry_count": total_pack_parse_retry_count,
                 "context_tokens_estimate": int(total_context_tokens_estimate / total_pack_count) if total_pack_count else 0,
             },
+            "refine_summary": refine_summary_total,
+            "refined_rule_count": total_refined_rule_count,
             "result_aggregation": _build_result_aggregation(all_items),
             "rule_results": rule_results,
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -1078,7 +1306,31 @@ async def create_workspace_batch_job(
     qc_service: SichuanQCService = Depends(get_qc_service),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    rule_ids = [str(item).strip() for item in (payload.rule_ids or []) if str(item).strip()]
+    requested_rule_set = get_sichuan_rule_set(payload.rule_set_key)
+    if payload.rule_set_key and not requested_rule_set:
+        raise HTTPException(status_code=422, detail=f"未知规则集: {payload.rule_set_key}")
+
+    if requested_rule_set:
+        rule_ids = list(requested_rule_set.rule_ids)
+        effective_scope = requested_rule_set.scope or payload.scope
+        rule_set_key = requested_rule_set.key
+        rule_set_name = requested_rule_set.name
+        rule_set_version = requested_rule_set.version
+        quality_profile = requested_rule_set.quality_profile
+        bucket_strategy = requested_rule_set.bucket_strategy
+        enable_selective_refine = requested_rule_set.enable_selective_refine
+        refine_confidence_threshold = requested_rule_set.refine_confidence_threshold
+    else:
+        rule_ids = [str(item).strip() for item in (payload.rule_ids or []) if str(item).strip()]
+        effective_scope = payload.scope
+        rule_set_key = ""
+        rule_set_name = ""
+        rule_set_version = ""
+        quality_profile = _normalize_quality_profile(payload.quality_profile)
+        bucket_strategy = _normalize_bucket_strategy(payload.bucket_strategy)
+        enable_selective_refine = bool(payload.enable_selective_refine is True)
+        refine_confidence_threshold = _normalize_refine_threshold(payload.refine_confidence_threshold)
+
     if not rule_ids:
         raise HTTPException(status_code=422, detail="rule_ids 不能为空")
     _enforce_sc_source_guard(
@@ -1089,8 +1341,9 @@ async def create_workspace_batch_job(
     )
 
     workspace = _sichuan_workspace_service()
+    normalized_scope = _normalize_scope(effective_scope)
     records = workspace.collect_records(
-        scope=_normalize_scope(payload.scope),
+        scope=normalized_scope,
         department=payload.department,
         doctor=payload.doctor,
         date_field=_normalize_date_field(payload.date_field),
@@ -1105,13 +1358,13 @@ async def create_workspace_batch_job(
     pseudo_draft = {
         "id": "sichuan-rule-library",
         "rule_code": "SC-BATCH",
-        "name": f"四川规则库批量任务({len(rule_ids)}条规则)",
-        "scene": "running" if _normalize_scope(payload.scope) == "running" else "final",
+        "name": f"{rule_set_name or '四川规则库'}批量任务({len(rule_ids)}条规则)",
+        "scene": "running" if normalized_scope == "running" else "final",
     }
     job = workspace.create_batch_job(
         draft=pseudo_draft,
         created_by=_current_user_id(current_user),
-        scope=_normalize_scope(payload.scope),
+        scope=normalized_scope,
         filters={
             "department": payload.department,
             "doctor": payload.doctor,
@@ -1120,6 +1373,13 @@ async def create_workspace_batch_job(
             "end_date": payload.end_date,
             "keyword": payload.keyword,
             "rule_ids": rule_ids,
+            "rule_set_key": rule_set_key,
+            "rule_set_name": rule_set_name,
+            "rule_set_version": rule_set_version,
+            "quality_profile": quality_profile,
+            "bucket_strategy": bucket_strategy,
+            "enable_selective_refine": enable_selective_refine,
+            "refine_confidence_threshold": refine_confidence_threshold,
             "source": "sichuan_rule_workspace",
         },
         record_ids=payload.record_ids or [],
@@ -1132,8 +1392,23 @@ async def create_workspace_batch_job(
             "execution_mode": "batch",
             "rule_count": len(rule_ids),
             "draft_ids": rule_ids,
+            "rule_set_key": rule_set_key,
+            "rule_set_name": rule_set_name,
+            "rule_set_version": rule_set_version,
+            "quality_profile": quality_profile,
+            "bucket_strategy": bucket_strategy,
+            "refine_summary": None,
         },
         message="四川规则批量任务已创建",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/workspace/rule-sets")
+async def list_workspace_rule_sets(request: Request, current_user: Dict[str, Any] = Depends(get_current_user)):
+    return success_response(
+        data={"items": list_sichuan_rule_sets()},
+        message="获取四川规则集成功",
         trace_id=get_trace_id(request),
     )
 
@@ -1189,6 +1464,12 @@ async def list_workspace_batch_jobs(
             "execution_mode": "batch",
             "rule_count": int((item.get("summary") or {}).get("rule_count") or 0),
             "draft_ids": list(((item.get("filters") or {}).get("rule_ids") or [])),
+            "rule_set_key": str(((item.get("filters") or {}).get("rule_set_key")) or ""),
+            "rule_set_name": str(((item.get("filters") or {}).get("rule_set_name")) or ""),
+            "rule_set_version": str(((item.get("filters") or {}).get("rule_set_version")) or ""),
+            "quality_profile": str(((item.get("summary") or {}).get("quality_profile") or (item.get("filters") or {}).get("quality_profile")) or ""),
+            "bucket_strategy": str(((item.get("summary") or {}).get("bucket_strategy") or (item.get("filters") or {}).get("bucket_strategy")) or ""),
+            "refine_summary": (item.get("summary") or {}).get("refine_summary"),
         }
         for item in result.items
     ]
@@ -1220,6 +1501,12 @@ async def get_workspace_batch_job(
             "execution_mode": "batch",
             "rule_count": int((job.get("summary") or {}).get("rule_count") or 0),
             "draft_ids": list(((job.get("filters") or {}).get("rule_ids") or [])),
+            "rule_set_key": str(((job.get("filters") or {}).get("rule_set_key")) or ""),
+            "rule_set_name": str(((job.get("filters") or {}).get("rule_set_name")) or ""),
+            "rule_set_version": str(((job.get("filters") or {}).get("rule_set_version")) or ""),
+            "quality_profile": str(((job.get("summary") or {}).get("quality_profile") or (job.get("filters") or {}).get("quality_profile")) or ""),
+            "bucket_strategy": str(((job.get("summary") or {}).get("bucket_strategy") or (job.get("filters") or {}).get("bucket_strategy")) or ""),
+            "refine_summary": (job.get("summary") or {}).get("refine_summary"),
         },
         message="获取四川规则批量任务详情成功",
         trace_id=get_trace_id(request),

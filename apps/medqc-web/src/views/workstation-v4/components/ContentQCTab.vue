@@ -186,7 +186,7 @@
       </a-button>
     </div>
 
-    <!-- 结果列表 -->
+    <!-- 结构化结果 -->
     <div
       v-else
       class="content-qc-tab__body custom-scrollbar"
@@ -206,8 +206,14 @@
             </div>
           </div>
           <div class="summary-card__progress">
-            {{ summary.complianceRate }}%
+            {{ complianceRateText }}
           </div>
+        </div>
+        <div
+          v-if="isNoRulesResult"
+          class="summary-card__warning"
+        >
+          本次未加载到可执行规则（总规则数=0），当前结果不可作为“质控通过”依据。
         </div>
         <div class="summary-row">
           <span class="summary-label">总规则数</span>
@@ -218,58 +224,231 @@
           <span
             class="summary-value"
             :class="complianceClass"
-          >{{ summary.complianceRate }}%</span>
+          >{{ complianceRateText }}</span>
         </div>
         <div class="summary-row">
           <span class="summary-label">发现问题</span>
-          <span class="summary-value text-red-500">{{ summary.issuesFound }}</span>
+          <span class="summary-value text-red-500">{{ summary.issueCount }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">待复核</span>
+          <span class="summary-value text-amber-500">{{ summary.uncertainCount }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">合规</span>
+          <span class="summary-value text-blue-600">{{ summary.compliantCount }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">不适用</span>
+          <span class="summary-value">{{ summary.notApplicableCount }}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">失败</span>
+          <span class="summary-value text-red-500">{{ summary.failedCount }}</span>
         </div>
         <div class="summary-row">
           <span class="summary-label">文书数</span>
           <span class="summary-value">{{ summary.docCount }}</span>
         </div>
+        <div class="summary-row">
+          <span class="summary-label">耗时</span>
+          <span class="summary-value">{{ summary.processingTimeSeconds.toFixed(1) }}s</span>
+        </div>
       </div>
 
-      <!-- 文书分类结果 -->
-      <template v-if="issues.length > 0">
-        <section
-          v-for="(group, gIdx) in groupedIssues"
-          :key="gIdx"
-          class="issue-group"
+      <div class="result-toolbar">
+        <a-radio-group
+          v-model:value="viewMode"
+          size="small"
+          class="result-view-switch"
         >
-          <header class="group-header">
-            <span
-              class="group-dot"
-              :style="{ background: severityColor(group.severity) }"
-            />
-            <span class="group-title">{{ group.title }}</span>
-            <span class="group-count">({{ group.items.length }})</span>
-          </header>
-          <article
-            v-for="(issue, iIdx) in group.items"
-            :key="iIdx"
-            class="issue-item"
+          <a-radio-button value="business">
+            业务视图
+          </a-radio-button>
+          <a-radio-button value="advanced">
+            高级视图
+          </a-radio-button>
+        </a-radio-group>
+        <div class="result-toolbar-meta">
+          <a-switch
+            v-model:checked="showAllStatuses"
+            size="small"
+          />
+          <span>{{ showAllStatuses ? '显示全部状态' : '仅显示问题项' }}</span>
+        </div>
+      </div>
+
+      <div
+        v-if="visibleGroups.length"
+        class="group-panel"
+      >
+        <div class="group-panel-title">
+          分组聚合（点击联动筛选）
+        </div>
+        <div class="group-grid">
+          <button
+            v-for="group in visibleGroups"
+            :key="group.key"
+            type="button"
+            class="group-chip"
+            :class="{ 'group-chip--active': activeGroupKey === group.key }"
+            @click="applyGroupFilter(group)"
           >
-            <div class="issue-top">
+            <span class="group-chip__label">{{ group.label }}</span>
+            <span class="group-chip__meta">{{ group.kind }} · {{ group.count }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-panel">
+        <a-input
+          v-model:value="issueFilter.keyword"
+          allow-clear
+          placeholder="搜索规则/结论/证据"
+          class="filter-item filter-item--keyword"
+          @change="detailPagination.current = 1"
+        >
+          <template #prefix>
+            <SearchOutlined />
+          </template>
+        </a-input>
+        <a-select
+          v-model:value="issueFilter.documentType"
+          allow-clear
+          class="filter-item"
+          placeholder="文书域"
+          :options="documentTypeOptions"
+          @change="detailPagination.current = 1"
+        />
+        <a-select
+          v-model:value="issueFilter.executionDomain"
+          allow-clear
+          class="filter-item"
+          placeholder="规则域"
+          :options="executionDomainOptions"
+          @change="detailPagination.current = 1"
+        />
+        <a-select
+          v-model:value="issueFilter.defectLevel"
+          allow-clear
+          class="filter-item"
+          placeholder="缺陷等级"
+          :options="defectLevelOptions"
+          @change="detailPagination.current = 1"
+        />
+        <a-button
+          size="small"
+          @click="resetIssueFilter"
+        >
+          重置筛选
+        </a-button>
+      </div>
+
+      <template v-if="filteredIssues.length > 0">
+        <div class="issue-card-list">
+          <article
+            v-for="record in pagedIssues"
+            :key="record.id"
+            class="issue-card"
+            :class="`issue-card--${record.status}`"
+          >
+            <header class="issue-card__header">
               <a-tag
-                :color="severityTagColor(issue.severity)"
-                size="small"
+                class="issue-card__status"
+                :color="statusTagColor(record.status)"
               >
-                {{ severityLabel(issue.severity) }}
+                {{ record.statusLabel }}
               </a-tag>
-              <span class="issue-rule">{{ issue.ruleName }}</span>
+              <span class="issue-card__code">{{ record.ruleCode || record.ruleId || '-' }}</span>
+            </header>
+
+            <div class="issue-card__title">
+              {{ record.ruleName || '-' }}
             </div>
-            <div class="issue-desc">
-              {{ issue.description }}
+
+            <div class="issue-card__findings">
+              {{ record.findings || '未提供结论' }}
             </div>
+
             <div
-              v-if="issue.suggestion"
-              class="issue-suggestion"
+              v-if="record.suggestion"
+              class="issue-card__suggestion"
             >
-              💡 {{ issue.suggestion }}
+              建议：{{ record.suggestion }}
             </div>
+
+            <div class="issue-card__meta">
+              <a-tag
+                v-if="record.documentType"
+                class="issue-card__chip"
+              >
+                文书域：{{ record.documentType }}
+              </a-tag>
+              <a-tag
+                v-if="record.executionDomain"
+                class="issue-card__chip"
+              >
+                规则域：{{ record.executionDomain }}
+              </a-tag>
+              <a-tag
+                v-if="record.defectLevel"
+                class="issue-card__chip"
+              >
+                缺陷等级：{{ record.defectLevel }}
+              </a-tag>
+              <a-tag
+                v-if="Number(record.confidence || 0) > 0"
+                class="issue-card__chip"
+              >
+                置信度：{{ formatConfidence(record.confidence) }}
+              </a-tag>
+            </div>
+
+            <div
+              v-if="viewMode === 'advanced'"
+              class="issue-card__advanced"
+            >
+              <span>trace: {{ record.metadata.traceId || '-' }}</span>
+              <span>cache:
+                {{
+                  record.metadata.cacheHit === null
+                    ? '-'
+                    : record.metadata.cacheHit
+                      ? '命中'
+                      : '未命中'
+                }}</span>
+              <span>prompt: {{ record.metadata.promptVersion || '-' }}</span>
+              <span>model: {{ record.metadata.modelVersion || '-' }}</span>
+            </div>
+
+            <footer class="issue-card__actions">
+              <a-button
+                type="link"
+                size="small"
+                @click="openIssueDetail(record as StructuredQCIssue)"
+              >
+                查看详情
+              </a-button>
+              <a-button
+                type="link"
+                size="small"
+                @click="copyIssueEvidence(record as StructuredQCIssue)"
+              >
+                复制证据
+              </a-button>
+            </footer>
           </article>
-        </section>
+        </div>
+        <div class="detail-pagination">
+          <a-pagination
+            :current="detailPagination.current"
+            :page-size="detailPagination.pageSize"
+            :total="detailPagination.total"
+            :show-size-changer="false"
+            size="small"
+            @change="handleDetailPageChange"
+          />
+        </div>
       </template>
 
       <!-- 无问题 -->
@@ -279,10 +458,110 @@
       >
         <CheckCircleOutlined class="empty-result-icon" />
         <div class="empty-result-text">
-          内涵质控通过，未发现问题
+          {{ showAllStatuses ? '暂无匹配明细' : '当前仅问题视图下未发现问题' }}
         </div>
       </div>
     </div>
+
+    <a-modal
+      v-model:open="issueDetailOpen"
+      title="质控明细"
+      width="760px"
+      :footer="null"
+      destroy-on-close
+    >
+      <div
+        v-if="issueDetailRecord"
+        class="issue-detail"
+      >
+        <div class="issue-detail-grid">
+          <div class="issue-detail-item">
+            <span class="issue-detail-label">规则</span>
+            <span class="issue-detail-value">{{
+              issueDetailRecord.ruleCode || issueDetailRecord.ruleId || '-'
+            }}</span>
+          </div>
+          <div class="issue-detail-item">
+            <span class="issue-detail-label">状态</span>
+            <a-tag :color="statusTagColor(issueDetailRecord.status)">
+              {{ issueDetailRecord.statusLabel }}
+            </a-tag>
+          </div>
+          <div class="issue-detail-item">
+            <span class="issue-detail-label">文书域</span>
+            <span class="issue-detail-value">{{ issueDetailRecord.documentType || '-' }}</span>
+          </div>
+          <div class="issue-detail-item">
+            <span class="issue-detail-label">规则域</span>
+            <span class="issue-detail-value">{{ issueDetailRecord.executionDomain || '-' }}</span>
+          </div>
+          <div class="issue-detail-item">
+            <span class="issue-detail-label">缺陷等级</span>
+            <span class="issue-detail-value">{{ issueDetailRecord.defectLevel || '-' }}</span>
+          </div>
+          <div class="issue-detail-item">
+            <span class="issue-detail-label">置信度</span>
+            <span class="issue-detail-value">{{
+              Number(issueDetailRecord.confidence || 0).toFixed(2)
+            }}</span>
+          </div>
+        </div>
+        <div class="issue-detail-block">
+          <div class="issue-detail-block__title">
+            结论
+          </div>
+          <div class="issue-detail-block__content">
+            {{ issueDetailRecord.findings || '-' }}
+          </div>
+        </div>
+        <div class="issue-detail-block">
+          <div class="issue-detail-block__title">
+            证据
+          </div>
+          <div class="issue-detail-block__content">
+            {{ issueDetailRecord.evidence || '-' }}
+          </div>
+        </div>
+        <div class="issue-detail-block">
+          <div class="issue-detail-block__title">
+            建议
+          </div>
+          <div class="issue-detail-block__content">
+            {{ issueDetailRecord.suggestion || '-' }}
+          </div>
+        </div>
+        <div
+          v-if="viewMode === 'advanced'"
+          class="issue-detail-block"
+        >
+          <div class="issue-detail-block__title">
+            高级追溯
+          </div>
+          <div class="advanced-cell advanced-cell--detail">
+            <span>trace_id: {{ issueDetailRecord.metadata.traceId || '-' }}</span>
+            <span>cache_hit:
+              {{
+                issueDetailRecord.metadata.cacheHit === null
+                  ? '-'
+                  : issueDetailRecord.metadata.cacheHit
+              }}</span>
+            <span>prompt_version: {{ issueDetailRecord.metadata.promptVersion || '-' }}</span>
+            <span>model_version: {{ issueDetailRecord.metadata.modelVersion || '-' }}</span>
+            <span>rule_version: {{ issueDetailRecord.metadata.ruleVersion || '-' }}</span>
+            <span>evidence_source: {{ issueDetailRecord.metadata.evidenceSource || '-' }}</span>
+            <span>cache_key: {{ issueDetailRecord.metadata.cacheKey || '-' }}</span>
+            <span>doc_scope: {{ issueDetailRecord.metadata.docScope || '-' }}</span>
+            <span>cost_class: {{ issueDetailRecord.metadata.costClass || '-' }}</span>
+            <span>llm_fallback:
+              {{
+                issueDetailRecord.metadata.llmFallback === null
+                  ? '-'
+                  : issueDetailRecord.metadata.llmFallback
+              }}</span>
+          </div>
+        </div>
+      </div>
+    </a-modal>
 
     <!-- 底部 -->
     <footer
@@ -310,10 +589,23 @@ import {
   ReloadOutlined,
   ThunderboltOutlined,
   CheckCircleOutlined,
+  SearchOutlined,
 } from '@ant-design/icons-vue'
 import axios from 'axios'
 import { evaluateSichuanBundleQC } from '@/api/qc'
 import { extractApiData } from '@/utils/api-helpers'
+import {
+  createDefaultStructuredQCFilter,
+  filterStructuredQCIssues,
+  isProblemStatus,
+  mapSichuanEvaluationToStructuredQC,
+} from '@/views/workstation-v4/utils/structuredQc'
+import type {
+  StructuredQCFilterState,
+  StructuredQCIssue,
+  StructuredQCResult,
+  StructuredQCStatus,
+} from '@/views/workstation-v4/types'
 
 // ==================== 类型 ====================
 
@@ -329,8 +621,13 @@ interface ContentIssue {
 interface ContentSummary {
   totalRules: number
   complianceRate: number
-  issuesFound: number
+  issueCount: number
+  uncertainCount: number
+  compliantCount: number
+  notApplicableCount: number
+  failedCount: number
   docCount: number
+  processingTimeSeconds: number
 }
 
 interface SectionProgress {
@@ -392,11 +689,24 @@ const loading = ref(false)
 const analyzed = ref(false)
 const issues = ref<ContentIssue[]>([])
 const summary = ref<ContentSummary | null>(null)
+const structuredResult = ref<StructuredQCResult | null>(null)
 const completedSections = ref<SectionProgress[]>([])
 const sectionTimeline = ref<SectionProgress[]>([])
 const totalSections = ref(0)
+const viewMode = ref<'business' | 'advanced'>('business')
+const showAllStatuses = ref(false)
+const activeGroupKey = ref('')
+const issueFilter = ref<StructuredQCFilterState>(createDefaultStructuredQCFilter())
+const issueDetailOpen = ref(false)
+const issueDetailRecord = ref<StructuredQCIssue | null>(null)
 
-const totalCount = computed(() => issues.value.length)
+const detailPagination = ref({
+  current: 1,
+  pageSize: 8,
+  total: 0,
+})
+
+const totalCount = computed(() => Number(summary.value?.issueCount || issues.value.length || 0))
 const progressPercent = computed(() =>
   totalSections.value > 0
     ? Math.round((completedSections.value.length / totalSections.value) * 100)
@@ -405,29 +715,139 @@ const progressPercent = computed(() =>
 
 const complianceClass = computed(() => {
   if (!summary.value) return ''
+  if (summary.value.totalRules <= 0) return 'text-slate-400'
   const rate = summary.value.complianceRate
   if (rate >= 90) return 'text-blue-600'
   if (rate >= 70) return 'text-amber-500'
   return 'text-red-500'
 })
 
-const groupedIssues = computed(() => {
-  const groups: Record<string, { title: string; severity: string; items: ContentIssue[] }> = {}
-  for (const issue of issues.value) {
-    const key = issue.group || '其他'
-    if (!groups[key]) {
-      groups[key] = { title: key, severity: issue.severity, items: [] }
-    }
-    groups[key].items.push(issue)
-  }
-  return Object.values(groups)
+const isNoRulesResult = computed(() => {
+  return !!summary.value && Number(summary.value.totalRules || 0) <= 0
 })
 
-// ==================== 辅助函数 ====================
+const complianceRateText = computed(() => {
+  if (!summary.value || summary.value.totalRules <= 0) return '--'
+  return `${summary.value.complianceRate}%`
+})
 
-function severityColor(sev: string) {
-  return { error: '#ef4444', warning: '#f59e0b', info: '#2563eb' }[sev] || '#94a3b8'
+const fallbackStructuredIssues = computed<StructuredQCIssue[]>(() => {
+  return issues.value.map((item, index) => ({
+    id: `${item.ruleId || 'unknown'}-${index}`,
+    status: 'non_compliant',
+    statusLabel: '不合规',
+    ruleJobId: '',
+    ruleId: item.ruleId || '',
+    ruleCode: item.ruleId || '',
+    ruleName: item.ruleName || '未知规则',
+    findings: item.description || '',
+    evidence: '',
+    suggestion: item.suggestion || '',
+    confidence: 0,
+    documentType: item.group || '',
+    executionDomain: '',
+    ruleFamily: '',
+    defectLevel: '',
+    executorType: '',
+    recordId: '',
+    visitId: '',
+    patientName: '',
+    department: '',
+    metadata: {
+      traceId: '',
+      cacheHit: null,
+      promptVersion: '',
+      modelVersion: '',
+      ruleVersion: '',
+      evidenceSource: '',
+      cacheKey: '',
+      docScope: '',
+      costClass: '',
+      llmFallback: null,
+      refined: null,
+      refineReason: '',
+      screeningStatus: '',
+      finalDecisionSource: '',
+    },
+  }))
+})
+
+const effectiveStructuredIssues = computed<StructuredQCIssue[]>(() => {
+  const source = structuredResult.value?.issues
+  if (Array.isArray(source) && source.length > 0) return source
+  return fallbackStructuredIssues.value
+})
+
+const documentTypeOptions = computed(() => {
+  const set = new Set<string>()
+  effectiveStructuredIssues.value.forEach((item) => {
+    const label = String(item.documentType || '').trim()
+    if (label) set.add(label)
+  })
+  return Array.from(set).map((value) => ({ label: value, value }))
+})
+
+const executionDomainOptions = computed(() => {
+  const set = new Set<string>()
+  effectiveStructuredIssues.value.forEach((item) => {
+    const label = String(item.executionDomain || '').trim()
+    if (label) set.add(label)
+  })
+  return Array.from(set).map((value) => ({ label: value, value }))
+})
+
+const defectLevelOptions = computed(() => {
+  const set = new Set<string>()
+  effectiveStructuredIssues.value.forEach((item) => {
+    const label = String(item.defectLevel || '').trim()
+    if (label) set.add(label)
+  })
+  return Array.from(set).map((value) => ({ label: value, value }))
+})
+
+const filteredIssues = computed(() => {
+  const nextFilter: StructuredQCFilterState = {
+    ...issueFilter.value,
+    statusList: showAllStatuses.value ? [] : ['non_compliant', 'uncertain'],
+  }
+  return filterStructuredQCIssues(effectiveStructuredIssues.value, nextFilter)
+})
+
+const visibleGroups = computed(() => {
+  const source = structuredResult.value?.groups || []
+  const cards = source.filter((item) => item.kind !== 'rule')
+  return cards.slice(0, 12)
+})
+
+const pagedIssues = computed<StructuredQCIssue[]>(() => {
+  const pageSize = Math.max(1, Number(detailPagination.value.pageSize || 8))
+  const current = Math.max(1, Number(detailPagination.value.current || 1))
+  const start = (current - 1) * pageSize
+  return filteredIssues.value.slice(start, start + pageSize)
+})
+
+watch(
+  filteredIssues,
+  (list) => {
+    detailPagination.value.total = list.length
+    if (
+      detailPagination.value.current >
+      Math.ceil(Math.max(1, list.length) / detailPagination.value.pageSize)
+    ) {
+      detailPagination.value.current = 1
+    }
+  },
+  { immediate: true },
+)
+
+function handleDetailPageChange(page: number, pageSize?: number) {
+  detailPagination.value.current = Number(page || 1)
+  if (pageSize && Number.isFinite(pageSize)) {
+    detailPagination.value.pageSize = Number(pageSize)
+  }
 }
+
+// ==================== 辅助函数 ====================
 function severityTagColor(sev: string) {
   return { error: 'error', warning: 'warning', info: 'processing' }[sev] || 'default'
 }
@@ -435,29 +855,96 @@ function severityLabel(sev: string) {
   return { error: '严重', warning: '警告', info: '提示' }[sev] || '未知'
 }
 
-/** 解析单次 evaluate 返回中的问题 */
-function parseEvalResults(data: any, docLabel: string): ContentIssue[] {
-  const newIssues: ContentIssue[] = []
-  const evalResults = data.evaluation_results || []
-  for (const result of evalResults) {
-    if (result.is_compliant === false || result.compliance === '不合规') {
-      newIssues.push({
-        ruleId: result.rule_id || '',
-        ruleName: result.rule_name || result.rule_text || '未知规则',
-        severity:
-          result.severity === '严重' || result.severity === 'critical'
-            ? 'error'
-            : result.severity === '轻微' || result.severity === 'minor'
-              ? 'info'
-              : 'warning',
-        group: docLabel,
-        description:
-          result.findings || result.issue_description || result.analysis || '未提供详细说明',
-        suggestion: result.improvement_suggestion || result.suggestion || '',
-      })
-    }
+function statusTagColor(status: StructuredQCStatus) {
+  if (status === 'non_compliant') return 'error'
+  if (status === 'uncertain') return 'warning'
+  if (status === 'not_applicable') return 'default'
+  if (status === 'failed' || status === 'error') return 'error'
+  return 'success'
+}
+
+function formatConfidence(value: number | string | undefined) {
+  const numeric = Number(value || 0)
+  if (!Number.isFinite(numeric) || numeric <= 0) return '-'
+  return numeric.toFixed(2)
+}
+
+function toSeverityByStatus(status: StructuredQCStatus): ContentIssue['severity'] {
+  if (status === 'non_compliant' || status === 'failed' || status === 'error') return 'error'
+  if (status === 'uncertain') return 'warning'
+  return 'info'
+}
+
+function toContentIssue(item: StructuredQCIssue, fallbackGroup = '整份病历'): ContentIssue {
+  return {
+    ruleId: item.ruleId || item.ruleCode,
+    ruleName: item.ruleName || item.ruleCode || '未知规则',
+    severity: toSeverityByStatus(item.status),
+    group: item.documentType || fallbackGroup,
+    description: item.findings || '未提供详细说明',
+    suggestion: item.suggestion || '',
   }
-  return newIssues
+}
+
+function resetIssueFilter() {
+  issueFilter.value = createDefaultStructuredQCFilter()
+  showAllStatuses.value = false
+  activeGroupKey.value = ''
+}
+
+function applyGroupFilter(group: { key: string; kind: string; label: string }) {
+  activeGroupKey.value = activeGroupKey.value === group.key ? '' : group.key
+  if (!activeGroupKey.value) {
+    resetIssueFilter()
+    return
+  }
+  if (group.kind === 'status') {
+    const map: Record<string, StructuredQCStatus> = {
+      不合规: 'non_compliant',
+      待复核: 'uncertain',
+      合规: 'compliant',
+      不适用: 'not_applicable',
+      失败: 'failed',
+      错误: 'error',
+    }
+    const status = map[group.label]
+    if (status) {
+      showAllStatuses.value = true
+      issueFilter.value.statusList = [status]
+    }
+    return
+  }
+  if (group.kind === 'document') {
+    issueFilter.value.documentType = group.label
+    return
+  }
+  if (group.kind === 'domain') {
+    issueFilter.value.executionDomain = group.label
+    return
+  }
+  if (group.kind === 'defect') {
+    issueFilter.value.defectLevel = group.label
+    return
+  }
+}
+
+function openIssueDetail(issue: StructuredQCIssue) {
+  issueDetailRecord.value = issue
+  issueDetailOpen.value = true
+}
+
+async function copyIssueEvidence(issue: StructuredQCIssue) {
+  const payload = issue.evidence || issue.findings || ''
+  if (!payload) {
+    message.warning('当前问题没有可复制内容')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(payload)
+    message.success('证据已复制')
+  } catch {
+    message.error('复制失败，请手动复制')
+  }
 }
 
 function resolveScene(): 'running' | 'final' {
@@ -482,8 +969,9 @@ async function runContentQCLegacy(docs: DocItem[]) {
 
   const allDocLabels = docs.map((d) => d.label).join('、')
   let allIssues: ContentIssue[] = []
+  let allStructuredIssues: StructuredQCIssue[] = []
   const allRuleIds = new Set<string>()
-  const nonCompliantRuleIds = new Set<string>()
+  const problemRuleIds = new Set<string>()
   const startTime = Date.now()
 
   for (let i = 0; i < sectionTimeline.value.length; i++) {
@@ -527,23 +1015,29 @@ async function runContentQCLegacy(docs: DocItem[]) {
       const secDuration = ((Date.now() - secStart) / 1000).toFixed(1)
 
       if (data?.status === 'success' || data?.evaluation_summary) {
-        const evalSummary = data.evaluation_summary || {}
-        const secIssues = parseEvalResults(data, sec.label)
+        const structured = mapSichuanEvaluationToStructuredQC(data, { docCount: 1 })
+        const normalizedIssues = structured.issues.map((item) => ({
+          ...item,
+          documentType: item.documentType || sec.label,
+        }))
+        const secIssues = normalizedIssues
+          .filter((item) => isProblemStatus(item.status))
+          .map((item) => toContentIssue(item, sec.label))
 
-        // 收集唯一 rule_id（去重统计）
-        const evalResults = data.evaluation_results || []
-        for (const r of evalResults) {
-          if (r.rule_id) {
-            allRuleIds.add(r.rule_id)
-            if (r.is_compliant === false || r.compliance === '不合规') {
-              nonCompliantRuleIds.add(r.rule_id)
+        for (const item of normalizedIssues) {
+          const key = item.ruleId || item.ruleCode
+          if (key) {
+            allRuleIds.add(key)
+            if (isProblemStatus(item.status)) {
+              problemRuleIds.add(key)
             }
           }
         }
+        allStructuredIssues = [...allStructuredIssues, ...normalizedIssues]
 
         // 更新时间线
         sec.status = 'done'
-        sec.ruleCount = evalSummary.total_rules || 0
+        sec.ruleCount = structured.overview.totalRules || normalizedIssues.length
         sec.issueCount = secIssues.length
         sec.duration = secDuration
         sec.issues = secIssues
@@ -575,24 +1069,75 @@ async function runContentQCLegacy(docs: DocItem[]) {
   }
 
   // 3. 汇总（按 rule_id 去重后的唯一规则数）
-  const totalDuration = ((Date.now() - startTime) / 1000).toFixed(1)
+  const totalDuration = (Date.now() - startTime) / 1000
   const uniqueRuleCount = allRuleIds.size
-  const compliantCount = uniqueRuleCount - nonCompliantRuleIds.size
-  summary.value = {
-    totalRules: uniqueRuleCount,
-    complianceRate:
-      uniqueRuleCount > 0 ? Math.round((compliantCount / uniqueRuleCount) * 10000) / 100 : 100,
-    issuesFound: allIssues.length,
-    docCount: sectionTimeline.value.length,
+  const compliantCount = uniqueRuleCount - problemRuleIds.size
+  const legacyStructuredResult = mapSichuanEvaluationToStructuredQC(
+    {
+      evaluation_summary: {
+        total_rules: uniqueRuleCount,
+        compliance_rate:
+          uniqueRuleCount > 0 ? Math.round((compliantCount / uniqueRuleCount) * 10000) / 100 : 100,
+        issues_found: allIssues.length,
+      },
+      evaluation_results: allStructuredIssues.map((item) => ({
+        rule_id: item.ruleId,
+        rule_code: item.ruleCode,
+        rule_name: item.ruleName,
+        status: item.status,
+        findings: item.findings,
+        evidence: item.evidence,
+        suggestion: item.suggestion,
+        confidence: item.confidence,
+        document_type: item.documentType,
+        execution_domain: item.executionDomain,
+        rule_family: item.ruleFamily,
+        defect_level: item.defectLevel,
+        executor_type: item.executorType,
+        record_id: item.recordId,
+        visit_id: item.visitId,
+        patient_name: item.patientName,
+        department: item.department,
+        metadata: {
+          trace_id: item.metadata.traceId,
+          cache_hit: item.metadata.cacheHit,
+          prompt_version: item.metadata.promptVersion,
+          model_version: item.metadata.modelVersion,
+          rule_version: item.metadata.ruleVersion,
+          evidence_source: item.metadata.evidenceSource,
+          cache_key: item.metadata.cacheKey,
+          doc_scope: item.metadata.docScope,
+          cost_class: item.metadata.costClass,
+          llm_fallback: item.metadata.llmFallback,
+          refined: item.metadata.refined,
+          refine_reason: item.metadata.refineReason,
+          screening_status: item.metadata.screeningStatus,
+          final_decision_source: item.metadata.finalDecisionSource,
+        },
+      })),
+    },
+    { docCount: sectionTimeline.value.length },
+  )
+  structuredResult.value = {
+    ...legacyStructuredResult,
+    overview: {
+      ...legacyStructuredResult.overview,
+      processingTimeSeconds: Math.round(totalDuration * 100) / 100,
+    },
   }
+  summary.value = structuredResult.value.overview
 
   analyzed.value = true
   loading.value = false
 
-  if (allIssues.length === 0) {
-    message.success(`内涵质控通过（${totalDuration}s，${sectionTimeline.value.length} 个文书）`)
+  if (uniqueRuleCount <= 0) {
+    message.warning('本次未加载到可执行规则，请检查文书类型映射或规则来源')
+  } else if (allIssues.length === 0) {
+    message.success(
+      `内涵质控通过（${totalDuration.toFixed(1)}s，${sectionTimeline.value.length} 个文书）`,
+    )
   } else {
-    message.warning(`发现 ${allIssues.length} 个问题（${totalDuration}s）`)
+    message.warning(`发现 ${allIssues.length} 个问题（${totalDuration.toFixed(1)}s）`)
   }
 }
 
@@ -607,6 +1152,7 @@ async function runContentQCBundle(docs: DocItem[]): Promise<boolean> {
   analyzed.value = false
   issues.value = []
   summary.value = null
+  structuredResult.value = null
   completedSections.value = []
   totalSections.value = 1
   sectionTimeline.value = [
@@ -636,48 +1182,29 @@ async function runContentQCBundle(docs: DocItem[]): Promise<boolean> {
     }
 
     const data = response.data as any
-    const evalResults = data.evaluation_results || []
-    const evalSummary = data.evaluation_summary || {}
-    const allIssues = parseEvalResults(data, '整份病历')
-    const uniqueRuleIds = new Set<string>()
-    const nonCompliantRuleIds = new Set<string>()
-    for (const item of evalResults) {
-      const ruleId = String(item?.rule_id || '').trim()
-      if (ruleId) uniqueRuleIds.add(ruleId)
-      if (item?.status === 'non_compliant' || item?.is_compliant === false) {
-        if (ruleId) nonCompliantRuleIds.add(ruleId)
-      }
-    }
-    const totalRules = Number(
-      evalSummary.total_rules || uniqueRuleIds.size || evalResults.length || 0,
-    )
-    const complianceRate = Number(
-      evalSummary.compliance_rate ??
-        (totalRules > 0
-          ? Math.round(((totalRules - nonCompliantRuleIds.size) / totalRules) * 10000) / 100
-          : 100),
-    )
+    const mapped = mapSichuanEvaluationToStructuredQC(data, { docCount: docs.length })
+    const allIssues = mapped.issues
+      .filter((item) => isProblemStatus(item.status))
+      .map((item) => toContentIssue(item, '整份病历'))
 
     if (bundleSection) {
       bundleSection.status = 'done'
-      bundleSection.ruleCount = totalRules
+      bundleSection.ruleCount = mapped.overview.totalRules
       bundleSection.issueCount = allIssues.length
       bundleSection.duration = ((Date.now() - startTime) / 1000).toFixed(1)
       bundleSection.issues = allIssues.slice(0, 3)
       completedSections.value = [{ ...bundleSection }]
     }
 
+    structuredResult.value = mapped
     issues.value = allIssues
-    summary.value = {
-      totalRules,
-      complianceRate,
-      issuesFound: allIssues.length,
-      docCount: docs.length,
-    }
+    summary.value = mapped.overview
     analyzed.value = true
     loading.value = false
-    emit('issues-change', allIssues.length)
-    if (allIssues.length === 0) {
+    emit('issues-change', mapped.overview.issueCount)
+    if (mapped.overview.totalRules <= 0) {
+      message.warning('本次未加载到可执行规则，请检查规则来源、场景或病历标识')
+    } else if (allIssues.length === 0) {
       message.success('内涵质控通过（Bundle）')
     } else {
       message.warning(`发现 ${allIssues.length} 个问题（Bundle）`)
@@ -716,6 +1243,7 @@ async function runContentQC() {
   analyzed.value = false
   issues.value = []
   summary.value = null
+  structuredResult.value = null
   completedSections.value = []
   await runContentQCLegacy(docs)
 }
@@ -727,6 +1255,10 @@ watch(
     analyzed.value = false
     issues.value = []
     summary.value = null
+    structuredResult.value = null
+    resetIssueFilter()
+    issueDetailOpen.value = false
+    issueDetailRecord.value = null
     completedSections.value = []
     sectionTimeline.value = []
     emit('issues-change', 0)
@@ -1166,6 +1698,17 @@ watch(
   font-weight: 800;
 }
 
+.summary-card__warning {
+  grid-column: 1 / -1;
+  border-radius: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(255, 247, 237, 0.92);
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .summary-row {
   display: flex;
   align-items: center;
@@ -1182,6 +1725,277 @@ watch(
   font-size: 13px;
   font-weight: 800;
   color: #0f172a;
+}
+
+.result-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.result-view-switch :deep(.ant-radio-button-wrapper) {
+  font-size: 12px;
+}
+
+.result-toolbar-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.group-panel {
+  margin-bottom: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.group-panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.group-chip {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.group-chip:hover {
+  border-color: #93c5fd;
+}
+
+.group-chip--active {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(191, 219, 254, 0.5);
+}
+
+.group-chip__label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.group-chip__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.filter-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(110px, 1fr)) auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.filter-item {
+  min-width: 0;
+}
+
+.filter-item--keyword :deep(.ant-input) {
+  font-size: 12px;
+}
+
+.issue-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.issue-card {
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(248, 251, 255, 0.98));
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
+  padding: 10px 10px 8px;
+}
+
+.issue-card--non_compliant {
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.issue-card--uncertain {
+  border-color: rgba(251, 191, 36, 0.46);
+}
+
+.issue-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.issue-card__status {
+  margin-right: 0;
+}
+
+.issue-card__code {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+  font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+}
+
+.issue-card__title {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.45;
+}
+
+.issue-card__findings {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #0f172a;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.issue-card__suggestion {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #1d4ed8;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  background: rgba(239, 246, 255, 0.9);
+  border: 1px solid rgba(191, 219, 254, 0.85);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.issue-card__meta {
+  margin-top: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.issue-card__chip {
+  margin: 0;
+  font-size: 11px;
+  color: #475569;
+  border-color: rgba(203, 213, 225, 0.85);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.issue-card__advanced {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1px dashed rgba(191, 219, 254, 0.95);
+  background: rgba(239, 246, 255, 0.55);
+  font-size: 11px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.issue-card__actions {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.advanced-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.advanced-cell--detail {
+  font-size: 12px;
+  color: #475569;
+}
+
+.detail-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.issue-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.issue-detail-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #f8fafc;
+}
+
+.issue-detail-label {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.issue-detail-value {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.issue-detail-block {
+  margin-top: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+}
+
+.issue-detail-block__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.issue-detail-block__content {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #0f172a;
+  white-space: pre-wrap;
 }
 
 .issue-group {
@@ -1296,6 +2110,19 @@ watch(
 }
 
 @media (max-width: 520px) {
+  .result-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .filter-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .issue-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
   .summary-card {
     grid-template-columns: 1fr;
   }

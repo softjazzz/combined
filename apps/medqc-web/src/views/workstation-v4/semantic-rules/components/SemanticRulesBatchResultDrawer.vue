@@ -59,6 +59,13 @@
           >
             {{ batchJobDetail.error_message }}
           </div>
+          <div class="rule-set-strip">
+            <span>规则集：{{ ruleSetDisplay.name }}</span>
+            <span>规则数：{{ ruleSetDisplay.ruleCount }}</span>
+            <span>策略：{{ ruleSetDisplay.qualityProfile }}</span>
+            <span>分桶：{{ ruleSetDisplay.bucketStrategy }}</span>
+            <span v-if="ruleSetDisplay.refinedCount > 0">精审：{{ ruleSetDisplay.refinedCount }}</span>
+          </div>
         </div>
 
         <div class="drawer-summary summary-grid-primary">
@@ -96,6 +103,49 @@
             </div>
             <div class="summary-value">
               {{ item.value }}
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="progressSummary"
+          class="drawer-card"
+        >
+          <div class="drawer-section-head">
+            <div class="drawer-section-title">
+              任务进度
+            </div>
+            <div class="drawer-section-meta">
+              {{ progressSummary.stepLabel }}
+            </div>
+          </div>
+          <a-progress
+            :percent="progressSummary.percent"
+            :status="progressSummary.status"
+            :stroke-color="progressSummary.status === 'exception' ? '#ef4444' : '#2563eb'"
+          />
+          <div class="progress-meta">
+            <span>已处理 {{ progressSummary.processedRecords }} /
+              {{ progressSummary.totalRecords }} 份病历</span>
+            <span>规则 {{ progressSummary.ruleIndex }} / {{ progressSummary.ruleCount }}</span>
+          </div>
+        </div>
+
+        <div class="drawer-summary summary-grid-tertiary">
+          <div class="summary-card">
+            <div class="summary-label">
+              规则结果条数
+            </div>
+            <div class="summary-value">
+              {{ resolvedRuleResults.length }}
+            </div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">
+              问题/待复核明细条数
+            </div>
+            <div class="summary-value">
+              {{ issueItems.length }}
             </div>
           </div>
         </div>
@@ -312,20 +362,72 @@
             row-key="id"
             size="small"
             :pagination="false"
+            :locale="{
+              emptyText: '暂无规则结果（任务可能仍在执行中，或该任务为旧格式历史数据）',
+            }"
           />
         </div>
 
         <div class="drawer-card">
           <div class="drawer-section-head">
             <div class="drawer-section-title">
-              命中明细（含版本与证据来源）
+              问题/待复核明细
             </div>
-            <div
-              v-if="activeRuleFilterLabel"
-              class="drawer-section-meta"
+            <div class="drawer-section-actions">
+              <a-radio-group
+                v-model:value="issueViewMode"
+                size="small"
+              >
+                <a-radio-button value="business">
+                  业务视图
+                </a-radio-button>
+                <a-radio-button value="advanced">
+                  高级视图
+                </a-radio-button>
+              </a-radio-group>
+              <a-switch
+                v-model:checked="showAllStatuses"
+                size="small"
+              />
+              <span class="drawer-section-meta">
+                {{ showAllStatuses ? '全部状态' : '仅问题项' }}
+              </span>
+            </div>
+          </div>
+          <div class="issue-filter-bar">
+            <a-input
+              v-model:value="issueFilter.keyword"
+              allow-clear
+              placeholder="搜索规则/病历号/结论"
+              class="issue-filter-item issue-filter-item--keyword"
+            />
+            <a-select
+              v-model:value="issueFilter.documentType"
+              allow-clear
+              placeholder="文书域"
+              class="issue-filter-item"
+              :options="issueDocumentTypeOptions"
+            />
+            <a-select
+              v-model:value="issueFilter.executionDomain"
+              allow-clear
+              placeholder="规则域"
+              class="issue-filter-item"
+              :options="issueExecutionDomainOptions"
+            />
+            <a-select
+              v-model:value="issueFilter.defectLevel"
+              allow-clear
+              placeholder="缺陷等级"
+              class="issue-filter-item"
+              :options="issueDefectLevelOptions"
+            />
+            <a-button
+              size="small"
+              @click="resetIssueFilters"
             >
-              已按规则过滤：{{ activeRuleFilterLabel }}
-            </div>
+              重置
+            </a-button>
           </div>
           <div
             v-if="selectedClusterKey || activeRuleFilterLabel"
@@ -351,15 +453,55 @@
               清除规则过滤
             </a-button>
           </div>
+          <div
+            v-if="topIssueCards.length"
+            class="issue-conclusion-list"
+          >
+            <div
+              v-for="item in topIssueCards"
+              :key="`conclusion-${resolveIssueStableKey(item)}`"
+              class="issue-conclusion-card"
+            >
+              <div class="issue-conclusion-head">
+                <span class="issue-conclusion-title">
+                  {{ item.rule_code || item.rule_id || '未知规则' }} ·
+                  {{ item.rule_name || '未知质控点' }}
+                </span>
+                <a-tag class="aggregation-count-tag">
+                  {{ resolveStatusText(item.status) }}
+                </a-tag>
+              </div>
+              <div class="issue-conclusion-meta">
+                <span>{{ item.record_id || '-' }}</span>
+                <span>{{ item.document_type || '未知文书域' }}</span>
+                <span>{{ item.rule_family || 'general' }}</span>
+                <span>{{ item.defect_level || '未分级' }}</span>
+                <span v-if="item.refined">单条精审</span>
+              </div>
+              <div class="issue-conclusion-row">
+                <span class="issue-conclusion-label">结论：</span>
+                <span>{{ item.findings || '无' }}</span>
+              </div>
+              <div class="issue-conclusion-row">
+                <span class="issue-conclusion-label">证据：</span>
+                <span>{{ item.evidence || '无' }}</span>
+              </div>
+              <div class="issue-conclusion-row">
+                <span class="issue-conclusion-label">建议：</span>
+                <span>{{ item.suggestion || '无' }}</span>
+              </div>
+            </div>
+          </div>
           <a-table
             :columns="issueColumns"
             class="batch-issue-table"
             :data-source="displayIssueItems"
             :row-key="resolveIssueStableKey"
             size="small"
-            :scroll="{ x: 980 }"
+            :scroll="{ x: 1700 }"
             :pagination="issuePagination"
             :row-class-name="resolveIssueRowClassName"
+            :locale="{ emptyText: '暂无问题/待复核明细' }"
             @change="handleIssueTableChange"
           />
         </div>
@@ -369,13 +511,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, reactive, ref, watch } from 'vue'
 import type {
   SichuanBatchIssueItem,
   SichuanBatchJobDebugSnapshot,
   SichuanBatchJob,
   SichuanBatchResultAggregation,
 } from '@/views/workstation-v4/semantic-rules/types'
+import type { StructuredQCFilterState, StructuredQCIssue } from '@/views/workstation-v4/types'
+import {
+  createDefaultStructuredQCFilter,
+  filterStructuredQCIssues,
+  mapBatchJobToStructuredQC,
+} from '@/views/workstation-v4/utils/structuredQc'
 
 const props = defineProps<{
   open: boolean
@@ -400,6 +548,21 @@ const scopeLabelMap: Record<string, string> = {
   all: '全量病历',
 }
 
+const PROGRESS_STEP_LABEL_MAP: Record<string, string> = {
+  queued: '排队中',
+  prepare: '准备中',
+  filter: '筛选病历',
+  run: '执行中',
+  aggregate: '结果聚合',
+  completed: '已完成',
+  failed: '执行失败',
+  canceled: '已取消',
+}
+
+const issueViewMode = ref<'business' | 'advanced'>('business')
+const showAllStatuses = ref(false)
+const issueFilter = ref<StructuredQCFilterState>(createDefaultStructuredQCFilter())
+
 const ruleColumns = computed(() => [
   { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 120 },
   { title: '规则名称', dataIndex: 'rule_name', key: 'rule_name', width: 220 },
@@ -409,31 +572,85 @@ const ruleColumns = computed(() => [
   { title: '失败', dataIndex: 'failed_count', key: 'failed_count', width: 90 },
 ])
 
-const issueColumns = computed(() => [
-  { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 96 },
-  { title: '病历号', dataIndex: 'record_id', key: 'record_id', width: 120 },
-  { title: '执行器', dataIndex: 'executor_type', key: 'executor_type', width: 84 },
-  { title: '规则版本', dataIndex: 'rule_version', key: 'rule_version', width: 112 },
-  { title: 'Prompt版本', dataIndex: 'prompt_version', key: 'prompt_version', width: 120 },
-  { title: '模型版本', dataIndex: 'model_version', key: 'model_version', width: 120 },
-  { title: '证据来源', dataIndex: 'evidence_source', key: 'evidence_source', width: 110 },
-])
+const issueColumns = computed(() => {
+  const columns: Array<Record<string, any>> = [
+    { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 96 },
+    { title: '病历号', dataIndex: 'record_id', key: 'record_id', width: 120 },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 92,
+      customRender: ({ text }: { text?: string }) => resolveStatusText(text),
+    },
+    {
+      title: '质控结论',
+      dataIndex: 'findings',
+      key: 'findings',
+      width: 320,
+      customRender: ({ text }: { text?: string }) =>
+        h('span', { title: text || '' }, truncateText(text, 80)),
+    },
+    {
+      title: '证据摘要',
+      dataIndex: 'evidence',
+      key: 'evidence',
+      width: 280,
+      customRender: ({ text }: { text?: string }) =>
+        h('span', { title: text || '' }, truncateText(text, 72)),
+    },
+    {
+      title: '整改建议',
+      dataIndex: 'suggestion',
+      key: 'suggestion',
+      width: 260,
+      customRender: ({ text }: { text?: string }) =>
+        h('span', { title: text || '' }, truncateText(text, 68)),
+    },
+    { title: '文书域', dataIndex: 'document_type', key: 'document_type', width: 108 },
+    { title: '规则域', dataIndex: 'execution_domain', key: 'execution_domain', width: 112 },
+    { title: '规则族', dataIndex: 'rule_family', key: 'rule_family', width: 128 },
+    { title: '缺陷等级', dataIndex: 'defect_level', key: 'defect_level', width: 110 },
+    {
+      title: '精审',
+      dataIndex: 'refined',
+      key: 'refined',
+      width: 72,
+      customRender: ({ text }: { text?: boolean }) => (text ? '是' : '否'),
+    },
+    {
+      title: '置信度',
+      dataIndex: 'confidence',
+      key: 'confidence',
+      width: 88,
+      customRender: ({ text }: { text?: number }) => Number(text || 0).toFixed(2),
+    },
+  ]
+  if (issueViewMode.value === 'advanced') {
+    columns.push(
+      { title: '执行器', dataIndex: 'executor_type', key: 'executor_type', width: 84 },
+      { title: '规则版本', dataIndex: 'rule_version', key: 'rule_version', width: 112 },
+      { title: 'Prompt版本', dataIndex: 'prompt_version', key: 'prompt_version', width: 120 },
+      { title: '模型版本', dataIndex: 'model_version', key: 'model_version', width: 120 },
+      { title: '证据来源', dataIndex: 'evidence_source', key: 'evidence_source', width: 110 },
+      { title: 'trace_id', dataIndex: 'trace_id', key: 'trace_id', width: 140 },
+      {
+        title: 'cache_hit',
+        dataIndex: 'cache_hit',
+        key: 'cache_hit',
+        width: 90,
+        customRender: ({ text }: { text?: boolean | null }) =>
+          text === null || text === undefined ? '-' : text ? 'true' : 'false',
+      },
+    )
+  }
+  return columns
+})
 
-const issueItems = computed<SichuanBatchIssueItem[]>(() => {
-  const ruleResults = props.batchJobDetail?.rule_results || []
-  const merged: SichuanBatchIssueItem[] = []
-  ruleResults.forEach((ruleResult) => {
-    ;(ruleResult.items || []).forEach((item) => {
-      merged.push({
-        ...item,
-        rule_code: item.rule_code || ruleResult.rule_code,
-        rule_name: item.rule_name || ruleResult.rule_name,
-      })
-    })
-  })
-  const recentItems = props.batchJobDebugSnapshot?.recent_items || []
-  const source = merged.length > 0 ? merged : recentItems
-  return source.slice(0, 200)
+const resolvedRuleResults = computed(() => {
+  const ruleResults = props.batchJobDetail?.rule_results
+  if (Array.isArray(ruleResults) && ruleResults.length > 0) return ruleResults
+  return []
 })
 
 const selectedClusterKey = ref('')
@@ -444,11 +661,111 @@ const issuePagination = reactive({
   showSizeChanger: false,
 })
 
+const batchJobDebugSnapshot = computed(() => props.batchJobDebugSnapshot || null)
+
+const structuredResult = computed(() =>
+  mapBatchJobToStructuredQC(props.batchJobDetail, batchJobDebugSnapshot.value),
+)
+
+const structuredIssues = computed<StructuredQCIssue[]>(() => {
+  const baseFilter: StructuredQCFilterState = {
+    ...issueFilter.value,
+    statusList: showAllStatuses.value ? [] : ['non_compliant', 'uncertain'],
+  }
+  let list = filterStructuredQCIssues(structuredResult.value.issues || [], baseFilter)
+  if (selectedDebugRuleJobId.value) {
+    list = list.filter((item) => item.ruleJobId === selectedDebugRuleJobId.value)
+  }
+  return list
+})
+
+const issueItems = computed<SichuanBatchIssueItem[]>(() => {
+  return structuredIssues.value.map((item) => ({
+    rule_job_id: item.ruleJobId || undefined,
+    rule_id: item.ruleId || item.ruleCode,
+    rule_code: item.ruleCode || item.ruleId,
+    rule_name: item.ruleName,
+    record_id: item.recordId || '-',
+    visit_id: item.visitId || '',
+    patient_name: item.patientName || '',
+    department: item.department || '',
+    status: item.status,
+    is_compliant: item.status === 'compliant' || item.status === 'not_applicable',
+    findings: item.findings,
+    evidence: item.evidence,
+    suggestion: item.suggestion,
+    confidence: item.confidence,
+    executor_type: item.executorType,
+    rule_version: item.metadata.ruleVersion,
+    prompt_version: item.metadata.promptVersion,
+    model_version: item.metadata.modelVersion,
+    evidence_source: item.metadata.evidenceSource,
+    cache_hit: item.metadata.cacheHit === null ? undefined : item.metadata.cacheHit,
+    trace_id: item.metadata.traceId,
+    cache_key: item.metadata.cacheKey,
+    execution_domain: item.executionDomain,
+    rule_family: item.ruleFamily,
+    doc_scope: item.metadata.docScope,
+    cost_class: item.metadata.costClass,
+    document_type: item.documentType,
+    defect_level: item.defectLevel,
+    llm_fallback: item.metadata.llmFallback === null ? undefined : item.metadata.llmFallback,
+    refined: item.metadata.refined === null ? undefined : item.metadata.refined,
+    refine_reason: item.metadata.refineReason,
+    screening_status: item.metadata.screeningStatus,
+    final_decision_source: item.metadata.finalDecisionSource,
+  }))
+})
+
+const issueDocumentTypeOptions = computed(() => {
+  const set = new Set<string>()
+  structuredResult.value.issues.forEach((item) => {
+    const value = String(item.documentType || '').trim()
+    if (value) set.add(value)
+  })
+  return Array.from(set).map((value) => ({ label: value, value }))
+})
+
+const issueExecutionDomainOptions = computed(() => {
+  const set = new Set<string>()
+  structuredResult.value.issues.forEach((item) => {
+    const value = String(item.executionDomain || '').trim()
+    if (value) set.add(value)
+  })
+  return Array.from(set).map((value) => ({ label: value, value }))
+})
+
+const issueDefectLevelOptions = computed(() => {
+  const set = new Set<string>()
+  structuredResult.value.issues.forEach((item) => {
+    const value = String(item.defectLevel || '').trim()
+    if (value) set.add(value)
+  })
+  return Array.from(set).map((value) => ({ label: value, value }))
+})
+
 watch(
   () => props.batchJobDetail?.id,
   () => {
     selectedClusterKey.value = ''
     selectedDebugRuleJobId.value = ''
+    issueViewMode.value = 'business'
+    resetIssueFilters()
+  },
+)
+
+watch(
+  () => [
+    issueFilter.value.keyword,
+    issueFilter.value.documentType,
+    issueFilter.value.executionDomain,
+    issueFilter.value.defectLevel,
+    showAllStatuses.value,
+    selectedDebugRuleJobId.value,
+    selectedClusterKey.value,
+  ],
+  () => {
+    issuePagination.current = 1
   },
 )
 
@@ -503,6 +820,18 @@ const aggregationBreakdownSections = computed(() => {
       ),
     },
     {
+      key: 'status',
+      title: '按状态',
+      total:
+        aggregation.status_breakdown?.reduce((sum, item) => sum + Number(item.count || 0), 0) || 0,
+      items: normalizeBreakdownItems(
+        (aggregation.status_breakdown || []).map((item) => ({
+          label: resolveBreakdownLabel('status', item.key),
+          count: Number(item.count || 0),
+        })),
+      ),
+    },
+    {
       key: 'defect',
       title: '按缺陷级别',
       total:
@@ -520,7 +849,6 @@ const aggregationBreakdownSections = computed(() => {
   ]
 })
 
-const batchJobDebugSnapshot = computed(() => props.batchJobDebugSnapshot || null)
 const debugRuleOptions = computed(() => {
   return (batchJobDebugSnapshot.value?.rules || []).map((rule) => ({
     label: `${rule.rule_code} · ${rule.rule_name}`,
@@ -588,15 +916,58 @@ const displayIssueItems = computed<SichuanBatchIssueItem[]>(() => {
   return items.filter((item) => matchIssueItemWithCluster(item, cluster))
 })
 
+const topIssueCards = computed(() => displayIssueItems.value.slice(0, 5))
+
 const linkedIssueRowKey = computed(() => {
   if (!selectedCluster.value) return ''
   return resolveIssueStableKey(displayIssueItems.value[0])
 })
 
 const displayRuleResults = computed(() => {
-  const items = props.batchJobDetail?.rule_results || []
+  const items = resolvedRuleResults.value
   if (!selectedDebugRuleJobId.value) return items
   return items.filter((item) => String(item.id || '').trim() === selectedDebugRuleJobId.value)
+})
+
+const progressSummary = computed(() => {
+  const progressCandidate =
+    props.batchJobDetail?.progress || props.batchJobDetail?.summary?.progress || {}
+  const progress =
+    progressCandidate && typeof progressCandidate === 'object'
+      ? (progressCandidate as Record<string, unknown>)
+      : {}
+  const totalRecords = Number(progress.total_records || props.batchJobDetail?.total_records || 0)
+  const processedRecords = Number(
+    progress.processed_records || (props.batchJobDetail?.status === 'completed' ? totalRecords : 0),
+  )
+  const rawRuleCount = Number(progress.rule_count || props.batchJobDetail?.rule_count || 0)
+  const ruleCount = Math.max(1, rawRuleCount || resolvedRuleResults.value.length || 1)
+  const ruleIndex = Math.min(
+    ruleCount,
+    Math.max(
+      0,
+      Number(progress.rule_index || (props.batchJobDetail?.status === 'completed' ? ruleCount : 0)),
+    ),
+  )
+  const status = String(props.batchJobDetail?.status || '')
+  const stepKey = String(progress.step_key || status || 'queued').toLowerCase()
+  let percent = 0
+  if (totalRecords > 0) {
+    percent = Math.min(100, Math.round((processedRecords / totalRecords) * 100))
+  } else if (status === 'completed') {
+    percent = 100
+  }
+  const progressStatus =
+    status === 'failed' ? 'exception' : status === 'completed' ? 'success' : 'active'
+  return {
+    percent,
+    processedRecords,
+    totalRecords,
+    ruleIndex,
+    ruleCount,
+    stepLabel: PROGRESS_STEP_LABEL_MAP[stepKey] || stepKey || '执行中',
+    status: progressStatus as 'active' | 'success' | 'exception',
+  }
 })
 
 const executionSummary = computed(() => {
@@ -635,6 +1006,7 @@ const primarySummaryCards = computed(() => {
     summary?.failed_count ?? props.batchJobDetail?.failed_count ?? 0,
   )
   const issueRecords = Number(summary?.issue_records ?? props.batchJobDetail?.issue_records ?? 0)
+  const uncertainRecords = Number(summary?.uncertain_records ?? 0)
   return [
     { key: 'total', label: '总病历', value: totalRecords, desc: '' },
     { key: 'success', label: '执行成功', value: successCount, desc: '' },
@@ -646,17 +1018,63 @@ const primarySummaryCards = computed(() => {
       desc: '规则执行失败总次数',
     },
     { key: 'issues', label: '命中问题', value: issueRecords, desc: '' },
+    { key: 'uncertain', label: '待复核', value: uncertainRecords, desc: '' },
   ]
+})
+
+const ruleSetDisplay = computed(() => {
+  const detail = props.batchJobDetail
+  const summary = detail?.summary
+  const filters = (detail?.filters || {}) as Record<string, unknown>
+  return {
+    name:
+      String(
+        detail?.rule_set_name || summary?.rule_set_name || filters.rule_set_name || '',
+      ).trim() || '手工选择规则',
+    key: String(detail?.rule_set_key || summary?.rule_set_key || filters.rule_set_key || '').trim(),
+    ruleCount: Number(summary?.rule_count ?? detail?.rule_count ?? 0),
+    qualityProfile:
+      String(
+        detail?.quality_profile || summary?.quality_profile || filters.quality_profile || '',
+      ).trim() || '-',
+    bucketStrategy:
+      String(
+        detail?.bucket_strategy || summary?.bucket_strategy || filters.bucket_strategy || '',
+      ).trim() || '-',
+    refinedCount: Number(
+      summary?.refined_rule_count ||
+        summary?.refine_summary?.refined_rule_count ||
+        detail?.refine_summary?.refined_rule_count ||
+        0,
+    ),
+  }
 })
 
 const executionSummaryCards = computed(() => {
   if (!executionSummary.value) return []
-  return [
+  const summary = props.batchJobDetail?.summary
+  const packMetrics = summary?.pack_metrics || {}
+  const cards = [
     { key: 'program', label: 'Program执行', value: executionSummary.value.programCount },
     { key: 'llm', label: 'LLM执行', value: executionSummary.value.llmCount },
     { key: 'hit', label: '缓存命中', value: executionSummary.value.cacheHit },
     { key: 'miss', label: '缓存未命中', value: executionSummary.value.cacheMiss },
   ]
+  if (summary?.refine_summary || summary?.refined_rule_count) {
+    cards.push({
+      key: 'refined',
+      label: '单条精审',
+      value: Number(summary.refined_rule_count || summary.refine_summary?.refined_rule_count || 0),
+    })
+  }
+  if (packMetrics.total_packs !== undefined) {
+    cards.push({
+      key: 'packs',
+      label: '分包数',
+      value: Number(packMetrics.total_packs || 0),
+    })
+  }
+  return cards
 })
 
 watch(
@@ -702,6 +1120,12 @@ function handleIssueTableChange(pagination: { current?: number; pageSize?: numbe
   issuePagination.pageSize = Number(pagination.pageSize || 8)
 }
 
+function resetIssueFilters() {
+  issueFilter.value = createDefaultStructuredQCFilter()
+  showAllStatuses.value = false
+  issuePagination.current = 1
+}
+
 function resolveIssueStableKey(item?: SichuanBatchIssueItem) {
   if (!item) return ''
   return [
@@ -731,7 +1155,13 @@ function normalizeBreakdownItems(items: Array<{ label: string; count: number }>)
     .slice(0, 4)
 }
 
-function resolveBreakdownLabel(kind: 'executor' | 'document' | 'defect', key: string) {
+function truncateText(text?: string, limit = 80) {
+  const value = String(text || '').trim()
+  if (!value) return '-'
+  return value.length > limit ? `${value.slice(0, limit)}...` : value
+}
+
+function resolveBreakdownLabel(kind: 'executor' | 'document' | 'defect' | 'status', key: string) {
   const normalizedKey = String(key || '').trim()
   if (!normalizedKey) return '未命名'
   if (kind === 'executor') {
@@ -753,7 +1183,28 @@ function resolveBreakdownLabel(kind: 'executor' | 'document' | 'defect', key: st
     }
     return map[normalizedKey.toLowerCase()] || normalizedKey
   }
+  if (kind === 'status') {
+    const map: Record<string, string> = {
+      non_compliant: '不合规',
+      uncertain: '待复核',
+      compliant: '合规',
+      not_applicable: '不适用',
+      failed: '失败',
+    }
+    return map[normalizedKey.toLowerCase()] || normalizedKey
+  }
   return normalizedKey
+}
+
+function resolveStatusText(status?: string) {
+  const normalized = String(status || '')
+    .trim()
+    .toLowerCase()
+  if (normalized === 'non_compliant') return '不合规'
+  if (normalized === 'uncertain') return '待复核'
+  if (normalized === 'not_applicable') return '不适用'
+  if (normalized === 'failed') return '失败'
+  return '合规'
 }
 
 function objectEntriesToCompactList(input: Record<string, unknown> | unknown) {
@@ -794,6 +1245,12 @@ function resolveIssueRowClassName(record: SichuanBatchIssueItem) {
   const linkedKey = linkedIssueRowKey.value
   const currentKey = resolveIssueStableKey(record)
   if (linkedKey && currentKey === linkedKey) return 'issue-row-highlight issue-row-linked'
+  if (
+    String(record.status || '')
+      .trim()
+      .toLowerCase() === 'uncertain'
+  )
+    return 'issue-row-uncertain'
   if (!selectedCluster.value) return ''
   return matchIssueItemWithCluster(record, selectedCluster.value) ? 'issue-row-highlight' : ''
 }
@@ -921,17 +1378,38 @@ watch(
   font-size: 12px;
 }
 
+.rule-set-strip {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rule-set-strip span {
+  border-radius: 999px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .drawer-summary {
   display: grid;
   gap: 12px;
 }
 
 .summary-grid-primary {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .summary-grid-secondary {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.summary-grid-tertiary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .drawer-summary .summary-card {
@@ -959,6 +1437,69 @@ watch(
   color: #94a3b8;
 }
 
+.progress-meta {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #64748b;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.issue-conclusion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.issue-conclusion-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.issue-conclusion-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.issue-conclusion-title {
+  font-size: 13px;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.issue-conclusion-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.issue-conclusion-meta span {
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
+.issue-conclusion-row {
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.issue-conclusion-label {
+  color: #64748b;
+}
+
 .drawer-section-title {
   font-size: 14px;
   font-weight: 600;
@@ -981,6 +1522,24 @@ watch(
 .drawer-section-meta {
   font-size: 12px;
   color: #64748b;
+}
+
+.drawer-section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.issue-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.4fr) repeat(3, minmax(90px, 1fr)) auto;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.issue-filter-item {
+  min-width: 0;
 }
 
 .debug-toolbar {
@@ -1236,6 +1795,10 @@ watch(
   .debug-meta-grid {
     grid-template-columns: 1fr;
   }
+
+  .issue-filter-bar {
+    grid-template-columns: 1fr;
+  }
 }
 
 :deep(.issue-row-highlight td) {
@@ -1244,5 +1807,9 @@ watch(
 
 :deep(.issue-row-linked td) {
   background: rgba(219, 234, 254, 0.85);
+}
+
+:deep(.issue-row-uncertain td) {
+  background: rgba(254, 243, 199, 0.55);
 }
 </style>

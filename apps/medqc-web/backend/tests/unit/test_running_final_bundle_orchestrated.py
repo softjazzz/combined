@@ -1,5 +1,6 @@
 import pytest
 
+from app.services.qc_input_adapters.running_final_bundle_runtime import evaluate_running_final_bundle
 from app.services.sichuan_qc_service import SichuanQCService
 
 
@@ -91,3 +92,32 @@ async def test_running_final_bundle_should_drive_orchestrator_with_evidence(monk
     assert result["total_rules"] == 1
     assert result["bundle_metadata"]["scene"] == "running"
     assert result["bundle_metadata"]["adapter_version"] == "running-final-adapter-v1"
+
+
+@pytest.mark.asyncio
+async def test_runtime_should_forward_effect_priority_options():
+    called = {}
+
+    class _Service:
+        async def evaluate_running_final_bundle_input(self, **kwargs):
+            called.update(kwargs)
+            return {"evaluation_results": [], "bundle_metadata": {}}
+
+    result = await evaluate_running_final_bundle(
+        qc_service=_Service(),  # type: ignore[arg-type]
+        bundle_input={"scene": "final", "visit_id": "V001"},
+        rule_ids=["SC-023"],
+        bucket_strategy="domain_family",
+        quality_profile="effect_priority_v1",
+        enable_selective_refine=True,
+        refine_confidence_threshold=0.75,
+        use_execution_cache=False,
+    )
+
+    assert result["bundle_metadata"]["scene"] == "final"
+    assert called["rule_ids"] == ["SC-023"]
+    assert called["bucket_strategy"] == "domain_family"
+    assert called["quality_profile"] == "effect_priority_v1"
+    assert called["enable_selective_refine"] is True
+    assert called["refine_confidence_threshold"] == 0.75
+    assert called["use_execution_cache"] is False

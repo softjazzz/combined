@@ -6,6 +6,16 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
+from .effect_priority_qc import (
+    evidence_limits_for_family,
+    family_check_limit,
+    family_keywords,
+    is_effect_priority_profile,
+    normalize_rule_family,
+    normalize_quality_profile,
+    select_family_snippet,
+)
+
 
 LLMGenerateFn = Callable[[str], Awaitable[Dict[str, Any]]]
 
@@ -42,6 +52,8 @@ class ApplicabilityChecker:
 
     SURGERY_HINTS = ["手术", "术中", "术后", "术前", "麻醉", "切除", "切开",
                      "缝合", "PCI", "介入", "植入", "移植", "造口"]
+    DEATH_ONLY_RULES = {"SC-119", "SC-120", "SC-127"}
+    DEATH_HINTS = ["患者死亡", "死亡时间", "死亡记录", "死亡证明", "抢救无效死亡", "宣布死亡", "临床死亡"]
 
     # 英文→中文文书类型映射（从共享常量导入，避免重复维护）
     from app.constants.doc_types import DOC_TYPE_MAP
@@ -73,6 +85,13 @@ class ApplicabilityChecker:
                     reason=f"规则 {rule_id} 仅适用于手术患者，病历中未检测到手术特征",
                     method="surgery_guard",
                 )
+
+        if rule_id in self.DEATH_ONLY_RULES and not self._has_death_context(medical_record):
+            return ApplicabilityResult(
+                is_applicable=False,
+                reason=f"规则 {rule_id} 仅适用于死亡病例，当前病历未检测到死亡记录或死亡事件",
+                method="death_case_guard",
+            )
 
         # ---- 3. 年龄 / 规则特定逻辑 ----
         if rule_id == "LX-003":
@@ -109,6 +128,22 @@ class ApplicabilityChecker:
                 )
 
         return ApplicabilityResult(is_applicable=True, reason="", method="default")
+
+    def _has_death_context(self, medical_record: Dict[str, Any]) -> bool:
+        evidence_payload = medical_record.get("evidence_payload")
+        if isinstance(evidence_payload, dict):
+            document_hits = evidence_payload.get("document_hits") or {}
+            if isinstance(document_hits, dict) and bool(document_hits.get("death_record")):
+                return True
+            for item in list(evidence_payload.get("supporting_documents") or []):
+                if not isinstance(item, dict):
+                    continue
+                doc_type = str(item.get("document_type") or item.get("source_table") or "").lower()
+                if "death" in doc_type or "死亡" in doc_type:
+                    return True
+
+        text = str(medical_record.get("content") or "")
+        return any(hint in text for hint in self.DEATH_HINTS)
 
     def _match_document_type(self, current_type: str, applicable_docs: list) -> bool:
         """检查当前文书类型是否匹配规则的适用文书列表（兼容中英文）"""
@@ -256,8 +291,12 @@ class UnifiedRuleEngine:
 
         parsed = self._parse_llm_response(raw_output)
 
+        parsed["findings"] = self._stringify_llm_text(parsed.get("findings", ""))
+        parsed["evidence"] = self._stringify_llm_text(parsed.get("evidence", ""))
+        parsed["suggestion"] = self._stringify_llm_text(parsed.get("suggestion", ""))
+
         evidence_info = self._evidence_verifier.verify(
-            parsed.get("evidence", ""),
+            parsed["evidence"],
             medical_record["content"]
         )
         if not evidence_info["verified"]:
@@ -297,7 +336,11 @@ class UnifiedRuleEngine:
             "issues": parsed["issues"],
             "findings": parsed["findings"],
             "evidence": parsed["evidence"],
-            "suggestion": parsed["suggestion"],
+            "suggestion": self._normalize_suggestion_by_status(
+                status=status,
+                suggestion=parsed["suggestion"],
+                rule_name=str(rule_name or ""),
+            ),
             "confidence": parsed["confidence"],
             "llm_raw_output": raw_output,
             "applicability": applicability_data,
@@ -318,7 +361,9 @@ class UnifiedRuleEngine:
         pack_size: int = 0,
         low_confidence_threshold: float = 0.45,
         context_token_budget: int = 7000,
+        quality_profile: str = "throughput_v1",
     ) -> Dict[str, Any]:
+        quality_profile_normalized = normalize_quality_profile(quality_profile)
         effective_rules = list(rules or [])
         if not effective_rules:
             return {
@@ -361,6 +406,7 @@ class UnifiedRuleEngine:
                         "tokens_used": 0,
                         "api_time": 0.0,
                         "prompt_strategy": "batch_compact_v1",
+                        "quality_profile": quality_profile_normalized,
                         "pack_id": pack_id,
                         "pack_size": int(pack_size or len(effective_rules)),
                         "pack_fallback": False,
@@ -385,11 +431,13 @@ class UnifiedRuleEngine:
             rules=applicable_rules,
             medical_record=medical_record,
             base_budget=context_token_budget,
+            quality_profile=quality_profile_normalized,
         )
         prompt, context_tokens_estimate = self._build_batch_prompt_compact(
             applicable_rules,
             medical_record,
             context_token_budget=resolved_budget,
+            quality_profile=quality_profile_normalized,
         )
         llm_result = await self._llm_generate(prompt)
         raw_output = (
@@ -444,6 +492,7 @@ class UnifiedRuleEngine:
                             "tokens_used": distributed_tokens,
                             "api_time": distributed_api_time,
                             "prompt_strategy": "batch_compact_v1",
+                            "quality_profile": quality_profile_normalized,
                             "pack_id": pack_id,
                             "pack_size": int(pack_size or len(effective_rules)),
                             "pack_fallback": False,
@@ -480,7 +529,11 @@ class UnifiedRuleEngine:
                     "issues": parsed_item.get("issues") or [],
                     "findings": parsed_item.get("findings") or "",
                     "evidence": evidence_text,
-                    "suggestion": parsed_item.get("suggestion") or "",
+                    "suggestion": self._normalize_suggestion_by_status(
+                        status=status,
+                        suggestion=str(parsed_item.get("suggestion") or ""),
+                        rule_name=str(rule_name or ""),
+                    ),
                     "confidence": confidence,
                     "llm_raw_output": raw_output,
                     "applicability": {
@@ -494,6 +547,7 @@ class UnifiedRuleEngine:
                         "tokens_used": distributed_tokens,
                         "api_time": distributed_api_time,
                         "prompt_strategy": "batch_compact_v1",
+                        "quality_profile": quality_profile_normalized,
                         "pack_id": pack_id,
                         "pack_size": int(pack_size or len(effective_rules)),
                         "pack_fallback": False,
@@ -519,13 +573,22 @@ class UnifiedRuleEngine:
         medical_record: Dict[str, Any],
         *,
         context_token_budget: int = 7000,
+        quality_profile: str = "throughput_v1",
     ) -> Tuple[str, int]:
         content = str(medical_record.get("content") or "")
         evidence_payload = medical_record.get("evidence_payload")
+        quality_profile_normalized = normalize_quality_profile(quality_profile)
+        rule_families = [
+            normalize_rule_family(rule.get("rule_family"))
+            for rule in list(rules or [])
+        ]
+        dominant_family = self._dominant_rule_family(rule_families)
         context_text, context_tokens = self._build_compact_context(
             content=content,
             evidence_payload=evidence_payload if isinstance(evidence_payload, dict) else {},
             context_token_budget=context_token_budget,
+            rule_family=dominant_family,
+            quality_profile=quality_profile_normalized,
         )
 
         card_lines: List[str] = []
@@ -538,12 +601,17 @@ class UnifiedRuleEngine:
                 rule=rule,
             )
             checks = re.sub(r"\s+", " ", checks).strip()
-            if len(checks) > 200:
-                checks = checks[:200] + "..."
+            check_limit = family_check_limit(
+                rule.get("rule_family") or dominant_family,
+                quality_profile=quality_profile_normalized,
+            )
+            if len(checks) > check_limit:
+                checks = checks[:check_limit] + "..."
             card_lines.append(
                 f"- rule_id: {rule_id}\n"
                 f"  rule_name: {rule_name}\n"
                 f"  defect_level: {defect_level}\n"
+                f"  rule_family: {normalize_rule_family(rule.get('rule_family') or dominant_family)}\n"
                 f"  checks: {checks}"
             )
 
@@ -583,19 +651,38 @@ class UnifiedRuleEngine:
         content: str,
         evidence_payload: Dict[str, Any],
         context_token_budget: int,
+        rule_family: str = "general",
+        quality_profile: str = "throughput_v1",
     ) -> Tuple[str, int]:
         budget = max(1200, int(context_token_budget or 7000))
         primary = str(content or "").strip()
-        primary_limit = min(len(primary), 12000)
-        primary_text = primary[:primary_limit]
+        quality_profile_normalized = normalize_quality_profile(quality_profile)
+        family = normalize_rule_family(rule_family)
+        limits = evidence_limits_for_family(family, quality_profile=quality_profile_normalized)
+        primary_limit = min(len(primary), int(limits["primary_limit"]))
+        primary_text = select_family_snippet(primary, rule_family=family, limit=primary_limit)
 
         supporting = list(evidence_payload.get("supporting_documents") or [])
         timeline = list(evidence_payload.get("timeline_facts") or [])
         document_hits = evidence_payload.get("document_hits") or {}
         quality_flags = list(evidence_payload.get("data_quality_flags") or [])
 
-        support_limit = min(len(supporting), 6)
-        timeline_limit = min(len(timeline), 12)
+        supporting = self._rank_supporting_documents(
+            supporting,
+            rule_family=family,
+            quality_profile=quality_profile_normalized,
+        )
+        timeline = self._rank_timeline_facts(
+            timeline,
+            rule_family=family,
+            quality_profile=quality_profile_normalized,
+        )
+
+        support_limit = min(len(supporting), int(limits["support_limit"]))
+        timeline_limit = min(len(timeline), int(limits["timeline_limit"]))
+        support_snippet_limit = int(limits["support_snippet_limit"])
+        timeline_snippet_limit = int(limits["timeline_snippet_limit"])
+        min_primary_limit = int(limits["min_primary_limit"])
 
         def _render_ctx() -> str:
             lines: List[str] = []
@@ -613,8 +700,8 @@ class UnifiedRuleEngine:
                         continue
                     doc_type = str(item.get("document_type") or item.get("source_table") or "辅助文书")
                     snippet = str(item.get("evidence_text") or item.get("content") or item.get("text_preview") or "").strip()
-                    if len(snippet) > 500:
-                        snippet = snippet[:500] + "..."
+                    if len(snippet) > support_snippet_limit:
+                        snippet = select_family_snippet(snippet, rule_family=family, limit=support_snippet_limit)
                     if snippet:
                         lines.append(f"- [{doc_type}] {snippet}")
             if timeline_limit > 0:
@@ -623,8 +710,8 @@ class UnifiedRuleEngine:
                     text = str(fact).strip()
                     if not text:
                         continue
-                    if len(text) > 220:
-                        text = text[:220] + "..."
+                    if len(text) > timeline_snippet_limit:
+                        text = text[:timeline_snippet_limit] + "..."
                     lines.append(f"- {text}")
             return "\n".join(lines)
 
@@ -639,8 +726,8 @@ class UnifiedRuleEngine:
             timeline_limit -= 1
             context_text = _render_ctx()
             estimated_tokens = self._estimate_tokens(context_text)
-        while estimated_tokens > budget and len(primary_text) > 1500:
-            primary_text = primary_text[: max(1500, int(len(primary_text) * 0.8))]
+        while estimated_tokens > budget and len(primary_text) > min_primary_limit:
+            primary_text = primary_text[: max(min_primary_limit, int(len(primary_text) * 0.8))]
             context_text = _render_ctx()
             estimated_tokens = self._estimate_tokens(context_text)
 
@@ -652,8 +739,11 @@ class UnifiedRuleEngine:
         rules: List[Dict[str, Any]],
         medical_record: Dict[str, Any],
         base_budget: int,
+        quality_profile: str = "throughput_v1",
     ) -> int:
         budget = max(4500, int(base_budget or 7000))
+        if is_effect_priority_profile(quality_profile):
+            budget = max(budget, 8600)
 
         execution_domain = str(medical_record.get("execution_domain") or "").strip().lower()
         if not execution_domain:
@@ -684,7 +774,69 @@ class UnifiedRuleEngine:
             elif any(token in model_version for token in ("32b", "34b", "35b", "70b", "72b", "110b", "gpt-4", "gpt-5", "claude-3-opus")):
                 budget += 500
 
-        return max(4500, min(9800, int(budget)))
+        upper_bound = 12500 if is_effect_priority_profile(quality_profile) else 9800
+        return max(4500, min(upper_bound, int(budget)))
+
+    @staticmethod
+    def _dominant_rule_family(rule_families: List[str]) -> str:
+        counts: Dict[str, int] = {}
+        for family in rule_families:
+            normalized = normalize_rule_family(family)
+            counts[normalized] = counts.get(normalized, 0) + 1
+        if not counts:
+            return "general"
+        return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+
+    @staticmethod
+    def _rank_supporting_documents(
+        supporting: List[Any],
+        *,
+        rule_family: str,
+        quality_profile: str,
+    ) -> List[Any]:
+        if not is_effect_priority_profile(quality_profile):
+            return list(supporting or [])
+
+        keywords = [keyword.lower() for keyword in family_keywords(rule_family)]
+
+        def _score(item: Any) -> int:
+            if not isinstance(item, dict):
+                return 0
+            text = " ".join(
+                [
+                    str(item.get("document_type") or ""),
+                    str(item.get("source_table") or ""),
+                    str(item.get("evidence_text") or item.get("content") or item.get("text_preview") or ""),
+                ]
+            ).lower()
+            score = sum(4 for keyword in keywords if keyword and keyword in text)
+            source = str(item.get("document_type") or item.get("source_table") or "").lower()
+            family = normalize_rule_family(rule_family)
+            if family == "procedure_order_linkage" and any(token in source for token in ("surgery", "anesthesia", "order", "exam", "pathology", "手术", "麻醉", "医嘱", "检查", "病理")):
+                score += 8
+            if family == "signature_authority" and any(token in text for token in ("签名", "签字", "审核", "医师")):
+                score += 8
+            if family == "timeliness" and any(token in text for token in ("时间", "小时", "日期", "记录")):
+                score += 6
+            return score
+
+        return sorted(list(supporting or []), key=_score, reverse=True)
+
+    @staticmethod
+    def _rank_timeline_facts(
+        timeline: List[Any],
+        *,
+        rule_family: str,
+        quality_profile: str,
+    ) -> List[Any]:
+        if not is_effect_priority_profile(quality_profile):
+            return list(timeline or [])
+        if normalize_rule_family(rule_family) != "timeliness":
+            return list(timeline or [])
+        return sorted(
+            list(timeline or []),
+            key=lambda item: 0 if any(token in str(item) for token in ("入院", "出院", "术后", "记录", "完成", "时间")) else 1,
+        )
 
     @staticmethod
     def _estimate_tokens(text: str) -> int:
@@ -908,15 +1060,66 @@ class UnifiedRuleEngine:
 
         default_result["is_compliant"] = bool(parsed_json.get("is_compliant", True))
         default_result["issues"] = parsed_json.get("issues", [])
-        default_result["findings"] = parsed_json.get("findings", "")
-        default_result["evidence"] = parsed_json.get("evidence", "")
-        default_result["suggestion"] = parsed_json.get("suggestion", "")
+        default_result["findings"] = UnifiedRuleEngine._stringify_llm_text(parsed_json.get("findings", ""))
+        default_result["evidence"] = UnifiedRuleEngine._stringify_llm_text(parsed_json.get("evidence", ""))
+        default_result["suggestion"] = UnifiedRuleEngine._stringify_llm_text(parsed_json.get("suggestion", ""))
         try:
             default_result["confidence"] = float(parsed_json.get("confidence", 0.7))
         except Exception:
             default_result["confidence"] = 0.7
 
         return default_result
+
+    @staticmethod
+    def _stringify_llm_text(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            return "；".join(str(item).strip() for item in value if str(item).strip())
+        if isinstance(value, dict):
+            return json.dumps(value, ensure_ascii=False)
+        return str(value)
+
+    @staticmethod
+    def _is_no_change_suggestion(text: str) -> bool:
+        normalized = str(text or "").strip().replace(" ", "")
+        if not normalized:
+            return False
+        patterns = (
+            r"(无需|无须).{0,4}(修改|调整|处理|整改|更改|改动|补充)",
+            r"无需整改",
+            r"无需处理",
+            r"无需完善",
+            r"符合规则要求",
+            r"符合要求",
+            r"无明显问题",
+        )
+        return any(re.search(pattern, normalized) for pattern in patterns)
+
+    @classmethod
+    def _normalize_suggestion_by_status(
+        cls,
+        *,
+        status: str,
+        suggestion: str,
+        rule_name: str = "",
+    ) -> str:
+        normalized_status = str(status or "").strip().lower()
+        suggestion_text = str(suggestion or "").strip()
+
+        if normalized_status == "non_compliant":
+            if (not suggestion_text) or cls._is_no_change_suggestion(suggestion_text):
+                if rule_name:
+                    return f"请按“{rule_name}”规则补充或修正相关记录。"
+                return "请根据规则要求补充或修正相关记录。"
+            return suggestion_text
+
+        if normalized_status == "uncertain" and cls._is_no_change_suggestion(suggestion_text):
+            return "证据不足，建议人工复核相关文书并补充佐证。"
+
+        return suggestion_text
 
     def _evaluate_lx003(
         self,
