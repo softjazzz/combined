@@ -196,8 +196,10 @@ supabase/logs/
 *.tar.gz
 *.zip
 *.rar
-node_modules
-node_modules
-node_modules
-node_modules
-node_modules
+
+# Dependencies
+node_modules/
+
+# Local QC experiment artifacts
+apps/medqc-web/backend/backend/data/manual_qc_runs/
+apps/medqc-web/backend/release-gate-artifacts/
