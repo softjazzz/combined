@@ -8,12 +8,12 @@
 
 ### 核心区别
 
-| 功能类型 | 运行病历质控 | 终末质控 |
-|---------|-------------|----------|
-| **对象** | 在院病人 | 出院病人 |
-| **时机** | 实时/定时 | 归档后 |
-| **目的** | 预防和及时纠正 | 总结和评价 |
-| **频率** | 持续监控 | 一次性 |
+| 功能类型 | 运行病历质控   | 终末质控       |
+| -------- | -------------- | -------------- |
+| **对象** | 在院病人       | 出院病人       |
+| **时机** | 实时/定时      | 归档后         |
+| **目的** | 预防和及时纠正 | 总结和评价     |
+| **频率** | 持续监控       | 一次性         |
 | **重点** | 时效性、完整性 | 全面性、规范性 |
 
 ### 技术架构
@@ -44,12 +44,14 @@
 ### 1. 实时质控监控
 
 **功能特点**：
+
 - ✅ 基于CSV质控标准的实时检查
 - ✅ 科室特定规则应用
 - ✅ 时效性自动监控
 - ✅ 风险等级自动评估
 
 **检查类型**：
+
 ```typescript
 interface QCCheckTypes {
   realTime: {
@@ -73,53 +75,58 @@ interface QCCheckTypes {
 ### 2. 质控标准应用
 
 **基于CSV数据**：
+
 - 📊 234个质控内容
 - 🏥 6个评分项目组
 - 🔍 科室特定规则筛选
 - ⚡ 启用状态动态控制
 
 **规则应用逻辑**：
+
 ```typescript
 // 1. 获取科室适用规则
-const applicableRules = qualityStandards.filter(std => 
-  std.departments.some(dept => dept.includes(currentDepartment))
+const applicableRules = qualityStandards.filter((std) =>
+  std.departments.some((dept) => dept.includes(currentDepartment)),
 )
 
 // 2. 检查启用状态
-const enabledRules = applicableRules.filter(rule => rule.isEnabled)
+const enabledRules = applicableRules.filter((rule) => rule.isEnabled)
 
 // 3. 应用医生端规则
-const doctorRules = enabledRules.filter(rule => rule.isEffectiveToDoctor)
+const doctorRules = enabledRules.filter((rule) => rule.isEffectiveToDoctor)
 ```
 
 ### 3. 时效性监控
 
 **关键时间节点**：
+
 - 📝 入院记录：24小时内
 - 📋 首次病程记录：8小时内
 - 🔄 日常病程记录：24小时内
 - 🏥 出院记录：24小时内
 
 **监控实现**：
+
 ```typescript
 // 时效性检查示例
 const timelinessChecks = [
   {
     checkType: 'admission_record',
     timeLimit: 24, // 小时
-    description: '入院记录应在入院后24小时内完成'
+    description: '入院记录应在入院后24小时内完成',
   },
   {
     checkType: 'progress_note',
     timeLimit: 8, // 小时
-    description: '首次病程记录应在入院后8小时内完成'
-  }
+    description: '首次病程记录应在入院后8小时内完成',
+  },
 ]
 ```
 
 ### 4. 风险等级评估
 
 **风险分级**：
+
 ```typescript
 interface RiskLevels {
   low: {
@@ -168,9 +175,9 @@ const analyzeInpatient = async (patient: InpatientRecord) => {
     admissionDate: patient.admissionDate,
     currentDate: new Date().toISOString(),
     doctorId: patient.doctorId,
-    analysisType: 'real-time'
+    analysisType: 'real-time',
   }
-  
+
   const result = await runningQCService.analyzeRunningRecord(request)
   return result
 }
@@ -200,12 +207,12 @@ const routes = [
     path: '/running-qc',
     name: 'RunningQC',
     component: () => import('@/views/RunningQCView.vue'),
-    meta: { 
+    meta: {
       title: '运行病历质控',
       requiresAuth: true,
-      roles: ['admin', 'qc_manager', 'doctor']
-    }
-  }
+      roles: ['admin', 'qc_manager', 'doctor'],
+    },
+  },
 ]
 ```
 
@@ -225,7 +232,7 @@ const result = await runningQCService.analyzeRunningRecord({
   admissionDate: '2024-01-15T10:00:00Z',
   currentDate: '2024-01-18T14:30:00Z',
   doctorId: 'DOC001',
-  analysisType: 'real-time'
+  analysisType: 'real-time',
 })
 
 console.log('质控结果:', result)
@@ -238,7 +245,7 @@ console.log('质控结果:', result)
 const analyzeDepartmentPatients = async (department: string) => {
   const patients = await getInpatientsByDepartment(department)
   const results = []
-  
+
   for (const patient of patients) {
     try {
       const result = await runningQCService.analyzeRunningRecord({
@@ -249,14 +256,14 @@ const analyzeDepartmentPatients = async (department: string) => {
         admissionDate: patient.admissionDate,
         currentDate: new Date().toISOString(),
         doctorId: patient.doctorId,
-        analysisType: 'scheduled'
+        analysisType: 'scheduled',
       })
       results.push(result)
     } catch (error) {
       console.error(`分析患者${patient.id}失败:`, error)
     }
   }
-  
+
   return results
 }
 ```
@@ -267,21 +274,24 @@ const analyzeDepartmentPatients = async (department: string) => {
 // 设置定时质控检查
 const setupScheduledQC = () => {
   // 每2小时执行一次高风险病人检查
-  setInterval(async () => {
-    const highRiskPatients = await getHighRiskPatients()
-    for (const patient of highRiskPatients) {
-      await runningQCService.analyzeRunningRecord({
-        recordId: `scheduled-${patient.id}`,
-        patientId: patient.id,
-        content: patient.medicalContent,
-        department: patient.department,
-        admissionDate: patient.admissionDate,
-        currentDate: new Date().toISOString(),
-        doctorId: patient.doctorId,
-        analysisType: 'scheduled'
-      })
-    }
-  }, 2 * 60 * 60 * 1000) // 2小时
+  setInterval(
+    async () => {
+      const highRiskPatients = await getHighRiskPatients()
+      for (const patient of highRiskPatients) {
+        await runningQCService.analyzeRunningRecord({
+          recordId: `scheduled-${patient.id}`,
+          patientId: patient.id,
+          content: patient.medicalContent,
+          department: patient.department,
+          admissionDate: patient.admissionDate,
+          currentDate: new Date().toISOString(),
+          doctorId: patient.doctorId,
+          analysisType: 'scheduled',
+        })
+      }
+    },
+    2 * 60 * 60 * 1000,
+  ) // 2小时
 }
 ```
 
@@ -298,17 +308,17 @@ const handleQCResult = (result: RunningQCResult) => {
       title: '质控紧急提醒',
       message: `患者${result.patientId}存在严重质控问题`,
       recipient: result.doctorId,
-      type: 'urgent'
+      type: 'urgent',
     })
   }
-  
+
   // 检查超时问题
-  const overdueChecks = result.timelinessChecks.filter(check => check.isOverdue)
+  const overdueChecks = result.timelinessChecks.filter((check) => check.isOverdue)
   if (overdueChecks.length > 0) {
     sendTimelinessAlert({
       patientId: result.patientId,
       overdueItems: overdueChecks,
-      recipient: result.doctorId
+      recipient: result.doctorId,
     })
   }
 }
@@ -324,24 +334,24 @@ const sendDepartmentSummary = async (department: string) => {
     totalPatients: patients.length,
     highRiskCount: 0,
     overdueCount: 0,
-    avgScore: 0
+    avgScore: 0,
   }
-  
+
   for (const patient of patients) {
     const result = await getLatestQCResult(patient.id)
     if (result) {
       if (result.summary.riskLevel === 'high' || result.summary.riskLevel === 'critical') {
         summary.highRiskCount++
       }
-      if (result.timelinessChecks.some(check => check.isOverdue)) {
+      if (result.timelinessChecks.some((check) => check.isOverdue)) {
         summary.overdueCount++
       }
       summary.avgScore += result.summary.totalScore
     }
   }
-  
+
   summary.avgScore = summary.avgScore / patients.length
-  
+
   // 发送科室汇总
   sendDepartmentReport(department, summary)
 }
@@ -366,9 +376,12 @@ const getCachedResult = (patientId: string): RunningQCResult | null => {
 const cacheResult = (result: RunningQCResult) => {
   qcResultCache.set(result.patientId, result)
   // 设置过期时间
-  setTimeout(() => {
-    qcResultCache.delete(result.patientId)
-  }, 30 * 60 * 1000) // 30分钟过期
+  setTimeout(
+    () => {
+      qcResultCache.delete(result.patientId)
+    },
+    30 * 60 * 1000,
+  ) // 30分钟过期
 }
 ```
 
@@ -379,10 +392,10 @@ const cacheResult = (result: RunningQCResult) => {
 const batchAnalyzePatients = async (patients: InpatientRecord[]) => {
   const BATCH_SIZE = 10
   const results = []
-  
+
   for (let i = 0; i < patients.length; i += BATCH_SIZE) {
     const batch = patients.slice(i, i + BATCH_SIZE)
-    const batchPromises = batch.map(patient => 
+    const batchPromises = batch.map((patient) =>
       runningQCService.analyzeRunningRecord({
         recordId: `batch-${patient.id}`,
         patientId: patient.id,
@@ -391,17 +404,17 @@ const batchAnalyzePatients = async (patients: InpatientRecord[]) => {
         admissionDate: patient.admissionDate,
         currentDate: new Date().toISOString(),
         doctorId: patient.doctorId,
-        analysisType: 'scheduled'
-      })
+        analysisType: 'scheduled',
+      }),
     )
-    
+
     const batchResults = await Promise.allSettled(batchPromises)
     results.push(...batchResults)
-    
+
     // 批次间延迟，避免过载
-    await new Promise(resolve => setTimeout(resolve, 100))
+    await new Promise((resolve) => setTimeout(resolve, 100))
   }
-  
+
   return results
 }
 ```
@@ -466,26 +479,26 @@ const analysisSchedule = {
   // 新入院患者（24小时内）
   newAdmission: {
     frequency: '每2小时',
-    focus: ['入院记录', '首次病程记录']
+    focus: ['入院记录', '首次病程记录'],
   },
-  
+
   // 普通住院患者
   regular: {
     frequency: '每12小时',
-    focus: ['病程记录', '医嘱执行']
+    focus: ['病程记录', '医嘱执行'],
   },
-  
+
   // 高风险患者
   highRisk: {
     frequency: '每6小时',
-    focus: ['全面检查', '时效性监控']
+    focus: ['全面检查', '时效性监控'],
   },
-  
+
   // 即将出院患者
   preDischarge: {
     frequency: '每4小时',
-    focus: ['出院准备', '记录完整性']
-  }
+    focus: ['出院准备', '记录完整性'],
+  },
 }
 ```
 
@@ -497,7 +510,7 @@ const robustAnalysis = async (request: RunningQCRequest) => {
     return await runningQCService.analyzeRunningRecord(request)
   } catch (error) {
     console.error('运行质控分析失败:', error)
-    
+
     // 降级处理
     return {
       recordId: request.recordId,
@@ -508,13 +521,13 @@ const robustAnalysis = async (request: RunningQCRequest) => {
         totalScore: 0,
         grade: '丙级' as const,
         overallAssessment: '分析服务暂时不可用',
-        riskLevel: 'medium' as const
+        riskLevel: 'medium' as const,
       },
       realTimeIssues: [],
       departmentSpecificIssues: [],
       timelinessChecks: [],
       recommendations: ['建议稍后重试质控分析'],
-      nextCheckTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+      nextCheckTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
     }
   }
 }
@@ -530,4 +543,4 @@ const robustAnalysis = async (request: RunningQCRequest) => {
 4. **风险预警**：分级提醒和处理机制
 5. **数据驱动**：基于234个质控标准的精准分析
 
-这个功能与现有的终末质控形成互补，构建了完整的医疗质控体系。 
+这个功能与现有的终末质控形成互补，构建了完整的医疗质控体系。

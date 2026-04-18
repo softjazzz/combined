@@ -40,9 +40,9 @@
 1. `ADR-MR-001` 数据库选型：统一 PostgreSQL（开发/测试/生产同构）。
 2. `ADR-MR-002` 部署策略：CDM 与质控同库部署，按 schema 隔离（`cdm` / `qc` / `sys` / `legacy`）。
 3. `ADR-MR-003` 命名策略：
-`CDM` 保持标准原名（如 `mr`、`diagnosis`）；
-质控业务使用 `qc_` 前缀（如 `qc_results`）。
-命名例外：`qc_rules`、`scoring_rules`、`scoring_config` 为历史兼容对象，暂不强制改名前缀。
+   `CDM` 保持标准原名（如 `mr`、`diagnosis`）；
+   质控业务使用 `qc_` 前缀（如 `qc_results`）。
+   命名例外：`qc_rules`、`scoring_rules`、`scoring_config` 为历史兼容对象，暂不强制改名前缀。
 4. `ADR-MR-004` 变更策略：引入 Alembic 管理 schema 变更与回滚。
 5. `ADR-MR-005` 关联策略：CDM 业务主键统一为三元键 `(institute_id, patient_id, visit_id)`。
 
@@ -70,7 +70,7 @@
 3. 约束：在映射统一完成前，禁止在文档和代码中声明 `record_id = visit_id` 为既成事实。
 4. 对仍使用 `record_id` 的模块，必须建立稳定映射，不允许“前端随机 ID 直写数据库”。
 5. 推荐新增映射表（P1）：
-`record_identity_map(record_id, institute_id, patient_id, visit_id, source, created_at)`。
+   `record_identity_map(record_id, institute_id, patient_id, visit_id, source, created_at)`。
 
 ### 4.3 时间与审计字段规范
 
@@ -82,18 +82,18 @@
 
 ## 5. P0 核心数据字典（高频对象）
 
-| 对象 | 表名 | 主键 | 说明 |
-|---|---|---|---|
-| 患者主索引 | `patient_information` | `institute_id, patient_id` | 患者基础身份 |
-| 就诊索引 | `inpat_registration` | `institute_id, patient_id, visit_id` | 住院就诊主索引 |
-| 病案首页主表 | `mr` | `institute_id, patient_id, visit_id` | 工作台核心列表来源，只存 HIS 原始数据 |
-| 诊断明细 | `diagnosis` | `institute_id, patient_id, visit_id, diagnosis_id` | ICD-10 与诊断类型 |
-| 手术明细 | `mr_surgery` | `institute_id, patient_id, visit_id, surgery_id` | ICD-9-CM-3 手术明细 |
-| 费用汇总 | `mr_cost` | `institute_id, patient_id, visit_id` | 首页费用聚合 |
-| 入院记录 | `admission_record` | `institute_id, patient_id, visit_id` | 入院文书全文与结构化字段 |
-| 出院记录 | `discharge_record` | `institute_id, patient_id, visit_id` | 出院文书全文与结构化字段 |
-| 质控结果（遗留） | `qc_result` | `id` | repository 仍在读写，待并轨 |
-| **AI 首页草稿** | **`ai_frontpage_draft`** | **`id`（visit_id 唯一索引）** | **系统扩展表**；AI 从病历文书抽取的首页草稿；与 `mr` 完全隔离，不覆盖原始数据；支持 upsert |
+| 对象             | 表名                     | 主键                                               | 说明                                                                                       |
+| ---------------- | ------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 患者主索引       | `patient_information`    | `institute_id, patient_id`                         | 患者基础身份                                                                               |
+| 就诊索引         | `inpat_registration`     | `institute_id, patient_id, visit_id`               | 住院就诊主索引                                                                             |
+| 病案首页主表     | `mr`                     | `institute_id, patient_id, visit_id`               | 工作台核心列表来源，只存 HIS 原始数据                                                      |
+| 诊断明细         | `diagnosis`              | `institute_id, patient_id, visit_id, diagnosis_id` | ICD-10 与诊断类型                                                                          |
+| 手术明细         | `mr_surgery`             | `institute_id, patient_id, visit_id, surgery_id`   | ICD-9-CM-3 手术明细                                                                        |
+| 费用汇总         | `mr_cost`                | `institute_id, patient_id, visit_id`               | 首页费用聚合                                                                               |
+| 入院记录         | `admission_record`       | `institute_id, patient_id, visit_id`               | 入院文书全文与结构化字段                                                                   |
+| 出院记录         | `discharge_record`       | `institute_id, patient_id, visit_id`               | 出院文书全文与结构化字段                                                                   |
+| 质控结果（遗留） | `qc_result`              | `id`                                               | repository 仍在读写，待并轨                                                                |
+| **AI 首页草稿**  | **`ai_frontpage_draft`** | **`id`（visit_id 唯一索引）**                      | **系统扩展表**；AI 从病历文书抽取的首页草稿；与 `mr` 完全隔离，不覆盖原始数据；支持 upsert |
 
 关键索引（P0 必须）：
 
@@ -175,7 +175,7 @@
 1. `revision` 命名包含域前缀：`cdm_` / `qc_` / `sync_`。
 2. 禁止手工改线上表结构后不补迁移。
 3. 每次迁移包含：
-`DDL`、`回滚`、`索引`、`兼容说明`、`数据修复脚本（如有）`。
+   `DDL`、`回滚`、`索引`、`兼容说明`、`数据修复脚本（如有）`。
 
 ---
 

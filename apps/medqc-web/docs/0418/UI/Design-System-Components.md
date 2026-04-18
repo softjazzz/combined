@@ -15,7 +15,7 @@
   "font": {
     "size": {
       "xs": "10px",
-      "sm": "11px", 
+      "sm": "11px",
       "base": "12px",
       "md": "13px",
       "lg": "14px",
@@ -62,7 +62,7 @@
   "colors": {
     "gray": {
       "50": "#F9FAFB",
-      "100": "#F3F4F6", 
+      "100": "#F3F4F6",
       "200": "#E5E7EB",
       "300": "#D1D5DB",
       "400": "#9CA3AF",
@@ -88,6 +88,7 @@
 ### 2.1 按钮组件
 
 #### 主要按钮 (Primary Button)
+
 ```
 尺寸: 30px × auto
 内边距: 4px 14px
@@ -97,7 +98,8 @@
 状态: Normal, Hover, Active, Disabled
 ```
 
-#### 次要按钮 (Secondary Button)  
+#### 次要按钮 (Secondary Button)
+
 ```
 尺寸: 28px × auto
 内边距: 3px 12px
@@ -108,6 +110,7 @@
 ```
 
 #### 小按钮 (Small Button)
+
 ```
 尺寸: 22px × auto
 内边距: 0px 6px
@@ -120,6 +123,7 @@
 ### 2.2 输入框组件
 
 #### 标准输入框
+
 ```
 尺寸: 28px × 200px (默认宽度)
 内边距: 3px 8px
@@ -131,6 +135,7 @@
 ```
 
 #### 搜索输入框
+
 ```
 尺寸: 28px × 200px
 内边距: 3px 8px 3px 32px (左侧图标空间)
@@ -142,6 +147,7 @@
 ### 2.3 下拉菜单组件
 
 #### 选择器
+
 ```
 尺寸: 28px × 120px (默认宽度)
 内边距: 0 8px
@@ -153,6 +159,7 @@
 ```
 
 #### 选项列表
+
 ```
 选项高度: 26px
 选项内边距: 4px 8px
@@ -163,6 +170,7 @@
 ### 2.4 标签组件
 
 #### 状态标签
+
 ```
 尺寸: 18px × auto
 内边距: 0 5px
@@ -170,7 +178,7 @@
 圆角: 2px
 颜色变体:
 - 完整性: Blue-100 背景, Blue-800 文字
-- 一致性: Green-100 背景, Green-800 文字  
+- 一致性: Green-100 背景, Green-800 文字
 - 合理性: Yellow-100 背景, Yellow-800 文字
 - 及时性: Purple-100 背景, Purple-800 文字
 ```
@@ -192,7 +200,7 @@
 ### 3.1 统计卡片
 
 ```
-容器: 
+容器:
 - 内边距: 16px 20px
 - 圆角: 6px
 - 阴影: 0 1px 3px rgba(0,0,0,0.1)
@@ -204,7 +212,7 @@
 - 底边距: 8px
 
 数值:
-- 字体: 20px Bold  
+- 字体: 20px Bold
 - 颜色: Gray-900
 - 行高: 1.2
 ```
@@ -227,6 +235,7 @@
 ### 3.3 表格组件
 
 #### 表格容器
+
 ```
 圆角: 6px
 阴影: 0 1px 3px rgba(0,0,0,0.1)
@@ -235,6 +244,7 @@
 ```
 
 #### 表格标题行
+
 ```
 高度: 40px
 背景: Gray-50
@@ -245,6 +255,7 @@
 ```
 
 #### 表格内容行
+
 ```
 高度: 36px (固定)
 背景: White
@@ -256,6 +267,7 @@
 ```
 
 #### 特殊列样式
+
 ```
 质控点来源列:
 - 字体: 12px Medium
@@ -301,15 +313,17 @@
 ### 4.3 网格布局
 
 #### 统计卡片网格
+
 ```
 桌面端: 4列网格
-平板端: 2列网格  
+平板端: 2列网格
 移动端: 1列网格
 间距: 12px
 底边距: 16px
 ```
 
 #### 响应式断点
+
 ```
 移动端: < 768px
 平板端: 768px - 1024px
@@ -369,7 +383,7 @@
 
 ```
 主要图标: Gray-600
-次要图标: Gray-400  
+次要图标: Gray-400
 交互图标: Blue-600
 状态图标: 根据状态颜色
 ```
@@ -429,6 +443,7 @@
 ### 8.1 Figma 配置
 
 #### 颜色样式 (Color Styles)
+
 ```
 Primary/Gray-900: #111827
 Primary/Gray-700: #374151
@@ -444,9 +459,10 @@ Primary/Blue-50: #EFF6FF
 ```
 
 #### 文本样式 (Text Styles)
+
 ```
 Heading/H1: 16px Bold
-Heading/H2: 15px Bold  
+Heading/H2: 15px Bold
 Heading/H3: 14px SemiBold
 Body/Large: 13px Medium
 Body/Medium: 12px Normal
@@ -455,6 +471,7 @@ Caption: 10px Normal
 ```
 
 #### 效果样式 (Effect Styles)
+
 ```
 Card Shadow: 0 1px 3px rgba(0,0,0,0.1)
 Card Shadow Hover: 0 4px 12px rgba(0,0,0,0.15)
@@ -467,7 +484,7 @@ Focus Ring: 0 0 0 2px #DBEAFE
 📁 Design System
   📁 Foundations
     📄 Colors
-    📄 Typography  
+    📄 Typography
     📄 Spacing
     📄 Icons
   📁 Components
@@ -477,7 +494,7 @@ Focus Ring: 0 0 0 2px #DBEAFE
       📄 Select
       📄 Tag
       📄 Switch
-    📁 Composite  
+    📁 Composite
       📄 StatCard
       📄 FilterCard
       📄 Table
@@ -497,6 +514,7 @@ Focus Ring: 0 0 0 2px #DBEAFE
 ### 9.1 设计稿标注
 
 #### 必须标注项
+
 - 字体大小和字重
 - 颜色值 (使用设计令牌名称)
 - 间距和内边距数值
@@ -505,6 +523,7 @@ Focus Ring: 0 0 0 2px #DBEAFE
 - 阴影参数
 
 #### 标注格式
+
 ```
 字体: Body/Medium (12px Normal)
 颜色: Primary/Gray-700 (#374151)
@@ -516,12 +535,14 @@ Focus Ring: 0 0 0 2px #DBEAFE
 ### 9.2 切图规范
 
 #### 图标切图
+
 - 格式: SVG (矢量图标)
 - 尺寸: 16×16px, 20×20px, 24×24px
 - 颜色: 单色 (可通过 CSS 修改)
 - 命名: icon-name-size.svg
 
-#### 图片切图  
+#### 图片切图
+
 - 格式: WebP (优先), PNG (备选)
 - 分辨率: 1x, 2x, 3x
 - 压缩: 保持质量前提下最小文件
@@ -530,6 +551,7 @@ Focus Ring: 0 0 0 2px #DBEAFE
 ### 9.3 组件文档
 
 每个组件需要提供:
+
 - 组件预览图
 - 使用场景说明
 - 属性和状态列表
@@ -541,6 +563,7 @@ Focus Ring: 0 0 0 2px #DBEAFE
 **📋 检查清单**
 
 设计师交付前检查:
+
 - [ ] 使用了正确的设计令牌
 - [ ] 组件尺寸符合规范
 - [ ] 标注信息完整准确
