@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from .effect_priority_qc import (
+    BATCH_OUTPUT_MODE_MINIMAL,
     DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+    DEFAULT_MAX_REFINE_CANDIDATES,
     QUALITY_PROFILE_EFFECT_PRIORITY,
     QUALITY_PROFILE_THROUGHPUT,
 )
@@ -42,6 +44,7 @@ SC_CONTENT_REVIEW_V1_RULE_IDS: tuple[str, ...] = (
     "SC-122",
     "SC-125",
 )
+SC_CONTENT_REVIEW_RULE_ID_SET = {item.upper() for item in SC_CONTENT_REVIEW_V1_RULE_IDS}
 
 
 @dataclass(frozen=True)
@@ -55,6 +58,8 @@ class QCRuleSet:
     bucket_strategy: str = "domain_only"
     enable_selective_refine: bool = False
     refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD
+    batch_output_mode: str = BATCH_OUTPUT_MODE_MINIMAL
+    max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES
     description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -69,6 +74,8 @@ class QCRuleSet:
             "bucket_strategy": self.bucket_strategy,
             "enable_selective_refine": self.enable_selective_refine,
             "refine_confidence_threshold": self.refine_confidence_threshold,
+            "batch_output_mode": self.batch_output_mode,
+            "max_refine_candidates": self.max_refine_candidates,
             "description": self.description,
         }
 
@@ -84,6 +91,8 @@ SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {
         bucket_strategy="domain_family",
         enable_selective_refine=True,
         refine_confidence_threshold=0.75,
+        batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
+        max_refine_candidates=2,
         description="终末病历内涵质控首发硬判定规则，仅保留当前深测中命中边界最稳定的 3 条规则。",
     ),
     "sc_content_review_v1": QCRuleSet(
@@ -94,8 +103,10 @@ SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {
         rule_ids=SC_CONTENT_REVIEW_V1_RULE_IDS,
         quality_profile=QUALITY_PROFILE_EFFECT_PRIORITY,
         bucket_strategy="domain_family",
-        enable_selective_refine=True,
+        enable_selective_refine=False,
         refine_confidence_threshold=0.75,
+        batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
+        max_refine_candidates=0,
         description="终末病历内涵质控首发待复核规则，优先输出疑点与证据，供人工复核使用。",
     ),
     "sc_content_v1": QCRuleSet(
@@ -108,6 +119,8 @@ SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {
         bucket_strategy="domain_family",
         enable_selective_refine=True,
         refine_confidence_threshold=0.75,
+        batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
+        max_refine_candidates=3,
         description="终末病历内涵质控首批上线规则集，面向医学语义、诊疗经过和跨文书一致性。",
     )
 }
@@ -126,3 +139,10 @@ def get_sichuan_rule_set(rule_set_key: Any) -> QCRuleSet | None:
 
 def list_sichuan_rule_sets() -> list[dict[str, Any]]:
     return [rule_set.to_dict() for rule_set in SICHUAN_RULE_SETS.values()]
+
+
+def should_refine_rule_by_default(rule_id: Any) -> bool:
+    normalized = str(rule_id or "").strip().upper()
+    if not normalized:
+        return True
+    return normalized not in SC_CONTENT_REVIEW_RULE_ID_SET

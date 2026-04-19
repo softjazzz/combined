@@ -359,12 +359,13 @@ describe('SemanticRulesBatchResultDrawer', () => {
 
     const tables = wrapper.findAllComponents(ATableStub)
     const ruleOverviewData = tables[0]?.props('dataSource') as Array<{ id?: string }>
-    const issueData = tables[1]?.props('dataSource') as Array<{ rule_job_id?: string }>
+    const issueCards = wrapper.findAll('.issue-conclusion-card')
 
     expect(ruleOverviewData).toHaveLength(1)
     expect(ruleOverviewData[0]?.id).toBe('rule-job-2')
-    expect(issueData).toHaveLength(1)
-    expect(issueData[0]?.rule_job_id).toBe('rule-job-2')
+    expect(issueCards).toHaveLength(1)
+    expect(issueCards[0]?.text()).toContain('SC-002 · 规则二')
+    expect(issueCards[0]?.text()).toContain('规则二命中')
     expect(wrapper.text()).toContain('已按规则过滤：SC-002 · 规则二')
   })
 })

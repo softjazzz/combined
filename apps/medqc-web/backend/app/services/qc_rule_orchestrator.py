@@ -161,6 +161,7 @@ class QCRuleOrchestrator:
         model_version: str = "",
         bucket_strategy: str = DEFAULT_BUCKET_STRATEGY,
         quality_profile: str = "throughput_v1",
+        batch_output_mode: str = "full",
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         execution_cache: Optional[QCExecutionCache] = None,
         cache_ttl_seconds: int = 1800,
@@ -185,6 +186,7 @@ class QCRuleOrchestrator:
         pack_metrics = {
             "prompt_strategy": prompt_strategy_normalized,
             "quality_profile": quality_profile_normalized,
+            "batch_output_mode": str(batch_output_mode or "full"),
             "bucket_strategy": bucket_strategy_normalized,
             "bucket_count": 0,
             "total_packs": 0,
@@ -290,6 +292,7 @@ class QCRuleOrchestrator:
                 metadata = dict(single_payload.get("metadata") or {})
                 metadata["prompt_strategy"] = prompt_strategy_normalized
                 metadata["quality_profile"] = quality_profile_normalized
+                metadata["batch_output_mode"] = str(batch_output_mode or "full")
                 metadata["pack_size"] = 1
                 metadata["pack_fallback"] = True
                 metadata["pack_id"] = f"single-fallback-{idx}"
@@ -370,6 +373,7 @@ class QCRuleOrchestrator:
                 metadata.setdefault("api_time", _safe_float(api_time / max(1, len(entries))))
                 metadata["prompt_strategy"] = prompt_strategy_normalized
                 metadata["quality_profile"] = quality_profile_normalized
+                metadata["batch_output_mode"] = str(batch_output_mode or "full")
                 metadata["pack_size"] = int(pack_size or len(entries))
                 metadata["pack_id"] = pack_id
                 metadata["pack_fallback"] = bool(force_pack_fallback)
@@ -411,6 +415,7 @@ class QCRuleOrchestrator:
                         "pack_size": int(pack_size or len(entries)),
                         "prompt_strategy": prompt_strategy_normalized,
                         "quality_profile": quality_profile_normalized,
+                        "batch_output_mode": str(batch_output_mode or "full"),
                         "low_confidence_threshold": low_confidence_threshold,
                         "execution_domain": str(bucket_key[0] or "generic"),
                         "doc_scope": str(bucket_key[1] or "primary"),
@@ -510,6 +515,7 @@ class QCRuleOrchestrator:
                             "pack_size": candidate,
                             "prompt_strategy": prompt_strategy_normalized,
                             "quality_profile": quality_profile_normalized,
+                            "batch_output_mode": str(batch_output_mode or "full"),
                             "low_confidence_threshold": low_confidence_threshold,
                             "execution_domain": str(bucket_key[0] or "generic"),
                             "doc_scope": str(bucket_key[1] or "primary"),
@@ -626,6 +632,7 @@ class QCRuleOrchestrator:
             metadata.setdefault("cache_key", cache_key)
             metadata.setdefault("prompt_strategy", prompt_strategy_normalized)
             metadata.setdefault("quality_profile", quality_profile_normalized)
+            metadata.setdefault("batch_output_mode", str(batch_output_mode or "full"))
             metadata.setdefault("bucket_strategy", bucket_strategy_normalized)
             metadata.setdefault("bucket_key", _bucket_metric_key(_build_bucket_key(meta, bucket_strategy_normalized)))
             metadata.setdefault("pack_size", int(metadata.get("pack_size") or 1))

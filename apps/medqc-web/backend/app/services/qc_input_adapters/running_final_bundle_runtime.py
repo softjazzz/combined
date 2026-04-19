@@ -109,8 +109,10 @@ async def evaluate_running_final_bundle(
     schema: str = "public",
     bucket_strategy: str = "domain_only",
     quality_profile: str = "throughput_v1",
+    batch_output_mode: str = "full",
     enable_selective_refine: bool = False,
     refine_confidence_threshold: float = 0.75,
+    max_refine_candidates: int = 3,
     use_execution_cache: bool = True,
 ) -> dict[str, Any]:
     if isinstance(bundle_input, dict) and bundle_input:
@@ -132,8 +134,10 @@ async def evaluate_running_final_bundle(
         rule_ids=list(rule_ids or []),
         bucket_strategy=bucket_strategy,
         quality_profile=quality_profile,
+        batch_output_mode=batch_output_mode,
         enable_selective_refine=enable_selective_refine,
         refine_confidence_threshold=refine_confidence_threshold,
+        max_refine_candidates=max_refine_candidates,
         use_execution_cache=use_execution_cache,
     )
     eval_args = adapt_bundle_to_sichuan_eval_args(bundle, rule_ids=rule_ids or [])

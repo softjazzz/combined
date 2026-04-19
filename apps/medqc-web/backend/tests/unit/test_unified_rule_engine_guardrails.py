@@ -72,3 +72,45 @@ def test_apply_result_sanity_should_downgrade_sc032_when_findings_self_report_un
     assert normalized["is_compliant"] is False
     assert normalized["confidence"] == 0.5
     assert "边界" in normalized["suggestion"]
+
+
+def test_apply_batch_output_mode_should_trim_long_text():
+    result = {
+        "status": "uncertain",
+        "findings": "这是一段非常长的结论文本，需要被压缩成简短摘要以避免批量阶段输出过长。" * 2,
+        "evidence": "这是一段非常长的证据引用，需要保留最关键的原文片段即可，不应该在批量阶段展开完整大段落。" * 2,
+        "suggestion": "这是一段非常长的整改建议，需要缩短成一句简洁动作建议即可。" * 2,
+        "issues": ["x"],
+    }
+
+    normalized = UnifiedRuleEngine._apply_batch_output_mode(result, batch_output_mode="minimal")
+
+    assert len(normalized["findings"]) <= 43
+    assert len(normalized["evidence"]) <= 83
+    assert len(normalized["suggestion"]) <= 33
+    assert normalized["issues"] == []
+
+
+async def _unused_llm_generate(prompt: str):  # pragma: no cover
+    return {"choices": [{"message": {"content": "{}"}}], "usage": {"total_tokens": 0}, "_api_time": 0.0}
+
+
+def test_build_batch_prompt_compact_should_use_minimal_output_contract():
+    engine = UnifiedRuleEngine(_unused_llm_generate)
+    prompt, _ = engine._build_batch_prompt_compact(
+        [
+            {
+                "rule_id": "SC-121",
+                "name": "诊疗经过不全面、不详细",
+                "defect_level": "一般缺陷",
+                "rule_family": "content_completeness",
+                "custom_prompt": "检查诊疗经过是否完整。",
+            }
+        ],
+        {"content": "出院记录正文"},
+        quality_profile="effect_priority_v1",
+        batch_output_mode="minimal",
+    )
+
+    assert "findings 最多 40 字" in prompt
+    assert "issues 固定输出空数组 []" in prompt

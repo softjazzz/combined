@@ -7,10 +7,12 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from .effect_priority_qc import (
+    BATCH_OUTPUT_MODE_MINIMAL,
     evidence_limits_for_family,
     family_check_limit,
     family_keywords,
     is_effect_priority_profile,
+    normalize_batch_output_mode,
     normalize_rule_family,
     normalize_quality_profile,
     select_family_snippet,
@@ -363,8 +365,13 @@ class UnifiedRuleEngine:
         low_confidence_threshold: float = 0.45,
         context_token_budget: int = 7000,
         quality_profile: str = "throughput_v1",
+        batch_output_mode: str = "full",
     ) -> Dict[str, Any]:
         quality_profile_normalized = normalize_quality_profile(quality_profile)
+        batch_output_mode_normalized = normalize_batch_output_mode(
+            batch_output_mode,
+            quality_profile=quality_profile_normalized,
+        )
         effective_rules = list(rules or [])
         if not effective_rules:
             return {
@@ -408,6 +415,7 @@ class UnifiedRuleEngine:
                         "api_time": 0.0,
                         "prompt_strategy": "batch_compact_v1",
                         "quality_profile": quality_profile_normalized,
+                        "batch_output_mode": batch_output_mode_normalized,
                         "pack_id": pack_id,
                         "pack_size": int(pack_size or len(effective_rules)),
                         "pack_fallback": False,
@@ -418,7 +426,10 @@ class UnifiedRuleEngine:
 
         if not applicable_rules:
             return {
-                "results": not_applicable_results,
+                "results": [
+                    self._apply_batch_output_mode(item, batch_output_mode=batch_output_mode_normalized)
+                    for item in not_applicable_results
+                ],
                 "tokens_used": 0,
                 "api_time": 0.0,
                 "raw_output": "",
@@ -439,6 +450,7 @@ class UnifiedRuleEngine:
             medical_record,
             context_token_budget=resolved_budget,
             quality_profile=quality_profile_normalized,
+            batch_output_mode=batch_output_mode_normalized,
         )
         llm_result = await self._llm_generate(prompt)
         raw_output = (
@@ -472,34 +484,38 @@ class UnifiedRuleEngine:
 
             if not parsed_item:
                 llm_results.append(
-                    {
-                        "rule_id": rule.get("rule_id"),
-                        "rule_name": rule_name,
-                        "status": "uncertain",
-                        "is_compliant": False,
-                        "issues": [],
-                        "findings": "批量响应缺少该规则结果，待回退重试。",
-                        "evidence": "",
-                        "suggestion": "",
-                        "confidence": 0.0,
-                        "llm_raw_output": raw_output,
-                        "applicability": {
-                            "is_applicable": True,
-                            "reason": "",
-                            "method": "default",
+                    self._apply_batch_output_mode(
+                        {
+                            "rule_id": rule.get("rule_id"),
+                            "rule_name": rule_name,
+                            "status": "uncertain",
+                            "is_compliant": False,
+                            "issues": [],
+                            "findings": "批量响应缺少该规则结果，待回退重试。",
+                            "evidence": "",
+                            "suggestion": "",
+                            "confidence": 0.0,
+                            "llm_raw_output": raw_output,
+                            "applicability": {
+                                "is_applicable": True,
+                                "reason": "",
+                                "method": "default",
+                            },
+                            "evidence_verified": False,
+                            "metadata": {
+                                "tokens_used": distributed_tokens,
+                                "api_time": distributed_api_time,
+                                "prompt_strategy": "batch_compact_v1",
+                                "quality_profile": quality_profile_normalized,
+                                "batch_output_mode": batch_output_mode_normalized,
+                                "pack_id": pack_id,
+                                "pack_size": int(pack_size or len(effective_rules)),
+                                "pack_fallback": False,
+                                "context_tokens_estimate": context_tokens_estimate,
+                            },
                         },
-                        "evidence_verified": False,
-                        "metadata": {
-                            "tokens_used": distributed_tokens,
-                            "api_time": distributed_api_time,
-                            "prompt_strategy": "batch_compact_v1",
-                            "quality_profile": quality_profile_normalized,
-                            "pack_id": pack_id,
-                            "pack_size": int(pack_size or len(effective_rules)),
-                            "pack_fallback": False,
-                            "context_tokens_estimate": context_tokens_estimate,
-                        },
-                    }
+                        batch_output_mode=batch_output_mode_normalized,
+                    )
                 )
                 continue
 
@@ -548,16 +564,28 @@ class UnifiedRuleEngine:
                         "api_time": distributed_api_time,
                         "prompt_strategy": "batch_compact_v1",
                         "quality_profile": quality_profile_normalized,
+                        "batch_output_mode": batch_output_mode_normalized,
                         "pack_id": pack_id,
                         "pack_size": int(pack_size or len(effective_rules)),
                         "pack_fallback": False,
                         "context_tokens_estimate": context_tokens_estimate,
                     },
                 }
-            llm_results.append(self._apply_result_sanity(result_item))
+            llm_results.append(
+                self._apply_batch_output_mode(
+                    self._apply_result_sanity(result_item),
+                    batch_output_mode=batch_output_mode_normalized,
+                )
+            )
 
         return {
-            "results": [*not_applicable_results, *llm_results],
+            "results": [
+                *[
+                    self._apply_batch_output_mode(item, batch_output_mode=batch_output_mode_normalized)
+                    for item in not_applicable_results
+                ],
+                *llm_results,
+            ],
             "tokens_used": tokens_used,
             "api_time": api_time,
             "raw_output": raw_output,
@@ -567,6 +595,31 @@ class UnifiedRuleEngine:
             "context_tokens_estimate": context_tokens_estimate,
         }
 
+    @staticmethod
+    def _apply_batch_output_mode(result: Dict[str, Any], *, batch_output_mode: str) -> Dict[str, Any]:
+        if batch_output_mode != BATCH_OUTPUT_MODE_MINIMAL:
+            return result
+        normalized = dict(result or {})
+        status = str(normalized.get("status") or "").strip().lower()
+        findings = re.sub(r"\s+", " ", str(normalized.get("findings") or "")).strip()
+        evidence = re.sub(r"\s+", " ", str(normalized.get("evidence") or "")).strip()
+        suggestion = re.sub(r"\s+", " ", str(normalized.get("suggestion") or "")).strip()
+
+        if len(findings) > 40:
+            findings = findings[:40].rstrip("，,。；; ") + "..."
+        if len(evidence) > 80:
+            evidence = evidence[:80].rstrip("，,。；; ") + "..."
+        if status in {"compliant", "not_applicable"}:
+            suggestion = ""
+        elif len(suggestion) > 30:
+            suggestion = suggestion[:30].rstrip("，,。；; ") + "..."
+
+        normalized["findings"] = findings
+        normalized["evidence"] = evidence
+        normalized["suggestion"] = suggestion
+        normalized["issues"] = []
+        return normalized
+
     def _build_batch_prompt_compact(
         self,
         rules: List[Dict[str, Any]],
@@ -574,10 +627,15 @@ class UnifiedRuleEngine:
         *,
         context_token_budget: int = 7000,
         quality_profile: str = "throughput_v1",
+        batch_output_mode: str = "full",
     ) -> Tuple[str, int]:
         content = str(medical_record.get("content") or "")
         evidence_payload = medical_record.get("evidence_payload")
         quality_profile_normalized = normalize_quality_profile(quality_profile)
+        batch_output_mode_normalized = normalize_batch_output_mode(
+            batch_output_mode,
+            quality_profile=quality_profile_normalized,
+        )
         rule_families = [
             normalize_rule_family(rule.get("rule_family"))
             for rule in list(rules or [])
@@ -616,16 +674,25 @@ class UnifiedRuleEngine:
                 f"  guardrails: {self._compact_rule_guardrails(rule_id)}"
             )
 
+        output_rules = (
+            "- findings 最多 40 字，只写一句结论，不要分点展开。\n"
+            "- evidence 最多 80 字，只保留 1-2 个直接原文片段。\n"
+            "- suggestion 最多 30 字，只给最短整改动作；compliant/not_applicable 置空。\n"
+            "- issues 固定输出空数组 []。\n"
+            if batch_output_mode_normalized == BATCH_OUTPUT_MODE_MINIMAL
+            else "- evidence 尽量引用原文短句。\n"
+        )
+
         prompt = (
             "你是资深病历质控专家。请基于下方病历证据，对规则列表逐条判定。\n"
             "要求：\n"
             "1. 只输出 JSON，不要解释。\n"
             "2. 必须覆盖全部 rule_id，每条只输出一次。\n"
             "3. 若证据不足，status=uncertain，is_compliant=false，并说明缺失证据。\n"
-            "4. evidence 尽量引用原文短句。\n"
-            "5. 不得因轻微格式问题、术语不够漂亮、标题顺序一般，就直接判 non_compliant。\n"
-            "6. 若核心内容已存在，只是提炼一般、表达一般或边界不清，优先 uncertain。\n"
-            "7. findings / evidence / suggestion 必须一致，不得出现“不合规但无需修改”。\n\n"
+            f"{output_rules}"
+            "- 不得因轻微格式问题、术语不够漂亮、标题顺序一般，就直接判 non_compliant。\n"
+            "- 若核心内容已存在，只是提炼一般、表达一般或边界不清，优先 uncertain。\n"
+            "- findings / evidence / suggestion 必须一致，不得出现“不合规但无需修改”。\n\n"
             f"适用规则数 {len(rules)}\n"
             "规则卡片：\n"
             f"{chr(10).join(card_lines)}\n\n"

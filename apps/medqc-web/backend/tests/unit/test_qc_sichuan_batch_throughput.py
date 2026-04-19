@@ -26,6 +26,7 @@ class _WorkspaceStub:
         self.items: List[Dict[str, Any]] = []
         self.failed_records: List[Dict[str, Any]] = []
         self.created_job: Optional[Dict[str, Any]] = None
+        self.progress_updates: List[Dict[str, Any]] = []
 
     def get_batch_job_for_processing(self, *, job_id: str) -> Optional[Dict[str, Any]]:
         if job_id != self.job["id"]:
@@ -72,10 +73,14 @@ class _WorkspaceStub:
         filters: Dict[str, Any],
         record_ids: List[str],
         total_records: int,
+        draft_ids: Optional[List[str]] = None,
+        execution_mode: Optional[str] = None,
+        rule_count: Optional[int] = None,
     ) -> Dict[str, Any]:
         self.created_job = {
             "id": self.job["id"],
             "draft_id": draft.get("id"),
+            "draft_ids": list(draft_ids or []),
             "rule_code": draft.get("rule_code"),
             "rule_name": draft.get("name"),
             "scene": draft.get("scene"),
@@ -84,9 +89,43 @@ class _WorkspaceStub:
             "filters": filters,
             "record_ids": record_ids,
             "total_records": total_records,
+            "execution_mode": execution_mode,
+            "rule_count": rule_count,
             "status": "queued",
         }
         return dict(self.created_job)
+
+    def update_batch_job_progress(
+        self,
+        *,
+        job_id: str,
+        step_key: str,
+        rule_index: int,
+        rule_count: int,
+        processed_records: int,
+        total_records: int,
+        summary_patch: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        if job_id != self.job["id"]:
+            return
+        progress = {
+            "step_key": step_key,
+            "rule_index": rule_index,
+            "rule_count": rule_count,
+            "processed_records": processed_records,
+            "total_records": total_records,
+        }
+        self.job["progress"] = progress
+        self.progress_updates.append(
+            {
+                **progress,
+                "summary_patch": dict(summary_patch or {}),
+            }
+        )
+        if summary_patch:
+            current_summary = dict(self.summary or {})
+            current_summary.update(summary_patch)
+            self.summary = current_summary
 
     def complete_batch_job(
         self,
@@ -419,6 +458,8 @@ async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkey
     assert filters["rule_set_name"] == "内涵质控首批 v1"
     assert filters["quality_profile"] == "effect_priority_v1"
     assert filters["bucket_strategy"] == "domain_family"
+    assert filters["batch_output_mode"] == "minimal"
     assert filters["enable_selective_refine"] is True
+    assert filters["max_refine_candidates"] == 3
     assert filters["rule_ids"] == list(SC_CONTENT_V1_RULE_IDS)
     assert response["data"]["draft_ids"] == list(SC_CONTENT_V1_RULE_IDS)

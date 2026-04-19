@@ -12,6 +12,8 @@ def test_sc_content_v1_rule_set_should_be_fixed_first_batch():
     assert rule_set.bucket_strategy == "domain_family"
     assert rule_set.enable_selective_refine is True
     assert rule_set.refine_confidence_threshold == 0.75
+    assert rule_set.batch_output_mode == "minimal"
+    assert rule_set.max_refine_candidates == 3
     assert list(rule_set.rule_ids) == [
         "SC-023",
         "SC-024",
@@ -38,6 +40,8 @@ def test_split_launch_rule_sets_should_match_latest_p1a_decision():
     assert full_rule_set is not None
 
     assert hard_rule_set.name == "内涵质控硬判定首发 v1"
+    assert hard_rule_set.enable_selective_refine is True
+    assert hard_rule_set.max_refine_candidates == 2
     assert list(hard_rule_set.rule_ids) == [
         "SC-033",
         "SC-121",
@@ -45,6 +49,8 @@ def test_split_launch_rule_sets_should_match_latest_p1a_decision():
     ]
 
     assert review_rule_set.name == "内涵质控待复核首发 v1"
+    assert review_rule_set.enable_selective_refine is False
+    assert review_rule_set.max_refine_candidates == 0
     assert list(review_rule_set.rule_ids) == [
         "SC-023",
         "SC-024",

@@ -44,8 +44,10 @@ export async function createSichuanWorkspaceBatchJob(payload: {
   rule_set_key?: string
   quality_profile?: string
   bucket_strategy?: string
+  batch_output_mode?: string
   enable_selective_refine?: boolean
   refine_confidence_threshold?: number
+  max_refine_candidates?: number
   scope: 'all' | 'running' | 'final'
   department?: string
   doctor?: string

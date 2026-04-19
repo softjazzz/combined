@@ -28,13 +28,18 @@ from .qc_execution_cache import QCExecutionCache
 from .qc_rule_orchestrator import QCRuleOrchestrator
 from .qc_rule_registry_service import QCRuleRegistryService
 from .effect_priority_qc import (
+    BATCH_OUTPUT_MODE_FULL,
+    DEFAULT_MAX_REFINE_CANDIDATES,
     DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
     QUALITY_PROFILE_EFFECT_PRIORITY,
     QUALITY_PROFILE_THROUGHPUT,
     merge_refined_results,
+    normalize_batch_output_mode,
+    normalize_max_refine_candidates,
     normalize_quality_profile,
     select_refine_candidates,
 )
+from .qc_rule_sets import should_refine_rule_by_default
 from .sc_rule_family import (
     DEFAULT_RULE_FAMILY,
     load_sc_rule_family_map,
@@ -154,6 +159,11 @@ class SichuanQCService:
             sc_mapping=self._load_sc_rule_family_map(),
         )
         normalized["rule_family"] = rule_family or DEFAULT_RULE_FAMILY
+        normalized["allow_selective_refine"] = bool(
+            normalized.get("allow_selective_refine")
+            if normalized.get("allow_selective_refine") is not None
+            else should_refine_rule_by_default(rule_id)
+        )
 
         custom_prompt = str(normalized.get("custom_prompt") or "")
         if custom_prompt:
@@ -714,12 +724,19 @@ class SichuanQCService:
         evidence_payload: Optional[Dict[str, Any]] = None,
         bucket_strategy: str = "domain_only",
         quality_profile: str = QUALITY_PROFILE_THROUGHPUT,
+        batch_output_mode: str = BATCH_OUTPUT_MODE_FULL,
         enable_selective_refine: bool = False,
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+        max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
     ) -> Dict[str, Any]:
         prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
         quality_profile_normalized = normalize_quality_profile(quality_profile)
+        batch_output_mode_normalized = normalize_batch_output_mode(
+            batch_output_mode,
+            quality_profile=quality_profile_normalized,
+        )
+        max_refine_candidates_normalized = normalize_max_refine_candidates(max_refine_candidates)
         model_version = str(self.client.model or "")
         llm_concurrency = 6
 
@@ -747,11 +764,13 @@ class SichuanQCService:
             model_version=model_version,
             bucket_strategy=bucket_strategy,
             quality_profile=quality_profile_normalized,
+            batch_output_mode=batch_output_mode_normalized,
             refine_confidence_threshold=refine_confidence_threshold,
             execution_cache=self.execution_cache if use_execution_cache else None,
             cache_ttl_seconds=1800,
         )
         orchestrated["quality_profile"] = quality_profile_normalized
+        orchestrated["batch_output_mode"] = batch_output_mode_normalized
 
         if enable_selective_refine:
             refined = await self._apply_selective_refine(
@@ -759,6 +778,7 @@ class SichuanQCService:
                 rules=prepared_rules,
                 medical_record=medical_record,
                 refine_confidence_threshold=refine_confidence_threshold,
+                max_refine_candidates=max_refine_candidates_normalized,
             )
             return refined
         orchestrated.setdefault(
@@ -766,8 +786,11 @@ class SichuanQCService:
             {
                 "enabled": False,
                 "candidate_count": 0,
+                "eligible_candidate_count": 0,
                 "refined_rule_count": 0,
                 "refine_failed_count": 0,
+                "budget_applied": 0,
+                "budget_skipped_count": 0,
                 "refine_reasons": {},
             },
         )
@@ -792,6 +815,10 @@ class SichuanQCService:
             low_confidence_threshold=float(options.get("low_confidence_threshold") or 0.45),
             context_token_budget=8600 if normalize_quality_profile(options.get("quality_profile")) == QUALITY_PROFILE_EFFECT_PRIORITY else 7000,
             quality_profile=normalize_quality_profile(options.get("quality_profile")),
+            batch_output_mode=normalize_batch_output_mode(
+                options.get("batch_output_mode"),
+                quality_profile=normalize_quality_profile(options.get("quality_profile")),
+            ),
         )
 
     async def _apply_selective_refine(
@@ -801,6 +828,7 @@ class SichuanQCService:
         rules: List[Dict[str, Any]],
         medical_record: Dict[str, Any],
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+        max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
     ) -> Dict[str, Any]:
         results = list(orchestrated.get("results") or [])
         rules_by_id = {
@@ -808,11 +836,44 @@ class SichuanQCService:
             for rule in list(rules or [])
             if str(rule.get("rule_id") or rule.get("rule_code") or "").strip()
         }
-        candidates = select_refine_candidates(
+        raw_candidates = select_refine_candidates(
             results,
             rules_by_id=rules_by_id,
             confidence_threshold=refine_confidence_threshold,
         )
+        ineligible_candidates = [
+            candidate
+            for candidate in raw_candidates
+            if not bool((candidate.get("rule") or {}).get("allow_selective_refine") is True)
+        ]
+        eligible_candidates = [
+            candidate
+            for candidate in raw_candidates
+            if bool((candidate.get("rule") or {}).get("allow_selective_refine") is True)
+        ]
+        eligible_candidates.sort(
+            key=lambda candidate: self._refine_candidate_priority(candidate),
+            reverse=True,
+        )
+        refine_budget = normalize_max_refine_candidates(max_refine_candidates)
+        candidates = eligible_candidates[:refine_budget] if refine_budget > 0 else []
+        skipped_candidates = eligible_candidates[refine_budget:] if refine_budget > 0 else eligible_candidates
+
+        for skipped in [*ineligible_candidates, *skipped_candidates]:
+            skipped_rule_id = str(skipped.get("rule_id") or "").strip().upper()
+            for item in results:
+                if str(item.get("rule_id") or "").strip().upper() != skipped_rule_id:
+                    continue
+                metadata = dict(item.get("metadata") or {})
+                metadata.setdefault("qc_stage", "screening")
+                metadata.setdefault("refined", False)
+                metadata["final_decision_source"] = "batch"
+                if skipped in ineligible_candidates:
+                    metadata["refine_skipped"] = "rule_policy"
+                else:
+                    metadata["refine_skipped"] = "budget"
+                item["metadata"] = metadata
+                break
 
         refined_by_rule: Dict[str, Dict[str, Any]] = {}
         refine_reasons_by_rule: Dict[str, str] = {}
@@ -883,12 +944,41 @@ class SichuanQCService:
         refined["refine_details"] = refine_details
         refined["refine_summary"] = {
             "enabled": True,
-            "candidate_count": len(candidates),
+            "candidate_count": len(raw_candidates),
+            "eligible_candidate_count": len(eligible_candidates),
             **merge_summary,
+            "budget_applied": refine_budget,
+            "budget_skipped_count": len(skipped_candidates),
         }
         refined["refined_rule_count"] = int(merge_summary.get("refined_rule_count") or 0)
         refined["refine_reasons"] = dict(merge_summary.get("refine_reasons") or {})
         return refined
+
+    @staticmethod
+    def _refine_candidate_priority(candidate: Dict[str, Any]) -> Tuple[int, int, float]:
+        screening_result = dict(candidate.get("screening_result") or {})
+        reason_text = str(candidate.get("refine_reason") or "")
+        reasons = {item.strip() for item in reason_text.split(",") if item.strip()}
+        rule = dict(candidate.get("rule") or {})
+        defect_level = str(rule.get("defect_level") or screening_result.get("defect_level") or "")
+        confidence = float(screening_result.get("confidence") or 0.0)
+
+        priority = 0
+        if "logical_contradiction" in reasons:
+            priority += 100
+        if str(screening_result.get("status") or "").strip().lower() == "non_compliant":
+            priority += 60
+        if any(reason.startswith("high_risk_family:") for reason in reasons):
+            priority += 40
+        if "severe_non_compliant" in reasons or ("严重" in defect_level or "重度" in defect_level):
+            priority += 30
+        if "uncertain" in reasons:
+            priority += 10
+        if "low_confidence" in reasons:
+            priority += 5
+
+        reason_count = len(reasons)
+        return priority, reason_count, 1 - confidence
 
     async def _resolve_rules_for_document(
         self,
@@ -1455,8 +1545,10 @@ class SichuanQCService:
         evidence_payload: Optional[Dict[str, Any]] = None,
         bucket_strategy: str = "domain_only",
         quality_profile: str = QUALITY_PROFILE_THROUGHPUT,
+        batch_output_mode: str = BATCH_OUTPUT_MODE_FULL,
         enable_selective_refine: bool = False,
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+        max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
     ) -> Dict[str, Any]:
         """
@@ -1493,8 +1585,10 @@ class SichuanQCService:
             evidence_payload=evidence_payload,
             bucket_strategy=bucket_strategy,
             quality_profile=quality_profile,
+            batch_output_mode=batch_output_mode,
             enable_selective_refine=enable_selective_refine,
             refine_confidence_threshold=refine_confidence_threshold,
+            max_refine_candidates=max_refine_candidates,
             use_execution_cache=use_execution_cache,
         )
         return self._build_document_evaluation_result(
@@ -1511,8 +1605,10 @@ class SichuanQCService:
         rule_ids: Optional[List[str]] = None,
         bucket_strategy: str = "domain_only",
         quality_profile: str = QUALITY_PROFILE_THROUGHPUT,
+        batch_output_mode: str = BATCH_OUTPUT_MODE_FULL,
         enable_selective_refine: bool = False,
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+        max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
     ) -> Dict[str, Any]:
         """
@@ -1566,8 +1662,10 @@ class SichuanQCService:
                 evidence_payload=evidence_payload,
                 bucket_strategy=bucket_strategy,
                 quality_profile=quality_profile,
+                batch_output_mode=batch_output_mode,
                 enable_selective_refine=enable_selective_refine,
                 refine_confidence_threshold=refine_confidence_threshold,
+                max_refine_candidates=max_refine_candidates,
                 use_execution_cache=use_execution_cache,
             )
         else:
@@ -1626,8 +1724,10 @@ class SichuanQCService:
                     evidence_payload=per_doc_evidence_payload,
                     bucket_strategy=bucket_strategy,
                     quality_profile=quality_profile,
+                    batch_output_mode=batch_output_mode,
                     enable_selective_refine=enable_selective_refine,
                     refine_confidence_threshold=refine_confidence_threshold,
+                    max_refine_candidates=max_refine_candidates,
                     use_execution_cache=use_execution_cache,
                 )
                 result_items.extend(list(per_doc_orchestrated.get("results") or []))
@@ -1661,8 +1761,11 @@ class SichuanQCService:
                 "refine_summary": {
                     "enabled": enable_selective_refine,
                     "candidate_count": refine_candidate_count,
+                    "eligible_candidate_count": refine_candidate_count,
                     "refined_rule_count": sum(1 for item in result_items if bool((item.get("metadata") or {}).get("refined"))),
                     "refine_failed_count": refine_failed_count,
+                    "budget_applied": max_refine_candidates,
+                    "budget_skipped_count": 0,
                     "refine_reasons": refine_reasons_agg,
                 },
                 "refined_rule_count": sum(1 for item in result_items if bool((item.get("metadata") or {}).get("refined"))),

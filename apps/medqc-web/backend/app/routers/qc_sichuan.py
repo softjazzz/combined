@@ -19,9 +19,13 @@ from ..core.settings import get_settings
 from ..core.security import require_admin, get_current_user
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ..services.effect_priority_qc import (
+    BATCH_OUTPUT_MODE_FULL,
+    DEFAULT_MAX_REFINE_CANDIDATES,
     DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
     QUALITY_PROFILE_EFFECT_PRIORITY,
     QUALITY_PROFILE_THROUGHPUT,
+    normalize_batch_output_mode,
+    normalize_max_refine_candidates,
 )
 
 logger = logging.getLogger(__name__)
@@ -192,8 +196,10 @@ class SichuanWorkspaceBatchJobCreateRequest(BaseModel):
     rule_set_key: Optional[str] = None
     quality_profile: Optional[str] = None
     bucket_strategy: Optional[str] = None
+    batch_output_mode: Optional[str] = None
     enable_selective_refine: Optional[bool] = None
     refine_confidence_threshold: Optional[float] = None
+    max_refine_candidates: Optional[int] = None
     scope: str = "final"
     department: Optional[str] = None
     doctor: Optional[str] = None
@@ -253,6 +259,14 @@ def _normalize_refine_threshold(value: Any) -> float:
     if number <= 0 or number > 1:
         return DEFAULT_REFINE_CONFIDENCE_THRESHOLD
     return number
+
+
+def _normalize_batch_output_mode(value: Any, *, quality_profile: Any = QUALITY_PROFILE_THROUGHPUT) -> str:
+    return normalize_batch_output_mode(value, quality_profile=quality_profile)
+
+
+def _normalize_max_refine_candidates(value: Any, *, default: int = DEFAULT_MAX_REFINE_CANDIDATES) -> int:
+    return normalize_max_refine_candidates(value, default=default)
 
 
 def _normalize_scope(scope: Optional[str]) -> str:
@@ -841,8 +855,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         rule_set_version = str(filters.get("rule_set_version") or "").strip()
         quality_profile = _normalize_quality_profile(filters.get("quality_profile"))
         bucket_strategy = _normalize_bucket_strategy(filters.get("bucket_strategy"))
+        batch_output_mode = _normalize_batch_output_mode(
+            filters.get("batch_output_mode"),
+            quality_profile=quality_profile,
+        )
         enable_selective_refine = bool(filters.get("enable_selective_refine") is True)
         refine_confidence_threshold = _normalize_refine_threshold(filters.get("refine_confidence_threshold"))
+        max_refine_candidates = _normalize_max_refine_candidates(filters.get("max_refine_candidates"))
         qc_service.assert_sc_rule_source_ready(
             context=f"workspace_batch_job:{job_id}",
             block_batch=True,
@@ -938,8 +957,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "rule_set_version": rule_set_version,
                 "quality_profile": quality_profile,
                 "bucket_strategy": bucket_strategy,
+                "batch_output_mode": batch_output_mode,
                 "enable_selective_refine": enable_selective_refine,
                 "refine_confidence_threshold": refine_confidence_threshold,
+                "max_refine_candidates": max_refine_candidates,
                 "rule_count": total_rules,
                 "total_records": total_records,
                 "success_count": 0,
@@ -1027,8 +1048,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             schema="public",
                             bucket_strategy=bucket_strategy,
                             quality_profile=quality_profile,
+                            batch_output_mode=batch_output_mode,
                             enable_selective_refine=enable_selective_refine,
                             refine_confidence_threshold=refine_confidence_threshold,
+                            max_refine_candidates=max_refine_candidates,
                         )
                         eval_items = list(
                             single_result.get("evaluation_results")
@@ -1081,8 +1104,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         rule_ids=valid_rule_ids,
                         bucket_strategy=bucket_strategy,
                         quality_profile=quality_profile,
+                        batch_output_mode=batch_output_mode,
                         enable_selective_refine=enable_selective_refine,
                         refine_confidence_threshold=refine_confidence_threshold,
+                        max_refine_candidates=max_refine_candidates,
                     )
                     record_total_tokens = int(((result.get("token_usage") or {}).get("total_tokens")) or 0)
                     record_total_api_time = float(result.get("api_time") or 0.0)
@@ -1374,8 +1399,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "rule_set_version": rule_set_version,
             "quality_profile": quality_profile,
             "bucket_strategy": bucket_strategy,
+            "batch_output_mode": batch_output_mode,
             "enable_selective_refine": enable_selective_refine,
             "refine_confidence_threshold": refine_confidence_threshold,
+            "max_refine_candidates": max_refine_candidates,
             "total_records": total_records,
             "success_count": max(0, total_records - len(failed_record_ids)),
             "failed_record_count": len(failed_record_ids),
@@ -1407,6 +1434,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "pack_metrics": {
                 "quality_profile": quality_profile,
                 "bucket_strategy": bucket_strategy,
+                "batch_output_mode": batch_output_mode,
                 "total_packs": total_pack_count,
                 "avg_pack_size": round((total_pack_size_weighted / total_pack_count), 2) if total_pack_count else 0.0,
                 "fallback_packs": total_pack_fallback_count,
@@ -1460,8 +1488,10 @@ async def create_workspace_batch_job(
         rule_set_version = requested_rule_set.version
         quality_profile = requested_rule_set.quality_profile
         bucket_strategy = requested_rule_set.bucket_strategy
+        batch_output_mode = requested_rule_set.batch_output_mode
         enable_selective_refine = requested_rule_set.enable_selective_refine
         refine_confidence_threshold = requested_rule_set.refine_confidence_threshold
+        max_refine_candidates = requested_rule_set.max_refine_candidates
     else:
         rule_ids = [str(item).strip() for item in (payload.rule_ids or []) if str(item).strip()]
         effective_scope = payload.scope
@@ -1470,8 +1500,13 @@ async def create_workspace_batch_job(
         rule_set_version = ""
         quality_profile = _normalize_quality_profile(payload.quality_profile)
         bucket_strategy = _normalize_bucket_strategy(payload.bucket_strategy)
+        batch_output_mode = _normalize_batch_output_mode(
+            payload.batch_output_mode,
+            quality_profile=quality_profile,
+        )
         enable_selective_refine = bool(payload.enable_selective_refine is True)
         refine_confidence_threshold = _normalize_refine_threshold(payload.refine_confidence_threshold)
+        max_refine_candidates = _normalize_max_refine_candidates(payload.max_refine_candidates)
 
     if not rule_ids:
         raise HTTPException(status_code=422, detail="rule_ids 不能为空")
@@ -1520,8 +1555,10 @@ async def create_workspace_batch_job(
             "rule_set_version": rule_set_version,
             "quality_profile": quality_profile,
             "bucket_strategy": bucket_strategy,
+            "batch_output_mode": batch_output_mode,
             "enable_selective_refine": enable_selective_refine,
             "refine_confidence_threshold": refine_confidence_threshold,
+            "max_refine_candidates": max_refine_candidates,
             "source": "sichuan_rule_workspace",
         },
         record_ids=payload.record_ids or [],
@@ -1542,6 +1579,8 @@ async def create_workspace_batch_job(
             "rule_set_version": rule_set_version,
             "quality_profile": quality_profile,
             "bucket_strategy": bucket_strategy,
+            "batch_output_mode": batch_output_mode,
+            "max_refine_candidates": max_refine_candidates,
             "refine_summary": None,
         },
         message="四川规则批量任务已创建",
@@ -1614,6 +1653,8 @@ async def list_workspace_batch_jobs(
             "rule_set_version": str(((item.get("filters") or {}).get("rule_set_version")) or ""),
             "quality_profile": str(((item.get("summary") or {}).get("quality_profile") or (item.get("filters") or {}).get("quality_profile")) or ""),
             "bucket_strategy": str(((item.get("summary") or {}).get("bucket_strategy") or (item.get("filters") or {}).get("bucket_strategy")) or ""),
+            "batch_output_mode": str(((item.get("summary") or {}).get("batch_output_mode") or (item.get("filters") or {}).get("batch_output_mode")) or ""),
+            "max_refine_candidates": int(((item.get("summary") or {}).get("max_refine_candidates") or (item.get("filters") or {}).get("max_refine_candidates") or 0) or 0),
             "refine_summary": (item.get("summary") or {}).get("refine_summary"),
         }
         for item in result.items
@@ -1651,6 +1692,8 @@ async def get_workspace_batch_job(
             "rule_set_version": str(((job.get("filters") or {}).get("rule_set_version")) or ""),
             "quality_profile": str(((job.get("summary") or {}).get("quality_profile") or (job.get("filters") or {}).get("quality_profile")) or ""),
             "bucket_strategy": str(((job.get("summary") or {}).get("bucket_strategy") or (job.get("filters") or {}).get("bucket_strategy")) or ""),
+            "batch_output_mode": str(((job.get("summary") or {}).get("batch_output_mode") or (job.get("filters") or {}).get("batch_output_mode")) or ""),
+            "max_refine_candidates": int(((job.get("summary") or {}).get("max_refine_candidates") or (job.get("filters") or {}).get("max_refine_candidates") or 0) or 0),
             "refine_summary": (job.get("summary") or {}).get("refine_summary"),
         },
         message="获取四川规则批量任务详情成功",

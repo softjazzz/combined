@@ -70,19 +70,25 @@ export interface SichuanBatchJobSummary {
   rule_set_version?: string
   quality_profile?: string
   bucket_strategy?: string
+  batch_output_mode?: string
   enable_selective_refine?: boolean
   refine_confidence_threshold?: number
+  max_refine_candidates?: number
   refined_rule_count?: number
   refine_summary?: {
     enabled?: boolean
     candidate_count?: number
+    eligible_candidate_count?: number
     refined_rule_count?: number
     refine_failed_count?: number
+    budget_applied?: number
+    budget_skipped_count?: number
     refine_reasons?: Record<string, number>
   }
   pack_metrics?: {
     quality_profile?: string
     bucket_strategy?: string
+    batch_output_mode?: string
     total_packs?: number
     avg_pack_size?: number
     fallback_packs?: number
@@ -176,6 +182,7 @@ export interface SichuanBatchIssueItem {
   llm_fallback?: boolean
   quality_profile?: string
   bucket_strategy?: string
+  batch_output_mode?: string
   refined?: boolean
   refine_reason?: string
   screening_status?: string
@@ -276,6 +283,8 @@ export interface SichuanBatchJob {
   rule_set_version?: string
   quality_profile?: string
   bucket_strategy?: string
+  batch_output_mode?: string
+  max_refine_candidates?: number
   refine_summary?: SichuanBatchJobSummary['refine_summary'] | null
   items?: SichuanBatchIssueItem[]
   failed_records?: SichuanBatchFailedItem[]

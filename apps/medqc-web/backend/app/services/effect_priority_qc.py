@@ -8,10 +8,18 @@ from typing import Any, Iterable
 QUALITY_PROFILE_THROUGHPUT = "throughput_v1"
 QUALITY_PROFILE_EFFECT_PRIORITY = "effect_priority_v1"
 DEFAULT_REFINE_CONFIDENCE_THRESHOLD = 0.75
+DEFAULT_MAX_REFINE_CANDIDATES = 3
+BATCH_OUTPUT_MODE_FULL = "full"
+BATCH_OUTPUT_MODE_MINIMAL = "minimal"
 
 ALLOWED_QUALITY_PROFILES = {
     QUALITY_PROFILE_THROUGHPUT,
     QUALITY_PROFILE_EFFECT_PRIORITY,
+}
+
+ALLOWED_BATCH_OUTPUT_MODES = {
+    BATCH_OUTPUT_MODE_FULL,
+    BATCH_OUTPUT_MODE_MINIMAL,
 }
 
 EFFECT_FAMILY_PACK_CANDIDATES: dict[str, tuple[int, ...]] = {
@@ -56,6 +64,23 @@ def normalize_quality_profile(value: Any) -> str:
 
 def is_effect_priority_profile(value: Any) -> bool:
     return normalize_quality_profile(value) == QUALITY_PROFILE_EFFECT_PRIORITY
+
+
+def normalize_batch_output_mode(value: Any, *, quality_profile: Any = QUALITY_PROFILE_THROUGHPUT) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in ALLOWED_BATCH_OUTPUT_MODES:
+        return normalized
+    if is_effect_priority_profile(quality_profile):
+        return BATCH_OUTPUT_MODE_MINIMAL
+    return BATCH_OUTPUT_MODE_FULL
+
+
+def normalize_max_refine_candidates(value: Any, *, default: int = DEFAULT_MAX_REFINE_CANDIDATES) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        return max(0, int(default or 0))
+    return max(0, parsed)
 
 
 def normalize_rule_family(value: Any) -> str:
