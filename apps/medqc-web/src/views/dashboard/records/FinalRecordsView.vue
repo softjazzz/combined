@@ -81,14 +81,29 @@
     >
       <ProQueryBar>
         <template #filters>
-          <div class="relative">
-            <a-input
-              v-model:value="searchKeyword"
-              placeholder="搜索病历号/姓名..."
-              class="w-64 !rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400 focus:!border-blue-500 !pl-10"
-              @press-enter="handleSearch"
-            />
-            <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div class="flex items-center gap-2">
+            <div class="relative">
+              <a-input
+                v-model:value="searchKeyword"
+                placeholder="搜索病历号/姓名..."
+                class="w-64 !rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400 focus:!border-blue-500 !pl-10"
+                @press-enter="handleSearch"
+              />
+              <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            </div>
+            <a-button
+              type="primary"
+              class="!rounded-xl !h-9"
+              @click="handleSearch"
+            >
+              查询
+            </a-button>
+            <a-button
+              class="!rounded-xl !h-9"
+              @click="handleResetFilters"
+            >
+              重置
+            </a-button>
           </div>
 
           <a-select
@@ -1209,6 +1224,16 @@ const confirmBatchLaunch = async () => {
 const handleSearch = () => {
   pagination.value.current = 1
   fetchRecords()
+}
+
+const handleResetFilters = () => {
+  searchKeyword.value = ''
+  selectedDepartment.value = undefined
+  selectedQCStatus.value = undefined
+  dateRange.value = null
+  pagination.value.current = 1
+  fetchRecords()
+  loadOverview()
 }
 
 const handleRefresh = () => {
