@@ -30,7 +30,7 @@ from .document_domain_alignment import (
     normalize_document_label,
 )
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
-from ..database.models.cdm import MedicalRecordFrontpage
+from ..database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
 
 
 DEFAULT_DOCUMENT_TYPE = "日常病程记录"
@@ -530,14 +530,49 @@ class CustomQCWorkspaceService:
         start = _as_date(start_date)
         end = _as_date(end_date)
         dept_expr = func.coalesce(
-            MedicalRecordFrontpage.discharge_dept_name, MedicalRecordFrontpage.admission_dept_name
+            MedicalRecordFrontpage.discharge_dept_name,
+            MedicalRecordFrontpage.admission_dept_name,
+            DischargeRecord.dept_name,
+            AdmissionRecord.dept_name,
         )
-        query = session.query(MedicalRecordFrontpage)
+        discharge_dt_expr = func.coalesce(
+            MedicalRecordFrontpage.discharge_datetime,
+            DischargeRecord.discharge_date,
+            DischargeRecord.update_time,
+        )
+        admission_dt_expr = func.coalesce(
+            MedicalRecordFrontpage.admission_datetime,
+            AdmissionRecord.admission_datetime,
+            AdmissionRecord.update_time,
+        )
+        query = (
+            session.query(
+                MedicalRecordFrontpage,
+                discharge_dt_expr.label("effective_discharge_datetime"),
+                admission_dt_expr.label("effective_admission_datetime"),
+            )
+            .outerjoin(
+                DischargeRecord,
+                and_(
+                    DischargeRecord.institute_id == MedicalRecordFrontpage.institute_id,
+                    DischargeRecord.patient_id == MedicalRecordFrontpage.patient_id,
+                    DischargeRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                ),
+            )
+            .outerjoin(
+                AdmissionRecord,
+                and_(
+                    AdmissionRecord.institute_id == MedicalRecordFrontpage.institute_id,
+                    AdmissionRecord.patient_id == MedicalRecordFrontpage.patient_id,
+                    AdmissionRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                ),
+            )
+        )
 
         if scope_value == "final":
-            query = query.filter(MedicalRecordFrontpage.discharge_datetime.is_not(None))
+            query = query.filter(discharge_dt_expr.is_not(None))
         elif scope_value == "running":
-            query = query.filter(MedicalRecordFrontpage.discharge_datetime.is_(None))
+            query = query.filter(discharge_dt_expr.is_(None))
 
         if department:
             query = query.filter(dept_expr == department)
@@ -561,9 +596,9 @@ class CustomQCWorkspaceService:
                 query = query.filter(MedicalRecordFrontpage.visit_id.in_(normalized_ids))
 
         date_col = (
-            MedicalRecordFrontpage.admission_datetime
+            admission_dt_expr
             if date_field_value == "admission"
-            else MedicalRecordFrontpage.discharge_datetime
+            else discharge_dt_expr
         )
         if start:
             query = query.filter(func.date(date_col) >= start)
@@ -572,21 +607,32 @@ class CustomQCWorkspaceService:
         return query
 
     def _serialize_record_row(self, row: Any) -> Dict[str, Any]:
-        item_scope = "final" if row.discharge_datetime else "running"
-        item_department = _safe_text(row.discharge_dept_name or row.admission_dept_name)
+        source_row = row
+        effective_discharge_datetime = None
+        effective_admission_datetime = None
+        if isinstance(row, tuple):
+            source_row = row[0]
+            if len(row) > 1:
+                effective_discharge_datetime = row[1]
+            if len(row) > 2:
+                effective_admission_datetime = row[2]
+        effective_discharge_datetime = effective_discharge_datetime or source_row.discharge_datetime
+        effective_admission_datetime = effective_admission_datetime or source_row.admission_datetime
+        item_scope = "final" if effective_discharge_datetime else "running"
+        item_department = _safe_text(source_row.discharge_dept_name or source_row.admission_dept_name)
         return {
-            "record_id": _safe_text(row.visit_id),
-            "visit_id": _safe_text(row.visit_id),
-            "patient_name": _safe_text(row.name),
-            "mr_no": _safe_text(row.mr_no),
-            "inpat_no": _safe_text(row.inpat_no),
+            "record_id": _safe_text(source_row.visit_id),
+            "visit_id": _safe_text(source_row.visit_id),
+            "patient_name": _safe_text(source_row.name),
+            "mr_no": _safe_text(source_row.mr_no),
+            "inpat_no": _safe_text(source_row.inpat_no),
             "scope": item_scope,
             "department": item_department,
-            "doctor": _safe_text(row.attending_physician_sign),
-            "admission_date": _to_iso_date(row.admission_datetime),
-            "discharge_date": _to_iso_date(row.discharge_datetime),
+            "doctor": _safe_text(source_row.attending_physician_sign),
+            "admission_date": _to_iso_date(effective_admission_datetime),
+            "discharge_date": _to_iso_date(effective_discharge_datetime),
             "status": "completed" if item_scope == "final" else "running",
-            "medical_text_length": len(_safe_text(row.record_content)),
+            "medical_text_length": len(_safe_text(source_row.record_content)),
         }
 
     def list_drafts(
@@ -783,14 +829,45 @@ class CustomQCWorkspaceService:
         start = _as_date(start_date)
         end = _as_date(end_date)
         dept_expr = func.coalesce(
-            MedicalRecordFrontpage.discharge_dept_name, MedicalRecordFrontpage.admission_dept_name
+            MedicalRecordFrontpage.discharge_dept_name,
+            MedicalRecordFrontpage.admission_dept_name,
+            DischargeRecord.dept_name,
+            AdmissionRecord.dept_name,
         )
-        query = session.query(MedicalRecordFrontpage)
+        discharge_dt_expr = func.coalesce(
+            MedicalRecordFrontpage.discharge_datetime,
+            DischargeRecord.discharge_date,
+            DischargeRecord.update_time,
+        )
+        admission_dt_expr = func.coalesce(
+            MedicalRecordFrontpage.admission_datetime,
+            AdmissionRecord.admission_datetime,
+            AdmissionRecord.update_time,
+        )
+        query = (
+            session.query(MedicalRecordFrontpage)
+            .outerjoin(
+                DischargeRecord,
+                and_(
+                    DischargeRecord.institute_id == MedicalRecordFrontpage.institute_id,
+                    DischargeRecord.patient_id == MedicalRecordFrontpage.patient_id,
+                    DischargeRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                ),
+            )
+            .outerjoin(
+                AdmissionRecord,
+                and_(
+                    AdmissionRecord.institute_id == MedicalRecordFrontpage.institute_id,
+                    AdmissionRecord.patient_id == MedicalRecordFrontpage.patient_id,
+                    AdmissionRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                ),
+            )
+        )
 
         if scope_value == "final":
-            query = query.filter(MedicalRecordFrontpage.discharge_datetime.is_not(None))
+            query = query.filter(discharge_dt_expr.is_not(None))
         elif scope_value == "running":
-            query = query.filter(MedicalRecordFrontpage.discharge_datetime.is_(None))
+            query = query.filter(discharge_dt_expr.is_(None))
 
         if department:
             query = query.filter(dept_expr == department)
@@ -814,9 +891,9 @@ class CustomQCWorkspaceService:
                 query = query.filter(MedicalRecordFrontpage.visit_id.in_(normalized_ids))
 
         date_col = (
-            MedicalRecordFrontpage.admission_datetime
+            admission_dt_expr
             if date_field_value == "admission"
-            else MedicalRecordFrontpage.discharge_datetime
+            else discharge_dt_expr
         )
         if start:
             query = query.filter(func.date(date_col) >= start)
@@ -825,7 +902,8 @@ class CustomQCWorkspaceService:
         return query
 
     def _serialize_record_row(self, row: Any) -> Dict[str, Any]:
-        item_scope = "final" if row.discharge_datetime else "running"
+        effective_discharge_datetime = row.discharge_datetime or getattr(row, "update_time", None)
+        item_scope = "final" if effective_discharge_datetime else "running"
         item_department = _safe_text(row.discharge_dept_name or row.admission_dept_name)
         return {
             "record_id": _safe_text(row.visit_id),
@@ -837,7 +915,7 @@ class CustomQCWorkspaceService:
             "department": item_department,
             "doctor": _safe_text(row.attending_physician_sign),
             "admission_date": _to_iso_date(row.admission_datetime),
-            "discharge_date": _to_iso_date(row.discharge_datetime),
+            "discharge_date": _to_iso_date(effective_discharge_datetime),
             "status": "completed" if item_scope == "final" else "running",
             "medical_text_length": len(_safe_text(row.record_content)),
         }
