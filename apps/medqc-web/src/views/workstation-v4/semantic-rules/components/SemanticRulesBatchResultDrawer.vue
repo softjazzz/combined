@@ -597,10 +597,10 @@ const scopeLabelMap: Record<string, string> = {
 
 const PROGRESS_STEP_LABEL_MAP: Record<string, string> = {
   queued: '排队中',
-  prepare: '准备中',
-  filter: '筛选病历',
-  run: '执行中',
-  aggregate: '结果聚合',
+  prepare: '收集病历与装配证据',
+  filter: '病历筛选完成，准备执行规则',
+  run: '正在执行质控规则',
+  aggregate: '正在汇总结果',
   completed: '已完成',
   failed: '执行失败',
   canceled: '已取消',

@@ -860,6 +860,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         )
         hydrated_records = workspace.hydrate_records_with_medical_text(records)
         total_records = len(hydrated_records)
+        total_rules = max(1, len(rule_ids))
 
         all_items: List[Dict[str, Any]] = []
         all_failed_records: List[Dict[str, Any]] = []
@@ -924,7 +925,37 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 valid_rule_ids.append(rule_id)
             rule_states[rule_id] = state
 
-        for record in hydrated_records:
+        workspace.update_batch_job_progress(
+            job_id=job_id,
+            step_key="filter",
+            rule_index=0,
+            rule_count=total_rules,
+            processed_records=0,
+            total_records=total_records,
+            summary_patch={
+                "rule_set_key": rule_set_key,
+                "rule_set_name": rule_set_name,
+                "rule_set_version": rule_set_version,
+                "quality_profile": quality_profile,
+                "bucket_strategy": bucket_strategy,
+                "enable_selective_refine": enable_selective_refine,
+                "refine_confidence_threshold": refine_confidence_threshold,
+                "rule_count": total_rules,
+                "total_records": total_records,
+                "success_count": 0,
+                "failed_count": 0,
+                "failed_record_count": 0,
+                "issue_records": 0,
+                "uncertain_records": 0,
+                "compliant_records": total_records,
+                "total_tokens": 0,
+                "total_processing_time": 0.0,
+                "executor_breakdown": {"program": 0, "llm": 0},
+                "cache_breakdown": {"hit": 0, "miss": 0},
+            },
+        )
+
+        for processed_index, record in enumerate(hydrated_records, start=1):
             latest = workspace.get_batch_job_for_processing(job_id=job_id)
             if not latest or str(latest.get("status") or "").lower() == "canceled":
                 logger.info("四川批量任务 %s 已取消，停止执行", job_id)
@@ -938,6 +969,40 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             document_type = _resolve_document_type(
                 current_scope,
                 str(record.get("scope") or ""),
+            )
+            workspace.update_batch_job_progress(
+                job_id=job_id,
+                step_key="run",
+                rule_index=1 if valid_rule_ids else 0,
+                rule_count=total_rules,
+                processed_records=max(0, processed_index - 1),
+                total_records=total_records,
+                summary_patch={
+                    "rule_count": total_rules,
+                    "total_records": total_records,
+                    "success_count": max(0, processed_index - 1 - len(failed_record_ids)),
+                    "failed_count": len(all_failed_records),
+                    "failed_record_count": len(failed_record_ids),
+                    "issue_records": len(issue_record_ids),
+                    "uncertain_records": len(uncertain_record_ids),
+                    "compliant_records": max(
+                        0,
+                        max(0, processed_index - 1)
+                        - len(issue_record_ids)
+                        - len(uncertain_record_ids)
+                        - len(failed_record_ids),
+                    ),
+                    "total_tokens": int(total_tokens),
+                    "total_processing_time": float(total_processing_time),
+                    "executor_breakdown": {
+                        "program": executor_program,
+                        "llm": executor_llm,
+                    },
+                    "cache_breakdown": {
+                        "hit": cache_hit,
+                        "miss": cache_miss,
+                    },
+                },
             )
             try:
                 used_bundle_path = False
@@ -1157,6 +1222,40 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     if issue_item["status"] in {"non_compliant", "uncertain"}:
                         state["items"].append(issue_item)
                         all_items.append(issue_item)
+                workspace.update_batch_job_progress(
+                    job_id=job_id,
+                    step_key="run",
+                    rule_index=len(valid_rule_ids) if valid_rule_ids else 0,
+                    rule_count=total_rules,
+                    processed_records=processed_index,
+                    total_records=total_records,
+                    summary_patch={
+                        "rule_count": total_rules,
+                        "total_records": total_records,
+                        "success_count": max(0, processed_index - len(failed_record_ids)),
+                        "failed_count": len(all_failed_records),
+                        "failed_record_count": len(failed_record_ids),
+                        "issue_records": len(issue_record_ids),
+                        "uncertain_records": len(uncertain_record_ids),
+                        "compliant_records": max(
+                            0,
+                            processed_index
+                            - len(issue_record_ids)
+                            - len(uncertain_record_ids)
+                            - len(failed_record_ids),
+                        ),
+                        "total_tokens": int(total_tokens),
+                        "total_processing_time": float(total_processing_time),
+                        "executor_breakdown": {
+                            "program": executor_program,
+                            "llm": executor_llm,
+                        },
+                        "cache_breakdown": {
+                            "hit": cache_hit,
+                            "miss": cache_miss,
+                        },
+                    },
+                )
             except Exception as exc:
                 failed_record_ids.add(record_id)
                 for rule_id in valid_rule_ids:
@@ -1175,6 +1274,40 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     }
                     state["failed_records"].append(failed_payload)
                     all_failed_records.append(failed_payload)
+                workspace.update_batch_job_progress(
+                    job_id=job_id,
+                    step_key="run",
+                    rule_index=len(valid_rule_ids) if valid_rule_ids else 0,
+                    rule_count=total_rules,
+                    processed_records=processed_index,
+                    total_records=total_records,
+                    summary_patch={
+                        "rule_count": total_rules,
+                        "total_records": total_records,
+                        "success_count": max(0, processed_index - len(failed_record_ids)),
+                        "failed_count": len(all_failed_records),
+                        "failed_record_count": len(failed_record_ids),
+                        "issue_records": len(issue_record_ids),
+                        "uncertain_records": len(uncertain_record_ids),
+                        "compliant_records": max(
+                            0,
+                            processed_index
+                            - len(issue_record_ids)
+                            - len(uncertain_record_ids)
+                            - len(failed_record_ids),
+                        ),
+                        "total_tokens": int(total_tokens),
+                        "total_processing_time": float(total_processing_time),
+                        "executor_breakdown": {
+                            "program": executor_program,
+                            "llm": executor_llm,
+                        },
+                        "cache_breakdown": {
+                            "hit": cache_hit,
+                            "miss": cache_miss,
+                        },
+                    },
+                )
 
         rule_results: List[Dict[str, Any]] = []
         for rule_index, rule_id in enumerate(rule_ids):
@@ -1287,6 +1420,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "rule_results": rule_results,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+        workspace.update_batch_job_progress(
+            job_id=job_id,
+            step_key="aggregate",
+            rule_index=len(rule_ids),
+            rule_count=total_rules,
+            processed_records=total_records,
+            total_records=total_records,
+            summary_patch=summary,
+        )
         workspace.complete_batch_job(
             job_id=job_id,
             summary=summary,
