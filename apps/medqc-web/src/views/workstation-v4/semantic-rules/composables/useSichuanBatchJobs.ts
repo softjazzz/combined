@@ -263,6 +263,13 @@ export function useSichuanBatchJobs() {
     stopBatchJobPolling()
   }
 
+  function prependBatchJob(job: SichuanBatchJob) {
+    batchJobPagination.current = 1
+    const nextItems = [job, ...batchJobs.value.filter((item) => item.id !== job.id)]
+    batchJobs.value = nextItems.slice(0, batchJobPagination.pageSize)
+    batchJobPagination.total += 1
+  }
+
   return {
     batchJobLoading,
     batchJobDetailLoading,
@@ -288,5 +295,6 @@ export function useSichuanBatchJobs() {
     executeRetryBatchJob,
     exportBatchJobReport,
     resetBatchJobs,
+    prependBatchJob,
   }
 }

@@ -739,6 +739,7 @@ const {
   executeCancelBatchJob,
   executeRetryBatchJob,
   exportBatchJobReport,
+  prependBatchJob,
 } = useSichuanBatchJobs()
 
 // KPI 卡片数据
@@ -1210,8 +1211,10 @@ const confirmBatchLaunch = async () => {
     }
     message.success('终末病历批量质控任务已创建')
     launchModalOpen.value = false
-    await loadFinalBatchJobs()
+    batchTaskPanelOpenKeys.value = ['final-batch-jobs']
+    prependBatchJob(response.data)
     await openBatchJobDrawer(response.data)
+    await loadFinalBatchJobs()
   } catch (error: any) {
     message.error(error?.message || '创建批量任务失败')
   } finally {
