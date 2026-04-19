@@ -14,7 +14,7 @@ from ..schemas.records import MedicalRecordResponse
 from ..storage.memory import medical_records_db
 from ..core.settings import get_settings
 from ..database.connection import SessionLocal
-from ..database.models.cdm import MedicalRecordFrontpage
+from ..database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
 from ..database.models.qc import QCDefect, QCResultBiz
 from ..core.permissions import (
     require_permission,
@@ -451,6 +451,23 @@ async def get_final_records(
         dept_expr = func.coalesce(
             MedicalRecordFrontpage.discharge_dept_name,
             MedicalRecordFrontpage.admission_dept_name,
+            DischargeRecord.dept_name,
+            AdmissionRecord.dept_name,
+        )
+        discharge_dt_expr = func.coalesce(
+            MedicalRecordFrontpage.discharge_datetime,
+            DischargeRecord.discharge_date,
+            DischargeRecord.update_time,
+        )
+        admission_dt_expr = func.coalesce(
+            MedicalRecordFrontpage.admission_datetime,
+            AdmissionRecord.admission_datetime,
+            AdmissionRecord.update_time,
+        )
+        created_at_expr = func.coalesce(
+            MedicalRecordFrontpage.update_time,
+            DischargeRecord.update_time,
+            AdmissionRecord.update_time,
         )
         try:
             latest_qc_time_subquery = (
@@ -487,8 +504,27 @@ async def get_final_records(
             query = (
                 session.query(
                     MedicalRecordFrontpage,
+                    discharge_dt_expr.label("effective_discharge_datetime"),
+                    admission_dt_expr.label("effective_admission_datetime"),
+                    created_at_expr.label("effective_created_at"),
                     latest_qc_score_subquery.c.overall_score.label("overall_score"),
                     func.coalesce(defect_count_subquery.c.defect_count, 0).label("defect_count"),
+                )
+                .outerjoin(
+                    DischargeRecord,
+                    and_(
+                        DischargeRecord.institute_id == MedicalRecordFrontpage.institute_id,
+                        DischargeRecord.patient_id == MedicalRecordFrontpage.patient_id,
+                        DischargeRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                    ),
+                )
+                .outerjoin(
+                    AdmissionRecord,
+                    and_(
+                        AdmissionRecord.institute_id == MedicalRecordFrontpage.institute_id,
+                        AdmissionRecord.patient_id == MedicalRecordFrontpage.patient_id,
+                        AdmissionRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                    ),
                 )
                 .outerjoin(
                     latest_qc_score_subquery,
@@ -498,7 +534,7 @@ async def get_final_records(
                     defect_count_subquery,
                     defect_count_subquery.c.record_id == MedicalRecordFrontpage.visit_id,
                 )
-                .filter(MedicalRecordFrontpage.discharge_datetime.is_not(None))
+                .filter(discharge_dt_expr.is_not(None))
             )
 
             if keyword:
@@ -514,9 +550,9 @@ async def get_final_records(
             if department:
                 query = query.filter(dept_expr == department)
             if start_dt:
-                query = query.filter(func.date(MedicalRecordFrontpage.discharge_datetime) >= start_dt)
+                query = query.filter(func.date(discharge_dt_expr) >= start_dt)
             if end_dt:
-                query = query.filter(func.date(MedicalRecordFrontpage.discharge_datetime) <= end_dt)
+                query = query.filter(func.date(discharge_dt_expr) <= end_dt)
             if normalized_status == "pending":
                 query = query.filter(
                     and_(
@@ -537,15 +573,22 @@ async def get_final_records(
             total = int(query.count() or 0)
             rows = (
                 query.order_by(
-                    desc(MedicalRecordFrontpage.discharge_datetime),
-                    desc(MedicalRecordFrontpage.update_time),
+                    desc(discharge_dt_expr),
+                    desc(created_at_expr),
                 )
                 .offset((page - 1) * page_size)
                 .limit(page_size)
                 .all()
             )
             items = []
-            for row, overall_score, defect_count in rows:
+            for (
+                row,
+                effective_discharge_datetime,
+                _effective_admission_datetime,
+                effective_created_at,
+                overall_score,
+                defect_count,
+            ) in rows:
                 score = _to_float(overall_score)
                 final_defect_count = _to_int(defect_count, 0)
                 final_status = "pending"
@@ -560,12 +603,21 @@ async def get_final_records(
                         "record_id": str(row.visit_id or ""),
                         "visit_type": str(row.visit_type or ""),
                         "patient_name": str(row.name or ""),
-                        "department": str(row.discharge_dept_name or row.admission_dept_name or ""),
-                        "discharge_date": _normalize_date_only(row.discharge_datetime),
+                        "department": str(
+                            row.discharge_dept_name
+                            or row.admission_dept_name
+                            or ""
+                        ),
+                        "discharge_date": _normalize_date_only(effective_discharge_datetime),
                         "status": final_status,
                         "score": score,
                         "defect_count": final_defect_count,
-                        "created_at": str(row.update_time or row.discharge_datetime or ""),
+                        "created_at": str(
+                            effective_created_at
+                            or effective_discharge_datetime
+                            or row.update_time
+                            or ""
+                        ),
                     }
                 )
         except HTTPException:
@@ -573,8 +625,29 @@ async def get_final_records(
         except Exception as exc:
             logger.warning("查询终末病历列表失败，降级无质控聚合: %s", exc)
             session.rollback()
-            query = session.query(MedicalRecordFrontpage).filter(
-                MedicalRecordFrontpage.discharge_datetime.is_not(None)
+            query = (
+                session.query(
+                    MedicalRecordFrontpage,
+                    discharge_dt_expr.label("effective_discharge_datetime"),
+                    created_at_expr.label("effective_created_at"),
+                )
+                .outerjoin(
+                    DischargeRecord,
+                    and_(
+                        DischargeRecord.institute_id == MedicalRecordFrontpage.institute_id,
+                        DischargeRecord.patient_id == MedicalRecordFrontpage.patient_id,
+                        DischargeRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                    ),
+                )
+                .outerjoin(
+                    AdmissionRecord,
+                    and_(
+                        AdmissionRecord.institute_id == MedicalRecordFrontpage.institute_id,
+                        AdmissionRecord.patient_id == MedicalRecordFrontpage.patient_id,
+                        AdmissionRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                    ),
+                )
+                .filter(discharge_dt_expr.is_not(None))
             )
             if keyword:
                 kw = f"%{keyword.strip()}%"
@@ -589,9 +662,9 @@ async def get_final_records(
             if department:
                 query = query.filter(dept_expr == department)
             if start_dt:
-                query = query.filter(func.date(MedicalRecordFrontpage.discharge_datetime) >= start_dt)
+                query = query.filter(func.date(discharge_dt_expr) >= start_dt)
             if end_dt:
-                query = query.filter(func.date(MedicalRecordFrontpage.discharge_datetime) <= end_dt)
+                query = query.filter(func.date(discharge_dt_expr) <= end_dt)
 
             if normalized_status in {"passed", "failed"}:
                 total = 0
@@ -600,8 +673,8 @@ async def get_final_records(
                 total = int(query.count() or 0)
                 rows = (
                     query.order_by(
-                        desc(MedicalRecordFrontpage.discharge_datetime),
-                        desc(MedicalRecordFrontpage.update_time),
+                        desc(discharge_dt_expr),
+                        desc(created_at_expr),
                     )
                     .offset((page - 1) * page_size)
                     .limit(page_size)
@@ -615,13 +688,13 @@ async def get_final_records(
                         "visit_type": str(row.visit_type or ""),
                         "patient_name": str(row.name or ""),
                         "department": str(row.discharge_dept_name or row.admission_dept_name or ""),
-                        "discharge_date": _normalize_date_only(row.discharge_datetime),
+                        "discharge_date": _normalize_date_only(effective_discharge_datetime),
                         "status": "pending",
                         "score": None,
                         "defect_count": 0,
-                        "created_at": str(row.update_time or row.discharge_datetime or ""),
+                        "created_at": str(effective_created_at or effective_discharge_datetime or row.update_time or ""),
                     }
-                    for row in rows
+                    for row, effective_discharge_datetime, effective_created_at in rows
                 ]
 
         return paginated_response(
