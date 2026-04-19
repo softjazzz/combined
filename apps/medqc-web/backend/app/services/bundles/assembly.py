@@ -78,6 +78,16 @@ _FINAL_DOC_PRIORITY: tuple[str, ...] = (
     "death_discussion",
     "admission_record",
     "first_course_record",
+    "daily_course_record",
+    "senior_course_record",
+    "rescue_record",
+    "consultation_record",
+    "presurg_summary",
+    "presurg_discussion",
+    "surgery_record",
+    "anesthesia_record",
+    "postsurg_firstcourse_record",
+    "surgery_safecheck_record",
 )
 _FRONTPAGE_DOC_PRIORITY: tuple[str, ...] = (
     "mr",
@@ -427,6 +437,8 @@ def _build_structured_context(
     scene: str,
     schema: str,
     docs: dict[str, list[dict[str, Any]]],
+    source_documents: list[dict[str, Any]] | None = None,
+    timeline_facts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if scene == "running":
         anchor_table = "admission_record"
@@ -517,6 +529,8 @@ def _build_structured_context(
             "missing_doc_count": len(missing_required_docs),
         },
         "documents": summary_docs,
+        "document_inventory": list(source_documents or []),
+        "timeline_facts": list(timeline_facts or []),
     }
 
 
@@ -882,7 +896,15 @@ def _assemble_scene_bundle(
         patient_id=patient_id,
         visit_id=visit_id,
     )
-    structured_context = _build_structured_context(scene=scene, schema=source_schema, docs=docs)
+    source_documents = _build_document_inventory(docs, source_schema)
+    timeline_facts = _build_timeline_facts_from_docs(docs)
+    structured_context = _build_structured_context(
+        scene=scene,
+        schema=source_schema,
+        docs=docs,
+        source_documents=source_documents,
+        timeline_facts=timeline_facts,
+    )
     department = str(structured_context.get("department") or "").strip()
     document_hits = _build_document_hits(docs, priority)
     medical_text = _build_medical_text(docs, priority, source_schema)
@@ -921,6 +943,8 @@ def _assemble_scene_bundle(
     bundle["source_doc_priority"] = list(priority)
     bundle["compat_strategy"] = "dual-read-single-write"
     bundle["bundle_schema_version"] = BUNDLE_SCHEMA_VERSION_CURRENT
+    bundle["source_documents"] = source_documents
+    bundle["timeline_facts"] = timeline_facts
     if scene in {"frontpage", "coding"}:
         bundle["structured_context"]["frontpage_coding"] = _build_frontpage_coding_context(
             docs=docs,

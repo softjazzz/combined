@@ -25,6 +25,24 @@ SC_CONTENT_V1_RULE_IDS: tuple[str, ...] = (
     "SC-125",
 )
 
+SC_CONTENT_HARD_V1_RULE_IDS: tuple[str, ...] = (
+    "SC-033",
+    "SC-121",
+    "SC-123",
+)
+
+SC_CONTENT_REVIEW_V1_RULE_IDS: tuple[str, ...] = (
+    "SC-023",
+    "SC-024",
+    "SC-025",
+    "SC-026",
+    "SC-027",
+    "SC-032",
+    "SC-036",
+    "SC-122",
+    "SC-125",
+)
+
 
 @dataclass(frozen=True)
 class QCRuleSet:
@@ -56,6 +74,30 @@ class QCRuleSet:
 
 
 SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {
+    "sc_content_hard_v1": QCRuleSet(
+        key="sc_content_hard_v1",
+        name="内涵质控硬判定首发 v1",
+        version="2026-04-19",
+        scope="final",
+        rule_ids=SC_CONTENT_HARD_V1_RULE_IDS,
+        quality_profile=QUALITY_PROFILE_EFFECT_PRIORITY,
+        bucket_strategy="domain_family",
+        enable_selective_refine=True,
+        refine_confidence_threshold=0.75,
+        description="终末病历内涵质控首发硬判定规则，仅保留当前深测中命中边界最稳定的 3 条规则。",
+    ),
+    "sc_content_review_v1": QCRuleSet(
+        key="sc_content_review_v1",
+        name="内涵质控待复核首发 v1",
+        version="2026-04-19",
+        scope="final",
+        rule_ids=SC_CONTENT_REVIEW_V1_RULE_IDS,
+        quality_profile=QUALITY_PROFILE_EFFECT_PRIORITY,
+        bucket_strategy="domain_family",
+        enable_selective_refine=True,
+        refine_confidence_threshold=0.75,
+        description="终末病历内涵质控首发待复核规则，优先输出疑点与证据，供人工复核使用。",
+    ),
     "sc_content_v1": QCRuleSet(
         key="sc_content_v1",
         name="内涵质控首批 v1",

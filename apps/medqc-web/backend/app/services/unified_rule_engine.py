@@ -328,7 +328,7 @@ class UnifiedRuleEngine:
                     "method": f"{(rule_id or '').lower()}_via_llm",
                 }
 
-        return {
+        result = {
             "rule_id": rule_id,
             "rule_name": rule_name,
             "status": status,
@@ -351,6 +351,7 @@ class UnifiedRuleEngine:
                 "api_time": api_time,
             }
         }
+        return self._apply_result_sanity(result)
 
     async def evaluate_batch_compact(
         self,
@@ -520,8 +521,7 @@ class UnifiedRuleEngine:
             if status == "not_applicable":
                 is_compliant = True
 
-            llm_results.append(
-                {
+            result_item = {
                     "rule_id": rule.get("rule_id"),
                     "rule_name": rule_name,
                     "status": status,
@@ -554,7 +554,7 @@ class UnifiedRuleEngine:
                         "context_tokens_estimate": context_tokens_estimate,
                     },
                 }
-            )
+            llm_results.append(self._apply_result_sanity(result_item))
 
         return {
             "results": [*not_applicable_results, *llm_results],
@@ -612,7 +612,8 @@ class UnifiedRuleEngine:
                 f"  rule_name: {rule_name}\n"
                 f"  defect_level: {defect_level}\n"
                 f"  rule_family: {normalize_rule_family(rule.get('rule_family') or dominant_family)}\n"
-                f"  checks: {checks}"
+                f"  checks: {checks}\n"
+                f"  guardrails: {self._compact_rule_guardrails(rule_id)}"
             )
 
         prompt = (
@@ -621,7 +622,10 @@ class UnifiedRuleEngine:
             "1. 只输出 JSON，不要解释。\n"
             "2. 必须覆盖全部 rule_id，每条只输出一次。\n"
             "3. 若证据不足，status=uncertain，is_compliant=false，并说明缺失证据。\n"
-            "4. evidence 尽量引用原文短句。\n\n"
+            "4. evidence 尽量引用原文短句。\n"
+            "5. 不得因轻微格式问题、术语不够漂亮、标题顺序一般，就直接判 non_compliant。\n"
+            "6. 若核心内容已存在，只是提炼一般、表达一般或边界不清，优先 uncertain。\n"
+            "7. findings / evidence / suggestion 必须一致，不得出现“不合规但无需修改”。\n\n"
             f"适用规则数 {len(rules)}\n"
             "规则卡片：\n"
             f"{chr(10).join(card_lines)}\n\n"
@@ -877,8 +881,33 @@ class UnifiedRuleEngine:
             if len(snippets) >= 3:
                 break
         if snippets:
-            return "；".join(snippets)
-        return source[:260]
+            base = "；".join(snippets)
+        else:
+            base = source[:260]
+        guardrails = UnifiedRuleEngine._compact_rule_guardrails(
+            str(rule.get("rule_id") or rule.get("rule_code") or "")
+        )
+        if guardrails:
+            return f"{base}；{guardrails}"
+        return base
+
+    @staticmethod
+    def _compact_rule_guardrails(rule_id: str) -> str:
+        normalized_rule_id = str(rule_id or "").strip().upper()
+        if not normalized_rule_id:
+            return ""
+        guardrails = {
+            "SC-023": "仅在病例特点核心内容实质缺失时判不合规；已写但提炼一般优先uncertain",
+            "SC-024": "已写病例特点但归纳一般不直接硬判；缺关键病史/体征才可判不合规",
+            "SC-025": "仅看诊断依据/鉴别诊断/诊疗计划三项；不要把中医项缺失并入主结论",
+            "SC-026": "不要因未引用全部辅助检查就直接判严重缺陷；证据不足优先uncertain",
+            "SC-027": "仅当缺少关键诊疗动作或明显不具体时判不合规；格式问题不要硬判",
+            "SC-032": "只看关键病情变化是否漏记；记录一般或细节不足优先uncertain",
+            "SC-036": "只看与当前病情阶段直接相关的重要异常检查，不回顾全部历史异常",
+            "SC-121": "只抓关键诊疗经过缺失，不做药理学或格式化发散点评",
+            "SC-125": "优先判断出院诊断明显漏填/错填/顺序错误，不把既往史展开不足作为主依据",
+        }
+        return guardrails.get(normalized_rule_id, "")
 
     def _parse_batch_llm_response(self, raw_output: str) -> Dict[str, Any]:
         if not raw_output:
@@ -984,6 +1013,7 @@ class UnifiedRuleEngine:
         evidence_payload: Optional[Dict[str, Any]] = None,
     ) -> str:
         template = rule.get("custom_prompt")
+        rule_id = str(rule.get("rule_id") or rule.get("rule_code") or "")
         evidence_context = ""
         if isinstance(evidence_payload, dict) and evidence_payload:
             evidence_context = self._format_evidence_payload(evidence_payload)
@@ -993,6 +1023,15 @@ class UnifiedRuleEngine:
             "==================== 病历文本结束 ====================\n"
         )
         prompt_input_text = f"{marked_medical_text}{evidence_context}"
+        guardrails = self._compact_rule_guardrails(rule_id)
+        common_guardrails = (
+            "\n\n【统一判定约束】\n"
+            "- 不得因轻微格式问题、术语不够漂亮、段落顺序一般，直接判 non_compliant。\n"
+            "- 若核心内容已存在，只是提炼一般、表达一般或边界不清，优先判 uncertain。\n"
+            "- findings / evidence / suggestion 必须一致，不得出现“不合规但无需修改”。\n"
+        )
+        if guardrails:
+            common_guardrails += f"【规则级收敛要求】\n- {guardrails}\n"
 
         if template:
             applicable_docs = rule.get("applicable_documents")
@@ -1007,6 +1046,7 @@ class UnifiedRuleEngine:
                 complexity=rule.get("complexity", ""),
                 medical_text=prompt_input_text
             )
+            prompt += common_guardrails
             # 兜底：如果模板中没有 {medical_text} 占位符，强制追加病历文本
             if "{medical_text}" not in template:
                 logging.getLogger(__name__).warning(
@@ -1025,6 +1065,7 @@ class UnifiedRuleEngine:
 缺陷等级：{rule.get("defect_level", "")}
 
 {prompt_input_text}
+{common_guardrails}
 """
 
     @staticmethod
@@ -1120,6 +1161,63 @@ class UnifiedRuleEngine:
             return "证据不足，建议人工复核相关文书并补充佐证。"
 
         return suggestion_text
+
+    @classmethod
+    def _apply_result_sanity(cls, result: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = dict(result or {})
+        rule_id = str(normalized.get("rule_id") or "").strip().upper()
+        status = str(normalized.get("status") or "").strip().lower()
+        findings = str(normalized.get("findings") or "").strip()
+        suggestion = str(normalized.get("suggestion") or "").strip()
+        evidence = str(normalized.get("evidence") or "").strip()
+        confidence = float(normalized.get("confidence") or 0.7)
+        evidence_verified = bool(normalized.get("evidence_verified") is True)
+
+        if status == "non_compliant" and cls._is_no_change_suggestion(suggestion):
+            normalized["status"] = "uncertain"
+            normalized["is_compliant"] = False
+            normalized["confidence"] = min(confidence, 0.5)
+            normalized["suggestion"] = "当前结论与整改建议不一致，建议人工复核后再确认是否需要修改。"
+            return normalized
+
+        if status == "non_compliant" and not evidence:
+            normalized["status"] = "uncertain"
+            normalized["is_compliant"] = False
+            normalized["confidence"] = min(confidence, 0.5)
+            normalized["suggestion"] = "当前缺少可直接支撑结论的原文证据，建议人工复核相关文书。"
+            return normalized
+
+        if status == "non_compliant" and not evidence_verified:
+            if rule_id in {"SC-023", "SC-025", "SC-125"}:
+                normalized["status"] = "uncertain"
+                normalized["is_compliant"] = False
+                normalized["confidence"] = min(confidence, 0.5)
+                normalized["suggestion"] = "当前规则边界较敏感，且原文证据支撑不足，建议人工复核后再决定是否判为不合规。"
+                return normalized
+
+            if rule_id in {"SC-024", "SC-026", "SC-027", "SC-036", "SC-121"} and confidence <= 0.5:
+                normalized["status"] = "uncertain"
+                normalized["is_compliant"] = False
+                normalized["confidence"] = min(confidence, 0.5)
+                normalized["suggestion"] = "当前原文证据支撑不足，更适合作为待复核问题处理。"
+                return normalized
+
+        if rule_id == "SC-032" and status == "compliant":
+            uncertainty_hints = (
+                "最终判定：uncertain",
+                "优先判 uncertain",
+                "证据不足",
+                "边界",
+                "细节不足",
+            )
+            if any(hint in findings for hint in uncertainty_hints):
+                normalized["status"] = "uncertain"
+                normalized["is_compliant"] = False
+                normalized["confidence"] = min(confidence, 0.5)
+                normalized["suggestion"] = "当前结果处于合规与不合规的边界，建议人工复核病程记录细节。"
+                return normalized
+
+        return normalized
 
     def _evaluate_lx003(
         self,

@@ -8,6 +8,7 @@ without changing existing rule engines.
 from .running_final_bundle_adapter import (
     adapt_bundle_to_qc_service_payload,
     adapt_bundle_to_sichuan_eval_args,
+    extract_bundle_documents,
 )
 from .running_final_bundle_runtime import (
     evaluate_running_final_bundle,
@@ -17,6 +18,7 @@ from .running_final_bundle_runtime import (
 __all__ = [
     "adapt_bundle_to_qc_service_payload",
     "adapt_bundle_to_sichuan_eval_args",
+    "extract_bundle_documents",
     "load_running_final_bundle",
     "evaluate_running_final_bundle",
 ]

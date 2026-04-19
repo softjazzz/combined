@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.constants.doc_types import DOC_TYPE_FULL_MAP
 from ..bundles.contracts import (
     BUNDLE_SCHEMA_VERSION_CURRENT,
     is_bundle_schema_readable,
@@ -28,6 +29,13 @@ def _safe_list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
 
 
+def _resolve_document_type_from_source(source_key: str, scene: str) -> str:
+    resolved = DOC_TYPE_FULL_MAP.get(str(source_key or "").strip())
+    if resolved:
+        return resolved
+    return _SCENE_TO_DOCUMENT_TYPE.get(scene, "病程记录")
+
+
 def _resolve_scene(bundle: dict[str, Any]) -> str:
     scene = _safe_text(bundle.get("scene")).lower()
     if scene in {"running", "final"}:
@@ -52,13 +60,29 @@ def _extract_documents(bundle: dict[str, Any], scene: str) -> list[dict[str, Any
     hit_map = _safe_dict(bundle.get("document_hits"))
     source_priority = _safe_list(bundle.get("source_doc_priority"))
     structured_docs = _safe_dict(structured.get("documents"))
+    inventory_items = _safe_list(bundle.get("source_documents")) or _safe_list(structured.get("document_inventory"))
+    inventory_by_source: dict[str, list[dict[str, Any]]] = {}
+    for item in inventory_items:
+        if not isinstance(item, dict):
+            continue
+        source_key = _safe_text(item.get("source_table"))
+        if not source_key:
+            continue
+        inventory_by_source.setdefault(source_key, []).append(item)
 
     for source_name in source_priority:
         source_key = _safe_text(source_name)
         if not source_key:
             continue
+        content = ""
+        inventory_rows = inventory_by_source.get(source_key) or []
+        for item in inventory_rows:
+            content = _safe_text(item.get("content") or item.get("assembled_text") or item.get("text_preview"))
+            if content:
+                break
         source_payload = structured.get(source_key)
-        content = _safe_text(source_payload)
+        if not content:
+            content = _safe_text(source_payload)
         if not content and isinstance(source_payload, dict):
             content = _safe_text(source_payload.get("content"))
         if not content:
@@ -72,7 +96,7 @@ def _extract_documents(bundle: dict[str, Any], scene: str) -> list[dict[str, Any
         docs.append(
             {
                 "id": f"{_resolve_record_id(bundle)}:{source_key}",
-                "document_type": _SCENE_TO_DOCUMENT_TYPE.get(scene, "病程记录"),
+                "document_type": _resolve_document_type_from_source(source_key, scene),
                 "source_table": source_key,
                 "hit": bool(hit_map.get(source_key)),
                 "content": content,
@@ -90,6 +114,11 @@ def _extract_documents(bundle: dict[str, Any], scene: str) -> list[dict[str, Any
             }
         )
     return docs
+
+
+def extract_bundle_documents(bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    scene = _resolve_scene(bundle)
+    return _extract_documents(bundle, scene)
 
 
 def _build_adapter_meta(bundle: dict[str, Any], scene: str) -> dict[str, Any]:
@@ -174,7 +203,8 @@ def adapt_bundle_to_evidence_payload(bundle: dict[str, Any]) -> dict[str, Any]:
                 "hit": bool(item.get("hit")),
             }
         )
-    timeline_facts = _safe_list(bundle.get("timeline_facts"))
+    structured = _safe_dict(bundle.get("structured_context"))
+    timeline_facts = _safe_list(bundle.get("timeline_facts")) or _safe_list(structured.get("timeline_facts"))
     return {
         "primary_document_text": primary_document_text,
         "supporting_documents": supporting_documents,

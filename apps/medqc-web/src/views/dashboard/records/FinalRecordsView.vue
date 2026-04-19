@@ -466,8 +466,14 @@
             class="flex flex-wrap gap-2"
             button-style="solid"
           >
+            <a-radio-button value="content_hard_v1">
+              硬判定首发（推荐）
+            </a-radio-button>
+            <a-radio-button value="content_review_v1">
+              待复核首发
+            </a-radio-button>
             <a-radio-button value="content_v1">
-              内涵质控首批 v1（推荐）
+              完整首批 12 条
             </a-radio-button>
             <a-radio-button value="manual">
               手工选择规则
@@ -634,6 +640,9 @@ import {
 } from '@/views/rules/utils/customQcWorkspacePresentation'
 
 const CONTENT_RULE_SET_KEY = 'sc_content_v1'
+const CONTENT_HARD_RULE_SET_KEY = 'sc_content_hard_v1'
+const CONTENT_REVIEW_RULE_SET_KEY = 'sc_content_review_v1'
+
 const CONTENT_RULE_SET_IDS = [
   'SC-023',
   'SC-024',
@@ -648,8 +657,20 @@ const CONTENT_RULE_SET_IDS = [
   'SC-123',
   'SC-125',
 ] as const
+const CONTENT_HARD_RULE_SET_IDS = ['SC-033', 'SC-121', 'SC-123'] as const
+const CONTENT_REVIEW_RULE_SET_IDS = [
+  'SC-023',
+  'SC-024',
+  'SC-025',
+  'SC-026',
+  'SC-027',
+  'SC-032',
+  'SC-036',
+  'SC-122',
+  'SC-125',
+] as const
 
-type LaunchRuleMode = 'content_v1' | 'manual' | 'all'
+type LaunchRuleMode = 'content_hard_v1' | 'content_review_v1' | 'content_v1' | 'manual' | 'all'
 
 const route = useRoute()
 const router = useRouter()
@@ -678,7 +699,7 @@ const ruleLoading = ref(false)
 const allRules = ref<SemanticRuleItem[]>([])
 const ruleKeyword = ref('')
 const selectedRuleIds = ref<string[]>([])
-const launchRuleMode = ref<LaunchRuleMode>('content_v1')
+const launchRuleMode = ref<LaunchRuleMode>('content_hard_v1')
 const launchOnlySelectedRecords = ref(true)
 
 const {
@@ -748,7 +769,21 @@ const normalizeRuleId = (value: unknown) =>
     .trim()
     .toUpperCase()
 
+const hardRuleSetIdSet = new Set<string>(CONTENT_HARD_RULE_SET_IDS)
+const reviewRuleSetIdSet = new Set<string>(CONTENT_REVIEW_RULE_SET_IDS)
 const contentRuleSetIdSet = new Set<string>(CONTENT_RULE_SET_IDS)
+
+const hardRuleSetRules = computed(() =>
+  allRules.value.filter((rule) =>
+    hardRuleSetIdSet.has(normalizeRuleId(rule.rule_id || rule.rule_code)),
+  ),
+)
+
+const reviewRuleSetRules = computed(() =>
+  allRules.value.filter((rule) =>
+    reviewRuleSetIdSet.has(normalizeRuleId(rule.rule_id || rule.rule_code)),
+  ),
+)
 
 const contentRuleSetRules = computed(() =>
   allRules.value.filter((rule) =>
@@ -757,6 +792,8 @@ const contentRuleSetRules = computed(() =>
 )
 
 const baseRulesForLaunch = computed(() => {
+  if (launchRuleMode.value === 'content_hard_v1') return hardRuleSetRules.value
+  if (launchRuleMode.value === 'content_review_v1') return reviewRuleSetRules.value
   if (launchRuleMode.value === 'content_v1') return contentRuleSetRules.value
   return allRules.value
 })
@@ -785,14 +822,22 @@ const filteredRules = computed(() => {
 })
 
 const selectedRuleCount = computed(() => {
+  if (launchRuleMode.value === 'content_hard_v1') return CONTENT_HARD_RULE_SET_IDS.length
+  if (launchRuleMode.value === 'content_review_v1') return CONTENT_REVIEW_RULE_SET_IDS.length
   if (launchRuleMode.value === 'content_v1') return CONTENT_RULE_SET_IDS.length
   if (launchRuleMode.value === 'all') return allRules.value.length
   return selectedRuleIds.value.length
 })
 
 const launchRuleModeDescription = computed(() => {
+  if (launchRuleMode.value === 'content_hard_v1') {
+    return '仅执行 3 条当前边界最稳定的内涵规则，适合作为终末病历首发硬判定默认口径。'
+  }
+  if (launchRuleMode.value === 'content_review_v1') {
+    return '执行 9 条高价值但当前更适合人工复核的内涵规则，默认保留证据并输出待复核结论。'
+  }
   if (launchRuleMode.value === 'content_v1') {
-    return '仅执行 12 条首批内涵质控规则，默认启用效果优先、文书域/规则族分桶和低置信单条精审。'
+    return '执行完整首批 12 条内涵规则，适合联调和回归验证，不建议直接作为终末首发硬判定默认。'
   }
   if (launchRuleMode.value === 'all') {
     return '高级调试入口：执行当前四川规则全集，耗时和 token 成本会明显增加，不建议作为首批上线默认。'
@@ -1074,6 +1119,14 @@ const clearSelectedRules = () => {
 }
 
 const syncRuleSelectionByMode = () => {
+  if (launchRuleMode.value === 'content_hard_v1') {
+    selectedRuleIds.value = [...CONTENT_HARD_RULE_SET_IDS]
+    return
+  }
+  if (launchRuleMode.value === 'content_review_v1') {
+    selectedRuleIds.value = [...CONTENT_REVIEW_RULE_SET_IDS]
+    return
+  }
   if (launchRuleMode.value === 'content_v1') {
     selectedRuleIds.value = [...CONTENT_RULE_SET_IDS]
     return
@@ -1088,20 +1141,24 @@ const syncRuleSelectionByMode = () => {
 const openBatchLaunchModal = async () => {
   launchModalOpen.value = true
   launchOnlySelectedRecords.value = selectedRecordIds.value.length > 0
-  launchRuleMode.value = 'content_v1'
+  launchRuleMode.value = 'content_hard_v1'
   await loadRulesForLaunch()
   syncRuleSelectionByMode()
 }
 
 const confirmBatchLaunch = async () => {
   const effectiveRuleIds =
-    launchRuleMode.value === 'content_v1'
-      ? [...CONTENT_RULE_SET_IDS]
-      : launchRuleMode.value === 'all'
-        ? allRules.value
-            .map((rule) => String(rule.rule_id || rule.rule_code || '').trim())
-            .filter(Boolean)
-        : selectedRuleIds.value
+    launchRuleMode.value === 'content_hard_v1'
+      ? [...CONTENT_HARD_RULE_SET_IDS]
+      : launchRuleMode.value === 'content_review_v1'
+        ? [...CONTENT_REVIEW_RULE_SET_IDS]
+        : launchRuleMode.value === 'content_v1'
+          ? [...CONTENT_RULE_SET_IDS]
+          : launchRuleMode.value === 'all'
+            ? allRules.value
+                .map((rule) => String(rule.rule_id || rule.rule_code || '').trim())
+                .filter(Boolean)
+            : selectedRuleIds.value
 
   if (!effectiveRuleIds.length) {
     message.warning('请至少选择一条质控规则')
@@ -1114,9 +1171,17 @@ const confirmBatchLaunch = async () => {
 
   launchingBatch.value = true
   try {
+    const selectedRuleSetKey =
+      launchRuleMode.value === 'content_hard_v1'
+        ? CONTENT_HARD_RULE_SET_KEY
+        : launchRuleMode.value === 'content_review_v1'
+          ? CONTENT_REVIEW_RULE_SET_KEY
+          : launchRuleMode.value === 'content_v1'
+            ? CONTENT_RULE_SET_KEY
+            : undefined
     const response = await createSichuanWorkspaceBatchJob({
-      rule_ids: launchRuleMode.value === 'content_v1' ? undefined : effectiveRuleIds,
-      rule_set_key: launchRuleMode.value === 'content_v1' ? CONTENT_RULE_SET_KEY : undefined,
+      rule_ids: selectedRuleSetKey ? undefined : effectiveRuleIds,
+      rule_set_key: selectedRuleSetKey,
       scope: 'final',
       department: selectedDepartment.value,
       date_field: 'discharge',

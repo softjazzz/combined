@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from datetime import datetime, timezone
 
+from app.constants.doc_types import DOC_TYPE_CN_TO_EN, DOC_TYPE_FULL_MAP
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
 from ..core.supabase_client import get_supabase
@@ -1144,6 +1145,166 @@ class SichuanQCService:
         )
         return matched
 
+    @staticmethod
+    def _canonical_doc_type(document_type: Any) -> str:
+        text = str(document_type or "").strip()
+        if not text:
+            return ""
+        if text in DOC_TYPE_CN_TO_EN:
+            return DOC_TYPE_CN_TO_EN[text]
+        mapped = DOC_TYPE_FULL_MAP.get(text)
+        if mapped and mapped in DOC_TYPE_CN_TO_EN:
+            return DOC_TYPE_CN_TO_EN[mapped]
+        return text
+
+    def _select_bundle_document_for_rule(
+        self,
+        *,
+        rule: Dict[str, Any],
+        bundle_documents: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        normalized_docs = [
+            self._canonical_doc_type(item)
+            for item in list(rule.get("applicable_documents") or [])
+            if str(item or "").strip()
+        ]
+        if not normalized_docs:
+            return next((dict(item) for item in bundle_documents if str(item.get("content") or "").strip()), None)
+
+        docs_by_code: Dict[str, List[Dict[str, Any]]] = {}
+        for item in bundle_documents:
+            doc_code = self._canonical_doc_type(item.get("document_type") or item.get("source_table"))
+            docs_by_code.setdefault(doc_code, []).append(dict(item))
+
+        for wanted in normalized_docs:
+            candidates = docs_by_code.get(wanted) or []
+            candidate = next((item for item in candidates if str(item.get("content") or "").strip()), None)
+            if candidate is not None:
+                return candidate
+        return None
+
+    def _build_bundle_evidence_payload_for_document(
+        self,
+        *,
+        primary_document: Dict[str, Any],
+        all_documents: List[Dict[str, Any]],
+        bundle: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        supporting_documents = []
+        primary_id = str(primary_document.get("id") or "")
+        for item in all_documents:
+            item_id = str(item.get("id") or "")
+            if item_id == primary_id:
+                continue
+            evidence_text = str(item.get("content") or "").strip()
+            if not evidence_text:
+                continue
+            supporting_documents.append(
+                {
+                    "document_type": str(item.get("document_type") or ""),
+                    "source_table": str(item.get("source_table") or ""),
+                    "document_id": item_id,
+                    "evidence_text": evidence_text,
+                    "hit": bool(item.get("hit")),
+                }
+            )
+        return {
+            "primary_document_text": str(primary_document.get("content") or "").strip(),
+            "supporting_documents": supporting_documents,
+            "timeline_facts": list(bundle.get("timeline_facts") or []),
+            "document_hits": dict(bundle.get("document_hits") or {}),
+            "data_quality_flags": list(bundle.get("data_quality_flags") or []),
+        }
+
+    def _build_bundle_missing_doc_result_item(
+        self,
+        *,
+        rule: Dict[str, Any],
+        bucket_strategy: str,
+        quality_profile: str,
+    ) -> Dict[str, Any]:
+        routing = route_rule_to_domain(rule)
+        target_docs = [
+            display_name_for_doc_type(doc_type)
+            for doc_type in routing.primary_doc_types
+        ] or [str(item) for item in list(rule.get("applicable_documents") or []) if str(item).strip()]
+        return {
+            "rule_id": str(rule.get("rule_id") or ""),
+            "rule_name": str(rule.get("name") or rule.get("rule_name") or ""),
+            "is_compliant": True,
+            "status": "not_applicable",
+            "findings": f"缺少适用文书，未执行该规则：{', '.join(target_docs) or '未指定文书'}",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 1.0,
+            "applicability": {
+                "is_applicable": False,
+                "reason": "missing_required_document",
+                "method": "bundle_document_guard",
+            },
+            "evidence_verified": True,
+            "metadata": {
+                "tokens_used": 0,
+                "api_time": 0.0,
+                "prompt_strategy": "batch_compact_v1",
+                "quality_profile": quality_profile,
+                "bucket_strategy": bucket_strategy,
+                "rule_family": str(rule.get("rule_family") or DEFAULT_RULE_FAMILY),
+                "executor_type": str(rule.get("executor_type") or "llm"),
+                "rule_version": str(rule.get("rule_version") or "v1"),
+                "prompt_version": str(rule.get("prompt_version") or "custom-v1"),
+                "cost_class": str(rule.get("cost_class") or "medium"),
+                "execution_domain": str(rule.get("execution_domain") or routing.execution_domain),
+                "doc_scope": str(rule.get("doc_scope") or "primary"),
+                "evidence_source": "bundle",
+                "model_version": str(self.client.model or ""),
+                "llm_fallback": False,
+                "cache_hit": False,
+                "qc_stage": "screening",
+                "refined": False,
+                "refine_reason": "",
+                "screening_status": "not_applicable",
+                "final_decision_source": "batch",
+            },
+        }
+
+    @staticmethod
+    def _sum_counter_dicts(values: List[Dict[str, Any]]) -> Dict[str, int]:
+        merged: Dict[str, int] = {}
+        for value in values:
+            for key, raw in dict(value or {}).items():
+                merged[str(key)] = int(merged.get(str(key), 0)) + int(raw or 0)
+        return merged
+
+    def _merge_pack_metrics(self, metrics_list: List[Dict[str, Any]], *, quality_profile: str, bucket_strategy: str) -> Dict[str, Any]:
+        if not metrics_list:
+            return {}
+        total_packs = sum(int(item.get("total_packs") or 0) for item in metrics_list)
+        weighted_pack = sum(float(item.get("avg_pack_size") or 0.0) * int(item.get("total_packs") or 0) for item in metrics_list)
+        selected_pack_size_by_bucket: Dict[str, Any] = {}
+        for item in metrics_list:
+            selected_pack_size_by_bucket.update(dict(item.get("selected_pack_size_by_bucket") or {}))
+        return {
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": quality_profile,
+            "bucket_strategy": bucket_strategy,
+            "bucket_count": sum(int(item.get("bucket_count") or 0) for item in metrics_list),
+            "total_packs": total_packs,
+            "avg_pack_size": round((weighted_pack / total_packs), 2) if total_packs else 0.0,
+            "fallback_packs": sum(int(item.get("fallback_packs") or 0) for item in metrics_list),
+            "single_rule_retries": sum(int(item.get("single_rule_retries") or 0) for item in metrics_list),
+            "pack_parse_retry_count": sum(int(item.get("pack_parse_retry_count") or 0) for item in metrics_list),
+            "pack_fallback_count": sum(int(item.get("pack_fallback_count") or 0) for item in metrics_list),
+            "pack_parse_failures": sum(int(item.get("pack_parse_failures") or 0) for item in metrics_list),
+            "pack_parse_error_count": sum(int(item.get("pack_parse_error_count") or 0) for item in metrics_list),
+            "missing_rule_items": sum(int(item.get("missing_rule_items") or 0) for item in metrics_list),
+            "low_confidence_items": sum(int(item.get("low_confidence_items") or 0) for item in metrics_list),
+            "context_tokens_estimate": sum(int(item.get("context_tokens_estimate") or 0) for item in metrics_list),
+            "probe_calls": sum(int(item.get("probe_calls") or 0) for item in metrics_list),
+            "selected_pack_size": max(int(item.get("selected_pack_size") or 0) for item in metrics_list),
+            "selected_pack_size_by_bucket": selected_pack_size_by_bucket,
+        }
+
     def _build_rule_execution_input_from_bundle(
         self,
         *,
@@ -1363,6 +1524,7 @@ class SichuanQCService:
         - 仅支持 running/final 场景。
         """
         from .qc_input_adapters import adapt_bundle_to_sichuan_eval_args
+        from .qc_input_adapters import extract_bundle_documents
 
         scene = str((bundle or {}).get("scene") or "").strip().lower()
         if scene not in {"running", "final"}:
@@ -1374,28 +1536,142 @@ class SichuanQCService:
         content = str(eval_args["content"])
         resolved_rule_ids = list(eval_args.get("rule_ids") or [])
         evidence_payload = dict(eval_args.get("evidence_payload") or {})
+        quality_profile_normalized = normalize_quality_profile(quality_profile)
 
-        rules = await self._resolve_rules_for_document(
-            document_type=document_type,
-            rule_ids=resolved_rule_ids,
-        )
-        orchestrated = await self._evaluate_rules_orchestrated(
-            document_id=document_id,
-            content=content,
-            document_type=document_type,
-            rules=rules,
-            evidence_source="bundle",
-            evidence_payload=evidence_payload,
-            bucket_strategy=bucket_strategy,
-            quality_profile=quality_profile,
-            enable_selective_refine=enable_selective_refine,
-            refine_confidence_threshold=refine_confidence_threshold,
-            use_execution_cache=use_execution_cache,
-        )
+        selected_rules: List[Dict[str, Any]] = []
+        if resolved_rule_ids:
+            for rid in resolved_rule_ids:
+                rule = self.get_rule_by_id(str(rid or "").strip())
+                if rule:
+                    selected_rules.append(self._ensure_rule_execution_meta(rule))
+        else:
+            selected_rules = await self._resolve_rules_for_document(
+                document_type=document_type,
+                rule_ids=resolved_rule_ids,
+            )
+
+        bundle_documents = [
+            dict(item)
+            for item in extract_bundle_documents(bundle)
+            if str(item.get("content") or "").strip()
+        ]
+
+        if not selected_rules or not bundle_documents:
+            orchestrated = await self._evaluate_rules_orchestrated(
+                document_id=document_id,
+                content=content,
+                document_type=document_type,
+                rules=selected_rules,
+                evidence_source="bundle",
+                evidence_payload=evidence_payload,
+                bucket_strategy=bucket_strategy,
+                quality_profile=quality_profile,
+                enable_selective_refine=enable_selective_refine,
+                refine_confidence_threshold=refine_confidence_threshold,
+                use_execution_cache=use_execution_cache,
+            )
+        else:
+            grouped_rules: Dict[str, Dict[str, Any]] = {}
+            result_items: List[Dict[str, Any]] = []
+            total_tokens = 0
+            total_api_time = 0.0
+            executor_breakdown_list: List[Dict[str, Any]] = []
+            cache_breakdown_list: List[Dict[str, Any]] = []
+            trace_items: List[Any] = []
+            pack_metrics_list: List[Dict[str, Any]] = []
+            refine_details: List[Dict[str, Any]] = []
+            refine_candidate_count = 0
+            refine_failed_count = 0
+            refine_reasons_agg: Dict[str, int] = {}
+
+            for rule in selected_rules:
+                matched_document = self._select_bundle_document_for_rule(
+                    rule=rule,
+                    bundle_documents=bundle_documents,
+                )
+                if matched_document is None:
+                    result_items.append(
+                        self._build_bundle_missing_doc_result_item(
+                            rule=rule,
+                            bucket_strategy=bucket_strategy,
+                            quality_profile=quality_profile_normalized,
+                        )
+                    )
+                    continue
+                doc_key = str(matched_document.get("id") or matched_document.get("document_type") or "")
+                slot = grouped_rules.setdefault(
+                    doc_key,
+                    {
+                        "document": matched_document,
+                        "rules": [],
+                    },
+                )
+                slot["rules"].append(rule)
+
+            for slot in grouped_rules.values():
+                primary_document = dict(slot.get("document") or {})
+                primary_content = str(primary_document.get("content") or "").strip()
+                primary_type = str(primary_document.get("document_type") or document_type or "病程记录")
+                per_doc_evidence_payload = self._build_bundle_evidence_payload_for_document(
+                    primary_document=primary_document,
+                    all_documents=bundle_documents,
+                    bundle=bundle,
+                )
+                per_doc_orchestrated = await self._evaluate_rules_orchestrated(
+                    document_id=f"{document_id}:{primary_document.get('source_table') or primary_type}",
+                    content=primary_content,
+                    document_type=primary_type,
+                    rules=list(slot.get("rules") or []),
+                    evidence_source="bundle",
+                    evidence_payload=per_doc_evidence_payload,
+                    bucket_strategy=bucket_strategy,
+                    quality_profile=quality_profile,
+                    enable_selective_refine=enable_selective_refine,
+                    refine_confidence_threshold=refine_confidence_threshold,
+                    use_execution_cache=use_execution_cache,
+                )
+                result_items.extend(list(per_doc_orchestrated.get("results") or []))
+                total_tokens += int(per_doc_orchestrated.get("total_tokens") or 0)
+                total_api_time += float(per_doc_orchestrated.get("total_api_time") or 0.0)
+                executor_breakdown_list.append(dict(per_doc_orchestrated.get("executor_breakdown") or {}))
+                cache_breakdown_list.append(dict(per_doc_orchestrated.get("cache_breakdown") or {}))
+                trace_items.extend(list(per_doc_orchestrated.get("trace") or []))
+                pack_metrics_list.append(dict(per_doc_orchestrated.get("pack_metrics") or {}))
+                refine_details.extend(list(per_doc_orchestrated.get("refine_details") or []))
+                refine_summary = dict(per_doc_orchestrated.get("refine_summary") or {})
+                refine_candidate_count += int(refine_summary.get("candidate_count") or 0)
+                refine_failed_count += int(refine_summary.get("refine_failed_count") or 0)
+                for reason, count in dict(refine_summary.get("refine_reasons") or {}).items():
+                    refine_reasons_agg[str(reason)] = int(refine_reasons_agg.get(str(reason), 0)) + int(count or 0)
+
+            orchestrated = {
+                "results": result_items,
+                "total_tokens": total_tokens,
+                "total_api_time": total_api_time,
+                "executor_breakdown": self._sum_counter_dicts(executor_breakdown_list),
+                "cache_breakdown": self._sum_counter_dicts(cache_breakdown_list),
+                "pack_metrics": self._merge_pack_metrics(
+                    pack_metrics_list,
+                    quality_profile=quality_profile_normalized,
+                    bucket_strategy=bucket_strategy,
+                ),
+                "quality_profile": quality_profile_normalized,
+                "refine_details": refine_details,
+                "trace": trace_items,
+                "refine_summary": {
+                    "enabled": enable_selective_refine,
+                    "candidate_count": refine_candidate_count,
+                    "refined_rule_count": sum(1 for item in result_items if bool((item.get("metadata") or {}).get("refined"))),
+                    "refine_failed_count": refine_failed_count,
+                    "refine_reasons": refine_reasons_agg,
+                },
+                "refined_rule_count": sum(1 for item in result_items if bool((item.get("metadata") or {}).get("refined"))),
+                "refine_reasons": refine_reasons_agg,
+            }
         result = self._build_document_evaluation_result(
             document_id=document_id,
-            document_type=document_type,
-            rules=rules,
+            document_type="终末病历" if scene == "final" else "运行病历",
+            rules=selected_rules,
             orchestrated=orchestrated,
         )
         result["bundle_metadata"] = {
