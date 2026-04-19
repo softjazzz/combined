@@ -1020,7 +1020,12 @@ class SichuanQCService:
     ) -> Dict[str, Any]:
         rule_results = list(orchestrated.get("results") or [])
         total_tokens = int(orchestrated.get("total_tokens") or 0)
+        total_prompt_tokens = int(orchestrated.get("total_prompt_tokens") or 0)
+        total_completion_tokens = int(orchestrated.get("total_completion_tokens") or 0)
         total_api_time = float(orchestrated.get("total_api_time") or 0.0)
+        first_result_latency = float(orchestrated.get("first_result_latency") or 0.0)
+        first_result_source = str(orchestrated.get("first_result_source") or "")
+        cot_summary = dict(orchestrated.get("cot_summary") or {})
 
         total_rules = len(rules)
         compliant_rules = sum(
@@ -1070,12 +1075,23 @@ class SichuanQCService:
                 "refine_summary": orchestrated.get("refine_summary") or {},
                 "refined_rule_count": int(orchestrated.get("refined_rule_count") or 0),
                 "refine_reasons": orchestrated.get("refine_reasons") or {},
+                "total_prompt_tokens": total_prompt_tokens,
+                "total_completion_tokens": total_completion_tokens,
+                "first_result_latency": first_result_latency,
+                "first_result_source": first_result_source,
+                "cot_summary": cot_summary,
             },
             "parsed_evaluation_results": rule_results,
             "evaluation_results": evaluation_results,
             "llm_output": None,
-            "token_usage": {"total_tokens": total_tokens},
+            "token_usage": {
+                "total_tokens": total_tokens,
+                "prompt_tokens": total_prompt_tokens,
+                "completion_tokens": total_completion_tokens,
+            },
             "api_time": total_api_time,
+            "first_result_latency": first_result_latency,
+            "first_result_source": first_result_source,
             "executor_breakdown": orchestrated.get("executor_breakdown") or {},
             "cache_breakdown": orchestrated.get("cache_breakdown") or {},
             "pack_metrics": orchestrated.get("pack_metrics") or {},
@@ -1084,6 +1100,7 @@ class SichuanQCService:
             "refined_rule_count": int(orchestrated.get("refined_rule_count") or 0),
             "refine_reasons": orchestrated.get("refine_reasons") or {},
             "refine_details": orchestrated.get("refine_details") or [],
+            "cot_summary": cot_summary,
             "trace": orchestrated.get("trace") or [],
         }
 

@@ -112,7 +112,8 @@ class SichuanQCLLMClient:
                 payload=payload,
                 timeout_seconds=self.timeout_seconds,
             )
-
+            usage_breakdown = self._extract_usage_breakdown(result)
+            cot_observation = self._detect_cot_observation(result, payload=payload)
             self._strip_think_content_inplace(result)
 
             finish_reason = result.get("choices", [{}])[0].get("finish_reason", "")
@@ -139,14 +140,18 @@ class SichuanQCLLMClient:
                         payload=retry_payload,
                         timeout_seconds=self.timeout_seconds,
                     )
+                    usage_breakdown = self._extract_usage_breakdown(result)
+                    cot_observation = self._detect_cot_observation(result, payload=retry_payload)
                     self._strip_think_content_inplace(result)
 
             api_time = time.time() - api_start
             self.total_api_time += api_time
             self.success_count += 1
-            usage = result.get("usage", {})
-            self.total_tokens += usage.get("total_tokens", 0)
+            self.total_tokens += int(usage_breakdown.get("total_tokens") or 0)
             result["_api_time"] = api_time
+            result["_first_result_latency"] = api_time
+            result["_usage_breakdown"] = usage_breakdown
+            result["_cot_observation"] = cot_observation
             return result
         except Exception:
             api_time = time.time() - api_start
@@ -158,8 +163,55 @@ class SichuanQCLLMClient:
         model = (self.model or "").lower()
         return ("qwen3.5" in model) or ("thinking" in model)
 
+    @staticmethod
+    def _extract_usage_breakdown(result: Dict[str, Any]) -> Dict[str, int]:
+        usage = dict(result.get("usage") or {})
+        prompt_tokens = int(
+            usage.get("prompt_tokens")
+            or usage.get("input_tokens")
+            or 0
+        )
+        completion_tokens = int(
+            usage.get("completion_tokens")
+            or usage.get("output_tokens")
+            or 0
+        )
+        total_tokens = int(
+            usage.get("total_tokens")
+            or usage.get("total")
+            or (prompt_tokens + completion_tokens)
+            or 0
+        )
+        return {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "input_tokens": prompt_tokens,
+            "output_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+        }
+
+    def _detect_cot_observation(self, result: Dict[str, Any], *, payload: Dict[str, Any]) -> Dict[str, Any]:
+        message = dict(result.get("choices", [{}])[0].get("message") or {})
+        content = str(message.get("content") or "")
+        reasoning_content = message.get("reasoning_content")
+        has_think_tags = bool(re.search(r"<think>[\s\S]*?</think>", content, flags=re.IGNORECASE))
+        has_reasoning_content = bool(reasoning_content)
+        requested_enable_thinking = bool(payload.get("enable_thinking") is True)
+        cot_mode = "disabled"
+        if requested_enable_thinking:
+            cot_mode = "explicit"
+        elif has_think_tags or has_reasoning_content:
+            cot_mode = "implicit"
+        return {
+            "cot_mode": cot_mode,
+            "requested_enable_thinking": requested_enable_thinking,
+            "thinking_heuristic_applied": bool(self._is_thinking_model()),
+            "response_has_think_tags": has_think_tags,
+            "response_has_reasoning_content": has_reasoning_content,
+        }
+
     def _estimate_rule_count(self, prompt: str) -> int:
-        match = re.search(r"适用规则数\s*(\d+)", prompt)
+        match = re.search(r"适用规则数\s*[:：]?\s*(\d+)", prompt)
         if match:
             try:
                 return int(match.group(1))

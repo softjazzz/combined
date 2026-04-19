@@ -887,11 +887,23 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         uncertain_record_ids: set[str] = set()
         failed_record_ids: set[str] = set()
         total_tokens = 0
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
         total_processing_time = 0.0
+        first_result_latency: Optional[float] = None
+        first_result_source = ""
         executor_program = 0
         executor_llm = 0
         cache_hit = 0
         cache_miss = 0
+        cot_summary_total = {
+            "explicit_calls": 0,
+            "implicit_calls": 0,
+            "disabled_calls": 0,
+            "thinking_heuristic_calls": 0,
+            "response_has_think_tags_calls": 0,
+            "response_has_reasoning_content_calls": 0,
+        }
         total_pack_count = 0
         total_pack_size_weighted = 0
         total_pack_fallback_count = 0
@@ -1030,8 +1042,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 bundle_fallback_reason = ""
                 eval_items: List[Dict[str, Any]] = []
                 record_total_tokens = 0
+                record_total_prompt_tokens = 0
+                record_total_completion_tokens = 0
                 record_total_api_time = 0.0
+                record_first_result_latency = 0.0
+                record_first_result_source = ""
                 record_pack_metrics: Dict[str, Any] = {}
+                record_cot_summary: Dict[str, Any] = {}
 
                 if current_scope == "final" and institute_id and patient_id and visit_id:
                     used_bundle_path = True
@@ -1060,9 +1077,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         )
                         if not eval_items:
                             raise ValueError("evaluate_running_final_bundle 未返回 evaluation_results")
-                        record_total_tokens = int(((single_result.get("token_usage") or {}).get("total_tokens")) or 0)
+                        token_usage = dict(single_result.get("token_usage") or {})
+                        record_total_tokens = int(token_usage.get("total_tokens") or 0)
+                        record_total_prompt_tokens = int(token_usage.get("prompt_tokens") or 0)
+                        record_total_completion_tokens = int(token_usage.get("completion_tokens") or 0)
                         record_total_api_time = float(single_result.get("api_time") or 0.0)
+                        record_first_result_latency = float(single_result.get("first_result_latency") or 0.0)
+                        record_first_result_source = str(single_result.get("first_result_source") or "")
                         record_pack_metrics = dict(single_result.get("pack_metrics") or {})
+                        record_cot_summary = dict(single_result.get("cot_summary") or {})
                         record_refine_summary = dict(single_result.get("refine_summary") or {})
                         if record_refine_summary:
                             refine_summary_total["enabled"] = bool(record_refine_summary.get("enabled") is True)
@@ -1109,9 +1132,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         refine_confidence_threshold=refine_confidence_threshold,
                         max_refine_candidates=max_refine_candidates,
                     )
-                    record_total_tokens = int(((result.get("token_usage") or {}).get("total_tokens")) or 0)
+                    token_usage = dict(result.get("token_usage") or {})
+                    record_total_tokens = int(token_usage.get("total_tokens") or 0)
+                    record_total_prompt_tokens = int(token_usage.get("prompt_tokens") or 0)
+                    record_total_completion_tokens = int(token_usage.get("completion_tokens") or 0)
                     record_total_api_time = float(result.get("api_time") or 0.0)
+                    record_first_result_latency = float(result.get("first_result_latency") or 0.0)
+                    record_first_result_source = str(result.get("first_result_source") or "")
                     record_pack_metrics = dict(result.get("pack_metrics") or {})
+                    record_cot_summary = dict(result.get("cot_summary") or {})
                     pack_count = int(record_pack_metrics.get("total_packs") or 0)
                     avg_pack_size = float(record_pack_metrics.get("avg_pack_size") or 0.0)
                     total_pack_count += pack_count
@@ -1127,7 +1156,17 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     if key and key not in eval_map:
                         eval_map[key] = dict(eval_item)
 
+                if record_first_result_latency > 0 and first_result_latency is None:
+                    first_result_latency = record_first_result_latency
+                    first_result_source = record_first_result_source or record_id
+                total_prompt_tokens += record_total_prompt_tokens
+                total_completion_tokens += record_total_completion_tokens
+                for cot_key, cot_value in record_cot_summary.items():
+                    cot_summary_total[cot_key] = int(cot_summary_total.get(cot_key) or 0) + int(cot_value or 0)
+
                 fallback_tokens_per_rule = int(record_total_tokens / max(1, len(valid_rule_ids)))
+                fallback_prompt_tokens_per_rule = int(record_total_prompt_tokens / max(1, len(valid_rule_ids)))
+                fallback_completion_tokens_per_rule = int(record_total_completion_tokens / max(1, len(valid_rule_ids)))
                 fallback_api_per_rule = float(record_total_api_time / max(1, len(valid_rule_ids)))
                 for rule_id in valid_rule_ids:
                     normalized_rule_id = str(rule_id).strip().upper()
@@ -1159,7 +1198,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         status = "compliant" if eval_item.get("is_compliant") else "non_compliant"
                     metadata = dict(eval_item.get("metadata") or {})
                     metadata.setdefault("tokens_used", fallback_tokens_per_rule)
+                    metadata.setdefault("prompt_tokens", fallback_prompt_tokens_per_rule)
+                    metadata.setdefault("completion_tokens", fallback_completion_tokens_per_rule)
+                    metadata.setdefault("input_tokens", fallback_prompt_tokens_per_rule)
+                    metadata.setdefault("output_tokens", fallback_completion_tokens_per_rule)
                     metadata.setdefault("api_time", fallback_api_per_rule)
+                    metadata.setdefault("first_result_latency", record_first_result_latency)
+                    metadata.setdefault("first_result_source", record_first_result_source)
                     metadata.setdefault("execution_domain", str((rule or {}).get("execution_domain") or ""))
                     metadata.setdefault("doc_scope", str((rule or {}).get("doc_scope") or ""))
                     metadata.setdefault("rule_family", str((rule or {}).get("rule_family") or ""))
@@ -1231,6 +1276,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "pack_id": str(metadata.get("pack_id") or ""),
                         "pack_fallback": bool(metadata.get("pack_fallback") is True),
                         "context_tokens_estimate": int(metadata.get("context_tokens_estimate") or 0),
+                        "prompt_tokens": int(metadata.get("prompt_tokens") or 0),
+                        "completion_tokens": int(metadata.get("completion_tokens") or 0),
+                        "first_result_latency": float(metadata.get("first_result_latency") or 0.0),
+                        "first_result_source": str(metadata.get("first_result_source") or ""),
+                        "cot_mode": str(metadata.get("cot_mode") or "disabled"),
+                        "requested_enable_thinking": bool(metadata.get("requested_enable_thinking") is True),
+                        "thinking_heuristic_applied": bool(metadata.get("thinking_heuristic_applied") is True),
                         "refined": bool(metadata.get("refined") is True),
                         "refine_reason": str(metadata.get("refine_reason") or ""),
                         "screening_status": str(metadata.get("screening_status") or ""),
@@ -1420,7 +1472,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "compliant": max(0, total_records - len(issue_record_ids) - len(uncertain_record_ids) - len(failed_record_ids)),
             },
             "total_tokens": int(total_tokens),
+            "total_prompt_tokens": int(total_prompt_tokens),
+            "total_completion_tokens": int(total_completion_tokens),
             "total_processing_time": float(total_processing_time),
+            "first_result_latency": round(float(first_result_latency or 0.0), 4),
+            "first_result_source": first_result_source,
             "rule_count": len(rule_ids),
             "processed_rule_count": len(rule_results),
             "executor_breakdown": {
@@ -1444,6 +1500,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             },
             "refine_summary": refine_summary_total,
             "refined_rule_count": total_refined_rule_count,
+            "cot_summary": cot_summary_total,
             "result_aggregation": _build_result_aggregation(all_items),
             "rule_results": rule_results,
             "updated_at": datetime.now(timezone.utc).isoformat(),

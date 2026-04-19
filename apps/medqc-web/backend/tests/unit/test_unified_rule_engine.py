@@ -87,8 +87,23 @@ async def test_evaluate_batch_compact_should_return_all_rule_results():
                     }
                 }
             ],
-            "usage": {"total_tokens": 40},
+            "usage": {"prompt_tokens": 28, "completion_tokens": 12, "total_tokens": 40},
             "_api_time": 0.2,
+            "_first_result_latency": 0.2,
+            "_usage_breakdown": {
+                "prompt_tokens": 28,
+                "completion_tokens": 12,
+                "input_tokens": 28,
+                "output_tokens": 12,
+                "total_tokens": 40,
+            },
+            "_cot_observation": {
+                "cot_mode": "disabled",
+                "requested_enable_thinking": False,
+                "thinking_heuristic_applied": False,
+                "response_has_think_tags": False,
+                "response_has_reasoning_content": False,
+            },
         }
 
     engine = UnifiedRuleEngine(_fake_llm)
@@ -108,6 +123,12 @@ async def test_evaluate_batch_compact_should_return_all_rule_results():
     assert result["low_confidence_rule_ids"] == []
     assert result["context_tokens_estimate"] > 0
     assert all((item.get("metadata") or {}).get("prompt_strategy") == "batch_compact_v1" for item in result["results"])
+    assert result["prompt_tokens"] == 28
+    assert result["completion_tokens"] == 12
+    assert result["first_result_latency"] == 0.2
+    assert result["cot_observation"]["cot_mode"] == "disabled"
+    assert all((item.get("metadata") or {}).get("prompt_tokens") == 14 for item in result["results"])
+    assert all((item.get("metadata") or {}).get("completion_tokens") == 6 for item in result["results"])
 
 
 @pytest.mark.asyncio

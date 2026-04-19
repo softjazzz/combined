@@ -169,7 +169,19 @@ class QCRuleOrchestrator:
         results: list[dict[str, Any]] = []
         trace: list[OrchestratedRuleResult] = []
         total_tokens = 0
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
         total_api_time = 0.0
+        first_result_latency: Optional[float] = None
+        first_result_source = ""
+        cot_summary = {
+            "explicit_calls": 0,
+            "implicit_calls": 0,
+            "disabled_calls": 0,
+            "thinking_heuristic_calls": 0,
+            "response_has_think_tags_calls": 0,
+            "response_has_reasoning_content_calls": 0,
+        }
         llm_count = 0
         program_count = 0
         llm_fallback_count = 0
@@ -337,6 +349,30 @@ class QCRuleOrchestrator:
                 "parse_error": parse_error,
             }
 
+        def _merge_single_call_observation(metadata: dict[str, Any]) -> None:
+            nonlocal first_result_latency, first_result_source, total_prompt_tokens, total_completion_tokens
+            if str(metadata.get("pack_id") or "").strip():
+                return
+            total_prompt_tokens += int(metadata.get("prompt_tokens") or 0)
+            total_completion_tokens += int(metadata.get("completion_tokens") or 0)
+            latency = float(metadata.get("first_result_latency") or 0.0)
+            if latency > 0 and first_result_latency is None:
+                first_result_latency = latency
+                first_result_source = str(metadata.get("pack_id") or metadata.get("rule_id") or "llm_response")
+            cot_mode = str(metadata.get("cot_mode") or "disabled").strip().lower()
+            if cot_mode == "explicit":
+                cot_summary["explicit_calls"] = int(cot_summary.get("explicit_calls") or 0) + 1
+            elif cot_mode == "implicit":
+                cot_summary["implicit_calls"] = int(cot_summary.get("implicit_calls") or 0) + 1
+            else:
+                cot_summary["disabled_calls"] = int(cot_summary.get("disabled_calls") or 0) + 1
+            if bool(metadata.get("thinking_heuristic_applied") is True):
+                cot_summary["thinking_heuristic_calls"] = int(cot_summary.get("thinking_heuristic_calls") or 0) + 1
+            if bool(metadata.get("response_has_think_tags") is True):
+                cot_summary["response_has_think_tags_calls"] = int(cot_summary.get("response_has_think_tags_calls") or 0) + 1
+            if bool(metadata.get("response_has_reasoning_content") is True):
+                cot_summary["response_has_reasoning_content_calls"] = int(cot_summary.get("response_has_reasoning_content_calls") or 0) + 1
+
         async def _accept_pack_results(
             entries: list[dict[str, Any]],
             response: dict[str, Any],
@@ -346,7 +382,7 @@ class QCRuleOrchestrator:
             bucket_key: tuple[str, str, str],
             force_pack_fallback: bool,
         ) -> tuple[bool, dict[str, Any]]:
-            nonlocal total_tokens, total_api_time, pack_size_sum, context_tokens_sum
+            nonlocal total_tokens, total_api_time, pack_size_sum, context_tokens_sum, total_prompt_tokens, total_completion_tokens, first_result_latency, first_result_source
             response_summary = _summarize_pack_response(entries, response)
             if (
                 response_summary["parse_error"]
@@ -356,10 +392,32 @@ class QCRuleOrchestrator:
                 return False, response_summary
 
             tokens_used = _safe_int(response.get("tokens_used"))
+            prompt_tokens = _safe_int(response.get("prompt_tokens"))
+            completion_tokens = _safe_int(response.get("completion_tokens"))
             api_time = _safe_float(response.get("api_time"))
+            response_first_result_latency = _safe_float(response.get("first_result_latency"))
+            response_cot = dict(response.get("cot_observation") or {})
             context_tokens = _safe_int(response.get("context_tokens_estimate"))
             total_tokens += tokens_used
+            total_prompt_tokens += prompt_tokens
+            total_completion_tokens += completion_tokens
             total_api_time += api_time
+            if response_first_result_latency > 0 and first_result_latency is None:
+                first_result_latency = response_first_result_latency
+                first_result_source = pack_id
+            cot_mode = str(response_cot.get("cot_mode") or "disabled").strip().lower()
+            if cot_mode == "explicit":
+                cot_summary["explicit_calls"] = int(cot_summary.get("explicit_calls") or 0) + 1
+            elif cot_mode == "implicit":
+                cot_summary["implicit_calls"] = int(cot_summary.get("implicit_calls") or 0) + 1
+            else:
+                cot_summary["disabled_calls"] = int(cot_summary.get("disabled_calls") or 0) + 1
+            if bool(response_cot.get("thinking_heuristic_applied") is True):
+                cot_summary["thinking_heuristic_calls"] = int(cot_summary.get("thinking_heuristic_calls") or 0) + 1
+            if bool(response_cot.get("response_has_think_tags") is True):
+                cot_summary["response_has_think_tags_calls"] = int(cot_summary.get("response_has_think_tags_calls") or 0) + 1
+            if bool(response_cot.get("response_has_reasoning_content") is True):
+                cot_summary["response_has_reasoning_content_calls"] = int(cot_summary.get("response_has_reasoning_content_calls") or 0) + 1
             pack_metrics["total_packs"] = int(pack_metrics.get("total_packs") or 0) + 1
             pack_size_sum += int(pack_size or len(entries))
             context_tokens_sum += context_tokens
@@ -370,7 +428,17 @@ class QCRuleOrchestrator:
                 rule_result = response_summary["parsed_by_rule"].get(key) or {}
                 metadata = dict(rule_result.get("metadata") or {})
                 metadata.setdefault("tokens_used", _safe_int(tokens_used / max(1, len(entries))))
+                metadata.setdefault("prompt_tokens", _safe_int(prompt_tokens / max(1, len(entries))))
+                metadata.setdefault("completion_tokens", _safe_int(completion_tokens / max(1, len(entries))))
+                metadata.setdefault("input_tokens", _safe_int(prompt_tokens / max(1, len(entries))))
+                metadata.setdefault("output_tokens", _safe_int(completion_tokens / max(1, len(entries))))
                 metadata.setdefault("api_time", _safe_float(api_time / max(1, len(entries))))
+                metadata.setdefault("first_result_latency", response_first_result_latency)
+                metadata.setdefault("cot_mode", str(response_cot.get("cot_mode") or "disabled"))
+                metadata.setdefault("requested_enable_thinking", bool(response_cot.get("requested_enable_thinking") is True))
+                metadata.setdefault("thinking_heuristic_applied", bool(response_cot.get("thinking_heuristic_applied") is True))
+                metadata.setdefault("response_has_think_tags", bool(response_cot.get("response_has_think_tags") is True))
+                metadata.setdefault("response_has_reasoning_content", bool(response_cot.get("response_has_reasoning_content") is True))
                 metadata["prompt_strategy"] = prompt_strategy_normalized
                 metadata["quality_profile"] = quality_profile_normalized
                 metadata["batch_output_mode"] = str(batch_output_mode or "full")
@@ -479,7 +547,7 @@ class QCRuleOrchestrator:
             *,
             bucket_key: tuple[str, str, str] = ("generic", "primary", ""),
         ) -> int:
-            nonlocal total_tokens, total_api_time
+            nonlocal total_tokens, total_api_time, total_prompt_tokens, total_completion_tokens, first_result_latency, first_result_source
             if llm_batch_evaluate is None:
                 return 1
             if not entries:
@@ -529,7 +597,27 @@ class QCRuleOrchestrator:
                     continue
 
                 total_tokens += _safe_int(probe_response.get("tokens_used"))
+                total_prompt_tokens += _safe_int(probe_response.get("prompt_tokens"))
+                total_completion_tokens += _safe_int(probe_response.get("completion_tokens"))
                 total_api_time += _safe_float(probe_response.get("api_time"))
+                probe_first_result_latency = _safe_float(probe_response.get("first_result_latency"))
+                if probe_first_result_latency > 0 and first_result_latency is None:
+                    first_result_latency = probe_first_result_latency
+                    first_result_source = f"probe-{bucket_key[0]}-{bucket_key[1]}-{bucket_key[2] or 'general'}"
+                probe_cot = dict(probe_response.get("cot_observation") or {})
+                probe_cot_mode = str(probe_cot.get("cot_mode") or "disabled").strip().lower()
+                if probe_cot_mode == "explicit":
+                    cot_summary["explicit_calls"] = int(cot_summary.get("explicit_calls") or 0) + 1
+                elif probe_cot_mode == "implicit":
+                    cot_summary["implicit_calls"] = int(cot_summary.get("implicit_calls") or 0) + 1
+                else:
+                    cot_summary["disabled_calls"] = int(cot_summary.get("disabled_calls") or 0) + 1
+                if bool(probe_cot.get("thinking_heuristic_applied") is True):
+                    cot_summary["thinking_heuristic_calls"] = int(cot_summary.get("thinking_heuristic_calls") or 0) + 1
+                if bool(probe_cot.get("response_has_think_tags") is True):
+                    cot_summary["response_has_think_tags_calls"] = int(cot_summary.get("response_has_think_tags_calls") or 0) + 1
+                if bool(probe_cot.get("response_has_reasoning_content") is True):
+                    cot_summary["response_has_reasoning_content_calls"] = int(cot_summary.get("response_has_reasoning_content_calls") or 0) + 1
                 missing_rule_ids = probe_response.get("missing_rule_ids") or []
                 parse_error = bool(probe_response.get("parse_error") is True)
                 low_confidence = probe_response.get("low_confidence_rule_ids") or []
@@ -644,6 +732,7 @@ class QCRuleOrchestrator:
             if not is_cache_hit:
                 total_tokens += int(metadata.get("tokens_used") or 0)
                 total_api_time += float(metadata.get("api_time") or 0.0)
+                _merge_single_call_observation(metadata)
                 if execution_cache is not None and cache_key:
                     execution_cache.set(
                         cache_key,
@@ -668,7 +757,12 @@ class QCRuleOrchestrator:
         return {
             "results": results,
             "total_tokens": total_tokens,
+            "total_prompt_tokens": total_prompt_tokens,
+            "total_completion_tokens": total_completion_tokens,
             "total_api_time": total_api_time,
+            "first_result_latency": round(float(first_result_latency or 0.0), 4),
+            "first_result_source": first_result_source,
+            "cot_summary": cot_summary,
             "executor_breakdown": {
                 "program": program_count,
                 "llm": llm_count,

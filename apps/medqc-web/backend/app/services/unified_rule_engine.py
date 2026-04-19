@@ -289,7 +289,10 @@ class UnifiedRuleEngine:
             .get("content", "")
         )
         usage = llm_result.get("usage", {})
+        usage_breakdown = dict(llm_result.get("_usage_breakdown") or {})
         api_time = llm_result.get("_api_time", 0.0)
+        first_result_latency = float(llm_result.get("_first_result_latency", 0.0) or 0.0)
+        cot_observation = dict(llm_result.get("_cot_observation") or {})
 
         parsed = self._parse_llm_response(raw_output)
 
@@ -350,7 +353,17 @@ class UnifiedRuleEngine:
             "evidence_span": evidence_info["span"],
             "metadata": {
                 "tokens_used": usage.get("total_tokens", 0),
+                "prompt_tokens": int(usage_breakdown.get("prompt_tokens") or 0),
+                "completion_tokens": int(usage_breakdown.get("completion_tokens") or 0),
+                "input_tokens": int(usage_breakdown.get("input_tokens") or 0),
+                "output_tokens": int(usage_breakdown.get("output_tokens") or 0),
                 "api_time": api_time,
+                "first_result_latency": first_result_latency,
+                "cot_mode": str(cot_observation.get("cot_mode") or "disabled"),
+                "requested_enable_thinking": bool(cot_observation.get("requested_enable_thinking") is True),
+                "thinking_heuristic_applied": bool(cot_observation.get("thinking_heuristic_applied") is True),
+                "response_has_think_tags": bool(cot_observation.get("response_has_think_tags") is True),
+                "response_has_reasoning_content": bool(cot_observation.get("response_has_reasoning_content") is True),
             }
         }
         return self._apply_result_sanity(result)
@@ -459,8 +472,13 @@ class UnifiedRuleEngine:
             .get("content", "")
         )
         usage = llm_result.get("usage", {})
-        tokens_used = int(usage.get("total_tokens", 0) or 0)
+        usage_breakdown = dict(llm_result.get("_usage_breakdown") or {})
+        tokens_used = int(usage_breakdown.get("total_tokens") or usage.get("total_tokens", 0) or 0)
+        prompt_tokens = int(usage_breakdown.get("prompt_tokens") or 0)
+        completion_tokens = int(usage_breakdown.get("completion_tokens") or 0)
         api_time = float(llm_result.get("_api_time", 0.0) or 0.0)
+        first_result_latency = float(llm_result.get("_first_result_latency", 0.0) or 0.0)
+        cot_observation = dict(llm_result.get("_cot_observation") or {})
 
         parsed = self._parse_batch_llm_response(raw_output)
         parsed_items = parsed.get("items") or []
@@ -474,6 +492,8 @@ class UnifiedRuleEngine:
         missing_ids = sorted(expected_ids - set(parsed_map.keys()))
         low_confidence_ids: List[str] = []
         distributed_tokens = int(tokens_used / max(1, len(applicable_rules)))
+        distributed_prompt_tokens = int(prompt_tokens / max(1, len(applicable_rules)))
+        distributed_completion_tokens = int(completion_tokens / max(1, len(applicable_rules)))
         distributed_api_time = float(api_time / max(1, len(applicable_rules)))
 
         llm_results: List[Dict[str, Any]] = []
@@ -504,7 +524,17 @@ class UnifiedRuleEngine:
                             "evidence_verified": False,
                             "metadata": {
                                 "tokens_used": distributed_tokens,
+                                "prompt_tokens": distributed_prompt_tokens,
+                                "completion_tokens": distributed_completion_tokens,
+                                "input_tokens": distributed_prompt_tokens,
+                                "output_tokens": distributed_completion_tokens,
                                 "api_time": distributed_api_time,
+                                "first_result_latency": first_result_latency,
+                                "cot_mode": str(cot_observation.get("cot_mode") or "disabled"),
+                                "requested_enable_thinking": bool(cot_observation.get("requested_enable_thinking") is True),
+                                "thinking_heuristic_applied": bool(cot_observation.get("thinking_heuristic_applied") is True),
+                                "response_has_think_tags": bool(cot_observation.get("response_has_think_tags") is True),
+                                "response_has_reasoning_content": bool(cot_observation.get("response_has_reasoning_content") is True),
                                 "prompt_strategy": "batch_compact_v1",
                                 "quality_profile": quality_profile_normalized,
                                 "batch_output_mode": batch_output_mode_normalized,
@@ -561,7 +591,17 @@ class UnifiedRuleEngine:
                     "evidence_span": evidence_info.get("span"),
                     "metadata": {
                         "tokens_used": distributed_tokens,
+                        "prompt_tokens": distributed_prompt_tokens,
+                        "completion_tokens": distributed_completion_tokens,
+                        "input_tokens": distributed_prompt_tokens,
+                        "output_tokens": distributed_completion_tokens,
                         "api_time": distributed_api_time,
+                        "first_result_latency": first_result_latency,
+                        "cot_mode": str(cot_observation.get("cot_mode") or "disabled"),
+                        "requested_enable_thinking": bool(cot_observation.get("requested_enable_thinking") is True),
+                        "thinking_heuristic_applied": bool(cot_observation.get("thinking_heuristic_applied") is True),
+                        "response_has_think_tags": bool(cot_observation.get("response_has_think_tags") is True),
+                        "response_has_reasoning_content": bool(cot_observation.get("response_has_reasoning_content") is True),
                         "prompt_strategy": "batch_compact_v1",
                         "quality_profile": quality_profile_normalized,
                         "batch_output_mode": batch_output_mode_normalized,
@@ -587,7 +627,13 @@ class UnifiedRuleEngine:
                 *llm_results,
             ],
             "tokens_used": tokens_used,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "input_tokens": prompt_tokens,
+            "output_tokens": completion_tokens,
             "api_time": api_time,
+            "first_result_latency": first_result_latency,
+            "cot_observation": cot_observation,
             "raw_output": raw_output,
             "parse_error": bool(parsed.get("parse_error") is True),
             "missing_rule_ids": missing_ids,
