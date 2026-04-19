@@ -1526,6 +1526,9 @@ async def create_workspace_batch_job(
         },
         record_ids=payload.record_ids or [],
         total_records=len(records),
+        draft_ids=rule_ids,
+        execution_mode="multi",
+        rule_count=len(rule_ids),
     )
     background_tasks.add_task(_run_sichuan_workspace_batch_job, job["id"])
     return success_response(

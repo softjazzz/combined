@@ -1155,13 +1155,23 @@ const ruleSetDisplay = computed(() => {
   const detail = props.batchJobDetail
   const summary = detail?.summary
   const filters = (detail?.filters || {}) as Record<string, unknown>
+  const filterRuleIds = Array.isArray(filters.rule_ids)
+    ? filters.rule_ids.filter((item) => String(item || '').trim())
+    : []
+  const effectiveRuleCount = Number(
+    summary?.rule_count ??
+      detail?.rule_count ??
+      filterRuleIds.length ??
+      (detail?.draft_ids || []).length ??
+      0,
+  )
   return {
     name:
       String(
         detail?.rule_set_name || summary?.rule_set_name || filters.rule_set_name || '',
       ).trim() || '手工选择规则',
     key: String(detail?.rule_set_key || summary?.rule_set_key || filters.rule_set_key || '').trim(),
-    ruleCount: Number(summary?.rule_count ?? detail?.rule_count ?? 0),
+    ruleCount: effectiveRuleCount,
     qualityProfile:
       String(
         detail?.quality_profile || summary?.quality_profile || filters.quality_profile || '',
