@@ -96,9 +96,6 @@
                 {{ formatDateTime(batchJobDetail.created_at) }}
               </div>
             </div>
-            <a-tag :class="getBatchJobStatusTagClass(batchJobDetail.status)">
-              {{ getBatchJobStatusText(batchJobDetail.status) }}
-            </a-tag>
           </div>
           <div
             v-if="batchJobDetail.error_message"
@@ -117,7 +114,7 @@
 
         <div class="drawer-summary summary-grid-primary">
           <div
-            v-for="item in primarySummaryCards"
+            v-for="item in focusedSummaryCards"
             :key="item.key"
             class="summary-card"
           >
@@ -134,285 +131,6 @@
               {{ item.desc }}
             </div>
           </div>
-        </div>
-
-        <div
-          v-if="executionSummary"
-          class="drawer-summary summary-grid-secondary"
-        >
-          <div
-            v-for="item in executionSummaryCards"
-            :key="item.key"
-            class="summary-card"
-          >
-            <div class="summary-label">
-              {{ item.label }}
-            </div>
-            <div class="summary-value">
-              {{ item.value }}
-            </div>
-          </div>
-        </div>
-
-        <div
-          v-if="progressSummary"
-          class="drawer-card"
-        >
-          <div class="drawer-section-head">
-            <div class="drawer-section-title">
-              任务进度
-            </div>
-            <div class="drawer-section-meta">
-              {{ progressSummary.stepLabel }}
-            </div>
-          </div>
-          <a-progress
-            :percent="progressSummary.percent"
-            :status="progressSummary.status"
-            :stroke-color="progressSummary.status === 'exception' ? '#ef4444' : '#2563eb'"
-          />
-          <div class="progress-meta">
-            <span>已处理 {{ progressSummary.processedRecords }} /
-              {{ progressSummary.totalRecords }} 份病历</span>
-            <span>规则 {{ progressSummary.ruleIndex }} / {{ progressSummary.ruleCount }}</span>
-          </div>
-        </div>
-
-        <div class="drawer-summary summary-grid-tertiary">
-          <div class="summary-card">
-            <div class="summary-label">
-              规则结果条数
-            </div>
-            <div class="summary-value">
-              {{ resolvedRuleResults.length }}
-            </div>
-          </div>
-          <div class="summary-card">
-            <div class="summary-label">
-              问题/待复核明细条数
-            </div>
-            <div class="summary-value">
-              {{ issueItems.length }}
-            </div>
-          </div>
-        </div>
-
-        <div
-          v-if="resultAggregation"
-          class="drawer-card"
-        >
-          <div class="drawer-section-head">
-            <div class="drawer-section-title">
-              结果聚合
-            </div>
-            <div class="drawer-section-meta">
-              簇数 {{ resultAggregation.cluster_count || 0 }} · 重复命中
-              {{ resultAggregation.duplicate_hits || 0 }}
-            </div>
-          </div>
-          <div
-            v-if="aggregationBreakdownSections.length"
-            class="aggregation-breakdown-grid"
-          >
-            <div
-              v-for="section in aggregationBreakdownSections"
-              :key="section.key"
-              class="aggregation-breakdown-card"
-            >
-              <div class="aggregation-breakdown-head">
-                <div class="aggregation-breakdown-title">
-                  {{ section.title }}
-                </div>
-                <div class="aggregation-breakdown-count">
-                  {{ section.total }}
-                </div>
-              </div>
-              <div
-                v-if="section.items.length"
-                class="aggregation-breakdown-items"
-              >
-                <div
-                  v-for="item in section.items"
-                  :key="`${section.key}-${item.label}`"
-                  class="aggregation-breakdown-item"
-                >
-                  <span class="aggregation-breakdown-item-label">{{ item.label }}</span>
-                  <a-tag class="aggregation-breakdown-item-tag">
-                    {{ item.count }}
-                  </a-tag>
-                </div>
-              </div>
-              <div
-                v-else
-                class="aggregation-breakdown-empty"
-              >
-                暂无分解数据
-              </div>
-            </div>
-          </div>
-          <div class="aggregation-list">
-            <div
-              v-for="cluster in topAggregationClusters"
-              :key="cluster.cluster_key"
-              class="aggregation-item"
-              :class="{ active: selectedClusterKey === cluster.cluster_key }"
-              @click="toggleClusterFilter(cluster.cluster_key)"
-            >
-              <div class="aggregation-item-head">
-                <span class="aggregation-item-title">{{ cluster.cluster_key }}</span>
-                <a-tag class="aggregation-count-tag">
-                  {{ cluster.records || 0 }} 次
-                </a-tag>
-              </div>
-              <div
-                v-if="cluster.sample_evidence"
-                class="aggregation-evidence"
-              >
-                {{ cluster.sample_evidence }}
-              </div>
-              <div class="aggregation-meta">
-                病历 {{ cluster.records || 0 }} 条 · 规则 {{ cluster.rules?.length || 0 }} 条
-              </div>
-            </div>
-          </div>
-          <div
-            v-if="selectedClusterKey"
-            class="aggregation-active-tip"
-          >
-            已按聚合簇过滤：{{ selectedClusterKey }}
-            <a-button
-              type="link"
-              size="small"
-              @click.stop="clearClusterFilter"
-            >
-              清除
-            </a-button>
-          </div>
-        </div>
-
-        <div
-          v-if="batchJobDebugSnapshot"
-          class="drawer-card"
-        >
-          <div class="drawer-section-head">
-            <div class="drawer-section-title">
-              执行调试快照
-            </div>
-            <div class="debug-toolbar">
-              <a-select
-                :value="selectedDebugRuleJobId || undefined"
-                allow-clear
-                placeholder="按规则筛选调试快照"
-                class="debug-rule-select"
-                :options="debugRuleOptions"
-                :loading="batchJobDebugLoading"
-                @change="handleDebugRuleChange"
-              />
-              <div class="drawer-section-meta">
-                {{ batchJobDebugSnapshot.status }} ·
-                {{ batchJobDebugSnapshot.execution_mode || 'unknown' }}
-              </div>
-            </div>
-          </div>
-          <div class="debug-current-rule">
-            <div class="debug-current-rule-main">
-              <span class="debug-current-rule-label">当前规则</span>
-              <span class="debug-current-rule-value">
-                {{
-                  batchJobDebugSnapshot.current_rule?.rule_code ||
-                    currentDebugRule?.rule_code ||
-                    '未定位'
-                }}
-              </span>
-            </div>
-            <div class="debug-current-rule-sub">
-              {{
-                batchJobDebugSnapshot.current_rule?.rule_name ||
-                  currentDebugRule?.rule_name ||
-                  '暂无规则名称'
-              }}
-            </div>
-          </div>
-          <div class="debug-meta-grid">
-            <div class="debug-meta-item">
-              <span class="debug-meta-label">规则总数</span>
-              <span class="debug-meta-value">{{ batchJobDebugSnapshot.rule_count || 0 }}</span>
-            </div>
-            <div class="debug-meta-item">
-              <span class="debug-meta-label">筛选规则</span>
-              <span class="debug-meta-value">{{
-                batchJobDebugSnapshot.filtered_rule_count || 0
-              }}</span>
-            </div>
-            <div class="debug-meta-item">
-              <span class="debug-meta-label">更新时间</span>
-              <span class="debug-meta-value">{{
-                formatDateTime(batchJobDebugSnapshot.updated_at)
-              }}</span>
-            </div>
-            <div class="debug-meta-item">
-              <span class="debug-meta-label">任务状态</span>
-              <span class="debug-meta-value">{{ batchJobDebugSnapshot.status }}</span>
-            </div>
-          </div>
-          <div
-            v-if="debugProgressEntries.length"
-            class="debug-pill-block"
-          >
-            <div class="debug-pill-title">
-              current_rule.progress
-            </div>
-            <div class="debug-pill-list">
-              <span
-                v-for="item in debugProgressEntries"
-                :key="`progress-${item.label}`"
-                class="debug-pill"
-              >
-                {{ item.label }}: {{ item.value }}
-              </span>
-            </div>
-          </div>
-          <div
-            v-if="debugDetailEntries.length"
-            class="debug-pill-block"
-          >
-            <div class="debug-pill-title">
-              current_rule.debug
-            </div>
-            <div class="debug-pill-list">
-              <span
-                v-for="item in debugDetailEntries"
-                :key="`debug-${item.label}`"
-                class="debug-pill debug-pill-muted"
-              >
-                {{ item.label }}: {{ item.value }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div class="drawer-card">
-          <div class="drawer-section-head">
-            <div class="drawer-section-title">
-              规则结果概览
-            </div>
-            <div
-              v-if="activeRuleFilterLabel"
-              class="drawer-section-meta"
-            >
-              已按规则过滤：{{ activeRuleFilterLabel }}
-            </div>
-          </div>
-          <a-table
-            :columns="ruleColumns"
-            :data-source="displayRuleResults"
-            row-key="id"
-            size="small"
-            :pagination="false"
-            :locale="{
-              emptyText: '暂无规则结果（任务可能仍在执行中，或该任务为旧格式历史数据）',
-            }"
-          />
         </div>
 
         <div class="drawer-card">
@@ -440,6 +158,9 @@
                 {{ showAllStatuses ? '全部状态' : '仅问题项' }}
               </span>
             </div>
+          </div>
+          <div class="issue-focus-summary">
+            {{ issueFocusSummary }}
           </div>
           <div class="issue-filter-bar">
             <a-input
@@ -540,6 +261,7 @@
             </div>
           </div>
           <a-table
+            v-if="issueViewMode === 'advanced'"
             :columns="issueColumns"
             class="batch-issue-table"
             :data-source="displayIssueItems"
@@ -552,6 +274,294 @@
             @change="handleIssueTableChange"
           />
         </div>
+
+        <a-collapse
+          v-model:active-key="advancedSectionKeys"
+          ghost
+          class="drawer-advanced-collapse"
+        >
+          <a-collapse-panel
+            key="execution"
+            header="执行详情与统计"
+          >
+            <div
+              v-if="progressSummary"
+              class="drawer-card drawer-card--nested"
+            >
+              <div class="drawer-section-head">
+                <div class="drawer-section-title">
+                  任务进度
+                </div>
+                <div class="drawer-section-meta">
+                  {{ progressSummary.stepLabel }}
+                </div>
+              </div>
+              <a-progress
+                :percent="progressSummary.percent"
+                :status="progressSummary.status"
+                :stroke-color="progressSummary.status === 'exception' ? '#ef4444' : '#2563eb'"
+              />
+              <div class="progress-meta">
+                <span>已处理 {{ progressSummary.processedRecords }} /
+                  {{ progressSummary.totalRecords }} 份病历</span>
+                <span>规则 {{ progressSummary.ruleIndex }} / {{ progressSummary.ruleCount }}</span>
+              </div>
+            </div>
+
+            <div
+              v-if="advancedSummaryCards.length"
+              class="drawer-summary summary-grid-secondary"
+            >
+              <div
+                v-for="item in advancedSummaryCards"
+                :key="item.key"
+                class="summary-card"
+              >
+                <div class="summary-label">
+                  {{ item.label }}
+                </div>
+                <div class="summary-value">
+                  {{ item.value }}
+                </div>
+                <div
+                  v-if="item.desc"
+                  class="summary-desc"
+                >
+                  {{ item.desc }}
+                </div>
+              </div>
+            </div>
+          </a-collapse-panel>
+
+          <a-collapse-panel
+            v-if="resultAggregation"
+            key="aggregation"
+            header="结果聚合与命中分布"
+          >
+            <div class="drawer-card drawer-card--nested">
+              <div class="drawer-section-head">
+                <div class="drawer-section-title">
+                  结果聚合
+                </div>
+                <div class="drawer-section-meta">
+                  簇数 {{ resultAggregation.cluster_count || 0 }} · 重复命中
+                  {{ resultAggregation.duplicate_hits || 0 }}
+                </div>
+              </div>
+              <div
+                v-if="aggregationBreakdownSections.length"
+                class="aggregation-breakdown-grid"
+              >
+                <div
+                  v-for="section in aggregationBreakdownSections"
+                  :key="section.key"
+                  class="aggregation-breakdown-card"
+                >
+                  <div class="aggregation-breakdown-head">
+                    <div class="aggregation-breakdown-title">
+                      {{ section.title }}
+                    </div>
+                    <div class="aggregation-breakdown-count">
+                      {{ section.total }}
+                    </div>
+                  </div>
+                  <div
+                    v-if="section.items.length"
+                    class="aggregation-breakdown-items"
+                  >
+                    <div
+                      v-for="item in section.items"
+                      :key="`${section.key}-${item.label}`"
+                      class="aggregation-breakdown-item"
+                    >
+                      <span class="aggregation-breakdown-item-label">{{ item.label }}</span>
+                      <a-tag class="aggregation-breakdown-item-tag">
+                        {{ item.count }}
+                      </a-tag>
+                    </div>
+                  </div>
+                  <div
+                    v-else
+                    class="aggregation-breakdown-empty"
+                  >
+                    暂无分解数据
+                  </div>
+                </div>
+              </div>
+              <div class="aggregation-list">
+                <div
+                  v-for="cluster in topAggregationClusters"
+                  :key="cluster.cluster_key"
+                  class="aggregation-item"
+                  :class="{ active: selectedClusterKey === cluster.cluster_key }"
+                  @click="toggleClusterFilter(cluster.cluster_key)"
+                >
+                  <div class="aggregation-item-head">
+                    <span class="aggregation-item-title">{{ cluster.cluster_key }}</span>
+                    <a-tag class="aggregation-count-tag">
+                      {{ cluster.records || 0 }} 次
+                    </a-tag>
+                  </div>
+                  <div
+                    v-if="cluster.sample_evidence"
+                    class="aggregation-evidence"
+                  >
+                    {{ cluster.sample_evidence }}
+                  </div>
+                  <div class="aggregation-meta">
+                    病历 {{ cluster.records || 0 }} 条 · 规则 {{ cluster.rules?.length || 0 }} 条
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="selectedClusterKey"
+                class="aggregation-active-tip"
+              >
+                已按聚合簇过滤：{{ selectedClusterKey }}
+                <a-button
+                  type="link"
+                  size="small"
+                  @click.stop="clearClusterFilter"
+                >
+                  清除
+                </a-button>
+              </div>
+            </div>
+          </a-collapse-panel>
+
+          <a-collapse-panel
+            key="rules"
+            header="规则结果概览"
+          >
+            <div class="drawer-card drawer-card--nested">
+              <div class="drawer-section-head">
+                <div class="drawer-section-title">
+                  规则结果概览
+                </div>
+                <div
+                  v-if="activeRuleFilterLabel"
+                  class="drawer-section-meta"
+                >
+                  已按规则过滤：{{ activeRuleFilterLabel }}
+                </div>
+              </div>
+              <a-table
+                :columns="ruleColumns"
+                :data-source="displayRuleResults"
+                row-key="id"
+                size="small"
+                :pagination="false"
+                :locale="{
+                  emptyText: '暂无规则结果（任务可能仍在执行中，或该任务为旧格式历史数据）',
+                }"
+              />
+            </div>
+          </a-collapse-panel>
+
+          <a-collapse-panel
+            v-if="batchJobDebugSnapshot"
+            key="debug"
+            header="执行调试快照"
+          >
+            <div class="drawer-card drawer-card--nested">
+              <div class="drawer-section-head">
+                <div class="drawer-section-title">
+                  执行调试快照
+                </div>
+                <div class="debug-toolbar">
+                  <a-select
+                    :value="selectedDebugRuleJobId || undefined"
+                    allow-clear
+                    placeholder="按规则筛选调试快照"
+                    class="debug-rule-select"
+                    :options="debugRuleOptions"
+                    :loading="batchJobDebugLoading"
+                    @change="handleDebugRuleChange"
+                  />
+                  <div class="drawer-section-meta">
+                    {{ batchJobDebugSnapshot.status }} ·
+                    {{ batchJobDebugSnapshot.execution_mode || 'unknown' }}
+                  </div>
+                </div>
+              </div>
+              <div class="debug-current-rule">
+                <div class="debug-current-rule-main">
+                  <span class="debug-current-rule-label">当前规则</span>
+                  <span class="debug-current-rule-value">
+                    {{
+                      batchJobDebugSnapshot.current_rule?.rule_code ||
+                        currentDebugRule?.rule_code ||
+                        '未定位'
+                    }}
+                  </span>
+                </div>
+                <div class="debug-current-rule-sub">
+                  {{
+                    batchJobDebugSnapshot.current_rule?.rule_name ||
+                      currentDebugRule?.rule_name ||
+                      '暂无规则名称'
+                  }}
+                </div>
+              </div>
+              <div class="debug-meta-grid">
+                <div class="debug-meta-item">
+                  <span class="debug-meta-label">规则总数</span>
+                  <span class="debug-meta-value">{{ batchJobDebugSnapshot.rule_count || 0 }}</span>
+                </div>
+                <div class="debug-meta-item">
+                  <span class="debug-meta-label">筛选规则</span>
+                  <span class="debug-meta-value">{{
+                    batchJobDebugSnapshot.filtered_rule_count || 0
+                  }}</span>
+                </div>
+                <div class="debug-meta-item">
+                  <span class="debug-meta-label">更新时间</span>
+                  <span class="debug-meta-value">{{
+                    formatDateTime(batchJobDebugSnapshot.updated_at)
+                  }}</span>
+                </div>
+                <div class="debug-meta-item">
+                  <span class="debug-meta-label">任务状态</span>
+                  <span class="debug-meta-value">{{ batchJobDebugSnapshot.status }}</span>
+                </div>
+              </div>
+              <div
+                v-if="debugProgressEntries.length"
+                class="debug-pill-block"
+              >
+                <div class="debug-pill-title">
+                  current_rule.progress
+                </div>
+                <div class="debug-pill-list">
+                  <span
+                    v-for="item in debugProgressEntries"
+                    :key="`progress-${item.label}`"
+                    class="debug-pill"
+                  >
+                    {{ item.label }}: {{ item.value }}
+                  </span>
+                </div>
+              </div>
+              <div
+                v-if="debugDetailEntries.length"
+                class="debug-pill-block"
+              >
+                <div class="debug-pill-title">
+                  current_rule.debug
+                </div>
+                <div class="debug-pill-list">
+                  <span
+                    v-for="item in debugDetailEntries"
+                    :key="`debug-${item.label}`"
+                    class="debug-pill debug-pill-muted"
+                  >
+                    {{ item.label }}: {{ item.value }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </a-collapse-panel>
+        </a-collapse>
       </div>
     </div>
   </a-drawer>
@@ -609,6 +619,7 @@ const PROGRESS_STEP_LABEL_MAP: Record<string, string> = {
 const issueViewMode = ref<'business' | 'advanced'>('business')
 const showAllStatuses = ref(false)
 const issueFilter = ref<StructuredQCFilterState>(createDefaultStructuredQCFilter())
+const advancedSectionKeys = ref<string[]>([])
 
 const ruleColumns = computed(() => [
   { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 120 },
@@ -797,6 +808,7 @@ watch(
     selectedClusterKey.value = ''
     selectedDebugRuleJobId.value = ''
     issueViewMode.value = 'business'
+    advancedSectionKeys.value = []
     resetIssueFilters()
   },
 )
@@ -1151,6 +1163,12 @@ const primarySummaryCards = computed(() => {
   ]
 })
 
+const focusedSummaryCards = computed(() =>
+  primarySummaryCards.value.filter((item) =>
+    ['total', 'issues', 'uncertain', 'failed-records'].includes(item.key),
+  ),
+)
+
 const ruleSetDisplay = computed(() => {
   const detail = props.batchJobDetail
   const summary = detail?.summary
@@ -1194,16 +1212,17 @@ const executionSummaryCards = computed(() => {
   const summary = props.batchJobDetail?.summary
   const packMetrics = summary?.pack_metrics || {}
   const cards = [
-    { key: 'program', label: 'Program执行', value: executionSummary.value.programCount },
-    { key: 'llm', label: 'LLM执行', value: executionSummary.value.llmCount },
-    { key: 'hit', label: '缓存命中', value: executionSummary.value.cacheHit },
-    { key: 'miss', label: '缓存未命中', value: executionSummary.value.cacheMiss },
+    { key: 'program', label: 'Program执行', value: executionSummary.value.programCount, desc: '' },
+    { key: 'llm', label: 'LLM执行', value: executionSummary.value.llmCount, desc: '' },
+    { key: 'hit', label: '缓存命中', value: executionSummary.value.cacheHit, desc: '' },
+    { key: 'miss', label: '缓存未命中', value: executionSummary.value.cacheMiss, desc: '' },
   ]
   if (summary?.refine_summary || summary?.refined_rule_count) {
     cards.push({
       key: 'refined',
       label: '单条精审',
       value: Number(summary.refined_rule_count || summary.refine_summary?.refined_rule_count || 0),
+      desc: '',
     })
   }
   if (packMetrics.total_packs !== undefined) {
@@ -1211,9 +1230,47 @@ const executionSummaryCards = computed(() => {
       key: 'packs',
       label: '分包数',
       value: Number(packMetrics.total_packs || 0),
+      desc: '',
     })
   }
   return cards
+})
+
+const advancedSummaryCards = computed(() => {
+  const cards = [
+    ...primarySummaryCards.value.filter(
+      (item) => !['total', 'issues', 'uncertain', 'failed-records'].includes(item.key),
+    ),
+    ...executionSummaryCards.value,
+    {
+      key: 'rule-results',
+      label: '规则结果条数',
+      value: resolvedRuleResults.value.length,
+      desc: '',
+    },
+    {
+      key: 'issue-items',
+      label: '问题/待复核明细',
+      value: issueItems.value.length,
+      desc: '',
+    },
+  ]
+  return cards.filter((item) => item.value !== undefined && item.value !== null)
+})
+
+const issueFocusSummary = computed(() => {
+  const total = issueItems.value.length
+  if (!total) {
+    return showAllStatuses.value ? '当前没有可展示的规则结果。' : '当前没有需要复核或整改的问题项。'
+  }
+  const nonCompliantCount = issueItems.value.filter(
+    (item) => item.status === 'non_compliant',
+  ).length
+  const uncertainCount = issueItems.value.filter((item) => item.status === 'uncertain').length
+  if (issueViewMode.value === 'business') {
+    return `当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。默认优先阅读问题卡片，高级表格已折叠到“高级视图”。`
+  }
+  return `当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。高级视图会展示完整表格和追溯字段。`
 })
 
 watch(
@@ -1608,6 +1665,10 @@ watch(
   padding: 14px 16px;
 }
 
+.drawer-card--nested {
+  margin-top: 8px;
+}
+
 .drawer-card-top {
   display: flex;
   justify-content: space-between;
@@ -1790,6 +1851,17 @@ watch(
   flex-wrap: wrap;
 }
 
+.issue-focus-summary {
+  margin-bottom: 12px;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  color: #1e3a8a;
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 10px 12px;
+}
+
 .issue-filter-bar {
   display: grid;
   grid-template-columns: minmax(160px, 1.4fr) repeat(3, minmax(90px, 1fr)) auto;
@@ -1948,6 +2020,33 @@ watch(
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
+}
+
+.drawer-advanced-collapse {
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  overflow: hidden;
+}
+
+:deep(.drawer-advanced-collapse .ant-collapse-item) {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+:deep(.drawer-advanced-collapse .ant-collapse-item:last-child) {
+  border-bottom: none;
+}
+
+:deep(.drawer-advanced-collapse .ant-collapse-header) {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #fff;
+}
+
+:deep(.drawer-advanced-collapse .ant-collapse-content-box) {
+  padding: 0 16px 16px;
+  background: #f8fafc;
 }
 
 .debug-current-rule {
