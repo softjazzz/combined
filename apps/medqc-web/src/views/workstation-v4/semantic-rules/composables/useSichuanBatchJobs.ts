@@ -1,6 +1,6 @@
 import { computed, reactive, ref } from 'vue'
 import type { Dayjs } from 'dayjs'
-import { message } from 'ant-design-vue'
+import { message, notification } from 'ant-design-vue'
 import type { WorkspaceScope } from '@/types/custom-rule-workspace'
 import type {
   SichuanBatchJobDebugSnapshot,
@@ -73,6 +73,7 @@ export function useSichuanBatchJobs() {
 
   let batchJobPollTimer: ReturnType<typeof setInterval> | number | null = null
   let batchJobPollTick = 0
+  const lastObservedJobStatus = reactive<Record<string, string>>({})
 
   async function loadBatchJobs() {
     batchJobLoading.value = true
@@ -97,8 +98,8 @@ export function useSichuanBatchJobs() {
         const latest = response.data.items.find((item) => item.id === batchJobDetail.value?.id)
         if (latest) {
           batchJobDetail.value = {
-            ...latest,
             ...batchJobDetail.value,
+            ...latest,
           }
         }
       }
@@ -174,7 +175,10 @@ export function useSichuanBatchJobs() {
       const response = await getSichuanWorkspaceBatchJob(jobId)
       if (!response.success || !response.data)
         throw new Error(response.message || '获取任务详情失败')
+      const previousStatus = lastObservedJobStatus[jobId] || batchJobDetail.value?.status || ''
       batchJobDetail.value = response.data
+      lastObservedJobStatus[jobId] = response.data.status
+      maybeNotifyBatchJobTerminalStatus(response.data, previousStatus)
       if (options?.includeDebugSnapshot) {
         await fetchBatchJobDebugSnapshot(jobId)
       }
@@ -265,9 +269,48 @@ export function useSichuanBatchJobs() {
 
   function prependBatchJob(job: SichuanBatchJob) {
     batchJobPagination.current = 1
+    lastObservedJobStatus[job.id] = job.status
     const nextItems = [job, ...batchJobs.value.filter((item) => item.id !== job.id)]
     batchJobs.value = nextItems.slice(0, batchJobPagination.pageSize)
     batchJobPagination.total += 1
+  }
+
+  function maybeNotifyBatchJobTerminalStatus(job: SichuanBatchJob, previousStatus?: string) {
+    const currentStatus = String(job.status || '')
+      .trim()
+      .toLowerCase()
+    const previous = String(previousStatus || '')
+      .trim()
+      .toLowerCase()
+    if (!['completed', 'failed', 'canceled'].includes(currentStatus)) return
+    if (!['queued', 'running'].includes(previous)) return
+    const issueCount = Number(job.summary?.issue_records ?? job.issue_records ?? 0)
+    const uncertainCount = Number(job.summary?.uncertain_records ?? 0)
+    const title =
+      currentStatus === 'completed'
+        ? '批量质控已完成'
+        : currentStatus === 'failed'
+          ? '批量质控执行失败'
+          : '批量质控已取消'
+    const description =
+      currentStatus === 'completed'
+        ? `任务“${job.rule_name || job.rule_code}”已完成。命中问题 ${issueCount} 条，待复核 ${uncertainCount} 条，可直接回到抽屉查看结果。`
+        : currentStatus === 'failed'
+          ? `任务“${job.rule_name || job.rule_code}”执行失败。请回到抽屉查看失败原因并决定是否重试。`
+          : `任务“${job.rule_name || job.rule_code}”已被停止，不会继续产生新的结果。`
+    const notify =
+      currentStatus === 'completed'
+        ? notification.success
+        : currentStatus === 'failed'
+          ? notification.error
+          : notification.warning
+    notify({
+      key: `sichuan-batch-job-${job.id}-${currentStatus}`,
+      message: title,
+      description,
+      duration: currentStatus === 'completed' ? 5.5 : 7,
+      placement: 'topRight',
+    })
   }
 
   return {

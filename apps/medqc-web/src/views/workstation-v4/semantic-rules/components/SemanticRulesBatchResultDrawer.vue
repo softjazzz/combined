@@ -36,6 +36,53 @@
 
       <div class="drawer-body">
         <div
+          v-if="batchJobDetail && statusHero"
+          class="status-hero"
+          :class="`status-hero--${statusHero.tone}`"
+        >
+          <div class="status-hero-main">
+            <div
+              v-if="statusHero.pulse"
+              class="status-hero-pulse"
+            />
+            <div>
+              <div class="status-hero-title-row">
+                <span class="status-hero-title">{{ statusHero.title }}</span>
+                <a-tag
+                  class="status-hero-tag"
+                  :class="getBatchJobStatusTagClass(batchJobDetail.status)"
+                >
+                  {{ getBatchJobStatusText(batchJobDetail.status) }}
+                </a-tag>
+              </div>
+              <div class="status-hero-desc">
+                {{ statusHero.description }}
+              </div>
+              <div
+                v-if="statusHero.meta.length"
+                class="status-hero-meta"
+              >
+                <span
+                  v-for="item in statusHero.meta"
+                  :key="item"
+                  class="status-hero-meta-item"
+                >
+                  {{ item }}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="status-hero-side">
+            <div class="status-hero-percent">
+              {{ progressSummary?.percent ?? 0 }}%
+            </div>
+            <div class="status-hero-side-label">
+              {{ progressSummary?.stepLabel || '准备中' }}
+            </div>
+          </div>
+        </div>
+
+        <div
           v-if="batchJobDetail"
           class="drawer-card"
         >
@@ -995,6 +1042,88 @@ const executionSummary = computed(() => {
   return { programCount, llmCount, cacheHit, cacheMiss }
 })
 
+const statusHero = computed(() => {
+  const detail = props.batchJobDetail
+  if (!detail) return null
+  const status = String(detail.status || '')
+    .trim()
+    .toLowerCase()
+  const processedRecords = progressSummary.value?.processedRecords ?? 0
+  const totalRecords = progressSummary.value?.totalRecords ?? Number(detail.total_records || 0)
+  const issueRecords = Number(detail.summary?.issue_records ?? detail.issue_records ?? 0)
+  const uncertainRecords = Number(detail.summary?.uncertain_records ?? 0)
+  const finishedAt = detail.finished_at || detail.updated_at
+  const meta: string[] = []
+  if (totalRecords > 0) {
+    meta.push(`已处理 ${processedRecords}/${totalRecords} 份病历`)
+  }
+  if ((progressSummary.value?.ruleCount || 0) > 0) {
+    meta.push(
+      `规则 ${progressSummary.value?.ruleIndex || 0}/${progressSummary.value?.ruleCount || 0}`,
+    )
+  }
+  if (status === 'completed') {
+    meta.push(`命中问题 ${issueRecords}`)
+    meta.push(`待复核 ${uncertainRecords}`)
+    if (finishedAt) {
+      meta.push(`完成于 ${props.formatDateTime(finishedAt)}`)
+    }
+  }
+  if (status === 'failed' && detail.error_message) {
+    meta.push('请优先查看下方失败原因与调试快照')
+  }
+  if (status === 'canceled' && finishedAt) {
+    meta.push(`停止于 ${props.formatDateTime(finishedAt)}`)
+  }
+  if (status === 'queued') {
+    return {
+      tone: 'queued',
+      title: '任务已创建，等待执行',
+      description:
+        '系统已接收任务，正在分配执行资源。抽屉内容会自动刷新，不需要手动反复关闭再打开。',
+      meta,
+      pulse: true,
+    }
+  }
+  if (status === 'running') {
+    return {
+      tone: 'running',
+      title: '任务执行中，请直接关注这里的进度',
+      description: '结果会随着轮询自动刷新。任务结束后会弹出强提醒，并保留最终结果在当前抽屉中。',
+      meta,
+      pulse: true,
+    }
+  }
+  if (status === 'completed') {
+    return {
+      tone: 'completed',
+      title: issueRecords > 0 ? '任务已完成，已产出可处理问题' : '任务已完成，本次未发现问题',
+      description:
+        issueRecords > 0
+          ? '请优先查看下方“问题/待复核明细”，直接判断需要复核或整改的质控点。'
+          : '本次批量质控已执行完毕，当前规则集下没有发现需要处理的问题。',
+      meta,
+      pulse: false,
+    }
+  }
+  if (status === 'failed') {
+    return {
+      tone: 'failed',
+      title: '任务执行失败，需要人工处理',
+      description: detail.error_message || '后端在执行中断，请检查失败原因，必要时点击重试。',
+      meta,
+      pulse: false,
+    }
+  }
+  return {
+    tone: 'canceled',
+    title: '任务已取消',
+    description: '该任务已被手动停止，不会继续产生新的质控结果。',
+    meta,
+    pulse: false,
+  }
+})
+
 const primarySummaryCards = computed(() => {
   const summary = props.batchJobDetail?.summary
   const totalRecords = Number(summary?.total_records ?? props.batchJobDetail?.total_records ?? 0)
@@ -1340,6 +1469,126 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.status-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: 18px;
+  border: 1px solid #dbeafe;
+  padding: 16px 18px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.status-hero--queued,
+.status-hero--running {
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+  border-color: #bfdbfe;
+}
+
+.status-hero--completed {
+  background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%);
+  border-color: #bbf7d0;
+}
+
+.status-hero--failed {
+  background: linear-gradient(135deg, #fff1f2 0%, #ffffff 100%);
+  border-color: #fecdd3;
+}
+
+.status-hero--canceled {
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border-color: #cbd5e1;
+}
+
+.status-hero-main {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+}
+
+.status-hero-pulse {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  margin-top: 6px;
+  background: #2563eb;
+  box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.5);
+  animation: statusPulse 1.8s infinite;
+  flex: none;
+}
+
+.status-hero-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-hero-title {
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.status-hero-tag {
+  margin: 0;
+}
+
+.status-hero-desc {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #334155;
+}
+
+.status-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.status-hero-meta-item {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  padding: 3px 9px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.status-hero-side {
+  min-width: 108px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  flex: none;
+}
+
+.status-hero-percent {
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.status-hero-side-label {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #64748b;
+  text-align: center;
 }
 
 .drawer-card {
@@ -1789,6 +2038,15 @@ watch(
 }
 
 @media (max-width: 767px) {
+  .status-hero {
+    flex-direction: column;
+  }
+
+  .status-hero-side {
+    width: 100%;
+    min-width: 0;
+  }
+
   .summary-grid-primary,
   .summary-grid-secondary,
   .aggregation-breakdown-grid,
@@ -1811,5 +2069,17 @@ watch(
 
 :deep(.issue-row-uncertain td) {
   background: rgba(254, 243, 199, 0.55);
+}
+
+@keyframes statusPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.42);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(37, 99, 235, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+  }
 }
 </style>
