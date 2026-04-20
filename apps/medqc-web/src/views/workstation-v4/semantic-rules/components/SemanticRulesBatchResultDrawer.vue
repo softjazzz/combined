@@ -221,32 +221,110 @@
               <div class="issue-conclusion-summary">
                 <div class="issue-conclusion-row">
                   <span class="issue-conclusion-label">结论</span>
-                  <span>
-                    {{
-                      isIssueExpanded(item)
-                        ? item.findings || '无'
-                        : truncateText(item.findings, 88)
-                    }}
+                  <div
+                    v-if="isIssueExpanded(item)"
+                    class="issue-conclusion-structured"
+                  >
+                    <div
+                      v-if="resolveStructuredText(item.findings).summary"
+                      class="issue-conclusion-summary-text"
+                    >
+                      {{ resolveStructuredText(item.findings).summary }}
+                    </div>
+                    <ol
+                      v-if="resolveStructuredText(item.findings).points.length"
+                      class="issue-conclusion-points"
+                    >
+                      <li
+                        v-for="(point, index) in resolveStructuredText(item.findings).points"
+                        :key="`finding-${resolveIssueStableKey(item)}-${index}`"
+                      >
+                        {{ point }}
+                      </li>
+                    </ol>
+                    <span
+                      v-if="
+                        !resolveStructuredText(item.findings).summary &&
+                          !resolveStructuredText(item.findings).points.length
+                      "
+                    >
+                      无
+                    </span>
+                  </div>
+                  <span v-else>
+                    {{ truncateText(item.findings, 88) }}
                   </span>
                 </div>
                 <div class="issue-conclusion-row">
                   <span class="issue-conclusion-label">证据</span>
-                  <span>
-                    {{
-                      isIssueExpanded(item)
-                        ? item.evidence || '无'
-                        : truncateText(item.evidence, 96)
-                    }}
+                  <div
+                    v-if="isIssueExpanded(item)"
+                    class="issue-conclusion-structured"
+                  >
+                    <div
+                      v-if="resolveStructuredText(item.evidence).summary"
+                      class="issue-conclusion-summary-text"
+                    >
+                      {{ resolveStructuredText(item.evidence).summary }}
+                    </div>
+                    <ol
+                      v-if="resolveStructuredText(item.evidence).points.length"
+                      class="issue-conclusion-points"
+                    >
+                      <li
+                        v-for="(point, index) in resolveStructuredText(item.evidence).points"
+                        :key="`evidence-${resolveIssueStableKey(item)}-${index}`"
+                      >
+                        {{ point }}
+                      </li>
+                    </ol>
+                    <span
+                      v-if="
+                        !resolveStructuredText(item.evidence).summary &&
+                          !resolveStructuredText(item.evidence).points.length
+                      "
+                    >
+                      无
+                    </span>
+                  </div>
+                  <span v-else>
+                    {{ truncateText(item.evidence, 96) }}
                   </span>
                 </div>
                 <div class="issue-conclusion-row">
                   <span class="issue-conclusion-label">建议</span>
-                  <span>
-                    {{
-                      isIssueExpanded(item)
-                        ? item.suggestion || '无'
-                        : truncateText(item.suggestion, 72)
-                    }}
+                  <div
+                    v-if="isIssueExpanded(item)"
+                    class="issue-conclusion-structured"
+                  >
+                    <div
+                      v-if="resolveStructuredText(item.suggestion).summary"
+                      class="issue-conclusion-summary-text"
+                    >
+                      {{ resolveStructuredText(item.suggestion).summary }}
+                    </div>
+                    <ol
+                      v-if="resolveStructuredText(item.suggestion).points.length"
+                      class="issue-conclusion-points"
+                    >
+                      <li
+                        v-for="(point, index) in resolveStructuredText(item.suggestion).points"
+                        :key="`suggestion-${resolveIssueStableKey(item)}-${index}`"
+                      >
+                        {{ point }}
+                      </li>
+                    </ol>
+                    <span
+                      v-if="
+                        !resolveStructuredText(item.suggestion).summary &&
+                          !resolveStructuredText(item.suggestion).points.length
+                      "
+                    >
+                      无
+                    </span>
+                  </div>
+                  <span v-else>
+                    {{ truncateText(item.suggestion, 72) }}
                   </span>
                 </div>
               </div>
@@ -1657,6 +1735,50 @@ function truncateText(text?: string, limit = 80) {
   return value.length > limit ? `${value.slice(0, limit)}...` : value
 }
 
+function resolveStructuredText(text?: string | null) {
+  const normalized = String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\n+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  if (!normalized) {
+    return { summary: '', points: [] as string[] }
+  }
+  const numberedMatches = Array.from(normalized.matchAll(/(?:^|[\s：:；;])(\d+)\.\s*/g))
+  if (!numberedMatches.length) {
+    return { summary: normalized, points: [] as string[] }
+  }
+  const firstMatch = numberedMatches[0]
+  const firstIndex = firstMatch.index ?? 0
+  const summary = normalized
+    .slice(0, firstIndex)
+    .replace(/[：:；;，,\s]+$/g, '')
+    .trim()
+  const points: string[] = []
+  numberedMatches.forEach((match, index) => {
+    const markerIndex = match.index ?? 0
+    const markerLength = match[0].length
+    const start = markerIndex + markerLength
+    const end =
+      index + 1 < numberedMatches.length
+        ? (numberedMatches[index + 1].index ?? normalized.length)
+        : normalized.length
+    const point = normalized
+      .slice(start, end)
+      .replace(/^[：:；;，,\s]+/g, '')
+      .replace(/[；;\s]+$/g, '')
+      .trim()
+    if (point) {
+      points.push(point)
+    }
+  })
+  if (!summary && points.length === 1) {
+    return { summary: points[0], points: [] }
+  }
+  return { summary, points }
+}
+
 function resolveBreakdownLabel(kind: 'executor' | 'document' | 'defect' | 'status', key: string) {
   const normalizedKey = String(key || '').trim()
   if (!normalizedKey) return '未命名'
@@ -2152,6 +2274,29 @@ watch(
 .issue-conclusion-label {
   color: #64748b;
   font-weight: 500;
+}
+
+.issue-conclusion-structured {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.issue-conclusion-summary-text {
+  color: #0f172a;
+}
+
+.issue-conclusion-points {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #334155;
+}
+
+.issue-conclusion-points li::marker {
+  color: #64748b;
 }
 
 .drawer-section-title {
