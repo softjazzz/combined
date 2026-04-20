@@ -124,11 +124,13 @@ export async function runManualSamplePool(
     top_p?: number
     temperature?: number
     max_tokens?: number
+    sample_item_ids?: string[]
   },
 ) {
   return requestEnvelope<{
     pool_id: string
     job_id: string
+    sample_item_count: number
     record_count: number
     rule_count: number
     record_ids: string[]

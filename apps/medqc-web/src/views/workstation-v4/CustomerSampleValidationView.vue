@@ -79,7 +79,7 @@
                 :loading="runLoading"
                 @click="handleRunPool"
               >
-                发起内涵验证
+                {{ runButtonText }}
               </a-button>
               <a-button
                 class="!rounded-full"
@@ -227,6 +227,7 @@
               :loading="itemLoading"
               :columns="itemColumns"
               :data-source="items"
+              :row-selection="rowSelection"
               :pagination="paginationConfig"
               :scroll="{ x: 1280 }"
               :locale="{ emptyText: tableEmptyText }"
@@ -351,7 +352,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { InboxOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType } from 'ant-design-vue'
@@ -376,6 +377,7 @@ const itemLoading = ref(false)
 const matchLoading = ref(false)
 const runLoading = ref(false)
 const syncLoading = ref(false)
+const selectedRowKeys = ref<string[]>([])
 
 const pools = ref<ManualSamplePool[]>([])
 const selectedPoolId = ref<string>()
@@ -399,6 +401,7 @@ const reviewDrawerRecord = ref<{
 const batchResultOpen = ref(false)
 const batchJobDetail = ref<SichuanBatchJob>()
 const batchJobLoading = ref(false)
+let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
 
 const pagination = ref({
   page: 1,
@@ -449,6 +452,14 @@ const summaryCards = computed(() => {
     },
   ]
 })
+
+const selectedRunnableCount = computed(() => selectedRowKeys.value.length)
+
+const runButtonText = computed(() =>
+  selectedRunnableCount.value > 0
+    ? `发起选中验证（${selectedRunnableCount.value}）`
+    : '发起内涵验证',
+)
 
 const paginationConfig = computed(() => ({
   current: pagination.value.page,
@@ -613,6 +624,16 @@ const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
   },
 ]
 
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedRowKeys.value,
+  onChange: (keys) => {
+    selectedRowKeys.value = keys.map((key) => String(key))
+  },
+  getCheckboxProps: (record) => ({
+    disabled: !isRunnableSample(record),
+  }),
+}))
+
 function coverageLabel(value: string): string {
   if (value === 'llm_intrinsic') return '内涵问题'
   if (value === 'programmatic') return '程序化'
@@ -645,6 +666,17 @@ function matchStatusTagClass(value: string): string {
     return 'inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700'
   }
   return 'inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700'
+}
+
+function isRunnableSample(record: ManualSamplePoolItem): boolean {
+  return (
+    record.coverage_type === 'llm_intrinsic' &&
+    record.include_in_batch_1 &&
+    record.match_status === 'matched' &&
+    record.sync_status === 'synced' &&
+    record.bundle_status === 'ready' &&
+    !!record.matched_visit_id
+  )
 }
 
 async function loadPools() {
@@ -688,10 +720,14 @@ async function loadItems() {
   selectedPool.value = result.data.pool
   items.value = result.data.items
   pagination.value.total = result.data.total
+  selectedRowKeys.value = selectedRowKeys.value.filter((key) =>
+    items.value.some((item) => item.id === key && isRunnableSample(item)),
+  )
 }
 
 async function handlePoolChange() {
   pagination.value.page = 1
+  selectedRowKeys.value = []
   selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
   await loadItems()
 }
@@ -704,6 +740,7 @@ function resetFilters() {
     includeInBatch: true,
   }
   pagination.value.page = 1
+  selectedRowKeys.value = []
   loadItems()
 }
 
@@ -763,15 +800,18 @@ async function handleSyncPoolRecords() {
 async function handleRunPool() {
   if (!selectedPoolId.value) return
   runLoading.value = true
-  const result = await runManualSamplePool(selectedPoolId.value)
+  const result = await runManualSamplePool(selectedPoolId.value, {
+    sample_item_ids: selectedRowKeys.value,
+  })
   runLoading.value = false
   if (!result.success || !result.data) {
     message.error(result.message || '创建样本验证任务失败')
     return
   }
   message.success(
-    `已创建验证任务，覆盖 ${result.data.record_count} 份病历 / ${result.data.rule_count} 条规则`,
+    `已创建验证任务，覆盖 ${result.data.sample_item_count} 条样本 / ${result.data.record_count} 份病历 / ${result.data.rule_count} 条规则`,
   )
+  selectedRowKeys.value = []
   await loadPools()
   await openBatchJob(result.data.job_id)
 }
@@ -782,6 +822,7 @@ async function openLatestJob() {
 }
 
 async function openBatchJob(jobId: string) {
+  stopBatchJobPolling()
   batchJobLoading.value = true
   batchResultOpen.value = true
   const result = await getSichuanWorkspaceBatchJob(jobId)
@@ -791,11 +832,45 @@ async function openBatchJob(jobId: string) {
     return
   }
   batchJobDetail.value = result.data
+  if (isBatchJobRunning(result.data.status)) {
+    startBatchJobPolling(jobId)
+  }
 }
 
 function closeBatchDrawer() {
+  stopBatchJobPolling()
   batchResultOpen.value = false
   batchJobDetail.value = undefined
+}
+
+function isBatchJobRunning(status?: string) {
+  const normalized = String(status || '').toLowerCase()
+  return normalized === 'queued' || normalized === 'running'
+}
+
+function stopBatchJobPolling() {
+  if (batchJobPollTimer) {
+    clearInterval(batchJobPollTimer)
+    batchJobPollTimer = null
+  }
+}
+
+function startBatchJobPolling(jobId: string) {
+  stopBatchJobPolling()
+  batchJobPollTimer = setInterval(async () => {
+    if (!batchResultOpen.value) {
+      stopBatchJobPolling()
+      return
+    }
+    const result = await getSichuanWorkspaceBatchJob(jobId)
+    if (!result.success || !result.data) return
+    batchJobDetail.value = result.data
+    if (!isBatchJobRunning(result.data.status)) {
+      stopBatchJobPolling()
+      await loadPools()
+      await loadItems()
+    }
+  }, 3000)
 }
 
 async function handleExportBatchReport(jobId: string) {
@@ -852,6 +927,10 @@ function formatDateTime(value?: string) {
 
 onMounted(() => {
   loadPools()
+})
+
+onUnmounted(() => {
+  stopBatchJobPolling()
 })
 </script>
 

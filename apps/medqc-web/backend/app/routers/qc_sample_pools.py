@@ -54,6 +54,7 @@ class SamplePoolRunRequest(BaseModel):
     top_p: Optional[float] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+    sample_item_ids: list[str] = Field(default_factory=list, description="选中的样本项 ID")
 
 
 class SamplePoolSyncRequest(BaseModel):
@@ -231,8 +232,10 @@ async def run_sample_pool_intrinsic_validation(
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
 
-    runnable_items = service.get_runnable_items(pool_id=pool_id)
+    runnable_items = service.get_runnable_items(pool_id=pool_id, item_ids=payload.sample_item_ids)
     if not runnable_items:
+        if payload.sample_item_ids:
+            raise HTTPException(status_code=422, detail="当前选中样本没有可执行的内涵病历")
         raise HTTPException(status_code=422, detail="当前样本池没有可执行的内涵样本")
 
     record_ids = sorted(
@@ -312,6 +315,7 @@ async def run_sample_pool_intrinsic_validation(
         data={
             "pool_id": pool_id,
             "job_id": job["id"],
+            "sample_item_count": len(runnable_items),
             "record_count": len(record_ids),
             "rule_count": len(rule_ids),
             "record_ids": record_ids,

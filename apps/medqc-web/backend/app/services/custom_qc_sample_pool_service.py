@@ -830,6 +830,7 @@ class CustomQCSamplePoolService:
         pool_id: str,
         coverage_type: str = "llm_intrinsic",
         include_in_batch_1: bool = True,
+        item_ids: Optional[Sequence[str]] = None,
     ) -> List[Dict[str, Any]]:
         session = _session()
         try:
@@ -847,6 +848,10 @@ class CustomQCSamplePoolService:
             )
             if include_in_batch_1:
                 stmt = stmt.where(self._item_table.c.include_in_batch_1.is_(True))
+            if item_ids:
+                normalized_ids = [str(item_id).strip() for item_id in item_ids if str(item_id).strip()]
+                if normalized_ids:
+                    stmt = stmt.where(self._item_table.c.id.in_(normalized_ids))
             rows = session.execute(stmt).mappings().all()
             return [self._row_to_item(dict(row)) for row in rows]
         finally:
