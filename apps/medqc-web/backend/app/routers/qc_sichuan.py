@@ -1269,6 +1269,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "rule_code": rule_code,
                         "rule_name": str(eval_item.get("rule_name") or rule_name),
                         "record_id": record_id,
+                        "institute_id": institute_id,
+                        "patient_id": patient_id,
                         "visit_id": str(record.get("visit_id") or ""),
                         "patient_name": str(record.get("patient_name") or ""),
                         "department": str(record.get("department") or ""),

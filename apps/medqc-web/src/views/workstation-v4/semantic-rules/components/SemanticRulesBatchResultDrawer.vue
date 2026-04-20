@@ -615,30 +615,52 @@
             <span>{{ selectedDeepReviewIssue.defect_level || '未分级' }}</span>
             <span v-if="selectedDeepReviewIssue.refined">单条精审</span>
           </div>
-          <div class="deep-review-section">
-            <div class="deep-review-label">
-              结论
+          <a-alert
+            v-if="deepReviewError"
+            type="warning"
+            show-icon
+            :message="deepReviewError"
+          />
+          <a-spin :spinning="deepReviewLoading">
+            <div class="deep-review-section">
+              <div class="deep-review-label">
+                复核结论
+              </div>
+              <div class="deep-review-content">
+                {{
+                  String(
+                    resolvedDeepReviewResult?.findings || selectedDeepReviewIssue.findings || '无',
+                  )
+                }}
+              </div>
             </div>
-            <div class="deep-review-content">
-              {{ selectedDeepReviewIssue.findings || '无' }}
+            <div class="deep-review-section">
+              <div class="deep-review-label">
+                复核证据
+              </div>
+              <div class="deep-review-content">
+                {{
+                  String(
+                    resolvedDeepReviewResult?.evidence || selectedDeepReviewIssue.evidence || '无',
+                  )
+                }}
+              </div>
             </div>
-          </div>
-          <div class="deep-review-section">
-            <div class="deep-review-label">
-              证据
+            <div class="deep-review-section">
+              <div class="deep-review-label">
+                复核建议
+              </div>
+              <div class="deep-review-content">
+                {{
+                  String(
+                    resolvedDeepReviewResult?.suggestion ||
+                      selectedDeepReviewIssue.suggestion ||
+                      '无',
+                  )
+                }}
+              </div>
             </div>
-            <div class="deep-review-content">
-              {{ selectedDeepReviewIssue.evidence || '无' }}
-            </div>
-          </div>
-          <div class="deep-review-section">
-            <div class="deep-review-label">
-              建议
-            </div>
-            <div class="deep-review-content">
-              {{ selectedDeepReviewIssue.suggestion || '无' }}
-            </div>
-          </div>
+          </a-spin>
         </div>
       </template>
     </a-modal>
@@ -647,12 +669,14 @@
 
 <script setup lang="ts">
 import { computed, h, nextTick, reactive, ref, watch } from 'vue'
+import { message } from 'ant-design-vue'
 import type {
   SichuanBatchIssueItem,
   SichuanBatchJobDebugSnapshot,
   SichuanBatchJob,
   SichuanBatchResultAggregation,
 } from '@/views/workstation-v4/semantic-rules/types'
+import { evaluateSichuanRuleForVisit } from '@/services/sichuan-rule-workspace-service'
 import type { StructuredQCFilterState, StructuredQCIssue } from '@/views/workstation-v4/types'
 import {
   createDefaultStructuredQCFilter,
@@ -799,6 +823,9 @@ const issuePagination = reactive({
 const expandedIssueKeys = ref<string[]>([])
 const deepReviewModalOpen = ref(false)
 const selectedDeepReviewIssue = ref<SichuanBatchIssueItem | null>(null)
+const deepReviewLoading = ref(false)
+const deepReviewError = ref('')
+const deepReviewResult = ref<Record<string, unknown> | null>(null)
 
 const batchJobDebugSnapshot = computed(() => props.batchJobDebugSnapshot || null)
 
@@ -818,42 +845,85 @@ const structuredIssues = computed<StructuredQCIssue[]>(() => {
   return list
 })
 
+function resolveIssueSourceKey(
+  issue: Pick<
+    SichuanBatchIssueItem,
+    'rule_job_id' | 'rule_id' | 'rule_code' | 'record_id' | 'visit_id'
+  >,
+) {
+  return [
+    issue.rule_job_id || '',
+    issue.rule_id || issue.rule_code || '',
+    issue.record_id || '',
+    issue.visit_id || '',
+  ].join('|')
+}
+
+const sourceIssueMap = computed(() => {
+  const map = new Map<string, SichuanBatchIssueItem>()
+  ;(props.batchJobDetail?.items || []).forEach((item) => {
+    map.set(resolveIssueSourceKey(item), item)
+  })
+  return map
+})
+
 const issueItems = computed<SichuanBatchIssueItem[]>(() => {
-  return structuredIssues.value.map((item) => ({
-    rule_job_id: item.ruleJobId || undefined,
-    rule_id: item.ruleId || item.ruleCode,
-    rule_code: item.ruleCode || item.ruleId,
-    rule_name: item.ruleName,
-    record_id: item.recordId || '-',
-    visit_id: item.visitId || '',
-    patient_name: item.patientName || '',
-    department: item.department || '',
-    status: item.status,
-    is_compliant: item.status === 'compliant' || item.status === 'not_applicable',
-    findings: item.findings,
-    evidence: item.evidence,
-    suggestion: item.suggestion,
-    confidence: item.confidence,
-    executor_type: item.executorType,
-    rule_version: item.metadata.ruleVersion,
-    prompt_version: item.metadata.promptVersion,
-    model_version: item.metadata.modelVersion,
-    evidence_source: item.metadata.evidenceSource,
-    cache_hit: item.metadata.cacheHit === null ? undefined : item.metadata.cacheHit,
-    trace_id: item.metadata.traceId,
-    cache_key: item.metadata.cacheKey,
-    execution_domain: item.executionDomain,
-    rule_family: item.ruleFamily,
-    doc_scope: item.metadata.docScope,
-    cost_class: item.metadata.costClass,
-    document_type: item.documentType,
-    defect_level: item.defectLevel,
-    llm_fallback: item.metadata.llmFallback === null ? undefined : item.metadata.llmFallback,
-    refined: item.metadata.refined === null ? undefined : item.metadata.refined,
-    refine_reason: item.metadata.refineReason,
-    screening_status: item.metadata.screeningStatus,
-    final_decision_source: item.metadata.finalDecisionSource,
-  }))
+  return structuredIssues.value.map((item) => {
+    const sourceIssue =
+      sourceIssueMap.value.get(
+        resolveIssueSourceKey({
+          rule_job_id: item.ruleJobId || undefined,
+          rule_id: item.ruleId || item.ruleCode,
+          rule_code: item.ruleCode || item.ruleId,
+          record_id: item.recordId || '-',
+          visit_id: item.visitId || '',
+        }),
+      ) || {}
+    return {
+      ...sourceIssue,
+      rule_job_id: item.ruleJobId || undefined,
+      rule_id: item.ruleId || item.ruleCode,
+      rule_code: item.ruleCode || item.ruleId,
+      rule_name: item.ruleName,
+      record_id: item.recordId || '-',
+      visit_id: item.visitId || '',
+      patient_name: item.patientName || '',
+      department: item.department || '',
+      status: item.status,
+      is_compliant: item.status === 'compliant' || item.status === 'not_applicable',
+      findings: item.findings,
+      evidence: item.evidence,
+      suggestion: item.suggestion,
+      confidence: item.confidence,
+      executor_type: item.executorType,
+      rule_version: item.metadata.ruleVersion,
+      prompt_version: item.metadata.promptVersion,
+      model_version: item.metadata.modelVersion,
+      evidence_source: item.metadata.evidenceSource,
+      cache_hit: item.metadata.cacheHit === null ? undefined : item.metadata.cacheHit,
+      trace_id: item.metadata.traceId,
+      cache_key: item.metadata.cacheKey,
+      execution_domain: item.executionDomain,
+      rule_family: item.ruleFamily,
+      doc_scope: item.metadata.docScope,
+      cost_class: item.metadata.costClass,
+      document_type: item.documentType,
+      defect_level: item.defectLevel,
+      llm_fallback: item.metadata.llmFallback === null ? undefined : item.metadata.llmFallback,
+      refined: item.metadata.refined === null ? undefined : item.metadata.refined,
+      refine_reason: item.metadata.refineReason,
+      screening_status: item.metadata.screeningStatus,
+      final_decision_source: item.metadata.finalDecisionSource,
+    }
+  })
+})
+
+const resolvedDeepReviewResult = computed(() => {
+  if (!deepReviewResult.value) return null
+  const evaluationResults = Array.isArray(deepReviewResult.value.evaluation_results)
+    ? (deepReviewResult.value.evaluation_results as Array<Record<string, unknown>>)
+    : []
+  return evaluationResults[0] || deepReviewResult.value
 })
 
 const issueDocumentTypeOptions = computed(() => {
@@ -1513,14 +1583,45 @@ function toggleIssueExpanded(item: SichuanBatchIssueItem) {
     : [...expandedIssueKeys.value, key]
 }
 
-function openIssueDeepReview(item: SichuanBatchIssueItem) {
+async function openIssueDeepReview(item: SichuanBatchIssueItem) {
   selectedDeepReviewIssue.value = item
   deepReviewModalOpen.value = true
+  deepReviewLoading.value = true
+  deepReviewError.value = ''
+  deepReviewResult.value = null
+  const ruleId = String(item.rule_id || item.rule_code || '').trim()
+  const instituteId = String(item.institute_id || '').trim()
+  const patientId = String(item.patient_id || '').trim()
+  const visitId = String(item.visit_id || '').trim()
+  if (!ruleId || !instituteId || !patientId || !visitId) {
+    deepReviewLoading.value = false
+    deepReviewError.value = '当前结果缺少单条复核所需病历主键，无法发起深度复核。'
+    return
+  }
+  const response = await evaluateSichuanRuleForVisit({
+    rule_id: ruleId,
+    institute_id: instituteId,
+    patient_id: patientId,
+    visit_id: visitId,
+    source_schema: 'cdm',
+    bundle_schema: 'public',
+    force_refresh_bundle: false,
+  })
+  deepReviewLoading.value = false
+  if (!response.success || !response.data) {
+    deepReviewError.value = response.message || '深度复核失败'
+    message.warning(deepReviewError.value)
+    return
+  }
+  deepReviewResult.value = response.data
 }
 
 function closeDeepReviewModal() {
   deepReviewModalOpen.value = false
   selectedDeepReviewIssue.value = null
+  deepReviewLoading.value = false
+  deepReviewError.value = ''
+  deepReviewResult.value = null
 }
 
 function formatProcessingTime(seconds: number) {

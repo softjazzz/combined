@@ -153,3 +153,24 @@ export async function exportSichuanWorkspaceBatchJob({
     }
   }
 }
+
+export async function evaluateSichuanRuleForVisit(payload: {
+  rule_id: string
+  institute_id: string
+  patient_id: string
+  visit_id: string
+  source_schema?: string
+  bundle_schema?: string
+  force_refresh_bundle?: boolean
+  model?: string
+}) {
+  return requestEnvelope<Record<string, unknown>>(
+    {
+      method: 'POST',
+      url: '/api/v1/qc/sichuan/evaluate-rule-for-visit',
+      data: payload,
+      timeout: WORKSPACE_QUERY_TIMEOUT_MS,
+    },
+    '深度复核失败',
+  )
+}

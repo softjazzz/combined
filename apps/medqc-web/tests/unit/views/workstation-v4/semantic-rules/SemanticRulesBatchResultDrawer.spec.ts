@@ -304,7 +304,7 @@ function buildProps() {
 }
 
 describe('SemanticRulesBatchResultDrawer', () => {
-  it('应展示失败病历与失败次数两个不同统计口径', () => {
+  it('应展示当前任务摘要中的病历级与规则级统计口径', () => {
     const wrapper = mount(SemanticRulesBatchResultDrawer, {
       props: buildProps(),
       global: {
@@ -323,8 +323,8 @@ describe('SemanticRulesBatchResultDrawer', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('失败病历')
-    expect(wrapper.text()).toContain('去重后的病历数')
+    expect(wrapper.text()).toContain('涉及问题病历')
+    expect(wrapper.text()).toContain('病历级去重统计')
     expect(wrapper.text()).toContain('失败次数')
     expect(wrapper.text()).toContain('规则执行失败总次数')
   })

@@ -155,6 +155,8 @@ export interface SichuanBatchIssueItem {
   rule_code?: string
   rule_name?: string
   record_id: string
+  institute_id?: string
+  patient_id?: string
   visit_id?: string
   patient_name?: string
   department?: string
