@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Iterable
 
 from app.constants.doc_types import DOC_TYPE_FULL_MAP
 
+from .sc_rule_family import DEFAULT_RULE_FAMILY
 from .bundles import assemble_final_record_bundle
 from .effect_priority_qc import (
     BATCH_OUTPUT_MODE_MINIMAL,
@@ -28,29 +29,234 @@ FAST_SCREEN_DEFAULT_CONTEXT_TOKEN_BUDGET = 7000
 class FastScreenPackDefinition:
     pack_id: str
     document_type: str
+    rule_family: str
     rule_ids: tuple[str, ...]
+
+
+FAST_SCREEN_V1_RULE_ID_SET = {
+    "SC-023",
+    "SC-024",
+    "SC-025",
+    "SC-026",
+    "SC-027",
+    "SC-032",
+    "SC-033",
+    "SC-036",
+    "SC-121",
+    "SC-122",
+    "SC-123",
+    "SC-125",
+}
 
 
 FAST_SCREEN_PACK_DEFINITIONS: tuple[FastScreenPackDefinition, ...] = (
     FastScreenPackDefinition(
         pack_id="first_course_features",
         document_type="首次病程记录",
+        rule_family="content_completeness",
         rule_ids=("SC-023", "SC-024"),
     ),
     FastScreenPackDefinition(
         pack_id="first_course_reasoning",
         document_type="首次病程记录",
+        rule_family="content_completeness",
         rule_ids=("SC-025", "SC-026", "SC-027"),
     ),
     FastScreenPackDefinition(
         pack_id="daily_course_core",
         document_type="日常病程记录",
+        rule_family="content_completeness",
         rule_ids=("SC-032", "SC-033", "SC-036"),
     ),
     FastScreenPackDefinition(
         pack_id="discharge_core",
         document_type="出院记录",
+        rule_family="mixed",
         rule_ids=("SC-121", "SC-122", "SC-123", "SC-125"),
+    ),
+)
+
+
+FAST_SCREEN_FULL_PACK_DEFINITIONS: tuple[FastScreenPackDefinition, ...] = (
+    FastScreenPackDefinition(
+        pack_id="admission_content_core",
+        document_type="入院记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-004", "SC-007", "SC-008", "SC-009", "SC-011", "SC-012", "SC-013", "SC-014", "SC-016", "SC-018"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="admission_consistency_core",
+        document_type="入院记录",
+        rule_family="consistency_cross_doc",
+        rule_ids=("SC-010", "SC-015", "SC-019", "SC-020"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="first_course_features",
+        document_type="首次病程记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-023", "SC-024"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="first_course_reasoning",
+        document_type="首次病程记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-025", "SC-026", "SC-027"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="daily_course_content_core",
+        document_type="日常病程记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-032", "SC-033", "SC-035", "SC-039", "SC-040", "SC-047", "SC-066", "SC-075", "SC-076"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="daily_course_procedure_core",
+        document_type="日常病程记录",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-034", "SC-036", "SC-037", "SC-043", "SC-044"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="daily_course_procedure_followup",
+        document_type="日常病程记录",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-046", "SC-070", "SC-073", "SC-074", "SC-107", "SC-114"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="daily_course_consistency",
+        document_type="日常病程记录",
+        rule_family="consistency_cross_doc",
+        rule_ids=("SC-038",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="senior_course_content",
+        document_type="上级查房记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-050", "SC-051"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="rescue_content",
+        document_type="抢救记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-055",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="diffcase_content",
+        document_type="疑难病例讨论记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-057", "SC-058"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="death_discussion_content",
+        document_type="死亡病例讨论记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-060",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="handoff_content",
+        document_type="交接班记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-063",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="newborn_consistency",
+        document_type="新生儿记录",
+        rule_family="consistency_cross_doc",
+        rule_ids=("SC-079",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="presurg_summary_procedure",
+        document_type="术前小结",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-081",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="presurg_discussion_procedure",
+        document_type="术前讨论",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-083", "SC-084", "SC-085"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="anesthesia_procedure",
+        document_type="麻醉记录",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-086", "SC-092", "SC-093", "SC-094", "SC-106"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="consent_content",
+        document_type="知情同意书",
+        rule_family="content_completeness",
+        rule_ids=("SC-089", "SC-091", "SC-131", "SC-134", "SC-136"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="surgery_content",
+        document_type="手术记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-097", "SC-110"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="surgery_procedure",
+        document_type="手术记录",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-099", "SC-100", "SC-101", "SC-108", "SC-115"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="surgery_safecheck_procedure",
+        document_type="手术安全核查",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-103",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="postsurg_firstcourse_procedure",
+        document_type="术后首次病程记录",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-105",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="presurg_summary_content",
+        document_type="术前小结",
+        rule_family="content_completeness",
+        rule_ids=("SC-113",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="discharge_content",
+        document_type="出院记录",
+        rule_family="content_completeness",
+        rule_ids=("SC-118", "SC-119", "SC-123"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="discharge_procedure",
+        document_type="出院记录",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-121", "SC-122"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="discharge_consistency",
+        document_type="出院记录",
+        rule_family="consistency_cross_doc",
+        rule_ids=("SC-125", "SC-127"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="exam_consistency",
+        document_type="检查检验报告",
+        rule_family="consistency_cross_doc",
+        rule_ids=("SC-138", "SC-139"),
+    ),
+    FastScreenPackDefinition(
+        pack_id="exam_procedure",
+        document_type="检查检验报告",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-140",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="daily_order_procedure",
+        document_type="日常病程记录",
+        rule_family="procedure_order_linkage",
+        rule_ids=("SC-143",),
+    ),
+    FastScreenPackDefinition(
+        pack_id="daily_order_consistency",
+        document_type="日常病程记录",
+        rule_family="consistency_cross_doc",
+        rule_ids=("SC-146",),
     ),
 )
 
@@ -75,6 +281,19 @@ def get_fast_screen_rule_ids() -> tuple[str, ...]:
     return tuple(ordered)
 
 
+def get_fast_screen_full_rule_ids() -> tuple[str, ...]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for definition in FAST_SCREEN_FULL_PACK_DEFINITIONS:
+        for rule_id in definition.rule_ids:
+            normalized = str(rule_id or "").strip().upper()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            ordered.append(normalized)
+    return tuple(ordered)
+
+
 def get_fast_screen_pack_definitions(
     rule_ids: Iterable[str] | None = None,
 ) -> list[FastScreenPackDefinition]:
@@ -83,8 +302,12 @@ def get_fast_screen_pack_definitions(
         for item in (rule_ids or [])
         if str(item or "").strip()
     }
+    definitions = FAST_SCREEN_PACK_DEFINITIONS
+    if selected and any(rule_id not in FAST_SCREEN_V1_RULE_ID_SET for rule_id in selected):
+        definitions = FAST_SCREEN_FULL_PACK_DEFINITIONS
+
     packs: list[FastScreenPackDefinition] = []
-    for definition in FAST_SCREEN_PACK_DEFINITIONS:
+    for definition in definitions:
         pack_rule_ids = tuple(
             rule_id
             for rule_id in definition.rule_ids
@@ -96,10 +319,70 @@ def get_fast_screen_pack_definitions(
             FastScreenPackDefinition(
                 pack_id=definition.pack_id,
                 document_type=definition.document_type,
+                rule_family=definition.rule_family,
                 rule_ids=pack_rule_ids,
             )
         )
     return packs
+
+
+def _build_pack_uncertain_result_item(
+    *,
+    qc_service: "SichuanQCService",
+    rule: dict[str, Any],
+    document_type: str,
+    quality_profile: str,
+    batch_output_mode: str,
+    reason: str,
+) -> dict[str, Any]:
+    findings = str(reason or "").strip() or "批量执行结果不完整，已降级为待复核。"
+    return {
+        "rule_id": str(rule.get("rule_id") or ""),
+        "rule_name": str(rule.get("name") or rule.get("rule_name") or ""),
+        "is_compliant": False,
+        "status": "uncertain",
+        "findings": findings,
+        "evidence": "",
+        "suggestion": "建议人工复核该规则。",
+        "confidence": 0.0,
+        "applicability": {
+            "is_applicable": True,
+            "reason": "",
+            "method": "fast_screen_guard",
+        },
+        "evidence_verified": False,
+        "metadata": {
+            "tokens_used": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "api_time": 0.0,
+            "first_result_latency": 0.0,
+            "prompt_strategy": "fast_screen_fixed_v1",
+            "quality_profile": quality_profile,
+            "batch_output_mode": batch_output_mode,
+            "bucket_strategy": FAST_SCREEN_BUCKET_STRATEGY,
+            "rule_family": str(rule.get("rule_family") or DEFAULT_RULE_FAMILY),
+            "executor_type": str(rule.get("executor_type") or "llm"),
+            "rule_version": str(rule.get("rule_version") or "v1"),
+            "prompt_version": str(rule.get("prompt_version") or "custom-v1"),
+            "cost_class": str(rule.get("cost_class") or "medium"),
+            "execution_domain": str(rule.get("execution_domain") or ""),
+            "doc_scope": str(rule.get("doc_scope") or "primary"),
+            "evidence_source": "bundle",
+            "model_version": str(qc_service.client.model or ""),
+            "llm_fallback": False,
+            "cache_hit": False,
+            "qc_stage": "screening",
+            "refined": False,
+            "refine_reason": "",
+            "screening_status": "uncertain",
+            "final_decision_source": "batch",
+            "target_document_type": document_type,
+        },
+        "target_document_type": document_type,
+    }
 
 
 def _pick_primary_document(
@@ -278,6 +561,7 @@ async def run_final_fast_screen(
         if str(item or "").strip()
     ]
     selected_rule_id_set = set(selected_rule_ids)
+    pack_definitions = get_fast_screen_pack_definitions(selected_rule_id_set)
     selected_rules: list[dict[str, Any]] = []
     rules_by_id: dict[str, dict[str, Any]] = {}
     for rule_id in selected_rule_ids:
@@ -309,7 +593,7 @@ async def run_final_fast_screen(
     pack_size_sum = 0
     context_tokens_estimate = 0
 
-    for pack in get_fast_screen_pack_definitions(selected_rule_id_set):
+    for pack in pack_definitions:
         pack_rules = [rules_by_id[rule_id] for rule_id in pack.rule_ids if rule_id in rules_by_id]
         if not pack_rules:
             continue
@@ -331,44 +615,77 @@ async def run_final_fast_screen(
             all_documents=documents,
             bundle=bundle,
         )
-        evaluated = await qc_service.rule_engine.evaluate_batch_compact(
-            rules=pack_rules,
-            medical_record={
-                "content": str(primary_document.get("content") or ""),
-                "evidence_payload": evidence_payload,
-                "execution_domain": "final_fast_screen",
-                "doc_scope": "primary",
-                "model_version": str(qc_service.client.model or ""),
-            },
-            pack_id=pack.pack_id,
-            pack_size=len(pack_rules),
-            low_confidence_threshold=low_confidence_threshold,
-            context_token_budget=context_token_budget,
-            quality_profile=quality_profile_normalized,
-            batch_output_mode=batch_output_mode_normalized,
-        )
-        pack_results = list(evaluated.get("results") or [])
-        for item in pack_results:
-            if not isinstance(item, dict):
-                continue
-            item["_document_type"] = pack.document_type
-            metadata = item.get("metadata")
-            if isinstance(metadata, dict):
-                metadata["target_document_type"] = pack.document_type
-        results.extend(pack_results)
-        total_tokens += int(evaluated.get("tokens_used") or 0)
-        total_prompt_tokens += int(evaluated.get("prompt_tokens") or 0)
-        total_completion_tokens += int(evaluated.get("completion_tokens") or 0)
-        total_api_time += float(evaluated.get("api_time") or 0.0)
-        latency = float(evaluated.get("first_result_latency") or 0.0)
-        if latency > 0 and (first_result_latency <= 0 or latency < first_result_latency):
-            first_result_latency = latency
-            first_result_source = pack.pack_id
-        cot_summary = _merge_cot_summary(cot_summary, dict(evaluated.get("cot_observation") or {}))
-        llm_rule_count += len(pack_rules)
         executed_pack_count += 1
         pack_size_sum += len(pack_rules)
-        context_tokens_estimate += int(evaluated.get("context_tokens_estimate") or 0)
+        llm_rule_count += len(pack_rules)
+        try:
+            evaluated = await qc_service.rule_engine.evaluate_batch_compact(
+                rules=pack_rules,
+                medical_record={
+                    "content": str(primary_document.get("content") or ""),
+                    "evidence_payload": evidence_payload,
+                    "execution_domain": "final_fast_screen",
+                    "doc_scope": "primary",
+                    "model_version": str(qc_service.client.model or ""),
+                },
+                pack_id=pack.pack_id,
+                pack_size=len(pack_rules),
+                low_confidence_threshold=low_confidence_threshold,
+                context_token_budget=context_token_budget,
+                quality_profile=quality_profile_normalized,
+                batch_output_mode=batch_output_mode_normalized,
+            )
+            pack_results = [
+                dict(item)
+                for item in list(evaluated.get("results") or [])
+                if isinstance(item, dict)
+            ]
+            pack_result_map = {
+                str(item.get("rule_id") or "").strip().upper(): item
+                for item in pack_results
+                if str(item.get("rule_id") or "").strip()
+            }
+            for rule in pack_rules:
+                rule_id = str(rule.get("rule_id") or "").strip().upper()
+                item = pack_result_map.get(rule_id)
+                if not item:
+                    item = _build_pack_uncertain_result_item(
+                        qc_service=qc_service,
+                        rule=rule,
+                        document_type=pack.document_type,
+                        quality_profile=quality_profile_normalized,
+                        batch_output_mode=batch_output_mode_normalized,
+                        reason="批量响应缺少该规则结果，已降级为待复核。",
+                    )
+                item["_document_type"] = pack.document_type
+                item["target_document_type"] = pack.document_type
+                metadata = item.get("metadata")
+                if isinstance(metadata, dict):
+                    metadata["target_document_type"] = pack.document_type
+                    metadata["rule_family"] = str(metadata.get("rule_family") or pack.rule_family)
+                results.append(item)
+            total_tokens += int(evaluated.get("tokens_used") or 0)
+            total_prompt_tokens += int(evaluated.get("prompt_tokens") or 0)
+            total_completion_tokens += int(evaluated.get("completion_tokens") or 0)
+            total_api_time += float(evaluated.get("api_time") or 0.0)
+            latency = float(evaluated.get("first_result_latency") or 0.0)
+            if latency > 0 and (first_result_latency <= 0 or latency < first_result_latency):
+                first_result_latency = latency
+                first_result_source = pack.pack_id
+            cot_summary = _merge_cot_summary(cot_summary, dict(evaluated.get("cot_observation") or {}))
+            context_tokens_estimate += int(evaluated.get("context_tokens_estimate") or 0)
+        except Exception as exc:
+            for rule in pack_rules:
+                item = _build_pack_uncertain_result_item(
+                    qc_service=qc_service,
+                    rule=rule,
+                    document_type=pack.document_type,
+                    quality_profile=quality_profile_normalized,
+                    batch_output_mode=batch_output_mode_normalized,
+                    reason=f"批量执行异常，已降级为待复核：{exc}",
+                )
+                item["_document_type"] = pack.document_type
+                results.append(item)
 
     for rule in selected_rules:
         if str(rule.get("executor_type") or "").strip().lower() == "program":
@@ -395,7 +712,7 @@ async def run_final_fast_screen(
             "quality_profile": quality_profile_normalized,
             "batch_output_mode": batch_output_mode_normalized,
             "bucket_strategy": FAST_SCREEN_BUCKET_STRATEGY,
-            "bucket_count": len(get_fast_screen_pack_definitions(selected_rule_id_set)),
+            "bucket_count": len(pack_definitions),
             "total_packs": executed_pack_count,
             "avg_pack_size": round(pack_size_sum / executed_pack_count, 2) if executed_pack_count else 0.0,
             "fallback_packs": 0,
@@ -411,7 +728,7 @@ async def run_final_fast_screen(
             "selected_pack_size": 10,
             "selected_pack_size_by_bucket": {
                 pack.pack_id: len(pack.rule_ids)
-                for pack in get_fast_screen_pack_definitions(selected_rule_id_set)
+                for pack in pack_definitions
             },
             "execution_strategy": EXECUTION_STRATEGY_FAST_SCREEN,
         },

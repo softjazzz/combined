@@ -604,3 +604,40 @@ async def test_create_workspace_batch_job_should_resolve_fast_screen_rule_set(mo
     assert filters["enable_selective_refine"] is False
     assert filters["max_refine_candidates"] == 0
     assert response["data"]["execution_strategy"] == "fast_screen"
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_batch_job_should_resolve_full_intrinsic_fast_screen_rule_set(monkeypatch):
+    workspace = _WorkspaceStub()
+    service = _ServiceStub()
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    request = SimpleNamespace(state=SimpleNamespace())
+    payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+        rule_set_key="sc_content_full_v1",
+        scope="final",
+        date_field="discharge",
+        record_ids=["visit-001"],
+    )
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=request,  # type: ignore[arg-type]
+        payload=payload,
+        background_tasks=BackgroundTasks(),
+        qc_service=service,  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert workspace.created_job is not None
+    filters = dict(workspace.created_job.get("filters") or {})
+    assert filters["rule_set_key"] == "sc_content_full_v1"
+    assert filters["execution_strategy"] == "fast_screen"
+    assert filters["quality_profile"] == "throughput_v1"
+    assert filters["bucket_strategy"] == "fixed_packs"
+    assert filters["batch_output_mode"] == "minimal"
+    assert filters["enable_selective_refine"] is False
+    assert filters["max_refine_candidates"] == 0
+    assert len(filters["rule_ids"]) == 84
+    assert response["data"]["execution_strategy"] == "fast_screen"

@@ -10,7 +10,11 @@ from .effect_priority_qc import (
     QUALITY_PROFILE_EFFECT_PRIORITY,
     QUALITY_PROFILE_THROUGHPUT,
 )
-from .fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_STRATEGY_STANDARD
+from .fast_screen_qc import (
+    EXECUTION_STRATEGY_FAST_SCREEN,
+    EXECUTION_STRATEGY_STANDARD,
+    get_fast_screen_full_rule_ids,
+)
 
 
 SC_CONTENT_V1_RULE_IDS: tuple[str, ...] = (
@@ -46,6 +50,7 @@ SC_CONTENT_REVIEW_V1_RULE_IDS: tuple[str, ...] = (
     "SC-125",
 )
 SC_CONTENT_REVIEW_RULE_ID_SET = {item.upper() for item in SC_CONTENT_REVIEW_V1_RULE_IDS}
+SC_CONTENT_FULL_V1_RULE_IDS: tuple[str, ...] = get_fast_screen_full_rule_ids()
 
 
 @dataclass(frozen=True)
@@ -98,6 +103,21 @@ SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {
         batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
         max_refine_candidates=0,
         description="终末病历内涵质控快速初筛规则集，按固定文书分包执行，不做 fallback、不做单条重跑、不做精审。",
+    ),
+    "sc_content_full_v1": QCRuleSet(
+        key="sc_content_full_v1",
+        name="内涵质控全量 v1",
+        version="2026-04-20",
+        scope="final",
+        rule_ids=SC_CONTENT_FULL_V1_RULE_IDS,
+        execution_strategy=EXECUTION_STRATEGY_FAST_SCREEN,
+        quality_profile=QUALITY_PROFILE_THROUGHPUT,
+        bucket_strategy="fixed_packs",
+        enable_selective_refine=False,
+        refine_confidence_threshold=0.45,
+        batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
+        max_refine_candidates=0,
+        description="终末病历内涵质控全量规则集，覆盖 SC146 中 84 条内涵规则，按固定文书桶一次执行，不做 fallback、不做单条重跑、不做精审。",
     ),
     "sc_content_hard_v1": QCRuleSet(
         key="sc_content_hard_v1",
