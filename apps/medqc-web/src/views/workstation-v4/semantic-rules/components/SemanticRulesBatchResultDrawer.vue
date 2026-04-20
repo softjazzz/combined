@@ -55,33 +55,10 @@
                   {{ getBatchJobStatusText(batchJobDetail.status) }}
                 </a-tag>
               </div>
-              <div class="status-hero-desc">
-                {{ statusHero.description }}
-              </div>
               <div class="status-hero-jobline">
                 <div class="status-hero-job-name">
                   {{ batchJobDetail.rule_name || batchJobDetail.rule_code }}
                 </div>
-                <div class="status-hero-job-meta">
-                  {{ scopeLabelMap[batchJobDetail.scope] || batchJobDetail.scope }} ·
-                  {{ formatDateTime(batchJobDetail.created_at) }}
-                </div>
-              </div>
-              <div class="rule-set-strip rule-set-strip--hero">
-                <span>规则集：{{ ruleSetDisplay.name }}</span>
-                <span>规则数：{{ ruleSetDisplay.ruleCount }}</span>
-              </div>
-              <div
-                v-if="statusHero.meta.length"
-                class="status-hero-meta"
-              >
-                <span
-                  v-for="item in statusHero.meta"
-                  :key="item"
-                  class="status-hero-meta-item"
-                >
-                  {{ item }}
-                </span>
               </div>
             </div>
           </div>
