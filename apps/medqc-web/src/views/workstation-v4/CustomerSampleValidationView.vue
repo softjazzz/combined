@@ -155,7 +155,6 @@
                 <a-select
                   v-model:value="selectedPoolId"
                   class="w-full xl:max-w-[280px]"
-                  size="large"
                   :loading="poolLoading"
                   :options="poolOptions"
                   placeholder="请选择样本池"
@@ -164,7 +163,6 @@
                 <a-input
                   v-model:value="filters.query"
                   class="w-full xl:min-w-[320px] xl:flex-1"
-                  size="large"
                   placeholder="搜索患者/住院号/人工问题"
                   @press-enter="loadItems()"
                 />
@@ -174,7 +172,6 @@
                 <a-select
                   v-model:value="filters.coverageType"
                   class="min-w-[140px]"
-                  size="large"
                   allow-clear
                   placeholder="覆盖类型"
                   :options="coverageOptions"
@@ -182,7 +179,6 @@
                 <a-select
                   v-model:value="filters.matchStatus"
                   class="min-w-[140px]"
-                  size="large"
                   allow-clear
                   placeholder="匹配状态"
                   :options="matchStatusOptions"
