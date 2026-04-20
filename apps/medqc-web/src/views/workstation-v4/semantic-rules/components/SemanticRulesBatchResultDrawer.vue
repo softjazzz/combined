@@ -1054,6 +1054,44 @@ const executionSummary = computed(() => {
   return { programCount, llmCount, cacheHit, cacheMiss }
 })
 
+const ruleLevelSummary = computed(() => {
+  const totalRules = Math.max(
+    0,
+    Number(props.batchJobDetail?.summary?.rule_count ?? props.batchJobDetail?.rule_count ?? 0) ||
+      resolvedRuleResults.value.length,
+  )
+  const issueItemsList = issueItems.value
+  const nonCompliantCount = issueItemsList.filter((item) => item.status === 'non_compliant').length
+  const uncertainCount = issueItemsList.filter((item) => item.status === 'uncertain').length
+  const focusCount = nonCompliantCount + uncertainCount
+  const docIssueCount = new Set(
+    issueItemsList
+      .filter((item) => item.status === 'non_compliant')
+      .map((item) => String(item.record_id || item.visit_id || '').trim())
+      .filter(Boolean),
+  ).size
+  const docUncertainCount = new Set(
+    issueItemsList
+      .filter((item) => item.status === 'uncertain')
+      .map((item) => String(item.record_id || item.visit_id || '').trim())
+      .filter(Boolean),
+  ).size
+  const processingTimeSeconds = Number(
+    props.batchJobDetail?.summary?.total_processing_time ??
+      props.batchJobDetail?.total_processing_time ??
+      0,
+  )
+  return {
+    totalRules,
+    nonCompliantCount,
+    uncertainCount,
+    focusCount,
+    docIssueCount,
+    docUncertainCount,
+    processingTimeSeconds,
+  }
+})
+
 const statusHero = computed(() => {
   const detail = props.batchJobDetail
   if (!detail) return null
@@ -1062,8 +1100,8 @@ const statusHero = computed(() => {
     .toLowerCase()
   const processedRecords = progressSummary.value?.processedRecords ?? 0
   const totalRecords = progressSummary.value?.totalRecords ?? Number(detail.total_records || 0)
-  const issueRecords = Number(detail.summary?.issue_records ?? detail.issue_records ?? 0)
-  const uncertainRecords = Number(detail.summary?.uncertain_records ?? 0)
+  const issueRecords = ruleLevelSummary.value.nonCompliantCount
+  const uncertainRecords = ruleLevelSummary.value.uncertainCount
   const finishedAt = detail.finished_at || detail.updated_at
   const meta: string[] = []
   if (totalRecords > 0) {
@@ -1075,8 +1113,11 @@ const statusHero = computed(() => {
     )
   }
   if (status === 'completed') {
-    meta.push(`命中问题 ${issueRecords}`)
-    meta.push(`待复核 ${uncertainRecords}`)
+    meta.push(`不合规规则 ${issueRecords}`)
+    meta.push(`待复核规则 ${uncertainRecords}`)
+    if (ruleLevelSummary.value.processingTimeSeconds > 0) {
+      meta.push(`总耗时 ${formatProcessingTime(ruleLevelSummary.value.processingTimeSeconds)}`)
+    }
     if (finishedAt) {
       meta.push(`完成于 ${props.formatDateTime(finishedAt)}`)
     }
@@ -1107,11 +1148,12 @@ const statusHero = computed(() => {
     }
   }
   if (status === 'completed') {
+    const focusCount = issueRecords + uncertainRecords
     return {
       tone: 'completed',
-      title: issueRecords > 0 ? '任务已完成，已产出可处理问题' : '任务已完成，本次未发现问题',
+      title: focusCount > 0 ? '任务已完成，已产出可处理问题' : '任务已完成，本次未发现问题',
       description:
-        issueRecords > 0
+        focusCount > 0
           ? '请优先查看下方“问题/待复核明细”，直接判断需要复核或整改的质控点。'
           : '本次批量质控已执行完毕，当前规则集下没有发现需要处理的问题。',
       meta,
@@ -1146,11 +1188,13 @@ const primarySummaryCards = computed(() => {
   const failedAttemptCount = Number(
     summary?.failed_count ?? props.batchJobDetail?.failed_count ?? 0,
   )
-  const issueRecords = Number(summary?.issue_records ?? props.batchJobDetail?.issue_records ?? 0)
-  const uncertainRecords = Number(summary?.uncertain_records ?? 0)
+  const issueRecords = ruleLevelSummary.value.nonCompliantCount
+  const uncertainRecords = ruleLevelSummary.value.uncertainCount
+  const focusCount = ruleLevelSummary.value.focusCount
+  const processingTimeSeconds = ruleLevelSummary.value.processingTimeSeconds
   return [
     { key: 'total', label: '总病历', value: totalRecords, desc: '' },
-    { key: 'success', label: '执行成功', value: successCount, desc: '' },
+    { key: 'rules', label: '总规则', value: ruleLevelSummary.value.totalRules, desc: '' },
     { key: 'failed-records', label: '失败病历', value: failedRecordCount, desc: '去重后的病历数' },
     {
       key: 'failed-attempts',
@@ -1158,14 +1202,34 @@ const primarySummaryCards = computed(() => {
       value: failedAttemptCount,
       desc: '规则执行失败总次数',
     },
-    { key: 'issues', label: '命中问题', value: issueRecords, desc: '' },
-    { key: 'uncertain', label: '待复核', value: uncertainRecords, desc: '' },
+    { key: 'issues', label: '不合规规则', value: issueRecords, desc: '' },
+    { key: 'uncertain', label: '待复核规则', value: uncertainRecords, desc: '' },
+    { key: 'focus', label: '重点结果', value: focusCount, desc: '' },
+    {
+      key: 'duration',
+      label: '总耗时',
+      value: processingTimeSeconds > 0 ? formatProcessingTime(processingTimeSeconds) : '-',
+      desc: '',
+    },
+    { key: 'success', label: '执行成功', value: successCount, desc: '' },
+    {
+      key: 'issue-records',
+      label: '涉及问题病历',
+      value: ruleLevelSummary.value.docIssueCount,
+      desc: '病历级去重统计',
+    },
+    {
+      key: 'uncertain-records',
+      label: '涉及待复核病历',
+      value: ruleLevelSummary.value.docUncertainCount,
+      desc: '病历级去重统计',
+    },
   ]
 })
 
 const focusedSummaryCards = computed(() =>
   primarySummaryCards.value.filter((item) =>
-    ['total', 'issues', 'uncertain', 'failed-records'].includes(item.key),
+    ['total', 'rules', 'issues', 'uncertain', 'focus', 'duration'].includes(item.key),
   ),
 )
 
@@ -1331,6 +1395,15 @@ function resolveIssueStableKey(item?: SichuanBatchIssueItem) {
     item.visit_id || '',
     item.trace_id || '',
   ].join('|')
+}
+
+function formatProcessingTime(seconds: number) {
+  const safeSeconds = Math.max(0, Number(seconds || 0))
+  if (safeSeconds <= 0) return '-'
+  if (safeSeconds < 60) return `${safeSeconds.toFixed(1)} 秒`
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainSeconds = safeSeconds % 60
+  return `${minutes}分${remainSeconds.toFixed(1)}秒`
 }
 
 function scrollToLinkedIssueRow() {
