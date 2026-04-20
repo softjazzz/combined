@@ -31,6 +31,7 @@ def _base_models() -> list[dict[str, Any]]:
     return [
         {"provider": "alibaba", "id": "qwen-plus", "model_code": "qwen-plus", "model_name": "Qwen-Plus", "is_custom": False},
         {"provider": "alibaba", "id": "qwen3.5-35b-a3b", "model_code": "qwen3.5-35b-a3b", "model_name": "Qwen3.5-35B-A3B", "is_custom": False},
+        {"provider": "alibaba", "id": "qwen3.6-35b-a3b", "model_code": "qwen3.6-35b-a3b", "model_name": "Qwen3.6-35B-A3B", "is_custom": False},
         {"provider": "siliconflow", "id": "Qwen/Qwen3.5-27B", "model_code": "Qwen/Qwen3.5-27B", "model_name": "Qwen/Qwen3.5-27B", "is_custom": False},
         {"provider": "siliconflow", "id": "Qwen/Qwen3.5-9B", "model_code": "Qwen/Qwen3.5-9B", "model_name": "Qwen/Qwen3.5-9B", "is_custom": False},
         {"provider": "siliconflow", "id": "Qwen/Qwen3.5-4B", "model_code": "Qwen/Qwen3.5-4B", "model_name": "Qwen/Qwen3.5-4B", "is_custom": False},

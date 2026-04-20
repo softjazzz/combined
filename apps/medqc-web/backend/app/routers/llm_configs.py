@@ -62,6 +62,20 @@ def _resolve_provider(provider_code: str) -> Dict[str, Any]:
 
 def _resolve_model(model_code: str) -> Dict[str, Any]:
     code = (model_code or "").lower()
+    if code in ("qwen3.6-35b-a3b",):
+        return {
+            "id": "qwen3.6-35b-a3b",
+            "model_code": "qwen3.6-35b-a3b",
+            "model_name": "Qwen3.6-35B-A3B",
+            "description": "Qwen3.6 35B A3B 模型",
+        }
+    if code in ("qwen3.5-35b-a3b",):
+        return {
+            "id": "qwen3.5-35b-a3b",
+            "model_code": "qwen3.5-35b-a3b",
+            "model_name": "Qwen3.5-35B-A3B",
+            "description": "Qwen3.5 35B A3B 模型",
+        }
     if code in ("qwen2.5-14b-instruct", "qwen2.5-14b", "qwen2.5-14b-instruct".lower()):
         return {
             "id": "qwen2.5-14b-instruct",

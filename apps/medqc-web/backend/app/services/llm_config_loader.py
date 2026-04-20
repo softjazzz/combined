@@ -9,6 +9,7 @@ import os
 
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
+from ..storage.memory import llm_configs
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,17 @@ class LLMConfigLoader:
             except Exception as exc:
                 logger.warning("从数据库加载 LLM 配置失败: %s，将回退到 .env 配置", exc)
 
+        memory_config = LLMConfigLoader._load_from_memory(config_name=config_name, user_id=user_id)
+        if memory_config:
+            logger.info(
+                "✅ 从内存配置加载 LLM 配置成功: config_name=%s user_id=%s provider=%s model=%s",
+                config_name,
+                user_id,
+                memory_config.get("provider_code"),
+                memory_config.get("model"),
+            )
+            return memory_config
+
         config = LLMConfigLoader._load_from_env()
         logger.info(
             "✅ 从 .env 文件加载 LLM 配置: provider=%s model=%s",
@@ -184,6 +196,67 @@ class LLMConfigLoader:
         except Exception as exc:
             logger.error("从数据库加载配置时出错: %s", exc)
             raise
+
+    @staticmethod
+    def _load_from_memory(
+        config_name: str,
+        user_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """在无 Supabase 或保存回退内存时，从内存配置加载运行时配置。"""
+        matched: list[Dict[str, Any]] = []
+        for item in llm_configs.values():
+            if str(item.get("config_name") or "").strip() != config_name:
+                continue
+            item_user_id = item.get("user_id")
+            if user_id is not None:
+                if item_user_id != user_id:
+                    continue
+            elif item_user_id is not None:
+                continue
+            matched.append(item)
+
+        if not matched:
+            return None
+
+        matched.sort(key=lambda row: str(row.get("updated_at") or row.get("created_at") or ""), reverse=True)
+        memory_config = matched[0]
+        provider_code = str(
+            memory_config.get("provider_code")
+            or memory_config.get("provider_id")
+            or (
+                memory_config.get("provider", {}).get("provider_code")
+                if isinstance(memory_config.get("provider"), dict)
+                else memory_config.get("provider")
+            )
+            or "alibaba"
+        ).strip().lower()
+        if provider_code not in SUPPORTED_PROVIDER_CODES:
+            provider_code = get_default_provider_code()
+
+        model_code = str(
+            memory_config.get("model_code")
+            or memory_config.get("model_id")
+            or (
+                memory_config.get("model", {}).get("model_code")
+                if isinstance(memory_config.get("model"), dict)
+                else memory_config.get("model")
+            )
+            or ""
+        ).strip() or None
+
+        runtime = build_provider_runtime_config(
+            provider_code=provider_code,
+            model_code=model_code,
+            custom_parameters=memory_config.get("custom_parameters", {}) or {},
+        )
+        runtime.update(
+            {
+                "source": "memory+env",
+                "config_id": memory_config.get("id"),
+                "config_name": config_name,
+            }
+        )
+        return runtime
 
     @staticmethod
     def _load_from_env() -> Dict[str, Any]:
