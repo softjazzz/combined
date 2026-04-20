@@ -95,8 +95,16 @@
 
         <div class="drawer-card">
           <div class="drawer-section-head">
-            <div class="drawer-section-title">
-              问题/待复核明细
+            <div class="drawer-section-title-group">
+              <div class="drawer-section-title">
+                问题/待复核明细
+              </div>
+              <span
+                v-if="isFastScreenResult"
+                class="summary-mode-badge"
+              >
+                快速初筛结果（摘要版）
+              </span>
             </div>
             <div class="drawer-section-actions">
               <a-radio-group
@@ -248,7 +256,14 @@
                   size="small"
                   @click="toggleIssueExpanded(item)"
                 >
-                  {{ isIssueExpanded(item) ? '收起详情' : '展开详情' }}
+                  {{ isIssueExpanded(item) ? '收起完整说明' : '展开完整说明' }}
+                </a-button>
+                <a-button
+                  type="link"
+                  size="small"
+                  @click="openIssueDeepReview(item)"
+                >
+                  深度复核
                 </a-button>
               </div>
             </div>
@@ -605,6 +620,16 @@ const props = defineProps<{
   getBatchJobStatusTagClass: (status?: string) => string
   getBatchJobStatusText: (status?: string) => string
   formatDateTime: (value?: string | Date | null) => string
+  openReviewDrawer?: (record: {
+    id: string
+    record_id: string
+    patient_name?: string
+    department?: string
+    discharge_date?: string
+    score?: number
+    defect_count?: number
+    status?: string
+  }) => void
 }>()
 
 const scopeLabelMap: Record<string, string> = {
@@ -1282,6 +1307,22 @@ const ruleSetDisplay = computed(() => {
   }
 })
 
+const isFastScreenResult = computed(() => {
+  const detail = props.batchJobDetail
+  const summary = detail?.summary
+  return (
+    String(detail?.execution_strategy || summary?.execution_strategy || '')
+      .trim()
+      .toLowerCase() === 'fast_screen' ||
+    String(detail?.batch_output_mode || summary?.batch_output_mode || '')
+      .trim()
+      .toLowerCase() === 'minimal' ||
+    String(detail?.rule_set_key || summary?.rule_set_key || '')
+      .trim()
+      .toLowerCase() === 'sc_content_fast_v1'
+  )
+})
+
 const executionSummaryCards = computed(() => {
   if (!executionSummary.value) return []
   const summary = props.batchJobDetail?.summary
@@ -1343,6 +1384,9 @@ const issueFocusSummary = computed(() => {
   ).length
   const uncertainCount = issueItems.value.filter((item) => item.status === 'uncertain').length
   if (issueViewMode.value === 'business') {
+    if (isFastScreenResult.value) {
+      return `当前为快速初筛结果（摘要版），共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。可先展开完整说明，再按需进入深度复核查看全文文书。`
+    }
     return `当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。默认优先阅读问题卡片，高级表格已折叠到“高级视图”。`
   }
   return `当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。高级视图会展示完整表格和追溯字段。`
@@ -1419,6 +1463,22 @@ function toggleIssueExpanded(item: SichuanBatchIssueItem) {
   expandedIssueKeys.value = expandedIssueKeys.value.includes(key)
     ? expandedIssueKeys.value.filter((itemKey) => itemKey !== key)
     : [...expandedIssueKeys.value, key]
+}
+
+function openIssueDeepReview(item: SichuanBatchIssueItem) {
+  if (!props.openReviewDrawer) return
+  const recordId = String(item.record_id || item.visit_id || '').trim()
+  if (!recordId) return
+  props.openReviewDrawer({
+    id: recordId,
+    record_id: recordId,
+    patient_name: item.patient_name || '',
+    department: item.department || '',
+    discharge_date: '',
+    score: undefined,
+    defect_count: undefined,
+    status: String(item.status || '').trim() || undefined,
+  })
 }
 
 function formatProcessingTime(seconds: number) {
@@ -1943,6 +2003,7 @@ watch(
   margin-top: 10px;
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 
 .issue-conclusion-label {
@@ -1967,6 +2028,26 @@ watch(
 
 .drawer-section-head .drawer-section-title {
   margin-bottom: 0;
+}
+
+.drawer-section-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.summary-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
 }
 
 .drawer-section-meta {
