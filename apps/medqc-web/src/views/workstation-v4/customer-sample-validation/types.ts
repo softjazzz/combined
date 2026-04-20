@@ -49,6 +49,26 @@ export type ManualSamplePoolItem = {
   raw_payload?: Record<string, unknown>
 }
 
+export type ManualSamplePoolRecord = {
+  id: string
+  matched_institute_id?: string
+  matched_patient_id?: string
+  matched_visit_id?: string
+  patient_name: string
+  mr_no: string
+  department: string
+  match_status: string
+  sync_status: string
+  bundle_status: string
+  coverage_types: string[]
+  candidate_rule_ids: string[]
+  issue_count: number
+  issue_preview: string[]
+  issue_preview_text: string
+  sample_item_ids: string[]
+  sample_items: ManualSamplePoolItem[]
+}
+
 export type ManualSamplePoolListResult = {
   items: ManualSamplePool[]
   total: number
@@ -59,6 +79,14 @@ export type ManualSamplePoolListResult = {
 export type ManualSamplePoolItemsResult = {
   pool: ManualSamplePool
   items: ManualSamplePoolItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type ManualSamplePoolRecordsResult = {
+  pool: ManualSamplePool
+  items: ManualSamplePoolRecord[]
   total: number
   page: number
   page_size: number

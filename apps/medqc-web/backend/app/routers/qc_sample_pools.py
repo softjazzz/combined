@@ -55,6 +55,7 @@ class SamplePoolRunRequest(BaseModel):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     sample_item_ids: list[str] = Field(default_factory=list, description="选中的样本项 ID")
+    record_ids: list[str] = Field(default_factory=list, description="选中的真实病历 visit_id")
 
 
 class SamplePoolSyncRequest(BaseModel):
@@ -174,6 +175,43 @@ async def list_sample_pool_items(
     )
 
 
+@router.get("/{pool_id}/records")
+async def list_sample_pool_records(
+    request: Request,
+    pool_id: str,
+    coverage_type: Optional[str] = Query(default=None),
+    match_status: Optional[str] = Query(default=None),
+    include_in_batch_1: Optional[bool] = Query(default=None),
+    q: Optional[str] = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    pool = _service().get_pool(pool_id=pool_id)
+    if not pool:
+        raise HTTPException(status_code=404, detail="样本池不存在")
+    result = _service().list_pool_records(
+        pool_id=pool_id,
+        coverage_type=coverage_type,
+        match_status=match_status,
+        include_in_batch_1=include_in_batch_1,
+        query=q,
+        page=page,
+        page_size=page_size,
+    )
+    return success_response(
+        data={
+            "pool": pool,
+            "items": result.items,
+            "total": result.total,
+            "page": result.page,
+            "page_size": result.page_size,
+        },
+        message="获取客户样本病历列表成功",
+        trace_id=get_trace_id(request),
+    )
+
+
 @router.post("/{pool_id}/match")
 async def match_sample_pool(
     request: Request,
@@ -232,8 +270,14 @@ async def run_sample_pool_intrinsic_validation(
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
 
-    runnable_items = service.get_runnable_items(pool_id=pool_id, item_ids=payload.sample_item_ids)
+    runnable_items = service.get_runnable_items(
+        pool_id=pool_id,
+        item_ids=payload.sample_item_ids,
+        record_ids=payload.record_ids,
+    )
     if not runnable_items:
+        if payload.record_ids:
+            raise HTTPException(status_code=422, detail="当前选中病历没有可执行的内涵问题")
         if payload.sample_item_ids:
             raise HTTPException(status_code=422, detail="当前选中样本没有可执行的内涵病历")
         raise HTTPException(status_code=422, detail="当前样本池没有可执行的内涵样本")
@@ -296,6 +340,10 @@ async def run_sample_pool_intrinsic_validation(
             "max_refine_candidates": 0,
             "source": "manual_problem_sample_pool",
             "sample_pool_id": pool_id,
+            "selected_record_ids": payload.record_ids,
+            "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
+            "selected_sample_count": len(runnable_items),
+            "dedup_record_count": len(record_ids),
             "department": payload.department,
             "doctor": payload.doctor,
             "temperature": payload.temperature,
@@ -316,6 +364,7 @@ async def run_sample_pool_intrinsic_validation(
             "pool_id": pool_id,
             "job_id": job["id"],
             "sample_item_count": len(runnable_items),
+            "selected_record_count": len(payload.record_ids or []),
             "record_count": len(record_ids),
             "rule_count": len(rule_ids),
             "record_ids": record_ids,

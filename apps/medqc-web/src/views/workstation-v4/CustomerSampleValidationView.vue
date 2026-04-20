@@ -121,11 +121,11 @@
             <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div class="min-w-0">
                 <div class="text-[17px] font-semibold text-slate-900">
-                  样本明细
+                  病历池
                 </div>
                 <div class="mt-1 text-[13px] leading-6 text-slate-500">
-                  只把人工问题样本中的内涵问题纳入首轮验证。程序化和暂不支持问题继续保留在样本池中，不进入本轮
-                  LLM 批量验证。
+                  列表按真实病历聚合展示，人工问题样本作为病历详情里的关联问题保留。客户操作对象是病历，不是
+                  Excel 样本行。
                 </div>
               </div>
               <div class="grid gap-2 text-[13px] text-slate-500 sm:grid-cols-2 xl:min-w-[420px]">
@@ -166,7 +166,7 @@
                   class="w-full xl:min-w-[320px] xl:flex-1 customer-sample-toolbar-input"
                   size="middle"
                   placeholder="搜索患者/住院号/人工问题"
-                  @press-enter="loadItems()"
+                  @press-enter="loadRecords()"
                 />
               </div>
 
@@ -196,7 +196,7 @@
                 <a-button
                   type="primary"
                   class="!rounded-full"
-                  @click="loadItems()"
+                  @click="loadRecords()"
                 >
                   查询
                 </a-button>
@@ -216,8 +216,8 @@
                 当前口径
               </div>
               <div class="mt-1">
-                首批只验证内涵问题，优先覆盖首次病程、日常病程、会诊执行和上级查房。未匹配病历或
-                running bundle 未就绪的样本不会进入批量验证。
+                首批只验证内涵问题。列表是去重后的真实病历池；每份病历下可查看关联人工问题。未匹配病历或
+                running bundle 未就绪的病历不会进入批量验证。
               </div>
             </div>
 
@@ -226,7 +226,7 @@
               size="middle"
               :loading="itemLoading"
               :columns="itemColumns"
-              :data-source="items"
+              :data-source="records"
               :row-selection="rowSelection"
               :pagination="paginationConfig"
               :scroll="{ x: 1280 }"
@@ -240,11 +240,11 @@
     <a-drawer
       :open="detailOpen"
       width="720"
-      title="样本详情"
+      title="病历关联问题"
       @close="detailOpen = false"
     >
       <div
-        v-if="activeItem"
+        v-if="activeRecord"
         class="space-y-5"
       >
         <a-card
@@ -252,20 +252,20 @@
           class="rounded-2xl"
         >
           <template #title>
-            人工问题
+            病历概况
           </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">科室：</span>{{ activeItem.department || '-' }}
+              <span class="font-medium text-slate-500">科室：</span>{{ activeRecord.department || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">患者：</span>{{ activeItem.patient_name || '-' }}
+              <span class="font-medium text-slate-500">患者：</span>{{ activeRecord.patient_name || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">住院号：</span>{{ activeItem.mr_no || '-' }}
+              <span class="font-medium text-slate-500">住院号：</span>{{ activeRecord.mr_no || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">问题：</span>{{ activeItem.manual_issue_text }}
+              <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
             </div>
           </div>
         </a-card>
@@ -275,23 +275,18 @@
           class="rounded-2xl"
         >
           <template #title>
-            内涵分类
+            验证范围
           </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">覆盖类型：</span>{{ coverageLabel(activeItem.coverage_type) }}
+              <span class="font-medium text-slate-500">覆盖类型：</span>
+              {{ activeRecord.coverage_types.map((item) => coverageLabel(item)).join('、') || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">问题分类：</span>{{ activeItem.issue_category || '-' }}
+              <span class="font-medium text-slate-500">关联问题数：</span>{{ activeRecord.issue_count }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">首批纳入：</span>{{ activeItem.include_in_batch_1 ? '是' : '否' }}
-            </div>
-            <div>
-              <span class="font-medium text-slate-500">候选规则：</span>{{ activeItem.candidate_rule_ids.join(', ') || '-' }}
-            </div>
-            <div v-if="activeItem.exclude_reason">
-              <span class="font-medium text-slate-500">排除原因：</span>{{ activeItem.exclude_reason }}
+              <span class="font-medium text-slate-500">候选规则：</span>{{ activeRecord.candidate_rule_ids.join(', ') || '-' }}
             </div>
           </div>
         </a-card>
@@ -305,22 +300,48 @@
           </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">匹配状态：</span>{{ matchStatusLabel(activeItem.match_status) }}
+              <span class="font-medium text-slate-500">匹配状态：</span>{{ matchStatusLabel(activeRecord.match_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">visit_id：</span>{{ activeItem.matched_visit_id || '-' }}
+              <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">patient_id：</span>{{ activeItem.matched_patient_id || '-' }}
+              <span class="font-medium text-slate-500">patient_id：</span>{{ activeRecord.matched_patient_id || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">institute_id：</span>{{ activeItem.matched_institute_id || '-' }}
+              <span class="font-medium text-slate-500">institute_id：</span>{{ activeRecord.matched_institute_id || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">同步状态：</span>{{ activeItem.sync_status || '-' }}
+              <span class="font-medium text-slate-500">同步状态：</span>{{ activeRecord.sync_status || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">bundle 状态：</span>{{ activeItem.bundle_status || '-' }}
+              <span class="font-medium text-slate-500">bundle 状态：</span>{{ activeRecord.bundle_status || '-' }}
+            </div>
+          </div>
+        </a-card>
+
+        <a-card
+          size="small"
+          class="rounded-2xl"
+        >
+          <template #title>
+            关联人工问题
+          </template>
+          <div class="space-y-3">
+            <div
+              v-for="sample in activeRecord.sample_items"
+              :key="sample.id"
+              class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-7 text-slate-700"
+            >
+              <div class="font-medium text-slate-900">
+                行号 {{ sample.row_no }} · {{ sample.issue_category || '未分类' }}
+              </div>
+              <div class="mt-1">
+                {{ sample.manual_issue_text || '-' }}
+              </div>
+              <div class="mt-2 text-xs text-slate-500">
+                候选规则：{{ sample.candidate_rule_ids.join(', ') || '-' }}
+              </div>
             </div>
           </div>
         </a-card>
@@ -346,7 +367,7 @@
       :record="reviewDrawerRecord"
       @update:visible="reviewDrawerVisible = $event"
       @close="reviewDrawerVisible = false"
-      @refresh="loadItems"
+      @refresh="loadRecords"
     />
   </main>
 </template>
@@ -356,9 +377,9 @@ import { computed, h, onMounted, onUnmounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { InboxOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType } from 'ant-design-vue'
-import type { ManualSamplePool, ManualSamplePoolItem } from './customer-sample-validation/types'
+import type { ManualSamplePool, ManualSamplePoolRecord } from './customer-sample-validation/types'
 import {
-  getManualSamplePoolItems,
+  getManualSamplePoolRecords,
   listManualSamplePools,
   matchManualSamplePool,
   runManualSamplePool,
@@ -382,10 +403,10 @@ const selectedRowKeys = ref<string[]>([])
 const pools = ref<ManualSamplePool[]>([])
 const selectedPoolId = ref<string>()
 const selectedPool = ref<ManualSamplePool>()
-const items = ref<ManualSamplePoolItem[]>([])
+const records = ref<ManualSamplePoolRecord[]>([])
 
 const detailOpen = ref(false)
-const activeItem = ref<ManualSamplePoolItem>()
+const activeRecord = ref<ManualSamplePoolRecord>()
 const reviewDrawerVisible = ref(false)
 const reviewDrawerRecord = ref<{
   id: string
@@ -457,7 +478,7 @@ const selectedRunnableCount = computed(() => selectedRowKeys.value.length)
 
 const runButtonText = computed(() =>
   selectedRunnableCount.value > 0
-    ? `发起选中验证（${selectedRunnableCount.value}）`
+    ? `发起选中病历验证（${selectedRunnableCount.value}）`
     : '发起内涵验证',
 )
 
@@ -470,7 +491,7 @@ const paginationConfig = computed(() => ({
   onChange: (page: number, pageSize: number) => {
     pagination.value.page = page
     pagination.value.pageSize = pageSize
-    loadItems()
+    loadRecords()
   },
 }))
 
@@ -514,16 +535,11 @@ const emptyDescription = computed(() => {
   return '当前没有可展示的样本。'
 })
 
-const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
-  {
-    title: '行号',
-    dataIndex: 'row_no',
-    width: 80,
-  },
+const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
   {
     title: '患者 / 住院号',
     key: 'patient',
-    width: 190,
+    width: 200,
     customRender: ({ record }) =>
       h('div', { class: 'space-y-1' }, [
         h('div', { class: 'font-medium text-slate-900' }, record.patient_name || '-'),
@@ -536,21 +552,21 @@ const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
     width: 120,
   },
   {
-    title: '人工问题',
-    dataIndex: 'manual_issue_text',
+    title: '关联人工问题',
+    dataIndex: 'issue_preview_text',
     ellipsis: true,
   },
   {
     title: '覆盖类型',
-    dataIndex: 'coverage_type',
-    width: 120,
-    customRender: ({ value }) =>
+    dataIndex: 'coverage_types',
+    width: 180,
+    customRender: ({ record }) =>
       h(
         'span',
         {
-          class: coverageTagClass(String(value || '')),
+          class: coverageTagClass(String(record.coverage_types?.[0] || '')),
         },
-        coverageLabel(String(value || '')),
+        record.coverage_types?.map((item) => coverageLabel(String(item || ''))).join(' / ') || '-',
       ),
   },
   {
@@ -573,6 +589,11 @@ const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
       ),
   },
   {
+    title: '人工问题数',
+    dataIndex: 'issue_count',
+    width: 110,
+  },
+  {
     title: 'bundle',
     dataIndex: 'bundle_status',
     width: 120,
@@ -589,7 +610,7 @@ const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
           'a',
           {
             class: 'text-[#1677ff]',
-            onClick: () => openItemDetail(record),
+            onClick: () => openRecordDetail(record),
           },
           '查看详情',
         ),
@@ -630,7 +651,7 @@ const rowSelection = computed(() => ({
     selectedRowKeys.value = keys.map((key) => String(key))
   },
   getCheckboxProps: (record) => ({
-    disabled: !isRunnableSample(record),
+    disabled: !isRunnableRecord(record),
   }),
 }))
 
@@ -668,10 +689,8 @@ function matchStatusTagClass(value: string): string {
   return 'inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700'
 }
 
-function isRunnableSample(record: ManualSamplePoolItem): boolean {
+function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
   return (
-    record.coverage_type === 'llm_intrinsic' &&
-    record.include_in_batch_1 &&
     record.match_status === 'matched' &&
     record.sync_status === 'synced' &&
     record.bundle_status === 'ready' &&
@@ -693,18 +712,18 @@ async function loadPools() {
   }
   selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
   if (selectedPoolId.value) {
-    await loadItems()
+    await loadRecords()
   }
 }
 
-async function loadItems() {
+async function loadRecords() {
   if (!selectedPoolId.value) {
-    items.value = []
+    records.value = []
     pagination.value.total = 0
     return
   }
   itemLoading.value = true
-  const result = await getManualSamplePoolItems(selectedPoolId.value, {
+  const result = await getManualSamplePoolRecords(selectedPoolId.value, {
     coverage_type: filters.value.coverageType,
     match_status: filters.value.matchStatus,
     include_in_batch_1: filters.value.includeInBatch,
@@ -718,10 +737,10 @@ async function loadItems() {
     return
   }
   selectedPool.value = result.data.pool
-  items.value = result.data.items
+  records.value = result.data.items
   pagination.value.total = result.data.total
   selectedRowKeys.value = selectedRowKeys.value.filter((key) =>
-    items.value.some((item) => item.id === key && isRunnableSample(item)),
+    records.value.some((item) => item.id === key && isRunnableRecord(item)),
   )
 }
 
@@ -729,7 +748,7 @@ async function handlePoolChange() {
   pagination.value.page = 1
   selectedRowKeys.value = []
   selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
-  await loadItems()
+  await loadRecords()
 }
 
 function resetFilters() {
@@ -741,15 +760,15 @@ function resetFilters() {
   }
   pagination.value.page = 1
   selectedRowKeys.value = []
-  loadItems()
+  loadRecords()
 }
 
-function openItemDetail(record: ManualSamplePoolItem) {
-  activeItem.value = record
+function openRecordDetail(record: ManualSamplePoolRecord) {
+  activeRecord.value = record
   detailOpen.value = true
 }
 
-function openReviewDrawer(record: ManualSamplePoolItem) {
+function openReviewDrawer(record: ManualSamplePoolRecord) {
   if (!record.matched_visit_id) {
     message.warning('当前样本尚未匹配到病历，无法查看原文')
     return
@@ -760,7 +779,7 @@ function openReviewDrawer(record: ManualSamplePoolItem) {
     patient_name: record.patient_name,
     department: record.department,
     defect_count: 0,
-    status: record.latest_match_status || 'pending',
+    status: record.match_status || 'pending',
   }
   reviewDrawerVisible.value = true
 }
@@ -794,14 +813,14 @@ async function handleSyncPoolRecords() {
     `同步完成：可抽取 ${result.data.eligible_visits} 份病历，拉取 ${result.data.total_rows_pulled} 行，写入 ${result.data.total_rows_upserted} 行`,
   )
   await loadPools()
-  await loadItems()
+  await loadRecords()
 }
 
 async function handleRunPool() {
   if (!selectedPoolId.value) return
   runLoading.value = true
   const result = await runManualSamplePool(selectedPoolId.value, {
-    sample_item_ids: selectedRowKeys.value,
+    record_ids: selectedRowKeys.value,
   })
   runLoading.value = false
   if (!result.success || !result.data) {
@@ -868,7 +887,7 @@ function startBatchJobPolling(jobId: string) {
     if (!isBatchJobRunning(result.data.status)) {
       stopBatchJobPolling()
       await loadPools()
-      await loadItems()
+      await loadRecords()
     }
   }, 3000)
 }

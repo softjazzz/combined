@@ -692,6 +692,98 @@ class CustomQCSamplePoolService:
         finally:
             session.close()
 
+    def list_pool_records(
+        self,
+        *,
+        pool_id: str,
+        coverage_type: Optional[str] = None,
+        match_status: Optional[str] = None,
+        include_in_batch_1: Optional[bool] = None,
+        query: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> SamplePoolListResult:
+        session = _session()
+        try:
+            clauses = [self._item_table.c.pool_id == pool_id]
+            if coverage_type:
+                clauses.append(self._item_table.c.coverage_type == coverage_type)
+            if match_status:
+                clauses.append(self._item_table.c.match_status == match_status)
+            if include_in_batch_1 is not None:
+                clauses.append(self._item_table.c.include_in_batch_1.is_(include_in_batch_1))
+            if query:
+                keyword = f"%{query.strip()}%"
+                clauses.append(
+                    or_(
+                        self._item_table.c.patient_name.ilike(keyword),
+                        self._item_table.c.mr_no.ilike(keyword),
+                        self._item_table.c.manual_issue_text.ilike(keyword),
+                    )
+                )
+            where_clause = and_(*clauses)
+            stmt = select(self._item_table).where(where_clause).order_by(self._item_table.c.row_no.asc())
+            rows = session.execute(stmt).mappings().all()
+
+            grouped: Dict[str, Dict[str, Any]] = {}
+            for row in rows:
+                item = self._row_to_item(dict(row))
+                group_key = item["matched_visit_id"] or f"mr:{item['mr_no'] or item['id']}"
+                current = grouped.get(group_key)
+                if current is None:
+                    current = {
+                        "id": group_key,
+                        "matched_institute_id": item["matched_institute_id"],
+                        "matched_patient_id": item["matched_patient_id"],
+                        "matched_visit_id": item["matched_visit_id"],
+                        "patient_name": item["patient_name"],
+                        "mr_no": item["mr_no"],
+                        "department": item["department"],
+                        "match_status": item["match_status"],
+                        "sync_status": item["sync_status"],
+                        "bundle_status": item["bundle_status"],
+                        "coverage_types": [],
+                        "candidate_rule_ids": [],
+                        "issue_count": 0,
+                        "issue_preview": [],
+                        "sample_item_ids": [],
+                        "sample_items": [],
+                    }
+                    grouped[group_key] = current
+
+                current["issue_count"] += 1
+                current["sample_item_ids"].append(item["id"])
+                current["sample_items"].append(item)
+                if item["manual_issue_text"] and item["manual_issue_text"] not in current["issue_preview"]:
+                    current["issue_preview"].append(item["manual_issue_text"])
+                if item["coverage_type"] and item["coverage_type"] not in current["coverage_types"]:
+                    current["coverage_types"].append(item["coverage_type"])
+                for rule_id in item.get("candidate_rule_ids") or []:
+                    if rule_id not in current["candidate_rule_ids"]:
+                        current["candidate_rule_ids"].append(rule_id)
+
+            grouped_rows = sorted(
+                grouped.values(),
+                key=lambda item: (
+                    0 if item.get("matched_visit_id") else 1,
+                    str(item.get("mr_no") or ""),
+                    str(item.get("patient_name") or ""),
+                ),
+            )
+            total = len(grouped_rows)
+            start = max(page - 1, 0) * page_size
+            paged_rows = grouped_rows[start : start + page_size]
+            for row in paged_rows:
+                row["issue_preview_text"] = "；".join(row["issue_preview"][:2]) or "-"
+            return SamplePoolListResult(
+                items=paged_rows,
+                total=total,
+                page=page,
+                page_size=page_size,
+            )
+        finally:
+            session.close()
+
     def _check_running_bundle_status(self, *, institute_id: str, patient_id: str, visit_id: str) -> str:
         if engine is None:
             return "pending"
@@ -831,6 +923,7 @@ class CustomQCSamplePoolService:
         coverage_type: str = "llm_intrinsic",
         include_in_batch_1: bool = True,
         item_ids: Optional[Sequence[str]] = None,
+        record_ids: Optional[Sequence[str]] = None,
     ) -> List[Dict[str, Any]]:
         session = _session()
         try:
@@ -852,6 +945,10 @@ class CustomQCSamplePoolService:
                 normalized_ids = [str(item_id).strip() for item_id in item_ids if str(item_id).strip()]
                 if normalized_ids:
                     stmt = stmt.where(self._item_table.c.id.in_(normalized_ids))
+            if record_ids:
+                normalized_record_ids = [str(record_id).strip() for record_id in record_ids if str(record_id).strip()]
+                if normalized_record_ids:
+                    stmt = stmt.where(self._item_table.c.matched_visit_id.in_(normalized_record_ids))
             rows = session.execute(stmt).mappings().all()
             return [self._row_to_item(dict(row)) for row in rows]
         finally:

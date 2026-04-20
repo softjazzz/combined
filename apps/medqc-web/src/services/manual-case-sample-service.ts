@@ -3,6 +3,7 @@ import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/ap
 import type {
   ManualSamplePoolItemsResult,
   ManualSamplePoolListResult,
+  ManualSamplePoolRecordsResult,
 } from '@/views/workstation-v4/customer-sample-validation/types'
 
 type ServiceResult<T> = {
@@ -71,6 +72,27 @@ export async function getManualSamplePoolItems(
   )
 }
 
+export async function getManualSamplePoolRecords(
+  poolId: string,
+  params: {
+    coverage_type?: string
+    match_status?: string
+    include_in_batch_1?: boolean
+    q?: string
+    page?: number
+    page_size?: number
+  },
+) {
+  return requestEnvelope<ManualSamplePoolRecordsResult>(
+    {
+      method: 'GET',
+      url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}/records`,
+      params,
+    },
+    '获取客户样本病历列表失败',
+  )
+}
+
 export async function matchManualSamplePool(poolId: string) {
   return requestEnvelope<Record<string, unknown>>(
     {
@@ -125,12 +147,14 @@ export async function runManualSamplePool(
     temperature?: number
     max_tokens?: number
     sample_item_ids?: string[]
+    record_ids?: string[]
   },
 ) {
   return requestEnvelope<{
     pool_id: string
     job_id: string
     sample_item_count: number
+    selected_record_count: number
     record_count: number
     rule_count: number
     record_ids: string[]
