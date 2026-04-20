@@ -807,11 +807,61 @@
                 复核结论
               </div>
               <div class="deep-review-content">
-                {{
-                  String(
-                    resolvedDeepReviewResult?.findings || selectedDeepReviewIssue.findings || '无',
-                  )
-                }}
+                <template
+                  v-if="resolveStructuredText(resolveDeepReviewText('findings')).summary.length"
+                >
+                  <p
+                    v-for="(paragraph, index) in resolveStructuredText(
+                      resolveDeepReviewText('findings'),
+                    ).summary"
+                    :key="`deep-review-findings-summary-${index}`"
+                    class="issue-conclusion-summary-text"
+                  >
+                    {{ paragraph }}
+                  </p>
+                </template>
+                <div
+                  v-for="(section, sectionIndex) in resolveStructuredText(
+                    resolveDeepReviewText('findings'),
+                  ).sections"
+                  :key="`deep-review-findings-section-${sectionIndex}`"
+                  class="issue-conclusion-section"
+                >
+                  <div class="issue-conclusion-section-title">
+                    {{ section.title }}
+                  </div>
+                  <p
+                    v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                    :key="`deep-review-findings-paragraph-${sectionIndex}-${paragraphIndex}`"
+                    class="issue-conclusion-summary-text"
+                  >
+                    {{ paragraph }}
+                  </p>
+                  <ol
+                    v-if="section.points.length"
+                    class="issue-conclusion-points"
+                  >
+                    <li
+                      v-for="(point, index) in section.points"
+                      :key="`deep-review-findings-point-${sectionIndex}-${index}`"
+                    >
+                      {{ point }}
+                    </li>
+                  </ol>
+                </div>
+                <ol
+                  v-if="resolveStructuredText(resolveDeepReviewText('findings')).points.length"
+                  class="issue-conclusion-points"
+                >
+                  <li
+                    v-for="(point, index) in resolveStructuredText(
+                      resolveDeepReviewText('findings'),
+                    ).points"
+                    :key="`deep-review-findings-root-point-${index}`"
+                  >
+                    {{ point }}
+                  </li>
+                </ol>
               </div>
             </div>
             <div class="deep-review-section">
@@ -819,11 +869,61 @@
                 复核证据
               </div>
               <div class="deep-review-content">
-                {{
-                  String(
-                    resolvedDeepReviewResult?.evidence || selectedDeepReviewIssue.evidence || '无',
-                  )
-                }}
+                <template
+                  v-if="resolveStructuredText(resolveDeepReviewText('evidence')).summary.length"
+                >
+                  <p
+                    v-for="(paragraph, index) in resolveStructuredText(
+                      resolveDeepReviewText('evidence'),
+                    ).summary"
+                    :key="`deep-review-evidence-summary-${index}`"
+                    class="issue-conclusion-summary-text"
+                  >
+                    {{ paragraph }}
+                  </p>
+                </template>
+                <div
+                  v-for="(section, sectionIndex) in resolveStructuredText(
+                    resolveDeepReviewText('evidence'),
+                  ).sections"
+                  :key="`deep-review-evidence-section-${sectionIndex}`"
+                  class="issue-conclusion-section"
+                >
+                  <div class="issue-conclusion-section-title">
+                    {{ section.title }}
+                  </div>
+                  <p
+                    v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                    :key="`deep-review-evidence-paragraph-${sectionIndex}-${paragraphIndex}`"
+                    class="issue-conclusion-summary-text"
+                  >
+                    {{ paragraph }}
+                  </p>
+                  <ol
+                    v-if="section.points.length"
+                    class="issue-conclusion-points"
+                  >
+                    <li
+                      v-for="(point, index) in section.points"
+                      :key="`deep-review-evidence-point-${sectionIndex}-${index}`"
+                    >
+                      {{ point }}
+                    </li>
+                  </ol>
+                </div>
+                <ol
+                  v-if="resolveStructuredText(resolveDeepReviewText('evidence')).points.length"
+                  class="issue-conclusion-points"
+                >
+                  <li
+                    v-for="(point, index) in resolveStructuredText(
+                      resolveDeepReviewText('evidence'),
+                    ).points"
+                    :key="`deep-review-evidence-root-point-${index}`"
+                  >
+                    {{ point }}
+                  </li>
+                </ol>
               </div>
             </div>
             <div class="deep-review-section">
@@ -831,13 +931,61 @@
                 复核建议
               </div>
               <div class="deep-review-content">
-                {{
-                  String(
-                    resolvedDeepReviewResult?.suggestion ||
-                      selectedDeepReviewIssue.suggestion ||
-                      '无',
-                  )
-                }}
+                <template
+                  v-if="resolveStructuredText(resolveDeepReviewText('suggestion')).summary.length"
+                >
+                  <p
+                    v-for="(paragraph, index) in resolveStructuredText(
+                      resolveDeepReviewText('suggestion'),
+                    ).summary"
+                    :key="`deep-review-suggestion-summary-${index}`"
+                    class="issue-conclusion-summary-text"
+                  >
+                    {{ paragraph }}
+                  </p>
+                </template>
+                <div
+                  v-for="(section, sectionIndex) in resolveStructuredText(
+                    resolveDeepReviewText('suggestion'),
+                  ).sections"
+                  :key="`deep-review-suggestion-section-${sectionIndex}`"
+                  class="issue-conclusion-section"
+                >
+                  <div class="issue-conclusion-section-title">
+                    {{ section.title }}
+                  </div>
+                  <p
+                    v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                    :key="`deep-review-suggestion-paragraph-${sectionIndex}-${paragraphIndex}`"
+                    class="issue-conclusion-summary-text"
+                  >
+                    {{ paragraph }}
+                  </p>
+                  <ol
+                    v-if="section.points.length"
+                    class="issue-conclusion-points"
+                  >
+                    <li
+                      v-for="(point, index) in section.points"
+                      :key="`deep-review-suggestion-point-${sectionIndex}-${index}`"
+                    >
+                      {{ point }}
+                    </li>
+                  </ol>
+                </div>
+                <ol
+                  v-if="resolveStructuredText(resolveDeepReviewText('suggestion')).points.length"
+                  class="issue-conclusion-points"
+                >
+                  <li
+                    v-for="(point, index) in resolveStructuredText(
+                      resolveDeepReviewText('suggestion'),
+                    ).points"
+                    :key="`deep-review-suggestion-root-point-${index}`"
+                  >
+                    {{ point }}
+                  </li>
+                </ol>
               </div>
             </div>
           </a-spin>
@@ -1842,6 +1990,12 @@ function truncateText(text?: string, limit = 80) {
   const value = String(text || '').trim()
   if (!value) return '-'
   return value.length > limit ? `${value.slice(0, limit)}...` : value
+}
+
+function resolveDeepReviewText(field: 'findings' | 'evidence' | 'suggestion') {
+  return String(
+    resolvedDeepReviewResult.value?.[field] || selectedDeepReviewIssue.value?.[field] || '',
+  )
 }
 
 type StructuredTextSection = {
