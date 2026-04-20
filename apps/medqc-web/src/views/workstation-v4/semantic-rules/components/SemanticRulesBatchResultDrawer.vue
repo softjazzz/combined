@@ -2,7 +2,7 @@
   <a-drawer
     :open="open"
     placement="right"
-    :width="640"
+    :width="740"
     :closable="false"
     :body-style="{ padding: 0 }"
     @close="close"
