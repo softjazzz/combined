@@ -587,6 +587,61 @@
         </a-collapse>
       </div>
     </div>
+    <a-modal
+      :open="deepReviewModalOpen"
+      title="深度复核"
+      width="820px"
+      :footer="null"
+      @cancel="closeDeepReviewModal"
+    >
+      <template v-if="selectedDeepReviewIssue">
+        <div class="deep-review-modal">
+          <div class="deep-review-head">
+            <div class="deep-review-title">
+              {{
+                selectedDeepReviewIssue.rule_code || selectedDeepReviewIssue.rule_id || '未知规则'
+              }}
+              ·
+              {{ selectedDeepReviewIssue.rule_name || '未知质控点' }}
+            </div>
+            <a-tag class="aggregation-count-tag">
+              {{ resolveStatusText(selectedDeepReviewIssue.status) }}
+            </a-tag>
+          </div>
+          <div class="deep-review-meta">
+            <span>{{ selectedDeepReviewIssue.record_id || '-' }}</span>
+            <span>{{ selectedDeepReviewIssue.document_type || '未知文书域' }}</span>
+            <span>{{ selectedDeepReviewIssue.rule_family || 'general' }}</span>
+            <span>{{ selectedDeepReviewIssue.defect_level || '未分级' }}</span>
+            <span v-if="selectedDeepReviewIssue.refined">单条精审</span>
+          </div>
+          <div class="deep-review-section">
+            <div class="deep-review-label">
+              结论
+            </div>
+            <div class="deep-review-content">
+              {{ selectedDeepReviewIssue.findings || '无' }}
+            </div>
+          </div>
+          <div class="deep-review-section">
+            <div class="deep-review-label">
+              证据
+            </div>
+            <div class="deep-review-content">
+              {{ selectedDeepReviewIssue.evidence || '无' }}
+            </div>
+          </div>
+          <div class="deep-review-section">
+            <div class="deep-review-label">
+              建议
+            </div>
+            <div class="deep-review-content">
+              {{ selectedDeepReviewIssue.suggestion || '无' }}
+            </div>
+          </div>
+        </div>
+      </template>
+    </a-modal>
   </a-drawer>
 </template>
 
@@ -620,16 +675,6 @@ const props = defineProps<{
   getBatchJobStatusTagClass: (status?: string) => string
   getBatchJobStatusText: (status?: string) => string
   formatDateTime: (value?: string | Date | null) => string
-  openReviewDrawer?: (record: {
-    id: string
-    record_id: string
-    patient_name?: string
-    department?: string
-    discharge_date?: string
-    score?: number
-    defect_count?: number
-    status?: string
-  }) => void
 }>()
 
 const scopeLabelMap: Record<string, string> = {
@@ -752,6 +797,8 @@ const issuePagination = reactive({
   showSizeChanger: false,
 })
 const expandedIssueKeys = ref<string[]>([])
+const deepReviewModalOpen = ref(false)
+const selectedDeepReviewIssue = ref<SichuanBatchIssueItem | null>(null)
 
 const batchJobDebugSnapshot = computed(() => props.batchJobDebugSnapshot || null)
 
@@ -844,6 +891,7 @@ watch(
     issueViewMode.value = 'business'
     advancedSectionKeys.value = []
     expandedIssueKeys.value = []
+    closeDeepReviewModal()
     resetIssueFilters()
   },
 )
@@ -1466,19 +1514,13 @@ function toggleIssueExpanded(item: SichuanBatchIssueItem) {
 }
 
 function openIssueDeepReview(item: SichuanBatchIssueItem) {
-  if (!props.openReviewDrawer) return
-  const recordId = String(item.record_id || item.visit_id || '').trim()
-  if (!recordId) return
-  props.openReviewDrawer({
-    id: recordId,
-    record_id: recordId,
-    patient_name: item.patient_name || '',
-    department: item.department || '',
-    discharge_date: '',
-    score: undefined,
-    defect_count: undefined,
-    status: String(item.status || '').trim() || undefined,
-  })
+  selectedDeepReviewIssue.value = item
+  deepReviewModalOpen.value = true
+}
+
+function closeDeepReviewModal() {
+  deepReviewModalOpen.value = false
+  selectedDeepReviewIssue.value = null
 }
 
 function formatProcessingTime(seconds: number) {
@@ -2048,6 +2090,63 @@ watch(
   font-size: 11px;
   line-height: 1.4;
   font-weight: 600;
+}
+
+.deep-review-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.deep-review-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.deep-review-title {
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.deep-review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.deep-review-meta span {
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.deep-review-section {
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 12px 14px;
+}
+
+.deep-review-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 8px;
+}
+
+.deep-review-content {
+  font-size: 13px;
+  line-height: 1.8;
+  color: #0f172a;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .drawer-section-meta {

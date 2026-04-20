@@ -601,7 +601,6 @@
       :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
       :get-batch-job-status-text="getBatchJobStatusText"
       :format-date-time="formatDateTime"
-      :open-review-drawer="openReviewDrawerFromBatchIssue"
     />
 
     <!-- 联审详情抽屉 -->
@@ -1322,26 +1321,6 @@ const handleExport = async () => {
 
 const handleView = (record: AdminRecordItem) => {
   drawerRecord.value = record
-  drawerVisible.value = true
-}
-
-const openReviewDrawerFromBatchIssue = (
-  record: Partial<AdminRecordItem> & { id: string; record_id: string },
-) => {
-  const matchedRecord =
-    records.value.find((item) => String(item.record_id || '').trim() === record.record_id) || null
-  drawerRecord.value =
-    matchedRecord ||
-    ({
-      id: record.id,
-      record_id: record.record_id,
-      patient_name: record.patient_name || '',
-      department: record.department || '',
-      discharge_date: record.discharge_date || '',
-      score: record.score,
-      defect_count: record.defect_count ?? 0,
-      status: record.status || 'pending',
-    } as AdminRecordItem)
   drawerVisible.value = true
 }
 
