@@ -13,6 +13,11 @@ from ..core.response import success_response, paginated_response, error_response
 from ..services.sichuan_qc_service import SichuanQCService, RuleSourceGuardError
 from ..services.llm_config_loader import LLMConfigLoader
 from ..services.qc_input_adapters import evaluate_running_final_bundle
+from ..services.fast_screen_qc import (
+    EXECUTION_STRATEGY_FAST_SCREEN,
+    normalize_execution_strategy,
+    run_final_fast_screen,
+)
 from ..services.qc_rule_sets import get_sichuan_rule_set, list_sichuan_rule_sets
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
@@ -194,6 +199,7 @@ class SichuanRuleVisitEvaluateRequest(BaseModel):
 class SichuanWorkspaceBatchJobCreateRequest(BaseModel):
     rule_ids: Optional[List[str]] = None
     rule_set_key: Optional[str] = None
+    execution_strategy: Optional[str] = None
     quality_profile: Optional[str] = None
     bucket_strategy: Optional[str] = None
     batch_output_mode: Optional[str] = None
@@ -248,6 +254,8 @@ def _normalize_bucket_strategy(value: Any) -> str:
     normalized = str(value or "").strip().lower()
     if normalized == "domain_family":
         return "domain_family"
+    if normalized == "fixed_packs":
+        return "fixed_packs"
     return "domain_only"
 
 
@@ -853,6 +861,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         rule_set_key = str(filters.get("rule_set_key") or "").strip()
         rule_set_name = str(filters.get("rule_set_name") or "").strip()
         rule_set_version = str(filters.get("rule_set_version") or "").strip()
+        execution_strategy = normalize_execution_strategy(filters.get("execution_strategy"))
         quality_profile = _normalize_quality_profile(filters.get("quality_profile"))
         bucket_strategy = _normalize_bucket_strategy(filters.get("bucket_strategy"))
         batch_output_mode = _normalize_batch_output_mode(
@@ -967,6 +976,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "rule_set_key": rule_set_key,
                 "rule_set_name": rule_set_name,
                 "rule_set_version": rule_set_version,
+                "execution_strategy": execution_strategy,
                 "quality_profile": quality_profile,
                 "bucket_strategy": bucket_strategy,
                 "batch_output_mode": batch_output_mode,
@@ -1053,23 +1063,34 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 if current_scope == "final" and institute_id and patient_id and visit_id:
                     used_bundle_path = True
                     try:
-                        # 终末批量任务改为“单病历一次性评估全部规则”，让 orchestrator 启用动态分包。
-                        # 文书域约束通过规则元数据 execution_domain/doc_scope 在分桶时生效。
-                        single_result = await evaluate_running_final_bundle(
-                            qc_service=qc_service,
-                            scene="final",
-                            institute_id=institute_id,
-                            patient_id=patient_id,
-                            visit_id=visit_id,
-                            rule_ids=valid_rule_ids,
-                            schema="public",
-                            bucket_strategy=bucket_strategy,
-                            quality_profile=quality_profile,
-                            batch_output_mode=batch_output_mode,
-                            enable_selective_refine=enable_selective_refine,
-                            refine_confidence_threshold=refine_confidence_threshold,
-                            max_refine_candidates=max_refine_candidates,
-                        )
+                        if execution_strategy == EXECUTION_STRATEGY_FAST_SCREEN:
+                            single_result = await run_final_fast_screen(
+                                qc_service=qc_service,
+                                institute_id=institute_id,
+                                patient_id=patient_id,
+                                visit_id=visit_id,
+                                source_schema="cdm",
+                                rule_ids=valid_rule_ids,
+                                quality_profile=quality_profile,
+                                batch_output_mode=batch_output_mode,
+                            )
+                        else:
+                            # 标准链路仍保留动态分包能力。
+                            single_result = await evaluate_running_final_bundle(
+                                qc_service=qc_service,
+                                scene="final",
+                                institute_id=institute_id,
+                                patient_id=patient_id,
+                                visit_id=visit_id,
+                                rule_ids=valid_rule_ids,
+                                schema="public",
+                                bucket_strategy=bucket_strategy,
+                                quality_profile=quality_profile,
+                                batch_output_mode=batch_output_mode,
+                                enable_selective_refine=enable_selective_refine,
+                                refine_confidence_threshold=refine_confidence_threshold,
+                                max_refine_candidates=max_refine_candidates,
+                            )
                         eval_items = list(
                             single_result.get("evaluation_results")
                             or single_result.get("parsed_evaluation_results")
@@ -1449,6 +1470,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "rule_set_key": rule_set_key,
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,
+            "execution_strategy": execution_strategy,
             "quality_profile": quality_profile,
             "bucket_strategy": bucket_strategy,
             "batch_output_mode": batch_output_mode,
@@ -1543,6 +1565,7 @@ async def create_workspace_batch_job(
         rule_set_key = requested_rule_set.key
         rule_set_name = requested_rule_set.name
         rule_set_version = requested_rule_set.version
+        execution_strategy = normalize_execution_strategy(requested_rule_set.execution_strategy)
         quality_profile = requested_rule_set.quality_profile
         bucket_strategy = requested_rule_set.bucket_strategy
         batch_output_mode = requested_rule_set.batch_output_mode
@@ -1555,6 +1578,7 @@ async def create_workspace_batch_job(
         rule_set_key = ""
         rule_set_name = ""
         rule_set_version = ""
+        execution_strategy = normalize_execution_strategy(payload.execution_strategy)
         quality_profile = _normalize_quality_profile(payload.quality_profile)
         bucket_strategy = _normalize_bucket_strategy(payload.bucket_strategy)
         batch_output_mode = _normalize_batch_output_mode(
@@ -1610,6 +1634,7 @@ async def create_workspace_batch_job(
             "rule_set_key": rule_set_key,
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,
+            "execution_strategy": execution_strategy,
             "quality_profile": quality_profile,
             "bucket_strategy": bucket_strategy,
             "batch_output_mode": batch_output_mode,
@@ -1634,6 +1659,7 @@ async def create_workspace_batch_job(
             "rule_set_key": rule_set_key,
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,
+            "execution_strategy": execution_strategy,
             "quality_profile": quality_profile,
             "bucket_strategy": bucket_strategy,
             "batch_output_mode": batch_output_mode,
@@ -1708,6 +1734,7 @@ async def list_workspace_batch_jobs(
             "rule_set_key": str(((item.get("filters") or {}).get("rule_set_key")) or ""),
             "rule_set_name": str(((item.get("filters") or {}).get("rule_set_name")) or ""),
             "rule_set_version": str(((item.get("filters") or {}).get("rule_set_version")) or ""),
+            "execution_strategy": str(((item.get("summary") or {}).get("execution_strategy") or (item.get("filters") or {}).get("execution_strategy")) or ""),
             "quality_profile": str(((item.get("summary") or {}).get("quality_profile") or (item.get("filters") or {}).get("quality_profile")) or ""),
             "bucket_strategy": str(((item.get("summary") or {}).get("bucket_strategy") or (item.get("filters") or {}).get("bucket_strategy")) or ""),
             "batch_output_mode": str(((item.get("summary") or {}).get("batch_output_mode") or (item.get("filters") or {}).get("batch_output_mode")) or ""),
@@ -1747,6 +1774,7 @@ async def get_workspace_batch_job(
             "rule_set_key": str(((job.get("filters") or {}).get("rule_set_key")) or ""),
             "rule_set_name": str(((job.get("filters") or {}).get("rule_set_name")) or ""),
             "rule_set_version": str(((job.get("filters") or {}).get("rule_set_version")) or ""),
+            "execution_strategy": str(((job.get("summary") or {}).get("execution_strategy") or (job.get("filters") or {}).get("execution_strategy")) or ""),
             "quality_profile": str(((job.get("summary") or {}).get("quality_profile") or (job.get("filters") or {}).get("quality_profile")) or ""),
             "bucket_strategy": str(((job.get("summary") or {}).get("bucket_strategy") or (job.get("filters") or {}).get("bucket_strategy")) or ""),
             "batch_output_mode": str(((job.get("summary") or {}).get("batch_output_mode") or (job.get("filters") or {}).get("batch_output_mode")) or ""),

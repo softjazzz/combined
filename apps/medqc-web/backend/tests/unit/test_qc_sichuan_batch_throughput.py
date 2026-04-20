@@ -428,6 +428,111 @@ async def test_workspace_batch_final_should_prefer_bundle_path(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_workspace_batch_final_fast_screen_should_use_fast_screen_path(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_ids": ["SC-023", "SC-024"],
+        "rule_set_key": "sc_content_fast_v1",
+        "execution_strategy": "fast_screen",
+        "quality_profile": "throughput_v1",
+        "bucket_strategy": "fixed_packs",
+        "batch_output_mode": "minimal",
+        "enable_selective_refine": False,
+        "max_refine_candidates": 0,
+        "date_field": "discharge",
+    }
+    service = _ServiceStub(status_by_rule={"SC-023": "uncertain", "SC-024": "uncertain"})
+
+    def _hydrate_with_bundle_keys(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                **item,
+                "institute_id": "HOSP-001",
+                "patient_id": f"PAT-{item.get('visit_id')}",
+                "medical_text": f"fast-screen-text-{item.get('visit_id')}",
+            }
+            for item in records
+        ]
+
+    workspace.hydrate_records_with_medical_text = _hydrate_with_bundle_keys  # type: ignore[assignment]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    fast_screen_calls: List[Dict[str, Any]] = []
+
+    async def _fake_run_final_fast_screen(**kwargs: Any) -> Dict[str, Any]:
+        fast_screen_calls.append(dict(kwargs))
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": "SC-023",
+                    "rule_name": "规则-SC-023",
+                    "status": "uncertain",
+                    "is_compliant": False,
+                    "findings": "疑点",
+                    "evidence": "证据",
+                    "suggestion": "复核",
+                    "confidence": 0.5,
+                    "metadata": {
+                        "executor_type": "llm",
+                        "tokens_used": 100,
+                        "api_time": 0.1,
+                        "model_version": "test-model",
+                        "cache_hit": False,
+                    },
+                },
+                {
+                    "rule_id": "SC-024",
+                    "rule_name": "规则-SC-024",
+                    "status": "uncertain",
+                    "is_compliant": False,
+                    "findings": "疑点",
+                    "evidence": "证据",
+                    "suggestion": "复核",
+                    "confidence": 0.5,
+                    "metadata": {
+                        "executor_type": "llm",
+                        "tokens_used": 100,
+                        "api_time": 0.1,
+                        "model_version": "test-model",
+                        "cache_hit": False,
+                    },
+                },
+            ],
+            "token_usage": {"total_tokens": 200, "prompt_tokens": 160, "completion_tokens": 40},
+            "api_time": 0.2,
+            "first_result_latency": 0.05,
+            "first_result_source": "first_course_features",
+            "pack_metrics": {
+                "total_packs": 1,
+                "avg_pack_size": 2.0,
+                "fallback_packs": 0,
+                "single_rule_retries": 0,
+                "pack_parse_retry_count": 0,
+                "context_tokens_estimate": 300,
+                "bucket_strategy": "fixed_packs",
+                "batch_output_mode": "minimal",
+            },
+            "cot_summary": {"disabled_calls": 1},
+            "refine_summary": {"enabled": False},
+        }
+
+    monkeypatch.setattr(qc_sichuan, "run_final_fast_screen", _fake_run_final_fast_screen)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert len(fast_screen_calls) == 2
+    assert service.evaluate_calls == 0
+    assert workspace.summary is not None
+    assert workspace.summary.get("execution_strategy") == "fast_screen"
+    assert int((workspace.summary.get("pack_metrics") or {}).get("total_packs") or 0) == 2
+
+
+@pytest.mark.asyncio
 async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkeypatch):
     workspace = _WorkspaceStub()
     service = _ServiceStub()
@@ -463,3 +568,39 @@ async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkey
     assert filters["max_refine_candidates"] == 3
     assert filters["rule_ids"] == list(SC_CONTENT_V1_RULE_IDS)
     assert response["data"]["draft_ids"] == list(SC_CONTENT_V1_RULE_IDS)
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_batch_job_should_resolve_fast_screen_rule_set(monkeypatch):
+    workspace = _WorkspaceStub()
+    service = _ServiceStub()
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    request = SimpleNamespace(state=SimpleNamespace())
+    payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+        rule_set_key="sc_content_fast_v1",
+        scope="final",
+        date_field="discharge",
+        record_ids=["visit-001"],
+    )
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=request,  # type: ignore[arg-type]
+        payload=payload,
+        background_tasks=BackgroundTasks(),
+        qc_service=service,  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert workspace.created_job is not None
+    filters = dict(workspace.created_job.get("filters") or {})
+    assert filters["rule_set_key"] == "sc_content_fast_v1"
+    assert filters["execution_strategy"] == "fast_screen"
+    assert filters["quality_profile"] == "throughput_v1"
+    assert filters["bucket_strategy"] == "fixed_packs"
+    assert filters["batch_output_mode"] == "minimal"
+    assert filters["enable_selective_refine"] is False
+    assert filters["max_refine_candidates"] == 0
+    assert response["data"]["execution_strategy"] == "fast_screen"

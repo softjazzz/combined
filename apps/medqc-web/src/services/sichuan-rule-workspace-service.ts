@@ -42,6 +42,7 @@ async function requestEnvelope<T>(
 export async function createSichuanWorkspaceBatchJob(payload: {
   rule_ids?: string[]
   rule_set_key?: string
+  execution_strategy?: string
   quality_profile?: string
   bucket_strategy?: string
   batch_output_mode?: string

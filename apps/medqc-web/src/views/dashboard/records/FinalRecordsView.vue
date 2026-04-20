@@ -481,8 +481,11 @@
             class="flex flex-wrap gap-2"
             button-style="solid"
           >
+            <a-radio-button value="content_fast_v1">
+              快速初筛（推荐）
+            </a-radio-button>
             <a-radio-button value="content_hard_v1">
-              硬判定首发（推荐）
+              硬判定首发
             </a-radio-button>
             <a-radio-button value="content_review_v1">
               待复核首发
@@ -654,10 +657,25 @@ import {
   getBatchJobStatusText,
 } from '@/views/rules/utils/customQcWorkspacePresentation'
 
+const CONTENT_FAST_RULE_SET_KEY = 'sc_content_fast_v1'
 const CONTENT_RULE_SET_KEY = 'sc_content_v1'
 const CONTENT_HARD_RULE_SET_KEY = 'sc_content_hard_v1'
 const CONTENT_REVIEW_RULE_SET_KEY = 'sc_content_review_v1'
 
+const CONTENT_FAST_RULE_SET_IDS = [
+  'SC-023',
+  'SC-024',
+  'SC-025',
+  'SC-026',
+  'SC-027',
+  'SC-032',
+  'SC-033',
+  'SC-036',
+  'SC-121',
+  'SC-122',
+  'SC-123',
+  'SC-125',
+] as const
 const CONTENT_RULE_SET_IDS = [
   'SC-023',
   'SC-024',
@@ -685,7 +703,13 @@ const CONTENT_REVIEW_RULE_SET_IDS = [
   'SC-125',
 ] as const
 
-type LaunchRuleMode = 'content_hard_v1' | 'content_review_v1' | 'content_v1' | 'manual' | 'all'
+type LaunchRuleMode =
+  | 'content_fast_v1'
+  | 'content_hard_v1'
+  | 'content_review_v1'
+  | 'content_v1'
+  | 'manual'
+  | 'all'
 
 const route = useRoute()
 const router = useRouter()
@@ -714,7 +738,7 @@ const ruleLoading = ref(false)
 const allRules = ref<SemanticRuleItem[]>([])
 const ruleKeyword = ref('')
 const selectedRuleIds = ref<string[]>([])
-const launchRuleMode = ref<LaunchRuleMode>('content_hard_v1')
+const launchRuleMode = ref<LaunchRuleMode>('content_fast_v1')
 const launchOnlySelectedRecords = ref(true)
 
 const {
@@ -785,9 +809,16 @@ const normalizeRuleId = (value: unknown) =>
     .trim()
     .toUpperCase()
 
+const fastRuleSetIdSet = new Set<string>(CONTENT_FAST_RULE_SET_IDS)
 const hardRuleSetIdSet = new Set<string>(CONTENT_HARD_RULE_SET_IDS)
 const reviewRuleSetIdSet = new Set<string>(CONTENT_REVIEW_RULE_SET_IDS)
 const contentRuleSetIdSet = new Set<string>(CONTENT_RULE_SET_IDS)
+
+const fastRuleSetRules = computed(() =>
+  allRules.value.filter((rule) =>
+    fastRuleSetIdSet.has(normalizeRuleId(rule.rule_id || rule.rule_code)),
+  ),
+)
 
 const hardRuleSetRules = computed(() =>
   allRules.value.filter((rule) =>
@@ -808,6 +839,7 @@ const contentRuleSetRules = computed(() =>
 )
 
 const baseRulesForLaunch = computed(() => {
+  if (launchRuleMode.value === 'content_fast_v1') return fastRuleSetRules.value
   if (launchRuleMode.value === 'content_hard_v1') return hardRuleSetRules.value
   if (launchRuleMode.value === 'content_review_v1') return reviewRuleSetRules.value
   if (launchRuleMode.value === 'content_v1') return contentRuleSetRules.value
@@ -838,6 +870,7 @@ const filteredRules = computed(() => {
 })
 
 const selectedRuleCount = computed(() => {
+  if (launchRuleMode.value === 'content_fast_v1') return CONTENT_FAST_RULE_SET_IDS.length
   if (launchRuleMode.value === 'content_hard_v1') return CONTENT_HARD_RULE_SET_IDS.length
   if (launchRuleMode.value === 'content_review_v1') return CONTENT_REVIEW_RULE_SET_IDS.length
   if (launchRuleMode.value === 'content_v1') return CONTENT_RULE_SET_IDS.length
@@ -846,6 +879,9 @@ const selectedRuleCount = computed(() => {
 })
 
 const launchRuleModeDescription = computed(() => {
+  if (launchRuleMode.value === 'content_fast_v1') {
+    return '默认快速初筛模式：按固定文书分包执行 12 条首批内涵规则，不做 fallback、不做单条重跑、不做精审，优先输出疑点和待复核结果。'
+  }
   if (launchRuleMode.value === 'content_hard_v1') {
     return '仅执行 3 条当前边界最稳定的内涵规则，适合作为终末病历首发硬判定默认口径。'
   }
@@ -1135,6 +1171,10 @@ const clearSelectedRules = () => {
 }
 
 const syncRuleSelectionByMode = () => {
+  if (launchRuleMode.value === 'content_fast_v1') {
+    selectedRuleIds.value = [...CONTENT_FAST_RULE_SET_IDS]
+    return
+  }
   if (launchRuleMode.value === 'content_hard_v1') {
     selectedRuleIds.value = [...CONTENT_HARD_RULE_SET_IDS]
     return
@@ -1157,24 +1197,26 @@ const syncRuleSelectionByMode = () => {
 const openBatchLaunchModal = async () => {
   launchModalOpen.value = true
   launchOnlySelectedRecords.value = selectedRecordIds.value.length > 0
-  launchRuleMode.value = 'content_hard_v1'
+  launchRuleMode.value = 'content_fast_v1'
   await loadRulesForLaunch()
   syncRuleSelectionByMode()
 }
 
 const confirmBatchLaunch = async () => {
   const effectiveRuleIds =
-    launchRuleMode.value === 'content_hard_v1'
-      ? [...CONTENT_HARD_RULE_SET_IDS]
-      : launchRuleMode.value === 'content_review_v1'
-        ? [...CONTENT_REVIEW_RULE_SET_IDS]
-        : launchRuleMode.value === 'content_v1'
-          ? [...CONTENT_RULE_SET_IDS]
-          : launchRuleMode.value === 'all'
-            ? allRules.value
-                .map((rule) => String(rule.rule_id || rule.rule_code || '').trim())
-                .filter(Boolean)
-            : selectedRuleIds.value
+    launchRuleMode.value === 'content_fast_v1'
+      ? [...CONTENT_FAST_RULE_SET_IDS]
+      : launchRuleMode.value === 'content_hard_v1'
+        ? [...CONTENT_HARD_RULE_SET_IDS]
+        : launchRuleMode.value === 'content_review_v1'
+          ? [...CONTENT_REVIEW_RULE_SET_IDS]
+          : launchRuleMode.value === 'content_v1'
+            ? [...CONTENT_RULE_SET_IDS]
+            : launchRuleMode.value === 'all'
+              ? allRules.value
+                  .map((rule) => String(rule.rule_id || rule.rule_code || '').trim())
+                  .filter(Boolean)
+              : selectedRuleIds.value
 
   if (!effectiveRuleIds.length) {
     message.warning('请至少选择一条质控规则')
@@ -1188,13 +1230,15 @@ const confirmBatchLaunch = async () => {
   launchingBatch.value = true
   try {
     const selectedRuleSetKey =
-      launchRuleMode.value === 'content_hard_v1'
-        ? CONTENT_HARD_RULE_SET_KEY
-        : launchRuleMode.value === 'content_review_v1'
-          ? CONTENT_REVIEW_RULE_SET_KEY
-          : launchRuleMode.value === 'content_v1'
-            ? CONTENT_RULE_SET_KEY
-            : undefined
+      launchRuleMode.value === 'content_fast_v1'
+        ? CONTENT_FAST_RULE_SET_KEY
+        : launchRuleMode.value === 'content_hard_v1'
+          ? CONTENT_HARD_RULE_SET_KEY
+          : launchRuleMode.value === 'content_review_v1'
+            ? CONTENT_REVIEW_RULE_SET_KEY
+            : launchRuleMode.value === 'content_v1'
+              ? CONTENT_RULE_SET_KEY
+              : undefined
     const response = await createSichuanWorkspaceBatchJob({
       rule_ids: selectedRuleSetKey ? undefined : effectiveRuleIds,
       rule_set_key: selectedRuleSetKey,

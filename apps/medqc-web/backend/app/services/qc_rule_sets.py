@@ -10,6 +10,7 @@ from .effect_priority_qc import (
     QUALITY_PROFILE_EFFECT_PRIORITY,
     QUALITY_PROFILE_THROUGHPUT,
 )
+from .fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_STRATEGY_STANDARD
 
 
 SC_CONTENT_V1_RULE_IDS: tuple[str, ...] = (
@@ -54,6 +55,7 @@ class QCRuleSet:
     version: str
     scope: str
     rule_ids: tuple[str, ...]
+    execution_strategy: str = EXECUTION_STRATEGY_STANDARD
     quality_profile: str = QUALITY_PROFILE_THROUGHPUT
     bucket_strategy: str = "domain_only"
     enable_selective_refine: bool = False
@@ -70,6 +72,7 @@ class QCRuleSet:
             "scope": self.scope,
             "rule_ids": list(self.rule_ids),
             "rule_count": len(self.rule_ids),
+            "execution_strategy": self.execution_strategy,
             "quality_profile": self.quality_profile,
             "bucket_strategy": self.bucket_strategy,
             "enable_selective_refine": self.enable_selective_refine,
@@ -81,6 +84,21 @@ class QCRuleSet:
 
 
 SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {
+    "sc_content_fast_v1": QCRuleSet(
+        key="sc_content_fast_v1",
+        name="内涵质控快速初筛 v1",
+        version="2026-04-20",
+        scope="final",
+        rule_ids=SC_CONTENT_V1_RULE_IDS,
+        execution_strategy=EXECUTION_STRATEGY_FAST_SCREEN,
+        quality_profile=QUALITY_PROFILE_THROUGHPUT,
+        bucket_strategy="fixed_packs",
+        enable_selective_refine=False,
+        refine_confidence_threshold=0.45,
+        batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
+        max_refine_candidates=0,
+        description="终末病历内涵质控快速初筛规则集，按固定文书分包执行，不做 fallback、不做单条重跑、不做精审。",
+    ),
     "sc_content_hard_v1": QCRuleSet(
         key="sc_content_hard_v1",
         name="内涵质控硬判定首发 v1",

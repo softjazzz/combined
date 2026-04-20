@@ -68,6 +68,7 @@ export interface SichuanBatchJobSummary {
   rule_set_key?: string
   rule_set_name?: string
   rule_set_version?: string
+  execution_strategy?: string
   quality_profile?: string
   bucket_strategy?: string
   batch_output_mode?: string
@@ -281,6 +282,7 @@ export interface SichuanBatchJob {
   rule_set_key?: string
   rule_set_name?: string
   rule_set_version?: string
+  execution_strategy?: string
   quality_profile?: string
   bucket_strategy?: string
   batch_output_mode?: string
