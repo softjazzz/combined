@@ -12,7 +12,9 @@
     <div class="bg-slate-50 rounded-xl p-4 mb-4 border border-slate-100">
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
+          <div
+            class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm"
+          >
             {{ (record?.patient_name || '').charAt(0) }}
           </div>
           <div>
@@ -24,7 +26,7 @@
             </div>
           </div>
         </div>
-        <span 
+        <span
           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border"
           :class="statusClass"
         >
@@ -111,7 +113,7 @@
         <div class="flex items-center justify-between mb-3">
           <h3 class="text-sm font-bold text-slate-800">
             质控问题
-            <span class="text-xs text-slate-400 font-normal ml-2">共 {{ defectList.length }} 项</span>
+            <span class="text-xs text-slate-400 font-normal ml-2">共 {{ displayedIssueCount }} 项</span>
           </h3>
           <a-button
             size="small"
@@ -128,18 +130,18 @@
           class="flex-1 overflow-hidden"
         >
           <div
-            v-if="defectList.length === 0"
+            v-if="displayedIssueCount === 0"
             class="text-center py-8 text-slate-400 text-sm"
           >
             暂无质控问题
           </div>
           <div
-            v-else
+            v-else-if="defectList.length > 0"
             class="space-y-3 overflow-y-auto pr-1"
             style="max-height: calc(100vh - 380px)"
           >
-            <div 
-              v-for="defect in defectList" 
+            <div
+              v-for="defect in defectList"
               :key="defect.id"
               class="bg-white rounded-xl border border-slate-100 p-4 hover:shadow-md transition-all cursor-pointer group"
               :class="{ 'ring-2 ring-blue-200 border-blue-200': selectedDefectId === defect.id }"
@@ -147,7 +149,7 @@
             >
               <div class="flex items-start justify-between mb-2">
                 <div class="flex items-center gap-2">
-                  <span 
+                  <span
                     class="w-2 h-2 rounded-full flex-shrink-0"
                     :class="{
                       'bg-rose-500': defect.severity === 'critical' || defect.severity === 'error',
@@ -157,7 +159,7 @@
                   />
                   <span class="text-sm font-medium text-slate-800">{{ defect.rule_name }}</span>
                 </div>
-                <span 
+                <span
                   class="text-xs px-2 py-0.5 rounded-md font-medium"
                   :class="{
                     'bg-amber-50 text-amber-600': defect.status === 'pending',
@@ -179,12 +181,83 @@
               </div>
 
               <!-- 操作按钮（选中时显示） -->
-              <QCReviewActionBar 
+              <QCReviewActionBar
                 v-if="selectedDefectId === defect.id"
                 :defect="defect"
                 class="mt-3 pt-3 border-t border-slate-100"
                 @action-done="handleActionDone"
               />
+            </div>
+          </div>
+          <div
+            v-else
+            class="space-y-3 overflow-y-auto pr-1"
+            style="max-height: calc(100vh - 380px)"
+          >
+            <div
+              v-for="issue in reviewItemList"
+              :key="issue.id"
+              class="bg-white rounded-xl border border-slate-100 p-4"
+            >
+              <div class="flex items-start justify-between gap-3 mb-3">
+                <div class="min-w-0">
+                  <div class="text-sm font-semibold text-slate-800 break-words">
+                    {{ issue.rule_code ? `${issue.rule_code} · ` : ''
+                    }}{{ issue.rule_name || '质控规则' }}
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
+                    <span
+                      class="px-2 py-0.5 rounded-full border"
+                      :class="getReviewStatusClass(issue.status)"
+                    >
+                      {{ getReviewStatusText(issue.status) }}
+                    </span>
+                    <span
+                      v-if="issue.document_type"
+                      class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
+                    >
+                      {{ issue.document_type }}
+                    </span>
+                    <span
+                      v-if="issue.rule_family"
+                      class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
+                    >
+                      {{ issue.rule_family }}
+                    </span>
+                    <span
+                      v-if="issue.defect_level"
+                      class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
+                    >
+                      {{ issue.defect_level }}
+                    </span>
+                  </div>
+                </div>
+                <span
+                  v-if="issue.confidence !== null && issue.confidence !== undefined"
+                  class="text-xs text-slate-400 font-mono flex-shrink-0"
+                >
+                  {{ Number(issue.confidence).toFixed(2) }}
+                </span>
+              </div>
+
+              <div
+                v-if="issue.findings"
+                class="text-xs text-slate-700 leading-6"
+              >
+                <span class="text-slate-400">结论：</span>{{ issue.findings }}
+              </div>
+              <div
+                v-if="issue.evidence"
+                class="text-xs text-slate-500 leading-6 mt-2"
+              >
+                <span class="text-slate-400">证据：</span>{{ issue.evidence }}
+              </div>
+              <div
+                v-if="issue.suggestion"
+                class="text-xs text-blue-600 leading-6 mt-2"
+              >
+                <span class="text-slate-400">建议：</span>{{ issue.suggestion }}
+              </div>
             </div>
           </div>
         </a-spin>
@@ -210,6 +283,25 @@ interface RecordData {
   status?: string
 }
 
+interface ReviewIssueItem {
+  id: string
+  source?: string
+  job_id?: string
+  record_id: string
+  visit_id?: string
+  patient_name?: string
+  rule_code?: string
+  rule_name: string
+  status: 'non_compliant' | 'uncertain' | 'compliant' | 'not_applicable'
+  document_type?: string
+  rule_family?: string
+  defect_level?: string
+  findings?: string
+  evidence?: string
+  suggestion?: string
+  confidence?: number | null
+}
+
 const props = defineProps<{
   visible: boolean
   record: RecordData | null
@@ -223,9 +315,10 @@ const emit = defineEmits<{
 
 const defectLoading = ref(false)
 const defectList = ref<DefectItem[]>([])
+const reviewItemList = ref<ReviewIssueItem[]>([])
 const selectedDefectId = ref<string | null>(null)
 const docLoading = ref(false)
-const recordDetail = ref<any>(null)
+const recordDetail = ref<Record<string, unknown> | null>(null)
 const activeDocTab = ref('admission')
 
 const docTabs = [
@@ -239,15 +332,53 @@ const docTabs = [
 const currentDocContent = computed(() => {
   if (!recordDetail.value) return ''
   const d = recordDetail.value
-  const docs = d.documents || d.document_bundle || {}
+  const docs =
+    (d.documents as Record<string, unknown> | undefined) ||
+    (d.document_bundle as Record<string, unknown> | undefined) ||
+    {}
   const tabMap: Record<string, string> = {
-    admission: d.admissionNote || d.admission_note || d.admission_record || docs.admissionNote || docs.admission_note || '',
-    discharge: d.dischargeNote || d.discharge_note || d.discharge_record || d.discharge_summary || docs.dischargeNote || docs.discharge_note || '',
-    progress: d.progressNote || d.progress_note || d.progress_record || d.course_record || docs.progressNote || docs.progress_note || '',
-    surgery: d.surgeryNote || d.surgery_note || d.surgery_record || d.operation_record || docs.surgeryNote || docs.surgery_note || '',
+    admission: String(
+      d.admissionNote ||
+        d.admission_note ||
+        d.admission_record ||
+        docs.admissionNote ||
+        docs.admission_note ||
+        '',
+    ),
+    discharge: String(
+      d.dischargeNote ||
+        d.discharge_note ||
+        d.discharge_record ||
+        d.discharge_summary ||
+        docs.dischargeNote ||
+        docs.discharge_note ||
+        '',
+    ),
+    progress: String(
+      d.progressNote ||
+        d.progress_note ||
+        d.progress_record ||
+        d.course_record ||
+        docs.progressNote ||
+        docs.progress_note ||
+        '',
+    ),
+    surgery: String(
+      d.surgeryNote ||
+        d.surgery_note ||
+        d.surgery_record ||
+        d.operation_record ||
+        docs.surgeryNote ||
+        docs.surgery_note ||
+        '',
+    ),
   }
   return tabMap[activeDocTab.value] || ''
 })
+
+const displayedIssueCount = computed(() =>
+  defectList.value.length > 0 ? defectList.value.length : reviewItemList.value.length,
+)
 
 /**
  * HTML 净化：移除 script/iframe/事件属性，防止 XSS
@@ -255,23 +386,26 @@ const currentDocContent = computed(() => {
  */
 const sanitizeHtml = (html: string): string => {
   if (!html) return ''
-  return html
-    // 移除 script 标签及内容
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    // 移除 iframe
-    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
-    .replace(/<iframe[^>]*\/>/gi, '')
-    // 移除事件属性（on*="...")
-    .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, '')
-    .replace(/\son\w+\s*=\s*[^\s>]*/gi, '')
-    // 移除 javascript: 协议
-    .replace(/href\s*=\s*["']javascript:[^"']*["']/gi, 'href="#"')
+  return (
+    html
+      // 移除 script 标签及内容
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      // 移除 iframe
+      .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+      .replace(/<iframe[^>]*\/>/gi, '')
+      // 移除事件属性（on*="...")
+      .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, '')
+      .replace(/\son\w+\s*=\s*[^\s>]*/gi, '')
+      // 移除 javascript: 协议
+      .replace(/href\s*=\s*["']javascript:[^"']*["']/gi, 'href="#"')
+  )
 }
 
 // 状态样式计算
 const statusClass = computed(() => {
   const s = props.record?.status
-  if (s === 'completed' || s === 'passed' || s === 'approved') return 'bg-emerald-50 text-emerald-600 border-emerald-100'
+  if (s === 'completed' || s === 'passed' || s === 'approved')
+    return 'bg-emerald-50 text-emerald-600 border-emerald-100'
   if (s === 'failed' || s === 'rejected') return 'bg-rose-50 text-rose-600 border-rose-100'
   return 'bg-amber-50 text-amber-600 border-amber-100'
 })
@@ -285,9 +419,14 @@ const statusDotClass = computed(() => {
 
 const statusText = computed(() => {
   const map: Record<string, string> = {
-    pending: '待质控', urged: '已催办', remediated: '已整改',
-    approved: '已通过', rejected: '已驳回',
-    completed: '已通过', passed: '已通过', failed: '未通过',
+    pending: '待质控',
+    urged: '已催办',
+    remediated: '已整改',
+    approved: '已通过',
+    rejected: '已驳回',
+    completed: '已通过',
+    passed: '已通过',
+    failed: '未通过',
   }
   return map[props.record?.status || ''] || props.record?.status || '-'
 })
@@ -302,10 +441,33 @@ const getScoreColor = (score?: number) => {
 
 const getDefectStatusText = (status: string) => {
   const map: Record<string, string> = {
-    pending: '待处理', urged: '已催办',
-    remediated: '已整改', approved: '已通过', rejected: '已驳回',
+    pending: '待处理',
+    urged: '已催办',
+    remediated: '已整改',
+    approved: '已通过',
+    rejected: '已驳回',
   }
   return map[status] || status
+}
+
+const getReviewStatusText = (status: ReviewIssueItem['status']) => {
+  const map: Record<ReviewIssueItem['status'], string> = {
+    non_compliant: '不合规',
+    uncertain: '待复核',
+    compliant: '合规',
+    not_applicable: '不适用',
+  }
+  return map[status] || status
+}
+
+const getReviewStatusClass = (status: ReviewIssueItem['status']) => {
+  const map: Record<ReviewIssueItem['status'], string> = {
+    non_compliant: 'bg-rose-50 text-rose-600 border-rose-100',
+    uncertain: 'bg-amber-50 text-amber-600 border-amber-100',
+    compliant: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    not_applicable: 'bg-slate-100 text-slate-500 border-slate-200',
+  }
+  return map[status] || map.uncertain
 }
 
 // 加载缺陷列表
@@ -331,14 +493,20 @@ const loadRecordDetail = async () => {
   try {
     const res = await getRecordDetail(props.record.record_id)
     if (res.success && res.data) {
-      recordDetail.value = res.data
-      const inlineDefects = (res.data as any).defects
+      const detail = res.data as Record<string, unknown>
+      recordDetail.value = detail
+      const inlineDefects = detail.defects
       if (Array.isArray(inlineDefects)) {
-        defectList.value = inlineDefects
+        defectList.value = inlineDefects as DefectItem[]
+      }
+      const reviewItems = detail.review_items
+      if (Array.isArray(reviewItems)) {
+        reviewItemList.value = reviewItems as ReviewIssueItem[]
       }
     }
   } catch {
     recordDetail.value = null
+    reviewItemList.value = []
   } finally {
     docLoading.value = false
   }
@@ -356,15 +524,19 @@ const handleClose = () => {
 }
 
 // 打开时自动加载
-watch(() => props.visible, (val) => {
-  if (val && props.record) {
-    selectedDefectId.value = null
-    activeDocTab.value = 'admission'
-    recordDetail.value = null
-    loadDefects()
-    loadRecordDetail()
-  }
-})
+watch(
+  () => props.visible,
+  (val) => {
+    if (val && props.record) {
+      selectedDefectId.value = null
+      activeDocTab.value = 'admission'
+      recordDetail.value = null
+      reviewItemList.value = []
+      loadDefects()
+      loadRecordDetail()
+    }
+  },
+)
 </script>
 
 <style scoped>

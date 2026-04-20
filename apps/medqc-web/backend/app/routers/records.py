@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime, date
+import json
 from typing import Any, Dict, Optional, List
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request, Query
 from pydantic import BaseModel
-from sqlalchemy import and_, desc, func, or_
+from sqlalchemy import and_, desc, func, or_, text
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.security import get_current_user
@@ -13,9 +14,10 @@ from ..core.response import success_response, paginated_response, get_trace_id, 
 from ..schemas.records import MedicalRecordResponse
 from ..storage.memory import medical_records_db
 from ..core.settings import get_settings
-from ..database.connection import SessionLocal
+from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
 from ..database.models.qc import QCDefect, QCResultBiz
+from ..services.bundles.emr_view import load_bundle_documents
 from ..core.permissions import (
     require_permission,
     ResourceType,
@@ -128,13 +130,241 @@ def _normalize_outpatient_item(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _pick_document_content(documents: List[Dict[str, Any]], keywords: List[str]) -> str:
+    chunks: List[str] = []
     for doc in documents:
-        doc_type = str(doc.get("document_type") or doc.get("type") or doc.get("category") or "").lower()
-        if any(k in doc_type for k in keywords):
+        haystack = " ".join(
+            str(doc.get(field) or "")
+            for field in (
+                "document_type",
+                "type",
+                "category",
+                "doc_type",
+                "doc_name",
+                "title",
+                "label",
+                "document_title",
+            )
+        ).lower()
+        if any(k in haystack for k in keywords):
             content = doc.get("content") or doc.get("record_content") or doc.get("text")
             if content:
-                return str(content)
-    return ""
+                text = str(content).strip()
+                if text:
+                    chunks.append(text)
+    if not chunks:
+        return ""
+    if len(chunks) == 1:
+        return chunks[0]
+    return "\n\n<hr />\n\n".join(chunks)
+
+
+def _workspace_schema() -> str:
+    return "qc" if DB_SCHEMA_MODE == "split" else "public"
+
+
+def _safe_json_loads(value: Any, default: Any) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    text = str(value).strip()
+    if not text:
+        return default
+    try:
+        return json.loads(text)
+    except Exception:
+        return default
+
+
+def _resolve_visit_identity(record_id: str) -> Dict[str, str]:
+    if SessionLocal is None:
+        return {}
+    with SessionLocal() as session:
+        for model in (MedicalRecordFrontpage, DischargeRecord, AdmissionRecord):
+            row = (
+                session.query(model)
+                .filter(or_(model.visit_id == record_id, model.mr_no == record_id))
+                .first()
+            )
+            if row:
+                return {
+                    "institute_id": str(getattr(row, "institute_id", "") or "").strip(),
+                    "patient_id": str(getattr(row, "patient_id", "") or "").strip(),
+                    "visit_id": str(getattr(row, "visit_id", "") or "").strip(),
+                }
+    return {}
+
+
+def _load_bundle_payload_for_record(record_id: str) -> Dict[str, Any]:
+    identity = _resolve_visit_identity(record_id)
+    if not identity:
+        return {}
+    try:
+        payload = load_bundle_documents(
+            institute_id=identity["institute_id"],
+            patient_id=identity["patient_id"],
+            visit_id=identity["visit_id"],
+            bundle_schema="public",
+        )
+        if list(payload.get("documents") or []):
+            return payload
+    except Exception as exc:
+        logger.warning("从 bundle 加载病历文书失败: %s", exc)
+    if engine is None:
+        return {}
+
+    def _normalize_inventory_docs(items: Any) -> List[Dict[str, Any]]:
+        docs: List[Dict[str, Any]] = []
+        for idx, item in enumerate(items or []):
+            if not isinstance(item, dict):
+                continue
+            content = str(item.get("content") or item.get("assembled_text") or item.get("text_preview") or "").strip()
+            if not content:
+                continue
+            docs.append(
+                {
+                    "id": str(item.get("document_id") or item.get("id") or idx),
+                    "document_type": str(item.get("document_type") or item.get("doc_type") or "").strip(),
+                    "doc_type": str(item.get("document_type") or item.get("doc_type") or "").strip(),
+                    "document_title": str(item.get("document_title") or item.get("doc_name") or item.get("title") or "").strip(),
+                    "title": str(item.get("document_title") or item.get("doc_name") or item.get("title") or "").strip(),
+                    "content": content,
+                    "record_time": str(item.get("record_time") or item.get("display_time") or "").strip(),
+                    "source_table": str(item.get("source_table") or "").strip(),
+                }
+            )
+        return docs
+
+    visit_id = identity.get("visit_id") or record_id
+    patient_id = identity.get("patient_id") or ""
+    institute_id = identity.get("institute_id") or ""
+    candidates = (
+        ("public.final_record_bundle", "final"),
+        ("public.running_record_bundle", "running"),
+    )
+    for table_name, scene in candidates:
+        sql = text(
+            f"""
+            SELECT structured_context, medical_text
+            FROM {table_name}
+            WHERE institute_id = :institute_id
+              AND patient_id = :patient_id
+              AND visit_id = :visit_id
+            LIMIT 1
+            """
+        )
+        try:
+            with engine.connect() as conn:
+                row = conn.execute(
+                    sql,
+                    {
+                        "institute_id": institute_id,
+                        "patient_id": patient_id,
+                        "visit_id": visit_id,
+                    },
+                ).mappings().first()
+        except Exception as exc:
+            logger.warning("从 %s 读取 bundle 结构化文书失败: %s", table_name, exc)
+            continue
+        if not row:
+            continue
+        structured = row.get("structured_context") or {}
+        if not isinstance(structured, dict):
+            structured = {}
+        docs = _normalize_inventory_docs(structured.get("document_inventory"))
+        if docs:
+            return {
+                "layout_version": "bundle_struct_v1",
+                "documents": docs,
+                "documents_tree": [],
+                "domain_bundle_hits": {scene: True},
+                "empty_reason": "",
+            }
+        medical_text = str(row.get("medical_text") or "").strip()
+        if medical_text:
+            return {
+                "layout_version": "bundle_struct_v1",
+                "documents": [
+                    {
+                        "id": f"{visit_id}:{scene}",
+                        "document_type": f"{scene}_bundle",
+                        "document_title": "病历全文",
+                        "title": "病历全文",
+                        "content": medical_text,
+                        "record_time": "",
+                        "source_table": table_name,
+                    }
+                ],
+                "documents_tree": [],
+                "domain_bundle_hits": {scene: True},
+                "empty_reason": "",
+            }
+    return {}
+
+
+def _map_batch_item_to_review_item(item: Dict[str, Any], *, job_id: str, created_at: Any, index: int) -> Dict[str, Any]:
+    status = str(item.get("status") or "").strip().lower()
+    normalized_status = status if status in {"non_compliant", "uncertain", "compliant", "not_applicable"} else "uncertain"
+    return {
+        "id": f"{job_id}:{item.get('rule_code') or index}",
+        "source": "batch_job",
+        "job_id": job_id,
+        "created_at": str(created_at or ""),
+        "record_id": str(item.get("record_id") or item.get("visit_id") or "").strip(),
+        "visit_id": str(item.get("visit_id") or item.get("record_id") or "").strip(),
+        "patient_name": str(item.get("patient_name") or "").strip(),
+        "rule_code": str(item.get("rule_code") or "").strip(),
+        "rule_name": str(item.get("rule_name") or "").strip(),
+        "status": normalized_status,
+        "document_type": str(item.get("document_type") or "").strip(),
+        "rule_family": str(item.get("rule_family") or "").strip(),
+        "defect_level": str(item.get("defect_level") or "").strip(),
+        "findings": str(item.get("findings") or item.get("finding") or "").strip(),
+        "evidence": str(item.get("evidence") or "").strip(),
+        "suggestion": str(item.get("suggestion") or "").strip(),
+        "confidence": item.get("confidence"),
+    }
+
+
+def _load_review_items_from_latest_batch(record_id: str) -> Dict[str, Any]:
+    if engine is None:
+        return {"review_items": [], "review_job": None}
+    schema = _workspace_schema()
+    sql = text(
+        f"""
+        SELECT id, created_at, items_json
+        FROM {schema}.custom_qc_batch_jobs
+        WHERE draft_id = 'sichuan-rule-library'
+          AND scope = 'final'
+          AND status = 'completed'
+          AND items_json IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT 20
+        """
+    )
+    with engine.connect() as conn:
+        rows = conn.execute(sql).mappings().all()
+    for row in rows:
+        items = _safe_json_loads(row.get("items_json"), [])
+        if not isinstance(items, list):
+            continue
+        matched: List[Dict[str, Any]] = []
+        for idx, raw_item in enumerate(items):
+            if not isinstance(raw_item, dict):
+                continue
+            item_record_id = str(raw_item.get("record_id") or raw_item.get("visit_id") or "").strip()
+            if item_record_id != record_id:
+                continue
+            matched.append(_map_batch_item_to_review_item(raw_item, job_id=str(row.get("id") or ""), created_at=row.get("created_at"), index=idx))
+        if matched:
+            return {
+                "review_items": matched,
+                "review_job": {
+                    "id": str(row.get("id") or ""),
+                    "created_at": str(row.get("created_at") or ""),
+                },
+            }
+    return {"review_items": [], "review_job": None}
 
 
 def _parse_iso_date_or_422(value: Optional[str], field_name: str) -> Optional[date]:
@@ -735,6 +965,8 @@ async def get_record_qc_detail(
     payload: Dict[str, Any] = {
         "record": {"id": record_id, "record_id": record_id},
         "defects": [],
+        "review_items": [],
+        "review_job": None,
         "remediation": [],
         "appeals": [],
         "operation_history": [],
@@ -847,11 +1079,29 @@ async def get_record_qc_detail(
                 payload["documents"]["admissionNote"] = payload["admissionNote"]
                 payload["exists"] = True
 
+        if not payload["documents"]["raw_documents"]:
+            bundle_payload = _load_bundle_payload_for_record(record_id)
+            bundle_docs = list(bundle_payload.get("documents") or [])
+            if bundle_docs:
+                payload["documents"]["raw_documents"] = bundle_docs
+                payload["documents"]["admissionNote"] = _pick_document_content(bundle_docs, ["admission", "入院"])
+                payload["documents"]["dischargeNote"] = _pick_document_content(bundle_docs, ["discharge", "出院"])
+                payload["documents"]["progressNote"] = _pick_document_content(bundle_docs, ["progress", "病程", "course", "查房", "会诊"])
+                payload["documents"]["surgeryNote"] = _pick_document_content(bundle_docs, ["surgery", "operation", "手术", "麻醉", "术前", "术后"])
+                payload["exists"] = True
+
+        if not payload["defects"]:
+            review_payload = _load_review_items_from_latest_batch(record_id)
+            payload["review_items"] = list(review_payload.get("review_items") or [])
+            payload["review_job"] = review_payload.get("review_job")
+            if payload["review_items"]:
+                payload["exists"] = True
+
         payload["admissionNote"] = payload["documents"].get("admissionNote", "")
         payload["dischargeNote"] = payload["documents"].get("dischargeNote", "")
         payload["progressNote"] = payload["documents"].get("progressNote", "")
         payload["surgeryNote"] = payload["documents"].get("surgeryNote", "")
-        payload["record"]["defect_count"] = len(payload.get("defects", []))
+        payload["record"]["defect_count"] = len(payload.get("defects", [])) or len(payload.get("review_items", []))
 
         return success_response(
             data=payload,
