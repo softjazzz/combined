@@ -75,6 +75,12 @@
               </template>
               <span>终末病历质控</span>
             </a-menu-item>
+            <a-menu-item key="/workstation-v4/customer-sample-validation">
+              <template #icon>
+                <FileSearchOutlined />
+              </template>
+              <span>客户样本验证</span>
+            </a-menu-item>
             <a-menu-item
               key="ws-stage-frontpage-generate"
               @click="goStageMenu('frontpage_generate')"
@@ -466,6 +472,7 @@ const currentPageTitle = computed(() => {
     '/workstation-v4/rules/custom-workspace': '自定义规则工作台',
     '/workstation-v4/records/running': '运行病历',
     '/workstation-v4/records/final': '终末病历质控',
+    '/workstation-v4/customer-sample-validation': '客户样本验证',
     '/workstation-v4/system-config': '系统配置',
   }
   return titleMap[path] || '工作台'
