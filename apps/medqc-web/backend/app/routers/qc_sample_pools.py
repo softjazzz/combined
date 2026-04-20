@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import uuid
+from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from ..core.response import get_trace_id, success_response
@@ -20,6 +22,10 @@ router = APIRouter(
     prefix="/api/v1/qc/sample-pools",
     tags=["qc-sample-pools"],
     dependencies=[Depends(require_roles("admin", "qc_manager"))],
+)
+
+_IMPORT_UPLOAD_DIR = (
+    Path(__file__).resolve().parents[2] / "data" / "sample_pool_uploads"
 )
 
 
@@ -118,6 +124,51 @@ async def import_manual_sheet(
     return success_response(
         data={**pool, "imported_rows": len(rows)},
         message="客户样本池导入成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/import-upload")
+async def import_manual_sheet_upload(
+    request: Request,
+    pool_name: str = Form(..., description="样本池名称"),
+    source_sheet: str = Form(default="Sheet2", description="Sheet 名称"),
+    description: Optional[str] = Form(default=None, description="备注"),
+    scene: str = Form(default="running", description="目标场景"),
+    file: UploadFile = File(..., description="Excel 模板文件"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    filename = str(file.filename or "").strip()
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".xls", ".xlsx"}:
+        raise HTTPException(status_code=422, detail="仅支持导入 .xls 或 .xlsx 模板文件")
+
+    _IMPORT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    safe_stem = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in Path(filename).stem).strip("_")
+    safe_stem = safe_stem or "manual_case_pool"
+    saved_path = _IMPORT_UPLOAD_DIR / f"{safe_stem}-{uuid.uuid4().hex[:8]}{suffix}"
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=422, detail="上传文件为空")
+    saved_path.write_bytes(content)
+
+    rows = load_manual_case_rows_from_excel(file_path=str(saved_path), sheet_name=source_sheet)
+    if not rows:
+        raise HTTPException(status_code=422, detail="模板中未读取到有效样本行，请检查 Sheet 与表头格式")
+
+    pool = _service().create_pool_with_items(
+        name=str(pool_name).strip(),
+        source_file=str(saved_path),
+        source_sheet=str(source_sheet).strip() or "Sheet2",
+        created_by=_current_user_id(current_user),
+        rows=rows,
+        description=(description or "").strip() or None,
+        scene=str(scene).strip() or "running",
+    )
+    return success_response(
+        data={**pool, "imported_rows": len(rows)},
+        message="客户样本模板导入成功",
         trace_id=get_trace_id(request),
     )
 

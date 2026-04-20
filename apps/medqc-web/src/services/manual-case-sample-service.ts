@@ -51,6 +51,37 @@ export async function listManualSamplePools(params: {
   )
 }
 
+export async function importManualSamplePoolByUpload(payload: {
+  pool_name: string
+  source_sheet?: string
+  description?: string
+  scene?: string
+  file: File
+}) {
+  const formData = new FormData()
+  formData.append('pool_name', payload.pool_name)
+  formData.append('source_sheet', payload.source_sheet || 'Sheet2')
+  formData.append('description', payload.description || '')
+  formData.append('scene', payload.scene || 'running')
+  formData.append('file', payload.file)
+
+  return requestEnvelope<{
+    id: string
+    name: string
+    imported_rows: number
+  }>(
+    {
+      method: 'POST',
+      url: '/api/v1/qc/sample-pools/import-upload',
+      data: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    },
+    '导入客户样本模板失败',
+  )
+}
+
 export async function getManualSamplePoolItems(
   poolId: string,
   params: {

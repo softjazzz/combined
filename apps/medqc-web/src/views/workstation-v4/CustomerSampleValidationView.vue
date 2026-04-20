@@ -48,6 +48,14 @@
 
             <div class="flex shrink-0 flex-wrap gap-2 xl:justify-end">
               <a-button
+                type="primary"
+                ghost
+                class="!rounded-full"
+                @click="importModalOpen = true"
+              >
+                导入模板
+              </a-button>
+              <a-button
                 class="!rounded-full"
                 :loading="poolLoading"
                 @click="loadPools()"
@@ -237,6 +245,83 @@
       </div>
     </div>
 
+    <a-modal
+      v-model:open="importModalOpen"
+      title="导入客户样本模板"
+      :confirm-loading="importingPool"
+      ok-text="开始导入"
+      cancel-text="取消"
+      @ok="handleImportPool"
+      @cancel="resetImportForm"
+    >
+      <div class="space-y-4 pt-2">
+        <div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">
+            样本池名称
+          </div>
+          <a-input
+            v-model:value="importForm.poolName"
+            placeholder="例如：手工问题样本池-第二轮"
+            :maxlength="60"
+          />
+        </div>
+        <div class="grid gap-4 md:grid-cols-2">
+          <div>
+            <div class="mb-2 text-[13px] font-medium text-slate-700">
+              Sheet 名称
+            </div>
+            <a-input
+              v-model:value="importForm.sourceSheet"
+              placeholder="默认 Sheet2"
+              :maxlength="40"
+            />
+          </div>
+          <div>
+            <div class="mb-2 text-[13px] font-medium text-slate-700">
+              目标场景
+            </div>
+            <a-select
+              v-model:value="importForm.scene"
+              :options="sceneOptions"
+            />
+          </div>
+        </div>
+        <div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">
+            备注
+          </div>
+          <a-textarea
+            v-model:value="importForm.description"
+            :rows="3"
+            placeholder="可选，记录这次导入的说明"
+            :maxlength="200"
+          />
+        </div>
+        <div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">
+            Excel 模板
+          </div>
+          <a-upload-dragger
+            v-model:file-list="importFileList"
+            :before-upload="handleImportFileSelect"
+            :multiple="false"
+            :max-count="1"
+            accept=".xls,.xlsx"
+          >
+            <p class="ant-upload-drag-icon">
+              <InboxOutlined />
+            </p>
+            <p class="ant-upload-text">
+              点击或拖拽上传 Excel 模板
+            </p>
+            <p class="ant-upload-hint">
+              支持 .xls / .xlsx，默认读取 Sheet2。
+            </p>
+          </a-upload-dragger>
+        </div>
+      </div>
+    </a-modal>
+
     <a-drawer
       :open="detailOpen"
       width="720"
@@ -375,11 +460,13 @@
 <script setup lang="ts">
 import { computed, h, onMounted, onUnmounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import type { UploadFile, UploadProps } from 'ant-design-vue'
 import { InboxOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import type { ManualSamplePool, ManualSamplePoolRecord } from './customer-sample-validation/types'
 import {
   getManualSamplePoolRecords,
+  importManualSamplePoolByUpload,
   listManualSamplePools,
   matchManualSamplePool,
   runManualSamplePool,
@@ -398,7 +485,10 @@ const itemLoading = ref(false)
 const matchLoading = ref(false)
 const runLoading = ref(false)
 const syncLoading = ref(false)
+const importingPool = ref(false)
 const selectedRowKeys = ref<string[]>([])
+const importModalOpen = ref(false)
+const importFileList = ref<UploadFile[]>([])
 
 const pools = ref<ManualSamplePool[]>([])
 const selectedPoolId = ref<string>()
@@ -436,6 +526,12 @@ const filters = ref({
   matchStatus: undefined as string | undefined,
   includeInBatch: true,
 })
+const importForm = ref({
+  poolName: '',
+  sourceSheet: 'Sheet2',
+  description: '',
+  scene: 'running',
+})
 
 const poolOptions = computed(() =>
   pools.value.map((item) => ({
@@ -443,6 +539,11 @@ const poolOptions = computed(() =>
     value: item.id,
   })),
 )
+
+const sceneOptions = [
+  { label: '运行病历', value: 'running' },
+  { label: '终末病历', value: 'final' },
+]
 
 const coverageOptions = [
   { label: '内涵问题', value: 'llm_intrinsic' },
@@ -761,6 +862,61 @@ function resetFilters() {
   pagination.value.page = 1
   selectedRowKeys.value = []
   loadRecords()
+}
+
+function resetImportForm() {
+  importModalOpen.value = false
+  importForm.value = {
+    poolName: '',
+    sourceSheet: 'Sheet2',
+    description: '',
+    scene: 'running',
+  }
+  importFileList.value = []
+}
+
+const handleImportFileSelect: UploadProps['beforeUpload'] = (file) => {
+  importFileList.value = [
+    {
+      uid: file.uid,
+      name: file.name,
+      status: 'done',
+      size: file.size,
+      type: file.type,
+      originFileObj: file,
+    },
+  ]
+  return false
+}
+
+async function handleImportPool() {
+  const poolName = importForm.value.poolName.trim()
+  const file = importFileList.value[0]?.originFileObj
+  if (!poolName) {
+    message.warning('请先填写样本池名称')
+    return
+  }
+  if (!file) {
+    message.warning('请先上传 Excel 模板')
+    return
+  }
+  importingPool.value = true
+  const result = await importManualSamplePoolByUpload({
+    pool_name: poolName,
+    source_sheet: importForm.value.sourceSheet.trim() || 'Sheet2',
+    description: importForm.value.description.trim(),
+    scene: importForm.value.scene,
+    file,
+  })
+  importingPool.value = false
+  if (!result.success || !result.data) {
+    message.error(result.message || '导入客户样本模板失败')
+    return
+  }
+  selectedPoolId.value = result.data.id
+  resetImportForm()
+  message.success(`导入成功，共写入 ${result.data.imported_rows} 条样本`)
+  await loadPools()
 }
 
 function openRecordDetail(record: ManualSamplePoolRecord) {
