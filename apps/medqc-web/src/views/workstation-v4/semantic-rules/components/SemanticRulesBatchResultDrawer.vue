@@ -1767,9 +1767,6 @@ const isFastScreenResult = computed(() => {
     String(detail?.execution_strategy || summary?.execution_strategy || '')
       .trim()
       .toLowerCase() === 'fast_screen' ||
-    String(detail?.batch_output_mode || summary?.batch_output_mode || '')
-      .trim()
-      .toLowerCase() === 'minimal' ||
     String(detail?.rule_set_key || summary?.rule_set_key || '')
       .trim()
       .toLowerCase() === 'sc_content_fast_v1'
