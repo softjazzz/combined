@@ -1,143 +1,171 @@
 <template>
-  <div class="min-h-screen bg-slate-50 p-6">
-    <div class="mx-auto max-w-7xl space-y-6">
-      <a-card
-        :bordered="false"
-        class="rounded-3xl shadow-sm"
-      >
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div class="mb-3 flex flex-wrap items-center gap-2">
-              <a-tag color="blue">
-                运行病历
-              </a-tag>
-              <a-tag color="processing">
-                客户样本验证
-              </a-tag>
-            </div>
-            <h1 class="text-3xl font-semibold text-slate-900">
-              客户样本验证
-            </h1>
-            <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-              基于客户人工核查样本，核对系统病历同步情况，并对首批内涵问题执行 LLM
-              验证。页面重点展示人工问题、样本匹配状态和批量质控结果，不混入程序化时效问题。
-            </p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <a-button
-              class="!rounded-xl"
-              :loading="poolLoading"
-              @click="loadPools()"
-            >
-              刷新样本池
-            </a-button>
-            <a-button
-              type="primary"
-              class="!rounded-xl"
-              :disabled="!selectedPoolId"
-              :loading="matchLoading"
-              @click="handleMatchPool"
-            >
-              执行病历匹配
-            </a-button>
-            <a-button
-              type="primary"
-              ghost
-              class="!rounded-xl"
-              :disabled="!selectedPoolId || !selectedPool?.llm_intrinsic_items"
-              :loading="runLoading"
-              @click="handleRunPool"
-            >
-              发起内涵验证
-            </a-button>
-            <a-button
-              class="!rounded-xl"
-              :disabled="!selectedPool?.latest_job_id"
-              @click="openLatestJob"
-            >
-              查看最近任务
-            </a-button>
-          </div>
-        </div>
-      </a-card>
-
-      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <a-card
-          v-for="item in summaryCards"
-          :key="item.label"
-          :bordered="false"
-          class="rounded-2xl shadow-sm"
+  <main class="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
+    <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
+      <div class="mx-auto w-full max-w-[1440px] space-y-4">
+        <section
+          class="rounded-[24px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(239,246,255,0.95),rgba(255,255,255,0.98))] p-5 shadow-[0_14px_34px_rgba(148,163,184,0.16)]"
         >
-          <div class="text-sm text-slate-500">
-            {{ item.label }}
-          </div>
-          <div class="mt-3 text-3xl font-semibold text-slate-900">
-            {{ item.value }}
-          </div>
-          <div
-            v-if="item.help"
-            class="mt-2 text-xs text-slate-400"
-          >
-            {{ item.help }}
-          </div>
-        </a-card>
-      </div>
-
-      <a-card
-        :bordered="false"
-        class="rounded-3xl shadow-sm"
-      >
-        <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <div class="space-y-4">
-            <div>
-              <div class="mb-2 text-sm font-medium text-slate-700">
-                样本池
+          <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div class="min-w-0 space-y-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <a-tag color="blue">
+                  运行病历
+                </a-tag>
+                <a-tag color="processing">
+                  客户样本验证
+                </a-tag>
+                <a-tag v-if="selectedPool?.latest_job_status">
+                  {{ getBatchJobStatusText(selectedPool.latest_job_status) }}
+                </a-tag>
               </div>
-              <a-select
-                v-model:value="selectedPoolId"
-                class="w-full"
-                size="large"
-                :loading="poolLoading"
-                :options="poolOptions"
-                placeholder="请选择样本池"
-                @change="handlePoolChange"
-              />
+              <div>
+                <h1 class="text-[28px] font-bold leading-tight text-slate-900">
+                  客户样本验证
+                </h1>
+                <p class="mt-2 max-w-4xl text-[14px] leading-7 text-slate-600">
+                  先核对人工问题样本与系统病历的匹配关系，再对首批内涵问题执行 LLM
+                  验证。页面只展示可直接用于客户演示的样本状态、验证任务和命中结果。
+                </p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
+                <span class="rounded-full border border-slate-200 bg-white px-3 py-1">
+                  当前样本池：{{ selectedPool?.name || '未选择' }}
+                </span>
+                <span
+                  v-if="selectedPool?.source_sheet"
+                  class="rounded-full border border-slate-200 bg-white px-3 py-1"
+                >
+                  来源：{{ selectedPool.source_sheet }}
+                </span>
+                <span
+                  v-if="selectedPool?.latest_job_id"
+                  class="rounded-full border border-slate-200 bg-white px-3 py-1"
+                >
+                  最近任务：{{ selectedPool.latest_job_id }}
+                </span>
+              </div>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div class="text-sm font-medium text-slate-700">
-                当前样本池
-              </div>
-              <div
-                v-if="selectedPool"
-                class="mt-3 space-y-2 text-sm text-slate-600"
+
+            <div class="flex shrink-0 flex-wrap gap-2 xl:justify-end">
+              <a-button
+                class="!rounded-full"
+                :loading="poolLoading"
+                @click="loadPools()"
               >
-                <div><span class="text-slate-400">名称：</span>{{ selectedPool.name }}</div>
-                <div><span class="text-slate-400">来源：</span>{{ selectedPool.source_sheet }}</div>
-                <div><span class="text-slate-400">文件：</span>{{ selectedPool.source_file }}</div>
-                <div>
-                  <span class="text-slate-400">最近任务：</span>{{ selectedPool.latest_job_id || '暂无' }}
+                刷新样本池
+              </a-button>
+              <a-button
+                type="primary"
+                class="!rounded-full"
+                :disabled="!selectedPoolId"
+                :loading="matchLoading"
+                @click="handleMatchPool"
+              >
+                执行病历匹配
+              </a-button>
+              <a-button
+                type="primary"
+                ghost
+                class="!rounded-full"
+                :disabled="!selectedPoolId || !selectedPool?.llm_intrinsic_items"
+                :loading="runLoading"
+                @click="handleRunPool"
+              >
+                发起内涵验证
+              </a-button>
+              <a-button
+                class="!rounded-full"
+                :disabled="!selectedPool?.latest_job_id"
+                @click="openLatestJob"
+              >
+                查看最近任务
+              </a-button>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <a-card
+            v-for="item in summaryCards"
+            :key="item.label"
+            :bordered="false"
+            class="rounded-[18px] border border-slate-200/80 shadow-[0_10px_24px_rgba(148,163,184,0.12)]"
+          >
+            <div class="text-[13px] font-medium text-slate-500">
+              {{ item.label }}
+            </div>
+            <div class="mt-3 text-[34px] font-bold leading-none text-slate-900">
+              {{ item.value }}
+            </div>
+            <div
+              v-if="item.help"
+              class="mt-3 text-[12px] leading-5 text-slate-400"
+            >
+              {{ item.help }}
+            </div>
+          </a-card>
+        </section>
+
+        <section
+          class="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
+        >
+          <div class="border-b border-slate-200/80 px-5 py-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div class="min-w-0">
+                <div class="text-[17px] font-semibold text-slate-900">
+                  样本明细
+                </div>
+                <div class="mt-1 text-[13px] leading-6 text-slate-500">
+                  只把人工问题样本中的内涵问题纳入首轮验证。程序化和暂不支持问题继续保留在样本池中，不进入本轮
+                  LLM 批量验证。
                 </div>
               </div>
-              <div
-                v-else
-                class="mt-3 text-sm text-slate-400"
-              >
-                暂无样本池，请先导入 Sheet2。
+              <div class="grid gap-2 text-[13px] text-slate-500 sm:grid-cols-2 xl:min-w-[420px]">
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div class="text-[12px] text-slate-400">
+                    当前样本池
+                  </div>
+                  <div class="mt-1 font-medium text-slate-700">
+                    {{ selectedPool?.name || '未选择' }}
+                  </div>
+                </div>
+                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div class="text-[12px] text-slate-400">
+                    当前任务
+                  </div>
+                  <div class="mt-1 font-medium text-slate-700">
+                    {{ selectedPool?.latest_job_id ? '已创建' : '暂无任务' }}
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="rounded-2xl border border-slate-200 bg-white p-4">
-              <div class="text-sm font-medium text-slate-700">
-                筛选条件
-              </div>
-              <div class="mt-3 space-y-3">
+          </div>
+
+          <div class="space-y-4 px-5 py-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div class="flex flex-1 flex-col gap-3 xl:flex-row xl:items-center">
+                <a-select
+                  v-model:value="selectedPoolId"
+                  class="w-full xl:max-w-[280px]"
+                  size="large"
+                  :loading="poolLoading"
+                  :options="poolOptions"
+                  placeholder="请选择样本池"
+                  @change="handlePoolChange"
+                />
                 <a-input
                   v-model:value="filters.query"
+                  class="w-full xl:min-w-[320px] xl:flex-1"
                   size="large"
                   placeholder="搜索患者/住院号/人工问题"
                   @press-enter="loadItems()"
                 />
+              </div>
+
+              <div class="flex flex-wrap gap-2 xl:justify-end">
                 <a-select
                   v-model:value="filters.coverageType"
+                  class="min-w-[140px]"
                   size="large"
                   allow-clear
                   placeholder="覆盖类型"
@@ -145,42 +173,46 @@
                 />
                 <a-select
                   v-model:value="filters.matchStatus"
+                  class="min-w-[140px]"
                   size="large"
                   allow-clear
                   placeholder="匹配状态"
                   :options="matchStatusOptions"
                 />
-                <a-switch
-                  v-model:checked="filters.includeInBatch"
-                  checked-children="仅首批"
-                  un-checked-children="全部"
-                />
-                <div class="flex gap-2">
-                  <a-button
-                    type="primary"
-                    class="!rounded-xl"
-                    @click="loadItems()"
-                  >
-                    查询
-                  </a-button>
-                  <a-button
-                    class="!rounded-xl"
-                    @click="resetFilters"
-                  >
-                    重置
-                  </a-button>
+                <div
+                  class="flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
+                >
+                  <span class="mr-2">仅首批</span>
+                  <a-switch v-model:checked="filters.includeInBatch" />
                 </div>
+                <a-button
+                  type="primary"
+                  class="!rounded-full"
+                  @click="loadItems()"
+                >
+                  查询
+                </a-button>
+                <a-button
+                  class="!rounded-full"
+                  @click="resetFilters"
+                >
+                  重置
+                </a-button>
               </div>
             </div>
-          </div>
 
-          <div class="space-y-4">
             <div
-              class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+              class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[13px] leading-6 text-slate-600"
             >
-              首批只验证内涵问题，优先覆盖入院记录、首次病程、日常病程、会诊执行和上级查房内容质量。程序化/时效类问题保留在样本池中，但不进入本轮
-              LLM 批量验证。
+              <div class="font-medium text-slate-700">
+                当前口径
+              </div>
+              <div class="mt-1">
+                首批只验证内涵问题，优先覆盖首次病程、日常病程、会诊执行和上级查房。未匹配病历或
+                running bundle 未就绪的样本不会进入批量验证。
+              </div>
             </div>
+
             <a-table
               row-key="id"
               size="middle"
@@ -189,10 +221,11 @@
               :data-source="items"
               :pagination="paginationConfig"
               :scroll="{ x: 1280 }"
+              :locale="{ emptyText: tableEmptyText }"
             />
           </div>
-        </div>
-      </a-card>
+        </section>
+      </div>
     </div>
 
     <a-drawer
@@ -298,12 +331,13 @@
       :get-batch-job-status-text="getBatchJobStatusText"
       :format-date-time="formatDateTime"
     />
-  </div>
+  </main>
 </template>
 
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import { InboxOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType } from 'ant-design-vue'
 import type { ManualSamplePool, ManualSamplePoolItem } from './customer-sample-validation/types'
 import {
@@ -371,14 +405,17 @@ const matchStatusOptions = [
 const summaryCards = computed(() => {
   const pool = selectedPool.value
   return [
-    { label: '样本总数', value: pool?.total_items ?? 0 },
-    { label: '内涵样本', value: pool?.llm_intrinsic_items ?? 0 },
-    { label: '已匹配病历', value: pool?.matched_items ?? 0 },
-    { label: '可运行样本', value: pool?.ready_items ?? 0, help: 'running bundle 就绪' },
+    { label: '样本总数', value: pool?.total_items ?? 0, help: 'Sheet2 导入后的样本总量' },
     {
-      label: '最近任务',
-      value: pool?.latest_job_id ? '已创建' : '暂无',
-      help: pool?.latest_job_id || '',
+      label: '内涵样本',
+      value: pool?.llm_intrinsic_items ?? 0,
+      help: '当前纳入 LLM 验证的问题样本',
+    },
+    { label: '已匹配病历', value: pool?.matched_items ?? 0, help: '已映射到系统病历主键的样本数' },
+    {
+      label: '可运行样本',
+      value: pool?.ready_items ?? 0,
+      help: 'running bundle 已就绪，可直接发起验证',
     },
   ]
 })
@@ -396,6 +433,46 @@ const paginationConfig = computed(() => ({
   },
 }))
 
+const tableEmptyText = computed(() =>
+  h(
+    'div',
+    {
+      class: 'flex min-h-[220px] flex-col items-center justify-center px-6 py-10 text-center',
+    },
+    [
+      h(InboxOutlined, {
+        class: 'mb-3 text-[36px] text-slate-300',
+      }),
+      h('div', { class: 'text-[15px] font-semibold text-slate-700' }, emptyTitle.value),
+      h(
+        'div',
+        { class: 'mt-2 max-w-[420px] text-[13px] leading-6 text-slate-500' },
+        emptyDescription.value,
+      ),
+    ],
+  ),
+)
+
+const emptyTitle = computed(() => {
+  if (!selectedPoolId.value) return '请先选择样本池'
+  if (!selectedPool.value?.matched_items) return '当前还没有匹配成功的病历'
+  if (!pagination.value.total) return '当前筛选条件下没有样本'
+  return '暂无样本数据'
+})
+
+const emptyDescription = computed(() => {
+  if (!selectedPoolId.value) {
+    return '先选择一个客户样本池，再查看内涵问题样本和匹配状态。'
+  }
+  if (!selectedPool.value?.matched_items) {
+    return '请先执行病历匹配，并确认当前环境已经同步到客户真实病历数据。'
+  }
+  if (!pagination.value.total) {
+    return '可以放宽覆盖类型、匹配状态或关闭“仅首批”后重新查询。'
+  }
+  return '当前没有可展示的样本。'
+})
+
 const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
   {
     title: '行号',
@@ -405,7 +482,7 @@ const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
   {
     title: '患者 / 住院号',
     key: 'patient',
-    width: 180,
+    width: 190,
     customRender: ({ record }) =>
       h('div', { class: 'space-y-1' }, [
         h('div', { class: 'font-medium text-slate-900' }, record.patient_name || '-'),
@@ -426,7 +503,14 @@ const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
     title: '覆盖类型',
     dataIndex: 'coverage_type',
     width: 120,
-    customRender: ({ value }) => coverageLabel(String(value || '')),
+    customRender: ({ value }) =>
+      h(
+        'span',
+        {
+          class: coverageTagClass(String(value || '')),
+        },
+        coverageLabel(String(value || '')),
+      ),
   },
   {
     title: '候选规则',
@@ -437,13 +521,21 @@ const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
   {
     title: '匹配状态',
     dataIndex: 'match_status',
-    width: 110,
-    customRender: ({ value }) => matchStatusLabel(String(value || '')),
+    width: 120,
+    customRender: ({ value }) =>
+      h(
+        'span',
+        {
+          class: matchStatusTagClass(String(value || '')),
+        },
+        matchStatusLabel(String(value || '')),
+      ),
   },
   {
     title: 'bundle',
     dataIndex: 'bundle_status',
-    width: 100,
+    width: 120,
+    customRender: ({ value }) => value || '-',
   },
   {
     title: '操作',
@@ -481,11 +573,31 @@ function coverageLabel(value: string): string {
   return value || '-'
 }
 
+function coverageTagClass(value: string): string {
+  if (value === 'llm_intrinsic') {
+    return 'inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700'
+  }
+  if (value === 'programmatic') {
+    return 'inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700'
+  }
+  return 'inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600'
+}
+
 function matchStatusLabel(value: string): string {
   if (value === 'matched') return '已匹配'
   if (value === 'ambiguous') return '匹配歧义'
   if (value === 'unmatched') return '未匹配'
   return value || '-'
+}
+
+function matchStatusTagClass(value: string): string {
+  if (value === 'matched') {
+    return 'inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700'
+  }
+  if (value === 'ambiguous') {
+    return 'inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700'
+  }
+  return 'inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700'
 }
 
 async function loadPools() {
@@ -509,6 +621,7 @@ async function loadPools() {
 async function loadItems() {
   if (!selectedPoolId.value) {
     items.value = []
+    pagination.value.total = 0
     return
   }
   itemLoading.value = true
