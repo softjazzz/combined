@@ -58,6 +58,22 @@
               <div class="status-hero-desc">
                 {{ statusHero.description }}
               </div>
+              <div class="status-hero-jobline">
+                <div class="status-hero-job-name">
+                  {{ batchJobDetail.rule_name || batchJobDetail.rule_code }}
+                </div>
+                <div class="status-hero-job-meta">
+                  {{ scopeLabelMap[batchJobDetail.scope] || batchJobDetail.scope }} ·
+                  {{ formatDateTime(batchJobDetail.created_at) }}
+                </div>
+              </div>
+              <div class="rule-set-strip rule-set-strip--hero">
+                <span>规则集：{{ ruleSetDisplay.name }}</span>
+                <span>规则数：{{ ruleSetDisplay.ruleCount }}</span>
+                <span>策略：{{ ruleSetDisplay.qualityProfile }}</span>
+                <span>分桶：{{ ruleSetDisplay.bucketStrategy }}</span>
+                <span v-if="ruleSetDisplay.refinedCount > 0">精审：{{ ruleSetDisplay.refinedCount }}</span>
+              </div>
               <div
                 v-if="statusHero.meta.length"
                 class="status-hero-meta"
@@ -79,36 +95,6 @@
             <div class="status-hero-side-label">
               {{ progressSummary?.stepLabel || '准备中' }}
             </div>
-          </div>
-        </div>
-
-        <div
-          v-if="batchJobDetail"
-          class="drawer-card"
-        >
-          <div class="drawer-card-top">
-            <div>
-              <div class="drawer-rule-name">
-                {{ batchJobDetail.rule_name || batchJobDetail.rule_code }}
-              </div>
-              <div class="drawer-meta">
-                {{ scopeLabelMap[batchJobDetail.scope] || batchJobDetail.scope }} ·
-                {{ formatDateTime(batchJobDetail.created_at) }}
-              </div>
-            </div>
-          </div>
-          <div
-            v-if="batchJobDetail.error_message"
-            class="drawer-error"
-          >
-            {{ batchJobDetail.error_message }}
-          </div>
-          <div class="rule-set-strip">
-            <span>规则集：{{ ruleSetDisplay.name }}</span>
-            <span>规则数：{{ ruleSetDisplay.ruleCount }}</span>
-            <span>策略：{{ ruleSetDisplay.qualityProfile }}</span>
-            <span>分桶：{{ ruleSetDisplay.bucketStrategy }}</span>
-            <span v-if="ruleSetDisplay.refinedCount > 0">精审：{{ ruleSetDisplay.refinedCount }}</span>
           </div>
         </div>
 
@@ -159,43 +145,45 @@
               </span>
             </div>
           </div>
-          <div class="issue-focus-summary">
-            {{ issueFocusSummary }}
-          </div>
-          <div class="issue-filter-bar">
-            <a-input
-              v-model:value="issueFilter.keyword"
-              allow-clear
-              placeholder="搜索规则/病历号/结论"
-              class="issue-filter-item issue-filter-item--keyword"
-            />
-            <a-select
-              v-model:value="issueFilter.documentType"
-              allow-clear
-              placeholder="文书域"
-              class="issue-filter-item"
-              :options="issueDocumentTypeOptions"
-            />
-            <a-select
-              v-model:value="issueFilter.executionDomain"
-              allow-clear
-              placeholder="规则域"
-              class="issue-filter-item"
-              :options="issueExecutionDomainOptions"
-            />
-            <a-select
-              v-model:value="issueFilter.defectLevel"
-              allow-clear
-              placeholder="缺陷等级"
-              class="issue-filter-item"
-              :options="issueDefectLevelOptions"
-            />
-            <a-button
-              size="small"
-              @click="resetIssueFilters"
-            >
-              重置
-            </a-button>
+          <div class="issue-toolbar">
+            <div class="issue-focus-summary">
+              {{ issueFocusSummary }}
+            </div>
+            <div class="issue-filter-bar">
+              <a-input
+                v-model:value="issueFilter.keyword"
+                allow-clear
+                placeholder="搜索规则/病历号/结论"
+                class="issue-filter-item issue-filter-item--keyword"
+              />
+              <a-select
+                v-model:value="issueFilter.documentType"
+                allow-clear
+                placeholder="文书域"
+                class="issue-filter-item"
+                :options="issueDocumentTypeOptions"
+              />
+              <a-select
+                v-model:value="issueFilter.executionDomain"
+                allow-clear
+                placeholder="规则域"
+                class="issue-filter-item"
+                :options="issueExecutionDomainOptions"
+              />
+              <a-select
+                v-model:value="issueFilter.defectLevel"
+                allow-clear
+                placeholder="缺陷等级"
+                class="issue-filter-item"
+                :options="issueDefectLevelOptions"
+              />
+              <a-button
+                size="small"
+                @click="resetIssueFilters"
+              >
+                重置
+              </a-button>
+            </div>
           </div>
           <div
             v-if="selectedClusterKey || activeRuleFilterLabel"
@@ -222,44 +210,90 @@
             </a-button>
           </div>
           <div
-            v-if="topIssueCards.length"
+            v-if="businessIssueCards.length"
             class="issue-conclusion-list"
           >
             <div
-              v-for="item in topIssueCards"
+              v-for="item in businessIssueCards"
               :key="`conclusion-${resolveIssueStableKey(item)}`"
               class="issue-conclusion-card"
             >
               <div class="issue-conclusion-head">
-                <span class="issue-conclusion-title">
-                  {{ item.rule_code || item.rule_id || '未知规则' }} ·
-                  {{ item.rule_name || '未知质控点' }}
-                </span>
+                <div class="issue-conclusion-head-main">
+                  <span class="issue-conclusion-title">
+                    {{ item.rule_code || item.rule_id || '未知规则' }} ·
+                    {{ item.rule_name || '未知质控点' }}
+                  </span>
+                  <div class="issue-conclusion-meta">
+                    <span>{{ item.record_id || '-' }}</span>
+                    <span>{{ item.document_type || '未知文书域' }}</span>
+                    <span>{{ item.rule_family || 'general' }}</span>
+                    <span>{{ item.defect_level || '未分级' }}</span>
+                    <span v-if="item.refined">单条精审</span>
+                  </div>
+                </div>
                 <a-tag class="aggregation-count-tag">
                   {{ resolveStatusText(item.status) }}
                 </a-tag>
               </div>
-              <div class="issue-conclusion-meta">
-                <span>{{ item.record_id || '-' }}</span>
-                <span>{{ item.document_type || '未知文书域' }}</span>
-                <span>{{ item.rule_family || 'general' }}</span>
-                <span>{{ item.defect_level || '未分级' }}</span>
-                <span v-if="item.refined">单条精审</span>
+              <div class="issue-conclusion-summary">
+                <div class="issue-conclusion-row">
+                  <span class="issue-conclusion-label">结论</span>
+                  <span>
+                    {{
+                      isIssueExpanded(item)
+                        ? item.findings || '无'
+                        : truncateText(item.findings, 88)
+                    }}
+                  </span>
+                </div>
+                <div class="issue-conclusion-row">
+                  <span class="issue-conclusion-label">证据</span>
+                  <span>
+                    {{
+                      isIssueExpanded(item)
+                        ? item.evidence || '无'
+                        : truncateText(item.evidence, 96)
+                    }}
+                  </span>
+                </div>
+                <div class="issue-conclusion-row">
+                  <span class="issue-conclusion-label">建议</span>
+                  <span>
+                    {{
+                      isIssueExpanded(item)
+                        ? item.suggestion || '无'
+                        : truncateText(item.suggestion, 72)
+                    }}
+                  </span>
+                </div>
               </div>
-              <div class="issue-conclusion-row">
-                <span class="issue-conclusion-label">结论：</span>
-                <span>{{ item.findings || '无' }}</span>
-              </div>
-              <div class="issue-conclusion-row">
-                <span class="issue-conclusion-label">证据：</span>
-                <span>{{ item.evidence || '无' }}</span>
-              </div>
-              <div class="issue-conclusion-row">
-                <span class="issue-conclusion-label">建议：</span>
-                <span>{{ item.suggestion || '无' }}</span>
+              <div class="issue-conclusion-actions">
+                <a-button
+                  type="link"
+                  size="small"
+                  @click="toggleIssueExpanded(item)"
+                >
+                  {{ isIssueExpanded(item) ? '收起详情' : '展开详情' }}
+                </a-button>
               </div>
             </div>
           </div>
+          <a-empty
+            v-else-if="issueViewMode === 'business'"
+            description="暂无问题/待复核明细"
+          />
+          <a-pagination
+            v-if="
+              issueViewMode === 'business' && displayIssueItems.length > issuePagination.pageSize
+            "
+            v-model:current="issuePagination.current"
+            :page-size="issuePagination.pageSize"
+            :total="displayIssueItems.length"
+            size="small"
+            class="issue-pagination"
+            :show-size-changer="false"
+          />
           <a-table
             v-if="issueViewMode === 'advanced'"
             :columns="issueColumns"
@@ -718,6 +752,7 @@ const issuePagination = reactive({
   pageSize: 8,
   showSizeChanger: false,
 })
+const expandedIssueKeys = ref<string[]>([])
 
 const batchJobDebugSnapshot = computed(() => props.batchJobDebugSnapshot || null)
 
@@ -809,6 +844,7 @@ watch(
     selectedDebugRuleJobId.value = ''
     issueViewMode.value = 'business'
     advancedSectionKeys.value = []
+    expandedIssueKeys.value = []
     resetIssueFilters()
   },
 )
@@ -975,7 +1011,10 @@ const displayIssueItems = computed<SichuanBatchIssueItem[]>(() => {
   return items.filter((item) => matchIssueItemWithCluster(item, cluster))
 })
 
-const topIssueCards = computed(() => displayIssueItems.value.slice(0, 5))
+const businessIssueCards = computed(() => {
+  const startIndex = (issuePagination.current - 1) * issuePagination.pageSize
+  return displayIssueItems.value.slice(startIndex, startIndex + issuePagination.pageSize)
+})
 
 const linkedIssueRowKey = computed(() => {
   if (!selectedCluster.value) return ''
@@ -1229,7 +1268,7 @@ const primarySummaryCards = computed(() => {
 
 const focusedSummaryCards = computed(() =>
   primarySummaryCards.value.filter((item) =>
-    ['total', 'rules', 'issues', 'uncertain', 'focus', 'duration'].includes(item.key),
+    ['total', 'issues', 'uncertain', 'focus'].includes(item.key),
   ),
 )
 
@@ -1395,6 +1434,19 @@ function resolveIssueStableKey(item?: SichuanBatchIssueItem) {
     item.visit_id || '',
     item.trace_id || '',
   ].join('|')
+}
+
+function isIssueExpanded(item: SichuanBatchIssueItem) {
+  const key = resolveIssueStableKey(item)
+  return expandedIssueKeys.value.includes(key)
+}
+
+function toggleIssueExpanded(item: SichuanBatchIssueItem) {
+  const key = resolveIssueStableKey(item)
+  if (!key) return
+  expandedIssueKeys.value = expandedIssueKeys.value.includes(key)
+    ? expandedIssueKeys.value.filter((itemKey) => itemKey !== key)
+    : [...expandedIssueKeys.value, key]
 }
 
 function formatProcessingTime(seconds: number) {
@@ -1616,10 +1668,10 @@ watch(
   align-items: stretch;
   justify-content: space-between;
   gap: 16px;
-  border-radius: 18px;
+  border-radius: 22px;
   border: 1px solid #dbeafe;
-  padding: 16px 18px;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+  padding: 18px 20px;
+  box-shadow: 0 14px 34px rgba(148, 163, 184, 0.16);
 }
 
 .status-hero--queued,
@@ -1683,15 +1735,32 @@ watch(
 .status-hero-desc {
   margin-top: 6px;
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.65;
   color: #334155;
+}
+
+.status-hero-jobline {
+  margin-top: 12px;
+}
+
+.status-hero-job-name {
+  font-size: 16px;
+  line-height: 1.45;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.status-hero-job-meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
 }
 
 .status-hero-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .status-hero-meta-item {
@@ -1705,8 +1774,8 @@ watch(
 }
 
 .status-hero-side {
-  min-width: 108px;
-  border-radius: 16px;
+  min-width: 124px;
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(148, 163, 184, 0.18);
   display: flex;
@@ -1718,7 +1787,7 @@ watch(
 }
 
 .status-hero-percent {
-  font-size: 28px;
+  font-size: 32px;
   line-height: 1;
   font-weight: 800;
   color: #0f172a;
@@ -1742,25 +1811,6 @@ watch(
   margin-top: 8px;
 }
 
-.drawer-card-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.drawer-rule-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.drawer-meta {
-  font-size: 12px;
-  color: #64748b;
-  margin-top: 4px;
-}
-
 .drawer-error {
   margin-top: 10px;
   border-radius: 12px;
@@ -1772,10 +1822,13 @@ watch(
 }
 
 .rule-set-strip {
-  margin-top: 10px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.rule-set-strip--hero {
+  margin-top: 10px;
 }
 
 .rule-set-strip span {
@@ -1794,7 +1847,7 @@ watch(
 }
 
 .summary-grid-primary {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .summary-grid-secondary {
@@ -1806,20 +1859,21 @@ watch(
 }
 
 .drawer-summary .summary-card {
-  border-radius: 16px;
+  border-radius: 18px;
   border: 1px solid #e2e8f0;
   background: #fff;
-  padding: 12px 14px;
+  padding: 14px 16px;
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.1);
 }
 
 .summary-label {
-  font-size: 11px;
+  font-size: 12px;
   color: #94a3b8;
 }
 
 .summary-value {
   margin-top: 4px;
-  font-size: 18px;
+  font-size: 24px;
   font-weight: 700;
   color: #0f172a;
 }
@@ -1840,30 +1894,45 @@ watch(
   flex-wrap: wrap;
 }
 
-.issue-conclusion-list {
+.issue-toolbar {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-bottom: 12px;
 }
 
+.issue-conclusion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
 .issue-conclusion-card {
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #f8fafc;
-  padding: 10px 12px;
+  border-radius: 16px;
+  background: #fff;
+  padding: 14px 16px;
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08);
 }
 
 .issue-conclusion-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.issue-conclusion-head-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .issue-conclusion-title {
-  font-size: 13px;
+  display: block;
+  font-size: 14px;
+  line-height: 1.5;
   color: #0f172a;
   font-weight: 600;
 }
@@ -1872,7 +1941,7 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 0 0 8px;
+  margin: 8px 0 0;
 }
 
 .issue-conclusion-meta span {
@@ -1883,14 +1952,30 @@ watch(
   font-size: 11px;
 }
 
+.issue-conclusion-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .issue-conclusion-row {
   font-size: 12px;
   color: #334155;
-  line-height: 1.6;
+  line-height: 1.7;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.issue-conclusion-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .issue-conclusion-label {
   color: #64748b;
+  font-weight: 500;
 }
 
 .drawer-section-title {
@@ -1925,21 +2010,19 @@ watch(
 }
 
 .issue-focus-summary {
-  margin-bottom: 12px;
   border-radius: 12px;
-  border: 1px solid #dbeafe;
-  background: #f8fbff;
-  color: #1e3a8a;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  background: rgba(248, 250, 252, 0.9);
+  color: #475569;
   font-size: 12px;
-  line-height: 1.7;
-  padding: 10px 12px;
+  line-height: 1.6;
+  padding: 9px 12px;
 }
 
 .issue-filter-bar {
   display: grid;
   grid-template-columns: minmax(160px, 1.4fr) repeat(3, minmax(90px, 1fr)) auto;
   gap: 8px;
-  margin-bottom: 10px;
 }
 
 .issue-filter-item {
@@ -2083,7 +2166,7 @@ watch(
 }
 
 .aggregation-active-tip {
-  margin-top: 10px;
+  margin-bottom: 12px;
   border-radius: 10px;
   border: 1px solid #dbeafe;
   background: #eff6ff;
@@ -2093,6 +2176,11 @@ watch(
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
+}
+
+.issue-pagination {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .drawer-advanced-collapse {
@@ -2238,6 +2326,11 @@ watch(
 
   .issue-filter-bar {
     grid-template-columns: 1fr;
+  }
+
+  .issue-conclusion-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }
 
