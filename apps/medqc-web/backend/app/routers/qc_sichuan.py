@@ -1316,6 +1316,14 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             or metadata.get("document_type")
                             or document_type
                         ),
+                        "target_document_type": str(
+                            eval_item.get("target_document_type")
+                            or metadata.get("target_document_type")
+                            or eval_item.get("_document_type")
+                            or eval_item.get("document_type")
+                            or metadata.get("document_type")
+                            or document_type
+                        ),
                         "defect_level": str((rule or {}).get("defect_level") or ""),
                         "llm_fallback": bool(metadata.get("llm_fallback") is True),
                     }

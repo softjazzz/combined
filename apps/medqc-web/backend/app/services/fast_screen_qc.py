@@ -348,6 +348,13 @@ async def run_final_fast_screen(
             batch_output_mode=batch_output_mode_normalized,
         )
         pack_results = list(evaluated.get("results") or [])
+        for item in pack_results:
+            if not isinstance(item, dict):
+                continue
+            item["_document_type"] = pack.document_type
+            metadata = item.get("metadata")
+            if isinstance(metadata, dict):
+                metadata["target_document_type"] = pack.document_type
         results.extend(pack_results)
         total_tokens += int(evaluated.get("tokens_used") or 0)
         total_prompt_tokens += int(evaluated.get("prompt_tokens") or 0)

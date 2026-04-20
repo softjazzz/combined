@@ -181,6 +181,7 @@ export interface SichuanBatchIssueItem {
   rule_family?: string
   cost_class?: string
   document_type?: string
+  target_document_type?: string
   defect_level?: string
   llm_fallback?: boolean
   quality_profile?: string

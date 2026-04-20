@@ -208,7 +208,9 @@
                   </span>
                   <div class="issue-conclusion-meta">
                     <span>{{ item.record_id || '-' }}</span>
-                    <span>{{ item.document_type || '未知文书域' }}</span>
+                    <span>{{
+                      item.target_document_type || item.document_type || '未知文书域'
+                    }}</span>
                     <span>{{ item.rule_family || 'general' }}</span>
                     <span>{{ item.defect_level || '未分级' }}</span>
                     <span v-if="item.refined">单条精审</span>
@@ -688,7 +690,11 @@
           </div>
           <div class="deep-review-meta">
             <span>{{ selectedDeepReviewIssue.record_id || '-' }}</span>
-            <span>{{ selectedDeepReviewIssue.document_type || '未知文书域' }}</span>
+            <span>{{
+              selectedDeepReviewIssue.target_document_type ||
+                selectedDeepReviewIssue.document_type ||
+                '未知文书域'
+            }}</span>
             <span>{{ selectedDeepReviewIssue.rule_family || 'general' }}</span>
             <span>{{ selectedDeepReviewIssue.defect_level || '未分级' }}</span>
             <span v-if="selectedDeepReviewIssue.refined">单条精审</span>
@@ -845,7 +851,14 @@ const issueColumns = computed(() => {
       customRender: ({ text }: { text?: string }) =>
         h('span', { title: text || '' }, truncateText(text, 68)),
     },
-    { title: '文书域', dataIndex: 'document_type', key: 'document_type', width: 108 },
+    {
+      title: '文书域',
+      dataIndex: 'target_document_type',
+      key: 'target_document_type',
+      width: 108,
+      customRender: ({ record }: { record: SichuanBatchIssueItem }) =>
+        record.target_document_type || record.document_type || '-',
+    },
     { title: '规则域', dataIndex: 'execution_domain', key: 'execution_domain', width: 112 },
     { title: '规则族', dataIndex: 'rule_family', key: 'rule_family', width: 128 },
     { title: '缺陷等级', dataIndex: 'defect_level', key: 'defect_level', width: 110 },
