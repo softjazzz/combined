@@ -81,6 +81,40 @@ export async function matchManualSamplePool(poolId: string) {
   )
 }
 
+export async function syncManualSamplePoolRecords(
+  poolId: string,
+  payload?: {
+    only_intrinsic?: boolean
+    include_in_batch_1?: boolean
+    table_groups?: string[]
+  },
+) {
+  return requestEnvelope<{
+    pool_id: string
+    matched: number
+    ambiguous: number
+    unmatched: number
+    eligible_visits: number
+    total_rows_pulled: number
+    total_rows_upserted: number
+    sync_group_ids: string[]
+    missing_group_ids: string[]
+    synced_tables: Array<{
+      table_name: string
+      source_table: string
+      rows_pulled: number
+      rows_upserted: number
+    }>
+  }>(
+    {
+      method: 'POST',
+      url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}/sync-records`,
+      data: payload || {},
+    },
+    '同步样本病历失败',
+  )
+}
+
 export async function runManualSamplePool(
   poolId: string,
   payload?: {

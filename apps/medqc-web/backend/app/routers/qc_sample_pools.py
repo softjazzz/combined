@@ -56,6 +56,21 @@ class SamplePoolRunRequest(BaseModel):
     max_tokens: Optional[int] = None
 
 
+class SamplePoolSyncRequest(BaseModel):
+    only_intrinsic: bool = Field(default=True, description="只同步内涵样本")
+    include_in_batch_1: bool = Field(default=True, description="只同步首批样本")
+    table_groups: list[str] = Field(
+        default_factory=lambda: [
+            "core_8",
+            "document_extended",
+            "diagnosis_extended",
+            "orders_prescriptions",
+            "exam_lab_pathology",
+        ],
+        description="同步表分组",
+    )
+
+
 @router.get("")
 async def list_sample_pools(
     request: Request,
@@ -171,6 +186,34 @@ async def match_sample_pool(
     return success_response(
         data=result,
         message="客户样本病历匹配完成",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/{pool_id}/sync-records")
+async def sync_sample_pool_records(
+    request: Request,
+    pool_id: str,
+    payload: SamplePoolSyncRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    pool = _service().get_pool(pool_id=pool_id)
+    if not pool:
+        raise HTTPException(status_code=404, detail="样本池不存在")
+    try:
+        result = _service().sync_pool_records(
+            pool_id=pool_id,
+            only_intrinsic=payload.only_intrinsic,
+            include_in_batch_1=payload.include_in_batch_1,
+            table_groups=payload.table_groups,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"样本病历同步失败: {exc}") from exc
+    return success_response(
+        data=result,
+        message="样本病历定向同步完成",
         trace_id=get_trace_id(request),
     )
 

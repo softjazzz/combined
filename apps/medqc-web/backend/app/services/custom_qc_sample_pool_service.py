@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional, Sequence
+import psycopg2
+import psycopg2.extras
 
 import sqlalchemy as sa
 from sqlalchemy import MetaData, Table, and_, desc, func, or_, select, update
@@ -14,6 +16,16 @@ from sqlalchemy.orm import Session
 
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import MedicalRecordFrontpage
+from .bundles.assembly import refresh_scene_bundles_for_rows
+from .etl_sync import (
+    expand_table_groups,
+    fetch_remote_rows_by_visit_keys,
+    get_remote_db_url,
+    list_sync_tables,
+    load_db_config,
+    upsert_to_local,
+)
+from .visit_index_service import ingest_sync_rows
 
 
 def _now_utc() -> datetime:
@@ -289,6 +301,34 @@ def _score_candidate(
     return score
 
 
+def _score_remote_candidate(
+    *,
+    candidate: Dict[str, Any],
+    patient_name: str,
+    department: str,
+    qc_date_value: Optional[date],
+) -> int:
+    score = 0
+    row_name = _safe_text(candidate.get("name"))
+    row_department = _safe_text(
+        candidate.get("admission_dept_name") or candidate.get("discharge_dept_name") or candidate.get("dept_name")
+    )
+    if patient_name and row_name == patient_name:
+        score += 100
+    if department and row_department == department:
+        score += 50
+    if qc_date_value:
+        admission_date = _parse_date(candidate.get("admission_datetime"))
+        discharge_date = _parse_date(candidate.get("discharge_datetime"))
+        if admission_date and discharge_date and admission_date <= qc_date_value <= discharge_date:
+            score += 40
+        elif admission_date:
+            score += max(0, 15 - abs((qc_date_value - admission_date).days))
+        elif discharge_date:
+            score += max(0, 15 - abs((qc_date_value - discharge_date).days))
+    return score
+
+
 @lru_cache(maxsize=1)
 def _sample_pools_table() -> Table:
     if engine is None:
@@ -376,6 +416,25 @@ class CustomQCSamplePoolService:
     def __init__(self) -> None:
         self._pool_table = _sample_pools_table()
         self._item_table = _sample_pool_items_table()
+
+    @staticmethod
+    def resolve_sync_table_names(group_ids: Optional[Sequence[str]] = None) -> Dict[str, List[str]]:
+        default_group_ids = [
+            "core_8",
+            "document_extended",
+            "diagnosis_extended",
+            "orders_prescriptions",
+            "exam_lab_pathology",
+        ]
+        selected_groups = [str(item).strip() for item in (group_ids or default_group_ids) if str(item).strip()]
+        table_names, missing = expand_table_groups(selected_groups)
+        if not table_names:
+            raise ValueError("未解析到可执行同步表，请检查 table_groups 配置")
+        return {
+            "group_ids": selected_groups,
+            "table_names": table_names,
+            "missing_group_ids": missing,
+        }
 
     def _row_to_pool(self, row: Dict[str, Any]) -> Dict[str, Any]:
         return {
@@ -792,6 +851,244 @@ class CustomQCSamplePoolService:
             return [self._row_to_item(dict(row)) for row in rows]
         finally:
             session.close()
+
+    def _list_sync_candidate_items(
+        self,
+        *,
+        pool_id: str,
+        only_intrinsic: bool = True,
+        include_in_batch_1: bool = True,
+    ) -> List[Dict[str, Any]]:
+        session = _session()
+        try:
+            clauses = [self._item_table.c.pool_id == pool_id]
+            if only_intrinsic:
+                clauses.append(self._item_table.c.coverage_type == "llm_intrinsic")
+            if include_in_batch_1:
+                clauses.append(self._item_table.c.include_in_batch_1.is_(True))
+            stmt = select(self._item_table).where(and_(*clauses)).order_by(self._item_table.c.row_no.asc())
+            rows = session.execute(stmt).mappings().all()
+            return [self._row_to_item(dict(row)) for row in rows]
+        finally:
+            session.close()
+
+    def _resolve_remote_visit_keys(self, *, items: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+        remote_url = get_remote_db_url()
+        if not remote_url:
+            raise RuntimeError("远端 PG 未配置，无法执行样本定向同步")
+        cfg = load_db_config()
+        remote_schema = str(cfg.get("remote_schema") or "public").strip() or "public"
+        schema_ident = re.sub(r"[^A-Za-z0-9_]", "", remote_schema)
+        if not schema_ident:
+            raise ValueError("远端 schema 非法")
+
+        mr_nos = sorted({str(item.get("mr_no") or "").strip() for item in items if str(item.get("mr_no") or "").strip()})
+        if not mr_nos:
+            return {
+                "matched": 0,
+                "ambiguous": 0,
+                "unmatched": 0,
+                "visit_keys": [],
+            }
+
+        lookup_map: Dict[str, List[Dict[str, Any]]] = {}
+        conn = psycopg2.connect(remote_url, connect_timeout=10)
+        cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        try:
+            chunk_size = 200
+            for start in range(0, len(mr_nos), chunk_size):
+                chunk = mr_nos[start : start + chunk_size]
+                placeholders = ", ".join(["%s"] * len(chunk))
+                sql = f"""
+                    SELECT
+                        institute_id::text AS institute_id,
+                        patient_id::text AS patient_id,
+                        visit_id::text AS visit_id,
+                        COALESCE(inpat_no::text, '') AS inpat_no,
+                        COALESCE(mr_no::text, '') AS mr_no,
+                        COALESCE(name::text, '') AS name,
+                        COALESCE(admission_dept_name::text, '') AS admission_dept_name,
+                        COALESCE(discharge_dept_name::text, '') AS discharge_dept_name,
+                        admission_datetime,
+                        discharge_datetime
+                    FROM {schema_ident}.mr
+                    WHERE COALESCE(mr_no::text, '') IN ({placeholders})
+                       OR COALESCE(inpat_no::text, '') IN ({placeholders})
+                       OR COALESCE(visit_id::text, '') IN ({placeholders})
+                """
+                params = chunk + chunk + chunk
+                cursor.execute(sql, params)
+                for row in cursor.fetchall() or []:
+                    candidate = dict(row)
+                    for key in (candidate.get("mr_no"), candidate.get("inpat_no"), candidate.get("visit_id")):
+                        lookup_key = str(key or "").strip()
+                        if not lookup_key:
+                            continue
+                        lookup_map.setdefault(lookup_key, []).append(candidate)
+        finally:
+            cursor.close()
+            conn.close()
+
+        visit_key_set: set[tuple[str, str]] = set()
+        matched = 0
+        ambiguous = 0
+        unmatched = 0
+        for item in items:
+            mr_no = str(item.get("mr_no") or "").strip()
+            candidates = lookup_map.get(mr_no, [])
+            patient_name = _safe_text(item.get("patient_name"))
+            department = _safe_text(item.get("department"))
+            qc_date_value = _parse_date(item.get("qc_date"))
+            chosen: Optional[Dict[str, Any]]
+            if len(candidates) == 1:
+                chosen = candidates[0]
+            elif len(candidates) > 1:
+                scored = sorted(
+                    (
+                        (
+                            _score_remote_candidate(
+                                candidate=candidate,
+                                patient_name=patient_name,
+                                department=department,
+                                qc_date_value=qc_date_value,
+                            ),
+                            candidate,
+                        )
+                        for candidate in candidates
+                    ),
+                    key=lambda pair: pair[0],
+                    reverse=True,
+                )
+                top_score = scored[0][0]
+                chosen = scored[0][1] if top_score > 0 and (len(scored) == 1 or top_score > scored[1][0]) else None
+            else:
+                chosen = None
+
+            if chosen is None:
+                if candidates:
+                    ambiguous += 1
+                else:
+                    unmatched += 1
+                continue
+
+            patient_id = _safe_text(chosen.get("patient_id"))
+            visit_id = _safe_text(chosen.get("visit_id"))
+            if not patient_id or not visit_id:
+                unmatched += 1
+                continue
+            matched += 1
+            visit_key_set.add((patient_id, visit_id))
+
+        return {
+            "matched": matched,
+            "ambiguous": ambiguous,
+            "unmatched": unmatched,
+            "visit_keys": sorted(visit_key_set),
+        }
+
+    def sync_pool_records(
+        self,
+        *,
+        pool_id: str,
+        only_intrinsic: bool = True,
+        include_in_batch_1: bool = True,
+        table_groups: Optional[Sequence[str]] = None,
+    ) -> Dict[str, Any]:
+        items = self._list_sync_candidate_items(
+            pool_id=pool_id,
+            only_intrinsic=only_intrinsic,
+            include_in_batch_1=include_in_batch_1,
+        )
+        if not items:
+            raise ValueError("当前样本池没有可同步的样本")
+
+        sync_plan = self.resolve_sync_table_names(group_ids=table_groups)
+        resolved = self._resolve_remote_visit_keys(items=items)
+        visit_keys: List[tuple[str, str]] = resolved["visit_keys"]
+        if not visit_keys:
+            return {
+                "pool_id": pool_id,
+                "matched": resolved["matched"],
+                "ambiguous": resolved["ambiguous"],
+                "unmatched": resolved["unmatched"],
+                "eligible_visits": 0,
+                "synced_tables": [],
+                "total_rows_pulled": 0,
+                "total_rows_upserted": 0,
+                "sync_group_ids": sync_plan["group_ids"],
+                "missing_group_ids": sync_plan["missing_group_ids"],
+                "pool": self.get_pool(pool_id=pool_id),
+            }
+
+        table_map = {str(item.get("name") or "").strip(): item for item in list_sync_tables()}
+        remote_url = get_remote_db_url()
+        cfg = load_db_config()
+        remote_schema = str(cfg.get("remote_schema") or "public").strip() or "public"
+        anchor_tables = {"mr", "admission_record"}
+        results: List[Dict[str, Any]] = []
+        total_rows_pulled = 0
+        total_rows_upserted = 0
+
+        for table_name in sync_plan["table_names"]:
+            table_config = table_map.get(table_name)
+            if not table_config:
+                continue
+            source_table = str(table_config.get("source_table") or table_name)
+            rows = fetch_remote_rows_by_visit_keys(
+                remote_url=remote_url,
+                remote_schema=remote_schema,
+                source_table=source_table,
+                visit_keys=visit_keys,
+            )
+            upserted = upsert_to_local(
+                table_name=table_name,
+                records=rows,
+                primary_keys=[str(key) for key in (table_config.get("key_fields") or []) if str(key).strip()],
+            )
+            total_rows_pulled += len(rows)
+            total_rows_upserted += upserted
+
+            if table_name in anchor_tables and rows:
+                ingest_sync_rows(
+                    table_name=table_name,
+                    rows=rows,
+                    policy_version="sample_pool_sync",
+                    sync_scene="running",
+                    allow_frontpage_only=False,
+                    latest_mirror_success_time=datetime.now(),
+                    mirror_delay_base_minutes=30,
+                    sync_interval_minutes=30,
+                )
+                refresh_scene_bundles_for_rows(
+                    scene="running",
+                    rows=rows,
+                    policy_version="sample_pool_sync",
+                )
+
+            results.append(
+                {
+                    "table_name": table_name,
+                    "source_table": source_table,
+                    "rows_pulled": len(rows),
+                    "rows_upserted": upserted,
+                }
+            )
+
+        match_result = self.match_pool_items(pool_id=pool_id)
+        return {
+            "pool_id": pool_id,
+            "matched": resolved["matched"],
+            "ambiguous": resolved["ambiguous"],
+            "unmatched": resolved["unmatched"],
+            "eligible_visits": len(visit_keys),
+            "synced_tables": results,
+            "total_rows_pulled": total_rows_pulled,
+            "total_rows_upserted": total_rows_upserted,
+            "sync_group_ids": sync_plan["group_ids"],
+            "missing_group_ids": sync_plan["missing_group_ids"],
+            "pool": match_result.get("pool") or self.get_pool(pool_id=pool_id),
+            "post_match": match_result,
+        }
 
     def update_pool_latest_job(self, *, pool_id: str, job_id: str, job_status: str = "queued") -> None:
         session = _session()

@@ -55,6 +55,14 @@
                 刷新样本池
               </a-button>
               <a-button
+                class="!rounded-full"
+                :disabled="!selectedPoolId"
+                :loading="syncLoading"
+                @click="handleSyncPoolRecords"
+              >
+                同步样本病历
+              </a-button>
+              <a-button
                 type="primary"
                 class="!rounded-full"
                 :disabled="!selectedPoolId"
@@ -345,6 +353,7 @@ import {
   listManualSamplePools,
   matchManualSamplePool,
   runManualSamplePool,
+  syncManualSamplePoolRecords,
 } from '@/services/manual-case-sample-service'
 import {
   exportSichuanWorkspaceBatchJob,
@@ -357,6 +366,7 @@ const poolLoading = ref(false)
 const itemLoading = ref(false)
 const matchLoading = ref(false)
 const runLoading = ref(false)
+const syncLoading = ref(false)
 
 const pools = ref<ManualSamplePool[]>([])
 const selectedPoolId = ref<string>()
@@ -676,6 +686,25 @@ async function handleMatchPool() {
   }
   message.success('病历匹配完成')
   await loadPools()
+}
+
+async function handleSyncPoolRecords() {
+  if (!selectedPoolId.value) return
+  syncLoading.value = true
+  const result = await syncManualSamplePoolRecords(selectedPoolId.value, {
+    only_intrinsic: true,
+    include_in_batch_1: true,
+  })
+  syncLoading.value = false
+  if (!result.success || !result.data) {
+    message.error(result.message || '同步样本病历失败')
+    return
+  }
+  message.success(
+    `同步完成：可抽取 ${result.data.eligible_visits} 份病历，拉取 ${result.data.total_rows_pulled} 行，写入 ${result.data.total_rows_upserted} 行`,
+  )
+  await loadPools()
+  await loadItems()
 }
 
 async function handleRunPool() {
