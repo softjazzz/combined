@@ -154,7 +154,8 @@
               <div class="flex flex-1 flex-col gap-3 xl:flex-row xl:items-center">
                 <a-select
                   v-model:value="selectedPoolId"
-                  class="w-full xl:max-w-[280px]"
+                  class="w-full xl:max-w-[280px] customer-sample-toolbar-select"
+                  size="middle"
                   :loading="poolLoading"
                   :options="poolOptions"
                   placeholder="请选择样本池"
@@ -162,7 +163,8 @@
                 />
                 <a-input
                   v-model:value="filters.query"
-                  class="w-full xl:min-w-[320px] xl:flex-1"
+                  class="w-full xl:min-w-[320px] xl:flex-1 customer-sample-toolbar-input"
+                  size="middle"
                   placeholder="搜索患者/住院号/人工问题"
                   @press-enter="loadItems()"
                 />
@@ -171,14 +173,16 @@
               <div class="flex flex-wrap gap-2 xl:justify-end">
                 <a-select
                   v-model:value="filters.coverageType"
-                  class="min-w-[140px]"
+                  class="min-w-[140px] customer-sample-toolbar-select"
+                  size="middle"
                   allow-clear
                   placeholder="覆盖类型"
                   :options="coverageOptions"
                 />
                 <a-select
                   v-model:value="filters.matchStatus"
-                  class="min-w-[140px]"
+                  class="min-w-[140px] customer-sample-toolbar-select"
+                  size="middle"
                   allow-clear
                   placeholder="匹配状态"
                   :options="matchStatusOptions"
@@ -797,3 +801,30 @@ onMounted(() => {
   loadPools()
 })
 </script>
+
+<style scoped>
+.customer-sample-toolbar-input {
+  height: 40px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.customer-sample-toolbar-input::placeholder {
+  font-size: 14px;
+}
+
+:deep(.customer-sample-toolbar-select .ant-select-selector) {
+  height: 40px !important;
+  padding: 0 12px !important;
+}
+
+:deep(.customer-sample-toolbar-select .ant-select-selection-placeholder),
+:deep(.customer-sample-toolbar-select .ant-select-selection-item) {
+  font-size: 14px;
+  line-height: 38px !important;
+}
+
+:deep(.customer-sample-toolbar-select .ant-select-selection-search-input) {
+  height: 38px !important;
+}
+</style>
