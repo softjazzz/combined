@@ -339,6 +339,14 @@
       :get-batch-job-status-text="getBatchJobStatusText"
       :format-date-time="formatDateTime"
     />
+
+    <QCReviewDrawer
+      :visible="reviewDrawerVisible"
+      :record="reviewDrawerRecord"
+      @update:visible="reviewDrawerVisible = $event"
+      @close="reviewDrawerVisible = false"
+      @refresh="loadItems"
+    />
   </main>
 </template>
 
@@ -359,6 +367,7 @@ import {
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
+import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
 
@@ -375,6 +384,17 @@ const items = ref<ManualSamplePoolItem[]>([])
 
 const detailOpen = ref(false)
 const activeItem = ref<ManualSamplePoolItem>()
+const reviewDrawerVisible = ref(false)
+const reviewDrawerRecord = ref<{
+  id: string
+  record_id: string
+  patient_name?: string
+  department?: string
+  discharge_date?: string
+  score?: number
+  defect_count?: number
+  status?: string
+} | null>(null)
 
 const batchResultOpen = ref(false)
 const batchJobDetail = ref<SichuanBatchJob>()
@@ -550,7 +570,7 @@ const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
   {
     title: '操作',
     key: 'actions',
-    width: 180,
+    width: 240,
     fixed: 'right',
     customRender: ({ record }) =>
       h('div', { class: 'flex gap-2' }, [
@@ -562,6 +582,23 @@ const itemColumns: TableColumnsType<ManualSamplePoolItem> = [
           },
           '查看详情',
         ),
+        record.matched_visit_id
+          ? h(
+              'a',
+              {
+                class: 'text-[#1677ff]',
+                onClick: () => openReviewDrawer(record),
+              },
+              '查看病历',
+            )
+          : h(
+              'span',
+              {
+                class: 'cursor-not-allowed text-slate-300',
+                title: '需先完成病历匹配',
+              },
+              '查看病历',
+            ),
         selectedPool.value?.latest_job_id
           ? h(
               'a',
@@ -673,6 +710,22 @@ function resetFilters() {
 function openItemDetail(record: ManualSamplePoolItem) {
   activeItem.value = record
   detailOpen.value = true
+}
+
+function openReviewDrawer(record: ManualSamplePoolItem) {
+  if (!record.matched_visit_id) {
+    message.warning('当前样本尚未匹配到病历，无法查看原文')
+    return
+  }
+  reviewDrawerRecord.value = {
+    id: record.id,
+    record_id: record.matched_visit_id,
+    patient_name: record.patient_name,
+    department: record.department,
+    defect_count: 0,
+    status: record.latest_match_status || 'pending',
+  }
+  reviewDrawerVisible.value = true
 }
 
 async function handleMatchPool() {
