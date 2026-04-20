@@ -227,11 +227,42 @@
                     v-if="isIssueExpanded(item)"
                     class="issue-conclusion-structured"
                   >
+                    <template v-if="resolveStructuredText(item.findings).summary">
+                      <p
+                        v-for="(paragraph, index) in resolveStructuredText(item.findings).summary"
+                        :key="`finding-summary-${resolveIssueStableKey(item)}-${index}`"
+                        class="issue-conclusion-summary-text"
+                      >
+                        {{ paragraph }}
+                      </p>
+                    </template>
                     <div
-                      v-if="resolveStructuredText(item.findings).summary"
-                      class="issue-conclusion-summary-text"
+                      v-for="(section, sectionIndex) in resolveStructuredText(item.findings)
+                        .sections"
+                      :key="`finding-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
+                      class="issue-conclusion-section"
                     >
-                      {{ resolveStructuredText(item.findings).summary }}
+                      <div class="issue-conclusion-section-title">
+                        {{ section.title }}
+                      </div>
+                      <p
+                        v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                        :key="`finding-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
+                        class="issue-conclusion-summary-text"
+                      >
+                        {{ paragraph }}
+                      </p>
+                      <ol
+                        v-if="section.points.length"
+                        class="issue-conclusion-points"
+                      >
+                        <li
+                          v-for="(point, index) in section.points"
+                          :key="`finding-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
+                        >
+                          {{ point }}
+                        </li>
+                      </ol>
                     </div>
                     <ol
                       v-if="resolveStructuredText(item.findings).points.length"
@@ -239,14 +270,15 @@
                     >
                       <li
                         v-for="(point, index) in resolveStructuredText(item.findings).points"
-                        :key="`finding-${resolveIssueStableKey(item)}-${index}`"
+                        :key="`finding-point-${resolveIssueStableKey(item)}-${index}`"
                       >
                         {{ point }}
                       </li>
                     </ol>
                     <span
                       v-if="
-                        !resolveStructuredText(item.findings).summary &&
+                        !resolveStructuredText(item.findings).summary.length &&
+                          !resolveStructuredText(item.findings).sections.length &&
                           !resolveStructuredText(item.findings).points.length
                       "
                     >
@@ -263,11 +295,42 @@
                     v-if="isIssueExpanded(item)"
                     class="issue-conclusion-structured"
                   >
+                    <template v-if="resolveStructuredText(item.evidence).summary">
+                      <p
+                        v-for="(paragraph, index) in resolveStructuredText(item.evidence).summary"
+                        :key="`evidence-summary-${resolveIssueStableKey(item)}-${index}`"
+                        class="issue-conclusion-summary-text"
+                      >
+                        {{ paragraph }}
+                      </p>
+                    </template>
                     <div
-                      v-if="resolveStructuredText(item.evidence).summary"
-                      class="issue-conclusion-summary-text"
+                      v-for="(section, sectionIndex) in resolveStructuredText(item.evidence)
+                        .sections"
+                      :key="`evidence-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
+                      class="issue-conclusion-section"
                     >
-                      {{ resolveStructuredText(item.evidence).summary }}
+                      <div class="issue-conclusion-section-title">
+                        {{ section.title }}
+                      </div>
+                      <p
+                        v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                        :key="`evidence-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
+                        class="issue-conclusion-summary-text"
+                      >
+                        {{ paragraph }}
+                      </p>
+                      <ol
+                        v-if="section.points.length"
+                        class="issue-conclusion-points"
+                      >
+                        <li
+                          v-for="(point, index) in section.points"
+                          :key="`evidence-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
+                        >
+                          {{ point }}
+                        </li>
+                      </ol>
                     </div>
                     <ol
                       v-if="resolveStructuredText(item.evidence).points.length"
@@ -275,14 +338,15 @@
                     >
                       <li
                         v-for="(point, index) in resolveStructuredText(item.evidence).points"
-                        :key="`evidence-${resolveIssueStableKey(item)}-${index}`"
+                        :key="`evidence-point-${resolveIssueStableKey(item)}-${index}`"
                       >
                         {{ point }}
                       </li>
                     </ol>
                     <span
                       v-if="
-                        !resolveStructuredText(item.evidence).summary &&
+                        !resolveStructuredText(item.evidence).summary.length &&
+                          !resolveStructuredText(item.evidence).sections.length &&
                           !resolveStructuredText(item.evidence).points.length
                       "
                     >
@@ -299,11 +363,42 @@
                     v-if="isIssueExpanded(item)"
                     class="issue-conclusion-structured"
                   >
+                    <template v-if="resolveStructuredText(item.suggestion).summary">
+                      <p
+                        v-for="(paragraph, index) in resolveStructuredText(item.suggestion).summary"
+                        :key="`suggestion-summary-${resolveIssueStableKey(item)}-${index}`"
+                        class="issue-conclusion-summary-text"
+                      >
+                        {{ paragraph }}
+                      </p>
+                    </template>
                     <div
-                      v-if="resolveStructuredText(item.suggestion).summary"
-                      class="issue-conclusion-summary-text"
+                      v-for="(section, sectionIndex) in resolveStructuredText(item.suggestion)
+                        .sections"
+                      :key="`suggestion-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
+                      class="issue-conclusion-section"
                     >
-                      {{ resolveStructuredText(item.suggestion).summary }}
+                      <div class="issue-conclusion-section-title">
+                        {{ section.title }}
+                      </div>
+                      <p
+                        v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                        :key="`suggestion-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
+                        class="issue-conclusion-summary-text"
+                      >
+                        {{ paragraph }}
+                      </p>
+                      <ol
+                        v-if="section.points.length"
+                        class="issue-conclusion-points"
+                      >
+                        <li
+                          v-for="(point, index) in section.points"
+                          :key="`suggestion-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
+                        >
+                          {{ point }}
+                        </li>
+                      </ol>
                     </div>
                     <ol
                       v-if="resolveStructuredText(item.suggestion).points.length"
@@ -311,14 +406,15 @@
                     >
                       <li
                         v-for="(point, index) in resolveStructuredText(item.suggestion).points"
-                        :key="`suggestion-${resolveIssueStableKey(item)}-${index}`"
+                        :key="`suggestion-point-${resolveIssueStableKey(item)}-${index}`"
                       >
                         {{ point }}
                       </li>
                     </ol>
                     <span
                       v-if="
-                        !resolveStructuredText(item.suggestion).summary &&
+                        !resolveStructuredText(item.suggestion).summary.length &&
+                          !resolveStructuredText(item.suggestion).sections.length &&
                           !resolveStructuredText(item.suggestion).points.length
                       "
                     >
@@ -1748,48 +1844,95 @@ function truncateText(text?: string, limit = 80) {
   return value.length > limit ? `${value.slice(0, limit)}...` : value
 }
 
+type StructuredTextSection = {
+  title: string
+  paragraphs: string[]
+  points: string[]
+}
+
 function resolveStructuredText(text?: string | null) {
-  const normalized = String(text || '')
+  const raw = String(text || '')
     .replace(/\r\n/g, '\n')
     .replace(/\u00a0/g, ' ')
-    .replace(/\n+/g, ' ')
-    .replace(/\s{2,}/g, ' ')
     .trim()
-  if (!normalized) {
-    return { summary: '', points: [] as string[] }
-  }
-  const numberedMatches = Array.from(normalized.matchAll(/(?:^|[\s：:；;])(\d+)\.\s*/g))
-  if (!numberedMatches.length) {
-    return { summary: normalized, points: [] as string[] }
-  }
-  const firstMatch = numberedMatches[0]
-  const firstIndex = firstMatch.index ?? 0
-  const summary = normalized
-    .slice(0, firstIndex)
-    .replace(/[：:；;，,\s]+$/g, '')
-    .trim()
-  const points: string[] = []
-  numberedMatches.forEach((match, index) => {
-    const markerIndex = match.index ?? 0
-    const markerLength = match[0].length
-    const start = markerIndex + markerLength
-    const end =
-      index + 1 < numberedMatches.length
-        ? (numberedMatches[index + 1].index ?? normalized.length)
-        : normalized.length
-    const point = normalized
-      .slice(start, end)
-      .replace(/^[：:；;，,\s]+/g, '')
-      .replace(/[；;\s]+$/g, '')
-      .trim()
-    if (point) {
-      points.push(point)
+  if (!raw) {
+    return {
+      summary: [] as string[],
+      sections: [] as StructuredTextSection[],
+      points: [] as string[],
     }
-  })
-  if (!summary && points.length === 1) {
-    return { summary: points[0], points: [] }
   }
-  return { summary, points }
+
+  const prepared = raw
+    .replace(/(【[^】]{1,40}】)/g, '\n$1\n')
+    .replace(/(\*\*[^*]{1,60}\*\*[：:]?)/g, '\n$1\n')
+    .replace(/(^|[。；;]\s*)(\d+[.、]\s*)/g, '$1\n$2')
+
+  const lines = prepared
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+
+  const summary: string[] = []
+  const sections: StructuredTextSection[] = []
+  const rootPoints: string[] = []
+  let currentSection: StructuredTextSection | null = null
+
+  const pushParagraph = (target: StructuredTextSection | null, value: string) => {
+    const normalized = value.trim()
+    if (!normalized) return
+    if (target) {
+      target.paragraphs.push(normalized)
+    } else {
+      summary.push(normalized)
+    }
+  }
+
+  const createSection = (title: string, trailingContent = '') => {
+    currentSection = {
+      title: title.replace(/[：:]+$/g, '').trim(),
+      paragraphs: [],
+      points: [],
+    }
+    sections.push(currentSection)
+    if (trailingContent.trim()) {
+      currentSection.paragraphs.push(trailingContent.trim())
+    }
+  }
+
+  lines.forEach((line) => {
+    const markdownHeading = line.match(/^\*\*([^*]{1,80})\*\*[：:]?\s*(.*)$/)
+    if (markdownHeading) {
+      createSection(markdownHeading[1], markdownHeading[2] || '')
+      return
+    }
+
+    const bracketHeading = line.match(/^【([^】]{1,80})】\s*(.*)$/)
+    if (bracketHeading) {
+      createSection(bracketHeading[1], bracketHeading[2] || '')
+      return
+    }
+
+    const shortHeading = line.match(/^([^，。；;：:\s]{2,24})[：:]\s*(.+)$/)
+    if (shortHeading && shortHeading[1].length <= 18) {
+      createSection(shortHeading[1], shortHeading[2] || '')
+      return
+    }
+
+    const numberedPoint = line.match(/^\d+[.、]\s*(.+)$/)
+    if (numberedPoint) {
+      if (currentSection) {
+        currentSection.points.push(numberedPoint[1].trim())
+      } else {
+        rootPoints.push(numberedPoint[1].trim())
+      }
+      return
+    }
+
+    pushParagraph(currentSection, line)
+  })
+
+  return { summary, sections, points: rootPoints }
 }
 
 function resolveBreakdownLabel(kind: 'executor' | 'document' | 'defect' | 'status', key: string) {
@@ -2292,11 +2435,27 @@ watch(
 .issue-conclusion-structured {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .issue-conclusion-summary-text {
   color: #0f172a;
+  margin: 0;
+}
+
+.issue-conclusion-section {
+  border-left: 3px solid #dbeafe;
+  padding-left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.issue-conclusion-section-title {
+  font-size: 12px;
+  line-height: 1.6;
+  font-weight: 700;
+  color: #1e3a8a;
 }
 
 .issue-conclusion-points {
