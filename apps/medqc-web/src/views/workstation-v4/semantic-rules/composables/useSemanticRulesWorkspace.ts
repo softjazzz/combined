@@ -544,7 +544,15 @@ export function useSemanticRulesWorkspace() {
   function formatDateTime(value?: string | Date | null) {
     if (!value) return '-'
     try {
-      const date = typeof value === 'string' ? new Date(value) : value
+      let date: Date
+      if (typeof value === 'string') {
+        const text = value.trim()
+        const normalized = /z$/i.test(text) || /[+-]\d{2}:\d{2}$/.test(text) ? text : `${text}Z`
+        date = new Date(normalized)
+      } else {
+        date = value
+      }
+      if (Number.isNaN(date.getTime())) return String(value)
       return date.toLocaleString('zh-CN', { hour12: false })
     } catch {
       return String(value)

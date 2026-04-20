@@ -70,9 +70,6 @@
               <div class="rule-set-strip rule-set-strip--hero">
                 <span>规则集：{{ ruleSetDisplay.name }}</span>
                 <span>规则数：{{ ruleSetDisplay.ruleCount }}</span>
-                <span>策略：{{ ruleSetDisplay.qualityProfile }}</span>
-                <span>分桶：{{ ruleSetDisplay.bucketStrategy }}</span>
-                <span v-if="ruleSetDisplay.refinedCount > 0">精审：{{ ruleSetDisplay.refinedCount }}</span>
               </div>
               <div
                 v-if="statusHero.meta.length"
@@ -1152,8 +1149,6 @@ const statusHero = computed(() => {
     )
   }
   if (status === 'completed') {
-    meta.push(`不合规规则 ${issueRecords}`)
-    meta.push(`待复核规则 ${uncertainRecords}`)
     if (ruleLevelSummary.value.processingTimeSeconds > 0) {
       meta.push(`总耗时 ${formatProcessingTime(ruleLevelSummary.value.processingTimeSeconds)}`)
     }
@@ -1268,7 +1263,7 @@ const primarySummaryCards = computed(() => {
 
 const focusedSummaryCards = computed(() =>
   primarySummaryCards.value.filter((item) =>
-    ['total', 'issues', 'uncertain', 'focus'].includes(item.key),
+    ['total', 'issues', 'uncertain', 'duration'].includes(item.key),
   ),
 )
 
