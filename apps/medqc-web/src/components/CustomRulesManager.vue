@@ -707,8 +707,6 @@ import {
   CheckCircleFilled,
   CloseCircleFilled,
   InfoCircleFilled,
-  CheckCircleTwoTone,
-  ExclamationCircleTwoTone,
   FundOutlined,
   CodeOutlined,
   BulbOutlined,

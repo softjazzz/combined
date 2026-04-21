@@ -230,15 +230,15 @@
             :class="testResult.compliant ? 'result-status--success' : 'result-status--warning'"
           >
             <div class="status-icon">
-              <CheckCircleTwoTone
+              <CheckCircleFilled
                 v-if="testResult.compliant"
-                two-tone-color="#52C41A"
                 class="status-icon__graphic"
+                style="color: #52c41a"
               />
-              <ExclamationCircleTwoTone
+              <ExclamationCircleFilled
                 v-else
-                two-tone-color="#FAAD14"
                 class="status-icon__graphic"
+                style="color: #faad14"
               />
             </div>
             <div class="status-text">
@@ -381,8 +381,6 @@ import {
   ExclamationCircleFilled,
   CloseCircleFilled,
   InfoCircleFilled,
-  CheckCircleTwoTone,
-  ExclamationCircleTwoTone,
 } from '@ant-design/icons-vue'
 import type { QCRule, EvaluationResult } from '@/types/demo'
 import type { QCRuleCaseExample } from '@/data/qcRuleCases'
