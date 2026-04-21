@@ -115,6 +115,119 @@ def _build_request():
     return SimpleNamespace(state=SimpleNamespace(trace_id="trace-test"))
 
 
+class _ListResult:
+    def __init__(self, items, total, page=1, page_size=20) -> None:
+        self.items = items
+        self.total = total
+        self.page = page
+        self.page_size = page_size
+
+
+class _SamplePoolLifecycleServiceStub:
+    def __init__(self) -> None:
+        self.pools = {}
+        self.items_by_pool = {}
+        self.updated_pool_job = None
+
+    def create_pool_with_items(
+        self,
+        *,
+        name: str,
+        source_file: str,
+        source_sheet: str,
+        created_by: str,
+        rows: list[dict],
+        description: str | None,
+        scene: str,
+    ):
+        pool = {
+            "id": "pool-imported",
+            "name": name,
+            "source_file": source_file,
+            "source_sheet": source_sheet,
+            "created_by": created_by,
+            "description": description,
+            "scene": scene,
+            "total_items": len(rows),
+            "llm_intrinsic_items": len(rows),
+            "programmatic_items": 0,
+            "unsupported_items": 0,
+            "matched_items": len(rows),
+            "ambiguous_items": 0,
+            "unmatched_items": 0,
+            "ready_items": len(rows),
+        }
+        self.pools[pool["id"]] = pool
+        self.items_by_pool[pool["id"]] = [
+            {
+                "id": f"item-{index + 1}",
+                "matched_visit_id": row.get("visit_id") or row.get("mr_no"),
+                "candidate_rule_ids": ["SC-023"] if index == 0 else ["SC-026"],
+                "manual_issue_text": row.get("manual_issue_text") or "",
+            }
+            for index, row in enumerate(rows)
+        ]
+        return pool
+
+    def get_pool(self, *, pool_id: str):
+        return self.pools.get(pool_id)
+
+    def list_pool_records(
+        self,
+        *,
+        pool_id: str,
+        coverage_type=None,
+        match_status=None,
+        include_in_batch_1=None,
+        query=None,
+        page=1,
+        page_size=20,
+    ):
+        items = self.items_by_pool[pool_id]
+        record_id = items[0]["matched_visit_id"]
+        return _ListResult(
+            items=[
+                {
+                    "id": record_id,
+                    "matched_visit_id": record_id,
+                    "mr_no": record_id,
+                    "patient_name": "测试患者",
+                    "department": "普外科",
+                    "match_status": "matched",
+                    "sync_status": "synced",
+                    "bundle_status": "ready",
+                    "coverage_types": ["llm_intrinsic"],
+                    "candidate_rule_ids": ["SC-023", "SC-026"],
+                    "issue_count": len(items),
+                    "issue_preview": [item["manual_issue_text"] for item in items if item["manual_issue_text"]],
+                    "issue_preview_text": "；".join(
+                        [item["manual_issue_text"] for item in items if item["manual_issue_text"]]
+                    ),
+                    "sample_item_ids": [item["id"] for item in items],
+                    "sample_items": items,
+                }
+            ],
+            total=1,
+            page=page,
+            page_size=page_size,
+        )
+
+    def get_runnable_items(self, *, pool_id: str, item_ids: list[str], record_ids: list[str]):
+        items = list(self.items_by_pool[pool_id])
+        if item_ids:
+            items = [item for item in items if item["id"] in item_ids]
+        if record_ids:
+            items = [item for item in items if item["matched_visit_id"] in record_ids]
+        return items
+
+    def update_pool_latest_job(self, *, pool_id: str, job_id: str, job_status: str) -> None:
+        self.updated_pool_job = {
+            "pool_id": pool_id,
+            "job_id": job_id,
+            "job_status": job_status,
+        }
+
+
 @pytest.mark.asyncio
 async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sample_ids_and_parallel(monkeypatch):
     sample_service = _SamplePoolServiceStub()
@@ -188,3 +301,81 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
     assert response["data"]["selected_record_count"] == 2
     assert response["data"]["record_count"] == 2
     assert response["data"]["rule_count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_import_list_records_and_run_should_form_sample_pool_validation_chain(monkeypatch):
+    sample_service = _SamplePoolLifecycleServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+    monkeypatch.setattr(qc_sample_pools.os.path, "exists", lambda _: True)
+    monkeypatch.setattr(
+        qc_sample_pools,
+        "load_manual_case_rows_from_excel",
+        lambda file_path, sheet_name: [
+            {"mr_no": "2248248", "visit_id": "V001", "manual_issue_text": ""},
+            {"mr_no": "2248248", "visit_id": "V001", "manual_issue_text": "首次病程记录鉴别诊断不全面"},
+        ],
+    )
+
+    request = _build_request()
+    current_user = {"id": "tester"}
+
+    import_response = await qc_sample_pools.import_manual_sheet(
+        request=request,
+        payload=qc_sample_pools.SamplePoolImportRequest(
+            pool_name="手工问题样本池-链路测试",
+            source_file="D:/docs/manual_cases.xlsx",
+            source_sheet="Sheet2",
+            description="链路测试",
+            scene="running",
+        ),
+        current_user=current_user,
+    )
+    pool_id = import_response["data"]["id"]
+
+    records_response = await qc_sample_pools.list_sample_pool_records(
+        request=request,
+        pool_id=pool_id,
+        include_in_batch_1=True,
+        current_user=current_user,
+    )
+
+    background_tasks = BackgroundTasks()
+    run_response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=request,
+        pool_id=pool_id,
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V001"],
+            sample_item_ids=["item-1", "item-2"],
+            max_parallel_records=4,
+        ),
+        background_tasks=background_tasks,
+        current_user=current_user,
+    )
+
+    assert import_response["success"] is True
+    assert import_response["data"]["imported_rows"] == 2
+    assert records_response["success"] is True
+    assert records_response["data"]["total"] == 1
+    assert records_response["data"]["items"][0]["sample_item_ids"] == ["item-1", "item-2"]
+    assert records_response["data"]["items"][0]["candidate_rule_ids"] == ["SC-023", "SC-026"]
+
+    assert run_response["success"] is True
+    assert run_response["data"]["pool_id"] == pool_id
+    assert run_response["data"]["record_ids"] == ["V001"]
+    assert run_response["data"]["rule_ids"] == ["SC-023", "SC-026"]
+    assert workspace_service.create_batch_job_calls[0]["filters"]["selected_sample_item_ids"] == [
+        "item-1",
+        "item-2",
+    ]
+    assert workspace_service.create_batch_job_calls[0]["filters"]["max_parallel_records"] == 4
+    assert sample_service.updated_pool_job == {
+        "pool_id": pool_id,
+        "job_id": "job-sample-pool-1",
+        "job_status": "queued",
+    }
+    assert len(background_tasks.tasks) == 1
