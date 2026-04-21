@@ -123,6 +123,89 @@
         </section>
 
         <section
+          v-if="syncJobDetail"
+          class="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
+        >
+          <div class="border-b border-slate-200/80 px-5 py-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div class="min-w-0">
+                <div class="text-[17px] font-semibold text-slate-900">
+                  样本病历同步进度
+                </div>
+                <div class="mt-1 text-[13px] leading-6 text-slate-500">
+                  按样本池定向从源库拉取真实病历到本地 PG，并刷新 running bundle。
+                </div>
+              </div>
+              <a-tag :color="syncJobStatusColor(syncJobDetail.status)">
+                {{ syncJobStatusText(syncJobDetail.status) }}
+              </a-tag>
+            </div>
+          </div>
+          <div class="grid gap-4 px-5 py-4 md:grid-cols-2 xl:grid-cols-5">
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="text-[12px] text-slate-400">
+                样本病历
+              </div>
+              <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
+                {{ syncProgress.total_candidates ?? 0 }}
+              </div>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="text-[12px] text-slate-400">
+                可同步病历
+              </div>
+              <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
+                {{ syncProgress.eligible_visits ?? 0 }}
+              </div>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="text-[12px] text-slate-400">
+                已完成表数
+              </div>
+              <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
+                {{ syncProgress.processed_tables ?? 0 }}/{{ syncProgress.total_tables ?? 0 }}
+              </div>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="text-[12px] text-slate-400">
+                已拉取行数
+              </div>
+              <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
+                {{ syncProgress.total_rows_pulled ?? 0 }}
+              </div>
+            </div>
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div class="text-[12px] text-slate-400">
+                已写入行数
+              </div>
+              <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
+                {{ syncProgress.total_rows_upserted ?? 0 }}
+              </div>
+            </div>
+          </div>
+          <div class="space-y-3 px-5 pb-5">
+            <div
+              class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[13px] leading-6 text-slate-600"
+            >
+              <div class="font-medium text-slate-700">
+                {{ syncProgress.step_label || '等待同步开始' }}
+              </div>
+              <div class="mt-1">
+                当前表：{{ syncProgress.current_table || '—' }}；剩余表数：{{
+                  syncProgress.remaining_tables ?? 0
+                }}
+              </div>
+              <div
+                v-if="syncJobDetail.error_message"
+                class="mt-2 text-rose-600"
+              >
+                {{ syncJobDetail.error_message }}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
           class="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
         >
           <div class="border-b border-slate-200/80 px-5 py-4">
@@ -463,8 +546,14 @@ import { message } from 'ant-design-vue'
 import type { UploadFile, UploadProps } from 'ant-design-vue'
 import { InboxOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType } from 'ant-design-vue'
-import type { ManualSamplePool, ManualSamplePoolRecord } from './customer-sample-validation/types'
+import type {
+  ManualSamplePool,
+  ManualSamplePoolRecord,
+  ManualSamplePoolSyncJob,
+} from './customer-sample-validation/types'
 import {
+  getLatestManualSamplePoolSyncJob,
+  getManualSamplePoolSyncJob,
   getManualSamplePoolRecords,
   importManualSamplePoolByUpload,
   listManualSamplePools,
@@ -513,6 +602,8 @@ const batchResultOpen = ref(false)
 const batchJobDetail = ref<SichuanBatchJob>()
 const batchJobLoading = ref(false)
 let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
+let syncJobPollTimer: ReturnType<typeof setInterval> | null = null
+const syncJobDetail = ref<ManualSamplePoolSyncJob>()
 
 const pagination = ref({
   page: 1,
@@ -574,6 +665,8 @@ const summaryCards = computed(() => {
     },
   ]
 })
+
+const syncProgress = computed(() => syncJobDetail.value?.summary?.progress || {})
 
 const selectedRunnableCount = computed(() => selectedRowKeys.value.length)
 
@@ -813,6 +906,7 @@ async function loadPools() {
   }
   selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
   if (selectedPoolId.value) {
+    await loadLatestSyncJob()
     await loadRecords()
   }
 }
@@ -849,6 +943,7 @@ async function handlePoolChange() {
   pagination.value.page = 1
   selectedRowKeys.value = []
   selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
+  await loadLatestSyncJob()
   await loadRecords()
 }
 
@@ -965,11 +1060,8 @@ async function handleSyncPoolRecords() {
     message.error(result.message || '同步样本病历失败')
     return
   }
-  message.success(
-    `同步完成：可抽取 ${result.data.eligible_visits} 份病历，拉取 ${result.data.total_rows_pulled} 行，写入 ${result.data.total_rows_upserted} 行`,
-  )
-  await loadPools()
-  await loadRecords()
+  message.success('样本病历同步任务已创建')
+  await openSyncJob(result.data.job_id)
 }
 
 async function handleRunPool() {
@@ -994,6 +1086,38 @@ async function handleRunPool() {
 async function openLatestJob() {
   if (!selectedPool.value?.latest_job_id) return
   await openBatchJob(selectedPool.value.latest_job_id)
+}
+
+async function loadLatestSyncJob() {
+  if (!selectedPoolId.value) {
+    syncJobDetail.value = undefined
+    stopSyncJobPolling()
+    return
+  }
+  const result = await getLatestManualSamplePoolSyncJob(selectedPoolId.value)
+  if (!result.success) return
+  syncJobDetail.value = result.data || undefined
+  if (syncJobDetail.value && isSyncJobRunning(syncJobDetail.value.status)) {
+    startSyncJobPolling(syncJobDetail.value.id)
+  } else {
+    stopSyncJobPolling()
+  }
+}
+
+async function openSyncJob(jobId: string) {
+  stopSyncJobPolling()
+  const result = await getManualSamplePoolSyncJob(jobId)
+  if (!result.success || !result.data) {
+    message.error(result.message || '获取样本同步任务失败')
+    return
+  }
+  syncJobDetail.value = result.data
+  if (isSyncJobRunning(result.data.status)) {
+    startSyncJobPolling(jobId)
+  } else {
+    await loadPools()
+    await loadRecords()
+  }
 }
 
 async function openBatchJob(jobId: string) {
@@ -1028,6 +1152,32 @@ function stopBatchJobPolling() {
     clearInterval(batchJobPollTimer)
     batchJobPollTimer = null
   }
+}
+
+function isSyncJobRunning(status?: string) {
+  const normalized = String(status || '').toLowerCase()
+  return normalized === 'queued' || normalized === 'running'
+}
+
+function stopSyncJobPolling() {
+  if (syncJobPollTimer) {
+    clearInterval(syncJobPollTimer)
+    syncJobPollTimer = null
+  }
+}
+
+function startSyncJobPolling(jobId: string) {
+  stopSyncJobPolling()
+  syncJobPollTimer = setInterval(async () => {
+    const result = await getManualSamplePoolSyncJob(jobId)
+    if (!result.success || !result.data) return
+    syncJobDetail.value = result.data
+    if (!isSyncJobRunning(result.data.status)) {
+      stopSyncJobPolling()
+      await loadPools()
+      await loadRecords()
+    }
+  }, 3000)
 }
 
 function startBatchJobPolling(jobId: string) {
@@ -1085,6 +1235,22 @@ function getBatchJobStatusTagClass(status?: string): string {
   return 'border-amber-200 bg-amber-50 text-amber-700'
 }
 
+function syncJobStatusText(status?: string): string {
+  const normalized = String(status || '').toLowerCase()
+  if (normalized === 'completed') return '已完成'
+  if (normalized === 'running') return '执行中'
+  if (normalized === 'failed') return '失败'
+  return '排队中'
+}
+
+function syncJobStatusColor(status?: string): string {
+  const normalized = String(status || '').toLowerCase()
+  if (normalized === 'completed') return 'success'
+  if (normalized === 'running') return 'processing'
+  if (normalized === 'failed') return 'error'
+  return 'default'
+}
+
 function formatDateTime(value?: string) {
   if (!value) return '-'
   const date = new Date(value)
@@ -1106,6 +1272,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopBatchJobPolling()
+  stopSyncJobPolling()
 })
 </script>
 

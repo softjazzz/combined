@@ -4,6 +4,7 @@ import type {
   ManualSamplePoolItemsResult,
   ManualSamplePoolListResult,
   ManualSamplePoolRecordsResult,
+  ManualSamplePoolSyncJob,
 } from '@/views/workstation-v4/customer-sample-validation/types'
 
 type ServiceResult<T> = {
@@ -143,21 +144,10 @@ export async function syncManualSamplePoolRecords(
   },
 ) {
   return requestEnvelope<{
+    job_id: string
     pool_id: string
-    matched: number
-    ambiguous: number
-    unmatched: number
-    eligible_visits: number
-    total_rows_pulled: number
-    total_rows_upserted: number
-    sync_group_ids: string[]
-    missing_group_ids: string[]
-    synced_tables: Array<{
-      table_name: string
-      source_table: string
-      rows_pulled: number
-      rows_upserted: number
-    }>
+    status: string
+    summary?: ManualSamplePoolSyncJob['summary']
   }>(
     {
       method: 'POST',
@@ -165,6 +155,26 @@ export async function syncManualSamplePoolRecords(
       data: payload || {},
     },
     '同步样本病历失败',
+  )
+}
+
+export async function getLatestManualSamplePoolSyncJob(poolId: string) {
+  return requestEnvelope<ManualSamplePoolSyncJob | null>(
+    {
+      method: 'GET',
+      url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}/sync-jobs/latest`,
+    },
+    '获取样本同步任务失败',
+  )
+}
+
+export async function getManualSamplePoolSyncJob(jobId: string) {
+  return requestEnvelope<ManualSamplePoolSyncJob>(
+    {
+      method: 'GET',
+      url: `/api/v1/qc/sample-pools/sync-jobs/${encodeURIComponent(jobId)}`,
+    },
+    '获取样本同步任务失败',
   )
 }
 

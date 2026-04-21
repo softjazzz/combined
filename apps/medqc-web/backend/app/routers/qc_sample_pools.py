@@ -79,6 +79,35 @@ class SamplePoolSyncRequest(BaseModel):
     )
 
 
+def _run_sample_pool_sync_job(job_id: str) -> None:
+    service = _service()
+    job = service.get_sync_job(job_id=job_id)
+    if not job:
+        return
+    payload = job.get("payload") or {}
+    pool_id = str(job.get("pool_id") or "").strip()
+    if not pool_id:
+        service.fail_sync_job(job_id=job_id, error_message="同步任务缺少样本池标识")
+        return
+
+    service.mark_sync_job_running(job_id=job_id)
+
+    def emit_progress(progress: Dict[str, Any]) -> None:
+        service.update_sync_job_progress(job_id=job_id, progress=progress)
+
+    try:
+        result = service.sync_pool_records(
+            pool_id=pool_id,
+            only_intrinsic=bool(payload.get("only_intrinsic", True)),
+            include_in_batch_1=bool(payload.get("include_in_batch_1", True)),
+            table_groups=payload.get("table_groups") or [],
+            progress_callback=emit_progress,
+        )
+        service.finish_sync_job(job_id=job_id, summary=result)
+    except Exception as exc:
+        service.fail_sync_job(job_id=job_id, error_message=str(exc))
+
+
 @router.get("")
 async def list_sample_pools(
     request: Request,
@@ -285,25 +314,62 @@ async def sync_sample_pool_records(
     request: Request,
     pool_id: str,
     payload: SamplePoolSyncRequest,
+    background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     pool = _service().get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
     try:
-        result = _service().sync_pool_records(
+        job = _service().create_sync_job(
             pool_id=pool_id,
-            only_intrinsic=payload.only_intrinsic,
-            include_in_batch_1=payload.include_in_batch_1,
-            table_groups=payload.table_groups,
+            created_by=_current_user_id(current_user),
+            payload=payload.model_dump(),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"样本病历同步失败: {exc}") from exc
+    background_tasks.add_task(_run_sample_pool_sync_job, job["id"])
     return success_response(
-        data=result,
-        message="样本病历定向同步完成",
+        data={
+            "job_id": job["id"],
+            "pool_id": pool_id,
+            "status": job["status"],
+            "summary": job["summary"],
+        },
+        message="样本病历定向同步任务已创建",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/{pool_id}/sync-jobs/latest")
+async def get_latest_sample_pool_sync_job(
+    request: Request,
+    pool_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    pool = _service().get_pool(pool_id=pool_id)
+    if not pool:
+        raise HTTPException(status_code=404, detail="样本池不存在")
+    job = _service().get_latest_sync_job(pool_id=pool_id)
+    return success_response(
+        data=job,
+        message="获取样本同步任务成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/sync-jobs/{job_id}")
+async def get_sample_pool_sync_job(
+    request: Request,
+    job_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    job = _service().get_sync_job(job_id=job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="同步任务不存在")
+    return success_response(
+        data=job,
+        message="获取样本同步任务成功",
         trace_id=get_trace_id(request),
     )
 

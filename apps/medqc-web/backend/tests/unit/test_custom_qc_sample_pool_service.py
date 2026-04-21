@@ -93,6 +93,7 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_bundle(monkeypa
 
     ingest_calls = []
     refresh_calls = []
+    progress_events = []
     monkeypatch.setattr(sample_pool_module, "ingest_sync_rows", lambda **kwargs: ingest_calls.append(kwargs))
     monkeypatch.setattr(sample_pool_module, "refresh_scene_bundles_for_rows", lambda **kwargs: refresh_calls.append(kwargs))
 
@@ -101,6 +102,7 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_bundle(monkeypa
         only_intrinsic=True,
         include_in_batch_1=True,
         table_groups=["core_8"],
+        progress_callback=lambda progress: progress_events.append(progress.copy()),
     )
 
     assert result["eligible_visits"] == 1
@@ -110,3 +112,6 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_bundle(monkeypa
     assert [item["table_name"] for item in result["synced_tables"]] == ["mr", "admission_record", "daily_course_record"]
     assert len(ingest_calls) == 2
     assert len(refresh_calls) == 2
+    assert progress_events[0]["step_key"] == "resolving"
+    assert progress_events[1]["step_key"] == "resolved"
+    assert progress_events[-1]["step_key"] == "matching"

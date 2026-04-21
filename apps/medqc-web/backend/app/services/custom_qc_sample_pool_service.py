@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import lru_cache
@@ -404,6 +405,31 @@ def _sample_pool_items_table() -> Table:
     return table
 
 
+@lru_cache(maxsize=1)
+def _sample_pool_sync_jobs_table() -> Table:
+    if engine is None:
+        raise RuntimeError("DATABASE_URL is not configured; sample pool unavailable")
+    metadata = MetaData()
+    table = Table(
+        "manual_problem_sample_pool_sync_jobs",
+        metadata,
+        sa.Column("id", sa.String(36), primary_key=True),
+        sa.Column("pool_id", sa.String(36), nullable=False, index=True),
+        sa.Column("status", sa.String(20), nullable=False, default="queued"),
+        sa.Column("payload_json", sa.Text, nullable=False, default="{}"),
+        sa.Column("summary_json", sa.Text, nullable=False, default="{}"),
+        sa.Column("error_message", sa.Text),
+        sa.Column("created_by", sa.String(64), nullable=False),
+        sa.Column("created_at", sa.DateTime, nullable=False),
+        sa.Column("started_at", sa.DateTime),
+        sa.Column("finished_at", sa.DateTime),
+        sa.Column("updated_at", sa.DateTime, nullable=False),
+        schema=_schema(),
+    )
+    metadata.create_all(bind=engine, checkfirst=True)
+    return table
+
+
 @dataclass
 class SamplePoolListResult:
     items: List[Dict[str, Any]]
@@ -416,6 +442,7 @@ class CustomQCSamplePoolService:
     def __init__(self) -> None:
         self._pool_table = _sample_pools_table()
         self._item_table = _sample_pool_items_table()
+        self._sync_job_table = _sample_pool_sync_jobs_table()
 
     @staticmethod
     def resolve_sync_table_names(group_ids: Optional[Sequence[str]] = None) -> Dict[str, List[str]]:
@@ -491,6 +518,24 @@ class CustomQCSamplePoolService:
             "updated_at": row.get("updated_at"),
         }
 
+    def _row_to_sync_job(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        summary = _safe_json_loads(row.get("summary_json"), {})
+        if not isinstance(summary, dict):
+            summary = {}
+        return {
+            "id": _safe_text(row.get("id")),
+            "pool_id": _safe_text(row.get("pool_id")),
+            "status": _safe_text(row.get("status"), "queued"),
+            "payload": _safe_json_loads(row.get("payload_json"), {}),
+            "summary": summary,
+            "error_message": _safe_text(row.get("error_message")),
+            "created_by": _safe_text(row.get("created_by")),
+            "created_at": row.get("created_at"),
+            "started_at": row.get("started_at"),
+            "finished_at": row.get("finished_at"),
+            "updated_at": row.get("updated_at"),
+        }
+
     def _update_pool_counters(self, session: Session, pool_id: str) -> None:
         item_table = self._item_table
         stats_stmt = select(
@@ -561,6 +606,232 @@ class CustomQCSamplePoolService:
             stmt = select(self._pool_table).where(self._pool_table.c.id == pool_id)
             row = session.execute(stmt).mappings().first()
             return self._row_to_pool(dict(row)) if row else None
+        finally:
+            session.close()
+
+    def create_sync_job(
+        self,
+        *,
+        pool_id: str,
+        created_by: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        session = _session()
+        now = _now_utc()
+        job_id = str(uuid.uuid4())
+        summary = {
+            "progress": {
+                "step_key": "queued",
+                "step_label": "排队中",
+                "total_candidates": 0,
+                "eligible_visits": 0,
+                "processed_tables": 0,
+                "total_tables": 0,
+                "current_table": "",
+                "remaining_tables": 0,
+            },
+            "total_rows_pulled": 0,
+            "total_rows_upserted": 0,
+        }
+        try:
+            session.execute(
+                self._sync_job_table.insert().values(
+                    id=job_id,
+                    pool_id=pool_id,
+                    status="queued",
+                    payload_json=_safe_json_dumps(payload),
+                    summary_json=_safe_json_dumps(summary),
+                    error_message=None,
+                    created_by=_safe_text(created_by),
+                    created_at=now,
+                    started_at=None,
+                    finished_at=None,
+                    updated_at=now,
+                )
+            )
+            session.commit()
+            return {
+                "id": job_id,
+                "pool_id": pool_id,
+                "status": "queued",
+                "payload": payload,
+                "summary": summary,
+                "created_at": now,
+                "updated_at": now,
+            }
+        finally:
+            session.close()
+
+    def get_sync_job(self, *, job_id: str) -> Optional[Dict[str, Any]]:
+        session = _session()
+        try:
+            stmt = select(self._sync_job_table).where(self._sync_job_table.c.id == job_id)
+            row = session.execute(stmt).mappings().first()
+            return self._row_to_sync_job(dict(row)) if row else None
+        finally:
+            session.close()
+
+    def get_latest_sync_job(self, *, pool_id: str) -> Optional[Dict[str, Any]]:
+        session = _session()
+        try:
+            stmt = (
+                select(self._sync_job_table)
+                .where(self._sync_job_table.c.pool_id == pool_id)
+                .order_by(desc(self._sync_job_table.c.created_at))
+                .limit(1)
+            )
+            row = session.execute(stmt).mappings().first()
+            return self._row_to_sync_job(dict(row)) if row else None
+        finally:
+            session.close()
+
+    def mark_sync_job_running(self, *, job_id: str) -> bool:
+        session = _session()
+        try:
+            current = session.execute(
+                select(self._sync_job_table).where(self._sync_job_table.c.id == job_id)
+            ).mappings().first()
+            if not current:
+                return False
+            summary = _safe_json_loads(current.get("summary_json"), {})
+            if not isinstance(summary, dict):
+                summary = {}
+            progress = summary.get("progress")
+            if not isinstance(progress, dict):
+                progress = {}
+            progress.update(
+                {
+                    "step_key": "running",
+                    "step_label": "正在同步样本病历",
+                }
+            )
+            summary["progress"] = progress
+            session.execute(
+                update(self._sync_job_table)
+                .where(self._sync_job_table.c.id == job_id)
+                .values(
+                    status="running",
+                    started_at=_now_utc(),
+                    updated_at=_now_utc(),
+                    summary_json=_safe_json_dumps(summary),
+                )
+            )
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    def update_sync_job_progress(
+        self,
+        *,
+        job_id: str,
+        progress: Dict[str, Any],
+        summary_patch: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        session = _session()
+        try:
+            current = session.execute(
+                select(self._sync_job_table).where(self._sync_job_table.c.id == job_id)
+            ).mappings().first()
+            if not current:
+                return False
+            summary = _safe_json_loads(current.get("summary_json"), {})
+            if not isinstance(summary, dict):
+                summary = {}
+            current_progress = summary.get("progress")
+            if not isinstance(current_progress, dict):
+                current_progress = {}
+            current_progress.update(progress)
+            summary["progress"] = current_progress
+            if summary_patch:
+                summary.update(summary_patch)
+            session.execute(
+                update(self._sync_job_table)
+                .where(self._sync_job_table.c.id == job_id)
+                .values(
+                    updated_at=_now_utc(),
+                    summary_json=_safe_json_dumps(summary),
+                )
+            )
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    def finish_sync_job(self, *, job_id: str, summary: Dict[str, Any]) -> bool:
+        session = _session()
+        try:
+            current = session.execute(
+                select(self._sync_job_table).where(self._sync_job_table.c.id == job_id)
+            ).mappings().first()
+            if not current:
+                return False
+            final_summary = _safe_json_loads(current.get("summary_json"), {})
+            if not isinstance(final_summary, dict):
+                final_summary = {}
+            final_summary.update(summary)
+            progress = final_summary.get("progress")
+            if not isinstance(progress, dict):
+                progress = {}
+            progress.update(
+                {
+                    "step_key": "completed",
+                    "step_label": "同步完成",
+                    "remaining_tables": 0,
+                }
+            )
+            final_summary["progress"] = progress
+            session.execute(
+                update(self._sync_job_table)
+                .where(self._sync_job_table.c.id == job_id)
+                .values(
+                    status="completed",
+                    finished_at=_now_utc(),
+                    updated_at=_now_utc(),
+                    summary_json=_safe_json_dumps(final_summary),
+                )
+            )
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    def fail_sync_job(self, *, job_id: str, error_message: str, summary_patch: Optional[Dict[str, Any]] = None) -> bool:
+        session = _session()
+        try:
+            current = session.execute(
+                select(self._sync_job_table).where(self._sync_job_table.c.id == job_id)
+            ).mappings().first()
+            if not current:
+                return False
+            summary = _safe_json_loads(current.get("summary_json"), {})
+            if not isinstance(summary, dict):
+                summary = {}
+            progress = summary.get("progress")
+            if not isinstance(progress, dict):
+                progress = {}
+            progress.update(
+                {
+                    "step_key": "failed",
+                    "step_label": "同步失败",
+                }
+            )
+            summary["progress"] = progress
+            if summary_patch:
+                summary.update(summary_patch)
+            session.execute(
+                update(self._sync_job_table)
+                .where(self._sync_job_table.c.id == job_id)
+                .values(
+                    status="failed",
+                    error_message=_safe_text(error_message),
+                    finished_at=_now_utc(),
+                    updated_at=_now_utc(),
+                    summary_json=_safe_json_dumps(summary),
+                )
+            )
+            session.commit()
+            return True
         finally:
             session.close()
 
@@ -1095,6 +1366,7 @@ class CustomQCSamplePoolService:
         only_intrinsic: bool = True,
         include_in_batch_1: bool = True,
         table_groups: Optional[Sequence[str]] = None,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Dict[str, Any]:
         items = self._list_sync_candidate_items(
             pool_id=pool_id,
@@ -1105,8 +1377,38 @@ class CustomQCSamplePoolService:
             raise ValueError("当前样本池没有可同步的样本")
 
         sync_plan = self.resolve_sync_table_names(group_ids=table_groups)
+        total_tables = len(sync_plan["table_names"])
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "step_key": "resolving",
+                    "step_label": "正在解析样本病历",
+                    "total_candidates": len(items),
+                    "eligible_visits": 0,
+                    "processed_tables": 0,
+                    "total_tables": total_tables,
+                    "current_table": "",
+                    "remaining_tables": total_tables,
+                }
+            )
         resolved = self._resolve_remote_visit_keys(items=items)
         visit_keys: List[tuple[str, str]] = resolved["visit_keys"]
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "step_key": "resolved",
+                    "step_label": "病历解析完成",
+                    "total_candidates": len(items),
+                    "eligible_visits": len(visit_keys),
+                    "processed_tables": 0,
+                    "total_tables": total_tables,
+                    "current_table": "",
+                    "remaining_tables": total_tables,
+                    "matched": resolved["matched"],
+                    "ambiguous": resolved["ambiguous"],
+                    "unmatched": resolved["unmatched"],
+                }
+            )
         if not visit_keys:
             return {
                 "pool_id": pool_id,
@@ -1131,7 +1433,22 @@ class CustomQCSamplePoolService:
         total_rows_pulled = 0
         total_rows_upserted = 0
 
-        for table_name in sync_plan["table_names"]:
+        for index, table_name in enumerate(sync_plan["table_names"], start=1):
+            if progress_callback is not None:
+                progress_callback(
+                    {
+                        "step_key": "syncing",
+                        "step_label": "正在同步病历表",
+                        "total_candidates": len(items),
+                        "eligible_visits": len(visit_keys),
+                        "processed_tables": index - 1,
+                        "total_tables": total_tables,
+                        "current_table": table_name,
+                        "remaining_tables": max(total_tables - index + 1, 0),
+                        "total_rows_pulled": total_rows_pulled,
+                        "total_rows_upserted": total_rows_upserted,
+                    }
+                )
             table_config = table_map.get(table_name)
             if not table_config:
                 continue
@@ -1175,7 +1492,37 @@ class CustomQCSamplePoolService:
                     "rows_upserted": upserted,
                 }
             )
+            if progress_callback is not None:
+                progress_callback(
+                    {
+                        "step_key": "syncing",
+                        "step_label": "正在同步病历表",
+                        "total_candidates": len(items),
+                        "eligible_visits": len(visit_keys),
+                        "processed_tables": index,
+                        "total_tables": total_tables,
+                        "current_table": table_name,
+                        "remaining_tables": max(total_tables - index, 0),
+                        "total_rows_pulled": total_rows_pulled,
+                        "total_rows_upserted": total_rows_upserted,
+                    }
+                )
 
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "step_key": "matching",
+                    "step_label": "正在回写匹配结果",
+                    "total_candidates": len(items),
+                    "eligible_visits": len(visit_keys),
+                    "processed_tables": total_tables,
+                    "total_tables": total_tables,
+                    "current_table": "",
+                    "remaining_tables": 0,
+                    "total_rows_pulled": total_rows_pulled,
+                    "total_rows_upserted": total_rows_upserted,
+                }
+            )
         match_result = self.match_pool_items(pool_id=pool_id)
         return {
             "pool_id": pool_id,

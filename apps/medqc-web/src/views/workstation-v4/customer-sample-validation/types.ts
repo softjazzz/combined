@@ -91,3 +91,39 @@ export type ManualSamplePoolRecordsResult = {
   page: number
   page_size: number
 }
+
+export type ManualSamplePoolSyncJob = {
+  id: string
+  pool_id: string
+  status: string
+  payload?: Record<string, unknown>
+  summary?: {
+    progress?: {
+      step_key?: string
+      step_label?: string
+      total_candidates?: number
+      eligible_visits?: number
+      processed_tables?: number
+      total_tables?: number
+      current_table?: string
+      remaining_tables?: number
+      matched?: number
+      ambiguous?: number
+      unmatched?: number
+      total_rows_pulled?: number
+      total_rows_upserted?: number
+    }
+    total_rows_pulled?: number
+    total_rows_upserted?: number
+    matched?: number
+    ambiguous?: number
+    unmatched?: number
+    eligible_visits?: number
+  }
+  error_message?: string
+  created_by?: string
+  created_at?: string
+  started_at?: string
+  finished_at?: string
+  updated_at?: string
+}
