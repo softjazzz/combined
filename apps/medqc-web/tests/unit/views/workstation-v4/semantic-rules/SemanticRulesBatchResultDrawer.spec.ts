@@ -368,4 +368,33 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(issueCards[0]?.text()).toContain('规则二命中')
     expect(wrapper.text()).toContain('已按规则过滤：SC-002 · 规则二')
   })
+
+  it('应保持任务统计摘要与问题明细数量一致', () => {
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props: buildProps(),
+      global: {
+        stubs: {
+          'a-drawer': ADrawerStub,
+          'a-table': ATableStub,
+          'a-select': ASelectStub,
+          'a-button': AButtonStub,
+          'a-tag': ATagStub,
+          'a-progress': AProgressStub,
+          'a-radio-group': ARadioGroupStub,
+          'a-radio-button': ARadioButtonStub,
+          'a-switch': ASwitchStub,
+          'a-input': AInputStub,
+        },
+      },
+    })
+
+    const issueCards = wrapper.findAll('.issue-conclusion-card')
+
+    expect(issueCards).toHaveLength(2)
+    expect(wrapper.text()).toContain('当前共 2 条重点结果，其中不合规 2 条，待复核 0 条')
+    expect(wrapper.text()).toContain('重点结果')
+    expect(wrapper.text()).toContain('涉及问题病历')
+    expect(wrapper.text()).toContain('规则一命中')
+    expect(wrapper.text()).toContain('规则二命中')
+  })
 })

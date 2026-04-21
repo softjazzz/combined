@@ -1,5 +1,5 @@
 /* eslint-disable vue/one-component-per-file */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
 import CustomerSampleValidationView from '@/views/workstation-v4/CustomerSampleValidationView.vue'
@@ -444,6 +444,10 @@ async function mountView() {
 }
 
 describe('CustomerSampleValidationView', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     listManualSamplePools.mockResolvedValue({
@@ -549,6 +553,90 @@ describe('CustomerSampleValidationView', () => {
     })
     expect(wrapper.text()).toContain('样本病历同步进度')
     expect(wrapper.text()).toContain('正在同步')
+  })
+
+  it('同步任务轮询时应更新进度并在完成后刷新列表', async () => {
+    vi.useFakeTimers()
+    getManualSamplePoolSyncJob
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'sync-job-1',
+          pool_id: 'pool-1',
+          status: 'running',
+          summary: {
+            progress: {
+              step_label: '正在同步病历文书',
+              total_candidates: 3,
+              eligible_visits: 2,
+              processed_tables: 1,
+              total_tables: 3,
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'sync-job-1',
+          pool_id: 'pool-1',
+          status: 'running',
+          summary: {
+            progress: {
+              step_label: '继续同步病历文书',
+              total_candidates: 3,
+              eligible_visits: 2,
+              processed_tables: 2,
+              total_tables: 3,
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          id: 'sync-job-1',
+          pool_id: 'pool-1',
+          status: 'completed',
+          summary: {
+            progress: {
+              step_label: '同步完成',
+              total_candidates: 3,
+              eligible_visits: 2,
+              processed_tables: 3,
+              total_tables: 3,
+            },
+          },
+        },
+      })
+
+    const wrapper = await mountView()
+
+    const initialPoolCalls = listManualSamplePools.mock.calls.length
+    const initialRecordCalls = getManualSamplePoolRecords.mock.calls.length
+
+    const syncButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('同步样本病历'))
+    expect(syncButton).toBeTruthy()
+    await syncButton!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('1/3')
+    expect(wrapper.text()).toContain('正在同步病历文书')
+
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('2/3')
+    expect(wrapper.text()).toContain('继续同步病历文书')
+
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+
+    expect(getManualSamplePoolSyncJob).toHaveBeenCalledTimes(3)
+    expect(listManualSamplePools.mock.calls.length).toBeGreaterThan(initialPoolCalls)
+    expect(getManualSamplePoolRecords.mock.calls.length).toBeGreaterThan(initialRecordCalls)
   })
 
   it('支持下载简化后的客户样本导入模板', async () => {
