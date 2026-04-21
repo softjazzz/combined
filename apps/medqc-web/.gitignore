@@ -97,6 +97,7 @@ src/**/*.js
 src/**/*.js.map
 !src/**/*.config.js
 !src/**/*.setup.js
+!src/views/drg-grouper/cnDrg2023Grouper.js
 
 # Cache directories
 .cache/

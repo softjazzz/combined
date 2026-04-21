@@ -1,0 +1,96 @@
+param(
+  [string]$OutputRoot = "D:\LLM\LX888\release",
+  [switch]$SkipBuild
+)
+
+$ErrorActionPreference = "Stop"
+
+$projectRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $projectRoot)
+$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$releaseDir = Join-Path $OutputRoot "medqc-web-customer-$stamp"
+$backendDir = Join-Path $releaseDir "backend"
+$frontendDir = Join-Path $releaseDir "frontend"
+
+function Write-Step([string]$message) {
+  Write-Host "[package] $message" -ForegroundColor Cyan
+}
+
+function Copy-TreeExclude([string]$source, [string]$destination, [string[]]$excludeDirs, [string[]]$excludeFiles) {
+  Get-ChildItem -LiteralPath $source -Force | ForEach-Object {
+    $name = $_.Name
+    if ($_.PSIsContainer) {
+      if ($excludeDirs -contains $name) {
+        return
+      }
+      $target = Join-Path $destination $name
+      New-Item -ItemType Directory -Force -Path $target | Out-Null
+      Copy-TreeExclude -source $_.FullName -destination $target -excludeDirs $excludeDirs -excludeFiles $excludeFiles
+      return
+    }
+    if ($excludeFiles -contains $name) {
+      return
+    }
+    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $destination $name) -Force
+  }
+}
+
+if (-not $SkipBuild) {
+  Write-Step "构建前端 dist"
+  Push-Location $projectRoot
+  try {
+    npm run build
+  }
+  finally {
+    Pop-Location
+  }
+}
+
+Write-Step "准备发布目录 $releaseDir"
+if (Test-Path -LiteralPath $releaseDir) {
+  Remove-Item -LiteralPath $releaseDir -Recurse -Force
+}
+New-Item -ItemType Directory -Force -Path $releaseDir, $backendDir, $frontendDir | Out-Null
+
+Write-Step "复制前端构建产物"
+Copy-Item -LiteralPath (Join-Path $projectRoot "dist") -Destination (Join-Path $frontendDir "dist") -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "package.json") -Destination (Join-Path $frontendDir "package.json") -Force
+
+Write-Step "复制后端源码（排除 ICD 向量索引和开发目录）"
+Copy-TreeExclude `
+  -source (Join-Path $projectRoot "backend") `
+  -destination $backendDir `
+  -excludeDirs @("__pycache__", ".pytest_cache", ".mypy_cache", "htmlcov", ".ruff_cache", ".venv", "venv", "logs", "release-gate-artifacts") `
+  -excludeFiles @(".coverage", "dev-backend.log", "dev-backend.err.log", "uvicorn.err.log", "uvicorn.out.log")
+
+if (Test-Path -LiteralPath (Join-Path $backendDir "data\vector")) {
+  Remove-Item -LiteralPath (Join-Path $backendDir "data\vector") -Recurse -Force
+}
+if (Test-Path -LiteralPath (Join-Path $backendDir "data\manual_qc_runs")) {
+  Remove-Item -LiteralPath (Join-Path $backendDir "data\manual_qc_runs") -Recurse -Force
+}
+
+Write-Step "写入部署说明"
+$readme = @"
+# 客户部署包
+
+生成时间：$(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+
+## 目录说明
+- frontend/dist：前端静态产物
+- backend：后端源码
+
+## 已排除内容
+- ICD 编码语义检索向量索引目录：backend/data/vector
+- 手工运行日志目录：backend/data/manual_qc_runs
+- 各类缓存、测试、虚拟环境目录
+
+## 说明
+- 当前包不包含 ICD 语义向量索引。
+- 如果后续需要 ICD 语义检索能力，可在客户环境单独执行：
+  - apps/medqc-web/backend/scripts/build_icd_vector_index.py
+"@
+$readme | Set-Content -LiteralPath (Join-Path $releaseDir "README-部署说明.txt") -Encoding UTF8
+
+Write-Step "打包完成"
+Write-Host $releaseDir
