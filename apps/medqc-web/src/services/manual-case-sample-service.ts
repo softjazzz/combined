@@ -187,6 +187,7 @@ export async function runManualSamplePool(
     top_p?: number
     temperature?: number
     max_tokens?: number
+    max_parallel_records?: number
     sample_item_ids?: string[]
     record_ids?: string[]
   },

@@ -284,6 +284,17 @@
                   <span class="mr-2">仅首批</span>
                   <a-switch v-model:checked="filters.includeInBatch" />
                 </div>
+                <div
+                  class="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
+                >
+                  <span>并发病历数</span>
+                  <a-select
+                    v-model:value="runOptions.maxParallelRecords"
+                    class="w-[88px] customer-sample-toolbar-select"
+                    size="middle"
+                    :options="parallelOptions"
+                  />
+                </div>
                 <a-button
                   type="primary"
                   class="!rounded-full"
@@ -623,6 +634,9 @@ const importForm = ref({
   description: '',
   scene: 'running',
 })
+const runOptions = ref({
+  maxParallelRecords: 4,
+})
 
 const poolOptions = computed(() =>
   pools.value.map((item) => ({
@@ -646,6 +660,11 @@ const matchStatusOptions = [
   { label: '已匹配', value: 'matched' },
   { label: '匹配歧义', value: 'ambiguous' },
   { label: '未匹配', value: 'unmatched' },
+]
+const parallelOptions = [
+  { label: '1', value: 1 },
+  { label: '2', value: 2 },
+  { label: '4', value: 4 },
 ]
 
 const summaryCards = computed(() => {
@@ -1069,6 +1088,7 @@ async function handleRunPool() {
   runLoading.value = true
   const result = await runManualSamplePool(selectedPoolId.value, {
     record_ids: selectedRowKeys.value,
+    max_parallel_records: runOptions.value.maxParallelRecords,
   })
   runLoading.value = false
   if (!result.success || !result.data) {
@@ -1076,7 +1096,7 @@ async function handleRunPool() {
     return
   }
   message.success(
-    `已创建验证任务，覆盖 ${result.data.sample_item_count} 条样本 / ${result.data.record_count} 份病历 / ${result.data.rule_count} 条规则`,
+    `已创建验证任务，覆盖 ${result.data.sample_item_count} 条样本 / ${result.data.record_count} 份病历 / ${result.data.rule_count} 条规则，并发 ${runOptions.value.maxParallelRecords} 份病历`,
   )
   selectedRowKeys.value = []
   await loadPools()

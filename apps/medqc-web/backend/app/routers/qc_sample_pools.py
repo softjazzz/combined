@@ -60,6 +60,7 @@ class SamplePoolRunRequest(BaseModel):
     top_p: Optional[float] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+    max_parallel_records: Optional[int] = Field(default=None, description="病历级并发数")
     sample_item_ids: list[str] = Field(default_factory=list, description="选中的样本项 ID")
     record_ids: list[str] = Field(default_factory=list, description="选中的真实病历 visit_id")
 
@@ -467,6 +468,7 @@ async def run_sample_pool_intrinsic_validation(
             "top_p": payload.top_p,
             "max_tokens": payload.max_tokens,
             "model_code": payload.model_code,
+            "max_parallel_records": payload.max_parallel_records,
         },
         record_ids=record_ids,
         total_records=len(records),
