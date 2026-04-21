@@ -699,11 +699,22 @@ const summaryCards = computed(() => {
 
 const syncProgress = computed(() => syncJobDetail.value?.summary?.progress || {})
 
-const selectedRunnableCount = computed(() => selectedRowKeys.value.length)
+const selectedRecordStats = computed(() => {
+  const selectedRecords = records.value.filter((record) =>
+    selectedRowKeys.value.includes(record.id),
+  )
+  const runnableRecords = selectedRecords.filter((record) => isRunnableRecord(record))
+  return {
+    selectedCount: selectedRecords.length,
+    runnableCount: runnableRecords.length,
+    skippedCount: Math.max(0, selectedRecords.length - runnableRecords.length),
+    runnableRecordIds: runnableRecords.map((record) => record.id),
+  }
+})
 
 const runButtonText = computed(() =>
-  selectedRunnableCount.value > 0
-    ? `发起选中病历验证（${selectedRunnableCount.value}）`
+  selectedRecordStats.value.selectedCount > 0
+    ? `发起选中病历验证（${selectedRecordStats.value.selectedCount}）`
     : '发起内涵验证',
 )
 
@@ -875,9 +886,6 @@ const rowSelection = computed(() => ({
   onChange: (keys) => {
     selectedRowKeys.value = keys.map((key) => String(key))
   },
-  getCheckboxProps: (record) => ({
-    disabled: !isRunnableRecord(record),
-  }),
 }))
 
 function coverageLabel(value: string): string {
@@ -966,7 +974,7 @@ async function loadRecords() {
   records.value = result.data.items
   pagination.value.total = result.data.total
   selectedRowKeys.value = selectedRowKeys.value.filter((key) =>
-    records.value.some((item) => item.id === key && isRunnableRecord(item)),
+    records.value.some((item) => item.id === key),
   )
 }
 
@@ -1110,9 +1118,20 @@ async function handleSyncPoolRecords() {
 
 async function handleRunPool() {
   if (!selectedPoolId.value) return
+  const { selectedCount, runnableCount, skippedCount, runnableRecordIds } =
+    selectedRecordStats.value
+  if (selectedCount > 0 && runnableCount === 0) {
+    message.warning('当前选中的病历还未完成匹配、同步或 bundle 准备，暂时无法发起验证')
+    return
+  }
+  if (selectedCount > 0 && skippedCount > 0) {
+    message.info(
+      `已选 ${selectedCount} 份病历，其中 ${runnableCount} 份可执行，${skippedCount} 份将自动跳过`,
+    )
+  }
   runLoading.value = true
   const result = await runManualSamplePool(selectedPoolId.value, {
-    record_ids: selectedRowKeys.value,
+    record_ids: runnableRecordIds,
     max_parallel_records: runOptions.value.maxParallelRecords,
   })
   runLoading.value = false
