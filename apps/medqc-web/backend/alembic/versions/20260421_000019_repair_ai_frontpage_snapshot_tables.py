@@ -27,7 +27,12 @@ def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
 
-    if not _has_table(inspector, "ai_mr_snapshot"):
+    has_frontpage_snapshot = _has_table(inspector, "ai_frontpage_snapshot")
+    has_frontpage_diagnosis_snapshot = _has_table(inspector, "ai_frontpage_diagnosis_snapshot")
+    has_frontpage_surgery_snapshot = _has_table(inspector, "ai_frontpage_surgery_snapshot")
+    has_frontpage_cost_snapshot = _has_table(inspector, "ai_frontpage_cost_snapshot")
+
+    if not has_frontpage_snapshot and not _has_table(inspector, "ai_mr_snapshot"):
         op.create_table(
             "ai_mr_snapshot",
             sa.Column("id", sa.String(length=36), primary_key=True, nullable=False, comment="UUID主键"),
@@ -96,7 +101,7 @@ def upgrade() -> None:
         op.create_index("ix_ai_mr_snapshot_status", "ai_mr_snapshot", ["status"], unique=False, schema="cdm")
         op.create_index("ix_ai_mr_snapshot_created_at", "ai_mr_snapshot", ["created_at"], unique=False, schema="cdm")
 
-    if not _has_table(inspector, "ai_diagnosis_snapshot"):
+    if not has_frontpage_diagnosis_snapshot and not _has_table(inspector, "ai_diagnosis_snapshot"):
         op.create_table(
             "ai_diagnosis_snapshot",
             sa.Column("id", sa.String(length=36), primary_key=True, nullable=False, comment="UUID主键"),
@@ -121,7 +126,7 @@ def upgrade() -> None:
         op.create_index("ix_ai_diag_snapshot_snapshot", "ai_diagnosis_snapshot", ["snapshot_id"], unique=False, schema="cdm")
         op.create_index("ix_ai_diag_snapshot_main", "ai_diagnosis_snapshot", ["is_main"], unique=False, schema="cdm")
 
-    if not _has_table(inspector, "ai_mr_surgery_snapshot"):
+    if not has_frontpage_surgery_snapshot and not _has_table(inspector, "ai_mr_surgery_snapshot"):
         op.create_table(
             "ai_mr_surgery_snapshot",
             sa.Column("id", sa.String(length=36), primary_key=True, nullable=False, comment="UUID主键"),
@@ -150,7 +155,7 @@ def upgrade() -> None:
         op.create_index("ix_ai_surgery_snapshot_snapshot", "ai_mr_surgery_snapshot", ["snapshot_id"], unique=False, schema="cdm")
         op.create_index("ix_ai_surgery_snapshot_main", "ai_mr_surgery_snapshot", ["is_main"], unique=False, schema="cdm")
 
-    if not _has_table(inspector, "ai_mr_cost_snapshot"):
+    if not has_frontpage_cost_snapshot and not _has_table(inspector, "ai_mr_cost_snapshot"):
         op.create_table(
             "ai_mr_cost_snapshot",
             sa.Column("id", sa.String(length=36), primary_key=True, nullable=False, comment="UUID主键"),
