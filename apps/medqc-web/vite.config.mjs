@@ -18,8 +18,6 @@ const publicHmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT || devServer
 
 function createManualChunks(id) {
   const normalizedId = normalizeId(id)
-  const antdMatch = normalizedId.match(/\/node_modules\/ant-design-vue\/es\/([^/]+)\//)
-  const antdSegment = antdMatch ? antdMatch[1] : ''
 
   if (normalizedId.includes('/src/views/drg-grouper/sichuan2024Grouper.js')) {
     return 'grouper-sichuan-engine'
@@ -56,6 +54,18 @@ function createManualChunks(id) {
 
   if (normalizedId.includes('node_modules')) {
     if (
+      normalizedId.includes('/node_modules/ant-design-vue/')
+      || normalizedId.includes('/node_modules/@ant-design/icons-vue/')
+      || normalizedId.includes('/node_modules/@ant-design/colors/')
+      || normalizedId.includes('/node_modules/@ctrl/tinycolor/')
+      || normalizedId.includes('/node_modules/rc-util/')
+    ) {
+      // 避免 ant-design-vue、icons、colors 被拆成相互引用的 vendor chunk，
+      // 生产环境下会触发循环依赖，导致 two-tone 颜色初始化读取 blue.primary 时报错。
+      return 'vendor-antd'
+    }
+
+    if (
       normalizedId.includes('/node_modules/mammoth/')
       || normalizedId.includes('/node_modules/jszip/')
       || normalizedId.includes('/node_modules/@xmldom/xmldom/')
@@ -83,128 +93,6 @@ function createManualChunks(id) {
       || normalizedId.includes('/node_modules/pinia/')
     ) {
       return 'vendor-core'
-    }
-
-    if (
-      [
-        'affix',
-        'alert',
-        'anchor',
-        'app',
-        'avatar',
-        'badge',
-        'breadcrumb',
-        'button',
-        'calendar',
-        'card',
-        'collapse',
-        'descriptions',
-        'divider',
-        'dropdown',
-        'empty',
-        'image',
-        'layout',
-        'list',
-        'menu',
-        'pagination',
-        'popover',
-        'segmented',
-        'skeleton',
-        'space',
-        'spin',
-        'statistic',
-        'steps',
-        'table',
-        'tabs',
-        'tag',
-        'timeline',
-        'tooltip',
-        'tree',
-        'typography',
-      ].includes(antdSegment)
-    ) {
-      return 'vendor-antd-display'
-    }
-
-    if (
-      [
-        'auto-complete',
-        'cascader',
-        'checkbox',
-        'date-picker',
-        'form',
-        'input',
-        'input-number',
-        'mentions',
-        'radio',
-        'rate',
-        'select',
-        'slider',
-        'switch',
-        'time-picker',
-        'transfer',
-        'tree-select',
-        'upload',
-      ].includes(antdSegment)
-    ) {
-      return 'vendor-antd-form'
-    }
-
-    if (
-      [
-        'drawer',
-        'message',
-        'modal',
-        'notification',
-        'popconfirm',
-        'progress',
-        'result',
-        'tour',
-      ].includes(antdSegment)
-    ) {
-      return 'vendor-antd-feedback'
-    }
-
-    if (
-      [
-        '_util',
-        'config-provider',
-        'grid',
-        'locale',
-        'style',
-        'theme',
-        'vc-align',
-        'vc-cascader',
-        'vc-dialog',
-        'vc-drawer',
-        'vc-image',
-        'vc-input-number',
-        'vc-menu',
-        'vc-notification',
-        'vc-overflow',
-        'vc-pagination',
-        'vc-picker',
-        'vc-resize-observer',
-        'vc-select',
-        'vc-slider',
-        'vc-table',
-        'vc-textarea',
-        'vc-tooltip',
-        'vc-tree',
-        'vc-tree-select',
-        'vc-trigger',
-        'vc-upload',
-      ].includes(antdSegment)
-    ) {
-      return 'vendor-antd-system'
-    }
-
-    if (normalizedId.includes('/node_modules/ant-design-vue/')) {
-      return 'vendor-antd-base'
-    }
-
-    if (normalizedId.includes('/node_modules/@ant-design/icons-vue/')) {
-      return 'vendor-antd-icons'
     }
 
     if (normalizedId.includes('/node_modules/vue-echarts/')) {
