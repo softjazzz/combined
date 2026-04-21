@@ -122,6 +122,28 @@ def _normalize_issue_text(text: Any) -> str:
     return normalized
 
 
+_DEFAULT_INTRINSIC_RULE_IDS: List[str] = [
+    "SC-008",
+    "SC-009",
+    "SC-010",
+    "SC-011",
+    "SC-012",
+    "SC-018",
+    "SC-019",
+    "SC-020",
+    "SC-023",
+    "SC-024",
+    "SC-025",
+    "SC-026",
+    "SC-027",
+    "SC-032",
+    "SC-033",
+    "SC-036",
+    "SC-050",
+    "SC-070",
+]
+
+
 def _contains_any(text: str, keywords: Sequence[str]) -> bool:
     return any(keyword in text for keyword in keywords)
 
@@ -129,6 +151,16 @@ def _contains_any(text: str, keywords: Sequence[str]) -> bool:
 def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
     normalized = _normalize_issue_text(text)
     lowered = normalized.lower()
+
+    if not normalized:
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "record_list_intrinsic",
+            "expected_scene": "running",
+            "candidate_rule_ids": list(_DEFAULT_INTRINSIC_RULE_IDS),
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
 
     # 纯程序/时效问题先挡掉，避免误入首批内涵样本。
     if _contains_any(
@@ -260,24 +292,34 @@ def load_manual_case_rows_from_excel(*, file_path: str, sheet_name: str = "Sheet
     import pandas as pd
 
     df = pd.read_excel(file_path, sheet_name=sheet_name, header=None)
-    if df.empty or len(df.index) < 3:
+    if df.empty or len(df.index) < 1:
         return []
-    header_row = [str(item).strip() for item in df.iloc[1].tolist()]
-    data = df.iloc[2:].copy()
+    known_headers = {"科室", "患者姓名", "住院号", "visit_id", "存在问题", "责任医生", "质控日期", "质控人员"}
+    header_index = 0
+    for idx in range(min(len(df.index), 3)):
+        row_headers = {str(item).strip() for item in df.iloc[idx].tolist() if str(item).strip()}
+        if row_headers & known_headers:
+            header_index = idx
+            break
+    header_row = [str(item).strip() for item in df.iloc[header_index].tolist()]
+    data = df.iloc[header_index + 1 :].copy()
     data.columns = header_row
     rows: List[Dict[str, Any]] = []
-    for index, raw in enumerate(data.to_dict(orient="records"), start=3):
+    for index, raw in enumerate(data.to_dict(orient="records"), start=header_index + 2):
         mr_no = _safe_text(raw.get("住院号"))
+        visit_id = _safe_text(raw.get("visit_id") or raw.get("VisitID") or raw.get("VISIT_ID"))
         issue_text = _safe_text(raw.get("存在问题"))
         patient_name = _safe_text(raw.get("患者姓名"))
-        if not mr_no and not issue_text and not patient_name:
+        record_identifier = mr_no or visit_id
+        if not record_identifier and not issue_text and not patient_name:
             continue
         rows.append(
             {
                 "row_no": index,
                 "department": _safe_text(raw.get("科室")),
                 "patient_name": patient_name,
-                "mr_no": mr_no,
+                "mr_no": record_identifier,
+                "visit_id": visit_id,
                 "manual_issue_text": issue_text,
                 "doctor_name": _safe_text(raw.get("责任医生")),
                 "qc_date": raw.get("质控日期"),

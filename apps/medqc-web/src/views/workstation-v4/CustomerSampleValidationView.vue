@@ -421,7 +421,7 @@
               支持 .xls / .xlsx，默认读取 Sheet2。
             </p>
             <p class="mt-2 text-[12px] text-slate-400">
-              必填列：科室、患者姓名、住院号、存在问题、责任医生、质控日期、质控人员
+              核心列：住院号 或 visit_id；存在问题为可选。其余字段可不填。
             </p>
           </a-upload-dragger>
         </div>
@@ -1049,18 +1049,11 @@ async function handleDownloadTemplate() {
   const XLSX = await import('xlsx')
   const workbook = XLSX.utils.book_new()
   const worksheet = XLSX.utils.aoa_to_sheet([
-    ['科室', '患者姓名', '住院号', '存在问题', '责任医生', '质控日期', '质控人员'],
-    ['普外科', '张三', '2248248', '首次病程记录鉴别诊断不全面', '李医生', '2026-04-21', '王质控'],
+    ['住院号', 'visit_id', '存在问题'],
+    ['2248248', '', ''],
+    ['', 'VISIT-001', '首次病程记录鉴别诊断不全面'],
   ])
-  worksheet['!cols'] = [
-    { wch: 14 },
-    { wch: 12 },
-    { wch: 16 },
-    { wch: 48 },
-    { wch: 12 },
-    { wch: 14 },
-    { wch: 12 },
-  ]
+  worksheet['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 48 }]
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet2')
   XLSX.writeFile(workbook, '客户样本导入模板.xlsx')
 }
