@@ -598,4 +598,83 @@ describe('CustomerSampleValidationView', () => {
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-1')
     expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
   })
+
+  it('只选中不可执行病历时提示并阻止发起验证', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord({
+            id: 'V003',
+            matched_visit_id: 'V003',
+            mr_no: '2250001',
+            patient_name: '王五',
+            sync_status: 'missing',
+            bundle_status: 'pending',
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起选中病历验证'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(message.warning).toHaveBeenCalledWith(
+      '当前选中的病历还未完成匹配、同步或 bundle 准备，暂时无法发起验证',
+    )
+    expect(runManualSamplePool).not.toHaveBeenCalled()
+  })
+
+  it('选中部分不可执行病历时仅提交可执行病历并提示跳过数量', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord(),
+          buildRecord({
+            id: 'V004',
+            matched_visit_id: 'V004',
+            mr_no: '2250002',
+            patient_name: '赵六',
+            sync_status: 'missing',
+            bundle_status: 'pending',
+          }),
+        ],
+        total: 2,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+    await recordCheckboxes[1].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起选中病历验证'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(message.info).toHaveBeenCalledWith('已选 2 份病历，其中 1 份可执行，1 份将自动跳过')
+    expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
+      record_ids: ['V001'],
+      max_parallel_records: 4,
+    })
+  })
 })
