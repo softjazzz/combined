@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import uuid
 from collections.abc import Callable
@@ -50,7 +51,7 @@ def _safe_text(value: Any, default: str = "") -> str:
 
 
 def _safe_json_dumps(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, default=str)
+    return json.dumps(_sanitize_json_value(value), ensure_ascii=False, default=str, allow_nan=False)
 
 
 def _safe_json_loads(value: Any, default: Any) -> Any:
@@ -62,9 +63,21 @@ def _safe_json_loads(value: Any, default: Any) -> Any:
     if not text:
         return default
     try:
-        return json.loads(text)
+        return _sanitize_json_value(json.loads(text))
     except Exception:
         return default
+
+
+def _sanitize_json_value(value: Any) -> Any:
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {str(key): _sanitize_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_json_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_json_value(item) for item in value]
+    return value
 
 
 def _parse_date(value: Any) -> Optional[date]:
