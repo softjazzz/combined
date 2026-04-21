@@ -2,7 +2,36 @@ from app.services import custom_qc_sample_pool_service as sample_pool_module
 from app.services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
     classify_manual_issue_text,
+    load_manual_case_rows_from_excel,
 )
+import pandas as pd
+
+
+class _FakeMappingsResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+
+class _FakeExecuteResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def mappings(self):
+        return _FakeMappingsResult(self._rows)
+
+
+class _FakeSession:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def execute(self, _stmt):
+        return _FakeExecuteResult(self._rows)
+
+    def close(self):
+        return None
 
 
 def test_classify_first_course_intrinsic_issue():
@@ -25,6 +54,35 @@ def test_classify_consultation_execution_issue():
     assert result["coverage_type"] == "llm_intrinsic"
     assert result["issue_category"] == "consultation_execution"
     assert result["candidate_rule_ids"] == ["SC-070"]
+
+
+def test_classify_empty_issue_defaults_to_intrinsic_record_batch():
+    result = classify_manual_issue_text("")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "record_list_intrinsic"
+    assert result["include_in_batch_1"] is True
+    assert "SC-023" in result["candidate_rule_ids"]
+
+
+def test_load_manual_case_rows_from_excel_supports_minimal_identifier_columns(monkeypatch):
+    dataframe = pd.DataFrame(
+        [
+            ["住院号", "visit_id", "存在问题"],
+            ["2248248", "", ""],
+            ["", "VISIT-001", "首次病程记录鉴别诊断不全面"],
+        ]
+    )
+    monkeypatch.setattr(pd, "read_excel", lambda *args, **kwargs: dataframe)
+
+    rows = load_manual_case_rows_from_excel(file_path="demo.xlsx", sheet_name="Sheet2")
+
+    assert len(rows) == 2
+    assert rows[0]["mr_no"] == "2248248"
+    assert rows[0]["visit_id"] == ""
+    assert rows[0]["manual_issue_text"] == ""
+    assert rows[1]["mr_no"] == "VISIT-001"
+    assert rows[1]["visit_id"] == "VISIT-001"
+    assert rows[1]["manual_issue_text"] == "首次病程记录鉴别诊断不全面"
 
 
 def test_resolve_sync_table_names_defaults_cover_core_groups():
@@ -115,3 +173,94 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_bundle(monkeypa
     assert progress_events[0]["step_key"] == "resolving"
     assert progress_events[1]["step_key"] == "resolved"
     assert progress_events[-1]["step_key"] == "matching"
+
+
+def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "张三",
+            "mr_no": "ZY001",
+            "department": "普外科",
+            "manual_issue_text": "首次病程记录鉴别诊断不全面",
+            "coverage_type": "llm_intrinsic",
+            "candidate_rule_ids_json": '["SC-026"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V001",
+            "matched_patient_id": "P001",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        },
+        {
+            "id": "item-2",
+            "pool_id": "pool-1",
+            "row_no": 2,
+            "patient_name": "张三",
+            "mr_no": "ZY001",
+            "department": "普外科",
+            "manual_issue_text": "病程记录未分析异常检查",
+            "coverage_type": "llm_intrinsic",
+            "candidate_rule_ids_json": '["SC-033"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V001",
+            "matched_patient_id": "P001",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        },
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+
+    result = service.list_pool_records(pool_id="pool-1", include_in_batch_1=True)
+
+    assert result.total == 1
+    assert len(result.items) == 1
+    record = result.items[0]
+    assert record["id"] == "V001"
+    assert record["issue_count"] == 2
+    assert record["sample_item_ids"] == ["item-1", "item-2"]
+    assert record["candidate_rule_ids"] == ["SC-026", "SC-033"]
+    assert "首次病程记录鉴别诊断不全面" in record["issue_preview_text"]
+
+
+def test_get_runnable_items_filters_by_selected_record_ids(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "张三",
+            "mr_no": "ZY001",
+            "department": "普外科",
+            "manual_issue_text": "",
+            "coverage_type": "llm_intrinsic",
+            "candidate_rule_ids_json": '["SC-023"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V001",
+            "matched_patient_id": "P001",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+
+    runnable = service.get_runnable_items(
+        pool_id="pool-1",
+        include_in_batch_1=True,
+        record_ids=["V001"],
+    )
+
+    assert len(runnable) == 1
+    assert runnable[0]["matched_visit_id"] == "V001"
