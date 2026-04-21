@@ -238,6 +238,10 @@ const ASwitchStub = defineComponent({
 const ATableStub = defineComponent({
   name: 'ATableStub',
   props: {
+    columns: {
+      type: Array,
+      default: () => [],
+    },
     dataSource: {
       type: Array,
       default: () => [],
@@ -263,15 +267,28 @@ const ATableStub = defineComponent({
         'div',
         { class: 'a-table-stub' },
         (props.dataSource as Array<any>).map((record) =>
-          h('label', { class: 'record-row', 'data-record-id': record.id }, [
-            h('input', {
-              type: 'checkbox',
-              class: 'record-checkbox',
-              checked: ((props.rowSelection as any).selectedRowKeys || []).includes(record.id),
-              onChange: (event: Event) =>
-                toggle(record.id, (event.target as HTMLInputElement).checked),
-            }),
-            h('span', { class: 'record-name' }, record.patient_name || record.mr_no || record.id),
+          h('div', { class: 'record-row', 'data-record-id': record.id }, [
+            h('label', [
+              h('input', {
+                type: 'checkbox',
+                class: 'record-checkbox',
+                checked: ((props.rowSelection as any).selectedRowKeys || []).includes(record.id),
+                onChange: (event: Event) =>
+                  toggle(record.id, (event.target as HTMLInputElement).checked),
+              }),
+              h('span', { class: 'record-name' }, record.patient_name || record.mr_no || record.id),
+            ]),
+            h(
+              'div',
+              { class: 'record-actions' },
+              (props.columns as Array<any>)
+                .filter((column) => typeof column?.customRender === 'function')
+                .map((column, index) =>
+                  h('div', { class: `column-${index}` }, [
+                    column.customRender({ record, value: record[column.dataIndex] }),
+                  ]),
+                ),
+            ),
           ]),
         ),
       )
@@ -557,5 +574,28 @@ describe('CustomerSampleValidationView', () => {
       ['2248248', '', ''],
       ['', 'VISIT-001', '首次病程记录鉴别诊断不全面'],
     ])
+  })
+
+  it('点击查看病历后打开病历联审抽屉', async () => {
+    const wrapper = await mountView()
+
+    const reviewLink = wrapper.findAll('a').find((node) => node.text() === '查看病历')
+    expect(reviewLink).toBeTruthy()
+    await reviewLink!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.qc-review-drawer-stub').exists()).toBe(true)
+  })
+
+  it('点击查看结果后打开批量任务结果抽屉', async () => {
+    const wrapper = await mountView()
+
+    const resultLink = wrapper.findAll('a').find((node) => node.text() === '查看结果')
+    expect(resultLink).toBeTruthy()
+    await resultLink!.trigger('click')
+    await flushPromises()
+
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-1')
+    expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
   })
 })
