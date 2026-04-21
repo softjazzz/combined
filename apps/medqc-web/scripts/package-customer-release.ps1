@@ -72,25 +72,25 @@ if (Test-Path -LiteralPath (Join-Path $backendDir "data\manual_qc_runs")) {
 
 Write-Step "写入部署说明"
 $readme = @"
-# 客户部署包
+# Customer deployment package
 
-生成时间：$(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+Generated at: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 
-## 目录说明
-- frontend/dist：前端静态产物
-- backend：后端源码
+## Directory layout
+- frontend/dist: frontend static assets
+- backend: backend source code
 
-## 已排除内容
-- ICD 编码语义检索向量索引目录：backend/data/vector
-- 手工运行日志目录：backend/data/manual_qc_runs
-- 各类缓存、测试、虚拟环境目录
+## Excluded from this package
+- backend/data/vector
+- backend/data/manual_qc_runs
+- cache, test, virtual environment, and log directories
 
-## 说明
-- 当前包不包含 ICD 语义向量索引。
-- 如果后续需要 ICD 语义检索能力，可在客户环境单独执行：
+## Notes
+- This package does not include the ICD semantic vector index.
+- If ICD semantic retrieval is needed later, build it in the customer environment:
   - apps/medqc-web/backend/scripts/build_icd_vector_index.py
 "@
-$readme | Set-Content -LiteralPath (Join-Path $releaseDir "README-部署说明.txt") -Encoding UTF8
+$readme | Set-Content -LiteralPath (Join-Path $releaseDir "README-deployment.txt") -Encoding UTF8
 
 Write-Step "打包完成"
 Write-Host $releaseDir
