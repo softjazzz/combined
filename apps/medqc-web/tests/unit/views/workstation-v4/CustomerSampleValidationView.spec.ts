@@ -664,6 +664,102 @@ describe('CustomerSampleValidationView', () => {
     ])
   })
 
+  it('导入模板成功后应切换到新样本池并刷新病历池', async () => {
+    listManualSamplePools
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [buildPool()], total: 1, page: 1, page_size: 50 },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          items: [
+            buildPool(),
+            {
+              ...buildPool(),
+              id: 'pool-2',
+              name: '第二轮样本池',
+              latest_job_id: undefined,
+              latest_job_status: undefined,
+            },
+          ],
+          total: 2,
+          page: 1,
+          page_size: 50,
+        },
+      })
+    getManualSamplePoolRecords
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          pool: buildPool(),
+          items: [buildRecord()],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          pool: {
+            ...buildPool(),
+            id: 'pool-2',
+            name: '第二轮样本池',
+            latest_job_id: undefined,
+            latest_job_status: undefined,
+          },
+          items: [
+            buildRecord({
+              id: 'V010',
+              matched_visit_id: 'V010',
+              mr_no: '300001',
+              patient_name: '新患者',
+            }),
+          ],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        },
+      })
+
+    const wrapper = await mountView()
+
+    const importButton = wrapper.findAll('button').find((node) => node.text().includes('导入模板'))
+    expect(importButton).toBeTruthy()
+    await importButton!.trigger('click')
+    await flushPromises()
+
+    const inputs = wrapper.findAll('input')
+    const poolNameInput = inputs.find((node) =>
+      node.attributes('placeholder')?.includes('手工问题样本池'),
+    )
+    expect(poolNameInput).toBeTruthy()
+    await poolNameInput!.setValue('第二轮样本池')
+
+    const uploadTrigger = wrapper.find('button.upload-trigger')
+    expect(uploadTrigger.exists()).toBe(true)
+    await uploadTrigger.trigger('click')
+    await flushPromises()
+
+    const confirmButton = wrapper.find('button.modal-ok')
+    await confirmButton.trigger('click')
+    await flushPromises()
+
+    expect(importManualSamplePoolByUpload).toHaveBeenCalledWith({
+      pool_name: '第二轮样本池',
+      source_sheet: 'Sheet2',
+      description: '',
+      scene: 'running',
+      file: expect.objectContaining({
+        name: 'demo.xlsx',
+      }),
+    })
+    expect(message.success).toHaveBeenCalledWith('导入成功，共写入 2 条样本')
+    expect(wrapper.text()).toContain('当前样本池：第二轮样本池')
+    expect(wrapper.text()).toContain('新患者')
+  })
+
   it('点击查看病历后打开病历联审抽屉', async () => {
     const wrapper = await mountView()
 
@@ -764,5 +860,25 @@ describe('CustomerSampleValidationView', () => {
       record_ids: ['V001'],
       max_parallel_records: 4,
     })
+  })
+
+  it('发起验证成功后应自动打开结果抽屉并显示成功提示', async () => {
+    const wrapper = await mountView()
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起选中病历验证'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(message.success).toHaveBeenCalledWith(
+      '已创建验证任务，覆盖 1 条样本 / 1 份病历 / 5 条规则，并发 4 份病历',
+    )
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-2')
+    expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
   })
 })
