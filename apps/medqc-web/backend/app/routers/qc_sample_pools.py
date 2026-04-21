@@ -472,6 +472,7 @@ async def run_sample_pool_intrinsic_validation(
         total_records=len(records),
         draft_ids=rule_ids,
         execution_mode="multi",
+        run_mode="parallel",
         rule_count=len(rule_ids),
     )
     service.update_pool_latest_job(pool_id=pool_id, job_id=job["id"], job_status="queued")

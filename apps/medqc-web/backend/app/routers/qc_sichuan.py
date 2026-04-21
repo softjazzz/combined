@@ -214,6 +214,7 @@ class SichuanWorkspaceBatchJobCreateRequest(BaseModel):
     end_date: Optional[str] = None
     keyword: Optional[str] = None
     record_ids: Optional[List[str]] = None
+    run_mode: Optional[str] = None
 
 
 class SaveQCResultRequest(BaseModel):
@@ -289,6 +290,11 @@ def _normalize_date_field(date_field: Optional[str]) -> str:
     if value not in {"admission", "discharge"}:
         return "admission"
     return value
+
+
+def _normalize_run_mode(run_mode: Optional[str]) -> str:
+    value = str(run_mode or "").strip().lower()
+    return "parallel" if value == "parallel" else "serial"
 
 
 def _resolve_document_type(scope: str, record_scope: Optional[str]) -> str:
@@ -871,6 +877,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         enable_selective_refine = bool(filters.get("enable_selective_refine") is True)
         refine_confidence_threshold = _normalize_refine_threshold(filters.get("refine_confidence_threshold"))
         max_refine_candidates = _normalize_max_refine_candidates(filters.get("max_refine_candidates"))
+        run_mode = _normalize_run_mode(current.get("run_mode") or filters.get("run_mode"))
+        max_parallel_records = min(4, max(1, int(filters.get("max_parallel_records") or 4)))
         qc_service.assert_sc_rule_source_ready(
             context=f"workspace_batch_job:{job_id}",
             block_batch=True,
@@ -965,14 +973,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 valid_rule_ids.append(rule_id)
             rule_states[rule_id] = state
 
-        workspace.update_batch_job_progress(
-            job_id=job_id,
-            step_key="filter",
-            rule_index=0,
-            rule_count=total_rules,
-            processed_records=0,
-            total_records=total_records,
-            summary_patch={
+        def _build_progress_patch(processed_records_count: int) -> Dict[str, Any]:
+            return {
                 "rule_set_key": rule_set_key,
                 "rule_set_name": rule_set_name,
                 "rule_set_version": rule_set_version,
@@ -983,70 +985,45 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "enable_selective_refine": enable_selective_refine,
                 "refine_confidence_threshold": refine_confidence_threshold,
                 "max_refine_candidates": max_refine_candidates,
+                "run_mode": run_mode,
                 "rule_count": total_rules,
                 "total_records": total_records,
-                "success_count": 0,
-                "failed_count": 0,
-                "failed_record_count": 0,
-                "issue_records": 0,
-                "uncertain_records": 0,
-                "compliant_records": total_records,
-                "total_tokens": 0,
-                "total_processing_time": 0.0,
-                "executor_breakdown": {"program": 0, "llm": 0},
-                "cache_breakdown": {"hit": 0, "miss": 0},
-            },
-        )
+                "success_count": max(0, processed_records_count - len(failed_record_ids)),
+                "failed_count": len(all_failed_records),
+                "failed_record_count": len(failed_record_ids),
+                "issue_records": len(issue_record_ids),
+                "uncertain_records": len(uncertain_record_ids),
+                "compliant_records": max(
+                    0,
+                    processed_records_count
+                    - len(issue_record_ids)
+                    - len(uncertain_record_ids)
+                    - len(failed_record_ids),
+                ),
+                "total_tokens": int(total_tokens),
+                "total_processing_time": float(total_processing_time),
+                "executor_breakdown": {"program": executor_program, "llm": executor_llm},
+                "cache_breakdown": {"hit": cache_hit, "miss": cache_miss},
+            }
 
-        for processed_index, record in enumerate(hydrated_records, start=1):
-            latest = workspace.get_batch_job_for_processing(job_id=job_id)
-            if not latest or str(latest.get("status") or "").lower() == "canceled":
-                logger.info("四川批量任务 %s 已取消，停止执行", job_id)
-                return
-
+        async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
             record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
             visit_id = str(record.get("visit_id") or record_id).strip()
             institute_id = str(record.get("institute_id") or "").strip()
             patient_id = str(record.get("patient_id") or "").strip()
             current_scope = str(current.get("scope") or "all").strip().lower()
-            document_type = _resolve_document_type(
-                current_scope,
-                str(record.get("scope") or ""),
-            )
-            workspace.update_batch_job_progress(
-                job_id=job_id,
-                step_key="run",
-                rule_index=1 if valid_rule_ids else 0,
-                rule_count=total_rules,
-                processed_records=max(0, processed_index - 1),
-                total_records=total_records,
-                summary_patch={
-                    "rule_count": total_rules,
-                    "total_records": total_records,
-                    "success_count": max(0, processed_index - 1 - len(failed_record_ids)),
-                    "failed_count": len(all_failed_records),
-                    "failed_record_count": len(failed_record_ids),
-                    "issue_records": len(issue_record_ids),
-                    "uncertain_records": len(uncertain_record_ids),
-                    "compliant_records": max(
-                        0,
-                        max(0, processed_index - 1)
-                        - len(issue_record_ids)
-                        - len(uncertain_record_ids)
-                        - len(failed_record_ids),
-                    ),
-                    "total_tokens": int(total_tokens),
-                    "total_processing_time": float(total_processing_time),
-                    "executor_breakdown": {
-                        "program": executor_program,
-                        "llm": executor_llm,
-                    },
-                    "cache_breakdown": {
-                        "hit": cache_hit,
-                        "miss": cache_miss,
-                    },
-                },
-            )
+            document_type = _resolve_document_type(current_scope, str(record.get("scope") or ""))
+            items_by_rule: Dict[str, List[Dict[str, Any]]] = {rule_id: [] for rule_id in valid_rule_ids}
+            failed_by_rule: Dict[str, List[Dict[str, Any]]] = {rule_id: [] for rule_id in valid_rule_ids}
+            rule_stats: Dict[str, Dict[str, Any]] = {
+                rule_id: {
+                    "total_tokens": 0,
+                    "total_processing_time": 0.0,
+                    "executor_program": 0,
+                    "executor_llm": 0,
+                }
+                for rule_id in valid_rule_ids
+            }
             try:
                 used_bundle_path = False
                 bundle_fallback_reason = ""
@@ -1059,6 +1036,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_first_result_source = ""
                 record_pack_metrics: Dict[str, Any] = {}
                 record_cot_summary: Dict[str, Any] = {}
+                record_refine_summary: Dict[str, Any] = {}
 
                 if current_scope == "final" and institute_id and patient_id and visit_id:
                     used_bundle_path = True
@@ -1075,7 +1053,6 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 batch_output_mode=batch_output_mode,
                             )
                         else:
-                            # 标准链路仍保留动态分包能力。
                             single_result = await evaluate_running_final_bundle(
                                 qc_service=qc_service,
                                 scene="final",
@@ -1108,26 +1085,6 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         record_pack_metrics = dict(single_result.get("pack_metrics") or {})
                         record_cot_summary = dict(single_result.get("cot_summary") or {})
                         record_refine_summary = dict(single_result.get("refine_summary") or {})
-                        if record_refine_summary:
-                            refine_summary_total["enabled"] = bool(record_refine_summary.get("enabled") is True)
-                            refine_summary_total["candidate_count"] = int(refine_summary_total.get("candidate_count") or 0) + int(record_refine_summary.get("candidate_count") or 0)
-                            refine_summary_total["refined_rule_count"] = int(refine_summary_total.get("refined_rule_count") or 0) + int(record_refine_summary.get("refined_rule_count") or 0)
-                            refine_summary_total["refine_failed_count"] = int(refine_summary_total.get("refine_failed_count") or 0) + int(record_refine_summary.get("refine_failed_count") or 0)
-                            total_refined_rule_count += int(record_refine_summary.get("refined_rule_count") or 0)
-                            reasons = dict(record_refine_summary.get("refine_reasons") or {})
-                            target_reasons = dict(refine_summary_total.get("refine_reasons") or {})
-                            for reason_key, reason_count in reasons.items():
-                                key = str(reason_key or "").strip() or "unknown"
-                                target_reasons[key] = int(target_reasons.get(key) or 0) + int(reason_count or 0)
-                            refine_summary_total["refine_reasons"] = target_reasons
-                        pack_count = int(record_pack_metrics.get("total_packs") or 0)
-                        avg_pack_size = float(record_pack_metrics.get("avg_pack_size") or 0.0)
-                        total_pack_count += pack_count
-                        total_pack_size_weighted += (avg_pack_size * pack_count)
-                        total_pack_fallback_count += int(record_pack_metrics.get("fallback_packs") or 0)
-                        total_pack_parse_retry_count += int(record_pack_metrics.get("pack_parse_retry_count") or 0)
-                        total_single_rule_retries += int(record_pack_metrics.get("single_rule_retries") or 0)
-                        total_context_tokens_estimate += int(record_pack_metrics.get("context_tokens_estimate") or 0)
                     except Exception as bundle_exc:
                         used_bundle_path = False
                         bundle_fallback_reason = f"bundle 一次性评估失败: {bundle_exc}"
@@ -1162,33 +1119,31 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     record_first_result_source = str(result.get("first_result_source") or "")
                     record_pack_metrics = dict(result.get("pack_metrics") or {})
                     record_cot_summary = dict(result.get("cot_summary") or {})
-                    pack_count = int(record_pack_metrics.get("total_packs") or 0)
-                    avg_pack_size = float(record_pack_metrics.get("avg_pack_size") or 0.0)
-                    total_pack_count += pack_count
-                    total_pack_size_weighted += (avg_pack_size * pack_count)
-                    total_pack_fallback_count += int(record_pack_metrics.get("fallback_packs") or 0)
-                    total_pack_parse_retry_count += int(record_pack_metrics.get("pack_parse_retry_count") or 0)
-                    total_single_rule_retries += int(record_pack_metrics.get("single_rule_retries") or 0)
-                    total_context_tokens_estimate += int(record_pack_metrics.get("context_tokens_estimate") or 0)
+                    record_refine_summary = dict(result.get("refine_summary") or {})
                     eval_items = list(result.get("evaluation_results") or [])
+
                 eval_map: Dict[str, Dict[str, Any]] = {}
                 for eval_item in eval_items:
                     key = str(eval_item.get("rule_id") or eval_item.get("rule_code") or "").strip().upper()
                     if key and key not in eval_map:
                         eval_map[key] = dict(eval_item)
 
-                if record_first_result_latency > 0 and first_result_latency is None:
-                    first_result_latency = record_first_result_latency
-                    first_result_source = record_first_result_source or record_id
-                total_prompt_tokens += record_total_prompt_tokens
-                total_completion_tokens += record_total_completion_tokens
-                for cot_key, cot_value in record_cot_summary.items():
-                    cot_summary_total[cot_key] = int(cot_summary_total.get(cot_key) or 0) + int(cot_value or 0)
+                local_total_tokens = 0
+                local_total_processing_time = 0.0
+                local_executor_program = 0
+                local_executor_llm = 0
+                local_cache_hit = 0
+                local_cache_miss = 0
+                has_issue = False
+                has_uncertain = False
 
                 fallback_tokens_per_rule = int(record_total_tokens / max(1, len(valid_rule_ids)))
                 fallback_prompt_tokens_per_rule = int(record_total_prompt_tokens / max(1, len(valid_rule_ids)))
-                fallback_completion_tokens_per_rule = int(record_total_completion_tokens / max(1, len(valid_rule_ids)))
+                fallback_completion_tokens_per_rule = int(
+                    record_total_completion_tokens / max(1, len(valid_rule_ids))
+                )
                 fallback_api_per_rule = float(record_total_api_time / max(1, len(valid_rule_ids)))
+
                 for rule_id in valid_rule_ids:
                     normalized_rule_id = str(rule_id).strip().upper()
                     state = rule_states[rule_id]
@@ -1198,22 +1153,22 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     rule_job_id = str(state["rule_job_id"])
                     eval_item = eval_map.get(normalized_rule_id) or {}
                     if not eval_item:
-                        failed_record_ids.add(record_id)
-                        failed_payload = {
-                            "rule_job_id": rule_job_id,
-                            "rule_id": rule_id,
-                            "rule_code": rule_code,
-                            "rule_name": rule_name,
-                            "record_id": record_id,
-                            "visit_id": str(record.get("visit_id") or ""),
-                            "patient_name": str(record.get("patient_name") or ""),
-                            "department": str(record.get("department") or ""),
-                            "error_phase": "result_missing",
-                            "error": "规则执行未返回结果",
-                        }
-                        state["failed_records"].append(failed_payload)
-                        all_failed_records.append(failed_payload)
+                        failed_by_rule[rule_id].append(
+                            {
+                                "rule_job_id": rule_job_id,
+                                "rule_id": rule_id,
+                                "rule_code": rule_code,
+                                "rule_name": rule_name,
+                                "record_id": record_id,
+                                "visit_id": str(record.get("visit_id") or ""),
+                                "patient_name": str(record.get("patient_name") or ""),
+                                "department": str(record.get("department") or ""),
+                                "error_phase": "result_missing",
+                                "error": "规则执行未返回结果",
+                            }
+                        )
                         continue
+
                     status = str(eval_item.get("status") or "").strip().lower()
                     if status not in {"compliant", "non_compliant", "not_applicable", "uncertain"}:
                         status = "compliant" if eval_item.get("is_compliant") else "non_compliant"
@@ -1230,7 +1185,9 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     metadata.setdefault("doc_scope", str((rule or {}).get("doc_scope") or ""))
                     metadata.setdefault("rule_family", str((rule or {}).get("rule_family") or ""))
                     metadata.setdefault("executor_type", str((rule or {}).get("executor_type") or "llm"))
-                    metadata.setdefault("prompt_strategy", str(record_pack_metrics.get("prompt_strategy") or "batch_compact_v1"))
+                    metadata.setdefault(
+                        "prompt_strategy", str(record_pack_metrics.get("prompt_strategy") or "batch_compact_v1")
+                    )
                     metadata.setdefault("pack_size", int(record_pack_metrics.get("selected_pack_size") or 1))
                     metadata.setdefault("quality_profile", quality_profile)
                     metadata.setdefault("bucket_strategy", bucket_strategy)
@@ -1239,29 +1196,34 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         if bundle_fallback_reason:
                             metadata.setdefault("bundle_fallback_reason", bundle_fallback_reason)
                         metadata.setdefault("evidence_source", "medical_text_fallback")
+
                     if status == "non_compliant":
-                        issue_record_ids.add(record_id)
+                        has_issue = True
                     elif status == "uncertain":
-                        uncertain_record_ids.add(record_id)
+                        has_uncertain = True
 
                     tokens_used = int(metadata.get("tokens_used") or 0)
                     api_time = float(metadata.get("api_time") or 0.0)
-                    total_tokens += tokens_used
-                    total_processing_time += api_time
-                    state["total_tokens"] = int(state["total_tokens"] or 0) + tokens_used
-                    state["total_processing_time"] = float(state["total_processing_time"] or 0.0) + api_time
+                    local_total_tokens += tokens_used
+                    local_total_processing_time += api_time
+                    rule_stats[rule_id]["total_tokens"] = int(rule_stats[rule_id]["total_tokens"] or 0) + tokens_used
+                    rule_stats[rule_id]["total_processing_time"] = (
+                        float(rule_stats[rule_id]["total_processing_time"] or 0.0) + api_time
+                    )
 
                     executor_type = str(metadata.get("executor_type") or "llm").lower()
                     if executor_type == "program":
-                        executor_program += 1
-                        state["executor_program"] = int(state["executor_program"] or 0) + 1
+                        local_executor_program += 1
+                        rule_stats[rule_id]["executor_program"] = (
+                            int(rule_stats[rule_id]["executor_program"] or 0) + 1
+                        )
                     else:
-                        executor_llm += 1
-                        state["executor_llm"] = int(state["executor_llm"] or 0) + 1
+                        local_executor_llm += 1
+                        rule_stats[rule_id]["executor_llm"] = int(rule_stats[rule_id]["executor_llm"] or 0) + 1
                     if metadata.get("cache_hit") is True:
-                        cache_hit += 1
+                        local_cache_hit += 1
                     else:
-                        cache_miss += 1
+                        local_cache_miss += 1
 
                     issue_item = {
                         "rule_job_id": rule_job_id,
@@ -1305,7 +1267,9 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "first_result_source": str(metadata.get("first_result_source") or ""),
                         "cot_mode": str(metadata.get("cot_mode") or "disabled"),
                         "requested_enable_thinking": bool(metadata.get("requested_enable_thinking") is True),
-                        "thinking_heuristic_applied": bool(metadata.get("thinking_heuristic_applied") is True),
+                        "thinking_heuristic_applied": bool(
+                            metadata.get("thinking_heuristic_applied") is True
+                        ),
                         "refined": bool(metadata.get("refined") is True),
                         "refine_reason": str(metadata.get("refine_reason") or ""),
                         "screening_status": str(metadata.get("screening_status") or ""),
@@ -1328,94 +1292,228 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "llm_fallback": bool(metadata.get("llm_fallback") is True),
                     }
                     if issue_item["status"] in {"non_compliant", "uncertain"}:
-                        state["items"].append(issue_item)
-                        all_items.append(issue_item)
-                workspace.update_batch_job_progress(
-                    job_id=job_id,
-                    step_key="run",
-                    rule_index=len(valid_rule_ids) if valid_rule_ids else 0,
-                    rule_count=total_rules,
-                    processed_records=processed_index,
-                    total_records=total_records,
-                    summary_patch={
-                        "rule_count": total_rules,
-                        "total_records": total_records,
-                        "success_count": max(0, processed_index - len(failed_record_ids)),
-                        "failed_count": len(all_failed_records),
-                        "failed_record_count": len(failed_record_ids),
-                        "issue_records": len(issue_record_ids),
-                        "uncertain_records": len(uncertain_record_ids),
-                        "compliant_records": max(
-                            0,
-                            processed_index
-                            - len(issue_record_ids)
-                            - len(uncertain_record_ids)
-                            - len(failed_record_ids),
-                        ),
-                        "total_tokens": int(total_tokens),
-                        "total_processing_time": float(total_processing_time),
-                        "executor_breakdown": {
-                            "program": executor_program,
-                            "llm": executor_llm,
-                        },
-                        "cache_breakdown": {
-                            "hit": cache_hit,
-                            "miss": cache_miss,
-                        },
-                    },
-                )
+                        items_by_rule[rule_id].append(issue_item)
+
+                return {
+                    "record_id": record_id,
+                    "items_by_rule": items_by_rule,
+                    "failed_by_rule": failed_by_rule,
+                    "rule_stats": rule_stats,
+                    "issue_record": has_issue,
+                    "uncertain_record": has_uncertain,
+                    "failed_record": any(bool(value) for value in failed_by_rule.values()),
+                    "total_tokens": local_total_tokens,
+                    "total_prompt_tokens": record_total_prompt_tokens,
+                    "total_completion_tokens": record_total_completion_tokens,
+                    "total_processing_time": local_total_processing_time,
+                    "first_result_latency": record_first_result_latency,
+                    "first_result_source": record_first_result_source,
+                    "executor_program": local_executor_program,
+                    "executor_llm": local_executor_llm,
+                    "cache_hit": local_cache_hit,
+                    "cache_miss": local_cache_miss,
+                    "pack_metrics": record_pack_metrics,
+                    "cot_summary": record_cot_summary,
+                    "refine_summary": record_refine_summary,
+                }
             except Exception as exc:
-                failed_record_ids.add(record_id)
                 for rule_id in valid_rule_ids:
                     state = rule_states[rule_id]
-                    failed_payload = {
-                        "rule_job_id": str(state["rule_job_id"]),
-                        "rule_id": rule_id,
-                        "rule_code": str(state["rule_code"]),
-                        "rule_name": str(state["rule_name"]),
-                        "record_id": record_id,
-                        "visit_id": str(record.get("visit_id") or ""),
-                        "patient_name": str(record.get("patient_name") or ""),
-                        "department": str(record.get("department") or ""),
-                        "error_phase": "evaluate_document",
-                        "error": str(exc),
-                    }
-                    state["failed_records"].append(failed_payload)
-                    all_failed_records.append(failed_payload)
-                workspace.update_batch_job_progress(
-                    job_id=job_id,
-                    step_key="run",
-                    rule_index=len(valid_rule_ids) if valid_rule_ids else 0,
-                    rule_count=total_rules,
-                    processed_records=processed_index,
-                    total_records=total_records,
-                    summary_patch={
-                        "rule_count": total_rules,
-                        "total_records": total_records,
-                        "success_count": max(0, processed_index - len(failed_record_ids)),
-                        "failed_count": len(all_failed_records),
-                        "failed_record_count": len(failed_record_ids),
-                        "issue_records": len(issue_record_ids),
-                        "uncertain_records": len(uncertain_record_ids),
-                        "compliant_records": max(
-                            0,
-                            processed_index
-                            - len(issue_record_ids)
-                            - len(uncertain_record_ids)
-                            - len(failed_record_ids),
-                        ),
-                        "total_tokens": int(total_tokens),
-                        "total_processing_time": float(total_processing_time),
-                        "executor_breakdown": {
-                            "program": executor_program,
-                            "llm": executor_llm,
-                        },
-                        "cache_breakdown": {
-                            "hit": cache_hit,
-                            "miss": cache_miss,
-                        },
-                    },
+                    failed_by_rule[rule_id].append(
+                        {
+                            "rule_job_id": str(state["rule_job_id"]),
+                            "rule_id": rule_id,
+                            "rule_code": str(state["rule_code"]),
+                            "rule_name": str(state["rule_name"]),
+                            "record_id": record_id,
+                            "visit_id": str(record.get("visit_id") or ""),
+                            "patient_name": str(record.get("patient_name") or ""),
+                            "department": str(record.get("department") or ""),
+                            "error_phase": "evaluate_document",
+                            "error": str(exc),
+                        }
+                    )
+                return {
+                    "record_id": record_id,
+                    "items_by_rule": items_by_rule,
+                    "failed_by_rule": failed_by_rule,
+                    "rule_stats": rule_stats,
+                    "issue_record": False,
+                    "uncertain_record": False,
+                    "failed_record": True,
+                    "total_tokens": 0,
+                    "total_prompt_tokens": 0,
+                    "total_completion_tokens": 0,
+                    "total_processing_time": 0.0,
+                    "first_result_latency": 0.0,
+                    "first_result_source": "",
+                    "executor_program": 0,
+                    "executor_llm": 0,
+                    "cache_hit": 0,
+                    "cache_miss": 0,
+                    "pack_metrics": {},
+                    "cot_summary": {},
+                    "refine_summary": {},
+                }
+
+        def _merge_record_result(record_result: Dict[str, Any], processed_records_count: int) -> None:
+            nonlocal total_tokens
+            nonlocal total_prompt_tokens
+            nonlocal total_completion_tokens
+            nonlocal total_processing_time
+            nonlocal first_result_latency
+            nonlocal first_result_source
+            nonlocal executor_program
+            nonlocal executor_llm
+            nonlocal cache_hit
+            nonlocal cache_miss
+            nonlocal total_pack_count
+            nonlocal total_pack_size_weighted
+            nonlocal total_pack_fallback_count
+            nonlocal total_pack_parse_retry_count
+            nonlocal total_single_rule_retries
+            nonlocal total_context_tokens_estimate
+            nonlocal total_refined_rule_count
+
+            record_id = str(record_result.get("record_id") or "").strip()
+            if record_result.get("issue_record") is True:
+                issue_record_ids.add(record_id)
+            if record_result.get("uncertain_record") is True:
+                uncertain_record_ids.add(record_id)
+            if record_result.get("failed_record") is True:
+                failed_record_ids.add(record_id)
+
+            total_tokens += int(record_result.get("total_tokens") or 0)
+            total_prompt_tokens += int(record_result.get("total_prompt_tokens") or 0)
+            total_completion_tokens += int(record_result.get("total_completion_tokens") or 0)
+            total_processing_time += float(record_result.get("total_processing_time") or 0.0)
+            executor_program += int(record_result.get("executor_program") or 0)
+            executor_llm += int(record_result.get("executor_llm") or 0)
+            cache_hit += int(record_result.get("cache_hit") or 0)
+            cache_miss += int(record_result.get("cache_miss") or 0)
+
+            record_first_result_latency = float(record_result.get("first_result_latency") or 0.0)
+            if record_first_result_latency > 0 and first_result_latency is None:
+                first_result_latency = record_first_result_latency
+                first_result_source = str(record_result.get("first_result_source") or "")
+
+            record_cot_summary = dict(record_result.get("cot_summary") or {})
+            for cot_key, cot_value in record_cot_summary.items():
+                cot_summary_total[cot_key] = int(cot_summary_total.get(cot_key) or 0) + int(cot_value or 0)
+
+            record_refine_summary = dict(record_result.get("refine_summary") or {})
+            if record_refine_summary:
+                refine_summary_total["enabled"] = bool(record_refine_summary.get("enabled") is True)
+                refine_summary_total["candidate_count"] = int(
+                    refine_summary_total.get("candidate_count") or 0
+                ) + int(record_refine_summary.get("candidate_count") or 0)
+                refine_summary_total["refined_rule_count"] = int(
+                    refine_summary_total.get("refined_rule_count") or 0
+                ) + int(record_refine_summary.get("refined_rule_count") or 0)
+                refine_summary_total["refine_failed_count"] = int(
+                    refine_summary_total.get("refine_failed_count") or 0
+                ) + int(record_refine_summary.get("refine_failed_count") or 0)
+                total_refined_rule_count += int(record_refine_summary.get("refined_rule_count") or 0)
+                reasons = dict(record_refine_summary.get("refine_reasons") or {})
+                target_reasons = dict(refine_summary_total.get("refine_reasons") or {})
+                for reason_key, reason_count in reasons.items():
+                    key = str(reason_key or "").strip() or "unknown"
+                    target_reasons[key] = int(target_reasons.get(key) or 0) + int(reason_count or 0)
+                refine_summary_total["refine_reasons"] = target_reasons
+
+            record_pack_metrics = dict(record_result.get("pack_metrics") or {})
+            pack_count = int(record_pack_metrics.get("total_packs") or 0)
+            avg_pack_size = float(record_pack_metrics.get("avg_pack_size") or 0.0)
+            total_pack_count += pack_count
+            total_pack_size_weighted += (avg_pack_size * pack_count)
+            total_pack_fallback_count += int(record_pack_metrics.get("fallback_packs") or 0)
+            total_pack_parse_retry_count += int(record_pack_metrics.get("pack_parse_retry_count") or 0)
+            total_single_rule_retries += int(record_pack_metrics.get("single_rule_retries") or 0)
+            total_context_tokens_estimate += int(record_pack_metrics.get("context_tokens_estimate") or 0)
+
+            items_by_rule = dict(record_result.get("items_by_rule") or {})
+            failed_by_rule = dict(record_result.get("failed_by_rule") or {})
+            rule_stats = dict(record_result.get("rule_stats") or {})
+            for rule_id in valid_rule_ids:
+                state = rule_states[rule_id]
+                stats = dict(rule_stats.get(rule_id) or {})
+                state["total_tokens"] = int(state.get("total_tokens") or 0) + int(
+                    stats.get("total_tokens") or 0
                 )
+                state["total_processing_time"] = float(state.get("total_processing_time") or 0.0) + float(
+                    stats.get("total_processing_time") or 0.0
+                )
+                state["executor_program"] = int(state.get("executor_program") or 0) + int(
+                    stats.get("executor_program") or 0
+                )
+                state["executor_llm"] = int(state.get("executor_llm") or 0) + int(
+                    stats.get("executor_llm") or 0
+                )
+                for item in list(items_by_rule.get(rule_id) or []):
+                    state["items"].append(item)
+                    all_items.append(item)
+                for failed in list(failed_by_rule.get(rule_id) or []):
+                    state["failed_records"].append(failed)
+                    all_failed_records.append(failed)
+
+            workspace.update_batch_job_progress(
+                job_id=job_id,
+                step_key="run",
+                rule_index=len(valid_rule_ids) if valid_rule_ids else 0,
+                rule_count=total_rules,
+                processed_records=processed_records_count,
+                total_records=total_records,
+                summary_patch=_build_progress_patch(processed_records_count),
+            )
+
+        workspace.update_batch_job_progress(
+            job_id=job_id,
+            step_key="filter",
+            rule_index=0,
+            rule_count=total_rules,
+            processed_records=0,
+            total_records=total_records,
+            summary_patch=_build_progress_patch(0),
+        )
+
+        if run_mode == "parallel" and total_records > 1:
+            semaphore = asyncio.Semaphore(max_parallel_records)
+
+            async def _evaluate_with_limit(record: Dict[str, Any]) -> Dict[str, Any]:
+                async with semaphore:
+                    return await _evaluate_single_record(record)
+
+            tasks = [
+                asyncio.create_task(
+                    _evaluate_with_limit(record),
+                    name=f"sichuan-batch-{job_id}-{idx + 1}",
+                )
+                for idx, record in enumerate(hydrated_records)
+            ]
+            completed_count = 0
+            try:
+                for future in asyncio.as_completed(tasks):
+                    latest = workspace.get_batch_job_for_processing(job_id=job_id)
+                    if not latest or str(latest.get("status") or "").lower() == "canceled":
+                        for task in tasks:
+                            if not task.done():
+                                task.cancel()
+                        await asyncio.gather(*tasks, return_exceptions=True)
+                        logger.info("四川批量任务 %s 已取消，停止执行", job_id)
+                        return
+                    record_result = await future
+                    completed_count += 1
+                    _merge_record_result(record_result, completed_count)
+            finally:
+                await asyncio.gather(*tasks, return_exceptions=True)
+        else:
+            for processed_index, record in enumerate(hydrated_records, start=1):
+                latest = workspace.get_batch_job_for_processing(job_id=job_id)
+                if not latest or str(latest.get("status") or "").lower() == "canceled":
+                    logger.info("四川批量任务 %s 已取消，停止执行", job_id)
+                    return
+                record_result = await _evaluate_single_record(record)
+                _merge_record_result(record_result, processed_index)
 
         rule_results: List[Dict[str, Any]] = []
         for rule_index, rule_id in enumerate(rule_ids):
@@ -1487,6 +1585,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "enable_selective_refine": enable_selective_refine,
             "refine_confidence_threshold": refine_confidence_threshold,
             "max_refine_candidates": max_refine_candidates,
+            "run_mode": run_mode,
             "total_records": total_records,
             "success_count": max(0, total_records - len(failed_record_ids)),
             "failed_record_count": len(failed_record_ids),
@@ -1610,6 +1709,7 @@ async def create_workspace_batch_job(
 
     workspace = _sichuan_workspace_service()
     normalized_scope = _normalize_scope(effective_scope)
+    run_mode = _normalize_run_mode(payload.run_mode) if payload.run_mode else "parallel"
     records = workspace.collect_records(
         scope=normalized_scope,
         department=payload.department,
@@ -1652,11 +1752,13 @@ async def create_workspace_batch_job(
             "refine_confidence_threshold": refine_confidence_threshold,
             "max_refine_candidates": max_refine_candidates,
             "source": "sichuan_rule_workspace",
+            "run_mode": run_mode,
         },
         record_ids=payload.record_ids or [],
         total_records=len(records),
         draft_ids=rule_ids,
         execution_mode="multi",
+        run_mode=run_mode,
         rule_count=len(rule_ids),
     )
     background_tasks.add_task(_run_sichuan_workspace_batch_job, job["id"])
@@ -1674,6 +1776,7 @@ async def create_workspace_batch_job(
             "bucket_strategy": bucket_strategy,
             "batch_output_mode": batch_output_mode,
             "max_refine_candidates": max_refine_candidates,
+            "run_mode": run_mode,
             "refine_summary": None,
         },
         message="四川规则批量任务已创建",

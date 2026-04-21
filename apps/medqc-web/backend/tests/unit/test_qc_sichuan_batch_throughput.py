@@ -76,6 +76,7 @@ class _WorkspaceStub:
         draft_ids: Optional[List[str]] = None,
         execution_mode: Optional[str] = None,
         rule_count: Optional[int] = None,
+        run_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         self.created_job = {
             "id": self.job["id"],
@@ -91,6 +92,7 @@ class _WorkspaceStub:
             "total_records": total_records,
             "execution_mode": execution_mode,
             "rule_count": rule_count,
+            "run_mode": run_mode,
             "status": "queued",
         }
         return dict(self.created_job)
@@ -566,7 +568,9 @@ async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkey
     assert filters["batch_output_mode"] == "minimal"
     assert filters["enable_selective_refine"] is True
     assert filters["max_refine_candidates"] == 3
+    assert filters["run_mode"] == "parallel"
     assert filters["rule_ids"] == list(SC_CONTENT_V1_RULE_IDS)
+    assert workspace.created_job["run_mode"] == "parallel"
     assert response["data"]["draft_ids"] == list(SC_CONTENT_V1_RULE_IDS)
 
 
@@ -603,6 +607,8 @@ async def test_create_workspace_batch_job_should_resolve_fast_screen_rule_set(mo
     assert filters["batch_output_mode"] == "minimal"
     assert filters["enable_selective_refine"] is False
     assert filters["max_refine_candidates"] == 0
+    assert filters["run_mode"] == "parallel"
+    assert workspace.created_job["run_mode"] == "parallel"
     assert response["data"]["execution_strategy"] == "fast_screen"
 
 
@@ -639,5 +645,7 @@ async def test_create_workspace_batch_job_should_resolve_full_intrinsic_fast_scr
     assert filters["batch_output_mode"] == "minimal"
     assert filters["enable_selective_refine"] is False
     assert filters["max_refine_candidates"] == 0
+    assert filters["run_mode"] == "parallel"
     assert len(filters["rule_ids"]) == 84
+    assert workspace.created_job["run_mode"] == "parallel"
     assert response["data"]["execution_strategy"] == "fast_screen"
