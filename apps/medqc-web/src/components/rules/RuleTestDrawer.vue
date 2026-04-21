@@ -193,8 +193,9 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
 } from '@ant-design/icons-vue'
+import { resolveApiBaseUrl } from '@/utils/api-helpers'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+const API_BASE = resolveApiBaseUrl()
 
 interface Props {
   open: boolean

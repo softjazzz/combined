@@ -14,8 +14,10 @@
  * ✅ 扩展性强
  */
 
+import { resolveApiBaseUrl } from '@/utils/api-helpers'
+
 // API配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+const API_BASE_URL = resolveApiBaseUrl()
 const API_VERSION = import.meta.env.VITE_API_VERSION || 'v1'
 
 // 接口类型定义
@@ -83,10 +85,7 @@ export class MedicalQcApiClient {
   }
 
   // 通用请求方法
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = endpoint.startsWith('http') ? endpoint : this.buildUrl(endpoint)
 
     const defaultOptions: RequestInit = {
@@ -136,7 +135,7 @@ export class MedicalQcApiClient {
     const concurrency = 3
     for (let i = 0; i < requests.length; i += concurrency) {
       const batch = requests.slice(i, i + concurrency)
-      const batchPromises = batch.map(request => this.analyzeRecord(request))
+      const batchPromises = batch.map((request) => this.analyzeRecord(request))
       const batchResults = await Promise.all(batchPromises)
       results.push(...batchResults)
     }
@@ -159,15 +158,15 @@ export const QC_RULES = {
     'L1.1': '时间完整性检查',
     'L2.1': '必填项检查',
     'L3.1': '格式规范检查',
-  }
+  },
 }
 
 // 缺陷等级配置
 export const DEFECT_LEVELS = {
-  '否决项': { color: 'red', priority: 1 },
-  'A级缺陷': { color: 'orange', priority: 2 },
-  'B级缺陷': { color: 'yellow', priority: 3 },
-  'C级缺陷': { color: 'blue', priority: 4 },
+  否决项: { color: 'red', priority: 1 },
+  A级缺陷: { color: 'orange', priority: 2 },
+  B级缺陷: { color: 'yellow', priority: 3 },
+  C级缺陷: { color: 'blue', priority: 4 },
 }
 
 // 工具函数
@@ -182,4 +181,3 @@ export const formatTokens = (tokens: number): string => {
 export const formatCompressionRatio = (ratio: number): string => {
   return `${(ratio * 100).toFixed(1)}%`
 }
-

@@ -11,9 +11,10 @@ import type {
   AIDefectSuggestion,
   DefectAnalysisContext,
   BatchAuditRequest,
-  BatchAuditResult
+  BatchAuditResult,
 } from '@/types/audit-module'
 import { getAccessToken } from '@/utils/auth-token'
+import { resolveApiBaseUrl } from '@/utils/api-helpers'
 
 // API响应包装类型
 interface APIResponse<T> {
@@ -32,25 +33,22 @@ interface PaginatedResponse<T> {
 }
 
 class UnifiedAPIClient {
-  private baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+  private baseURL = resolveApiBaseUrl()
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseURL}${endpoint}`
 
     const defaultHeaders = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.getAuthToken()}`
+      Authorization: `Bearer ${this.getAuthToken()}`,
     }
 
     const response = await fetch(url, {
       ...options,
       headers: {
         ...defaultHeaders,
-        ...options.headers
-      }
+        ...options.headers,
+      },
     })
 
     if (!response.ok) {
@@ -71,19 +69,21 @@ class UnifiedAPIClient {
   async createAuditTask(request: CreateAuditTaskRequest): Promise<QCAuditTask> {
     return this.request<QCAuditTask>('/api/audit-tasks', {
       method: 'POST',
-      body: JSON.stringify(request)
+      body: JSON.stringify(request),
     })
   }
 
-  async getAuditTasks(params: {
-    page?: number
-    page_size?: number
-    task_type?: string
-    audit_level?: string
-    status?: string
-    assigned_reviewer?: string
-    search?: string
-  } = {}): Promise<PaginatedResponse<QCAuditTask>> {
+  async getAuditTasks(
+    params: {
+      page?: number
+      page_size?: number
+      task_type?: string
+      audit_level?: string
+      status?: string
+      assigned_reviewer?: string
+      search?: string
+    } = {},
+  ): Promise<PaginatedResponse<QCAuditTask>> {
     const searchParams = new URLSearchParams()
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined) {
@@ -92,7 +92,7 @@ class UnifiedAPIClient {
     })
 
     return this.request<PaginatedResponse<QCAuditTask>>(
-      `/api/audit-tasks?${searchParams.toString()}`
+      `/api/audit-tasks?${searchParams.toString()}`,
     )
   }
 
@@ -108,7 +108,7 @@ class UnifiedAPIClient {
       status?: string
       risk_level?: string
       assigned_reviewer?: string
-    } = {}
+    } = {},
   ): Promise<PaginatedResponse<QCAuditTaskItem>> {
     const searchParams = new URLSearchParams()
     Object.entries(params).forEach(([key, value]) => {
@@ -118,35 +118,35 @@ class UnifiedAPIClient {
     })
 
     return this.request<PaginatedResponse<QCAuditTaskItem>>(
-      `/api/audit-tasks/${taskId}/items?${searchParams.toString()}`
+      `/api/audit-tasks/${taskId}/items?${searchParams.toString()}`,
     )
   }
 
   async startAuditTask(taskId: string): Promise<QCAuditTask> {
     return this.request<QCAuditTask>(`/api/audit-tasks/${taskId}/start`, {
-      method: 'POST'
+      method: 'POST',
     })
   }
 
   async completeAuditTask(taskId: string): Promise<QCAuditTask> {
     return this.request<QCAuditTask>(`/api/audit-tasks/${taskId}/complete`, {
-      method: 'POST'
+      method: 'POST',
     })
   }
 
   async performIntelligentSampling(taskId: string): Promise<QCAuditTaskItem[]> {
     return this.request<QCAuditTaskItem[]>(`/api/audit-tasks/${taskId}/intelligent-sampling`, {
-      method: 'POST'
+      method: 'POST',
     })
   }
 
   async batchAssignReviewers(
     taskId: string,
-    assignments: Record<string, string>
+    assignments: Record<string, string>,
   ): Promise<unknown> {
     return this.request(`/api/audit-tasks/${taskId}/batch-assign`, {
       method: 'POST',
-      body: JSON.stringify(assignments)
+      body: JSON.stringify(assignments),
     })
   }
 
@@ -156,7 +156,7 @@ class UnifiedAPIClient {
 
   async deleteAuditTask(taskId: string): Promise<void> {
     await this.request(`/api/audit-tasks/${taskId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
     })
   }
 
@@ -164,20 +164,17 @@ class UnifiedAPIClient {
 
   async detectDefectsForTaskItem(
     taskItemId: string,
-    analysisContext: DefectAnalysisContext
+    analysisContext: DefectAnalysisContext,
   ): Promise<AIDefectSuggestion[]> {
-    return this.request<AIDefectSuggestion[]>(
-      `/api/ai-assistance/defect-detection/${taskItemId}`,
-      {
-        method: 'POST',
-        body: JSON.stringify(analysisContext)
-      }
-    )
+    return this.request<AIDefectSuggestion[]>(`/api/ai-assistance/defect-detection/${taskItemId}`, {
+      method: 'POST',
+      body: JSON.stringify(analysisContext),
+    })
   }
 
   async batchDetectDefects(
     request: BatchAuditRequest,
-    analysisContext: DefectAnalysisContext
+    analysisContext: DefectAnalysisContext,
   ): Promise<Record<string, AIDefectSuggestion[]>> {
     return this.request<Record<string, AIDefectSuggestion[]>>(
       '/api/ai-assistance/batch-defect-detection',
@@ -185,61 +182,58 @@ class UnifiedAPIClient {
         method: 'POST',
         body: JSON.stringify({
           ...request,
-          analysis_context: analysisContext
-        })
-      }
+          analysis_context: analysisContext,
+        }),
+      },
     )
   }
 
   async generateRectificationPlan(
     defectsData: unknown[],
     medicalRecordId: string,
-    context?: Record<string, unknown>
+    context?: Record<string, unknown>,
   ): Promise<unknown> {
     return this.request('/api/ai-assistance/rectification-plan', {
       method: 'POST',
       body: JSON.stringify({
         defects_data: defectsData,
         medical_record_id: medicalRecordId,
-        context
-      })
+        context,
+      }),
     })
   }
 
   async smartMedicalRecordAnalysis(
     medicalRecordId: string,
-    analysisConfig: Record<string, unknown>
+    analysisConfig: Record<string, unknown>,
   ): Promise<unknown> {
     return this.request(`/api/ai-assistance/smart-analysis/${medicalRecordId}`, {
       method: 'POST',
-      body: JSON.stringify(analysisConfig)
+      body: JSON.stringify(analysisConfig),
     })
   }
 
   async predictQualityScore(
     medicalRecordId: string,
-    predictionConfig: Record<string, unknown>
+    predictionConfig: Record<string, unknown>,
   ): Promise<unknown> {
     return this.request('/api/ai-assistance/quality-score-prediction', {
       method: 'POST',
       body: JSON.stringify({
         medical_record_id: medicalRecordId,
-        prediction_config: predictionConfig
-      })
+        prediction_config: predictionConfig,
+      }),
     })
   }
 
-  async getAIAnalysisHistory(
-    taskItemId: string,
-    limit: number = 10
-  ): Promise<any[]> {
+  async getAIAnalysisHistory(taskItemId: string, limit: number = 10): Promise<any[]> {
     return this.request(`/api/ai-assistance/analysis-history/${taskItemId}?limit=${limit}`)
   }
 
   async submitAIFeedback(feedbackData: unknown): Promise<unknown> {
     return this.request('/api/ai-assistance/feedback', {
       method: 'POST',
-      body: JSON.stringify(feedbackData)
+      body: JSON.stringify(feedbackData),
     })
   }
 
@@ -247,34 +241,36 @@ class UnifiedAPIClient {
 
   async sendNotification(
     notificationData: unknown,
-    immediate: boolean = true
+    immediate: boolean = true,
   ): Promise<QCNotification> {
     return this.request<QCNotification>(`/api/notifications?immediate=${immediate}`, {
       method: 'POST',
-      body: JSON.stringify(notificationData)
+      body: JSON.stringify(notificationData),
     })
   }
 
   async batchSendNotifications(notificationsData: unknown[]): Promise<QCNotification[]> {
     return this.request<QCNotification[]>('/api/notifications/batch', {
       method: 'POST',
-      body: JSON.stringify(notificationsData)
+      body: JSON.stringify(notificationsData),
     })
   }
 
-  async getUserNotifications(params: {
-    page?: number
-    page_size?: number
-    status?: string[]
-    types?: string[]
-    priority?: string
-    unread_only?: boolean
-  } = {}): Promise<PaginatedResponse<QCNotification>> {
+  async getUserNotifications(
+    params: {
+      page?: number
+      page_size?: number
+      status?: string[]
+      types?: string[]
+      priority?: string
+      unread_only?: boolean
+    } = {},
+  ): Promise<PaginatedResponse<QCNotification>> {
     const searchParams = new URLSearchParams()
     Object.entries(params).forEach(([key, value]) => {
       if (value !== undefined) {
         if (Array.isArray(value)) {
-          value.forEach(v => searchParams.append(key, v))
+          value.forEach((v) => searchParams.append(key, v))
         } else {
           searchParams.append(key, String(value))
         }
@@ -282,26 +278,26 @@ class UnifiedAPIClient {
     })
 
     return this.request<PaginatedResponse<QCNotification>>(
-      `/api/notifications?${searchParams.toString()}`
+      `/api/notifications?${searchParams.toString()}`,
     )
   }
 
   async markNotificationAsRead(notificationId: string): Promise<void> {
     await this.request(`/api/notifications/${notificationId}/read`, {
-      method: 'PUT'
+      method: 'PUT',
     })
   }
 
   async markNotificationAsProcessed(notificationId: string): Promise<void> {
     await this.request(`/api/notifications/${notificationId}/processed`, {
-      method: 'PUT'
+      method: 'PUT',
     })
   }
 
   async batchMarkAsRead(notificationIds: string[]): Promise<void> {
     await this.request('/api/notifications/batch-read', {
       method: 'POST',
-      body: JSON.stringify(notificationIds)
+      body: JSON.stringify(notificationIds),
     })
   }
 
@@ -312,15 +308,15 @@ class UnifiedAPIClient {
   async sendTestNotification(
     recipientId: string,
     messageType: string = 'system_announcement',
-    priority: string = 'normal'
+    priority: string = 'normal',
   ): Promise<QCNotification> {
     return this.request<QCNotification>('/api/notifications/test', {
       method: 'POST',
       body: JSON.stringify({
         recipient_id: recipientId,
         message_type: messageType,
-        priority
-      })
+        priority,
+      }),
     })
   }
 
@@ -344,4 +340,3 @@ export const unifiedAPIClient = new UnifiedAPIClient()
 
 // 导出类型
 export type { APIResponse, PaginatedResponse }
-

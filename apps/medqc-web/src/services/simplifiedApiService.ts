@@ -6,21 +6,17 @@
 
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
-import type {
-  ApiResponse,
-  LoginRequest,
-  LoginResponse,
-  User
-} from '@/types'
+import type { ApiResponse, LoginRequest, LoginResponse, User } from '@/types'
 import {
   clearAuthTokens,
   getAccessToken,
   setAccessToken,
   setRefreshToken as writeRefreshToken,
 } from '@/utils/auth-token'
+import { resolveApiBaseUrl } from '@/utils/api-helpers'
 
 // API基础配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+const API_BASE_URL = resolveApiBaseUrl()
 const API_TIMEOUT = 30000 // 30秒超时
 
 // 创建axios实例
@@ -61,21 +57,22 @@ class TokenManager {
 }
 
 // 请求拦截器
-apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = TokenManager.getToken()
-  if (token && !TokenManager.isTokenExpired(token)) {
-    config.headers = config.headers || {}
-    config.headers.Authorization = `Bearer ${token}`
-  }
+apiClient.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const token = TokenManager.getToken()
+    if (token && !TokenManager.isTokenExpired(token)) {
+      config.headers = config.headers || {}
+      config.headers.Authorization = `Bearer ${token}`
+    }
 
-  console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`)
+    console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`)
 
-  return config
-},
+    return config
+  },
   (error: unknown) => {
     console.error('❌ Request interceptor error:', error)
     return Promise.reject(error)
-  }
+  },
 )
 
 const extractAxiosErrorMessage = (error: unknown, fallback: string): string => {
@@ -86,19 +83,26 @@ const extractAxiosErrorMessage = (error: unknown, fallback: string): string => {
 }
 
 // 响应拦截器
-apiClient.interceptors.response.use((response: AxiosResponse) => {
-  console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-    status: response.status,
-    data: response.data
-  })
-  return response
-},
+apiClient.interceptors.response.use(
+  (response: AxiosResponse) => {
+    console.log(
+      `✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`,
+      {
+        status: response.status,
+        data: response.data,
+      },
+    )
+    return response
+  },
   (error: unknown) => {
     const axiosError = axios.isAxiosError(error) ? error : null
-    console.error(`❌ API Error: ${axiosError?.config?.method?.toUpperCase()} ${axiosError?.config?.url}`, {
-      status: axiosError?.response?.status,
-      message: extractAxiosErrorMessage(error, '请求失败')
-    })
+    console.error(
+      `❌ API Error: ${axiosError?.config?.method?.toUpperCase()} ${axiosError?.config?.url}`,
+      {
+        status: axiosError?.response?.status,
+        message: extractAxiosErrorMessage(error, '请求失败'),
+      },
+    )
 
     // 处理401错误
     if (axiosError?.response?.status === 401) {
@@ -109,7 +113,7 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
     }
 
     return Promise.reject(error)
-  }
+  },
 )
 
 /**
@@ -117,7 +121,6 @@ apiClient.interceptors.response.use((response: AxiosResponse) => {
  * 只包含认证和工具类API
  */
 export class SimplifiedApiService {
-
   // ==================== 认证相关API ====================
 
   /**
@@ -138,12 +141,12 @@ export class SimplifiedApiService {
       return {
         success: true,
         data: response.data,
-        message: '登录成功'
+        message: '登录成功',
       }
     } catch (error: unknown) {
       return {
         success: false,
-        error: extractAxiosErrorMessage(error, '登录失败')
+        error: extractAxiosErrorMessage(error, '登录失败'),
       }
     }
   }
@@ -156,12 +159,12 @@ export class SimplifiedApiService {
       const response = await apiClient.get<User>('/api/v1/auth/me')
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
     } catch (error: unknown) {
       return {
         success: false,
-        error: extractAxiosErrorMessage(error, '获取用户信息失败')
+        error: extractAxiosErrorMessage(error, '获取用户信息失败'),
       }
     }
   }
@@ -175,14 +178,14 @@ export class SimplifiedApiService {
       TokenManager.clearTokens()
       return {
         success: true,
-        message: '登出成功'
+        message: '登出成功',
       }
     } catch (error: unknown) {
       // 即使后端登出失败，也清除本地token
       TokenManager.clearTokens()
       return {
         success: true,
-        message: '登出成功'
+        message: '登出成功',
       }
     }
   }
@@ -197,12 +200,12 @@ export class SimplifiedApiService {
       const response = await apiClient.get('/api/v1/health')
       return {
         success: true,
-        data: response.data
+        data: response.data,
       }
     } catch (error: unknown) {
       return {
         success: false,
-        error: extractAxiosErrorMessage(error, '健康检查失败')
+        error: extractAxiosErrorMessage(error, '健康检查失败'),
       }
     }
   }
@@ -217,19 +220,19 @@ export class SimplifiedApiService {
 
       const response = await apiClient.post('/api/qc/analyze-demo', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+          'Content-Type': 'multipart/form-data',
+        },
       })
 
       return {
         success: true,
         data: response.data.data,
-        message: response.data.message
+        message: response.data.message,
       }
     } catch (error: unknown) {
       return {
         success: false,
-        error: extractAxiosErrorMessage(error, '分析失败')
+        error: extractAxiosErrorMessage(error, '分析失败'),
       }
     }
   }
@@ -244,19 +247,19 @@ export class SimplifiedApiService {
 
       const response = await apiClient.post('/api/files/upload', formData, {
         headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+          'Content-Type': 'multipart/form-data',
+        },
       })
 
       return {
         success: true,
         data: response.data.data,
-        message: response.data.message
+        message: response.data.message,
       }
     } catch (error: unknown) {
       return {
         success: false,
-        error: extractAxiosErrorMessage(error, '文件上传失败')
+        error: extractAxiosErrorMessage(error, '文件上传失败'),
       }
     }
   }
@@ -270,12 +273,12 @@ export class SimplifiedApiService {
       return {
         success: true,
         data: response.data.data,
-        message: response.data.message
+        message: response.data.message,
       }
     } catch (error: unknown) {
       return {
         success: false,
-        error: extractAxiosErrorMessage(error, '获取规则失败')
+        error: extractAxiosErrorMessage(error, '获取规则失败'),
       }
     }
   }

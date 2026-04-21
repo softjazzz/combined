@@ -146,10 +146,11 @@ import {
   ImportOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  SyncOutlined
+  SyncOutlined,
 } from '@ant-design/icons-vue'
+import { resolveApiBaseUrl } from '@/utils/api-helpers'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001'
+const API_BASE = resolveApiBaseUrl()
 
 interface Props {
   open: boolean
@@ -158,7 +159,7 @@ interface Props {
 defineProps<Props>()
 const emit = defineEmits<{
   'update:open': [value: boolean]
-  'imported': []
+  imported: []
 }>()
 
 type Step = 'upload' | 'preview' | 'result'
@@ -171,7 +172,7 @@ const importResult = ref({
   inserted: 0,
   updated: 0,
   errors: 0,
-  sample_error: null as string | null
+  sample_error: null as string | null,
 })
 
 const previewColumns = [
@@ -179,21 +180,25 @@ const previewColumns = [
   { title: '名称', dataIndex: 'name', key: 'name', width: 200, ellipsis: true },
   { title: '分类', dataIndex: 'category', key: 'category', width: 80 },
   { title: '严重性', dataIndex: 'severity', key: 'severity', width: 80 },
-  { title: '类型', dataIndex: 'rule_type', key: 'rule_type', width: 80 }
+  { title: '类型', dataIndex: 'rule_type', key: 'rule_type', width: 80 },
 ]
 
 const previewData = computed(() => {
-  return parsedRules.value.map(r => ({
+  return parsedRules.value.map((r) => ({
     rule_code: r.rule_code || r.rule_id || '-',
     name: r.name || r.rule_name || '未命名',
     category: r.category || r.rule_category || '-',
     severity: r.defect_level || r.severity || '-',
-    rule_type: r.rule_type || '-'
+    rule_type: r.rule_type || '-',
   }))
 })
 
 const resultStatus = computed(() => {
-  if (importResult.value.errors > 0 && importResult.value.inserted === 0 && importResult.value.updated === 0) {
+  if (
+    importResult.value.errors > 0 &&
+    importResult.value.inserted === 0 &&
+    importResult.value.updated === 0
+  ) {
     return 'error'
   }
   if (importResult.value.errors > 0) return 'warning'
@@ -255,7 +260,7 @@ const doImport = async () => {
     const resp = await fetch(`${API_BASE}/api/v1/semantic-rules/import`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rules: parsedRules.value })
+      body: JSON.stringify({ rules: parsedRules.value }),
     })
 
     if (!resp.ok) {
@@ -270,7 +275,7 @@ const doImport = async () => {
       inserted: data.inserted || 0,
       updated: data.updated || 0,
       errors: data.errors || 0,
-      sample_error: data.sample_error || null
+      sample_error: data.sample_error || null,
     }
 
     step.value = 'result'

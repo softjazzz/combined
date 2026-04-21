@@ -11,6 +11,7 @@ $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $releaseDir = Join-Path $OutputRoot "medqc-web-customer-$stamp"
 $backendDir = Join-Path $releaseDir "backend"
 $frontendDir = Join-Path $releaseDir "frontend"
+$toolsDir = Join-Path $releaseDir "tools"
 
 function Write-Step([string]$message) {
   Write-Host "[package] $message" -ForegroundColor Cyan
@@ -36,10 +37,10 @@ function Copy-TreeExclude([string]$source, [string]$destination, [string[]]$excl
 }
 
 if (-not $SkipBuild) {
-  Write-Step "构建前端 dist"
+  Write-Step "以 customer 模式构建前端 dist"
   Push-Location $projectRoot
   try {
-    npm run build
+    npx vite build --mode customer --config vite.config.mjs --configLoader native
   }
   finally {
     Pop-Location
@@ -50,11 +51,12 @@ Write-Step "准备发布目录 $releaseDir"
 if (Test-Path -LiteralPath $releaseDir) {
   Remove-Item -LiteralPath $releaseDir -Recurse -Force
 }
-New-Item -ItemType Directory -Force -Path $releaseDir, $backendDir, $frontendDir | Out-Null
+New-Item -ItemType Directory -Force -Path $releaseDir, $backendDir, $frontendDir, $toolsDir | Out-Null
 
 Write-Step "复制前端构建产物"
 Copy-Item -LiteralPath (Join-Path $projectRoot "dist") -Destination (Join-Path $frontendDir "dist") -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "package.json") -Destination (Join-Path $frontendDir "package.json") -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\serve_dist_spa.py") -Destination (Join-Path $toolsDir "serve_dist_spa.py") -Force
 
 Write-Step "复制后端源码（排除 ICD 向量索引和开发目录）"
 Copy-TreeExclude `
@@ -87,6 +89,7 @@ Generated at: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 
 ## Notes
 - This package does not include the ICD semantic vector index.
+- Frontend is built in customer mode and does not hardcode the public API domain.
 - If ICD semantic retrieval is needed later, build it in the customer environment:
   - apps/medqc-web/backend/scripts/build_icd_vector_index.py
 "@

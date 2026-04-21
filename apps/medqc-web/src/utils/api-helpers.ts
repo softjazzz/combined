@@ -1,15 +1,23 @@
 import { isSuccessResponse, type ApiResponse } from '@/types/api'
 
-const DEFAULT_BACKEND_PORT = '8000'
+const DEFAULT_BACKEND_PORT = '8001'
 
 export const isApiResponse = <T>(value: unknown): value is ApiResponse<T> => {
-  return typeof value === 'object' && value !== null && 'success' in (value as Record<string, unknown>)
+  return (
+    typeof value === 'object' && value !== null && 'success' in (value as Record<string, unknown>)
+  )
 }
 
 export const resolveApiBaseUrl = (): string => {
   const configured = import.meta.env.VITE_API_BASE_URL?.trim()
   if (configured) {
     return configured
+  }
+  const preferSameOrigin = String(import.meta.env.VITE_API_USE_SAME_ORIGIN || '')
+    .trim()
+    .toLowerCase()
+  if (preferSameOrigin === 'true' || preferSameOrigin === '1') {
+    return ''
   }
   if (import.meta.env.DEV) {
     return ''
