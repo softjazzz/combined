@@ -392,8 +392,17 @@
           />
         </div>
         <div>
-          <div class="mb-2 text-[13px] font-medium text-slate-700">
-            Excel 模板
+          <div
+            class="mb-2 flex items-center justify-between gap-3 text-[13px] font-medium text-slate-700"
+          >
+            <span>Excel 模板</span>
+            <a-button
+              type="link"
+              class="!px-0"
+              @click="handleDownloadTemplate"
+            >
+              下载模板
+            </a-button>
           </div>
           <a-upload-dragger
             v-model:file-list="importFileList"
@@ -410,6 +419,9 @@
             </p>
             <p class="ant-upload-hint">
               支持 .xls / .xlsx，默认读取 Sheet2。
+            </p>
+            <p class="mt-2 text-[12px] text-slate-400">
+              必填列：科室、患者姓名、住院号、存在问题、责任医生、质控日期、质控人员
             </p>
           </a-upload-dragger>
         </div>
@@ -1031,6 +1043,26 @@ async function handleImportPool() {
   resetImportForm()
   message.success(`导入成功，共写入 ${result.data.imported_rows} 条样本`)
   await loadPools()
+}
+
+async function handleDownloadTemplate() {
+  const XLSX = await import('xlsx')
+  const workbook = XLSX.utils.book_new()
+  const worksheet = XLSX.utils.aoa_to_sheet([
+    ['科室', '患者姓名', '住院号', '存在问题', '责任医生', '质控日期', '质控人员'],
+    ['普外科', '张三', '2248248', '首次病程记录鉴别诊断不全面', '李医生', '2026-04-21', '王质控'],
+  ])
+  worksheet['!cols'] = [
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 48 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 12 },
+  ]
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet2')
+  XLSX.writeFile(workbook, '客户样本导入模板.xlsx')
 }
 
 function openRecordDetail(record: ManualSamplePoolRecord) {
