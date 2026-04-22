@@ -1011,15 +1011,16 @@ class UnifiedRuleEngine:
             return ""
         guardrails = {
             "SC-023": "仅在病例特点核心内容实质缺失时判不合规；已写但提炼一般优先uncertain",
-            "SC-024": "已写病例特点但归纳一般不直接硬判；缺关键病史/体征才可判不合规",
+            "SC-024": "病例特点若只是现病史/查体/检查原文堆砌且无概括性总结，直接判non_compliant；已有分点概括或诊断导向性总结则判compliant",
             "SC-025": "仅看诊断依据/鉴别诊断/诊疗计划三项；不要把中医项缺失并入主结论",
             "SC-011": "现病史若仅复述主诉且无任何鉴别相关症状或专科要点，直接判non_compliant；已有关键症状或专科查体则判compliant",
             "SC-012": "长病程或有门诊/外院处理线索却未交代检查治疗效果，直接判non_compliant；明确写未诊治/仅观察则判compliant",
-            "SC-026": "不要因未引用全部辅助检查就直接判严重缺陷；证据不足优先uncertain",
+            "SC-026": "已有具体鉴别病种且有至少一条具体排除依据则判compliant；若只有病名加“依据不支持/待排”等空话、无具体推理，直接判non_compliant",
             "SC-027": "仅当缺少关键诊疗动作或明显不具体时判不合规；格式问题不要硬判",
             "SC-032": "日常病程若仅写病情同前/继续治疗等套话且无任何具体症状体征变化，直接判non_compliant",
             "SC-033": "已有感染/检查/用药线索但无分析或具体处理意见时，直接判non_compliant；有疗效判断或后续计划则判compliant",
             "SC-036": "上下文有重要异常检查结果而病程未提及或无分析处理时，直接判non_compliant；无异常检查线索不要硬判",
+            "SC-070": "病程记录若只是照抄会诊意见、未写是否采纳及具体执行动作/结果，直接判non_compliant；写明已落实的检查/用药/处理或未采纳理由则判compliant",
             "SC-050": "若主文书与辅助证据全文或核心句子基本相同且无新增分析/计划，直接判non_compliant；若有新增判断或计划则判compliant",
             "SC-121": "只抓关键诊疗经过缺失，不做药理学或格式化发散点评",
             "SC-125": "优先判断出院诊断明显漏填/错填/顺序错误，不把既往史展开不足作为主依据",
@@ -1305,6 +1306,19 @@ class UnifiedRuleEngine:
             return normalized
 
         if status == "non_compliant" and not evidence_verified:
+            findings_text = str(normalized.get("findings") or "")
+            evidence_text = str(normalized.get("evidence") or "")
+            if rule_id == "SC-024":
+                strong_feature_copy_hints = (
+                    "原文堆砌",
+                    "缺乏归纳提炼",
+                    "无概括性总结",
+                    "直接复制现病史",
+                    "只是现病史与检查原文",
+                )
+                if any(hint in findings_text or hint in evidence_text for hint in strong_feature_copy_hints):
+                    return normalized
+
             if rule_id in {"SC-023", "SC-025", "SC-125"}:
                 normalized["status"] = "uncertain"
                 normalized["is_compliant"] = False
