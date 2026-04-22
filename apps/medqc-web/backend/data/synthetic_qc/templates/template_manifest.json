@@ -1,0 +1,105 @@
+{
+  "schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "generated_at": "2026-04-22",
+  "template_count": 16,
+  "variants": ["pass", "defect"],
+  "files": [
+    {
+      "file": "running_admission_consistency_conflict_v1_pass.json",
+      "issue_type": "A1_admission_past_history_conflict",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-010", "SC-019", "SC-020"]
+    },
+    {
+      "file": "running_admission_consistency_conflict_v1_defect.json",
+      "issue_type": "A1_admission_past_history_conflict",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-010", "SC-019", "SC-020"]
+    },
+    {
+      "file": "running_admission_missing_exam_v1_pass.json",
+      "issue_type": "A2_admission_missing_special_exam",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-011", "SC-012"]
+    },
+    {
+      "file": "running_admission_missing_exam_v1_defect.json",
+      "issue_type": "A2_admission_missing_special_exam",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-011", "SC-012"]
+    },
+    {
+      "file": "running_admission_present_history_incomplete_v1_pass.json",
+      "issue_type": "A3_admission_present_history_incomplete",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-008", "SC-009", "SC-018"]
+    },
+    {
+      "file": "running_admission_present_history_incomplete_v1_defect.json",
+      "issue_type": "A3_admission_present_history_incomplete",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-008", "SC-009", "SC-018"]
+    },
+    {
+      "file": "running_first_course_diff_diagnosis_insufficient_v1_pass.json",
+      "issue_type": "B1_first_course_diff_diagnosis_insufficient",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-026"]
+    },
+    {
+      "file": "running_first_course_diff_diagnosis_insufficient_v1_defect.json",
+      "issue_type": "B1_first_course_diff_diagnosis_insufficient",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-026"]
+    },
+    {
+      "file": "running_first_course_features_not_summarized_v1_pass.json",
+      "issue_type": "B2_first_course_features_not_summarized",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-023", "SC-024"]
+    },
+    {
+      "file": "running_first_course_features_not_summarized_v1_defect.json",
+      "issue_type": "B2_first_course_features_not_summarized",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-023", "SC-024"]
+    },
+    {
+      "file": "running_daily_course_abnormal_results_no_analysis_v1_pass.json",
+      "issue_type": "C1_daily_course_abnormal_results_no_analysis",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-033", "SC-036"]
+    },
+    {
+      "file": "running_daily_course_abnormal_results_no_analysis_v1_defect.json",
+      "issue_type": "C1_daily_course_abnormal_results_no_analysis",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-033", "SC-036"]
+    },
+    {
+      "file": "running_daily_course_antibiotic_not_documented_v1_pass.json",
+      "issue_type": "C2_daily_course_antibiotic_not_documented",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-032", "SC-033"]
+    },
+    {
+      "file": "running_daily_course_antibiotic_not_documented_v1_defect.json",
+      "issue_type": "C2_daily_course_antibiotic_not_documented",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-032", "SC-033"]
+    },
+    {
+      "file": "running_consultation_execution_generic_phrase_v1_pass.json",
+      "issue_type": "D1_consultation_execution_generic_phrase",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "file": "running_consultation_execution_generic_phrase_v1_defect.json",
+      "issue_type": "D1_consultation_execution_generic_phrase",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-070"]
+    }
+  ]
+}

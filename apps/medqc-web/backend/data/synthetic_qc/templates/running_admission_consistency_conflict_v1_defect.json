@@ -1,0 +1,44 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_admission_consistency_conflict_v1",
+    "issue_type": "A1_admission_past_history_conflict",
+    "display_name": "既往史与现病史前后矛盾",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-010", "SC-019", "SC-020"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P001",
+    "visit_id": "SYN-RUN-001",
+    "mr_no": "SYN0001",
+    "patient_name": "合成患者",
+    "gender": "男",
+    "age": 56,
+    "department": "普通外科"
+  },
+  "documents": [
+    {
+      "document_type": "admission_record",
+      "title": "入院记录",
+      "content": "主诉：反复右上腹痛1周。现病史：患者1周前出现右上腹阵发性绞痛，伴恶心，无发热，于外院超声提示胆囊结石。患者3年前曾因乳腺癌于外院行根治术。既往史：否认手术史。"
+    },
+    {
+      "document_type": "first_course_record",
+      "title": "首次病程记录",
+      "content": "病例特点：中年患者，右上腹痛1周，超声提示胆囊结石，现病史中提及3年前外院乳腺癌根治术。"
+    },
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "继续术前准备。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["胆囊结石"],
+    "orders": ["补液"],
+    "exams": ["腹部超声：胆囊结石"]
+  }
+}

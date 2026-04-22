@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_admission_present_history_incomplete_v1",
+    "issue_type": "A3_admission_present_history_incomplete",
+    "display_name": "现病史记录不全",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-008", "SC-009", "SC-018"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P001",
+    "visit_id": "SYN-RUN-001",
+    "mr_no": "SYN0001",
+    "patient_name": "合成患者",
+    "gender": "男",
+    "age": 56,
+    "department": "普通外科"
+  },
+  "documents": [
+    {
+      "document_type": "admission_record",
+      "title": "入院记录",
+      "content": "主诉：发热咳嗽3天。现病史：3天前受凉后出现发热，最高38.6℃，伴咳嗽咳黄痰，无胸痛，无咯血。于社区医院予口服阿莫西林2天效果欠佳，今日为进一步治疗来院。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["肺部感染"],
+    "orders": ["阿莫西林"],
+    "exams": ["胸片：右下肺渗出影"]
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_daily_course_antibiotic_not_documented_v1",
+    "issue_type": "C2_daily_course_antibiotic_not_documented",
+    "display_name": "抗菌药物使用未在病程中记录",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-032", "SC-033"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P001",
+    "visit_id": "SYN-RUN-001",
+    "mr_no": "SYN0001",
+    "patient_name": "合成患者",
+    "gender": "男",
+    "age": 56,
+    "department": "普通外科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "患者今日体温较前稍降，继续治疗。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["肺部感染"],
+    "orders": ["哌拉西林他唑巴坦"],
+    "exams": ["痰培养：肺炎克雷伯菌"]
+  }
+}
