@@ -1,0 +1,212 @@
+{
+  "schema_version": "v1",
+  "source": {
+    "excel_file": "docs/运行病历质控记录.xls",
+    "sheet_name": "Sheet2",
+    "scope": "llm_intrinsic_only",
+    "total_rows": 290,
+    "coverage_counts": {
+      "llm_intrinsic": 179,
+      "programmatic": 41,
+      "unsupported": 70
+    },
+    "intrinsic_category_counts": {
+      "admission_consistency": 56,
+      "daily_course_analysis": 46,
+      "first_course_reasoning": 35,
+      "consultation_execution": 29,
+      "senior_round_content": 13
+    }
+  },
+  "template_family": {
+    "name": "running_record_intrinsic_baseline_v1",
+    "description": "用于运行病历内涵问题回归的统一简化模板，正文以入院记录、首次病程、日常病程为主，按需补上级查房、会诊、检查检验和医嘱摘要。",
+    "document_outline": [
+      "病案首页摘要",
+      "入院记录",
+      "首次病程记录",
+      "日常病程记录",
+      "上级查房记录",
+      "会诊记录或会诊执行记录",
+      "诊断摘要",
+      "医嘱摘要",
+      "检查检验摘要"
+    ]
+  },
+  "issue_types": [
+    {
+      "issue_type": "A1_admission_past_history_conflict",
+      "display_name": "既往史与现病史前后矛盾",
+      "priority": "P0",
+      "source_category": "admission_consistency",
+      "template_name": "running_admission_consistency_conflict_v1",
+      "documents_required": ["admission_record", "first_course_record", "daily_course_record"],
+      "defect_injection": [
+        "既往史写明否认手术史或重大疾病史",
+        "现病史或体格检查中出现明确既往手术或疾病事实"
+      ],
+      "representative_examples": ["既往史否认手术史，但现病史出现左侧乳腺癌根治手术"],
+      "expected_rule_ids": ["SC-010", "SC-019", "SC-020"]
+    },
+    {
+      "issue_type": "A2_admission_missing_special_exam",
+      "display_name": "入院记录缺少专科检查或关键体征",
+      "priority": "P0",
+      "source_category": "admission_consistency",
+      "template_name": "running_admission_missing_exam_v1",
+      "documents_required": ["admission_record"],
+      "defect_injection": ["主诉和现病史完整", "体格检查缺少关键专科检查项或一般情况关键体征"],
+      "representative_examples": ["入院记录中无专科检查", "体格检查缺体重"],
+      "expected_rule_ids": ["SC-011", "SC-012"]
+    },
+    {
+      "issue_type": "A3_admission_present_history_incomplete",
+      "display_name": "现病史记录不全",
+      "priority": "P0",
+      "source_category": "admission_consistency",
+      "template_name": "running_admission_present_history_incomplete_v1",
+      "documents_required": ["admission_record"],
+      "defect_injection": [
+        "保留主诉",
+        "现病史缺少症状性质、持续时间、就诊经过、伴随症状或外院处理"
+      ],
+      "representative_examples": ["现病史记录不全"],
+      "expected_rule_ids": ["SC-008", "SC-009", "SC-018"]
+    },
+    {
+      "issue_type": "B1_first_course_diff_diagnosis_insufficient",
+      "display_name": "首次病程记录鉴别诊断不全面",
+      "priority": "P0",
+      "source_category": "first_course_reasoning",
+      "template_name": "running_first_course_diff_diagnosis_insufficient_v1",
+      "documents_required": ["admission_record", "first_course_record"],
+      "defect_injection": [
+        "仅给出1到2个过窄的鉴别诊断",
+        "排除依据简单，缺少关键阴性症状或关键检查"
+      ],
+      "representative_examples": ["首次病程记录鉴别诊断不全面"],
+      "expected_rule_ids": ["SC-026"]
+    },
+    {
+      "issue_type": "B2_first_course_features_not_summarized",
+      "display_name": "病例特点未提炼",
+      "priority": "P0",
+      "source_category": "first_course_reasoning",
+      "template_name": "running_first_course_features_not_summarized_v1",
+      "documents_required": ["admission_record", "first_course_record"],
+      "defect_injection": ["病例特点标题存在", "标题下直接复制现病史和体格检查原文，缺少提炼归纳"],
+      "representative_examples": ["病例特点直接堆病史，未归纳提炼"],
+      "expected_rule_ids": ["SC-023", "SC-024"]
+    },
+    {
+      "issue_type": "B3_first_course_basis_not_structured",
+      "display_name": "诊断依据书写不规范",
+      "priority": "P1",
+      "source_category": "first_course_reasoning",
+      "template_name": "running_first_course_basis_not_structured_v1",
+      "documents_required": ["first_course_record"],
+      "defect_injection": ["诊断依据写成整段混合描述", "未按诊断逐个对应书写依据"],
+      "representative_examples": ["首次病程中诊断依据书写不正确，未按诊断逐个书写"],
+      "expected_rule_ids": ["SC-025", "SC-026"]
+    },
+    {
+      "issue_type": "B4_first_course_plan_incomplete",
+      "display_name": "诊疗计划不完整",
+      "priority": "P1",
+      "source_category": "first_course_reasoning",
+      "template_name": "running_first_course_plan_incomplete_v1",
+      "documents_required": ["first_course_record"],
+      "defect_injection": ["诊疗计划只保留完善检查和择期处理", "缺少具体治疗与观察安排"],
+      "representative_examples": ["首次病程记录诊疗计划不完整"],
+      "expected_rule_ids": ["SC-027"]
+    },
+    {
+      "issue_type": "C1_daily_course_abnormal_results_no_analysis",
+      "display_name": "异常检查结果未分析",
+      "priority": "P0",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_daily_course_abnormal_results_no_analysis_v1",
+      "documents_required": ["daily_course_record", "exam_or_lab_summary"],
+      "defect_injection": ["检查检验结果明确异常", "病程只抄结果，不写分析与处理意见"],
+      "representative_examples": ["病程记录未分析异常检查结果"],
+      "expected_rule_ids": ["SC-033", "SC-036"]
+    },
+    {
+      "issue_type": "C2_daily_course_antibiotic_not_documented",
+      "display_name": "抗菌药物使用未在病程中记录",
+      "priority": "P0",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_daily_course_antibiotic_not_documented_v1",
+      "documents_required": ["daily_course_record", "drug_order_summary"],
+      "defect_injection": ["医嘱里存在明确抗菌药物", "病程中没有体现使用理由、疗效观察或调整"],
+      "representative_examples": ["使用抗菌药物治疗的患者，使用情况未在病程记录中记录"],
+      "expected_rule_ids": ["SC-032", "SC-033"]
+    },
+    {
+      "issue_type": "C3_daily_course_overly_brief",
+      "display_name": "病程记录过于简略",
+      "priority": "P1",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_daily_course_overly_brief_v1",
+      "documents_required": ["daily_course_record"],
+      "defect_injection": ["仅保留一句模板化病程描述", "不体现病情变化、体征、分析与处理"],
+      "representative_examples": ["病程记录仅写检查目的，无病情变化、体征、分析"],
+      "expected_rule_ids": ["SC-032", "SC-036"]
+    },
+    {
+      "issue_type": "D1_consultation_execution_generic_phrase",
+      "display_name": "会诊执行记录仅写遵会诊意见执行",
+      "priority": "P0",
+      "source_category": "consultation_execution",
+      "template_name": "running_consultation_execution_generic_phrase_v1",
+      "documents_required": ["consultation_record", "daily_course_record"],
+      "defect_injection": ["会诊意见存在", "执行记录只写遵会诊意见执行，不写具体动作"],
+      "representative_examples": ["请会诊执行记录书写不规范仅描述遵会诊意见执行"],
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "issue_type": "D2_consultation_execution_copy_paste",
+      "display_name": "会诊执行记录复制粘贴严重",
+      "priority": "P1",
+      "source_category": "consultation_execution",
+      "template_name": "running_consultation_execution_copy_paste_v1",
+      "documents_required": ["consultation_record", "consultation_execution_record"],
+      "defect_injection": ["执行记录与会诊意见文本高度一致", "缺少本病历具体执行动作"],
+      "representative_examples": ["请会诊执行记录复制粘贴严重"],
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "issue_type": "D3_consultation_execution_no_specific_actions",
+      "display_name": "会诊执行记录无具体执行情况",
+      "priority": "P1",
+      "source_category": "consultation_execution",
+      "template_name": "running_consultation_execution_no_specific_actions_v1",
+      "documents_required": ["consultation_record", "daily_course_record"],
+      "defect_injection": ["病程记录未体现药物、检查、观察或诊疗调整", "仅笼统表述已执行"],
+      "representative_examples": ["不能体现会诊执行情况"],
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "issue_type": "E1_senior_round_no_targeted_judgement",
+      "display_name": "上级查房未围绕关键问题做诊疗判断",
+      "priority": "P1",
+      "source_category": "senior_round_content",
+      "template_name": "running_senior_round_no_targeted_judgement_v1",
+      "documents_required": ["senior_course_record", "daily_course_record", "vital_sign_summary"],
+      "defect_injection": ["连续异常指标存在", "查房内容模板化，不对关键问题做诊疗分析或修正"],
+      "representative_examples": ["血压持续异常，上级查房未修正诊断"],
+      "expected_rule_ids": ["SC-050"]
+    },
+    {
+      "issue_type": "E2_senior_round_copy_paste",
+      "display_name": "上级查房记录复制粘贴",
+      "priority": "P1",
+      "source_category": "senior_round_content",
+      "template_name": "running_senior_round_copy_paste_v1",
+      "documents_required": ["senior_course_record"],
+      "defect_injection": ["连续两日上级查房记录仅改日期", "查房内容高度重复"],
+      "representative_examples": ["两天查房记录高度重复"],
+      "expected_rule_ids": ["SC-050"]
+    }
+  ]
+}
