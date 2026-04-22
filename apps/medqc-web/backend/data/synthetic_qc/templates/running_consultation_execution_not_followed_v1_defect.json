@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_consultation_execution_not_followed_v1",
+    "issue_type": "D4_consultation_execution_not_followed",
+    "display_name": "会诊意见书面称执行但实际未落实",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-070"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P007",
+    "visit_id": "SYN-RUN-040",
+    "mr_no": "SYN0040",
+    "patient_name": "合成患者七",
+    "gender": "女",
+    "age": 54,
+    "department": "神经内科"
+  },
+  "documents": [
+    {
+      "document_type": "consultation_record",
+      "title": "会诊记录",
+      "content": "康复科会诊意见：建议给予偏瘫肢体综合训练、关节松动及拍背排痰治疗。"
+    },
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "遵康复科会诊意见执行。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["脑梗死恢复期"],
+    "orders": ["普通护理"],
+    "exams": []
+  }
+}

@@ -2,7 +2,7 @@
   "schema_version": "v1",
   "template_family": "running_record_intrinsic_baseline_v1",
   "generated_at": "2026-04-22",
-  "template_count": 30,
+  "template_count": 42,
   "variants": ["pass", "defect"],
   "files": [
     {
@@ -182,6 +182,78 @@
     {
       "file": "running_senior_round_copy_paste_v1_defect.json",
       "issue_type": "E2_senior_round_copy_paste",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-050"]
+    },
+    {
+      "file": "running_admission_external_exam_inaccurate_v1_pass.json",
+      "issue_type": "A4_admission_external_exam_inaccurate",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-019"]
+    },
+    {
+      "file": "running_admission_external_exam_inaccurate_v1_defect.json",
+      "issue_type": "A4_admission_external_exam_inaccurate",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-019"]
+    },
+    {
+      "file": "running_admission_secondary_diagnosis_omitted_v1_pass.json",
+      "issue_type": "A5_admission_secondary_diagnosis_omitted",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-020"]
+    },
+    {
+      "file": "running_admission_secondary_diagnosis_omitted_v1_defect.json",
+      "issue_type": "A5_admission_secondary_diagnosis_omitted",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-020"]
+    },
+    {
+      "file": "running_daily_course_medication_detail_missing_v1_pass.json",
+      "issue_type": "C4_daily_course_medication_detail_missing",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-033"]
+    },
+    {
+      "file": "running_daily_course_medication_detail_missing_v1_defect.json",
+      "issue_type": "C4_daily_course_medication_detail_missing",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-033"]
+    },
+    {
+      "file": "running_daily_course_abnormal_vitals_no_followup_v1_pass.json",
+      "issue_type": "C5_daily_course_abnormal_vitals_no_followup",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-032", "SC-033"]
+    },
+    {
+      "file": "running_daily_course_abnormal_vitals_no_followup_v1_defect.json",
+      "issue_type": "C5_daily_course_abnormal_vitals_no_followup",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-032", "SC-033"]
+    },
+    {
+      "file": "running_consultation_execution_not_followed_v1_pass.json",
+      "issue_type": "D4_consultation_execution_not_followed",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "file": "running_consultation_execution_not_followed_v1_defect.json",
+      "issue_type": "D4_consultation_execution_not_followed",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "file": "running_senior_round_no_revision_of_diagnosis_v1_pass.json",
+      "issue_type": "E3_senior_round_no_revision_of_diagnosis",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-050"]
+    },
+    {
+      "file": "running_senior_round_no_revision_of_diagnosis_v1_defect.json",
+      "issue_type": "E3_senior_round_no_revision_of_diagnosis",
       "variant": "defect",
       "expected_rule_ids": ["SC-050"]
     }

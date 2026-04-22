@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_admission_external_exam_inaccurate_v1",
+    "issue_type": "A4_admission_external_exam_inaccurate",
+    "display_name": "入院前辅助检查记录错误或描述不清",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-019"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P003",
+    "visit_id": "SYN-RUN-031",
+    "mr_no": "SYN0031",
+    "patient_name": "合成患者三",
+    "gender": "男",
+    "age": 63,
+    "department": "骨科"
+  },
+  "documents": [
+    {
+      "document_type": "admission_record",
+      "title": "入院记录",
+      "content": "主诉：左髋部疼痛活动受限3天。现病史：患者3天前跌倒后出现左髋部疼痛，活动受限，于门诊行髋关节X线提示左股骨粗隆间骨折，为进一步治疗入院。既往史无特殊。体格检查：左髋部压痛、叩痛明显，左下肢活动受限。入院诊断：左股骨粗隆间骨折。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["左股骨粗隆间骨折"],
+    "orders": ["完善术前检查"],
+    "exams": ["门诊X线：左股骨粗隆间骨折"]
+  }
+}

@@ -207,6 +207,106 @@
       "defect_injection": ["连续两日上级查房记录仅改日期", "查房内容高度重复"],
       "representative_examples": ["两天查房记录高度重复"],
       "expected_rule_ids": ["SC-050"]
+    },
+    {
+      "issue_type": "A4_admission_external_exam_inaccurate",
+      "display_name": "入院前辅助检查记录错误或描述不清",
+      "priority": "P1",
+      "source_category": "admission_consistency",
+      "template_name": "running_admission_external_exam_inaccurate_v1",
+      "documents_required": ["admission_record"],
+      "defect_injection": [
+        "外院或门诊辅助检查真实存在",
+        "入院记录中对检查结果抄写错误、混入无关内容或表述不清"
+      ],
+      "representative_examples": ["病程记录中CT结果引用错误", "未记录在我院门诊的检查项目及结果"],
+      "expected_rule_ids": ["SC-019"]
+    },
+    {
+      "issue_type": "A5_admission_secondary_diagnosis_omitted",
+      "display_name": "入院诊断遗漏重要并存疾病",
+      "priority": "P1",
+      "source_category": "admission_consistency",
+      "template_name": "running_admission_secondary_diagnosis_omitted_v1",
+      "documents_required": ["admission_record", "first_course_record"],
+      "defect_injection": [
+        "现病史或既往史已明确提示重要慢病或并存病",
+        "入院诊断未体现该重要并存疾病"
+      ],
+      "representative_examples": [
+        "患者既往有类风湿关节炎，入院诊断未体现",
+        "高脂血症未诊断",
+        "患者既往有糖尿病史，入院诊断未诊断该疾病"
+      ],
+      "expected_rule_ids": ["SC-020"]
+    },
+    {
+      "issue_type": "C4_daily_course_medication_detail_missing",
+      "display_name": "日常病程用药记录不具体",
+      "priority": "P1",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_daily_course_medication_detail_missing_v1",
+      "documents_required": ["daily_course_record"],
+      "defect_injection": [
+        "病程记录写到继续抗感染或止痛治疗",
+        "未写调整理由、药物信息、剂量或处理意图"
+      ],
+      "representative_examples": [
+        "病程记录中，用药记录不规范，未记录药物剂量",
+        "未阐述其他用药方案及治疗措施"
+      ],
+      "expected_rule_ids": ["SC-033"]
+    },
+    {
+      "issue_type": "C5_daily_course_abnormal_vitals_no_followup",
+      "display_name": "异常生命体征或关键指标无后续处理",
+      "priority": "P1",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_daily_course_abnormal_vitals_no_followup_v1",
+      "documents_required": ["daily_course_record"],
+      "defect_injection": [
+        "上下文已出现高血压/高血糖/低钾等异常指标",
+        "病程记录未写病情变化分析、监测计划或处理措施"
+      ],
+      "representative_examples": [
+        "患者血压150/108mmHg,未做诊断及血压监测",
+        "低钾进一步加重，无处理"
+      ],
+      "expected_rule_ids": ["SC-032", "SC-033"]
+    },
+    {
+      "issue_type": "D4_consultation_execution_not_followed",
+      "display_name": "会诊意见书面称执行但实际未落实",
+      "priority": "P1",
+      "source_category": "consultation_execution",
+      "template_name": "running_consultation_execution_not_followed_v1",
+      "documents_required": ["consultation_record", "daily_course_record"],
+      "defect_injection": [
+        "会诊意见提出明确检查或治疗措施",
+        "病程记录声称遵照执行，但结构化事实未见对应落实或出现相反事实"
+      ],
+      "representative_examples": [
+        "请会诊执行记录描述为遵执，但实际未按会诊意见执行",
+        "仍然开具与会诊意见相反的治疗项目"
+      ],
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "issue_type": "E3_senior_round_no_revision_of_diagnosis",
+      "display_name": "上级查房未修正诊断或未针对异常情况给意见",
+      "priority": "P1",
+      "source_category": "senior_round_content",
+      "template_name": "running_senior_round_no_revision_of_diagnosis_v1",
+      "documents_required": ["senior_course_record"],
+      "defect_injection": [
+        "上下文已存在可疑诊断或异常指标持续存在",
+        "上级查房仅写继续观察/原治疗，未作修正或处理意见"
+      ],
+      "representative_examples": [
+        "连续监测三日后上级医师查房未对诊断进行修正",
+        "低钾进一步加重，无处理"
+      ],
+      "expected_rule_ids": ["SC-050"]
     }
   ]
 }
