@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_consultation_execution_copy_paste_v1",
+    "issue_type": "D2_consultation_execution_copy_paste",
+    "display_name": "会诊执行记录复制粘贴严重",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-070"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P002",
+    "visit_id": "SYN-RUN-016",
+    "mr_no": "SYN0016",
+    "patient_name": "合成患者二",
+    "gender": "女",
+    "age": 47,
+    "department": "消化内科"
+  },
+  "documents": [
+    {
+      "document_type": "consultation_record",
+      "title": "会诊记录",
+      "content": "呼吸科会诊意见：建议完善降钙素原，调整抗菌药物为左氧氟沙星，鼓励排痰。"
+    },
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "呼吸科会诊意见：建议完善降钙素原，调整抗菌药物为左氧氟沙星，鼓励排痰。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["肺部感染"],
+    "orders": ["降钙素原", "左氧氟沙星"],
+    "exams": []
+  }
+}

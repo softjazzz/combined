@@ -2,7 +2,7 @@
   "schema_version": "v1",
   "template_family": "running_record_intrinsic_baseline_v1",
   "generated_at": "2026-04-22",
-  "template_count": 16,
+  "template_count": 30,
   "variants": ["pass", "defect"],
   "files": [
     {
@@ -100,6 +100,90 @@
       "issue_type": "D1_consultation_execution_generic_phrase",
       "variant": "defect",
       "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "file": "running_first_course_basis_not_structured_v1_pass.json",
+      "issue_type": "B3_first_course_basis_not_structured",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-025", "SC-026"]
+    },
+    {
+      "file": "running_first_course_basis_not_structured_v1_defect.json",
+      "issue_type": "B3_first_course_basis_not_structured",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-025", "SC-026"]
+    },
+    {
+      "file": "running_first_course_plan_incomplete_v1_pass.json",
+      "issue_type": "B4_first_course_plan_incomplete",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-027"]
+    },
+    {
+      "file": "running_first_course_plan_incomplete_v1_defect.json",
+      "issue_type": "B4_first_course_plan_incomplete",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-027"]
+    },
+    {
+      "file": "running_daily_course_overly_brief_v1_pass.json",
+      "issue_type": "C3_daily_course_overly_brief",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-032", "SC-036"]
+    },
+    {
+      "file": "running_daily_course_overly_brief_v1_defect.json",
+      "issue_type": "C3_daily_course_overly_brief",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-032", "SC-036"]
+    },
+    {
+      "file": "running_consultation_execution_copy_paste_v1_pass.json",
+      "issue_type": "D2_consultation_execution_copy_paste",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "file": "running_consultation_execution_copy_paste_v1_defect.json",
+      "issue_type": "D2_consultation_execution_copy_paste",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "file": "running_consultation_execution_no_specific_actions_v1_pass.json",
+      "issue_type": "D3_consultation_execution_no_specific_actions",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "file": "running_consultation_execution_no_specific_actions_v1_defect.json",
+      "issue_type": "D3_consultation_execution_no_specific_actions",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-070"]
+    },
+    {
+      "file": "running_senior_round_no_targeted_judgement_v1_pass.json",
+      "issue_type": "E1_senior_round_no_targeted_judgement",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-050"]
+    },
+    {
+      "file": "running_senior_round_no_targeted_judgement_v1_defect.json",
+      "issue_type": "E1_senior_round_no_targeted_judgement",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-050"]
+    },
+    {
+      "file": "running_senior_round_copy_paste_v1_pass.json",
+      "issue_type": "E2_senior_round_copy_paste",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-050"]
+    },
+    {
+      "file": "running_senior_round_copy_paste_v1_defect.json",
+      "issue_type": "E2_senior_round_copy_paste",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-050"]
     }
   ]
 }
