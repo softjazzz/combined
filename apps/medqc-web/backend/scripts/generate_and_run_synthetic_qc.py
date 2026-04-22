@@ -15,6 +15,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+from app.constants.doc_types import DOC_TYPE_FULL_MAP
 from app.services.fast_screen_qc import get_fast_screen_pack_definitions
 from app.services.llm_config_loader import build_provider_runtime_config
 from app.services.sichuan_qc_service import SichuanQCService
@@ -134,11 +135,13 @@ def _normalize_template_documents(
 ) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for index, item in enumerate(documents, start=1):
+        source_table = str(item.get("document_type") or "").strip()
+        document_type = DOC_TYPE_FULL_MAP.get(source_table, source_table)
         normalized.append(
             {
                 "id": f"{visit_id}:synthetic:{index}",
-                "document_type": str(item.get("document_type") or "").strip(),
-                "source_table": str(item.get("document_type") or "").strip(),
+                "document_type": document_type,
+                "source_table": source_table,
                 "hit": True,
                 "content": str(item.get("content") or ""),
             }
