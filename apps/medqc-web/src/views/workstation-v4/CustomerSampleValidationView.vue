@@ -27,22 +27,37 @@
                   验证。页面只展示可直接用于客户演示的样本状态、验证任务和命中结果。
                 </p>
               </div>
-              <div class="flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
-                <span class="rounded-full border border-slate-200 bg-white px-3 py-1">
-                  当前样本池：{{ selectedPool?.name || '未选择' }}
-                </span>
-                <span
-                  v-if="selectedPool?.source_sheet"
-                  class="rounded-full border border-slate-200 bg-white px-3 py-1"
-                >
-                  来源：{{ selectedPool.source_sheet }}
-                </span>
-                <span
-                  v-if="selectedPool?.latest_job_id"
-                  class="rounded-full border border-slate-200 bg-white px-3 py-1"
-                >
-                  最近任务：{{ selectedPool.latest_job_id }}
-                </span>
+              <div class="flex flex-col gap-3 xl:flex-row xl:items-center">
+                <div class="flex min-w-0 flex-col gap-1">
+                  <div class="text-[12px] font-medium text-slate-500">
+                    当前样本池
+                  </div>
+                  <a-select
+                    v-model:value="selectedPoolId"
+                    class="w-full min-w-[280px] max-w-[420px] customer-sample-toolbar-select"
+                    size="middle"
+                    :loading="poolLoading"
+                    :options="poolOptions"
+                    placeholder="请选择样本池"
+                    show-search
+                    option-filter-prop="label"
+                    @change="handlePoolChange"
+                  />
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
+                  <span
+                    v-if="selectedPool?.source_sheet"
+                    class="rounded-full border border-slate-200 bg-white px-3 py-1"
+                  >
+                    来源：{{ selectedPool.source_sheet }}
+                  </span>
+                  <span
+                    v-if="selectedPool?.latest_job_id"
+                    class="rounded-full border border-slate-200 bg-white px-3 py-1"
+                  >
+                    最近任务：{{ selectedPool.latest_job_id }}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -249,7 +264,9 @@
                   size="middle"
                   :loading="poolLoading"
                   :options="poolOptions"
-                  placeholder="请选择样本池"
+                  placeholder="快速切换样本池"
+                  show-search
+                  option-filter-prop="label"
                   @change="handlePoolChange"
                 />
                 <a-input
