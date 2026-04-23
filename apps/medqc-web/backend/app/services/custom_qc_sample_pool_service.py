@@ -110,6 +110,19 @@ def _parse_date(value: Any) -> Optional[date]:
         return None
 
 
+def _remote_column_exists(cursor: Any, schema: str, table: str, column: str) -> bool:
+    cursor.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = %s AND table_name = %s AND column_name = %s
+        LIMIT 1
+        """,
+        (schema, table, column),
+    )
+    return cursor.fetchone() is not None
+
+
 def _to_iso_date(value: Any) -> str:
     parsed = _parse_date(value)
     return parsed.isoformat() if parsed else ""
@@ -1323,6 +1336,18 @@ class CustomQCSamplePoolService:
         conn = psycopg2.connect(remote_url, connect_timeout=10)
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
+            admission_expr = "NULL AS admission_datetime"
+            discharge_expr = "NULL AS discharge_datetime"
+            if _remote_column_exists(cursor, schema_ident, "mr", "admission_datetime"):
+                admission_expr = "admission_datetime AS admission_datetime"
+            elif _remote_column_exists(cursor, schema_ident, "mr", "admission_time"):
+                admission_expr = "admission_time AS admission_datetime"
+
+            if _remote_column_exists(cursor, schema_ident, "mr", "discharge_datetime"):
+                discharge_expr = "discharge_datetime AS discharge_datetime"
+            elif _remote_column_exists(cursor, schema_ident, "mr", "discharge_time"):
+                discharge_expr = "discharge_time AS discharge_datetime"
+
             chunk_size = 200
             for start in range(0, len(mr_nos), chunk_size):
                 chunk = mr_nos[start : start + chunk_size]
@@ -1337,8 +1362,8 @@ class CustomQCSamplePoolService:
                         COALESCE(name::text, '') AS name,
                         COALESCE(admission_dept_name::text, '') AS admission_dept_name,
                         COALESCE(discharge_dept_name::text, '') AS discharge_dept_name,
-                        admission_datetime,
-                        discharge_datetime
+                        {admission_expr},
+                        {discharge_expr}
                     FROM {schema_ident}.mr
                     WHERE COALESCE(mr_no::text, '') IN ({placeholders})
                        OR COALESCE(inpat_no::text, '') IN ({placeholders})
