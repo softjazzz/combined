@@ -425,6 +425,69 @@
                     {{ truncateText(item.suggestion, 72) }}
                   </span>
                 </div>
+                <div
+                  v-if="item.rewrite_example"
+                  class="issue-conclusion-row"
+                >
+                  <span class="issue-conclusion-label">改写示例</span>
+                  <div
+                    v-if="isIssueExpanded(item)"
+                    class="issue-conclusion-structured"
+                  >
+                    <template v-if="resolveStructuredText(item.rewrite_example).summary">
+                      <p
+                        v-for="(paragraph, index) in resolveStructuredText(item.rewrite_example)
+                          .summary"
+                        :key="`rewrite-summary-${resolveIssueStableKey(item)}-${index}`"
+                        class="issue-conclusion-summary-text"
+                      >
+                        {{ paragraph }}
+                      </p>
+                    </template>
+                    <div
+                      v-for="(section, sectionIndex) in resolveStructuredText(item.rewrite_example)
+                        .sections"
+                      :key="`rewrite-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
+                      class="issue-conclusion-section"
+                    >
+                      <div class="issue-conclusion-section-title">
+                        {{ section.title }}
+                      </div>
+                      <p
+                        v-for="(paragraph, paragraphIndex) in section.paragraphs"
+                        :key="`rewrite-section-paragraph-${resolveIssueStableKey(item)}-${sectionIndex}-${paragraphIndex}`"
+                        class="issue-conclusion-summary-text"
+                      >
+                        {{ paragraph }}
+                      </p>
+                      <ol
+                        v-if="section.points.length"
+                        class="issue-conclusion-points"
+                      >
+                        <li
+                          v-for="(point, index) in section.points"
+                          :key="`rewrite-${resolveIssueStableKey(item)}-${sectionIndex}-${index}`"
+                        >
+                          {{ point }}
+                        </li>
+                      </ol>
+                    </div>
+                    <ol
+                      v-if="resolveStructuredText(item.rewrite_example).points.length"
+                      class="issue-conclusion-points"
+                    >
+                      <li
+                        v-for="(point, index) in resolveStructuredText(item.rewrite_example).points"
+                        :key="`rewrite-point-${resolveIssueStableKey(item)}-${index}`"
+                      >
+                        {{ point }}
+                      </li>
+                    </ol>
+                  </div>
+                  <span v-else>
+                    {{ truncateText(item.rewrite_example, 96) }}
+                  </span>
+                </div>
               </div>
               <div class="issue-conclusion-actions">
                 <a-button

@@ -166,6 +166,7 @@ export interface SichuanBatchIssueItem {
   findings?: string
   evidence?: string
   suggestion?: string
+  rewrite_example?: string
   confidence?: number
   llm_raw_output?: string
   executor_type?: string

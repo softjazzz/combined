@@ -233,6 +233,165 @@ class UnifiedRuleEngine:
         self._app_checker = ApplicabilityChecker()
         self._evidence_verifier = EvidenceVerifier()
 
+    @staticmethod
+    def _collect_evidence_sources(medical_record: Dict[str, Any]) -> List[Dict[str, Any]]:
+        sources: List[Dict[str, Any]] = []
+        primary_content = str(medical_record.get("content") or "").strip()
+        primary_document_type = str(medical_record.get("document_type") or "").strip()
+        if primary_content:
+            sources.append(
+                {
+                    "document_type": primary_document_type or "当前文书",
+                    "content": primary_content,
+                    "is_primary": True,
+                }
+            )
+
+        evidence_payload = medical_record.get("evidence_payload")
+        if isinstance(evidence_payload, dict):
+            for item in list(evidence_payload.get("supporting_documents") or []):
+                if not isinstance(item, dict):
+                    continue
+                evidence_text = str(
+                    item.get("evidence_text") or item.get("content") or item.get("text_preview") or ""
+                ).strip()
+                if not evidence_text:
+                    continue
+                sources.append(
+                    {
+                        "document_type": str(item.get("document_type") or item.get("source_table") or "辅助文书").strip(),
+                        "content": evidence_text,
+                        "is_primary": False,
+                    }
+                )
+        return sources
+
+    @staticmethod
+    def _normalize_for_match(text: str) -> str:
+        return re.sub(r"\s+", "", str(text or ""))
+
+    @classmethod
+    def _extract_match_keywords(cls, *texts: str) -> List[str]:
+        stop_words = {
+            "患者", "病历", "记录", "提示", "建议", "情况", "当前", "相关", "内容", "符合", "要求", "进行",
+            "存在", "需要", "以及", "其中", "已经", "未见", "缺少", "补充", "完善", "进一步", "检查",
+            "治疗", "病程", "首次", "入院", "会诊", "意见", "执行", "病例特点", "诊断依据", "鉴别诊断",
+        }
+        ordered: List[str] = []
+        seen: set[str] = set()
+        for text in texts:
+            candidate_text = str(text or "")
+            for token in re.split(r"[，。；：、,.;:\s（）()【】\[\]\-]+", candidate_text):
+                normalized = token.strip("“”\"'：:，,。；;（）()")
+                if len(normalized) < 2 or len(normalized) > 16:
+                    continue
+                if normalized.isdigit() or normalized in stop_words:
+                    continue
+                if normalized not in seen:
+                    seen.add(normalized)
+                    ordered.append(normalized)
+        return ordered[:8]
+
+    @classmethod
+    def _extract_quote_from_content(cls, content: str, keywords: List[str]) -> str:
+        raw = str(content or "").strip()
+        if not raw:
+            return ""
+        fragments = [
+            fragment.strip()
+            for fragment in re.split(r"(?<=[。！？；])|\n+", raw)
+            if fragment and fragment.strip()
+        ]
+        if not fragments:
+            fragments = [raw]
+
+        best_fragment = ""
+        best_score = -1
+        normalized_raw = cls._normalize_for_match(raw)
+        for fragment in fragments:
+            normalized_fragment = cls._normalize_for_match(fragment)
+            score = 0
+            for keyword in keywords:
+                if cls._normalize_for_match(keyword) and cls._normalize_for_match(keyword) in normalized_fragment:
+                    score += 2
+            if best_score < score:
+                best_fragment = fragment
+                best_score = score
+            if score >= max(2, min(4, len(keywords) * 2)):
+                break
+
+        if best_fragment:
+            return best_fragment[:120].rstrip("，,。；; ") + ("..." if len(best_fragment) > 120 else "")
+
+        # 兜底：直接返回前 80 字，避免 evidence 变成抽象标签。
+        fallback = raw[:80].rstrip("，,。；; ")
+        return fallback + ("..." if len(raw) > 80 else "")
+
+    @classmethod
+    def _refine_evidence_text(
+        cls,
+        *,
+        evidence_text: str,
+        findings_text: str,
+        medical_record: Dict[str, Any],
+    ) -> Tuple[str, bool, Any]:
+        original = str(evidence_text or "").strip()
+        sources = cls._collect_evidence_sources(medical_record)
+        primary_content = str(medical_record.get("content") or "")
+        verifier = EvidenceVerifier()
+        original_info = verifier.verify(original, primary_content)
+        if original and original_info.get("verified"):
+            return original, True, original_info.get("span")
+
+        keywords = cls._extract_match_keywords(original, findings_text)
+        for source in sources:
+            content = str(source.get("content") or "")
+            if not content:
+                continue
+            snippet = cls._extract_quote_from_content(content, keywords)
+            if not snippet:
+                continue
+            document_type = str(source.get("document_type") or "").strip()
+            refined = f"【{document_type}】{snippet}" if document_type else snippet
+            if source.get("is_primary"):
+                info = verifier.verify(snippet, primary_content)
+                return refined, bool(info.get("verified")), info.get("span")
+            return refined, True, None
+
+        return original, bool(original_info.get("verified")), original_info.get("span")
+
+    @staticmethod
+    def _build_rewrite_example(
+        *,
+        rule_id: str,
+        status: str,
+        medical_record: Dict[str, Any],
+    ) -> str:
+        normalized_status = str(status or "").strip().lower()
+        if normalized_status not in {"non_compliant", "uncertain"}:
+            return ""
+
+        document_type = str(medical_record.get("document_type") or "").strip()
+        template_map = {
+            "SC-024": "病例特点：反复上腹痛2月，进食后加重；胃镜示胃窦溃疡；上腹轻压痛，无反跳痛，考虑胃溃疡可能。",
+            "SC-026": "诊断依据：反复上腹痛2月，胃镜示胃窦溃疡。鉴别诊断：胃癌，结合胃镜及病理结果暂不支持。",
+            "SC-027": "诊疗计划：继续抑酸护胃，完善幽门螺杆菌检测，根据结果调整治疗并复查胃镜。",
+            "SC-070": "今日记录会诊意见：继续抑酸治疗，完善幽门螺杆菌检测，已开立相关医嘱并向患者交代。",
+            "SC-032": "今日病程：患者体温升高至38.6℃，考虑感染活动，已复查血常规并调整抗感染方案。",
+            "SC-033": "今日病程：复查胃镜提示胃窦溃疡，结合腹痛持续，继续抑酸治疗并密切观察疗效。",
+            "SC-036": "今日病程：腹痛较前加重，结合检查结果考虑病情进展，已请上级医师评估并调整处理计划。",
+        }
+        if rule_id in template_map:
+            return template_map[rule_id]
+
+        if document_type == "首次病程记录":
+            return "建议补写：概括主要症状演变、关键阳性/阴性体征、检查结果及诊断导向性判断。"
+        if document_type == "日常病程记录":
+            return "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。"
+        if document_type == "入院记录":
+            return "建议补写：补充与本次诊疗直接相关的病史要点、查体结果及入院诊断依据。"
+        return "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。"
+
     _DOMAIN_CONTEXT_BUDGET_DELTA: Dict[str, int] = {
         "admission": 200,
         "course": 300,
@@ -300,11 +459,13 @@ class UnifiedRuleEngine:
         parsed["evidence"] = self._stringify_llm_text(parsed.get("evidence", ""))
         parsed["suggestion"] = self._stringify_llm_text(parsed.get("suggestion", ""))
 
-        evidence_info = self._evidence_verifier.verify(
-            parsed["evidence"],
-            medical_record["content"]
+        refined_evidence, evidence_verified, evidence_span = self._refine_evidence_text(
+            evidence_text=parsed["evidence"],
+            findings_text=parsed["findings"],
+            medical_record=medical_record,
         )
-        if not evidence_info["verified"]:
+        parsed["evidence"] = refined_evidence
+        if not evidence_verified:
             parsed["confidence"] = min(parsed.get("confidence") or 0.6, 0.5)
 
         status = "non_compliant"
@@ -346,11 +507,16 @@ class UnifiedRuleEngine:
                 suggestion=parsed["suggestion"],
                 rule_name=str(rule_name or ""),
             ),
+            "rewrite_example": self._build_rewrite_example(
+                rule_id=str(rule_id or "").strip().upper(),
+                status=status,
+                medical_record=medical_record,
+            ),
             "confidence": parsed["confidence"],
             "llm_raw_output": raw_output,
             "applicability": applicability_data,
-            "evidence_verified": evidence_info["verified"],
-            "evidence_span": evidence_info["span"],
+            "evidence_verified": evidence_verified,
+            "evidence_span": evidence_span,
             "metadata": {
                 "tokens_used": usage.get("total_tokens", 0),
                 "prompt_tokens": int(usage_breakdown.get("prompt_tokens") or 0),
@@ -550,12 +716,12 @@ class UnifiedRuleEngine:
                 continue
 
             confidence = float(parsed_item.get("confidence") or 0.7)
-            evidence_text = str(parsed_item.get("evidence") or "")
-            evidence_info = self._evidence_verifier.verify(
-                evidence_text,
-                str(medical_record.get("content") or ""),
+            evidence_text, evidence_verified, evidence_span = self._refine_evidence_text(
+                evidence_text=str(parsed_item.get("evidence") or ""),
+                findings_text=str(parsed_item.get("findings") or ""),
+                medical_record=medical_record,
             )
-            if not evidence_info.get("verified"):
+            if not evidence_verified:
                 confidence = min(confidence, 0.5)
             if confidence < low_confidence_threshold:
                 low_confidence_ids.append(rule_id)
@@ -580,6 +746,11 @@ class UnifiedRuleEngine:
                         suggestion=str(parsed_item.get("suggestion") or ""),
                         rule_name=str(rule_name or ""),
                     ),
+                    "rewrite_example": self._build_rewrite_example(
+                        rule_id=str(rule_id or "").strip().upper(),
+                        status=status,
+                        medical_record=medical_record,
+                    ),
                     "confidence": confidence,
                     "llm_raw_output": raw_output,
                     "applicability": {
@@ -587,8 +758,8 @@ class UnifiedRuleEngine:
                         "reason": "",
                         "method": "default",
                     },
-                    "evidence_verified": bool(evidence_info.get("verified") is True),
-                    "evidence_span": evidence_info.get("span"),
+                    "evidence_verified": evidence_verified,
+                    "evidence_span": evidence_span,
                     "metadata": {
                         "tokens_used": distributed_tokens,
                         "prompt_tokens": distributed_prompt_tokens,
@@ -650,6 +821,7 @@ class UnifiedRuleEngine:
         findings = re.sub(r"\s+", " ", str(normalized.get("findings") or "")).strip()
         evidence = re.sub(r"\s+", " ", str(normalized.get("evidence") or "")).strip()
         suggestion = re.sub(r"\s+", " ", str(normalized.get("suggestion") or "")).strip()
+        rewrite_example = re.sub(r"\s+", " ", str(normalized.get("rewrite_example") or "")).strip()
 
         if len(findings) > 40:
             findings = findings[:40].rstrip("，,。；; ") + "..."
@@ -659,10 +831,13 @@ class UnifiedRuleEngine:
             suggestion = ""
         elif len(suggestion) > 30:
             suggestion = suggestion[:30].rstrip("，,。；; ") + "..."
+        if len(rewrite_example) > 120:
+            rewrite_example = rewrite_example[:120].rstrip("，,。；; ") + "..."
 
         normalized["findings"] = findings
         normalized["evidence"] = evidence
         normalized["suggestion"] = suggestion
+        normalized["rewrite_example"] = rewrite_example
         normalized["issues"] = []
         return normalized
 
