@@ -1949,4 +1949,6 @@ function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) 
 }
 </script>
 
-<style src="./styles/workstation-v4-view.css"></style>
+<style>
+@import './styles/workstation-v4-view.css';
+</style>

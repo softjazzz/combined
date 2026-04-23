@@ -724,4 +724,6 @@ watch(
 )
 </script>
 
-<style src="../workstation-v4/styles/workstation-v4-view.css"></style>
+<style>
+@import '../workstation-v4/styles/workstation-v4-view.css';
+</style>

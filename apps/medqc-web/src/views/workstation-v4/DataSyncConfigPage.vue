@@ -363,7 +363,9 @@ onUnmounted(() => {
 })
 </script>
 
-<style src="./styles/workstation-v4-view.css"></style>
+<style>
+@import './styles/workstation-v4-view.css';
+</style>
 <style scoped>
 .sync-config-page {
   background: linear-gradient(180deg, #f8fafc, #f1f5f9 48%, #edf2f7);
