@@ -47,32 +47,9 @@ function computeBaseURL(): string {
     return '' // 使用相对路径，通过vite代理转发到后端
   }
 
-  try {
-    if (typeof window !== 'undefined') {
-      const { protocol, hostname } = window.location
-      const isLocalHost = isLoopbackHost(hostname)
-      const isPrivateIPv4 = /^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
-      const sameHostBackend = `${protocol}//${hostname}:8001`
-
-      // 本地/内网环境：优先保持与前端同主机，避免硬编码 127.0.0.1 导致局域网客户端请求到“自己本机”。
-      if (isLocalHost || isPrivateIPv4) {
-        if (!base) {
-          base = sameHostBackend
-        } else {
-          try {
-            const parsed = new URL(base, window.location.origin)
-            if (isLoopbackHost(parsed.hostname) && !isLocalHost) {
-              base = sameHostBackend
-            }
-          } catch {
-            // base 解析失败时保留原配置
-          }
-        }
-      }
-    }
-  } catch {
-    // 忽略运行时环境探测异常，回退到已有 base 配置
-  }
+  // 生产/客户部署默认走同源 /api，由静态服务反向代理到后端。
+  // 只有显式配置了绝对地址时才使用绝对基址，避免浏览器直接请求 :8001 触发 CORS，
+  // 同时兼容局域网通过前端入口访问的场景。
   return base
 }
 
