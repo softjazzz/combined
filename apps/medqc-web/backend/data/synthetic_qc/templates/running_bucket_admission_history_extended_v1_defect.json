@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_admission_history_extended_v1",
+    "issue_type": "Z02_admission_history_extended",
+    "display_name": "入院记录扩展内容",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-012", "SC-013", "SC-014", "SC-016", "SC-018"],
+    "bucket_id": "admission_history_extended"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P102",
+    "visit_id": "SYN-RUN-102",
+    "mr_no": "SYN0102",
+    "patient_name": "合成患者乙",
+    "gender": "女",
+    "age": 48,
+    "department": "消化内科"
+  },
+  "documents": [
+    {
+      "document_type": "admission_record",
+      "title": "入院记录",
+      "content": "主诉：上腹痛2周。现病史：上腹痛2周。体格检查：腹软。入院诊断：胃炎。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["胃炎"],
+    "orders": [],
+    "exams": []
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_first_course_reasoning_v1",
+    "issue_type": "Z14_first_course_reasoning",
+    "display_name": "首次病程诊断推理",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-025", "SC-026", "SC-027"],
+    "bucket_id": "first_course_reasoning"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P114",
+    "visit_id": "SYN-RUN-114",
+    "mr_no": "SYN0114",
+    "patient_name": "合成患者卯",
+    "gender": "女",
+    "age": 57,
+    "department": "神经内科"
+  },
+  "documents": [
+    {
+      "document_type": "first_course_record",
+      "title": "首次病程记录",
+      "content": "病例特点：突发右侧肢体无力4小时。诊断依据：头颅MRI示左侧基底节急性脑梗死，神经系统查体示右侧肢体肌力4级。鉴别诊断：脑出血、短暂性脑缺血发作，结合MRI及病程可排除。诊疗计划：完善血脂血糖及颈动脉超声，予双抗、调脂、改善循环及康复评估。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["急性脑梗死"],
+    "orders": ["双抗治疗", "调脂治疗"],
+    "exams": ["头颅MRI示急性脑梗死"]
+  }
+}

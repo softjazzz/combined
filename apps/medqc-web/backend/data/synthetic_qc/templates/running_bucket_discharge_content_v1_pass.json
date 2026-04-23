@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_discharge_content_v1",
+    "issue_type": "Z05_discharge_content",
+    "display_name": "出院记录内容",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-118", "SC-119", "SC-123"],
+    "bucket_id": "discharge_content"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P105",
+    "visit_id": "SYN-RUN-105",
+    "mr_no": "SYN0105",
+    "patient_name": "合成患者戊",
+    "gender": "男",
+    "age": 67,
+    "department": "心内科"
+  },
+  "documents": [
+    {
+      "document_type": "discharge_record",
+      "title": "出院记录",
+      "content": "入院日期：2026-04-01。出院日期：2026-04-08。入院情况：胸闷胸痛1天。入院诊断：冠心病，不稳定型心绞痛，高血压病。诊疗经过：入院后完善心电图、肌钙蛋白、冠脉CTA，予抗血小板、调脂、扩冠及控制血压治疗，胸痛缓解。出院情况：生命体征平稳，无胸痛。出院医嘱：继续阿司匹林100mg qd、瑞舒伐他汀10mg qn、硝酸异山梨酯20mg tid，低盐低脂饮食，1周后门诊复查。出院带药：阿司匹林肠溶片100mg*14片、瑞舒伐他汀10mg*14片、硝酸异山梨酯20mg*42片。医师签名：张医生。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["冠心病", "不稳定型心绞痛", "高血压病"],
+    "orders": ["阿司匹林", "瑞舒伐他汀"],
+    "exams": ["冠脉CTA"]
+  }
+}

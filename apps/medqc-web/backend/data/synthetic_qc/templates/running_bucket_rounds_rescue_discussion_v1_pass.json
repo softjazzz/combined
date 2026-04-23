@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_rounds_rescue_discussion_v1",
+    "issue_type": "Z17_rounds_rescue_discussion",
+    "display_name": "查房抢救讨论记录",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-050", "SC-051", "SC-055", "SC-057", "SC-058", "SC-060"],
+    "bucket_id": "rounds_rescue_discussion"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P117",
+    "visit_id": "SYN-RUN-117",
+    "mr_no": "SYN0117",
+    "patient_name": "合成患者午",
+    "gender": "男",
+    "age": 72,
+    "department": "ICU"
+  },
+  "documents": [
+    {
+      "document_type": "senior_course_record",
+      "title": "主任医师查房记录",
+      "content": "患者病危，血压偏低，主任医师查房指出感染性休克诊断明确，需强化补液、升压及抗感染方案。"
+    },
+    {
+      "document_type": "rescue_record",
+      "title": "抢救记录",
+      "content": "16:20患者血压下降至78/45mmHg，立即补液、去甲肾上腺素升压、复查乳酸，家属已告知。"
+    },
+    {
+      "document_type": "diffcase_discussion_record",
+      "title": "疑难病例讨论记录",
+      "content": "围绕持续发热、感染灶不明进行讨论，形成补充CT及血培养方案。"
+    },
+    {
+      "document_type": "death_discussion",
+      "title": "死亡病例讨论记录",
+      "content": "若患者死亡，已围绕死亡原因、诊疗经过和经验教训完整讨论。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["感染性休克"],
+    "orders": ["补液", "升压", "血培养"],
+    "exams": ["乳酸复查"]
+  }
+}

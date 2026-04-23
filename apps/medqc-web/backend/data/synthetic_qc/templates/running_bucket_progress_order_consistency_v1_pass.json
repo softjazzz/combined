@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_progress_order_consistency_v1",
+    "issue_type": "Z20_progress_order_consistency",
+    "display_name": "病程医嘱一致性",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-038", "SC-079", "SC-143", "SC-146"],
+    "bucket_id": "progress_order_consistency"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P120",
+    "visit_id": "SYN-RUN-120",
+    "mr_no": "SYN0120",
+    "patient_name": "合成患者酉",
+    "gender": "女",
+    "age": 29,
+    "department": "产科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "今日复核B超提示胎位正常、羊水适中，与原报告一致。病程记录中已分析继续待产观察。长期医嘱单患者姓名、病案号、起始停止时间及内容清晰，诊疗医嘱与病程一致。"
+    },
+    {
+      "document_type": "medical_order",
+      "title": "长期医嘱单",
+      "content": "患者姓名：李某；病案号：SYN0120；起始时间：2026-04-10 08:00；长期医嘱：胎心监护 bid，补液 qd；停止时间记录完整。"
+    },
+    {
+      "document_type": "newborn_record",
+      "title": "新生儿记录",
+      "content": "新生儿情况记录完整，与产程病程描述一致。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["待产"],
+    "orders": ["胎心监护", "补液"],
+    "exams": ["B超提示胎位正常"]
+  }
+}

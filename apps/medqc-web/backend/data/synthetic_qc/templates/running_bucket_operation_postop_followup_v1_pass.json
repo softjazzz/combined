@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_postop_followup_v1",
+    "issue_type": "Z12_operation_postop_followup",
+    "display_name": "术后随访闭环",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-105", "SC-106", "SC-107", "SC-108", "SC-114", "SC-115"],
+    "bucket_id": "operation_postop_followup"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P112",
+    "visit_id": "SYN-RUN-112",
+    "mr_no": "SYN0112",
+    "patient_name": "合成患者丑",
+    "gender": "女",
+    "age": 44,
+    "department": "甲乳外科"
+  },
+  "documents": [
+    {
+      "document_type": "surgery_record",
+      "title": "手术记录",
+      "content": "行乳腺肿物切除术，术中顺利，送病理。"
+    },
+    {
+      "document_type": "postsurg_firstcourse_record",
+      "title": "术后首次病程记录",
+      "content": "术后麻醉苏醒，生命体征平稳，伤口敷料干燥，无活动性出血，继续心电监护及止痛治疗。"
+    },
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "术后第1日复查血常规平稳，切口无渗血，指导下床活动，继续抗感染及镇痛。"
+    },
+    {
+      "document_type": "anesthesia_record",
+      "title": "麻醉记录",
+      "content": "麻醉术后访视：无恶心呕吐，疼痛可耐受。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["乳腺良性肿物"],
+    "orders": ["术后心电监护", "止痛治疗"],
+    "exams": ["术后血常规"]
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_anesthesia_intraop_v1",
+    "issue_type": "Z11_operation_anesthesia_intraop",
+    "display_name": "麻醉术中闭环",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-093", "SC-094", "SC-099", "SC-100", "SC-101", "SC-103"],
+    "bucket_id": "operation_anesthesia_intraop"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P111",
+    "visit_id": "SYN-RUN-111",
+    "mr_no": "SYN0111",
+    "patient_name": "合成患者子",
+    "gender": "男",
+    "age": 55,
+    "department": "骨科"
+  },
+  "documents": [
+    {
+      "document_type": "anesthesia_record",
+      "title": "麻醉记录",
+      "content": "麻醉记录仅写全麻，未见麻醉开始结束时间及术中监测。"
+    },
+    {
+      "document_type": "surgery_safecheck_record",
+      "title": "手术安全核查记录",
+      "content": "核查记录空白。"
+    },
+    {
+      "document_type": "surgery_record",
+      "title": "手术记录",
+      "content": "行手术治疗。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["股骨骨折"],
+    "orders": ["手术"],
+    "exams": []
+  }
+}

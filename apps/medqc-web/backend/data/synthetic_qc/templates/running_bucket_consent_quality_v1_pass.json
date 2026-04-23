@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_consent_quality_v1",
+    "issue_type": "Z04_consent_quality",
+    "display_name": "知情同意质量",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-131", "SC-134", "SC-136"],
+    "bucket_id": "consent_quality"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P104",
+    "visit_id": "SYN-RUN-104",
+    "mr_no": "SYN0104",
+    "patient_name": "合成患者丁",
+    "gender": "女",
+    "age": 45,
+    "department": "肿瘤科"
+  },
+  "documents": [
+    {
+      "document_type": "consent_form",
+      "title": "特殊治疗知情同意书",
+      "content": "拟行特殊治疗：中心静脉置管及化疗。已向患者说明治疗名称、目的、主要步骤、常见并发症、替代方案、自费耗材情况及患者签字意见。患者本人签字，同意实施。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["乳腺恶性肿瘤"],
+    "orders": ["中心静脉置管", "化疗前准备"],
+    "exams": []
+  }
+}

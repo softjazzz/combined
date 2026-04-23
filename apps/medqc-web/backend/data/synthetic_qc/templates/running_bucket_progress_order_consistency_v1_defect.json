@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_progress_order_consistency_v1",
+    "issue_type": "Z20_progress_order_consistency",
+    "display_name": "病程医嘱一致性",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-038", "SC-079", "SC-143", "SC-146"],
+    "bucket_id": "progress_order_consistency"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P120",
+    "visit_id": "SYN-RUN-120",
+    "mr_no": "SYN0120",
+    "patient_name": "合成患者酉",
+    "gender": "女",
+    "age": 29,
+    "department": "产科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "病程转抄B超结果为胎位异常，与原报告不符；记录称继续观察，但医嘱单未见对应监测医嘱。"
+    },
+    {
+      "document_type": "medical_order",
+      "title": "长期医嘱单",
+      "content": "长期医嘱：观察。"
+    },
+    {
+      "document_type": "newborn_record",
+      "title": "新生儿记录",
+      "content": "记录与病程不一致。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["待产"],
+    "orders": ["观察"],
+    "exams": ["B超原报告胎位正常，病程转抄异常"]
+  }
+}

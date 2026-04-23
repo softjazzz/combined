@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_daily_course_quality_v1",
+    "issue_type": "Z16_daily_course_quality",
+    "display_name": "日常病程质量",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-035", "SC-039", "SC-040", "SC-047"],
+    "bucket_id": "daily_course_quality"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P116",
+    "visit_id": "SYN-RUN-116",
+    "mr_no": "SYN0116",
+    "patient_name": "合成患者巳",
+    "gender": "女",
+    "age": 71,
+    "department": "肾内科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "今日患者诉乏力较前减轻，无胸闷气促。复查电解质示血钾由2.9mmol/L升至3.5mmol/L，考虑补钾有效；继续口服氯化钾并复查电解质。病程记录书写清晰，未见复制粘贴及无关内容。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["低钾血症"],
+    "orders": ["口服氯化钾"],
+    "exams": ["血钾升至3.5mmol/L"]
+  }
+}

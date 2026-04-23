@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_preop_v1",
+    "issue_type": "Z10_operation_preop",
+    "display_name": "术前准备闭环",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-081", "SC-083", "SC-084", "SC-085", "SC-086", "SC-092"],
+    "bucket_id": "operation_preop"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P110",
+    "visit_id": "SYN-RUN-110",
+    "mr_no": "SYN0110",
+    "patient_name": "合成患者癸",
+    "gender": "女",
+    "age": 39,
+    "department": "妇科"
+  },
+  "documents": [
+    {
+      "document_type": "presurg_summary",
+      "title": "术前小结",
+      "content": "拟手术。"
+    },
+    {
+      "document_type": "presurg_discussion",
+      "title": "术前讨论",
+      "content": "已讨论。"
+    },
+    {
+      "document_type": "anesthesia_record",
+      "title": "麻醉记录",
+      "content": "麻醉相关记录缺少术前评估和方案。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["子宫肌瘤"],
+    "orders": ["手术治疗"],
+    "exams": []
+  }
+}

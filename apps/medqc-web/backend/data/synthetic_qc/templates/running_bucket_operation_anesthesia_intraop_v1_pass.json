@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_anesthesia_intraop_v1",
+    "issue_type": "Z11_operation_anesthesia_intraop",
+    "display_name": "麻醉术中闭环",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-093", "SC-094", "SC-099", "SC-100", "SC-101", "SC-103"],
+    "bucket_id": "operation_anesthesia_intraop"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P111",
+    "visit_id": "SYN-RUN-111",
+    "mr_no": "SYN0111",
+    "patient_name": "合成患者子",
+    "gender": "男",
+    "age": 55,
+    "department": "骨科"
+  },
+  "documents": [
+    {
+      "document_type": "anesthesia_record",
+      "title": "麻醉记录",
+      "content": "麻醉开始至结束时间完整，麻醉方式为全麻，术中生命体征、用药、输液、苏醒情况记录完整。"
+    },
+    {
+      "document_type": "surgery_safecheck_record",
+      "title": "手术安全核查记录",
+      "content": "麻醉实施前、手术开始前及离室前核查项目齐全，签名完整。"
+    },
+    {
+      "document_type": "surgery_record",
+      "title": "手术记录",
+      "content": "手术名称、术者、经过及术中情况记录完整，与麻醉记录时间一致。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["股骨骨折"],
+    "orders": ["切开复位内固定术"],
+    "exams": ["术前X线"]
+  }
+}

@@ -26,6 +26,7 @@ MAPPING_PATH = DATA_ROOT / "sheet2_intrinsic_issue_mapping.json"
 TEMPLATE_ROOT = DATA_ROOT / "templates"
 MANIFEST_PATH = TEMPLATE_ROOT / "template_manifest.json"
 OUTPUT_DIR = BACKEND_ROOT / "data" / "manual_qc_runs"
+COVERAGE_MATRIX_PATH = DATA_ROOT / "sc146_intrinsic_84_coverage_matrix.json"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -33,6 +34,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--provider", default="alibaba")
     parser.add_argument("--model", default="qwen3.6-35b-a3b")
     parser.add_argument("--template-file", default="", help="仅运行某个模板文件名")
+    parser.add_argument(
+        "--bucket-id",
+        nargs="*",
+        default=[],
+        help="仅运行指定 bucket_id 的模板，可传多个",
+    )
     parser.add_argument(
         "--variant",
         default="all",
@@ -65,6 +72,16 @@ def _parse_args() -> argparse.Namespace:
 
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _normalize_bucket_filters(values: Sequence[str]) -> set[str]:
+    output: set[str] = set()
+    for item in values:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        output.update(part.strip() for part in text.split(",") if part.strip())
+    return output
 
 
 def _pick_primary_document(
@@ -156,6 +173,55 @@ def _status_map(items: list[dict[str, Any]]) -> dict[str, str]:
         if rule_id:
             output[rule_id] = str(item.get("status") or "")
     return output
+
+
+def _build_rule_coverage_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    coverage: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        variant = str(row.get("variant") or "").strip()
+        expectation = dict(row.get("expectation_result") or {})
+        status = str(expectation.get("status") or "")
+        template_file = str(row.get("template_file") or "")
+        for rule_id in list(row.get("expected_rule_ids") or []):
+            rid = str(rule_id or "").strip().upper()
+            if not rid:
+                continue
+            entry = coverage.setdefault(
+                rid,
+                {
+                    "rule_id": rid,
+                    "pass_result": "missing",
+                    "defect_result": "missing",
+                    "pass_templates": [],
+                    "defect_templates": [],
+                    "stabilized": False,
+                },
+            )
+            if variant == "pass":
+                entry["pass_result"] = status or "missing"
+                if template_file:
+                    entry["pass_templates"].append(template_file)
+            elif variant == "defect":
+                entry["defect_result"] = status or "missing"
+                if template_file:
+                    entry["defect_templates"].append(template_file)
+            entry["stabilized"] = entry["pass_result"] == "pass_ok" and entry["defect_result"] == "hit"
+
+    summary = {
+        "rule_count": len(coverage),
+        "stabilized": 0,
+        "pass_missing": 0,
+        "defect_missing": 0,
+        "entries": sorted(coverage.values(), key=lambda item: item["rule_id"]),
+    }
+    for item in summary["entries"]:
+        if item["stabilized"]:
+            summary["stabilized"] += 1
+        if item["pass_result"] == "missing":
+            summary["pass_missing"] += 1
+        if item["defect_result"] == "missing":
+            summary["defect_missing"] += 1
+    return summary
 
 
 def _evaluate_expectation(
@@ -349,6 +415,7 @@ async def _main() -> None:
 
     strict_hit_statuses = {str(item).strip().lower() for item in args.strict_hit_status if str(item).strip()}
     soft_hit_statuses = {str(item).strip().lower() for item in args.soft_hit_status if str(item).strip()}
+    bucket_filters = _normalize_bucket_filters(args.bucket_id)
 
     selected_files: list[Path] = []
     for entry in list(manifest.get("files") or []):
@@ -361,7 +428,13 @@ async def _main() -> None:
             continue
         if args.variant != "all" and str(entry.get("variant") or "") != args.variant:
             continue
-        selected_files.append(TEMPLATE_ROOT / file_name)
+        template_path = TEMPLATE_ROOT / file_name
+        if bucket_filters:
+            template = _load_json(template_path)
+            bucket_id = str(dict(template.get("metadata") or {}).get("bucket_id") or "").strip()
+            if bucket_id not in bucket_filters:
+                continue
+        selected_files.append(template_path)
 
     run_started = datetime.now().isoformat()
     rows: list[dict[str, Any]] = []
@@ -400,6 +473,12 @@ async def _main() -> None:
         },
         "results": rows,
     }
+    payload["bucket_filters"] = sorted(bucket_filters)
+    payload["rule_coverage_summary"] = _build_rule_coverage_summary(rows)
+    if COVERAGE_MATRIX_PATH.exists():
+        payload["coverage_matrix_schema_version"] = str(
+            _load_json(COVERAGE_MATRIX_PATH).get("schema_version") or ""
+        )
 
     if args.output_json:
         output_path = Path(args.output_json)

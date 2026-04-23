@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_postop_followup_v1",
+    "issue_type": "Z12_operation_postop_followup",
+    "display_name": "术后随访闭环",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-105", "SC-106", "SC-107", "SC-108", "SC-114", "SC-115"],
+    "bucket_id": "operation_postop_followup"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P112",
+    "visit_id": "SYN-RUN-112",
+    "mr_no": "SYN0112",
+    "patient_name": "合成患者丑",
+    "gender": "女",
+    "age": 44,
+    "department": "甲乳外科"
+  },
+  "documents": [
+    {
+      "document_type": "surgery_record",
+      "title": "手术记录",
+      "content": "行手术，顺利。"
+    },
+    {
+      "document_type": "postsurg_firstcourse_record",
+      "title": "术后首次病程记录",
+      "content": "术后返回病房。"
+    },
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "术后情况一般。"
+    },
+    {
+      "document_type": "anesthesia_record",
+      "title": "麻醉记录",
+      "content": "无术后访视内容。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["乳腺肿物"],
+    "orders": ["术后观察"],
+    "exams": []
+  }
+}

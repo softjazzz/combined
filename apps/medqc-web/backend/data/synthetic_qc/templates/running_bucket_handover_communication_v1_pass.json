@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_handover_communication_v1",
+    "issue_type": "Z18_handover_communication",
+    "display_name": "交接班与告知沟通",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-063", "SC-066", "SC-075", "SC-076"],
+    "bucket_id": "handover_communication"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P118",
+    "visit_id": "SYN-RUN-118",
+    "mr_no": "SYN0118",
+    "patient_name": "合成患者未",
+    "gender": "女",
+    "age": 63,
+    "department": "神经外科"
+  },
+  "documents": [
+    {
+      "document_type": "handoff_record",
+      "title": "交班记录",
+      "content": "入院日期2026-04-10，患者王某，女，63岁，脑出血术后，当前意识清，留置引流管1根，重点观察意识、瞳孔、引流量及血压变化。"
+    },
+    {
+      "document_type": "handover_record",
+      "title": "接班记录",
+      "content": "已核对患者基本信息、病情、管路、医嘱和注意事项，继续严密观察神志及引流情况。"
+    },
+    {
+      "document_type": "daily_course_record",
+      "title": "医患沟通记录",
+      "content": "已向家属说明病情变化、治疗风险及注意事项，家属表示理解并同意目前方案。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["脑出血术后"],
+    "orders": ["监测意识瞳孔"],
+    "exams": ["引流量记录"]
+  }
+}

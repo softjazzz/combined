@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_admission_history_extended_v1",
+    "issue_type": "Z02_admission_history_extended",
+    "display_name": "入院记录扩展内容",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-012", "SC-013", "SC-014", "SC-016", "SC-018"],
+    "bucket_id": "admission_history_extended"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P102",
+    "visit_id": "SYN-RUN-102",
+    "mr_no": "SYN0102",
+    "patient_name": "合成患者乙",
+    "gender": "女",
+    "age": 48,
+    "department": "消化内科"
+  },
+  "documents": [
+    {
+      "document_type": "admission_record",
+      "title": "入院记录",
+      "content": "主诉：上腹痛伴反酸2周。现病史：2周前进食辛辣后出现上腹灼痛，伴反酸、嗳气，无呕血黑便，门诊予抑酸治疗后缓解不明显。既往史：胆囊切除术后5年，否认输血史。个人史：无烟酒嗜好。月经婚育史：已婚已育。家族史：父亲有胃溃疡病史。体格检查：T36.4℃，P76次/分，R18次/分，BP124/76mmHg，腹平软，上腹轻压痛，无反跳痛。辅助检查：门诊胃镜提示胃窦炎。入院诊断：慢性胃炎。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["慢性胃炎"],
+    "orders": [],
+    "exams": ["胃镜提示胃窦炎"]
+  }
+}

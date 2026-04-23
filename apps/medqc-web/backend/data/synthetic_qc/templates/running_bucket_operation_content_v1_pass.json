@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_content_v1",
+    "issue_type": "Z09_operation_content",
+    "display_name": "手术相关内容完整性",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-089", "SC-091", "SC-097", "SC-110", "SC-113"],
+    "bucket_id": "operation_content"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P109",
+    "visit_id": "SYN-RUN-109",
+    "mr_no": "SYN0109",
+    "patient_name": "合成患者壬",
+    "gender": "男",
+    "age": 46,
+    "department": "普外科"
+  },
+  "documents": [
+    {
+      "document_type": "consent_form",
+      "title": "手术知情同意书",
+      "content": "拟行腹腔镜胆囊切除术，已说明手术名称、方式、风险及替代方案，患者签字同意。"
+    },
+    {
+      "document_type": "presurg_summary",
+      "title": "术前小结",
+      "content": "简要病情：反复右上腹痛半年。术前诊断：胆囊结石伴慢性胆囊炎。手术指征明确，拟行腹腔镜胆囊切除术，拟全麻。"
+    },
+    {
+      "document_type": "surgery_record",
+      "title": "手术记录",
+      "content": "手术名称：腹腔镜胆囊切除术。术中所见胆囊壁增厚，粘连轻。手术经过完整，标本送病理，术后安返病房。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["胆囊结石伴慢性胆囊炎"],
+    "orders": ["腹腔镜胆囊切除术"],
+    "exams": ["腹部超声提示胆囊结石"]
+  }
+}

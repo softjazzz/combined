@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_content_v1",
+    "issue_type": "Z09_operation_content",
+    "display_name": "手术相关内容完整性",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-089", "SC-091", "SC-097", "SC-110", "SC-113"],
+    "bucket_id": "operation_content"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P109",
+    "visit_id": "SYN-RUN-109",
+    "mr_no": "SYN0109",
+    "patient_name": "合成患者壬",
+    "gender": "男",
+    "age": 46,
+    "department": "普外科"
+  },
+  "documents": [
+    {
+      "document_type": "consent_form",
+      "title": "手术知情同意书",
+      "content": "患者同意手术。"
+    },
+    {
+      "document_type": "presurg_summary",
+      "title": "术前小结",
+      "content": "拟手术治疗。"
+    },
+    {
+      "document_type": "surgery_record",
+      "title": "手术记录",
+      "content": "行手术，过程顺利。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["胆囊结石"],
+    "orders": ["手术治疗"],
+    "exams": []
+  }
+}
