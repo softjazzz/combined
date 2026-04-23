@@ -201,5 +201,10 @@ supabase/logs/
 node_modules/
 
 # Local QC experiment artifacts
-apps/medqc-web/backend/backend/data/manual_qc_runs/
+apps/medqc-web/backend/data/manual_qc_runs/
+apps/medqc-web/backend/data/sample_pool_uploads/
 apps/medqc-web/backend/release-gate-artifacts/
+apps/medqc-web/backend/backend/data/manual_qc_runs/
+
+# Local release bundles
+release/
