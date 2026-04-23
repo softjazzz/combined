@@ -7,7 +7,7 @@
     "display_name": "出院诊断一致性",
     "variant": "defect",
     "scene": "running",
-    "expected_rule_ids": ["SC-125", "SC-127"],
+    "expected_rule_ids": ["SC-125"],
     "bucket_id": "discharge_consistency"
   },
   "patient_identity": {
@@ -24,7 +24,7 @@
     {
       "document_type": "discharge_record",
       "title": "出院记录",
-      "content": "入院诊断：慢性肾功能不全急性加重，2型糖尿病。出院诊断：2型糖尿病；慢性肾炎。"
+      "content": "入院诊断：慢性肾功能不全急性加重，2型糖尿病。住院期间病程记录多次记载少尿、水肿加重，予利尿、纠酸及血液透析处理后好转。出院诊断：2型糖尿病；慢性肾炎。出院医嘱：继续低蛋白饮食，3日后肾内科复诊并复查肾功能。"
     }
   ],
   "structured_facts": {

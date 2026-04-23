@@ -7,7 +7,7 @@
     "display_name": "出院记录内容",
     "variant": "defect",
     "scene": "running",
-    "expected_rule_ids": ["SC-118", "SC-119", "SC-123"],
+    "expected_rule_ids": ["SC-118", "SC-123"],
     "bucket_id": "discharge_content"
   },
   "patient_identity": {

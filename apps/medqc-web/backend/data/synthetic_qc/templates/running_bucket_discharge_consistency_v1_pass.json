@@ -7,7 +7,7 @@
     "display_name": "出院诊断一致性",
     "variant": "pass",
     "scene": "running",
-    "expected_rule_ids": ["SC-125", "SC-127"],
+    "expected_rule_ids": ["SC-125"],
     "bucket_id": "discharge_consistency"
   },
   "patient_identity": {

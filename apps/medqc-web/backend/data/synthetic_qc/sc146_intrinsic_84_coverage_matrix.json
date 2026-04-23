@@ -11,9 +11,9 @@
       "bucket_display_name": "入院记录核心内容",
       "pass_templates": ["running_bucket_admission_history_core_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_history_core_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖主诉、现病史、体格检查、专科检查完整性。"
     },
     {
@@ -22,9 +22,9 @@
       "bucket_display_name": "入院记录核心内容",
       "pass_templates": ["running_bucket_admission_history_core_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_history_core_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖主诉、现病史、体格检查、专科检查完整性。"
     },
     {
@@ -33,9 +33,9 @@
       "bucket_display_name": "入院记录核心内容",
       "pass_templates": ["running_bucket_admission_history_core_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_history_core_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖主诉、现病史、体格检查、专科检查完整性。"
     },
     {
@@ -44,9 +44,9 @@
       "bucket_display_name": "入院记录核心内容",
       "pass_templates": ["running_bucket_admission_history_core_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_history_core_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖主诉、现病史、体格检查、专科检查完整性。"
     },
     {
@@ -55,9 +55,9 @@
       "bucket_display_name": "入院记录核心内容",
       "pass_templates": ["running_bucket_admission_history_core_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_history_core_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖主诉、现病史、体格检查、专科检查完整性。"
     },
     {
@@ -196,8 +196,8 @@
       "rule_id": "SC-118",
       "bucket_id": "discharge_content",
       "bucket_display_name": "出院记录内容",
-      "pass_templates": ["running_bucket_discharge_content_v1_pass.json"],
-      "defect_templates": ["running_bucket_discharge_content_v1_defect.json"],
+      "pass_templates": ["running_bucket_discharge_content_death_v1_pass.json"],
+      "defect_templates": ["running_bucket_discharge_content_death_v1_defect.json"],
       "pass_result": "pending",
       "defect_result": "pending",
       "stabilized": false,
@@ -251,8 +251,8 @@
       "rule_id": "SC-125",
       "bucket_id": "discharge_consistency",
       "bucket_display_name": "出院诊断一致性",
-      "pass_templates": ["running_bucket_discharge_consistency_v1_pass.json"],
-      "defect_templates": ["running_bucket_discharge_consistency_v1_defect.json"],
+      "pass_templates": ["running_bucket_discharge_consistency_death_v1_pass.json"],
+      "defect_templates": ["running_bucket_discharge_consistency_death_v1_defect.json"],
       "pass_result": "pending",
       "defect_result": "pending",
       "stabilized": false,

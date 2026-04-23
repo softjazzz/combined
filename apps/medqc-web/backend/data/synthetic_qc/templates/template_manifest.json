@@ -2,7 +2,7 @@
   "schema_version": "v1",
   "template_family": "running_record_intrinsic_baseline_v1",
   "generated_at": "2026-04-22",
-  "template_count": 82,
+  "template_count": 86,
   "variants": ["pass", "defect"],
   "files": [
     {
@@ -141,25 +141,49 @@
       "file": "running_bucket_discharge_consistency_v1_defect.json",
       "issue_type": "Z07_discharge_consistency",
       "variant": "defect",
-      "expected_rule_ids": ["SC-125", "SC-127"]
+      "expected_rule_ids": ["SC-125"]
+    },
+    {
+      "file": "running_bucket_discharge_consistency_death_v1_defect.json",
+      "issue_type": "Z07_discharge_consistency",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-127"]
+    },
+    {
+      "file": "running_bucket_discharge_consistency_death_v1_pass.json",
+      "issue_type": "Z07_discharge_consistency",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-127"]
     },
     {
       "file": "running_bucket_discharge_consistency_v1_pass.json",
       "issue_type": "Z07_discharge_consistency",
       "variant": "pass",
-      "expected_rule_ids": ["SC-125", "SC-127"]
+      "expected_rule_ids": ["SC-125"]
     },
     {
       "file": "running_bucket_discharge_content_v1_defect.json",
       "issue_type": "Z05_discharge_content",
       "variant": "defect",
-      "expected_rule_ids": ["SC-118", "SC-119", "SC-123"]
+      "expected_rule_ids": ["SC-118", "SC-123"]
+    },
+    {
+      "file": "running_bucket_discharge_content_death_v1_defect.json",
+      "issue_type": "Z05_discharge_content",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-119"]
+    },
+    {
+      "file": "running_bucket_discharge_content_death_v1_pass.json",
+      "issue_type": "Z05_discharge_content",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-119"]
     },
     {
       "file": "running_bucket_discharge_content_v1_pass.json",
       "issue_type": "Z05_discharge_content",
       "variant": "pass",
-      "expected_rule_ids": ["SC-118", "SC-119", "SC-123"]
+      "expected_rule_ids": ["SC-118", "SC-123"]
     },
     {
       "file": "running_bucket_discharge_orders_v1_defect.json",
