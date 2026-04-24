@@ -330,6 +330,84 @@ def test_row_to_item_should_fallback_candidate_rules_for_intrinsic_history_rows(
     assert item["candidate_rule_ids"] == sample_pool_module._DEFAULT_INTRINSIC_RULE_IDS
 
 
+def test_derive_dynamic_candidate_rule_ids_from_source_tables_should_cover_operation_and_discharge():
+    rule_ids = sample_pool_module._derive_dynamic_candidate_rule_ids_from_source_tables(
+        ["discharge_record", "surgery_record", "anesthesia_record"]
+    )
+
+    assert "SC-118" in rule_ids
+    assert "SC-093" in rule_ids
+    assert "SC-114" in rule_ids
+
+
+def test_apply_dynamic_candidate_rule_ids_should_replace_default_rules_for_blank_intrinsic_rows(monkeypatch):
+    service = CustomQCSamplePoolService()
+    items = [
+        {
+            "id": "item-1",
+            "matched_visit_id": "V001",
+            "coverage_type": "llm_intrinsic",
+            "manual_issue_text": "",
+            "candidate_rule_ids": sample_pool_module._DEFAULT_INTRINSIC_RULE_IDS,
+        }
+    ]
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {
+            "V001": {"discharge_record", "surgery_record", "anesthesia_record"},
+        },
+    )
+
+    enriched = service._apply_dynamic_candidate_rule_ids(items=items)
+
+    assert len(enriched) == 1
+    assert "SC-118" in enriched[0]["candidate_rule_ids"]
+    assert "SC-093" in enriched[0]["candidate_rule_ids"]
+    assert "SC-008" not in enriched[0]["candidate_rule_ids"]
+
+
+def test_get_runnable_items_should_enrich_candidate_rules_from_bundle(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "",
+            "mr_no": "161241",
+            "department": "",
+            "manual_issue_text": "",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "record_list_intrinsic",
+            "candidate_rule_ids_json": '["SC-008","SC-023"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V001",
+            "matched_patient_id": "P001",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {
+            "V001": {"surgery_record", "anesthesia_record", "postsurg_firstcourse_record"},
+        },
+    )
+
+    result = service.get_runnable_items(pool_id="pool-1")
+
+    assert len(result) == 1
+    assert "SC-093" in result[0]["candidate_rule_ids"]
+    assert "SC-114" in result[0]["candidate_rule_ids"]
+    assert "SC-008" not in result[0]["candidate_rule_ids"]
+
+
 def test_choose_scored_candidate_should_fallback_to_most_recent_candidate():
     candidates = [
         {

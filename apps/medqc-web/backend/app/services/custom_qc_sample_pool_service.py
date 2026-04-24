@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 import psycopg2
 import psycopg2.extras
@@ -161,9 +162,94 @@ _DEFAULT_INTRINSIC_RULE_IDS: List[str] = [
     "SC-070",
 ]
 
+_BUNDLE_SOURCE_TABLE_CATEGORY_MAP: Dict[str, List[str]] = {
+    "admission_record": ["admission_consistency"],
+    "first_course_record": ["first_course_reasoning"],
+    "daily_course_record": ["daily_course_analysis"],
+    "consultation_record": ["consultation_execution"],
+    "senior_course_record": ["senior_round_content"],
+    "rescue_record": ["senior_round_content"],
+    "diffcase_discussion_record": ["senior_round_content"],
+    "death_discussion": ["senior_round_content"],
+    "discharge_record": ["discharge_content"],
+    "exam_master": ["exam_report_quality"],
+    "exam_item_report": ["exam_report_quality"],
+    "labtest_master": ["exam_report_quality"],
+    "labtest_item_report": ["exam_report_quality"],
+    "pathology_exam_master": ["exam_report_quality"],
+    "pathology_exam_report": ["exam_report_quality"],
+    "handoff_record": ["handover_communication"],
+    "handover_record": ["handover_communication"],
+    "presurg_summary": ["operation_record"],
+    "presurg_discussion": ["operation_record"],
+    "surgery_application": ["operation_record"],
+    "surgery_record": ["operation_record"],
+    "surgery_safecheck_record": ["operation_record"],
+    "surgery_risk_assessment": ["operation_record"],
+    "anesthesia_record": ["operation_record"],
+    "postsurg_firstcourse_record": ["operation_record"],
+    "surgery_inform_consent": ["operation_record", "consent_quality"],
+    "docpat_commu_record": ["consent_quality"],
+}
+
 
 def _contains_any(text: str, keywords: Sequence[str]) -> bool:
     return any(keyword in text for keyword in keywords)
+
+
+@lru_cache(maxsize=1)
+def _load_issue_category_rule_map() -> Dict[str, List[str]]:
+    mapping_path = Path(__file__).resolve().parents[2] / "data" / "synthetic_qc" / "sheet2_intrinsic_issue_mapping.json"
+    if not mapping_path.exists():
+        return {}
+    try:
+        data = json.loads(mapping_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    category_map: Dict[str, List[str]] = {}
+    for issue_type in data.get("issue_types") or []:
+        category = _safe_text(issue_type.get("source_category"))
+        if not category:
+            continue
+        current = category_map.setdefault(category, [])
+        for rule_id in _normalize_candidate_rule_ids(issue_type.get("expected_rule_ids")):
+            if rule_id not in current:
+                current.append(rule_id)
+    return category_map
+
+
+def _derive_dynamic_candidate_rule_ids_from_source_tables(source_tables: Sequence[str]) -> List[str]:
+    normalized_tables = {_safe_text(item).lower() for item in source_tables if _safe_text(item)}
+    if not normalized_tables:
+        return []
+    category_rule_map = _load_issue_category_rule_map()
+    dynamic_rule_ids: List[str] = []
+    for source_table in normalized_tables:
+        for category in _BUNDLE_SOURCE_TABLE_CATEGORY_MAP.get(source_table, []):
+            for rule_id in category_rule_map.get(category, []):
+                if rule_id not in dynamic_rule_ids:
+                    dynamic_rule_ids.append(rule_id)
+    return dynamic_rule_ids
+
+
+def _merge_candidate_rule_ids(
+    *,
+    base_rule_ids: Sequence[str],
+    dynamic_rule_ids: Sequence[str],
+    coverage_type: str,
+    manual_issue_text: str,
+) -> List[str]:
+    base = _normalize_candidate_rule_ids(base_rule_ids)
+    dynamic = _normalize_candidate_rule_ids(dynamic_rule_ids)
+    if not dynamic:
+        return base
+    if coverage_type == "llm_intrinsic" and not _safe_text(manual_issue_text):
+        return dynamic
+    merged = list(base)
+    for rule_id in dynamic:
+        if rule_id not in merged:
+            merged.append(rule_id)
+    return merged
 
 
 def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
@@ -770,6 +856,80 @@ class CustomQCSamplePoolService:
             "updated_at": row.get("updated_at"),
         }
 
+    def _load_bundle_source_table_map(self, *, visit_ids: Sequence[str]) -> Dict[str, set[str]]:
+        normalized_ids = [str(item).strip() for item in visit_ids if str(item).strip()]
+        if not normalized_ids or engine is None:
+            return {}
+        sql = (
+            sa.text(
+                """
+                SELECT visit_id::text AS visit_id,
+                       COALESCE(doc.value ->> 'source_table', doc.value ->> 'document_type', '') AS source_table
+                FROM public.running_record_bundle
+                CROSS JOIN LATERAL jsonb_array_elements(
+                    COALESCE((structured_context::jsonb -> 'document_inventory'), '[]'::jsonb)
+                ) AS doc(value)
+                WHERE visit_id IN :visit_ids
+
+                UNION ALL
+
+                SELECT visit_id::text AS visit_id,
+                       COALESCE(doc.value ->> 'source_table', doc.value ->> 'document_type', '') AS source_table
+                FROM public.final_record_bundle
+                CROSS JOIN LATERAL jsonb_array_elements(
+                    COALESCE((structured_context::jsonb -> 'document_inventory'), '[]'::jsonb)
+                ) AS doc(value)
+                WHERE visit_id IN :visit_ids
+                """
+            )
+            .bindparams(sa.bindparam("visit_ids", expanding=True))
+        )
+        source_table_map: Dict[str, set[str]] = {}
+        try:
+            with engine.connect() as conn:
+                rows = conn.execute(sql, {"visit_ids": normalized_ids}).mappings().all()
+        except Exception:
+            return {}
+        for row in rows:
+            visit_id = _safe_text(row.get("visit_id"))
+            source_table = _safe_text(row.get("source_table")).lower()
+            if not visit_id or not source_table:
+                continue
+            source_table_map.setdefault(visit_id, set()).add(source_table)
+        return source_table_map
+
+    def _apply_dynamic_candidate_rule_ids(
+        self,
+        *,
+        items: Sequence[Dict[str, Any]],
+        source_table_map: Optional[Dict[str, set[str]]] = None,
+    ) -> List[Dict[str, Any]]:
+        item_list = [dict(item) for item in items]
+        visit_ids = [
+            str(item.get("matched_visit_id") or "").strip()
+            for item in item_list
+            if str(item.get("matched_visit_id") or "").strip()
+        ]
+        effective_source_table_map = source_table_map or self._load_bundle_source_table_map(visit_ids=visit_ids)
+        if not effective_source_table_map:
+            return item_list
+        for item in item_list:
+            visit_id = str(item.get("matched_visit_id") or "").strip()
+            if not visit_id:
+                continue
+            dynamic_rule_ids = _derive_dynamic_candidate_rule_ids_from_source_tables(
+                sorted(effective_source_table_map.get(visit_id, set()))
+            )
+            if not dynamic_rule_ids:
+                continue
+            item["candidate_rule_ids"] = _merge_candidate_rule_ids(
+                base_rule_ids=item.get("candidate_rule_ids") or [],
+                dynamic_rule_ids=dynamic_rule_ids,
+                coverage_type=_safe_text(item.get("coverage_type"), "unsupported"),
+                manual_issue_text=_safe_text(item.get("manual_issue_text")),
+            )
+        return item_list
+
     def _row_to_sync_job(self, row: Dict[str, Any]) -> Dict[str, Any]:
         summary = _safe_json_loads(row.get("summary_json"), {})
         if not isinstance(summary, dict):
@@ -1248,10 +1408,11 @@ class CustomQCSamplePoolService:
             where_clause = and_(*clauses)
             stmt = select(self._item_table).where(where_clause).order_by(self._item_table.c.row_no.asc())
             rows = session.execute(stmt).mappings().all()
+            items = [self._row_to_item(dict(row)) for row in rows]
+            items = self._apply_dynamic_candidate_rule_ids(items=items)
 
             grouped: Dict[str, Dict[str, Any]] = {}
-            for row in rows:
-                item = self._row_to_item(dict(row))
+            for item in items:
                 group_key = item["matched_visit_id"] or f"id:{item['visit_id'] or item['mr_no'] or item['id']}"
                 current = grouped.get(group_key)
                 if current is None:
@@ -1518,7 +1679,8 @@ class CustomQCSamplePoolService:
                 if normalized_record_ids:
                     stmt = stmt.where(self._item_table.c.matched_visit_id.in_(normalized_record_ids))
             rows = session.execute(stmt).mappings().all()
-            return [self._row_to_item(dict(row)) for row in rows]
+            items = [self._row_to_item(dict(row)) for row in rows]
+            return self._apply_dynamic_candidate_rule_ids(items=items)
         finally:
             session.close()
 
