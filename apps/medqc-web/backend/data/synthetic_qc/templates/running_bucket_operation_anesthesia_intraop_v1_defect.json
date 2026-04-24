@@ -24,22 +24,24 @@
     {
       "document_type": "anesthesia_record",
       "title": "麻醉记录",
-      "content": "麻醉记录仅写全麻，未见麻醉开始结束时间及术中监测。"
+      "content": "麻醉记录仅写“全麻”，未写麻醉开始结束时间、生命体征监测、术中用药及苏醒拔管情况。"
     },
     {
       "document_type": "surgery_safecheck_record",
       "title": "手术安全核查记录",
-      "content": "核查记录空白。"
+      "content": "患者行左股骨骨折切开复位钢板内固定术，但手术安全核查记录仅留空白表格，麻醉前、切皮前、离室前三阶段均未填写，签名缺失。"
     },
     {
       "document_type": "surgery_record",
       "title": "手术记录",
-      "content": "行手术治疗。"
+      "content": "行左股骨骨折切开复位钢板内固定术。术中切取骨痂及肉芽组织送病理，但未写取材部位、数量及病理申请信息；置入锁定钢板1块、螺钉6枚，但未贴植入物条形码，也未记录植入物规格和数量明细。"
     }
   ],
   "structured_facts": {
-    "diagnoses": ["股骨骨折"],
+    "diagnoses": ["左股骨骨折"],
     "orders": ["手术"],
-    "exams": []
+    "exams": [],
+    "implants": ["锁定钢板1块", "螺钉6枚"],
+    "pathology": "骨痂及肉芽组织送检但记录缺失"
   }
 }

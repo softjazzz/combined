@@ -429,10 +429,10 @@
       "bucket_display_name": "麻醉术中闭环",
       "pass_templates": ["running_bucket_operation_anesthesia_intraop_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_anesthesia_intraop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖无麻醉记录、术中麻醉记录及安全核查。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖麻醉记录缺失、术中麻醉记录关键要素及安全核查。"
     },
     {
       "rule_id": "SC-094",
@@ -440,10 +440,10 @@
       "bucket_display_name": "麻醉术中闭环",
       "pass_templates": ["running_bucket_operation_anesthesia_intraop_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_anesthesia_intraop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖无麻醉记录、术中麻醉记录及安全核查。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖麻醉记录缺失、术中麻醉记录关键要素及安全核查。"
     },
     {
       "rule_id": "SC-099",
@@ -451,10 +451,10 @@
       "bucket_display_name": "麻醉术中闭环",
       "pass_templates": ["running_bucket_operation_anesthesia_intraop_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_anesthesia_intraop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖无麻醉记录、术中麻醉记录及安全核查。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖麻醉记录缺失、术中麻醉记录关键要素及安全核查。"
     },
     {
       "rule_id": "SC-100",
@@ -462,10 +462,10 @@
       "bucket_display_name": "麻醉术中闭环",
       "pass_templates": ["running_bucket_operation_anesthesia_intraop_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_anesthesia_intraop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖无麻醉记录、术中麻醉记录及安全核查。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖麻醉记录缺失、术中麻醉记录关键要素及安全核查。"
     },
     {
       "rule_id": "SC-101",
@@ -473,10 +473,10 @@
       "bucket_display_name": "麻醉术中闭环",
       "pass_templates": ["running_bucket_operation_anesthesia_intraop_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_anesthesia_intraop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖无麻醉记录、术中麻醉记录及安全核查。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖麻醉记录缺失、术中麻醉记录关键要素及安全核查。"
     },
     {
       "rule_id": "SC-103",
@@ -484,10 +484,10 @@
       "bucket_display_name": "麻醉术中闭环",
       "pass_templates": ["running_bucket_operation_anesthesia_intraop_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_anesthesia_intraop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖无麻醉记录、术中麻醉记录及安全核查。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖麻醉记录缺失、术中麻醉记录关键要素及安全核查。"
     },
     {
       "rule_id": "SC-105",
@@ -495,10 +495,10 @@
       "bucket_display_name": "术后随访闭环",
       "pass_templates": ["running_bucket_operation_postop_followup_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_postop_followup_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术后首次病程、术后观察、麻醉访视与复查闭环。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖术后首次病程、连续病程、麻醉术后访视及术区随访闭环。"
     },
     {
       "rule_id": "SC-106",
@@ -506,10 +506,10 @@
       "bucket_display_name": "术后随访闭环",
       "pass_templates": ["running_bucket_operation_postop_followup_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_postop_followup_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术后首次病程、术后观察、麻醉访视与复查闭环。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖术后首次病程、连续病程、麻醉术后访视及术区随访闭环。"
     },
     {
       "rule_id": "SC-107",
@@ -517,10 +517,10 @@
       "bucket_display_name": "术后随访闭环",
       "pass_templates": ["running_bucket_operation_postop_followup_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_postop_followup_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术后首次病程、术后观察、麻醉访视与复查闭环。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖术后首次病程、连续病程、麻醉术后访视及术区随访闭环。"
     },
     {
       "rule_id": "SC-108",
@@ -528,10 +528,10 @@
       "bucket_display_name": "术后随访闭环",
       "pass_templates": ["running_bucket_operation_postop_followup_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_postop_followup_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术后首次病程、术后观察、麻醉访视与复查闭环。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖术后首次病程、连续病程、麻醉术后访视及术区随访闭环。"
     },
     {
       "rule_id": "SC-114",
@@ -539,10 +539,10 @@
       "bucket_display_name": "术后随访闭环",
       "pass_templates": ["running_bucket_operation_postop_followup_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_postop_followup_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术后首次病程、术后观察、麻醉访视与复查闭环。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖术后首次病程、连续病程、麻醉术后访视及术区随访闭环。"
     },
     {
       "rule_id": "SC-115",
@@ -550,10 +550,10 @@
       "bucket_display_name": "术后随访闭环",
       "pass_templates": ["running_bucket_operation_postop_followup_v1_pass.json"],
       "defect_templates": ["running_bucket_operation_postop_followup_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术后首次病程、术后观察、麻醉访视与复查闭环。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖术后首次病程、连续病程、麻醉术后访视及术区随访闭环。"
     },
     {
       "rule_id": "SC-023",
@@ -891,10 +891,10 @@
       "bucket_display_name": "病程医嘱一致性",
       "pass_templates": ["running_bucket_progress_order_consistency_v1_pass.json"],
       "defect_templates": ["running_bucket_progress_order_consistency_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖报告转抄错误、长期医嘱描述不清及病程医嘱不一致。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖检查报告转抄错误、长期医嘱描述不清及病程医嘱不一致。"
     },
     {
       "rule_id": "SC-079",
@@ -902,10 +902,10 @@
       "bucket_display_name": "病程医嘱一致性",
       "pass_templates": ["running_bucket_progress_order_consistency_v1_pass.json"],
       "defect_templates": ["running_bucket_progress_order_consistency_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖报告转抄错误、长期医嘱描述不清及病程医嘱不一致。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖检查报告转抄错误、长期医嘱描述不清及病程医嘱不一致。"
     },
     {
       "rule_id": "SC-143",
@@ -913,10 +913,10 @@
       "bucket_display_name": "病程医嘱一致性",
       "pass_templates": ["running_bucket_progress_order_consistency_v1_pass.json"],
       "defect_templates": ["running_bucket_progress_order_consistency_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖报告转抄错误、长期医嘱描述不清及病程医嘱不一致。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖检查报告转抄错误、长期医嘱描述不清及病程医嘱不一致。"
     },
     {
       "rule_id": "SC-146",
@@ -924,10 +924,10 @@
       "bucket_display_name": "病程医嘱一致性",
       "pass_templates": ["running_bucket_progress_order_consistency_v1_pass.json"],
       "defect_templates": ["running_bucket_progress_order_consistency_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖报告转抄错误、长期医嘱描述不清及病程医嘱不一致。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖检查报告转抄错误、长期医嘱描述不清及病程医嘱不一致。"
     }
   ]
 }

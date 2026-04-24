@@ -24,22 +24,28 @@
     {
       "document_type": "daily_course_record",
       "title": "日常病程记录",
-      "content": "病程转抄B超结果为胎位异常，与原报告不符；记录称继续观察，但医嘱单未见对应监测医嘱。"
+      "content": "病程转抄B超结果为胎位异常、羊水过少，与原报告单中“单胎头位、羊水适中”不一致；同时记录需持续胎心监护并补液，但医嘱单未开对应监测和补液医嘱。"
     },
     {
       "document_type": "medical_order",
       "title": "长期医嘱单",
-      "content": "长期医嘱：观察。"
+      "content": "长期医嘱单仅写“观察”，未写患者姓名、科别、病案号、页码、起始时间、停止时间及具体医嘱内容。"
     },
     {
       "document_type": "newborn_record",
       "title": "新生儿记录",
-      "content": "记录与病程不一致。"
+      "content": "新生儿记录：性别女。"
+    },
+    {
+      "document_type": "delivery_record",
+      "title": "分娩记录",
+      "content": "分娩记录：新生儿男性。"
     }
   ],
   "structured_facts": {
     "diagnoses": ["待产"],
     "orders": ["观察"],
-    "exams": ["B超原报告胎位正常，病程转抄异常"]
+    "exams": ["原报告单胎头位、羊水适中；病程转抄胎位异常、羊水过少"],
+    "newborn_gender_conflict": ["女", "男"]
   }
 }
