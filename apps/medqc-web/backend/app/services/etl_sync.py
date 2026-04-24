@@ -1975,19 +1975,35 @@ def validate_pg_sync_plan(
 
 
 def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str]) -> int:
-    """将数据写入本地 PG（按主键 UPSERT）。"""
+    """将数据写入本地 PG（按本地真实主键 UPSERT）。"""
     if not records:
         return 0
 
-    if not primary_keys:
-        raise ValueError(f"表 {table_name} 缺少主键信息，无法执行 UPSERT")
-    for key in primary_keys:
+    requested_primary_keys = [str(key).strip().lower() for key in primary_keys if str(key).strip()]
+    for key in requested_primary_keys:
         _safe_identifier(key)
 
     with Session(engine) as session:
-        local_schema, local_columns, _ = _get_local_table_meta(session, table_name)
+        local_schema, local_columns, local_primary_keys = _get_local_table_meta(session, table_name)
         if not local_schema:
             raise ValueError(f"表 {table_name} 本地目标 schema 未命中，无法执行 UPSERT")
+        if not local_primary_keys:
+            raise ValueError(f"表 {table_name} 本地目标表缺少主键信息，无法执行 UPSERT")
+
+        # 历史调用方会传入 table_config.key_fields；这套配置未包含 institute_id 等真实主键字段。
+        # 为避免 ON CONFLICT 命中不到唯一约束，写入阶段必须以本地表真实主键为准。
+        effective_primary_keys = [str(key).strip().lower() for key in local_primary_keys if str(key).strip()]
+        for key in effective_primary_keys:
+            _safe_identifier(key)
+
+        if requested_primary_keys and requested_primary_keys != effective_primary_keys:
+            logger.info(
+                "表 %s UPSERT 主键已按本地约束覆盖：requested=%s effective=%s",
+                table_name,
+                requested_primary_keys,
+                effective_primary_keys,
+            )
+
         table_ident = f"{_safe_identifier(local_schema)}.{_safe_identifier(table_name)}"
         existing_columns = set(local_columns)
 
@@ -2006,14 +2022,14 @@ def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str
 
             if not filtered:
                 continue
-            if not all(pk in filtered for pk in primary_keys):
+            if not all(pk in filtered for pk in effective_primary_keys):
                 continue
 
             columns = list(filtered.keys())
             placeholders = ", ".join([f":{c}" for c in columns])
             col_list = ", ".join([_safe_identifier(c) for c in columns])
-            conflict_clause = ", ".join([_safe_identifier(k) for k in primary_keys])
-            update_cols = [c for c in columns if c not in primary_keys]
+            conflict_clause = ", ".join([_safe_identifier(k) for k in effective_primary_keys])
+            update_cols = [c for c in columns if c not in effective_primary_keys]
             if update_cols:
                 update_set = ", ".join(
                     [f"{_safe_identifier(c)} = EXCLUDED.{_safe_identifier(c)}" for c in update_cols]

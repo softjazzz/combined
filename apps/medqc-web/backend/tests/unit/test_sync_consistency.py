@@ -30,7 +30,7 @@ def test_run_sync_rejects_when_advisory_lock_not_acquired(monkeypatch):
 
     monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
     monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", lambda _state: None)
-    result = etl_sync.run_sync(sync_date="2026-03-25", tables=["mr"])
+    result = etl_sync.run_sync(sync_date="2026-03-25", tables=["mr", "admission_record", "discharge_record"])
     assert result["success"] is False
     assert "同步正在进行中" in result["error"]
 
@@ -58,7 +58,41 @@ def test_run_sync_updates_state_and_unlocks(monkeypatch):
             return _FakeConn()
 
     monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
-    monkeypatch.setattr(etl_sync, "call_stored_procedure", lambda *_args, **_kwargs: [{"patient_id": "p1"}])
+    monkeypatch.setattr(
+        etl_sync,
+        "validate_pg_sync_plan",
+        lambda **_kwargs: {
+            "executable": True,
+            "remote_schema": "public",
+            "table_validations": [
+                {"table": "mr", "source": "public.mr", "source_table": "mr", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
+                {
+                    "table": "admission_record",
+                    "source": "public.admission_record",
+                    "source_table": "admission_record",
+                    "local_primary_keys": ["institute_id", "patient_id", "visit_id"],
+                },
+                {
+                    "table": "discharge_record",
+                    "source": "public.discharge_record",
+                    "source_table": "discharge_record",
+                    "local_primary_keys": ["institute_id", "patient_id", "visit_id"],
+                },
+            ],
+        },
+    )
+    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {"schedule": {"minutes": 30}, "mirror_delay_base_minutes": 30})
+    monkeypatch.setattr(
+        etl_sync,
+        "_resolve_pg_extract_window",
+        lambda **_kwargs: (__import__("datetime").date(2026, 3, 25), __import__("datetime").date(2026, 3, 25), ["*"], ""),
+    )
+    monkeypatch.setattr(etl_sync, "collect_visit_keys_by_policy", lambda **_kwargs: [("p1", "v1")])
+    monkeypatch.setattr(
+        etl_sync,
+        "fetch_remote_rows_by_visit_keys",
+        lambda **kwargs: [{"institute_id": "A", "patient_id": "p1", "visit_id": "v1"}] if kwargs["source_table"] == "mr" else [],
+    )
     monkeypatch.setattr(etl_sync, "upsert_to_local", lambda *_args, **_kwargs: 1)
 
     def _capture_state(state):
@@ -72,14 +106,57 @@ def test_run_sync_updates_state_and_unlocks(monkeypatch):
 
     monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", _capture_state)
 
-    result = etl_sync.run_sync(sync_date="2026-03-25", tables=["mr"])
+    result = etl_sync.run_sync(sync_date="2026-03-25", tables=["mr", "admission_record", "discharge_record"])
     assert result["success"] is True
-    assert result["total_records"] == 1
+    assert result["total_records"] == 3
     assert any("pg_try_advisory_lock" in item for item in calls)
     assert any("pg_advisory_unlock" in item for item in calls)
     assert state_snapshots[0]["is_running"] is True
     assert state_snapshots[-1]["is_running"] is False
     assert state_snapshots[-1]["last_sync_status"] == "success"
+    assert state_snapshots[-1]["total_records_synced"] == 3
+
+
+def test_upsert_to_local_uses_real_local_primary_keys(monkeypatch):
+    executed_sql: list[str] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_sql.append(str(stmt))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: ("cdm", ["institute_id", "patient_id", "visit_id", "name"], ["institute_id", "patient_id", "visit_id"]),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="mr",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "name": "张三",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id"],
+    )
+
+    assert count == 1
+    assert len(executed_sql) == 1
+    assert "ON CONFLICT (institute_id, patient_id, visit_id)" in executed_sql[0]
 
 
 def test_sync_run_history_persists_and_caps_records(monkeypatch):
