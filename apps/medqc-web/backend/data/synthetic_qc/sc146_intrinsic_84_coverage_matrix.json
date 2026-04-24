@@ -66,9 +66,9 @@
       "bucket_display_name": "入院记录扩展内容",
       "pass_templates": ["running_bucket_admission_history_extended_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_history_extended_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖一般生命体征、既往/个人/家族史及现病史延展信息。"
     },
     {
@@ -77,9 +77,9 @@
       "bucket_display_name": "入院记录扩展内容",
       "pass_templates": ["running_bucket_admission_history_extended_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_history_extended_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖一般生命体征、既往/个人/家族史及现病史延展信息。"
     },
     {
@@ -88,9 +88,9 @@
       "bucket_display_name": "入院记录扩展内容",
       "pass_templates": ["running_bucket_admission_history_extended_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_history_extended_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖一般生命体征、既往/个人/家族史及现病史延展信息。"
     },
     {
@@ -99,9 +99,9 @@
       "bucket_display_name": "入院记录扩展内容",
       "pass_templates": ["running_bucket_admission_history_extended_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_history_extended_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖一般生命体征、既往/个人/家族史及现病史延展信息。"
     },
     {
@@ -110,9 +110,9 @@
       "bucket_display_name": "入院记录扩展内容",
       "pass_templates": ["running_bucket_admission_history_extended_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_history_extended_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖一般生命体征、既往/个人/家族史及现病史延展信息。"
     },
     {
@@ -121,9 +121,9 @@
       "bucket_display_name": "入院记录一致性",
       "pass_templates": ["running_bucket_admission_consistency_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_consistency_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。"
     },
     {
@@ -132,9 +132,9 @@
       "bucket_display_name": "入院记录一致性",
       "pass_templates": ["running_bucket_admission_consistency_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_consistency_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。"
     },
     {
@@ -143,9 +143,9 @@
       "bucket_display_name": "入院记录一致性",
       "pass_templates": ["running_bucket_admission_consistency_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_consistency_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。"
     },
     {
@@ -154,9 +154,9 @@
       "bucket_display_name": "入院记录一致性",
       "pass_templates": ["running_bucket_admission_consistency_v1_pass.json"],
       "defect_templates": ["running_bucket_admission_consistency_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。"
     },
     {

@@ -3,8 +3,8 @@
 ## 概览
 
 - 规则数量：`84`
-- 已稳定规则：`59`
-- 未稳定规则：`25`
+- 已稳定规则：`68`
+- 未稳定规则：`16`
 
 ## 规则级矩阵
 
@@ -15,15 +15,15 @@
 | `SC-008` | `admission_history_core`       | `running_bucket_admission_history_core_v1_pass.json`                 | `running_bucket_admission_history_core_v1_defect.json`                 | `pass_ok/hit`     | 覆盖主诉、现病史、体格检查、专科检查完整性。                               |
 | `SC-009` | `admission_history_core`       | `running_bucket_admission_history_core_v1_pass.json`                 | `running_bucket_admission_history_core_v1_defect.json`                 | `pass_ok/hit`     | 覆盖主诉、现病史、体格检查、专科检查完整性。                               |
 | `SC-011` | `admission_history_core`       | `running_bucket_admission_history_core_v1_pass.json`                 | `running_bucket_admission_history_core_v1_defect.json`                 | `pass_ok/hit`     | 覆盖主诉、现病史、体格检查、专科检查完整性。                               |
-| `SC-012` | `admission_history_extended`   | `running_bucket_admission_history_extended_v1_pass.json`             | `running_bucket_admission_history_extended_v1_defect.json`             | `pending/pending` | 覆盖一般生命体征、既往/个人/家族史及现病史延展信息。                       |
-| `SC-013` | `admission_history_extended`   | `running_bucket_admission_history_extended_v1_pass.json`             | `running_bucket_admission_history_extended_v1_defect.json`             | `pending/pending` | 覆盖一般生命体征、既往/个人/家族史及现病史延展信息。                       |
-| `SC-014` | `admission_history_extended`   | `running_bucket_admission_history_extended_v1_pass.json`             | `running_bucket_admission_history_extended_v1_defect.json`             | `pending/pending` | 覆盖一般生命体征、既往/个人/家族史及现病史延展信息。                       |
-| `SC-016` | `admission_history_extended`   | `running_bucket_admission_history_extended_v1_pass.json`             | `running_bucket_admission_history_extended_v1_defect.json`             | `pending/pending` | 覆盖一般生命体征、既往/个人/家族史及现病史延展信息。                       |
-| `SC-018` | `admission_history_extended`   | `running_bucket_admission_history_extended_v1_pass.json`             | `running_bucket_admission_history_extended_v1_defect.json`             | `pending/pending` | 覆盖一般生命体征、既往/个人/家族史及现病史延展信息。                       |
-| `SC-010` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pending/pending` | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
-| `SC-015` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pending/pending` | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
-| `SC-019` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pending/pending` | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
-| `SC-020` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pending/pending` | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
+| `SC-012` | `admission_history_extended`   | `running_bucket_admission_history_extended_v1_pass.json`             | `running_bucket_admission_history_extended_v1_defect.json`             | `pass_ok/hit`     | 覆盖一般生命体征、既往/个人/家族史及现病史延展信息。                       |
+| `SC-013` | `admission_history_extended`   | `running_bucket_admission_history_extended_v1_pass.json`             | `running_bucket_admission_history_extended_v1_defect.json`             | `pass_ok/hit`     | 覆盖一般生命体征、既往/个人/家族史及现病史延展信息。                       |
+| `SC-014` | `admission_history_extended`   | `running_bucket_admission_history_extended_v1_pass.json`             | `running_bucket_admission_history_extended_v1_defect.json`             | `pass_ok/hit`     | 覆盖一般生命体征、既往/个人/家族史及现病史延展信息。                       |
+| `SC-016` | `admission_history_extended`   | `running_bucket_admission_history_extended_v1_pass.json`             | `running_bucket_admission_history_extended_v1_defect.json`             | `pass_ok/hit`     | 覆盖一般生命体征、既往/个人/家族史及现病史延展信息。                       |
+| `SC-018` | `admission_history_extended`   | `running_bucket_admission_history_extended_v1_pass.json`             | `running_bucket_admission_history_extended_v1_defect.json`             | `pass_ok/hit`     | 覆盖一般生命体征、既往/个人/家族史及现病史延展信息。                       |
+| `SC-010` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pass_ok/hit`     | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
+| `SC-015` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pass_ok/hit`     | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
+| `SC-019` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pass_ok/hit`     | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
+| `SC-020` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pass_ok/hit`     | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
 | `SC-131` | `consent_quality`              | `running_bucket_consent_quality_v1_pass.json`                        | `running_bucket_consent_quality_v1_defect.json`                        | `pending/pending` | 覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。                           |
 | `SC-134` | `consent_quality`              | `running_bucket_consent_quality_v1_pass.json`                        | `running_bucket_consent_quality_v1_defect.json`                        | `pending/pending` | 覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。                           |
 | `SC-136` | `consent_quality`              | `running_bucket_consent_quality_v1_pass.json`                        | `running_bucket_consent_quality_v1_defect.json`                        | `pending/pending` | 覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。                           |
