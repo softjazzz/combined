@@ -53,6 +53,8 @@ SC_CONTENT_REVIEW_V1_RULE_IDS: tuple[str, ...] = (
 SC_CONTENT_REVIEW_RULE_ID_SET = {item.upper() for item in SC_CONTENT_REVIEW_V1_RULE_IDS}
 SC_CONTENT_FULL_V1_RULE_IDS: tuple[str, ...] = get_fast_screen_full_rule_ids()
 SC_CONTENT_LAUNCH_A_V1_RULE_IDS: tuple[str, ...] = list_sc_intrinsic_rule_ids_by_launch_tier("A")
+SC_CONTENT_LAUNCH_B_V1_RULE_IDS: tuple[str, ...] = list_sc_intrinsic_rule_ids_by_launch_tier("B")
+SC_CONTENT_LAUNCH_C_V1_RULE_IDS: tuple[str, ...] = list_sc_intrinsic_rule_ids_by_launch_tier("C")
 
 
 @dataclass(frozen=True)
@@ -105,6 +107,36 @@ SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {
         batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
         max_refine_candidates=0,
         description="终末病历内涵质控默认启用规则集，对应 launch_tier=A 的 37 条规则，适合作为首批默认启用名单。",
+    ),
+    "sc_content_launch_b_v1": QCRuleSet(
+        key="sc_content_launch_b_v1",
+        name="内涵质控灰度观察 v1",
+        version="2026-04-24",
+        scope="final",
+        rule_ids=SC_CONTENT_LAUNCH_B_V1_RULE_IDS,
+        execution_strategy=EXECUTION_STRATEGY_FAST_SCREEN,
+        quality_profile=QUALITY_PROFILE_THROUGHPUT,
+        bucket_strategy="fixed_packs",
+        enable_selective_refine=False,
+        refine_confidence_threshold=0.45,
+        batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
+        max_refine_candidates=0,
+        description="终末病历内涵质控灰度规则集，对应 launch_tier=B 的 38 条规则，适合小流量或限定科室灰度上线。",
+    ),
+    "sc_content_launch_c_v1": QCRuleSet(
+        key="sc_content_launch_c_v1",
+        name="内涵质控重点观察 v1",
+        version="2026-04-24",
+        scope="final",
+        rule_ids=SC_CONTENT_LAUNCH_C_V1_RULE_IDS,
+        execution_strategy=EXECUTION_STRATEGY_FAST_SCREEN,
+        quality_profile=QUALITY_PROFILE_THROUGHPUT,
+        bucket_strategy="fixed_packs",
+        enable_selective_refine=False,
+        refine_confidence_threshold=0.45,
+        batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
+        max_refine_candidates=0,
+        description="终末病历内涵质控重点观察规则集，对应 launch_tier=C 的 9 条规则，适合真实病历观察集验证，不建议首批默认启用。",
     ),
     "sc_content_fast_v1": QCRuleSet(
         key="sc_content_fast_v1",
