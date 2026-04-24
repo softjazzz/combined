@@ -421,8 +421,10 @@ async def run_sample_pool_intrinsic_validation(
         raise HTTPException(status_code=422, detail="当前样本池没有可执行规则")
 
     workspace = _workspace_service()
+    requested_scope = str(pool.get("scene") or "running").strip().lower() or "running"
+    effective_scope = requested_scope
     records = workspace.collect_records(
-        scope="running",
+        scope=effective_scope,
         department=payload.department,
         doctor=payload.doctor,
         date_field="admission",
@@ -431,6 +433,20 @@ async def run_sample_pool_intrinsic_validation(
         keyword=None,
         record_ids=record_ids,
     )
+    if not records and record_ids and effective_scope != "all":
+        fallback_records = workspace.collect_records(
+            scope="all",
+            department=payload.department,
+            doctor=payload.doctor,
+            date_field="admission",
+            start_date=None,
+            end_date=None,
+            keyword=None,
+            record_ids=record_ids,
+        )
+        if fallback_records:
+            records = fallback_records
+            effective_scope = "all"
     if not records:
         raise HTTPException(status_code=422, detail="样本池匹配病历未同步到当前 PG，无法执行")
 
@@ -443,7 +459,7 @@ async def run_sample_pool_intrinsic_validation(
     job = workspace.create_batch_job(
         draft=pseudo_draft,
         created_by=_current_user_id(current_user),
-        scope="running",
+        scope=effective_scope,
         filters={
             "rule_ids": rule_ids,
             "rule_set_key": "",
@@ -469,6 +485,7 @@ async def run_sample_pool_intrinsic_validation(
             "max_tokens": payload.max_tokens,
             "model_code": payload.model_code,
             "max_parallel_records": payload.max_parallel_records,
+            "effective_scope": effective_scope,
         },
         record_ids=record_ids,
         total_records=len(records),

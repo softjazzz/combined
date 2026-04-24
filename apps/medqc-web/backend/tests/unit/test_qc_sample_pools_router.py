@@ -54,6 +54,16 @@ class _WorkspaceServiceStub:
     def __init__(self) -> None:
         self.collect_records_calls = []
         self.create_batch_job_calls = []
+        self.records_by_scope = {
+            "running": [
+                {"record_id": "V001", "visit_id": "V001"},
+                {"record_id": "V002", "visit_id": "V002"},
+            ],
+            "all": [
+                {"record_id": "V001", "visit_id": "V001"},
+                {"record_id": "V002", "visit_id": "V002"},
+            ],
+        }
 
     def collect_records(
         self,
@@ -76,10 +86,7 @@ class _WorkspaceServiceStub:
                 "record_ids": list(record_ids or []),
             }
         )
-        return [
-            {"record_id": "V001", "visit_id": "V001"},
-            {"record_id": "V002", "visit_id": "V002"},
-        ]
+        return list(self.records_by_scope.get(scope, []))
 
     def create_batch_job(
         self,
@@ -289,6 +296,7 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
     assert created["filters"]["temperature"] == 0.2
     assert created["filters"]["top_p"] == 0.8
     assert created["filters"]["max_tokens"] == 1600
+    assert created["filters"]["effective_scope"] == "running"
 
     assert sample_service.updated_pool_job == {
         "pool_id": "pool-1",
@@ -373,9 +381,64 @@ async def test_import_list_records_and_run_should_form_sample_pool_validation_ch
         "item-2",
     ]
     assert workspace_service.create_batch_job_calls[0]["filters"]["max_parallel_records"] == 4
+    assert workspace_service.create_batch_job_calls[0]["filters"]["effective_scope"] == "running"
     assert sample_service.updated_pool_job == {
         "pool_id": pool_id,
         "job_id": "job-sample-pool-1",
         "job_status": "queued",
     }
     assert len(background_tasks.tasks) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_fallback_to_all_scope_when_running_scope_empty(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+    workspace_service.records_by_scope["running"] = []
+    workspace_service.records_by_scope["all"] = [
+        {"record_id": "V001", "visit_id": "V001"},
+        {"record_id": "V002", "visit_id": "V002"},
+    ]
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    request = _build_request()
+    background_tasks = BackgroundTasks()
+    payload = qc_sample_pools.SamplePoolRunRequest(
+        record_ids=["V001", "V002"],
+        sample_item_ids=["item-1", "item-2"],
+        max_parallel_records=2,
+    )
+    current_user = {"id": "tester"}
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=request,
+        pool_id="pool-1",
+        payload=payload,
+        background_tasks=background_tasks,
+        current_user=current_user,
+    )
+
+    assert workspace_service.collect_records_calls == [
+        {
+            "scope": "running",
+            "department": None,
+            "doctor": None,
+            "date_field": "admission",
+            "record_ids": ["V001", "V002"],
+        },
+        {
+            "scope": "all",
+            "department": None,
+            "doctor": None,
+            "date_field": "admission",
+            "record_ids": ["V001", "V002"],
+        },
+    ]
+    created = workspace_service.create_batch_job_calls[0]
+    assert created["scope"] == "all"
+    assert created["filters"]["effective_scope"] == "all"
+    assert response["success"] is True
+    assert response["data"]["record_count"] == 2
