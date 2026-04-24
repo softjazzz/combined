@@ -165,9 +165,9 @@
       "bucket_display_name": "知情同意质量",
       "pass_templates": ["running_bucket_consent_quality_v1_pass.json"],
       "defect_templates": ["running_bucket_consent_quality_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。"
     },
     {
@@ -176,9 +176,9 @@
       "bucket_display_name": "知情同意质量",
       "pass_templates": ["running_bucket_consent_quality_v1_pass.json"],
       "defect_templates": ["running_bucket_consent_quality_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。"
     },
     {
@@ -187,9 +187,9 @@
       "bucket_display_name": "知情同意质量",
       "pass_templates": ["running_bucket_consent_quality_v1_pass.json"],
       "defect_templates": ["running_bucket_consent_quality_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。"
     },
     {
@@ -198,9 +198,9 @@
       "bucket_display_name": "出院记录内容",
       "pass_templates": ["running_bucket_discharge_content_death_v1_pass.json"],
       "defect_templates": ["running_bucket_discharge_content_death_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖出院记录缺项、死亡/出院情况及带药详细度。"
     },
     {
@@ -209,9 +209,9 @@
       "bucket_display_name": "出院记录内容",
       "pass_templates": ["running_bucket_discharge_content_v1_pass.json"],
       "defect_templates": ["running_bucket_discharge_content_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖出院记录缺项、死亡/出院情况及带药详细度。"
     },
     {
@@ -220,9 +220,9 @@
       "bucket_display_name": "出院记录内容",
       "pass_templates": ["running_bucket_discharge_content_v1_pass.json"],
       "defect_templates": ["running_bucket_discharge_content_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖出院记录缺项、死亡/出院情况及带药详细度。"
     },
     {
@@ -253,9 +253,9 @@
       "bucket_display_name": "出院诊断一致性",
       "pass_templates": ["running_bucket_discharge_consistency_death_v1_pass.json"],
       "defect_templates": ["running_bucket_discharge_consistency_death_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖出院诊断漏填、错填及顺序问题。"
     },
     {
@@ -264,9 +264,9 @@
       "bucket_display_name": "出院诊断一致性",
       "pass_templates": ["running_bucket_discharge_consistency_v1_pass.json"],
       "defect_templates": ["running_bucket_discharge_consistency_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖出院诊断漏填、错填及顺序问题。"
     },
     {
@@ -275,9 +275,9 @@
       "bucket_display_name": "检查检验报告质量",
       "pass_templates": ["running_bucket_exam_report_quality_v1_pass.json"],
       "defect_templates": ["running_bucket_exam_report_quality_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖报告单完整性及与病程/病理一致性。"
     },
     {
@@ -286,9 +286,9 @@
       "bucket_display_name": "检查检验报告质量",
       "pass_templates": ["running_bucket_exam_report_quality_v1_pass.json"],
       "defect_templates": ["running_bucket_exam_report_quality_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖报告单完整性及与病程/病理一致性。"
     },
     {
@@ -297,9 +297,9 @@
       "bucket_display_name": "检查检验报告质量",
       "pass_templates": ["running_bucket_exam_report_quality_v1_pass.json"],
       "defect_templates": ["running_bucket_exam_report_quality_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
       "note": "覆盖报告单完整性及与病程/病理一致性。"
     },
     {

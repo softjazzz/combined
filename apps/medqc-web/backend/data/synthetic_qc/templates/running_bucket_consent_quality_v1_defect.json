@@ -23,13 +23,23 @@
   "documents": [
     {
       "document_type": "consent_form",
-      "title": "特殊治疗知情同意书",
-      "content": "拟行特殊治疗，患者已知情同意。"
+      "title": "中心静脉置管及化疗知情同意书",
+      "content": "拟行中心静脉置管及化疗，患者知情。治疗目的、主要风险、替代方案、自费耗材情况未填写，患者及医师签名栏为空。"
+    },
+    {
+      "document_type": "consent_form",
+      "title": "输血治疗知情同意书",
+      "content": "拟输血治疗，家属知情。"
+    },
+    {
+      "document_type": "consent_form",
+      "title": "病重通知书",
+      "content": "患者病重，家属已知情。"
     }
   ],
   "structured_facts": {
     "diagnoses": ["乳腺恶性肿瘤"],
-    "orders": ["特殊治疗"],
+    "orders": ["特殊治疗", "输血治疗", "病重监护"],
     "exams": []
   }
 }

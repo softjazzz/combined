@@ -3,8 +3,8 @@
 ## 概览
 
 - 规则数量：`84`
-- 已稳定规则：`68`
-- 未稳定规则：`16`
+- 已稳定规则：`79`
+- 未稳定规则：`5`
 
 ## 规则级矩阵
 
@@ -24,9 +24,9 @@
 | `SC-015` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pass_ok/hit`     | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
 | `SC-019` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pass_ok/hit`     | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
 | `SC-020` | `admission_consistency`        | `running_bucket_admission_consistency_v1_pass.json`                  | `running_bucket_admission_consistency_v1_defect.json`                  | `pass_ok/hit`     | 覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。                       |
-| `SC-131` | `consent_quality`              | `running_bucket_consent_quality_v1_pass.json`                        | `running_bucket_consent_quality_v1_defect.json`                        | `pending/pending` | 覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。                           |
-| `SC-134` | `consent_quality`              | `running_bucket_consent_quality_v1_pass.json`                        | `running_bucket_consent_quality_v1_defect.json`                        | `pending/pending` | 覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。                           |
-| `SC-136` | `consent_quality`              | `running_bucket_consent_quality_v1_pass.json`                        | `running_bucket_consent_quality_v1_defect.json`                        | `pending/pending` | 覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。                           |
+| `SC-131` | `consent_quality`              | `running_bucket_consent_quality_v1_pass.json`                        | `running_bucket_consent_quality_v1_defect.json`                        | `pass_ok/hit`     | 覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。                           |
+| `SC-134` | `consent_quality`              | `running_bucket_consent_quality_v1_pass.json`                        | `running_bucket_consent_quality_v1_defect.json`                        | `pass_ok/hit`     | 覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。                           |
+| `SC-136` | `consent_quality`              | `running_bucket_consent_quality_v1_pass.json`                        | `running_bucket_consent_quality_v1_defect.json`                        | `pass_ok/hit`     | 覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。                           |
 | `SC-118` | `discharge_content`            | `running_bucket_discharge_content_death_v1_pass.json`                | `running_bucket_discharge_content_death_v1_defect.json`                | `pending/pending` | 覆盖出院记录缺项、死亡/出院情况及带药详细度。                              |
 | `SC-119` | `discharge_content`            | `running_bucket_discharge_content_v1_pass.json`                      | `running_bucket_discharge_content_v1_defect.json`                      | `pending/pending` | 覆盖出院记录缺项、死亡/出院情况及带药详细度。                              |
 | `SC-123` | `discharge_content`            | `running_bucket_discharge_content_v1_pass.json`                      | `running_bucket_discharge_content_v1_defect.json`                      | `pending/pending` | 覆盖出院记录缺项、死亡/出院情况及带药详细度。                              |
@@ -34,14 +34,14 @@
 | `SC-122` | `discharge_orders`             | `running_bucket_discharge_orders_v1_pass.json`                       | `running_bucket_discharge_orders_v1_defect.json`                       | `pass_ok/hit`     | 覆盖主要药物、关键检查结果及出院医嘱完整性。                               |
 | `SC-125` | `discharge_consistency`        | `running_bucket_discharge_consistency_death_v1_pass.json`            | `running_bucket_discharge_consistency_death_v1_defect.json`            | `pending/pending` | 覆盖出院诊断漏填、错填及顺序问题。                                         |
 | `SC-127` | `discharge_consistency`        | `running_bucket_discharge_consistency_v1_pass.json`                  | `running_bucket_discharge_consistency_v1_defect.json`                  | `pending/pending` | 覆盖出院诊断漏填、错填及顺序问题。                                         |
-| `SC-138` | `exam_report_quality`          | `running_bucket_exam_report_quality_v1_pass.json`                    | `running_bucket_exam_report_quality_v1_defect.json`                    | `pending/pending` | 覆盖报告单完整性及与病程/病理一致性。                                      |
-| `SC-139` | `exam_report_quality`          | `running_bucket_exam_report_quality_v1_pass.json`                    | `running_bucket_exam_report_quality_v1_defect.json`                    | `pending/pending` | 覆盖报告单完整性及与病程/病理一致性。                                      |
-| `SC-140` | `exam_report_quality`          | `running_bucket_exam_report_quality_v1_pass.json`                    | `running_bucket_exam_report_quality_v1_defect.json`                    | `pending/pending` | 覆盖报告单完整性及与病程/病理一致性。                                      |
-| `SC-089` | `operation_content`            | `running_bucket_operation_content_v1_pass.json`                      | `running_bucket_operation_content_v1_defect.json`                      | `pending/pending` | 覆盖知情同意、术前小结、手术记录核心内容。                                 |
-| `SC-091` | `operation_content`            | `running_bucket_operation_content_v1_pass.json`                      | `running_bucket_operation_content_v1_defect.json`                      | `pending/pending` | 覆盖知情同意、术前小结、手术记录核心内容。                                 |
-| `SC-097` | `operation_content`            | `running_bucket_operation_content_v1_pass.json`                      | `running_bucket_operation_content_v1_defect.json`                      | `pending/pending` | 覆盖知情同意、术前小结、手术记录核心内容。                                 |
-| `SC-110` | `operation_content`            | `running_bucket_operation_content_v1_pass.json`                      | `running_bucket_operation_content_v1_defect.json`                      | `pending/pending` | 覆盖知情同意、术前小结、手术记录核心内容。                                 |
-| `SC-113` | `operation_content`            | `running_bucket_operation_content_v1_pass.json`                      | `running_bucket_operation_content_v1_defect.json`                      | `pending/pending` | 覆盖知情同意、术前小结、手术记录核心内容。                                 |
+| `SC-138` | `exam_report_quality`          | `running_bucket_exam_report_quality_v1_pass.json`                    | `running_bucket_exam_report_quality_v1_defect.json`                    | `pass_ok/hit`     | 覆盖报告单完整性及与病程/病理一致性。                                      |
+| `SC-139` | `exam_report_quality`          | `running_bucket_exam_report_quality_v1_pass.json`                    | `running_bucket_exam_report_quality_v1_defect.json`                    | `pass_ok/hit`     | 覆盖报告单完整性及与病程/病理一致性。                                      |
+| `SC-140` | `exam_report_quality`          | `running_bucket_exam_report_quality_v1_pass.json`                    | `running_bucket_exam_report_quality_v1_defect.json`                    | `pass_ok/hit`     | 覆盖报告单完整性及与病程/病理一致性。                                      |
+| `SC-089` | `operation_content`            | `running_bucket_operation_content_v1_pass.json`                      | `running_bucket_operation_content_v1_defect.json`                      | `pass_ok/hit`     | 覆盖知情同意、术前小结、手术记录核心内容。                                 |
+| `SC-091` | `operation_content`            | `running_bucket_operation_content_v1_pass.json`                      | `running_bucket_operation_content_v1_defect.json`                      | `pass_ok/hit`     | 覆盖知情同意、术前小结、手术记录核心内容。                                 |
+| `SC-097` | `operation_content`            | `running_bucket_operation_content_v1_pass.json`                      | `running_bucket_operation_content_v1_defect.json`                      | `pass_ok/hit`     | 覆盖知情同意、术前小结、手术记录核心内容。                                 |
+| `SC-110` | `operation_content`            | `running_bucket_operation_content_v1_pass.json`                      | `running_bucket_operation_content_v1_defect.json`                      | `pass_ok/hit`     | 覆盖知情同意、术前小结、手术记录核心内容。                                 |
+| `SC-113` | `operation_content`            | `running_bucket_operation_content_v1_pass.json`                      | `running_bucket_operation_content_v1_defect.json`                      | `pass_ok/hit`     | 覆盖知情同意、术前小结、手术记录核心内容。                                 |
 | `SC-081` | `operation_preop`              | `running_bucket_operation_preop_summary_v1_pass.json`                | `running_bucket_operation_preop_summary_v1_defect.json`                | `pass_ok/hit`     | 术前小结专项模板，覆盖简要病情、术前诊断、指征、术式、麻醉及术者查看记录。 |
 | `SC-083` | `operation_preop`              | `running_bucket_operation_preop_mdt_v1_pass.json`                    | `running_bucket_operation_preop_mdt_v1_defect.json`                    | `pass_ok/hit`     | 四级手术 MDT 专项模板，区分多学科讨论与本科单科讨论。                      |
 | `SC-084` | `operation_preop`              | `running_bucket_operation_preop_conclusion_v1_pass.json`             | `running_bucket_operation_preop_conclusion_v1_defect.json`             | `pass_ok/hit`     | 术前讨论结论专项模板，覆盖结论是否落病历及是否完整。                       |
