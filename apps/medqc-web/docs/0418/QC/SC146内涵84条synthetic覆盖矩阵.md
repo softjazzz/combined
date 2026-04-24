@@ -3,8 +3,8 @@
 ## 概览
 
 - 规则数量：`84`
-- 已稳定规则：`52`
-- 未稳定规则：`32`
+- 已稳定规则：`59`
+- 未稳定规则：`25`
 
 ## 规则级矩阵
 
@@ -60,13 +60,13 @@
 | `SC-108` | `operation_postop_followup`    | `running_bucket_operation_postop_followup_v1_pass.json`              | `running_bucket_operation_postop_followup_v1_defect.json`              | `pass_ok/hit`     | 覆盖术后首次病程、连续病程、麻醉术后访视及术区随访闭环。                   |
 | `SC-114` | `operation_postop_followup`    | `running_bucket_operation_postop_followup_v1_pass.json`              | `running_bucket_operation_postop_followup_v1_defect.json`              | `pass_ok/hit`     | 覆盖术后首次病程、连续病程、麻醉术后访视及术区随访闭环。                   |
 | `SC-115` | `operation_postop_followup`    | `running_bucket_operation_postop_followup_v1_pass.json`              | `running_bucket_operation_postop_followup_v1_defect.json`              | `pass_ok/hit`     | 覆盖术后首次病程、连续病程、麻醉术后访视及术区随访闭环。                   |
-| `SC-023` | `first_course_features`        | `running_bucket_first_course_features_v1_pass.json`                  | `running_bucket_first_course_features_v1_defect.json`                  | `pending/pending` | 保留现有强规则组，同时提供桶级模板。                                       |
-| `SC-024` | `first_course_features`        | `running_bucket_first_course_features_v1_pass.json`                  | `running_bucket_first_course_features_v1_defect.json`                  | `pending/pending` | 保留现有强规则组，同时提供桶级模板。                                       |
-| `SC-025` | `first_course_reasoning`       | `running_bucket_first_course_reasoning_v1_pass.json`                 | `running_bucket_first_course_reasoning_v1_defect.json`                 | `pending/pending` | 覆盖诊断依据、鉴别诊断及计划完整性。                                       |
-| `SC-026` | `first_course_reasoning`       | `running_bucket_first_course_reasoning_v1_pass.json`                 | `running_bucket_first_course_reasoning_v1_defect.json`                 | `pending/pending` | 覆盖诊断依据、鉴别诊断及计划完整性。                                       |
-| `SC-027` | `first_course_reasoning`       | `running_bucket_first_course_reasoning_v1_pass.json`                 | `running_bucket_first_course_reasoning_v1_defect.json`                 | `pending/pending` | 覆盖诊断依据、鉴别诊断及计划完整性。                                       |
-| `SC-032` | `daily_course_core`            | `running_bucket_daily_course_core_v1_pass.json`                      | `running_bucket_daily_course_core_v1_defect.json`                      | `pending/pending` | 覆盖病情变化记录和分析处理意见。                                           |
-| `SC-033` | `daily_course_core`            | `running_bucket_daily_course_core_v1_pass.json`                      | `running_bucket_daily_course_core_v1_defect.json`                      | `pending/pending` | 覆盖病情变化记录和分析处理意见。                                           |
+| `SC-023` | `first_course_features`        | `running_bucket_first_course_features_v1_pass.json`                  | `running_bucket_first_course_features_v1_defect.json`                  | `pass_ok/hit`     | 覆盖首次病程病例特点的归纳性和支撑证据完整性。                             |
+| `SC-024` | `first_course_features`        | `running_bucket_first_course_features_v1_pass.json`                  | `running_bucket_first_course_features_v1_defect.json`                  | `pass_ok/hit`     | 覆盖首次病程病例特点的归纳性和支撑证据完整性。                             |
+| `SC-025` | `first_course_reasoning`       | `running_bucket_first_course_reasoning_v1_pass.json`                 | `running_bucket_first_course_reasoning_v1_defect.json`                 | `pass_ok/hit`     | 覆盖诊断依据、鉴别诊断及治疗计划完整性。                                   |
+| `SC-026` | `first_course_reasoning`       | `running_bucket_first_course_reasoning_v1_pass.json`                 | `running_bucket_first_course_reasoning_v1_defect.json`                 | `pass_ok/hit`     | 覆盖诊断依据、鉴别诊断及治疗计划完整性。                                   |
+| `SC-027` | `first_course_reasoning`       | `running_bucket_first_course_reasoning_v1_pass.json`                 | `running_bucket_first_course_reasoning_v1_defect.json`                 | `pass_ok/hit`     | 覆盖诊断依据、鉴别诊断及治疗计划完整性。                                   |
+| `SC-032` | `daily_course_core`            | `running_bucket_daily_course_core_v1_pass.json`                      | `running_bucket_daily_course_core_v1_defect.json`                      | `pass_ok/hit`     | 覆盖病情变化记录和分析处理意见闭环。                                       |
+| `SC-033` | `daily_course_core`            | `running_bucket_daily_course_core_v1_pass.json`                      | `running_bucket_daily_course_core_v1_defect.json`                      | `pass_ok/hit`     | 覆盖病情变化记录和分析处理意见闭环。                                       |
 | `SC-035` | `daily_course_quality`         | `running_bucket_daily_course_quality_v1_pass.json`                   | `running_bucket_daily_course_quality_v1_defect.json`                   | `pass_ok/hit`     | 覆盖简略、复制、无关叙述及异常变化未跟踪。                                 |
 | `SC-039` | `daily_course_quality`         | `running_bucket_daily_course_quality_v1_pass.json`                   | `running_bucket_daily_course_quality_v1_defect.json`                   | `pass_ok/hit`     | 覆盖简略、复制、无关叙述及异常变化未跟踪。                                 |
 | `SC-040` | `daily_course_quality`         | `running_bucket_daily_course_quality_v1_pass.json`                   | `running_bucket_daily_course_quality_v1_defect.json`                   | `pass_ok/hit`     | 覆盖简略、复制、无关叙述及异常变化未跟踪。                                 |

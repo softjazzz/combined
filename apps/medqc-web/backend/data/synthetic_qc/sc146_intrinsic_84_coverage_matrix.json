@@ -561,10 +561,10 @@
       "bucket_display_name": "首次病程病例特点",
       "pass_templates": ["running_bucket_first_course_features_v1_pass.json"],
       "defect_templates": ["running_bucket_first_course_features_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "保留现有强规则组，同时提供桶级模板。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖首次病程病例特点的归纳性和支撑证据完整性。"
     },
     {
       "rule_id": "SC-024",
@@ -572,10 +572,10 @@
       "bucket_display_name": "首次病程病例特点",
       "pass_templates": ["running_bucket_first_course_features_v1_pass.json"],
       "defect_templates": ["running_bucket_first_course_features_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "保留现有强规则组，同时提供桶级模板。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖首次病程病例特点的归纳性和支撑证据完整性。"
     },
     {
       "rule_id": "SC-025",
@@ -583,10 +583,10 @@
       "bucket_display_name": "首次病程诊断推理",
       "pass_templates": ["running_bucket_first_course_reasoning_v1_pass.json"],
       "defect_templates": ["running_bucket_first_course_reasoning_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖诊断依据、鉴别诊断及计划完整性。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖诊断依据、鉴别诊断及治疗计划完整性。"
     },
     {
       "rule_id": "SC-026",
@@ -594,10 +594,10 @@
       "bucket_display_name": "首次病程诊断推理",
       "pass_templates": ["running_bucket_first_course_reasoning_v1_pass.json"],
       "defect_templates": ["running_bucket_first_course_reasoning_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖诊断依据、鉴别诊断及计划完整性。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖诊断依据、鉴别诊断及治疗计划完整性。"
     },
     {
       "rule_id": "SC-027",
@@ -605,10 +605,10 @@
       "bucket_display_name": "首次病程诊断推理",
       "pass_templates": ["running_bucket_first_course_reasoning_v1_pass.json"],
       "defect_templates": ["running_bucket_first_course_reasoning_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖诊断依据、鉴别诊断及计划完整性。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖诊断依据、鉴别诊断及治疗计划完整性。"
     },
     {
       "rule_id": "SC-032",
@@ -616,10 +616,10 @@
       "bucket_display_name": "日常病程核心分析",
       "pass_templates": ["running_bucket_daily_course_core_v1_pass.json"],
       "defect_templates": ["running_bucket_daily_course_core_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖病情变化记录和分析处理意见。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖病情变化记录和分析处理意见闭环。"
     },
     {
       "rule_id": "SC-033",
@@ -627,10 +627,10 @@
       "bucket_display_name": "日常病程核心分析",
       "pass_templates": ["running_bucket_daily_course_core_v1_pass.json"],
       "defect_templates": ["running_bucket_daily_course_core_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖病情变化记录和分析处理意见。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖病情变化记录和分析处理意见闭环。"
     },
     {
       "rule_id": "SC-035",
