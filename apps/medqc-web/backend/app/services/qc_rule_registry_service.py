@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import text
 
 from ..database.connection import SessionLocal
+from .sc_rule_launch_tier import load_sc_intrinsic_launch_tier_map, resolve_sc_intrinsic_launch_tier
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ class QCRuleRegistryService:
             if json_path is not None
             else Path(__file__).resolve().parent.parent / "data" / "sichuan_rules_146.json"
         )
+        self._sc_intrinsic_launch_tier_map_cache: dict[str, str] | None = None
 
     def load_active_rules(self) -> tuple[list[dict[str, Any]], str]:
         """加载可用规则，返回 (rules, source)。"""
@@ -573,6 +575,10 @@ class QCRuleRegistryService:
                 "execution_domain": str(normalized.get("execution_domain") or "").strip(),
                 "doc_scope": str(normalized.get("doc_scope") or "").strip() or "primary",
                 "rule_family": str(normalized.get("rule_family") or "").strip(),
+                "launch_tier": resolve_sc_intrinsic_launch_tier(
+                    rid,
+                    launch_tier_map=self._load_sc_intrinsic_launch_tier_map(),
+                ),
                 "rule_version": rule_version,
                 "prompt_version": prompt_version,
                 "cost_class": cost_class,
@@ -583,6 +589,11 @@ class QCRuleRegistryService:
             normalized.setdefault(required, "" if required != "applicable_documents" else [])
 
         return normalized
+
+    def _load_sc_intrinsic_launch_tier_map(self) -> dict[str, str]:
+        if self._sc_intrinsic_launch_tier_map_cache is None:
+            self._sc_intrinsic_launch_tier_map_cache = load_sc_intrinsic_launch_tier_map()
+        return dict(self._sc_intrinsic_launch_tier_map_cache)
 
     @staticmethod
     def _parse_payload(payload: Any) -> dict[str, Any] | None:
