@@ -284,7 +284,7 @@
                   class="min-w-[140px] customer-sample-toolbar-select"
                   size="middle"
                   allow-clear
-                  placeholder="覆盖类型"
+                  placeholder="样本范围"
                   :options="coverageOptions"
                 />
                 <a-select
@@ -292,7 +292,7 @@
                   class="min-w-[140px] customer-sample-toolbar-select"
                   size="middle"
                   allow-clear
-                  placeholder="匹配状态"
+                  placeholder="病历关联"
                   :options="matchStatusOptions"
                 />
                 <div
@@ -335,8 +335,8 @@
                 当前口径
               </div>
               <div class="mt-1">
-                首批只验证内涵问题。列表是去重后的真实病历池；每份病历下可查看关联人工问题。未匹配病历或
-                running bundle 未就绪的病历不会进入批量验证。
+                列表展示的是去重后的真实病历池。每份病历可查看关联人工问题、已识别文书范围和文书就绪状态。
+                未关联到真实病历或文书未就绪的病历不会进入批量验证。
               </div>
             </div>
 
@@ -483,18 +483,16 @@
           class="rounded-2xl"
         >
           <template #title>
-            验证范围
+            识别范围
           </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">覆盖类型：</span>
+              <span class="font-medium text-slate-500">文书范围：</span>
+              {{ summarizeRecordScope(activeRecord) }}
+            </div>
+            <div>
+              <span class="font-medium text-slate-500">样本范围：</span>
               {{ activeRecord.coverage_types.map((item) => coverageLabel(item)).join('、') || '-' }}
-            </div>
-            <div>
-              <span class="font-medium text-slate-500">关联问题数：</span>{{ activeRecord.issue_count }}
-            </div>
-            <div>
-              <span class="font-medium text-slate-500">候选规则：</span>{{ activeRecord.candidate_rule_ids.join(', ') || '-' }}
             </div>
           </div>
         </a-card>
@@ -504,26 +502,20 @@
           class="rounded-2xl"
         >
           <template #title>
-            病历匹配
+            病历关联
           </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">匹配状态：</span>{{ matchStatusLabel(activeRecord.match_status) }}
+              <span class="font-medium text-slate-500">关联结果：</span>{{ matchStatusLabel(activeRecord.match_status) }}
             </div>
             <div>
               <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">patient_id：</span>{{ activeRecord.matched_patient_id || '-' }}
-            </div>
-            <div>
-              <span class="font-medium text-slate-500">institute_id：</span>{{ activeRecord.matched_institute_id || '-' }}
-            </div>
-            <div>
               <span class="font-medium text-slate-500">同步状态：</span>{{ activeRecord.sync_status || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">bundle 状态：</span>{{ activeRecord.bundle_status || '-' }}
+              <span class="font-medium text-slate-500">文书就绪：</span>{{ bundleStatusLabel(activeRecord.bundle_status) }}
             </div>
           </div>
         </a-card>
@@ -546,9 +538,6 @@
               </div>
               <div class="mt-1">
                 {{ sample.manual_issue_text || '-' }}
-              </div>
-              <div class="mt-2 text-xs text-slate-500">
-                候选规则：{{ sample.candidate_rule_ids.join(', ') || '-' }}
               </div>
             </div>
           </div>
@@ -688,15 +677,15 @@ const sceneOptions = [
 ]
 
 const coverageOptions = [
-  { label: '内涵问题', value: 'llm_intrinsic' },
-  { label: '程序化问题', value: 'programmatic' },
-  { label: '暂不支持', value: 'unsupported' },
+  { label: '内涵验证', value: 'llm_intrinsic' },
+  { label: '程序规则', value: 'programmatic' },
+  { label: '未纳入', value: 'unsupported' },
 ]
 
 const matchStatusOptions = [
-  { label: '已匹配', value: 'matched' },
-  { label: '匹配歧义', value: 'ambiguous' },
-  { label: '未匹配', value: 'unmatched' },
+  { label: '已关联病历', value: 'matched' },
+  { label: '待人工确认', value: 'ambiguous' },
+  { label: '未找到病历', value: 'unmatched' },
 ]
 const parallelOptions = [
   { label: '1', value: 1 },
@@ -818,26 +807,21 @@ const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
     ellipsis: true,
   },
   {
-    title: '覆盖类型',
-    dataIndex: 'coverage_types',
+    title: '文书范围',
+    dataIndex: 'candidate_rule_ids',
     width: 180,
     customRender: ({ record }) =>
       h(
         'span',
         {
-          class: coverageTagClass(String(record.coverage_types?.[0] || '')),
+          class:
+            'inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-medium text-cyan-700',
         },
-        record.coverage_types?.map((item) => coverageLabel(String(item || ''))).join(' / ') || '-',
+        summarizeRecordScope(record),
       ),
   },
   {
-    title: '候选规则',
-    dataIndex: 'candidate_rule_ids',
-    width: 220,
-    customRender: ({ record }) => record.candidate_rule_ids.join(', ') || '-',
-  },
-  {
-    title: '匹配状态',
+    title: '病历关联',
     dataIndex: 'match_status',
     width: 120,
     customRender: ({ value }) =>
@@ -850,15 +834,17 @@ const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
       ),
   },
   {
-    title: '人工问题数',
-    dataIndex: 'issue_count',
-    width: 110,
-  },
-  {
-    title: 'bundle',
+    title: '文书就绪',
     dataIndex: 'bundle_status',
     width: 120,
-    customRender: ({ value }) => value || '-',
+    customRender: ({ value }) =>
+      h(
+        'span',
+        {
+          class: bundleStatusTagClass(String(value || '')),
+        },
+        bundleStatusLabel(String(value || '')),
+      ),
   },
   {
     title: '操作',
@@ -927,26 +913,16 @@ const rowSelection = computed(() => ({
 }))
 
 function coverageLabel(value: string): string {
-  if (value === 'llm_intrinsic') return '内涵问题'
-  if (value === 'programmatic') return '程序化'
-  if (value === 'unsupported') return '暂不支持'
+  if (value === 'llm_intrinsic') return '内涵验证'
+  if (value === 'programmatic') return '程序规则'
+  if (value === 'unsupported') return '未纳入'
   return value || '-'
 }
 
-function coverageTagClass(value: string): string {
-  if (value === 'llm_intrinsic') {
-    return 'inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700'
-  }
-  if (value === 'programmatic') {
-    return 'inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700'
-  }
-  return 'inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600'
-}
-
 function matchStatusLabel(value: string): string {
-  if (value === 'matched') return '已匹配'
-  if (value === 'ambiguous') return '匹配歧义'
-  if (value === 'unmatched') return '未匹配'
+  if (value === 'matched') return '已关联病历'
+  if (value === 'ambiguous') return '待人工确认'
+  if (value === 'unmatched') return '未找到病历'
   return value || '-'
 }
 
@@ -958,6 +934,67 @@ function matchStatusTagClass(value: string): string {
     return 'inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700'
   }
   return 'inline-flex rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700'
+}
+
+function bundleStatusLabel(value: string): string {
+  if (value === 'ready') return '已就绪'
+  if (value === 'missing') return '待同步'
+  if (value === 'pending') return '准备中'
+  return value || '-'
+}
+
+function bundleStatusTagClass(value: string): string {
+  if (value === 'ready') {
+    return 'inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700'
+  }
+  if (value === 'pending') {
+    return 'inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700'
+  }
+  return 'inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600'
+}
+
+function summarizeRuleScopes(ruleIds: string[]): string {
+  const scopes: string[] = []
+  const pushScope = (label: string) => {
+    if (!scopes.includes(label)) scopes.push(label)
+  }
+  const rules = new Set((ruleIds || []).map((item) => String(item || '').trim()).filter(Boolean))
+  for (const ruleId of rules) {
+    const num = Number.parseInt(ruleId.replace('SC-', ''), 10)
+    if (Number.isNaN(num)) continue
+    if (num <= 20) {
+      pushScope('入院记录')
+    } else if (num <= 27) {
+      pushScope('首次病程')
+    } else if (
+      num <= 49 ||
+      num === 70 ||
+      num === 73 ||
+      num === 74 ||
+      num === 79 ||
+      num === 143 ||
+      num === 146
+    ) {
+      pushScope('日常病程')
+    } else if (num <= 60) {
+      pushScope('查房讨论')
+    } else if (num <= 76) {
+      pushScope('交接会诊')
+    } else if (num <= 115) {
+      pushScope('手术麻醉')
+    } else if (num <= 127) {
+      pushScope('出院记录')
+    } else if (num <= 136) {
+      pushScope('知情同意')
+    } else if (num <= 140) {
+      pushScope('检查检验')
+    }
+  }
+  return scopes.join(' / ') || '-'
+}
+
+function summarizeRecordScope(record: ManualSamplePoolRecord): string {
+  return summarizeRuleScopes(record.candidate_rule_ids || [])
 }
 
 function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
