@@ -1563,6 +1563,11 @@ class CustomQCSamplePoolService:
                     rows=rows,
                     policy_version="sample_pool_sync",
                 )
+                refresh_scene_bundles_for_rows(
+                    scene="final",
+                    rows=rows,
+                    policy_version="sample_pool_sync",
+                )
 
             results.append(
                 {
