@@ -306,6 +306,66 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
     }
 
 
+_ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
+    "record_list_intrinsic": list(_DEFAULT_INTRINSIC_RULE_IDS),
+    "first_course_reasoning": ["SC-023", "SC-024", "SC-025", "SC-026", "SC-027"],
+    "admission_consistency": ["SC-008", "SC-009", "SC-010", "SC-011", "SC-012", "SC-018", "SC-019", "SC-020"],
+    "daily_course_analysis": ["SC-032", "SC-033", "SC-036"],
+    "consultation_execution": ["SC-070"],
+    "senior_round_content": ["SC-050"],
+}
+
+
+def _looks_like_rule_id(value: str) -> bool:
+    text = _safe_text(value)
+    if not text:
+        return False
+    return bool(re.fullmatch(r"[A-Z]{2,}(?:-[A-Z0-9]+)+", text) or re.fullmatch(r"[A-Z]{2,}-\d+", text))
+
+
+def _normalize_candidate_rule_ids(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        result: List[str] = []
+        for item in value:
+            text = _safe_text(item)
+            if text and _looks_like_rule_id(text) and text not in result:
+                result.append(text)
+        return result
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        parsed = _safe_json_loads(text, None)
+        if parsed is not None and parsed is not value:
+            return _normalize_candidate_rule_ids(parsed)
+        parts = [segment.strip() for segment in re.split(r"[,\n;；]+", text) if segment.strip()]
+        result: List[str] = []
+        for item in parts:
+            if _looks_like_rule_id(item) and item not in result:
+                result.append(item)
+        return result
+    return []
+
+
+def _fallback_candidate_rule_ids(
+    *,
+    coverage_type: str,
+    issue_category: str,
+    manual_issue_text: Any,
+) -> List[str]:
+    if coverage_type != "llm_intrinsic":
+        return []
+    mapped = _ISSUE_CATEGORY_RULE_MAP.get(issue_category)
+    if mapped:
+        return list(mapped)
+    classification = classify_manual_issue_text(manual_issue_text)
+    if classification.get("coverage_type") != "llm_intrinsic":
+        return []
+    return _normalize_candidate_rule_ids(classification.get("candidate_rule_ids"))
+
+
 def load_manual_case_rows_from_excel(*, file_path: str, sheet_name: str = "Sheet2") -> List[Dict[str, Any]]:
     import pandas as pd
 
@@ -602,6 +662,16 @@ class CustomQCSamplePoolService:
         visit_id = _safe_text(
             raw_payload.get("visit_id") if isinstance(raw_payload, dict) else ""
         )
+        coverage_type = _safe_text(row.get("coverage_type"), "unsupported")
+        issue_category = _safe_text(row.get("issue_category"), "unclassified")
+        manual_issue_text = _safe_text(row.get("manual_issue_text"))
+        candidate_rule_ids = _normalize_candidate_rule_ids(row.get("candidate_rule_ids_json"))
+        if not candidate_rule_ids:
+            candidate_rule_ids = _fallback_candidate_rule_ids(
+                coverage_type=coverage_type,
+                issue_category=issue_category,
+                manual_issue_text=manual_issue_text,
+            )
         return {
             "id": _safe_text(row.get("id")),
             "pool_id": _safe_text(row.get("pool_id")),
@@ -610,15 +680,15 @@ class CustomQCSamplePoolService:
             "patient_name": _safe_text(row.get("patient_name")),
             "mr_no": _safe_text(row.get("mr_no")),
             "visit_id": visit_id,
-            "manual_issue_text": _safe_text(row.get("manual_issue_text")),
+            "manual_issue_text": manual_issue_text,
             "normalized_issue_text": _safe_text(row.get("normalized_issue_text")),
             "doctor_name": _safe_text(row.get("doctor_name")),
             "qc_date": _to_iso_date(row.get("qc_date")),
             "qc_user": _safe_text(row.get("qc_user")),
-            "coverage_type": _safe_text(row.get("coverage_type"), "unsupported"),
-            "issue_category": _safe_text(row.get("issue_category"), "unclassified"),
+            "coverage_type": coverage_type,
+            "issue_category": issue_category,
             "expected_scene": _safe_text(row.get("expected_scene"), "running"),
-            "candidate_rule_ids": _safe_json_loads(row.get("candidate_rule_ids_json"), []),
+            "candidate_rule_ids": candidate_rule_ids,
             "include_in_batch_1": bool(row.get("include_in_batch_1")),
             "exclude_reason": _safe_text(row.get("exclude_reason")),
             "matched_institute_id": _safe_text(row.get("matched_institute_id")),

@@ -291,6 +291,26 @@ def test_row_to_item_should_read_visit_id_from_raw_payload():
     assert item["visit_id"] == "VISIT-001"
 
 
+def test_row_to_item_should_fallback_candidate_rules_for_intrinsic_history_rows():
+    service = CustomQCSamplePoolService()
+
+    item = service._row_to_item(
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "manual_issue_text": "",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "record_list_intrinsic",
+            "candidate_rule_ids_json": "not-json-array",
+            "raw_payload_json": '{"visit_id":"VISIT-001"}',
+        }
+    )
+
+    assert item["visit_id"] == "VISIT-001"
+    assert item["candidate_rule_ids"] == sample_pool_module._DEFAULT_INTRINSIC_RULE_IDS
+
+
 def test_choose_scored_candidate_should_fallback_to_most_recent_candidate():
     candidates = [
         {
