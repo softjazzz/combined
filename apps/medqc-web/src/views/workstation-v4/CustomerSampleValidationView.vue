@@ -1365,19 +1365,27 @@ function startBatchJobPolling(jobId: string) {
   }, 3000)
 }
 
-async function handleExportBatchReport(jobId: string) {
-  const result = await exportSichuanWorkspaceBatchJob({ job_id: jobId, format: 'xlsx' })
+async function handleExportBatchReport(format: 'xlsx' | 'csv' = 'xlsx') {
+  const jobId = String(batchJobDetail.value?.id || '').trim()
+  if (!jobId) {
+    message.warning('当前任务详情未加载完成，暂时无法导出报告')
+    return
+  }
+  const result = await exportSichuanWorkspaceBatchJob({ job_id: jobId, format })
   if (!result.success || !result.data) {
     message.error(result.message || '导出验证任务失败')
     return
   }
   const blob = new Blob([result.data], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    type:
+      format === 'csv'
+        ? 'text/csv;charset=utf-8'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
   const url = window.URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `manual-sample-validation-${jobId}.xlsx`
+  link.download = `manual-sample-validation-${jobId}.${format}`
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
