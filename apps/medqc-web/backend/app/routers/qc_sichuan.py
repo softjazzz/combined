@@ -19,6 +19,10 @@ from ..services.fast_screen_qc import (
     run_final_fast_screen,
 )
 from ..services.qc_rule_sets import get_sichuan_rule_set, list_sichuan_rule_sets
+from ..services.sc_rule_launch_tier import (
+    load_sc_intrinsic_launch_tier_map,
+    resolve_sc_intrinsic_launch_tier,
+)
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..core.security import require_admin, get_current_user
@@ -2305,6 +2309,22 @@ async def rules(
 
     data: list[dict[str, Any]]
     source = "fallback"
+    launch_tier_map = load_sc_intrinsic_launch_tier_map()
+
+    def enrich_launch_tier(item: dict[str, Any]) -> dict[str, Any]:
+        rule_id = str(item.get("rule_id") or item.get("rule_code") or "").strip()
+        tier = resolve_sc_intrinsic_launch_tier(rule_id, launch_tier_map=launch_tier_map)
+        tier_label_map = {
+            "A": "默认启用",
+            "B": "灰度",
+            "C": "观察",
+            "UNKNOWN": "未分层",
+        }
+        enriched = dict(item)
+        enriched["launch_tier"] = tier
+        enriched["launch_tier_label"] = tier_label_map.get(tier, "未分层")
+        return enriched
+
     if records is not None and len(records) > 0:
         def normalize(rec: dict[str, Any]) -> dict[str, Any]:
             # 统一字段到前端所需格式
@@ -2329,7 +2349,7 @@ async def rules(
             if isinstance(docs, str):
                 # 简单拆分字符串形式
                 docs = [d.strip() for d in docs.split(",") if d.strip()]
-            return {
+            return enrich_launch_tier({
                 "rule_id": rule_id,
                 "rule_code": rule_code,
                 "name": name,
@@ -2342,7 +2362,7 @@ async def rules(
                 "medical_domain": rec.get("medical_domain") or rec.get("domain") or "通用",
                 "requires_rag": bool(rec.get("requires_rag") or rec.get("need_rag") or False),
                 "requires_cot": bool(rec.get("requires_cot") or rec.get("need_cot") or False),
-            }
+            })
 
         data = [normalize(r) for r in records]
         source = "supabase"
@@ -2379,7 +2399,7 @@ async def rules(
             data = []
             for rule in full_rules:
                 docs = [doc_type_mapping.get(d, d) for d in (rule.get("applicable_documents", []) or [])]
-                data.append({
+                data.append(enrich_launch_tier({
                     "rule_id": rule.get("rule_id", ""),
                     "rule_code": rule.get("rule_code", rule.get("rule_id", "")),
                     "name": rule.get("name", ""),
@@ -2392,13 +2412,13 @@ async def rules(
                     "requires_rag": False,
                     "requires_cot": False,
                     "description": rule.get("description", "")
-                })
+                }))
             source = "json_file"
             logger.info("Loaded %s Sichuan rules from JSON file", len(data))
         except Exception as e:
             logger.warning("Failed to load Sichuan rules JSON file, fallback to minimal sample: %s", e)
             data = [
-                {"rule_id": "sc-001", "name": "入院记录完整性", "category": "基础", "defect_level": "major", "complexity": "medium", "applicable_documents": ["入院记录"], "score_deduction": 2, "medical_domain": "通用", "requires_rag": False, "requires_cot": False, "description": "检查入院记录结构是否完整"},
+                enrich_launch_tier({"rule_id": "sc-001", "name": "入院记录完整性", "category": "基础", "defect_level": "major", "complexity": "medium", "applicable_documents": ["入院记录"], "score_deduction": 2, "medical_domain": "通用", "requires_rag": False, "requires_cot": False, "description": "检查入院记录结构是否完整"}),
             ]
     else:
         # Supabase 查询成功但无数据：返回空数组，不再回退

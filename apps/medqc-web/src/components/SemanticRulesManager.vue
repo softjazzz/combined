@@ -151,6 +151,18 @@
           @input="(e) => handleSearch((e.target as HTMLInputElement).value)"
         >
       </div>
+      <div class="launch-tier-filter">
+        <button
+          v-for="option in launchTierOptions"
+          :key="option.value"
+          type="button"
+          class="launch-tier-pill"
+          :class="{ active: launchTierFilter === option.value }"
+          @click="launchTierFilter = option.value"
+        >
+          {{ option.label }}
+        </button>
+      </div>
       <div class="toolbar-actions">
         <button
           class="modern-btn-ghost"
@@ -251,6 +263,15 @@
             </span>
           </template>
 
+          <template v-if="column.key === 'launch_tier'">
+            <span
+              class="status-pill"
+              :class="getLaunchTierClass(record.launch_tier)"
+            >
+              {{ getLaunchTierLabel(record.launch_tier, record.launch_tier_label) }}
+            </span>
+          </template>
+
           <template v-if="column.key === 'applicable_documents'">
             <div class="doc-pill-stack">
               <span
@@ -348,6 +369,16 @@
                 getDefectLevelClass(selectedRule.defect_level),
               ]"
             >{{ getSeverityZh(selectedRule.defect_level) }}</span>
+          </a-descriptions-item>
+          <a-descriptions-item label="上线层级">
+            <span
+              :class="[
+                'px-2 py-0.5 rounded-md text-xs',
+                getLaunchTierClass(selectedRule.launch_tier),
+              ]"
+            >{{
+              getLaunchTierLabel(selectedRule.launch_tier, selectedRule.launch_tier_label)
+            }}</span>
           </a-descriptions-item>
           <a-descriptions-item label="扣分">
             {{ selectedRule.score_deduction }}分
@@ -651,6 +682,8 @@ interface SichuanQCRule {
   medical_domain: string
   requires_rag: boolean
   requires_cot: boolean
+  launch_tier?: string
+  launch_tier_label?: string
 }
 
 interface SichuanQCStats {
@@ -670,8 +703,15 @@ const sichuanStats = ref<SichuanQCStats>({
   defect_level_distribution: {},
 })
 const searchText = ref('')
+const launchTierFilter = ref<'ALL' | 'A' | 'B' | 'C'>('ALL')
 const currentUser = ref<User | null>(null)
 const isAdmin = computed(() => currentUser.value?.roles?.includes(UserRole.ADMIN) || false)
+const launchTierOptions = [
+  { label: '全部', value: 'ALL' as const },
+  { label: '默认启用', value: 'A' as const },
+  { label: '灰度', value: 'B' as const },
+  { label: '观察', value: 'C' as const },
+]
 
 // 分页
 const tablePagination = ref<TablePaginationConfig>({
@@ -772,10 +812,14 @@ const complexityConicGradient = computed(() => {
 
 // 搜索过滤 computed（修复问题 #2）
 const filteredRules = computed(() => {
-  if (!searchText.value.trim()) return sichuanRules.value
   const keyword = searchText.value.trim().toLowerCase()
-  return sichuanRules.value.filter(
-    (r) =>
+  return sichuanRules.value.filter((r) => {
+    const tier = String(r.launch_tier || 'UNKNOWN').toUpperCase()
+    if (launchTierFilter.value !== 'ALL' && tier !== launchTierFilter.value) {
+      return false
+    }
+    if (!keyword) return true
+    return (
       r.rule_id.toLowerCase().includes(keyword) ||
       r.name.toLowerCase().includes(keyword) ||
       r.description.toLowerCase().includes(keyword) ||
@@ -783,8 +827,9 @@ const filteredRules = computed(() => {
       (r.applicable_documents || []).some((d: string) => {
         const zh = getDocTypeZh(d)
         return d.toLowerCase().includes(keyword) || zh.includes(keyword)
-      }),
-  )
+      })
+    )
+  })
 })
 
 const getDefectRate = (count: number | undefined) => {
@@ -825,6 +870,7 @@ const sichuanColumns = computed<TableColumnsType<SichuanQCRule>>(() => [
   { title: '规则名称', key: 'name', width: 360 },
   { title: '复杂度', key: 'complexity', width: 100 },
   { title: '缺陷级别', key: 'defect_level', width: 100 },
+  { title: '上线层级', key: 'launch_tier', width: 110 },
   { title: '操作', key: 'actions', width: 120, fixed: 'right', align: 'right' },
 ])
 
@@ -851,6 +897,8 @@ const refreshSichuanRules = async () => {
         medical_domain: r.medical_domain || '通用',
         requires_rag: Boolean(r.requires_rag),
         requires_cot: Boolean(r.requires_cot),
+        launch_tier: String(r.launch_tier || 'UNKNOWN'),
+        launch_tier_label: r.launch_tier_label ? String(r.launch_tier_label) : undefined,
       })
 
       sichuanRules.value = (data.rules || []).map(normalizeRule)
@@ -1051,6 +1099,23 @@ const getDefectLevelClass = (val: string) => {
   if (val?.includes('一般') || val === 'major')
     return 'bg-orange-50 text-orange-700 border border-orange-100'
   return 'bg-slate-100 text-slate-600 border border-slate-200'
+}
+
+const getLaunchTierClass = (val?: string) => {
+  const tier = String(val || 'UNKNOWN').toUpperCase()
+  if (tier === 'A') return 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+  if (tier === 'B') return 'bg-amber-50 text-amber-700 border border-amber-100'
+  if (tier === 'C') return 'bg-violet-50 text-violet-700 border border-violet-100'
+  return 'bg-slate-100 text-slate-600 border border-slate-200'
+}
+
+const getLaunchTierLabel = (val?: string, label?: string) => {
+  if (label) return label
+  const tier = String(val || 'UNKNOWN').toUpperCase()
+  if (tier === 'A') return '默认启用'
+  if (tier === 'B') return '灰度'
+  if (tier === 'C') return '观察'
+  return '未分层'
 }
 
 // 文本映射
@@ -1775,6 +1840,36 @@ onMounted(async () => {
   color: #2563eb;
   background: #edf4ff;
   border-color: #bed2f6;
+}
+
+.launch-tier-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.launch-tier-pill {
+  border: 1px solid #dbe5f4;
+  background: #fff;
+  color: #475569;
+  border-radius: 9999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.launch-tier-pill:hover {
+  border-color: #93c5fd;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.launch-tier-pill.active {
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  background: #dbeafe;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.08);
 }
 
 .animate-fade-in-up {

@@ -7,6 +7,7 @@ import type {
   SemanticRuleRowStatusModel,
   SemanticRuleStats,
   SemanticRuleTestResult,
+  SichuanRuleSetOption,
   SemanticRuleWorkspaceQueryState,
 } from './types'
 import { SEMANTIC_RULE_QUERY_KEYS, getDocTypeZh } from './types'
@@ -174,7 +175,40 @@ export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleIte
     medical_domain: String(raw.medical_domain || '通用'),
     requires_rag: Boolean(raw.requires_rag),
     requires_cot: Boolean(raw.requires_cot),
+    launch_tier: String(raw.launch_tier || 'UNKNOWN'),
+    launch_tier_label: String(raw.launch_tier_label || ''),
   }
+}
+
+export async function fetchSichuanRuleSetsFromBackend(): Promise<SichuanRuleSetOption[]> {
+  const response = await ApiService.getRaw('/api/v1/qc/sichuan/workspace/rule-sets', {
+    _ts: Date.now(),
+  })
+  const payload = pickResponseData(response)
+  const items = Array.isArray(payload.items) ? payload.items : []
+  return items.map((item) => ({
+    rule_set_key: String(item.rule_set_key || ''),
+    rule_set_name: String(item.rule_set_name || item.rule_set_key || ''),
+    rule_set_version: String(item.rule_set_version || 'v1'),
+    scope: String(item.scope || 'unknown'),
+    rule_ids: Array.isArray(item.rule_ids)
+      ? item.rule_ids.map((ruleId: unknown) => String(ruleId))
+      : [],
+    rule_count: parseCount(item.rule_count ?? item.rule_ids?.length),
+    execution_strategy: item.execution_strategy ? String(item.execution_strategy) : undefined,
+    quality_profile: item.quality_profile ? String(item.quality_profile) : undefined,
+    bucket_strategy: item.bucket_strategy ? String(item.bucket_strategy) : undefined,
+    enable_selective_refine:
+      typeof item.enable_selective_refine === 'boolean' ? item.enable_selective_refine : undefined,
+    refine_confidence_threshold:
+      item.refine_confidence_threshold === undefined
+        ? undefined
+        : Number(item.refine_confidence_threshold),
+    batch_output_mode: item.batch_output_mode ? String(item.batch_output_mode) : undefined,
+    max_refine_candidates:
+      item.max_refine_candidates === undefined ? undefined : Number(item.max_refine_candidates),
+    description: item.description ? String(item.description) : undefined,
+  }))
 }
 
 export function buildSemanticStatsFromRules(

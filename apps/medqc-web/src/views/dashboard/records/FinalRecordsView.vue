@@ -481,20 +481,15 @@
             class="flex flex-wrap gap-2"
             button-style="solid"
           >
-            <a-radio-button value="content_full_v1">
-              全量内涵 84 条（推荐）
-            </a-radio-button>
-            <a-radio-button value="content_fast_v1">
-              快速初筛
-            </a-radio-button>
-            <a-radio-button value="content_hard_v1">
-              硬判定首发
-            </a-radio-button>
-            <a-radio-button value="content_review_v1">
-              待复核首发
-            </a-radio-button>
-            <a-radio-button value="content_v1">
-              完整首批 12 条
+            <a-radio-button
+              v-for="option in launchPresetOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label
+              }}<template v-if="option.ruleCount">
+                （{{ option.ruleCount }}）
+              </template>
             </a-radio-button>
             <a-radio-button value="manual">
               手工选择规则
@@ -652,8 +647,15 @@ import ProStandardTable from '@/components/pro/ProStandardTable.vue'
 import SemanticRulesBatchPanel from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchPanel.vue'
 import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
 import { useSichuanBatchJobs } from '@/views/workstation-v4/semantic-rules/composables/useSichuanBatchJobs'
-import type { SemanticRuleItem, SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
-import { fetchSemanticRulesFromBackend } from '@/views/workstation-v4/semantic-rules/service'
+import type {
+  SemanticRuleItem,
+  SichuanBatchJob,
+  SichuanRuleSetOption,
+} from '@/views/workstation-v4/semantic-rules/types'
+import {
+  fetchSemanticRulesFromBackend,
+  fetchSichuanRuleSetsFromBackend,
+} from '@/views/workstation-v4/semantic-rules/service'
 import { createSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import {
   getBatchJobStatusTagClass,
@@ -664,6 +666,9 @@ const CONTENT_FAST_RULE_SET_KEY = 'sc_content_fast_v1'
 const CONTENT_RULE_SET_KEY = 'sc_content_v1'
 const CONTENT_HARD_RULE_SET_KEY = 'sc_content_hard_v1'
 const CONTENT_REVIEW_RULE_SET_KEY = 'sc_content_review_v1'
+const CONTENT_LAUNCH_A_RULE_SET_KEY = 'sc_content_launch_a_v1'
+const CONTENT_LAUNCH_B_RULE_SET_KEY = 'sc_content_launch_b_v1'
+const CONTENT_LAUNCH_C_RULE_SET_KEY = 'sc_content_launch_c_v1'
 const CONTENT_FULL_RULE_FAMILIES = new Set<string>([
   'content_completeness',
   'consistency_cross_doc',
@@ -711,14 +716,7 @@ const CONTENT_REVIEW_RULE_SET_IDS = [
   'SC-125',
 ] as const
 
-type LaunchRuleMode =
-  | 'content_full_v1'
-  | 'content_fast_v1'
-  | 'content_hard_v1'
-  | 'content_review_v1'
-  | 'content_v1'
-  | 'manual'
-  | 'all'
+type LaunchRuleMode = string
 
 const route = useRoute()
 const router = useRouter()
@@ -745,6 +743,7 @@ const launchingBatch = ref(false)
 
 const ruleLoading = ref(false)
 const allRules = ref<SemanticRuleItem[]>([])
+const ruleSetOptions = ref<SichuanRuleSetOption[]>([])
 const ruleKeyword = ref('')
 const selectedRuleIds = ref<string[]>([])
 const launchRuleMode = ref<LaunchRuleMode>('content_full_v1')
@@ -818,47 +817,137 @@ const normalizeRuleId = (value: unknown) =>
     .trim()
     .toUpperCase()
 
-const fastRuleSetIdSet = new Set<string>(CONTENT_FAST_RULE_SET_IDS)
-const hardRuleSetIdSet = new Set<string>(CONTENT_HARD_RULE_SET_IDS)
-const reviewRuleSetIdSet = new Set<string>(CONTENT_REVIEW_RULE_SET_IDS)
-const contentRuleSetIdSet = new Set<string>(CONTENT_RULE_SET_IDS)
+const dynamicRuleSetOptionMap = computed(() => {
+  const mapping = new Map<string, SichuanRuleSetOption>()
+  ruleSetOptions.value.forEach((option) => {
+    const key = String(option.rule_set_key || '').trim()
+    if (key) mapping.set(key, option)
+  })
+  return mapping
+})
 
-const fastRuleSetRules = computed(() =>
-  allRules.value.filter((rule) =>
-    fastRuleSetIdSet.has(normalizeRuleId(rule.rule_id || rule.rule_code)),
-  ),
-)
+const getRuleSetIdsByKey = (ruleSetKey: string): string[] => {
+  const dynamicOption = dynamicRuleSetOptionMap.value.get(ruleSetKey)
+  if (dynamicOption) {
+    return dynamicOption.rule_ids.map((ruleId) => normalizeRuleId(ruleId)).filter(Boolean)
+  }
+  if (ruleSetKey === CONTENT_FAST_RULE_SET_KEY) return [...CONTENT_FAST_RULE_SET_IDS]
+  if (ruleSetKey === CONTENT_HARD_RULE_SET_KEY) return [...CONTENT_HARD_RULE_SET_IDS]
+  if (ruleSetKey === CONTENT_REVIEW_RULE_SET_KEY) return [...CONTENT_REVIEW_RULE_SET_IDS]
+  if (ruleSetKey === CONTENT_RULE_SET_KEY) return [...CONTENT_RULE_SET_IDS]
+  return []
+}
 
-const hardRuleSetRules = computed(() =>
-  allRules.value.filter((rule) =>
-    hardRuleSetIdSet.has(normalizeRuleId(rule.rule_id || rule.rule_code)),
-  ),
-)
+const buildRuleSetRules = (ruleSetKey: string) => {
+  const idSet = new Set<string>(getRuleSetIdsByKey(ruleSetKey))
+  return allRules.value.filter((rule) => idSet.has(normalizeRuleId(rule.rule_id || rule.rule_code)))
+}
 
-const reviewRuleSetRules = computed(() =>
-  allRules.value.filter((rule) =>
-    reviewRuleSetIdSet.has(normalizeRuleId(rule.rule_id || rule.rule_code)),
-  ),
-)
+const launchPresetOptions = computed(() => {
+  const optionByKey = dynamicRuleSetOptionMap.value
+  const builtins = [
+    {
+      key: 'content_full_v1',
+      label: '全量内涵 84 条（推荐）',
+      description:
+        '默认执行 SC146 全量内涵规则。保留待复核、深度复核、业务/高级视图与规则标签，按文书域和规则族聚合后的结果统一展示。',
+      ruleSetKey: 'sc_content_full_v1',
+    },
+    {
+      key: CONTENT_LAUNCH_A_RULE_SET_KEY,
+      label: '默认启用（A）',
+      description: '仅执行默认启用层级规则，适合作为客户首批默认放量口径。',
+      ruleSetKey: CONTENT_LAUNCH_A_RULE_SET_KEY,
+    },
+    {
+      key: CONTENT_LAUNCH_B_RULE_SET_KEY,
+      label: '灰度（B）',
+      description: '执行灰度层级规则，适合科室或小流量观察误报和证据质量。',
+      ruleSetKey: CONTENT_LAUNCH_B_RULE_SET_KEY,
+    },
+    {
+      key: CONTENT_LAUNCH_C_RULE_SET_KEY,
+      label: '观察（C）',
+      description: '执行观察层级规则，仅建议用于联调和现场行为采样。',
+      ruleSetKey: CONTENT_LAUNCH_C_RULE_SET_KEY,
+    },
+    {
+      key: 'content_fast_v1',
+      label: '快速初筛',
+      description:
+        '默认快速初筛模式：按固定文书分包执行 12 条首批内涵规则，不做 fallback、不做单条重跑、不做精审，优先输出疑点和待复核结果。',
+      ruleSetKey: CONTENT_FAST_RULE_SET_KEY,
+    },
+    {
+      key: 'content_hard_v1',
+      label: '硬判定首发',
+      description: '仅执行 3 条当前边界最稳定的内涵规则，适合作为终末病历首发硬判定默认口径。',
+      ruleSetKey: CONTENT_HARD_RULE_SET_KEY,
+    },
+    {
+      key: 'content_review_v1',
+      label: '待复核首发',
+      description: '执行 9 条高价值但当前更适合人工复核的内涵规则，默认保留证据并输出待复核结论。',
+      ruleSetKey: CONTENT_REVIEW_RULE_SET_KEY,
+    },
+    {
+      key: 'content_v1',
+      label: '完整首批 12 条',
+      description:
+        '执行完整首批 12 条内涵规则，适合联调和回归验证，不建议直接作为终末首发硬判定默认。',
+      ruleSetKey: CONTENT_RULE_SET_KEY,
+    },
+  ]
 
-const contentRuleSetRules = computed(() =>
-  allRules.value.filter((rule) =>
-    contentRuleSetIdSet.has(normalizeRuleId(rule.rule_id || rule.rule_code)),
-  ),
-)
+  return builtins.map((option) => {
+    const dynamic = optionByKey.get(option.ruleSetKey)
+    return {
+      value: option.key,
+      label: option.label,
+      description: option.description,
+      ruleSetKey: option.ruleSetKey,
+      ruleCount: dynamic?.rule_count ?? getRuleSetIdsByKey(option.ruleSetKey).length,
+    }
+  })
+})
+
+const launchPresetOptionMap = computed(() => {
+  const mapping = new Map<string, (typeof launchPresetOptions.value)[number]>()
+  launchPresetOptions.value.forEach((option) => mapping.set(option.value, option))
+  return mapping
+})
+
+const fastRuleSetRules = computed(() => buildRuleSetRules(CONTENT_FAST_RULE_SET_KEY))
+
+const hardRuleSetRules = computed(() => buildRuleSetRules(CONTENT_HARD_RULE_SET_KEY))
+
+const reviewRuleSetRules = computed(() => buildRuleSetRules(CONTENT_REVIEW_RULE_SET_KEY))
+
+const contentRuleSetRules = computed(() => buildRuleSetRules(CONTENT_RULE_SET_KEY))
+
+const launchARuleSetRules = computed(() => buildRuleSetRules(CONTENT_LAUNCH_A_RULE_SET_KEY))
+
+const launchBRuleSetRules = computed(() => buildRuleSetRules(CONTENT_LAUNCH_B_RULE_SET_KEY))
+
+const launchCRuleSetRules = computed(() => buildRuleSetRules(CONTENT_LAUNCH_C_RULE_SET_KEY))
 
 const fullContentRuleSetRules = computed(() =>
-  allRules.value.filter((rule) => {
-    const ruleId = normalizeRuleId(rule.rule_id || rule.rule_code)
-    const ruleFamily = String(rule.rule_family || '')
-      .trim()
-      .toLowerCase()
-    return ruleId.startsWith('SC-') && CONTENT_FULL_RULE_FAMILIES.has(ruleFamily)
-  }),
+  buildRuleSetRules('sc_content_full_v1').length > 0
+    ? buildRuleSetRules('sc_content_full_v1')
+    : allRules.value.filter((rule) => {
+        const ruleId = normalizeRuleId(rule.rule_id || rule.rule_code)
+        const ruleFamily = String(rule.rule_family || '')
+          .trim()
+          .toLowerCase()
+        return ruleId.startsWith('SC-') && CONTENT_FULL_RULE_FAMILIES.has(ruleFamily)
+      }),
 )
 
 const baseRulesForLaunch = computed(() => {
   if (launchRuleMode.value === 'content_full_v1') return fullContentRuleSetRules.value
+  if (launchRuleMode.value === CONTENT_LAUNCH_A_RULE_SET_KEY) return launchARuleSetRules.value
+  if (launchRuleMode.value === CONTENT_LAUNCH_B_RULE_SET_KEY) return launchBRuleSetRules.value
+  if (launchRuleMode.value === CONTENT_LAUNCH_C_RULE_SET_KEY) return launchCRuleSetRules.value
   if (launchRuleMode.value === 'content_fast_v1') return fastRuleSetRules.value
   if (launchRuleMode.value === 'content_hard_v1') return hardRuleSetRules.value
   if (launchRuleMode.value === 'content_review_v1') return reviewRuleSetRules.value
@@ -890,31 +979,15 @@ const filteredRules = computed(() => {
 })
 
 const selectedRuleCount = computed(() => {
-  if (launchRuleMode.value === 'content_full_v1') return fullContentRuleSetRules.value.length
-  if (launchRuleMode.value === 'content_fast_v1') return CONTENT_FAST_RULE_SET_IDS.length
-  if (launchRuleMode.value === 'content_hard_v1') return CONTENT_HARD_RULE_SET_IDS.length
-  if (launchRuleMode.value === 'content_review_v1') return CONTENT_REVIEW_RULE_SET_IDS.length
-  if (launchRuleMode.value === 'content_v1') return CONTENT_RULE_SET_IDS.length
+  const preset = launchPresetOptionMap.value.get(launchRuleMode.value)
+  if (preset) return preset.ruleCount
   if (launchRuleMode.value === 'all') return allRules.value.length
   return selectedRuleIds.value.length
 })
 
 const launchRuleModeDescription = computed(() => {
-  if (launchRuleMode.value === 'content_full_v1') {
-    return '默认执行 SC146 全量内涵规则。保留待复核、深度复核、业务/高级视图与规则标签，按文书域和规则族聚合后的结果统一展示。'
-  }
-  if (launchRuleMode.value === 'content_fast_v1') {
-    return '默认快速初筛模式：按固定文书分包执行 12 条首批内涵规则，不做 fallback、不做单条重跑、不做精审，优先输出疑点和待复核结果。'
-  }
-  if (launchRuleMode.value === 'content_hard_v1') {
-    return '仅执行 3 条当前边界最稳定的内涵规则，适合作为终末病历首发硬判定默认口径。'
-  }
-  if (launchRuleMode.value === 'content_review_v1') {
-    return '执行 9 条高价值但当前更适合人工复核的内涵规则，默认保留证据并输出待复核结论。'
-  }
-  if (launchRuleMode.value === 'content_v1') {
-    return '执行完整首批 12 条内涵规则，适合联调和回归验证，不建议直接作为终末首发硬判定默认。'
-  }
+  const preset = launchPresetOptionMap.value.get(launchRuleMode.value)
+  if (preset) return preset.description
   if (launchRuleMode.value === 'all') {
     return '高级调试入口：执行当前四川规则全集，耗时和 token 成本会明显增加，不建议作为首批上线默认。'
   }
@@ -926,6 +999,13 @@ const batchScopeOptions = [{ label: '终末病历', value: 'final' as const }]
 const launchRuleColumns: TableColumnsType<SemanticRuleItem> = [
   { title: '规则编码', dataIndex: 'rule_id', key: 'rule_id', width: 140 },
   { title: '规则名称', dataIndex: 'name', key: 'name', width: 260 },
+  {
+    title: '上线层级',
+    dataIndex: 'launch_tier_label',
+    key: 'launch_tier',
+    width: 100,
+    customRender: ({ record }) => record.launch_tier_label || record.launch_tier || '未分层',
+  },
   { title: '缺陷等级', dataIndex: 'defect_level', key: 'defect_level', width: 120 },
   {
     title: '文书域',
@@ -1175,11 +1255,15 @@ const handleExportBatchReport = async (format: 'xlsx' | 'csv' = 'xlsx') => {
 }
 
 const loadRulesForLaunch = async () => {
-  if (allRules.value.length > 0 || ruleLoading.value) return
+  if ((allRules.value.length > 0 && ruleSetOptions.value.length > 0) || ruleLoading.value) return
   ruleLoading.value = true
   try {
-    const response = await fetchSemanticRulesFromBackend()
+    const [response, backendRuleSets] = await Promise.all([
+      fetchSemanticRulesFromBackend(),
+      fetchSichuanRuleSetsFromBackend(),
+    ])
     allRules.value = response.rules || []
+    ruleSetOptions.value = backendRuleSets
   } catch (error: any) {
     message.error(error?.message || '加载四川规则失败')
   } finally {
@@ -1203,6 +1287,11 @@ const clearSelectedRules = () => {
 }
 
 const syncRuleSelectionByMode = () => {
+  const preset = launchPresetOptionMap.value.get(launchRuleMode.value)
+  if (preset) {
+    selectedRuleIds.value = getRuleSetIdsByKey(preset.ruleSetKey)
+    return
+  }
   if (launchRuleMode.value === 'content_full_v1') {
     selectedRuleIds.value = fullContentRuleSetRules.value
       .map((rule) => String(rule.rule_id || rule.rule_code || '').trim())
@@ -1241,8 +1330,10 @@ const openBatchLaunchModal = async () => {
 }
 
 const confirmBatchLaunch = async () => {
-  const effectiveRuleIds =
-    launchRuleMode.value === 'content_full_v1'
+  const preset = launchPresetOptionMap.value.get(launchRuleMode.value)
+  const effectiveRuleIds = preset
+    ? getRuleSetIdsByKey(preset.ruleSetKey)
+    : launchRuleMode.value === 'content_full_v1'
       ? fullContentRuleSetRules.value
           .map((rule) => String(rule.rule_id || rule.rule_code || '').trim())
           .filter(Boolean)
@@ -1271,9 +1362,12 @@ const confirmBatchLaunch = async () => {
 
   launchingBatch.value = true
   try {
-    const selectedRuleSetKey =
-      launchRuleMode.value === 'content_full_v1'
-        ? undefined
+    const selectedRuleSetKey = preset
+      ? preset.ruleSetKey
+      : launchRuleMode.value === 'content_full_v1'
+        ? dynamicRuleSetOptionMap.value.has('sc_content_full_v1')
+          ? 'sc_content_full_v1'
+          : undefined
         : launchRuleMode.value === 'content_fast_v1'
           ? CONTENT_FAST_RULE_SET_KEY
           : launchRuleMode.value === 'content_hard_v1'

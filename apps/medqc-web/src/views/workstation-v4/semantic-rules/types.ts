@@ -18,6 +18,25 @@ export interface SemanticRuleItem {
   prompt_version?: string
   cost_class?: string
   rule_family?: string
+  launch_tier?: 'A' | 'B' | 'C' | 'UNKNOWN' | string
+  launch_tier_label?: string
+}
+
+export interface SichuanRuleSetOption {
+  rule_set_key: string
+  rule_set_name: string
+  rule_set_version: string
+  scope: string
+  rule_ids: string[]
+  rule_count: number
+  execution_strategy?: string
+  quality_profile?: string
+  bucket_strategy?: string
+  enable_selective_refine?: boolean
+  refine_confidence_threshold?: number
+  batch_output_mode?: string
+  max_refine_candidates?: number
+  description?: string
 }
 
 export interface SemanticRuleStats {

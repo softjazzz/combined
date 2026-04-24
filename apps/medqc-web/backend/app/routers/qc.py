@@ -20,6 +20,10 @@ from ..core.permissions import (
 )
 from ..services.qc_persistence_service import default_qc_persistence_service
 from ..services.workflow_queue_state_service import default_workflow_queue_state_service
+from ..services.sc_rule_launch_tier import (
+    load_sc_intrinsic_launch_tier_map,
+    resolve_sc_intrinsic_launch_tier,
+)
 
 router = APIRouter(prefix="/api/v1/qc", tags=["qc"])
 service = QCService()
@@ -414,6 +418,7 @@ async def list_rules(
         raise HTTPException(status_code=503, detail="数据库不可用")
 
     try:
+        launch_tier_map = load_sc_intrinsic_launch_tier_map()
         query = sb.table('qc_rules').select('*', count='exact')
         if keyword:
             if hasattr(query, 'or_'):
@@ -443,12 +448,26 @@ async def list_rules(
 
         resp = await async_execute(query)
         data = list(getattr(resp, 'data', None) or [])
+        tier_label_map = {
+            "A": "默认启用",
+            "B": "灰度",
+            "C": "观察",
+            "UNKNOWN": "未分层",
+        }
+        enriched_data = []
+        for item in data:
+            normalized = dict(item)
+            rule_id = str(normalized.get('rule_id') or normalized.get('rule_code') or '').strip()
+            tier = resolve_sc_intrinsic_launch_tier(rule_id, launch_tier_map=launch_tier_map)
+            normalized['launch_tier'] = tier
+            normalized['launch_tier_label'] = tier_label_map.get(tier, '未分层')
+            enriched_data.append(normalized)
         total = getattr(resp, 'count', None)
         if total is None:
-            total = len(data)
+            total = len(enriched_data)
 
         return paginated_response(
-            items=data,
+            items=enriched_data,
             total=total,
             page=page,
             page_size=limit,
@@ -1057,7 +1076,6 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
     except Exception as e:
         logger.warning(f"从 PG 读取编码质控数据失败: {e}")
         return None
-
 
 
 
