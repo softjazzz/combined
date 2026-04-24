@@ -2,7 +2,7 @@
   "schema_version": "v1",
   "template_family": "running_record_intrinsic_baseline_v1",
   "generated_at": "2026-04-22",
-  "template_count": 86,
+  "template_count": 94,
   "variants": ["pass", "defect"],
   "files": [
     {
@@ -309,33 +309,13 @@
       "file": "running_bucket_progress_treatment_linkage_v1_defect.json",
       "issue_type": "Z19_progress_treatment_linkage",
       "variant": "defect",
-      "expected_rule_ids": [
-        "SC-034",
-        "SC-036",
-        "SC-037",
-        "SC-043",
-        "SC-044",
-        "SC-046",
-        "SC-070",
-        "SC-073",
-        "SC-074"
-      ]
+      "expected_rule_ids": ["SC-034", "SC-036", "SC-070"]
     },
     {
       "file": "running_bucket_progress_treatment_linkage_v1_pass.json",
       "issue_type": "Z19_progress_treatment_linkage",
       "variant": "pass",
-      "expected_rule_ids": [
-        "SC-034",
-        "SC-036",
-        "SC-037",
-        "SC-043",
-        "SC-044",
-        "SC-046",
-        "SC-070",
-        "SC-073",
-        "SC-074"
-      ]
+      "expected_rule_ids": ["SC-034", "SC-036", "SC-070"]
     },
     {
       "file": "running_bucket_rounds_rescue_discussion_v1_defect.json",
@@ -540,6 +520,54 @@
       "issue_type": "E1_senior_round_no_targeted_judgement",
       "variant": "pass",
       "expected_rule_ids": ["SC-050"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_antibiotic_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-043", "SC-044"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_antibiotic_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-043", "SC-044"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_pathology_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-037"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_pathology_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-037"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_procedure_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-046"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_procedure_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-046"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_transfusion_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-073", "SC-074"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_transfusion_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-073", "SC-074"]
     }
   ]
 }
