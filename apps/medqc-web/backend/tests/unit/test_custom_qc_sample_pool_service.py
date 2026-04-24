@@ -76,13 +76,10 @@ def test_load_manual_case_rows_from_excel_supports_minimal_identifier_columns(mo
 
     rows = load_manual_case_rows_from_excel(file_path="demo.xlsx", sheet_name="Sheet2")
 
-    assert len(rows) == 2
-    assert rows[0]["mr_no"] == "2248248"
-    assert rows[0]["visit_id"] == ""
-    assert rows[0]["manual_issue_text"] == ""
-    assert rows[1]["mr_no"] == "VISIT-001"
-    assert rows[1]["visit_id"] == "VISIT-001"
-    assert rows[1]["manual_issue_text"] == "首次病程记录鉴别诊断不全面"
+    assert len(rows) == 1
+    assert rows[0]["mr_no"] == ""
+    assert rows[0]["visit_id"] == "VISIT-001"
+    assert rows[0]["manual_issue_text"] == "首次病程记录鉴别诊断不全面"
 
 
 def test_resolve_sync_table_names_defaults_cover_core_groups():
@@ -219,6 +216,7 @@ def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeyp
         },
     ]
     monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(service, "_load_record_display_map", lambda **kwargs: {})
 
     result = service.list_pool_records(pool_id="pool-1", include_in_batch_1=True)
 
@@ -230,6 +228,97 @@ def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeyp
     assert record["sample_item_ids"] == ["item-1", "item-2"]
     assert record["candidate_rule_ids"] == ["SC-026", "SC-033"]
     assert "首次病程记录鉴别诊断不全面" in record["issue_preview_text"]
+
+
+def test_list_pool_records_should_backfill_patient_name_and_department_from_matched_record(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "nan",
+            "mr_no": "147640",
+            "department": "nan",
+            "manual_issue_text": "",
+            "coverage_type": "llm_intrinsic",
+            "candidate_rule_ids_json": '["SC-023"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V001",
+            "matched_patient_id": "P001",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_record_display_map",
+        lambda **kwargs: {
+            "V001": {
+                "patient_name": "张三",
+                "mr_no": "147640",
+                "department": "普外科",
+            }
+        },
+    )
+
+    result = service.list_pool_records(pool_id="pool-1", include_in_batch_1=True)
+
+    assert result.total == 1
+    record = result.items[0]
+    assert record["patient_name"] == "张三"
+    assert record["department"] == "普外科"
+    assert record["mr_no"] == "147640"
+
+
+def test_row_to_item_should_read_visit_id_from_raw_payload():
+    service = CustomQCSamplePoolService()
+
+    item = service._row_to_item(
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "mr_no": "",
+            "raw_payload_json": '{"visit_id":"VISIT-001"}',
+        }
+    )
+
+    assert item["visit_id"] == "VISIT-001"
+
+
+def test_choose_scored_candidate_should_fallback_to_most_recent_candidate():
+    candidates = [
+        {
+            "visit_id": "V001",
+            "admission_datetime": "2025-06-15",
+            "discharge_datetime": "2025-06-21",
+            "update_time": "2025-06-21",
+        },
+        {
+            "visit_id": "V002",
+            "admission_datetime": "2025-07-04",
+            "discharge_datetime": "2025-07-10",
+            "update_time": "2025-07-10",
+        },
+    ]
+
+    chosen = sample_pool_module._choose_scored_candidate(
+        [(0, candidate) for candidate in candidates],
+        get_recency_key=lambda candidate: sample_pool_module._candidate_recency_key(
+            admission_value=candidate.get("admission_datetime"),
+            discharge_value=candidate.get("discharge_datetime"),
+            update_value=candidate.get("update_time"),
+            visit_id=candidate.get("visit_id"),
+        ),
+    )
+
+    assert chosen is not None
+    assert chosen["visit_id"] == "V002"
 
 
 def test_get_runnable_items_filters_by_selected_record_ids(monkeypatch):
