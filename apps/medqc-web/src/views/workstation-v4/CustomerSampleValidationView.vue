@@ -803,8 +803,8 @@ const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
     width: 200,
     customRender: ({ record }) =>
       h('div', { class: 'space-y-1' }, [
-        h('div', { class: 'font-medium text-slate-900' }, record.patient_name || '-'),
-        h('div', { class: 'text-xs text-slate-500' }, record.mr_no || '-'),
+        h('div', { class: 'font-medium text-slate-900' }, resolveRecordPatientName(record)),
+        h('div', { class: 'text-xs text-slate-500' }, resolveRecordIdentifier(record)),
       ]),
   },
   {
@@ -900,8 +900,14 @@ const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
                 onClick: () =>
                   openBatchJob(selectedPool.value?.latest_job_id || '', {
                     visitId: record.matched_visit_id || '',
-                    recordId: record.mr_no || '',
-                    label: [record.patient_name || '', record.department || '', record.mr_no || '']
+                    recordId: resolveRecordIdentifier(record),
+                    label: [
+                      resolveRecordPatientName(record) === '-'
+                        ? ''
+                        : resolveRecordPatientName(record),
+                      record.department || '',
+                      resolveRecordIdentifier(record),
+                    ]
                       .filter(Boolean)
                       .join(' · '),
                   }),
@@ -1096,6 +1102,20 @@ async function handleDownloadTemplate() {
   worksheet['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 48 }]
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet2')
   XLSX.writeFile(workbook, '客户样本导入模板.xlsx')
+}
+
+function resolveRecordPatientName(record: ManualSamplePoolRecord): string {
+  return String(record.patient_name || '').trim() || '-'
+}
+
+function resolveRecordIdentifier(record: ManualSamplePoolRecord): string {
+  const rawVisitId = String(record.sample_items?.[0]?.visit_id || '').trim()
+  return (
+    String(record.mr_no || '').trim() ||
+    rawVisitId ||
+    String(record.matched_visit_id || '').trim() ||
+    '-'
+  )
 }
 
 function openRecordDetail(record: ManualSamplePoolRecord) {

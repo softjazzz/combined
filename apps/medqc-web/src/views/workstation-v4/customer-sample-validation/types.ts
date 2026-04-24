@@ -27,6 +27,7 @@ export type ManualSamplePoolItem = {
   department: string
   patient_name: string
   mr_no: string
+  visit_id: string
   manual_issue_text: string
   normalized_issue_text: string
   doctor_name: string

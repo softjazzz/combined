@@ -5,6 +5,7 @@ from app.services.custom_qc_sample_pool_service import (
     load_manual_case_rows_from_excel,
 )
 import pandas as pd
+from types import SimpleNamespace
 
 
 class _FakeMappingsResult:
@@ -76,10 +77,28 @@ def test_load_manual_case_rows_from_excel_supports_minimal_identifier_columns(mo
 
     rows = load_manual_case_rows_from_excel(file_path="demo.xlsx", sheet_name="Sheet2")
 
+    assert len(rows) == 2
+    assert rows[0]["mr_no"] == "2248248"
+    assert rows[0]["visit_id"] == ""
+    assert rows[1]["mr_no"] == ""
+    assert rows[1]["visit_id"] == "VISIT-001"
+    assert rows[1]["manual_issue_text"] == "首次病程记录鉴别诊断不全面"
+
+
+def test_load_manual_case_rows_from_excel_keeps_mr_no_only_rows(monkeypatch):
+    dataframe = pd.DataFrame(
+        [
+            ["住院号", "visit_id", "存在问题"],
+            ["161241", "", ""],
+        ]
+    )
+    monkeypatch.setattr(pd, "read_excel", lambda *args, **kwargs: dataframe)
+
+    rows = load_manual_case_rows_from_excel(file_path="demo.xlsx", sheet_name="Sheet2")
+
     assert len(rows) == 1
-    assert rows[0]["mr_no"] == ""
-    assert rows[0]["visit_id"] == "VISIT-001"
-    assert rows[0]["manual_issue_text"] == "首次病程记录鉴别诊断不全面"
+    assert rows[0]["mr_no"] == "161241"
+    assert rows[0]["visit_id"] == ""
 
 
 def test_resolve_sync_table_names_defaults_cover_core_groups():
@@ -339,6 +358,72 @@ def test_choose_scored_candidate_should_fallback_to_most_recent_candidate():
 
     assert chosen is not None
     assert chosen["visit_id"] == "V002"
+
+
+def test_pick_best_local_candidate_should_choose_department_and_date_match():
+    candidates = [
+        SimpleNamespace(
+            visit_id="V001",
+            name="刘德荣",
+            admission_dept_name="疼痛科",
+            discharge_dept_name="疼痛科",
+            admission_datetime="2025-08-14",
+            discharge_datetime="2025-08-19",
+            update_time="2025-08-19",
+        ),
+        SimpleNamespace(
+            visit_id="V002",
+            name="刘德荣",
+            admission_dept_name="关节与运动医学科",
+            discharge_dept_name="关节与运动医学科",
+            admission_datetime="2026-03-22",
+            discharge_datetime="2026-04-07",
+            update_time="2026-04-07",
+        ),
+    ]
+
+    chosen = sample_pool_module._pick_best_local_candidate(
+        candidates=candidates,
+        patient_name="刘德荣",
+        department="关节与运动医学科",
+        qc_date_value=sample_pool_module._parse_date("2026-04-01"),
+    )
+
+    assert chosen is not None
+    assert chosen.visit_id == "V002"
+
+
+def test_pick_best_remote_candidate_should_fallback_to_latest_when_only_mr_no_available():
+    candidates = [
+        {
+            "visit_id": "2183055",
+            "name": "罗享金",
+            "admission_dept_name": "心血管内科",
+            "discharge_dept_name": "心血管内科",
+            "admission_datetime": "2026-01-18",
+            "discharge_datetime": "2026-01-25",
+            "update_time": "2026-01-25",
+        },
+        {
+            "visit_id": "2306811",
+            "name": "罗享金",
+            "admission_dept_name": "泌尿血管外科",
+            "discharge_dept_name": "泌尿血管外科",
+            "admission_datetime": "2026-03-25",
+            "discharge_datetime": "2026-04-03",
+            "update_time": "2026-04-03",
+        },
+    ]
+
+    chosen = sample_pool_module._pick_best_remote_candidate(
+        candidates=candidates,
+        patient_name="罗亨金",
+        department="",
+        qc_date_value=None,
+    )
+
+    assert chosen is not None
+    assert chosen["visit_id"] == "2306811"
 
 
 def test_get_runnable_items_filters_by_selected_record_ids(monkeypatch):

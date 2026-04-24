@@ -388,7 +388,7 @@ def load_manual_case_rows_from_excel(*, file_path: str, sheet_name: str = "Sheet
         visit_id = _safe_text(raw.get("visit_id") or raw.get("VisitID") or raw.get("VISIT_ID"))
         issue_text = _safe_text(raw.get("存在问题"))
         patient_name = _safe_text(raw.get("患者姓名"))
-        if not visit_id and not issue_text and not patient_name:
+        if not mr_no and not visit_id and not issue_text and not patient_name:
             continue
         rows.append(
             {
@@ -460,6 +460,72 @@ def _score_remote_candidate(
         elif discharge_date:
             score += max(0, 15 - abs((qc_date_value - discharge_date).days))
     return score
+
+
+def _pick_best_local_candidate(
+    *,
+    candidates: Sequence[Any],
+    patient_name: str,
+    department: str,
+    qc_date_value: Optional[date],
+) -> Optional[Any]:
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    return _choose_scored_candidate(
+        [
+            (
+                _score_candidate(
+                    row=candidate,
+                    patient_name=patient_name,
+                    department=department,
+                    qc_date_value=qc_date_value,
+                ),
+                candidate,
+            )
+            for candidate in candidates
+        ],
+        get_recency_key=lambda item: _candidate_recency_key(
+            admission_value=getattr(item, "admission_datetime", None),
+            discharge_value=getattr(item, "discharge_datetime", None),
+            update_value=getattr(item, "update_time", None),
+            visit_id=getattr(item, "visit_id", None),
+        ),
+    )
+
+
+def _pick_best_remote_candidate(
+    *,
+    candidates: Sequence[Dict[str, Any]],
+    patient_name: str,
+    department: str,
+    qc_date_value: Optional[date],
+) -> Optional[Dict[str, Any]]:
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    return _choose_scored_candidate(
+        [
+            (
+                _score_remote_candidate(
+                    candidate=candidate,
+                    patient_name=patient_name,
+                    department=department,
+                    qc_date_value=qc_date_value,
+                ),
+                candidate,
+            )
+            for candidate in candidates
+        ],
+        get_recency_key=lambda candidate: _candidate_recency_key(
+            admission_value=candidate.get("admission_datetime"),
+            discharge_value=candidate.get("discharge_datetime"),
+            update_value=candidate.get("update_time"),
+            visit_id=candidate.get("visit_id"),
+        ),
+    )
 
 
 def _candidate_recency_key(
@@ -1332,47 +1398,61 @@ class CustomQCSamplePoolService:
             for row in rows:
                 raw_payload = _safe_json_loads(row.get("raw_payload_json"), {})
                 visit_id_input = _safe_text(raw_payload.get("visit_id") if isinstance(raw_payload, dict) else "")
+                mr_no_input = _safe_text(raw_payload.get("mr_no") if isinstance(raw_payload, dict) else "")
+                patient_name = _safe_text(raw_payload.get("patient_name") if isinstance(raw_payload, dict) else "")
+                department = _safe_text(raw_payload.get("department") if isinstance(raw_payload, dict) else "")
+                qc_date_value = _parse_date(raw_payload.get("qc_date") if isinstance(raw_payload, dict) else None)
                 match_status = "unmatched"
                 institute_id = ""
                 patient_id = ""
                 visit_id = ""
                 sync_status = "missing"
                 bundle_status = "pending"
+                candidate = None
                 if visit_id_input:
-                    candidates = (
+                    visit_candidates = (
                         session.query(MedicalRecordFrontpage)
                         .filter(MedicalRecordFrontpage.visit_id == visit_id_input)
                         .all()
                     )
-                    if len(candidates) == 1:
-                        candidate = candidates[0]
-                        match_status = "matched"
-                    elif len(candidates) > 1:
-                        candidate = _choose_scored_candidate(
-                            [(0, item) for item in candidates],
-                            get_recency_key=lambda item: _candidate_recency_key(
-                                admission_value=getattr(item, "admission_datetime", None),
-                                discharge_value=getattr(item, "discharge_datetime", None),
-                                update_value=getattr(item, "update_time", None),
-                                visit_id=getattr(item, "visit_id", None),
-                            ),
-                        )
-                        if candidate is not None:
-                            match_status = "matched"
-                        else:
-                            match_status = "ambiguous"
-                    else:
-                        candidate = None
+                    candidate = _pick_best_local_candidate(
+                        candidates=visit_candidates,
+                        patient_name=patient_name,
+                        department=department,
+                        qc_date_value=qc_date_value,
+                    )
                     if candidate is not None:
-                        institute_id = _safe_text(candidate.institute_id)
-                        patient_id = _safe_text(candidate.patient_id)
-                        visit_id = _safe_text(candidate.visit_id)
-                        sync_status = "synced"
-                        bundle_status = self._check_running_bundle_status(
-                            institute_id=institute_id,
-                            patient_id=patient_id,
-                            visit_id=visit_id,
-                        )
+                        match_status = "matched"
+                    elif visit_candidates:
+                        match_status = "ambiguous"
+
+                if candidate is None and match_status == "unmatched" and mr_no_input:
+                    mr_no_candidates = (
+                        session.query(MedicalRecordFrontpage)
+                        .filter(MedicalRecordFrontpage.mr_no == mr_no_input)
+                        .all()
+                    )
+                    candidate = _pick_best_local_candidate(
+                        candidates=mr_no_candidates,
+                        patient_name=patient_name,
+                        department=department,
+                        qc_date_value=qc_date_value,
+                    )
+                    if candidate is not None:
+                        match_status = "matched"
+                    elif mr_no_candidates:
+                        match_status = "ambiguous"
+
+                if candidate is not None:
+                    institute_id = _safe_text(candidate.institute_id)
+                    patient_id = _safe_text(candidate.patient_id)
+                    visit_id = _safe_text(candidate.visit_id)
+                    sync_status = "synced"
+                    bundle_status = self._check_running_bundle_status(
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                    )
                 if match_status == "matched":
                     matched += 1
                 elif match_status == "ambiguous":
@@ -1472,8 +1552,13 @@ class CustomQCSamplePoolService:
         if not schema_ident:
             raise ValueError("远端 schema 非法")
 
-        visit_ids = sorted({str(item.get("visit_id") or "").strip() for item in items if str(item.get("visit_id") or "").strip()})
-        if not visit_ids:
+        visit_ids = sorted(
+            {str(item.get("visit_id") or "").strip() for item in items if str(item.get("visit_id") or "").strip()}
+        )
+        mr_nos = sorted(
+            {str(item.get("mr_no") or "").strip() for item in items if str(item.get("mr_no") or "").strip()}
+        )
+        if not visit_ids and not mr_nos:
             return {
                 "matched": 0,
                 "ambiguous": 0,
@@ -1481,7 +1566,8 @@ class CustomQCSamplePoolService:
                 "visit_keys": [],
             }
 
-        lookup_map: Dict[str, List[Dict[str, Any]]] = {}
+        visit_lookup_map: Dict[str, List[Dict[str, Any]]] = {}
+        mr_no_lookup_map: Dict[str, List[Dict[str, Any]]] = {}
         conn = psycopg2.connect(remote_url, connect_timeout=10)
         cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         try:
@@ -1506,31 +1592,38 @@ class CustomQCSamplePoolService:
                 update_expr = "mr_time AS update_time"
 
             chunk_size = 200
-            for start in range(0, len(visit_ids), chunk_size):
-                chunk = visit_ids[start : start + chunk_size]
-                placeholders = ", ".join(["%s"] * len(chunk))
-                sql = f"""
-                    SELECT
-                        institute_id::text AS institute_id,
-                        patient_id::text AS patient_id,
-                        visit_id::text AS visit_id,
-                        COALESCE(inpat_no::text, '') AS inpat_no,
-                        COALESCE(mr_no::text, '') AS mr_no,
-                        COALESCE(name::text, '') AS name,
-                        COALESCE(admission_dept_name::text, '') AS admission_dept_name,
-                        COALESCE(discharge_dept_name::text, '') AS discharge_dept_name,
-                        {admission_expr},
-                        {discharge_expr},
-                        {update_expr}
-                    FROM {schema_ident}.mr
-                    WHERE COALESCE(visit_id::text, '') IN ({placeholders})
-                """
-                cursor.execute(sql, chunk)
-                for row in cursor.fetchall() or []:
-                    candidate = dict(row)
-                    lookup_key = str(candidate.get("visit_id") or "").strip()
-                    if lookup_key:
-                        lookup_map.setdefault(lookup_key, []).append(candidate)
+
+            def _fetch_lookup_rows(field_name: str, values: Sequence[str], target_map: Dict[str, List[Dict[str, Any]]]) -> None:
+                for start in range(0, len(values), chunk_size):
+                    chunk = values[start : start + chunk_size]
+                    if not chunk:
+                        continue
+                    placeholders = ", ".join(["%s"] * len(chunk))
+                    sql = f"""
+                        SELECT
+                            institute_id::text AS institute_id,
+                            patient_id::text AS patient_id,
+                            visit_id::text AS visit_id,
+                            COALESCE(inpat_no::text, '') AS inpat_no,
+                            COALESCE(mr_no::text, '') AS mr_no,
+                            COALESCE(name::text, '') AS name,
+                            COALESCE(admission_dept_name::text, '') AS admission_dept_name,
+                            COALESCE(discharge_dept_name::text, '') AS discharge_dept_name,
+                            {admission_expr},
+                            {discharge_expr},
+                            {update_expr}
+                        FROM {schema_ident}.mr
+                        WHERE COALESCE({field_name}::text, '') IN ({placeholders})
+                    """
+                    cursor.execute(sql, chunk)
+                    for row in cursor.fetchall() or []:
+                        candidate = dict(row)
+                        lookup_key = str(candidate.get(field_name) or "").strip()
+                        if lookup_key:
+                            target_map.setdefault(lookup_key, []).append(candidate)
+
+            _fetch_lookup_rows("visit_id", visit_ids, visit_lookup_map)
+            _fetch_lookup_rows("mr_no", mr_nos, mr_no_lookup_map)
         finally:
             cursor.close()
             conn.close()
@@ -1541,28 +1634,34 @@ class CustomQCSamplePoolService:
         unmatched = 0
         for item in items:
             visit_id_input = str(item.get("visit_id") or "").strip()
-            candidates = lookup_map.get(visit_id_input, [])
-            chosen: Optional[Dict[str, Any]]
-            if len(candidates) == 1:
-                chosen = candidates[0]
-            elif len(candidates) > 1:
-                chosen = _choose_scored_candidate(
-                    [(0, candidate) for candidate in candidates],
-                    get_recency_key=lambda candidate: _candidate_recency_key(
-                        admission_value=candidate.get("admission_datetime"),
-                        discharge_value=candidate.get("discharge_datetime"),
-                        update_value=candidate.get("update_time"),
-                        visit_id=candidate.get("visit_id"),
-                    ),
+            mr_no_input = str(item.get("mr_no") or "").strip()
+            patient_name = str(item.get("patient_name") or "").strip()
+            department = str(item.get("department") or "").strip()
+            qc_date_value = _parse_date(item.get("qc_date"))
+            visit_candidates = visit_lookup_map.get(visit_id_input, []) if visit_id_input else []
+            chosen = _pick_best_remote_candidate(
+                candidates=visit_candidates,
+                patient_name=patient_name,
+                department=department,
+                qc_date_value=qc_date_value,
+            )
+            if chosen is None and visit_candidates:
+                ambiguous += 1
+                continue
+            if chosen is None and mr_no_input:
+                mr_no_candidates = mr_no_lookup_map.get(mr_no_input, [])
+                chosen = _pick_best_remote_candidate(
+                    candidates=mr_no_candidates,
+                    patient_name=patient_name,
+                    department=department,
+                    qc_date_value=qc_date_value,
                 )
-            else:
-                chosen = None
+                if chosen is None and mr_no_candidates:
+                    ambiguous += 1
+                    continue
 
             if chosen is None:
-                if candidates:
-                    ambiguous += 1
-                else:
-                    unmatched += 1
+                unmatched += 1
                 continue
 
             patient_id = _safe_text(chosen.get("patient_id"))
