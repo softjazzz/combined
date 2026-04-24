@@ -563,6 +563,9 @@
       :batch-job-debug-snapshot="undefined"
       :batch-job-debug-loading="false"
       :fetch-batch-job-debug-snapshot="undefined"
+      :focus-visit-id="batchResultFocusRecord?.visitId"
+      :focus-record-id="batchResultFocusRecord?.recordId"
+      :focus-record-label="batchResultFocusRecord?.label"
       :close="closeBatchDrawer"
       :export-batch-job-report="handleExportBatchReport"
       :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
@@ -641,6 +644,11 @@ const reviewDrawerRecord = ref<{
 const batchResultOpen = ref(false)
 const batchJobDetail = ref<SichuanBatchJob>()
 const batchJobLoading = ref(false)
+const batchResultFocusRecord = ref<{
+  visitId: string
+  recordId: string
+  label: string
+} | null>(null)
 let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
 let syncJobPollTimer: ReturnType<typeof setInterval> | null = null
 const syncJobDetail = ref<ManualSamplePoolSyncJob>()
@@ -889,7 +897,14 @@ const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
               'a',
               {
                 class: 'text-[#1677ff]',
-                onClick: () => openBatchJob(selectedPool.value?.latest_job_id || ''),
+                onClick: () =>
+                  openBatchJob(selectedPool.value?.latest_job_id || '', {
+                    visitId: record.matched_visit_id || '',
+                    recordId: record.mr_no || '',
+                    label: [record.patient_name || '', record.department || '', record.mr_no || '']
+                      .filter(Boolean)
+                      .join(' · '),
+                  }),
               },
               '查看结果',
             )
@@ -1201,10 +1216,23 @@ async function openSyncJob(jobId: string) {
   }
 }
 
-async function openBatchJob(jobId: string) {
+async function openBatchJob(
+  jobId: string,
+  focusRecord?: { visitId?: string; recordId?: string; label?: string } | null,
+) {
   stopBatchJobPolling()
   batchJobLoading.value = true
   batchResultOpen.value = true
+  const focusVisitId = String(focusRecord?.visitId || '').trim()
+  const focusRecordId = String(focusRecord?.recordId || '').trim()
+  batchResultFocusRecord.value =
+    focusVisitId || focusRecordId
+      ? {
+          visitId: focusVisitId,
+          recordId: focusRecordId,
+          label: String(focusRecord?.label || '').trim(),
+        }
+      : null
   const result = await getSichuanWorkspaceBatchJob(jobId)
   batchJobLoading.value = false
   if (!result.success || !result.data) {
@@ -1221,6 +1249,7 @@ function closeBatchDrawer() {
   stopBatchJobPolling()
   batchResultOpen.value = false
   batchJobDetail.value = undefined
+  batchResultFocusRecord.value = null
 }
 
 function isBatchJobRunning(status?: string) {

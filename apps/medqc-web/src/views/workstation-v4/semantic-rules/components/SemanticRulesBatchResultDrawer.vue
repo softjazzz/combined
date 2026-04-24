@@ -93,6 +93,20 @@
           </div>
         </div>
 
+        <div
+          v-if="isFocusedRecordMode"
+          class="drawer-card focus-record-card"
+        >
+          <div class="drawer-section-title">
+            当前仅查看单份病历结果
+          </div>
+          <div class="focus-record-meta">
+            <span v-if="props.focusRecordLabel">{{ props.focusRecordLabel }}</span>
+            <span v-if="props.focusVisitId">visit_id：{{ props.focusVisitId }}</span>
+            <span v-if="props.focusRecordId">记录标识：{{ props.focusRecordId }}</span>
+          </div>
+        </div>
+
         <div class="drawer-card">
           <div class="drawer-section-head">
             <div class="drawer-section-title-group">
@@ -1090,6 +1104,9 @@ const props = defineProps<{
   getBatchJobStatusTagClass: (status?: string) => string
   getBatchJobStatusText: (status?: string) => string
   formatDateTime: (value?: string | Date | null) => string
+  focusVisitId?: string
+  focusRecordId?: string
+  focusRecordLabel?: string
 }>()
 
 const scopeLabelMap: Record<string, string> = {
@@ -1113,6 +1130,27 @@ const issueViewMode = ref<'business' | 'advanced'>('business')
 const showAllStatuses = ref(false)
 const issueFilter = ref<StructuredQCFilterState>(createDefaultStructuredQCFilter())
 const advancedSectionKeys = ref<string[]>([])
+const normalizedFocusVisitId = computed(() => String(props.focusVisitId || '').trim())
+const normalizedFocusRecordId = computed(() => String(props.focusRecordId || '').trim())
+const isFocusedRecordMode = computed(
+  () => !!(normalizedFocusVisitId.value || normalizedFocusRecordId.value),
+)
+
+function matchesFocusedRecord(
+  item: Pick<SichuanBatchIssueItem, 'visit_id' | 'record_id'> | StructuredQCIssue,
+) {
+  if (!isFocusedRecordMode.value) return true
+  const candidateVisitId =
+    'visitId' in item ? String(item.visitId || '').trim() : String(item.visit_id || '').trim()
+  const candidateRecordId =
+    'recordId' in item ? String(item.recordId || '').trim() : String(item.record_id || '').trim()
+  if (normalizedFocusVisitId.value && candidateVisitId === normalizedFocusVisitId.value) return true
+  if (normalizedFocusVisitId.value && candidateRecordId === normalizedFocusVisitId.value)
+    return true
+  if (normalizedFocusRecordId.value && candidateRecordId === normalizedFocusRecordId.value)
+    return true
+  return false
+}
 
 const ruleColumns = computed(() => [
   { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 120 },
@@ -1207,7 +1245,15 @@ const issueColumns = computed(() => {
 
 const resolvedRuleResults = computed(() => {
   const ruleResults = props.batchJobDetail?.rule_results
-  if (Array.isArray(ruleResults) && ruleResults.length > 0) return ruleResults
+  if (Array.isArray(ruleResults) && ruleResults.length > 0) {
+    if (!isFocusedRecordMode.value) return ruleResults
+    return ruleResults
+      .map((ruleResult) => ({
+        ...ruleResult,
+        items: (ruleResult.items || []).filter((item) => matchesFocusedRecord(item)),
+      }))
+      .filter((ruleResult) => (ruleResult.items || []).length > 0)
+  }
   return []
 })
 
@@ -1231,12 +1277,18 @@ const structuredResult = computed(() =>
   mapBatchJobToStructuredQC(props.batchJobDetail, batchJobDebugSnapshot.value),
 )
 
+const scopedStructuredIssues = computed<StructuredQCIssue[]>(() => {
+  const issues = structuredResult.value.issues || []
+  if (!isFocusedRecordMode.value) return issues
+  return issues.filter((item) => matchesFocusedRecord(item))
+})
+
 const structuredIssues = computed<StructuredQCIssue[]>(() => {
   const baseFilter: StructuredQCFilterState = {
     ...issueFilter.value,
     statusList: showAllStatuses.value ? [] : ['non_compliant', 'uncertain'],
   }
-  let list = filterStructuredQCIssues(structuredResult.value.issues || [], baseFilter)
+  let list = filterStructuredQCIssues(scopedStructuredIssues.value, baseFilter)
   if (selectedDebugRuleJobId.value) {
     list = list.filter((item) => item.ruleJobId === selectedDebugRuleJobId.value)
   }
@@ -1326,7 +1378,7 @@ const resolvedDeepReviewResult = computed(() => {
 
 const issueDocumentTypeOptions = computed(() => {
   const set = new Set<string>()
-  structuredResult.value.issues.forEach((item) => {
+  scopedStructuredIssues.value.forEach((item) => {
     const value = String(item.documentType || '').trim()
     if (value) set.add(value)
   })
@@ -1335,7 +1387,7 @@ const issueDocumentTypeOptions = computed(() => {
 
 const issueExecutionDomainOptions = computed(() => {
   const set = new Set<string>()
-  structuredResult.value.issues.forEach((item) => {
+  scopedStructuredIssues.value.forEach((item) => {
     const value = String(item.executionDomain || '').trim()
     if (value) set.add(value)
   })
@@ -1344,7 +1396,7 @@ const issueExecutionDomainOptions = computed(() => {
 
 const issueDefectLevelOptions = computed(() => {
   const set = new Set<string>()
-  structuredResult.value.issues.forEach((item) => {
+  scopedStructuredIssues.value.forEach((item) => {
     const value = String(item.defectLevel || '').trim()
     if (value) set.add(value)
   })
@@ -1779,11 +1831,37 @@ const primarySummaryCards = computed(() => {
   ]
 })
 
-const focusedSummaryCards = computed(() =>
-  primarySummaryCards.value.filter((item) =>
+const focusedSummaryCards = computed(() => {
+  if (isFocusedRecordMode.value) {
+    return [
+      { key: 'total', label: '总病历', value: 1, desc: '当前仅展示选中病历' },
+      {
+        key: 'issues',
+        label: '不合规规则',
+        value: issueItems.value.filter((item) => item.status === 'non_compliant').length,
+        desc: '',
+      },
+      {
+        key: 'uncertain',
+        label: '待复核规则',
+        value: issueItems.value.filter((item) => item.status === 'uncertain').length,
+        desc: '',
+      },
+      {
+        key: 'duration',
+        label: '总耗时',
+        value:
+          ruleLevelSummary.value.processingTimeSeconds > 0
+            ? formatProcessingTime(ruleLevelSummary.value.processingTimeSeconds)
+            : '-',
+        desc: '当前仍展示任务总耗时',
+      },
+    ]
+  }
+  return primarySummaryCards.value.filter((item) =>
     ['total', 'issues', 'uncertain', 'duration'].includes(item.key),
-  ),
-)
+  )
+})
 
 const ruleSetDisplay = computed(() => {
   const detail = props.batchJobDetail
@@ -3089,6 +3167,19 @@ watch(
   border-color: #e2e8f0;
   background: #f8fafc;
   color: #475569;
+}
+
+.focus-record-card {
+  margin-bottom: 16px;
+}
+
+.focus-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 @media (max-width: 767px) {
