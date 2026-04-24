@@ -361,67 +361,67 @@
       "rule_id": "SC-081",
       "bucket_id": "operation_preop",
       "bucket_display_name": "术前准备闭环",
-      "pass_templates": ["running_bucket_operation_preop_v1_pass.json"],
-      "defect_templates": ["running_bucket_operation_preop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术前小结、术前讨论、麻醉前评估及方案。"
+      "pass_templates": ["running_bucket_operation_preop_summary_v1_pass.json"],
+      "defect_templates": ["running_bucket_operation_preop_summary_v1_defect.json"],
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "术前小结专项模板，覆盖简要病情、术前诊断、指征、术式、麻醉及术者查看记录。"
     },
     {
       "rule_id": "SC-083",
       "bucket_id": "operation_preop",
       "bucket_display_name": "术前准备闭环",
-      "pass_templates": ["running_bucket_operation_preop_v1_pass.json"],
-      "defect_templates": ["running_bucket_operation_preop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术前小结、术前讨论、麻醉前评估及方案。"
+      "pass_templates": ["running_bucket_operation_preop_mdt_v1_pass.json"],
+      "defect_templates": ["running_bucket_operation_preop_mdt_v1_defect.json"],
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "四级手术 MDT 专项模板，区分多学科讨论与本科单科讨论。"
     },
     {
       "rule_id": "SC-084",
       "bucket_id": "operation_preop",
       "bucket_display_name": "术前准备闭环",
-      "pass_templates": ["running_bucket_operation_preop_v1_pass.json"],
-      "defect_templates": ["running_bucket_operation_preop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术前小结、术前讨论、麻醉前评估及方案。"
+      "pass_templates": ["running_bucket_operation_preop_conclusion_v1_pass.json"],
+      "defect_templates": ["running_bucket_operation_preop_conclusion_v1_defect.json"],
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "术前讨论结论专项模板，覆盖结论是否落病历及是否完整。"
     },
     {
       "rule_id": "SC-085",
       "bucket_id": "operation_preop",
       "bucket_display_name": "术前准备闭环",
-      "pass_templates": ["running_bucket_operation_preop_v1_pass.json"],
-      "defect_templates": ["running_bucket_operation_preop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术前小结、术前讨论、麻醉前评估及方案。"
+      "pass_templates": ["running_bucket_operation_preop_conclusion_v1_pass.json"],
+      "defect_templates": ["running_bucket_operation_preop_conclusion_v1_defect.json"],
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "术前讨论结论专项模板，覆盖结论是否落病历及是否完整。"
     },
     {
       "rule_id": "SC-086",
       "bucket_id": "operation_preop",
       "bucket_display_name": "术前准备闭环",
-      "pass_templates": ["running_bucket_operation_preop_v1_pass.json"],
-      "defect_templates": ["running_bucket_operation_preop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术前小结、术前讨论、麻醉前评估及方案。"
+      "pass_templates": ["running_bucket_operation_preop_visit_v1_pass.json"],
+      "defect_templates": ["running_bucket_operation_preop_visit_v1_defect.json"],
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "术前访视专项模板，覆盖主刀术前查房与麻醉术前访视存在性。"
     },
     {
       "rule_id": "SC-092",
       "bucket_id": "operation_preop",
       "bucket_display_name": "术前准备闭环",
-      "pass_templates": ["running_bucket_operation_preop_v1_pass.json"],
-      "defect_templates": ["running_bucket_operation_preop_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖术前小结、术前讨论、麻醉前评估及方案。"
+      "pass_templates": ["running_bucket_operation_preop_visit_v1_pass.json"],
+      "defect_templates": ["running_bucket_operation_preop_visit_v1_defect.json"],
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "术前访视专项模板，覆盖麻醉术前访视记录完整性。"
     },
     {
       "rule_id": "SC-093",
@@ -682,10 +682,10 @@
       "bucket_display_name": "查房抢救讨论记录",
       "pass_templates": ["running_bucket_rounds_rescue_discussion_v1_pass.json"],
       "defect_templates": ["running_bucket_rounds_rescue_discussion_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖查房、抢救、疑难讨论、死亡讨论内容完整性。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖主任查房、抢救过程、疑难病例讨论及死亡讨论关键要素。"
     },
     {
       "rule_id": "SC-051",
@@ -693,10 +693,10 @@
       "bucket_display_name": "查房抢救讨论记录",
       "pass_templates": ["running_bucket_rounds_rescue_discussion_v1_pass.json"],
       "defect_templates": ["running_bucket_rounds_rescue_discussion_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖查房、抢救、疑难讨论、死亡讨论内容完整性。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖主任查房、抢救过程、疑难病例讨论及死亡讨论关键要素。"
     },
     {
       "rule_id": "SC-055",
@@ -704,10 +704,10 @@
       "bucket_display_name": "查房抢救讨论记录",
       "pass_templates": ["running_bucket_rounds_rescue_discussion_v1_pass.json"],
       "defect_templates": ["running_bucket_rounds_rescue_discussion_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖查房、抢救、疑难讨论、死亡讨论内容完整性。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖主任查房、抢救过程、疑难病例讨论及死亡讨论关键要素。"
     },
     {
       "rule_id": "SC-057",
@@ -715,10 +715,10 @@
       "bucket_display_name": "查房抢救讨论记录",
       "pass_templates": ["running_bucket_rounds_rescue_discussion_v1_pass.json"],
       "defect_templates": ["running_bucket_rounds_rescue_discussion_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖查房、抢救、疑难讨论、死亡讨论内容完整性。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖主任查房、抢救过程、疑难病例讨论及死亡讨论关键要素。"
     },
     {
       "rule_id": "SC-058",
@@ -726,10 +726,10 @@
       "bucket_display_name": "查房抢救讨论记录",
       "pass_templates": ["running_bucket_rounds_rescue_discussion_v1_pass.json"],
       "defect_templates": ["running_bucket_rounds_rescue_discussion_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖查房、抢救、疑难讨论、死亡讨论内容完整性。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖主任查房、抢救过程、疑难病例讨论及死亡讨论关键要素。"
     },
     {
       "rule_id": "SC-060",
@@ -737,10 +737,10 @@
       "bucket_display_name": "查房抢救讨论记录",
       "pass_templates": ["running_bucket_rounds_rescue_discussion_v1_pass.json"],
       "defect_templates": ["running_bucket_rounds_rescue_discussion_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖查房、抢救、疑难讨论、死亡讨论内容完整性。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖主任查房、抢救过程、疑难病例讨论及死亡讨论关键要素。"
     },
     {
       "rule_id": "SC-063",
@@ -748,10 +748,10 @@
       "bucket_display_name": "交接班与告知沟通",
       "pass_templates": ["running_bucket_handover_communication_v1_pass.json"],
       "defect_templates": ["running_bucket_handover_communication_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖交班缺项、描述不清及告知内容空泛。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖交班、接班与医患沟通记录的关键要素完整性。"
     },
     {
       "rule_id": "SC-066",
@@ -759,10 +759,10 @@
       "bucket_display_name": "交接班与告知沟通",
       "pass_templates": ["running_bucket_handover_communication_v1_pass.json"],
       "defect_templates": ["running_bucket_handover_communication_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖交班缺项、描述不清及告知内容空泛。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖交班、接班与医患沟通记录的关键要素完整性。"
     },
     {
       "rule_id": "SC-075",
@@ -770,10 +770,10 @@
       "bucket_display_name": "交接班与告知沟通",
       "pass_templates": ["running_bucket_handover_communication_v1_pass.json"],
       "defect_templates": ["running_bucket_handover_communication_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖交班缺项、描述不清及告知内容空泛。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖交班、接班与医患沟通记录的关键要素完整性。"
     },
     {
       "rule_id": "SC-076",
@@ -781,10 +781,10 @@
       "bucket_display_name": "交接班与告知沟通",
       "pass_templates": ["running_bucket_handover_communication_v1_pass.json"],
       "defect_templates": ["running_bucket_handover_communication_v1_defect.json"],
-      "pass_result": "pending",
-      "defect_result": "pending",
-      "stabilized": false,
-      "note": "覆盖交班缺项、描述不清及告知内容空泛。"
+      "pass_result": "pass_ok",
+      "defect_result": "hit",
+      "stabilized": true,
+      "note": "覆盖交班、接班与医患沟通记录的关键要素完整性。"
     },
     {
       "rule_id": "SC-034",

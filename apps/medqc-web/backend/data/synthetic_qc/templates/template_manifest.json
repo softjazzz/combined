@@ -1,8 +1,8 @@
 {
   "schema_version": "v1",
   "template_family": "running_record_intrinsic_baseline_v1",
-  "generated_at": "2026-04-22",
-  "template_count": 94,
+  "generated_at": "2026-04-24",
+  "template_count": 100,
   "variants": ["pass", "defect"],
   "files": [
     {
@@ -138,12 +138,6 @@
       "expected_rule_ids": ["SC-035", "SC-039", "SC-040", "SC-047"]
     },
     {
-      "file": "running_bucket_discharge_consistency_v1_defect.json",
-      "issue_type": "Z07_discharge_consistency",
-      "variant": "defect",
-      "expected_rule_ids": ["SC-125"]
-    },
-    {
       "file": "running_bucket_discharge_consistency_death_v1_defect.json",
       "issue_type": "Z07_discharge_consistency",
       "variant": "defect",
@@ -156,16 +150,16 @@
       "expected_rule_ids": ["SC-127"]
     },
     {
+      "file": "running_bucket_discharge_consistency_v1_defect.json",
+      "issue_type": "Z07_discharge_consistency",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-125"]
+    },
+    {
       "file": "running_bucket_discharge_consistency_v1_pass.json",
       "issue_type": "Z07_discharge_consistency",
       "variant": "pass",
       "expected_rule_ids": ["SC-125"]
-    },
-    {
-      "file": "running_bucket_discharge_content_v1_defect.json",
-      "issue_type": "Z05_discharge_content",
-      "variant": "defect",
-      "expected_rule_ids": ["SC-118", "SC-123"]
     },
     {
       "file": "running_bucket_discharge_content_death_v1_defect.json",
@@ -178,6 +172,12 @@
       "issue_type": "Z05_discharge_content",
       "variant": "pass",
       "expected_rule_ids": ["SC-119"]
+    },
+    {
+      "file": "running_bucket_discharge_content_v1_defect.json",
+      "issue_type": "Z05_discharge_content",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-118", "SC-123"]
     },
     {
       "file": "running_bucket_discharge_content_v1_pass.json",
@@ -282,16 +282,52 @@
       "expected_rule_ids": ["SC-105", "SC-106", "SC-107", "SC-108", "SC-114", "SC-115"]
     },
     {
-      "file": "running_bucket_operation_preop_v1_defect.json",
+      "file": "running_bucket_operation_preop_conclusion_v1_defect.json",
       "issue_type": "Z10_operation_preop",
       "variant": "defect",
-      "expected_rule_ids": ["SC-081", "SC-083", "SC-084", "SC-085", "SC-086", "SC-092"]
+      "expected_rule_ids": ["SC-084", "SC-085"]
     },
     {
-      "file": "running_bucket_operation_preop_v1_pass.json",
+      "file": "running_bucket_operation_preop_conclusion_v1_pass.json",
       "issue_type": "Z10_operation_preop",
       "variant": "pass",
-      "expected_rule_ids": ["SC-081", "SC-083", "SC-084", "SC-085", "SC-086", "SC-092"]
+      "expected_rule_ids": ["SC-084", "SC-085"]
+    },
+    {
+      "file": "running_bucket_operation_preop_mdt_v1_defect.json",
+      "issue_type": "Z10_operation_preop",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-083"]
+    },
+    {
+      "file": "running_bucket_operation_preop_mdt_v1_pass.json",
+      "issue_type": "Z10_operation_preop",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-083"]
+    },
+    {
+      "file": "running_bucket_operation_preop_summary_v1_defect.json",
+      "issue_type": "Z10_operation_preop",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-081"]
+    },
+    {
+      "file": "running_bucket_operation_preop_summary_v1_pass.json",
+      "issue_type": "Z10_operation_preop",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-081"]
+    },
+    {
+      "file": "running_bucket_operation_preop_visit_v1_defect.json",
+      "issue_type": "Z10_operation_preop",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-086", "SC-092"]
+    },
+    {
+      "file": "running_bucket_operation_preop_visit_v1_pass.json",
+      "issue_type": "Z10_operation_preop",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-086", "SC-092"]
     },
     {
       "file": "running_bucket_progress_order_consistency_v1_defect.json",
@@ -304,6 +340,54 @@
       "issue_type": "Z20_progress_order_consistency",
       "variant": "pass",
       "expected_rule_ids": ["SC-038", "SC-079", "SC-143", "SC-146"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_antibiotic_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-043", "SC-044"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_antibiotic_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-043", "SC-044"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_pathology_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-037"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_pathology_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-037"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_procedure_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-046"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_procedure_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-046"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_transfusion_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "defect",
+      "expected_rule_ids": ["SC-073", "SC-074"]
+    },
+    {
+      "file": "running_bucket_progress_treatment_linkage_transfusion_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "variant": "pass",
+      "expected_rule_ids": ["SC-073", "SC-074"]
     },
     {
       "file": "running_bucket_progress_treatment_linkage_v1_defect.json",
@@ -520,54 +604,6 @@
       "issue_type": "E1_senior_round_no_targeted_judgement",
       "variant": "pass",
       "expected_rule_ids": ["SC-050"]
-    },
-    {
-      "file": "running_bucket_progress_treatment_linkage_antibiotic_v1_defect.json",
-      "issue_type": "Z19_progress_treatment_linkage",
-      "variant": "defect",
-      "expected_rule_ids": ["SC-043", "SC-044"]
-    },
-    {
-      "file": "running_bucket_progress_treatment_linkage_antibiotic_v1_pass.json",
-      "issue_type": "Z19_progress_treatment_linkage",
-      "variant": "pass",
-      "expected_rule_ids": ["SC-043", "SC-044"]
-    },
-    {
-      "file": "running_bucket_progress_treatment_linkage_pathology_v1_defect.json",
-      "issue_type": "Z19_progress_treatment_linkage",
-      "variant": "defect",
-      "expected_rule_ids": ["SC-037"]
-    },
-    {
-      "file": "running_bucket_progress_treatment_linkage_pathology_v1_pass.json",
-      "issue_type": "Z19_progress_treatment_linkage",
-      "variant": "pass",
-      "expected_rule_ids": ["SC-037"]
-    },
-    {
-      "file": "running_bucket_progress_treatment_linkage_procedure_v1_defect.json",
-      "issue_type": "Z19_progress_treatment_linkage",
-      "variant": "defect",
-      "expected_rule_ids": ["SC-046"]
-    },
-    {
-      "file": "running_bucket_progress_treatment_linkage_procedure_v1_pass.json",
-      "issue_type": "Z19_progress_treatment_linkage",
-      "variant": "pass",
-      "expected_rule_ids": ["SC-046"]
-    },
-    {
-      "file": "running_bucket_progress_treatment_linkage_transfusion_v1_defect.json",
-      "issue_type": "Z19_progress_treatment_linkage",
-      "variant": "defect",
-      "expected_rule_ids": ["SC-073", "SC-074"]
-    },
-    {
-      "file": "running_bucket_progress_treatment_linkage_transfusion_v1_pass.json",
-      "issue_type": "Z19_progress_treatment_linkage",
-      "variant": "pass",
-      "expected_rule_ids": ["SC-073", "SC-074"]
     }
   ]
 }
