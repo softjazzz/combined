@@ -15,6 +15,7 @@ from .fast_screen_qc import (
     EXECUTION_STRATEGY_STANDARD,
     get_fast_screen_full_rule_ids,
 )
+from .sc_rule_launch_tier import list_sc_intrinsic_rule_ids_by_launch_tier
 
 
 SC_CONTENT_V1_RULE_IDS: tuple[str, ...] = (
@@ -51,6 +52,7 @@ SC_CONTENT_REVIEW_V1_RULE_IDS: tuple[str, ...] = (
 )
 SC_CONTENT_REVIEW_RULE_ID_SET = {item.upper() for item in SC_CONTENT_REVIEW_V1_RULE_IDS}
 SC_CONTENT_FULL_V1_RULE_IDS: tuple[str, ...] = get_fast_screen_full_rule_ids()
+SC_CONTENT_LAUNCH_A_V1_RULE_IDS: tuple[str, ...] = list_sc_intrinsic_rule_ids_by_launch_tier("A")
 
 
 @dataclass(frozen=True)
@@ -89,6 +91,21 @@ class QCRuleSet:
 
 
 SICHUAN_RULE_SETS: dict[str, QCRuleSet] = {
+    "sc_content_launch_a_v1": QCRuleSet(
+        key="sc_content_launch_a_v1",
+        name="内涵质控默认启用首发 v1",
+        version="2026-04-24",
+        scope="final",
+        rule_ids=SC_CONTENT_LAUNCH_A_V1_RULE_IDS,
+        execution_strategy=EXECUTION_STRATEGY_FAST_SCREEN,
+        quality_profile=QUALITY_PROFILE_THROUGHPUT,
+        bucket_strategy="fixed_packs",
+        enable_selective_refine=False,
+        refine_confidence_threshold=0.45,
+        batch_output_mode=BATCH_OUTPUT_MODE_MINIMAL,
+        max_refine_candidates=0,
+        description="终末病历内涵质控默认启用规则集，对应 launch_tier=A 的 37 条规则，适合作为首批默认启用名单。",
+    ),
     "sc_content_fast_v1": QCRuleSet(
         key="sc_content_fast_v1",
         name="内涵质控快速初筛 v1",

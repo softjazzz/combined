@@ -54,6 +54,26 @@ def list_sc_intrinsic_rule_ids_from_launch_tier_payload(path: Path | None = None
     return sorted(rule_ids)
 
 
+def list_sc_intrinsic_rule_ids_by_launch_tier(
+    launch_tier: Any,
+    *,
+    path: Path | None = None,
+) -> tuple[str, ...]:
+    normalized_tier = str(launch_tier or "").strip().upper()
+    if normalized_tier not in ALLOWED_LAUNCH_TIERS:
+        return ()
+    payload = load_sc_intrinsic_launch_tier_payload(path)
+    rule_ids: list[str] = []
+    for item in payload.get("entries") or []:
+        if not isinstance(item, dict):
+            continue
+        rule_id = _normalize_rule_id(item.get("rule_id"))
+        item_tier = str(item.get("launch_tier") or "").strip().upper()
+        if rule_id.startswith("SC-") and item_tier == normalized_tier:
+            rule_ids.append(rule_id)
+    return tuple(sorted(rule_ids))
+
+
 def load_sc_intrinsic_launch_tier_map(path: Path | None = None) -> dict[str, str]:
     payload = load_sc_intrinsic_launch_tier_payload(path)
     mapping: dict[str, str] = {}

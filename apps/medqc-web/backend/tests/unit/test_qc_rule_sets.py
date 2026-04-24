@@ -1,5 +1,6 @@
 from app.services.qc_rule_sets import (
     SC_CONTENT_FULL_V1_RULE_IDS,
+    SC_CONTENT_LAUNCH_A_V1_RULE_IDS,
     SC_CONTENT_V1_RULE_IDS,
     get_sichuan_rule_set,
     list_sichuan_rule_sets,
@@ -86,6 +87,7 @@ def test_rule_set_list_should_expose_new_launch_rule_sets():
     items = list_sichuan_rule_sets()
     keys = {item["rule_set_key"] for item in items}
 
+    assert "sc_content_launch_a_v1" in keys
     assert "sc_content_fast_v1" in keys
     assert "sc_content_full_v1" in keys
     assert "sc_content_hard_v1" in keys
@@ -120,3 +122,18 @@ def test_sc_content_full_v1_should_cover_all_intrinsic_rules_with_fast_screen():
     assert rule_set.max_refine_candidates == 0
     assert list(rule_set.rule_ids) == list(SC_CONTENT_FULL_V1_RULE_IDS)
     assert len(rule_set.rule_ids) == 84
+
+
+def test_sc_content_launch_a_v1_should_cover_default_enabled_rules():
+    rule_set = get_sichuan_rule_set("sc_content_launch_a_v1")
+
+    assert rule_set is not None
+    assert rule_set.name == "内涵质控默认启用首发 v1"
+    assert rule_set.execution_strategy == "fast_screen"
+    assert rule_set.scope == "final"
+    assert rule_set.quality_profile == "throughput_v1"
+    assert rule_set.bucket_strategy == "fixed_packs"
+    assert rule_set.enable_selective_refine is False
+    assert rule_set.max_refine_candidates == 0
+    assert list(rule_set.rule_ids) == list(SC_CONTENT_LAUNCH_A_V1_RULE_IDS)
+    assert len(rule_set.rule_ids) == 37

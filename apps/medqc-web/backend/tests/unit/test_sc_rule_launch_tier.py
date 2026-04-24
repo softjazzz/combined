@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.services.sc_rule_launch_tier import (
     ALLOWED_LAUNCH_TIERS,
+    list_sc_intrinsic_rule_ids_by_launch_tier,
     load_sc_intrinsic_launch_tier_map,
     load_sc_intrinsic_launch_tier_payload,
     resolve_sc_intrinsic_launch_tier,
@@ -40,3 +41,10 @@ def test_resolve_sc_intrinsic_launch_tier_should_return_expected_tier():
     assert resolve_sc_intrinsic_launch_tier("SC-010", launch_tier_map=mapping) == "B"
     assert resolve_sc_intrinsic_launch_tier("SC-034", launch_tier_map=mapping) == "C"
     assert resolve_sc_intrinsic_launch_tier("LX-001", launch_tier_map=mapping) == "UNKNOWN"
+
+
+def test_list_sc_intrinsic_rule_ids_by_launch_tier_should_match_expected_counts():
+    assert len(list_sc_intrinsic_rule_ids_by_launch_tier("A")) == 37
+    assert len(list_sc_intrinsic_rule_ids_by_launch_tier("B")) == 38
+    assert len(list_sc_intrinsic_rule_ids_by_launch_tier("C")) == 9
+    assert list_sc_intrinsic_rule_ids_by_launch_tier("UNKNOWN") == ()
