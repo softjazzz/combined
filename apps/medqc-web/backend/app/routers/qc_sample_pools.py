@@ -16,6 +16,10 @@ from ..services.custom_qc_sample_pool_service import (
     load_manual_case_rows_from_excel,
 )
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+from ..services.customer_rule_sets import (
+    CUSTOMER_LUXIAN_RULE_SET_KEY,
+    get_customer_luxian_rule_set,
+)
 
 
 router = APIRouter(
@@ -63,6 +67,8 @@ class SamplePoolRunRequest(BaseModel):
     max_parallel_records: Optional[int] = Field(default=None, description="病历级并发数")
     sample_item_ids: list[str] = Field(default_factory=list, description="选中的样本项 ID")
     record_ids: list[str] = Field(default_factory=list, description="选中的真实病历 visit_id")
+    validation_mode: str = Field(default="customer", description="验证模式：customer/sc")
+    rule_set_key: Optional[str] = Field(default=None, description="指定规则包 key，仅客户专项模式使用")
 
 
 class SamplePoolSyncRequest(BaseModel):
@@ -395,10 +401,10 @@ async def run_sample_pool_intrinsic_validation(
     )
     if not runnable_items:
         if payload.record_ids:
-            raise HTTPException(status_code=422, detail="当前选中病历没有可执行的内涵问题")
+            raise HTTPException(status_code=422, detail="当前选中病历没有可执行的样本问题")
         if payload.sample_item_ids:
-            raise HTTPException(status_code=422, detail="当前选中样本没有可执行的内涵病历")
-        raise HTTPException(status_code=422, detail="当前样本池没有可执行的内涵样本")
+            raise HTTPException(status_code=422, detail="当前选中样本没有可执行的病历")
+        raise HTTPException(status_code=422, detail="当前样本池没有可执行的样本病历")
 
     record_ids = sorted(
         {
@@ -407,16 +413,35 @@ async def run_sample_pool_intrinsic_validation(
             if str(item.get("matched_visit_id") or "").strip()
         }
     )
-    rule_ids = sorted(
-        {
-            str(rule_id).strip()
-            for item in runnable_items
-            for rule_id in (item.get("candidate_rule_ids") or [])
-            if str(rule_id).strip()
-        }
-    )
     if not record_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有已匹配的病历")
+
+    validation_mode = str(payload.validation_mode or "customer").strip().lower() or "customer"
+    if validation_mode not in {"customer", "sc"}:
+        raise HTTPException(status_code=422, detail="未知验证模式，仅支持 customer 或 sc")
+
+    if validation_mode == "customer":
+        requested_rule_set_key = str(payload.rule_set_key or CUSTOMER_LUXIAN_RULE_SET_KEY).strip() or CUSTOMER_LUXIAN_RULE_SET_KEY
+        if requested_rule_set_key != CUSTOMER_LUXIAN_RULE_SET_KEY:
+            raise HTTPException(status_code=422, detail=f"未知客户规则包: {requested_rule_set_key}")
+        customer_rule_set = get_customer_luxian_rule_set()
+        rule_ids = sorted({str(rule_id).strip() for rule_id in customer_rule_set.rule_ids if str(rule_id).strip()})
+        rule_set_key = customer_rule_set.key
+        rule_set_name = customer_rule_set.name
+        rule_set_version = customer_rule_set.version
+    else:
+        rule_ids = sorted(
+            {
+                str(rule_id).strip()
+                for item in runnable_items
+                for rule_id in (item.get("candidate_rule_ids") or [])
+                if str(rule_id).strip()
+            }
+        )
+        rule_set_key = ""
+        rule_set_name = "SC样本规则模式"
+        rule_set_version = "running-batch-1"
+
     if not rule_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有可执行规则")
 
@@ -453,7 +478,7 @@ async def run_sample_pool_intrinsic_validation(
     pseudo_draft = {
         "id": "sichuan-rule-library",
         "rule_code": "SC-SAMPLE-POOL",
-        "name": f"{pool['name']}内涵样本验证任务({len(rule_ids)}条规则)",
+        "name": f"{pool['name']}样本验证任务({len(rule_ids)}条规则)",
         "scene": "running",
     }
     job = workspace.create_batch_job(
@@ -462,9 +487,9 @@ async def run_sample_pool_intrinsic_validation(
         scope=effective_scope,
         filters={
             "rule_ids": rule_ids,
-            "rule_set_key": "",
-            "rule_set_name": "客户内涵样本验证",
-            "rule_set_version": "running-batch-1",
+            "rule_set_key": rule_set_key,
+            "rule_set_name": rule_set_name,
+            "rule_set_version": rule_set_version,
             "execution_strategy": "fast_screen",
             "quality_profile": "throughput_v1",
             "bucket_strategy": "fixed_packs",
@@ -486,6 +511,7 @@ async def run_sample_pool_intrinsic_validation(
             "model_code": payload.model_code,
             "max_parallel_records": payload.max_parallel_records,
             "effective_scope": effective_scope,
+            "validation_mode": validation_mode,
         },
         record_ids=record_ids,
         total_records=len(records),
@@ -506,7 +532,11 @@ async def run_sample_pool_intrinsic_validation(
             "rule_count": len(rule_ids),
             "record_ids": record_ids,
             "rule_ids": rule_ids,
+            "validation_mode": validation_mode,
+            "rule_set_key": rule_set_key,
+            "rule_set_name": rule_set_name,
+            "rule_set_version": rule_set_version,
         },
-        message="客户样本内涵验证任务已创建",
+        message="客户样本验证任务已创建",
         trace_id=get_trace_id(request),
     )

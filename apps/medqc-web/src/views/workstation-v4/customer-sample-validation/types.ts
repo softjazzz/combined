@@ -71,6 +71,8 @@ export type ManualSamplePoolRecord = {
   sample_items: ManualSamplePoolItem[]
 }
 
+export type ManualSampleValidationMode = 'customer' | 'sc'
+
 export type ManualSamplePoolListResult = {
   items: ManualSamplePool[]
   total: number
@@ -128,4 +130,19 @@ export type ManualSamplePoolSyncJob = {
   started_at?: string
   finished_at?: string
   updated_at?: string
+}
+
+export type ManualSamplePoolRunResult = {
+  pool_id: string
+  job_id: string
+  sample_item_count: number
+  selected_record_count: number
+  record_count: number
+  rule_count: number
+  record_ids: string[]
+  rule_ids: string[]
+  validation_mode?: ManualSampleValidationMode | string
+  rule_set_key?: string
+  rule_set_name?: string
+  rule_set_version?: string
 }

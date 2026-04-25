@@ -254,6 +254,7 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
         temperature=0.2,
         top_p=0.8,
         max_tokens=1600,
+        validation_mode="sc",
     )
     current_user = {"id": "tester"}
 
@@ -297,6 +298,8 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
     assert created["filters"]["top_p"] == 0.8
     assert created["filters"]["max_tokens"] == 1600
     assert created["filters"]["effective_scope"] == "running"
+    assert created["filters"]["validation_mode"] == "sc"
+    assert created["filters"]["rule_set_name"] == "SC样本规则模式"
 
     assert sample_service.updated_pool_job == {
         "pool_id": "pool-1",
@@ -360,6 +363,7 @@ async def test_import_list_records_and_run_should_form_sample_pool_validation_ch
             record_ids=["V001"],
             sample_item_ids=["item-1", "item-2"],
             max_parallel_records=4,
+            validation_mode="sc",
         ),
         background_tasks=background_tasks,
         current_user=current_user,
@@ -382,6 +386,7 @@ async def test_import_list_records_and_run_should_form_sample_pool_validation_ch
     ]
     assert workspace_service.create_batch_job_calls[0]["filters"]["max_parallel_records"] == 4
     assert workspace_service.create_batch_job_calls[0]["filters"]["effective_scope"] == "running"
+    assert workspace_service.create_batch_job_calls[0]["filters"]["validation_mode"] == "sc"
     assert sample_service.updated_pool_job == {
         "pool_id": pool_id,
         "job_id": "job-sample-pool-1",
@@ -410,6 +415,7 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_all_scope
         record_ids=["V001", "V002"],
         sample_item_ids=["item-1", "item-2"],
         max_parallel_records=2,
+        validation_mode="sc",
     )
     current_user = {"id": "tester"}
 
@@ -442,3 +448,44 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_all_scope
     assert created["filters"]["effective_scope"] == "all"
     assert response["success"] is True
     assert response["data"]["record_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_use_customer_rule_pack_by_default(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+    monkeypatch.setattr(
+        qc_sample_pools,
+        "get_customer_luxian_rule_set",
+        lambda: SimpleNamespace(
+            key="customer_luxian_full_v1",
+            name="客户专项规则包 v1",
+            version="2026-04-26",
+            rule_ids=("CL-001", "CL-002"),
+        ),
+    )
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V001"],
+            sample_item_ids=["item-1"],
+            max_parallel_records=2,
+        ),
+        background_tasks=BackgroundTasks(),
+        current_user={"id": "tester"},
+    )
+
+    created = workspace_service.create_batch_job_calls[0]
+    assert created["draft_ids"] == ["CL-001", "CL-002"]
+    assert created["filters"]["validation_mode"] == "customer"
+    assert created["filters"]["rule_set_key"] == "customer_luxian_full_v1"
+    assert created["filters"]["rule_set_name"] == "客户专项规则包 v1"
+    assert response["data"]["validation_mode"] == "customer"
+    assert response["data"]["rule_set_name"] == "客户专项规则包 v1"
+    assert response["data"]["rule_ids"] == ["CL-001", "CL-002"]

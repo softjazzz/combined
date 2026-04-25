@@ -23,26 +23,39 @@
                   客户样本验证
                 </h1>
                 <p class="mt-2 max-w-4xl text-[14px] leading-7 text-slate-600">
-                  先核对人工问题样本与系统病历的匹配关系，再对首批内涵问题执行 LLM
-                  验证。页面只展示可直接用于客户演示的样本状态、验证任务和命中结果。
+                  先核对人工问题样本与系统病历的匹配关系，再在当前页面直接发起客户专项 LLM
+                  复核。页面只展示可直接用于客户演示的样本状态、验证任务和命中结果。
                 </p>
               </div>
               <div class="flex flex-col gap-3 xl:flex-row xl:items-center">
-                <div class="flex min-w-0 flex-col gap-1">
-                  <div class="text-[12px] font-medium text-slate-500">
-                    当前样本池
+                <div class="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-end">
+                  <div class="flex min-w-0 flex-col gap-1">
+                    <div class="text-[12px] font-medium text-slate-500">
+                      当前样本池
+                    </div>
+                    <a-select
+                      v-model:value="selectedPoolId"
+                      class="w-full min-w-[280px] max-w-[420px] customer-sample-toolbar-select"
+                      size="middle"
+                      :loading="poolLoading"
+                      :options="poolOptions"
+                      placeholder="请选择样本池"
+                      show-search
+                      option-filter-prop="label"
+                      @change="handlePoolChange"
+                    />
                   </div>
-                  <a-select
-                    v-model:value="selectedPoolId"
-                    class="w-full min-w-[280px] max-w-[420px] customer-sample-toolbar-select"
-                    size="middle"
-                    :loading="poolLoading"
-                    :options="poolOptions"
-                    placeholder="请选择样本池"
-                    show-search
-                    option-filter-prop="label"
-                    @change="handlePoolChange"
-                  />
+                  <div class="flex min-w-0 flex-col gap-1">
+                    <div class="text-[12px] font-medium text-slate-500">
+                      验证模式
+                    </div>
+                    <a-select
+                      v-model:value="selectedValidationMode"
+                      class="w-full min-w-[220px] customer-sample-toolbar-select"
+                      size="middle"
+                      :options="validationModeOptions"
+                    />
+                  </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
                   <span
@@ -98,7 +111,7 @@
                 type="primary"
                 ghost
                 class="!rounded-full"
-                :disabled="!selectedPoolId || !selectedPool?.llm_intrinsic_items"
+                :disabled="!selectedPoolId || !selectedPool?.total_items"
                 :loading="runLoading"
                 @click="handleRunPool"
               >
@@ -590,6 +603,7 @@ import type { TableColumnsType } from 'ant-design-vue'
 import type {
   ManualSamplePool,
   ManualSamplePoolRecord,
+  ManualSampleValidationMode,
   ManualSamplePoolSyncJob,
 } from './customer-sample-validation/types'
 import {
@@ -672,6 +686,7 @@ const importForm = ref({
 const runOptions = ref({
   maxParallelRecords: 4,
 })
+const selectedValidationMode = ref<ManualSampleValidationMode>('customer')
 
 const poolOptions = computed(() =>
   pools.value.map((item) => ({
@@ -701,15 +716,24 @@ const parallelOptions = [
   { label: '2', value: 2 },
   { label: '4', value: 4 },
 ]
+const validationModeOptions = [
+  { label: '客户专项规则包模式', value: 'customer' },
+  { label: 'SC 样本规则模式', value: 'sc' },
+]
 
 const summaryCards = computed(() => {
   const pool = selectedPool.value
+  const issueSampleLabel = selectedValidationMode.value === 'customer' ? '问题样本' : '内涵样本'
+  const issueSampleHelp =
+    selectedValidationMode.value === 'customer'
+      ? '当前纳入客户专项规则包验证的问题样本'
+      : '当前纳入 LLM 验证的问题样本'
   return [
     { label: '样本总数', value: pool?.total_items ?? 0, help: 'Sheet2 导入后的样本总量' },
     {
-      label: '内涵样本',
+      label: issueSampleLabel,
       value: pool?.llm_intrinsic_items ?? 0,
-      help: '当前纳入 LLM 验证的问题样本',
+      help: issueSampleHelp,
     },
     { label: '已匹配病历', value: pool?.matched_items ?? 0, help: '已映射到系统病历主键的样本数' },
     {
@@ -726,7 +750,9 @@ const currentScopeDescription = computed(() => {
   const total = pagination.value.total || 0
   const matched = records.value.filter((record) => record.match_status === 'matched').length
   const ready = records.value.filter((record) => record.bundle_status === 'ready').length
+  const modeLabel = validationModeLabel(selectedValidationMode.value)
   const filterLabels = [
+    `验证模式：${modeLabel}`,
     filters.value.coverageType ? `样本范围：${coverageLabel(filters.value.coverageType)}` : '',
     filters.value.matchStatus ? `病历关联：${matchStatusLabel(filters.value.matchStatus)}` : '',
     filters.value.includeInBatch ? '仅看首批样本' : '',
@@ -754,7 +780,7 @@ const selectedRecordStats = computed(() => {
 const runButtonText = computed(() =>
   selectedRecordStats.value.selectedCount > 0
     ? `发起选中病历验证（${selectedRecordStats.value.selectedCount}）`
-    : '发起内涵验证',
+    : '发起样本验证',
 )
 
 const paginationConfig = computed(() => ({
@@ -799,7 +825,7 @@ const emptyTitle = computed(() => {
 
 const emptyDescription = computed(() => {
   if (!selectedPoolId.value) {
-    return '先选择一个客户样本池，再查看内涵问题样本和匹配状态。'
+    return '先选择一个客户样本池，再查看问题样本和匹配状态。'
   }
   if (!selectedPool.value?.matched_items) {
     return '请先执行病历匹配，并确认当前环境已经同步到客户真实病历数据。'
@@ -945,6 +971,11 @@ function coverageLabel(value: string): string {
   return value || '-'
 }
 
+function validationModeLabel(value: string): string {
+  if (value === 'sc') return 'SC 样本规则模式'
+  return '客户专项规则包模式'
+}
+
 function matchStatusLabel(value: string): string {
   if (value === 'matched') return '已关联病历'
   if (value === 'ambiguous') return '待人工确认'
@@ -1000,6 +1031,10 @@ function summarizeRuleScopes(ruleIds: string[]): string {
   }
   const rules = new Set((ruleIds || []).map((item) => String(item || '').trim()).filter(Boolean))
   for (const ruleId of rules) {
+    if (ruleId.startsWith('CL-')) {
+      pushScope('客户专项规则包')
+      continue
+    }
     const num = Number.parseInt(ruleId.replace('SC-', ''), 10)
     if (Number.isNaN(num)) continue
     if (num <= 20) {
@@ -1038,12 +1073,18 @@ function summarizeRecordScope(record: ManualSamplePoolRecord): string {
   if (labels.length) {
     return labels.join(' / ')
   }
+  if (selectedValidationMode.value === 'customer') {
+    return '客户专项规则包'
+  }
   return summarizeRuleScopes(record.candidate_rule_ids || [])
 }
 
 function recordScopeHint(record: ManualSamplePoolRecord): string {
   if ((record.document_scope_labels || []).length > 0) {
     return '已按当前病历实际同步到的文书类型识别验证范围。'
+  }
+  if (selectedValidationMode.value === 'customer') {
+    return '当前按客户专项规则包执行，原始 Excel 问题仅作为对照上下文保留。'
   }
   if ((record.candidate_rule_ids || []).length > 0) {
     return '当前仍按样本问题推断范围，待同步后会自动刷新。'
@@ -1401,14 +1442,18 @@ async function handleRunPool() {
   const result = await runManualSamplePool(selectedPoolId.value, {
     record_ids: runnableRecordIds,
     max_parallel_records: runOptions.value.maxParallelRecords,
+    validation_mode: selectedValidationMode.value,
   })
   runLoading.value = false
   if (!result.success || !result.data) {
     message.error(result.message || '创建样本验证任务失败')
     return
   }
+  const ruleSetName = String(
+    result.data.rule_set_name || validationModeLabel(selectedValidationMode.value),
+  ).trim()
   message.success(
-    `已创建验证任务，覆盖 ${result.data.sample_item_count} 条样本 / ${result.data.record_count} 份病历 / ${result.data.rule_count} 条规则，并发 ${runOptions.value.maxParallelRecords} 份病历`,
+    `已创建${ruleSetName}验证任务，覆盖 ${result.data.sample_item_count} 条样本 / ${result.data.record_count} 份病历 / ${result.data.rule_count} 条规则，并发 ${runOptions.value.maxParallelRecords} 份病历`,
   )
   selectedRowKeys.value = []
   await loadPools()

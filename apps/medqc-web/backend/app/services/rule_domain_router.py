@@ -20,6 +20,8 @@ DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "transfer_out_record",
         "newborn_record",
         "medical_order",
+        "inpat_drug_order",
+        "inpat_nondrug_order",
         "exam_item_report",
         "labtest_item_report",
     ),

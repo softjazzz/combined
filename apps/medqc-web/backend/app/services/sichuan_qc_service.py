@@ -40,6 +40,7 @@ from .effect_priority_qc import (
     select_refine_candidates,
 )
 from .qc_rule_sets import should_refine_rule_by_default
+from .customer_rule_sets import load_customer_luxian_rules, invalidate_customer_rule_set_cache
 from .sc_rule_family import (
     DEFAULT_RULE_FAMILY,
     load_sc_rule_family_map,
@@ -72,6 +73,7 @@ class SichuanQCService:
         # 规则缓存
         self._rules_cache: Optional[List[Dict[str, Any]]] = None
         self._custom_rules_cache: Optional[List[Dict[str, Any]]] = None
+        self._customer_rules_cache: Optional[List[Dict[str, Any]]] = None
         self._active_sc_rules_cache: Optional[List[Dict[str, Any]]] = None
         self._active_sc_rules_source: str = "json_file"
         self._active_sc_rules_checksum: str = ""
@@ -81,6 +83,7 @@ class SichuanQCService:
         data_dir = Path(__file__).resolve().parent.parent / "data"
         self._sc_rules_json_path = data_dir / "sichuan_rules_146.json"
         self._custom_rules_json_path = data_dir / "custom_rules_33.json"
+        self._customer_rules_json_path = data_dir / "customer_rules_luxian_v1.json"
         self._last_source_alert_key: str = ""
         self._last_source_alert_at: float = 0.0
 
@@ -269,6 +272,34 @@ class SichuanQCService:
             logger.error(f"从 JSON 文件加载自定义规则失败: {e}", exc_info=True)
             return []
 
+    def _load_customer_rules_from_json(self) -> List[Dict[str, Any]]:
+        """
+        从 JSON 文件加载客户专项规则
+        """
+        if self._customer_rules_cache is not None:
+            return self._customer_rules_cache
+
+        try:
+            rules = [dict(item) for item in load_customer_luxian_rules()]
+
+            for rule in rules:
+                applicable_docs = rule.get("applicable_documents", [])
+                if applicable_docs:
+                    rule["applicable_documents"] = [
+                        self.doc_type_mapping.get(doc, doc)
+                        for doc in applicable_docs
+                    ]
+                normalized_rule = self._ensure_rule_execution_meta(rule)
+                rule.clear()
+                rule.update(normalized_rule)
+
+            self._customer_rules_cache = rules
+            logger.info(f"从 JSON 文件加载了 {len(rules)} 条客户专项规则")
+            return rules
+        except Exception as e:
+            logger.error(f"从 JSON 文件加载客户专项规则失败: {e}", exc_info=True)
+            return []
+
     def _normalize_rule_documents(self, rule: Dict[str, Any]) -> Dict[str, Any]:
         normalized = dict(rule or {})
         applicable_docs = normalized.get("applicable_documents", [])
@@ -407,7 +438,9 @@ class SichuanQCService:
         self._active_sc_rules_cache = None
         self._rules_cache = None
         self._custom_rules_cache = None
+        self._customer_rules_cache = None
         self._sc_rule_family_map_cache = None
+        invalidate_customer_rule_set_cache()
 
     def get_rule_source_overview(self) -> Dict[str, Any]:
         self._load_active_sc_rules()
@@ -467,17 +500,39 @@ class SichuanQCService:
             operator=operator,
             mark_published=mark_published,
         )
+        customer_registry = QCRuleRegistryService(
+            json_path=self._customer_rules_json_path,
+        )
+        result_customer = customer_registry.bootstrap_rules_from_json_to_pg(
+            operator=operator,
+            mark_published=mark_published,
+        )
         self.invalidate_rule_cache()
         return {
-            "inserted": int(result_sc.get("inserted", 0)) + int(result_custom.get("inserted", 0)),
-            "skipped": int(result_sc.get("skipped", 0)) + int(result_custom.get("skipped", 0)),
-            "published": int(result_sc.get("published", 0)) + int(result_custom.get("published", 0)),
+            "inserted": (
+                int(result_sc.get("inserted", 0))
+                + int(result_custom.get("inserted", 0))
+                + int(result_customer.get("inserted", 0))
+            ),
+            "skipped": (
+                int(result_sc.get("skipped", 0))
+                + int(result_custom.get("skipped", 0))
+                + int(result_customer.get("skipped", 0))
+            ),
+            "published": (
+                int(result_sc.get("published", 0))
+                + int(result_custom.get("published", 0))
+                + int(result_customer.get("published", 0))
+            ),
             "inserted_sc": int(result_sc.get("inserted", 0)),
             "inserted_lx_lxe": int(result_custom.get("inserted", 0)),
+            "inserted_cl": int(result_customer.get("inserted", 0)),
             "skipped_sc": int(result_sc.get("skipped", 0)),
             "skipped_lx_lxe": int(result_custom.get("skipped", 0)),
+            "skipped_cl": int(result_customer.get("skipped", 0)),
             "published_sc": int(result_sc.get("published", 0)),
             "published_lx_lxe": int(result_custom.get("published", 0)),
+            "published_cl": int(result_customer.get("published", 0)),
         }
 
     def list_rule_versions(self, *, rule_id: str, limit: int = 20) -> List[Dict[str, Any]]:
@@ -590,6 +645,10 @@ class SichuanQCService:
                 rid = str(rule.get("rule_id") or "").strip().upper()
                 if rid:
                     baseline_map[rid] = self._normalize_rule_documents(rule)
+            for rule in self._load_customer_rules_from_json():
+                rid = str(rule.get("rule_id") or "").strip().upper()
+                if rid:
+                    baseline_map[rid] = self._normalize_rule_documents(rule)
 
         baseline_ids = set(baseline_map.keys())
         active_ids = set(active_map.keys())
@@ -642,11 +701,12 @@ class SichuanQCService:
         """
         sc_rules = self._load_active_sc_rules()
         custom_rules = self._load_custom_rules_from_json()
+        customer_rules = self._load_customer_rules_from_json()
         # 合并并按 rule_id 去重，避免 LX 规则在两份文件中重复执行。
         merged_rules: Dict[str, Dict[str, Any]] = {}
         extra_rules: List[Dict[str, Any]] = []
 
-        for rule in [*sc_rules, *custom_rules]:
+        for rule in [*sc_rules, *custom_rules, *customer_rules]:
             rule_key = str(rule.get("rule_id") or rule.get("rule_code") or "").strip()
             if rule_key:
                 # custom_rules 在后，允许覆盖同 ID 的基础规则
@@ -2201,6 +2261,7 @@ class SichuanQCService:
         # 根据规则ID前缀明确区分规则来源
         # SC- 开头：优先治理表，再回退 JSON（但生产可被 strict guard 阻断）
         # LX- / LXE- 开头：优先治理表（若已纳管），否则回退 custom JSON
+        # CL- 开头：客户专项规则，优先客户专项 JSON
         if normalized_rule_id.startswith("SC-"):
             rule, source = self.rule_registry.load_rule_by_id(normalized_rule_id)
             if rule:
@@ -2215,9 +2276,15 @@ class SichuanQCService:
                 logger.info("按 rule_id 命中 LX/LXE 规则（source=%s）: %s", source, normalized_rule_id)
                 return normalized
             all_rules = self._load_custom_rules_from_json()
+        elif normalized_rule_id.startswith("CL-"):
+            all_rules = self._load_customer_rules_from_json()
         else:
             # 兼容旧调用：允许传入 rule_code/original_id，再从两套规则里回查
-            all_rules = [*self._load_active_sc_rules(), *self._load_custom_rules_from_json()]
+            all_rules = [
+                *self._load_active_sc_rules(),
+                *self._load_custom_rules_from_json(),
+                *self._load_customer_rules_from_json(),
+            ]
 
         for rule in all_rules:
             candidate_ids = {
@@ -2271,6 +2338,8 @@ class SichuanQCService:
                 return ("sichuan_rules_146.json", target)
             if target.startswith("LX-") or target.startswith("LXE-"):
                 return ("custom_rules_33.json", target)
+            if target.startswith("CL-"):
+                return ("customer_rules_luxian_v1.json", target)
 
             # 兼容 rule_code/original_id 入参：回查规则并落到真实 rule_id
             resolved = self.get_rule_by_id(target)
@@ -2281,6 +2350,8 @@ class SichuanQCService:
                 return ("sichuan_rules_146.json", resolved_rule_id)
             if resolved_rule_id.startswith("LX-") or resolved_rule_id.startswith("LXE-"):
                 return ("custom_rules_33.json", resolved_rule_id)
+            if resolved_rule_id.startswith("CL-"):
+                return ("customer_rules_luxian_v1.json", resolved_rule_id)
             return None
 
         resolved_target = _rule_file_and_id(normalized_rule_id)

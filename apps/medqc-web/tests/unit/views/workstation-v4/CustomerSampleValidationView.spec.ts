@@ -493,6 +493,8 @@ describe('CustomerSampleValidationView', () => {
         rule_count: 5,
         record_ids: ['V001'],
         rule_ids: ['SC-023'],
+        validation_mode: 'customer',
+        rule_set_name: '客户专项规则包 v1',
       },
     })
     syncManualSamplePoolRecords.mockResolvedValue({
@@ -533,6 +535,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
       record_ids: ['V001'],
       max_parallel_records: 2,
+      validation_mode: 'customer',
     })
     expect(message.success).toHaveBeenCalled()
   })
@@ -862,6 +865,7 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
       record_ids: ['V001'],
       max_parallel_records: 4,
+      validation_mode: 'customer',
     })
   })
 
@@ -879,9 +883,36 @@ describe('CustomerSampleValidationView', () => {
     await flushPromises()
 
     expect(message.success).toHaveBeenCalledWith(
-      '已创建验证任务，覆盖 1 条样本 / 1 份病历 / 5 条规则，并发 4 份病历',
+      '已创建客户专项规则包 v1验证任务，覆盖 1 条样本 / 1 份病历 / 5 条规则，并发 4 份病历',
     )
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-2')
     expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
+  })
+
+  it('切换到 SC 样本规则模式后应按 sc 模式提交', async () => {
+    const wrapper = await mountView()
+
+    const selectElements = wrapper.findAll('select')
+    const modeSelect = selectElements.find((node) =>
+      node.findAll('option').some((option) => option.text() === 'SC 样本规则模式'),
+    )
+    expect(modeSelect).toBeTruthy()
+    await modeSelect!.setValue('sc')
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起选中病历验证'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
+      record_ids: ['V001'],
+      max_parallel_records: 4,
+      validation_mode: 'sc',
+    })
   })
 })

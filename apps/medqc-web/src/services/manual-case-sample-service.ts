@@ -4,6 +4,7 @@ import type {
   ManualSamplePoolItemsResult,
   ManualSamplePoolListResult,
   ManualSamplePoolRecordsResult,
+  ManualSamplePoolRunResult,
   ManualSamplePoolSyncJob,
 } from '@/views/workstation-v4/customer-sample-validation/types'
 
@@ -190,23 +191,16 @@ export async function runManualSamplePool(
     max_parallel_records?: number
     sample_item_ids?: string[]
     record_ids?: string[]
+    validation_mode?: string
+    rule_set_key?: string
   },
 ) {
-  return requestEnvelope<{
-    pool_id: string
-    job_id: string
-    sample_item_count: number
-    selected_record_count: number
-    record_count: number
-    rule_count: number
-    record_ids: string[]
-    rule_ids: string[]
-  }>(
+  return requestEnvelope<ManualSamplePoolRunResult>(
     {
       method: 'POST',
       url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}/run`,
       data: payload || {},
     },
-    '创建客户样本内涵验证任务失败',
+    '创建客户样本验证任务失败',
   )
 }

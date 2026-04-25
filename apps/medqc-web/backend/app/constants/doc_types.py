@@ -36,6 +36,8 @@ DOC_TYPE_MAP: dict[str, str] = {
     "labtest_master":               "检验申请单",
     "labtest_item_report":          "检验报告",
     "medical_order":                "医嘱",
+    "inpat_drug_order":             "长期医嘱",
+    "inpat_nondrug_order":          "临时医嘱",
     "exam_attention_report":        "检查关注摘要",
     "lab_attention_report":         "检验关注摘要",
     "transfer_in_record":           "转科记录",
