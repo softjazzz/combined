@@ -63,6 +63,7 @@ export type ManualSamplePoolRecord = {
   bundle_status: string
   coverage_types: string[]
   candidate_rule_ids: string[]
+  document_scope_labels: string[]
   issue_count: number
   issue_preview: string[]
   issue_preview_text: string

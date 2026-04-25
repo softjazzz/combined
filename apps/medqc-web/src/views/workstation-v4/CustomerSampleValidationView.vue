@@ -273,7 +273,7 @@
                   v-model:value="filters.query"
                   class="w-full xl:min-w-[320px] xl:flex-1 customer-sample-toolbar-input"
                   size="middle"
-                  placeholder="搜索患者/住院号/人工问题"
+                  placeholder="搜索患者、住院号或问题摘要"
                   @press-enter="loadRecords()"
                 />
               </div>
@@ -335,8 +335,7 @@
                 当前口径
               </div>
               <div class="mt-1">
-                列表展示的是去重后的真实病历池。每份病历可查看关联人工问题、已识别文书范围和文书就绪状态。
-                未关联到真实病历或文书未就绪的病历不会进入批量验证。
+                {{ currentScopeDescription }}
               </div>
             </div>
 
@@ -491,6 +490,10 @@
               {{ summarizeRecordScope(activeRecord) }}
             </div>
             <div>
+              <span class="font-medium text-slate-500">验证说明：</span>
+              {{ recordScopeHint(activeRecord) }}
+            </div>
+            <div>
               <span class="font-medium text-slate-500">样本范围：</span>
               {{ activeRecord.coverage_types.map((item) => coverageLabel(item)).join('、') || '-' }}
             </div>
@@ -509,6 +512,9 @@
               <span class="font-medium text-slate-500">关联结果：</span>{{ matchStatusLabel(activeRecord.match_status) }}
             </div>
             <div>
+              <span class="font-medium text-slate-500">下一步：</span>{{ matchStatusHint(activeRecord.match_status) }}
+            </div>
+            <div>
               <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
             </div>
             <div>
@@ -516,6 +522,9 @@
             </div>
             <div>
               <span class="font-medium text-slate-500">文书就绪：</span>{{ bundleStatusLabel(activeRecord.bundle_status) }}
+            </div>
+            <div>
+              <span class="font-medium text-slate-500">处理建议：</span>{{ bundleStatusHint(activeRecord.bundle_status) }}
             </div>
           </div>
         </a-card>
@@ -713,6 +722,22 @@ const summaryCards = computed(() => {
 
 const syncProgress = computed(() => syncJobDetail.value?.summary?.progress || {})
 
+const currentScopeDescription = computed(() => {
+  const total = pagination.value.total || 0
+  const matched = records.value.filter((record) => record.match_status === 'matched').length
+  const ready = records.value.filter((record) => record.bundle_status === 'ready').length
+  const filterLabels = [
+    filters.value.coverageType ? `样本范围：${coverageLabel(filters.value.coverageType)}` : '',
+    filters.value.matchStatus ? `病历关联：${matchStatusLabel(filters.value.matchStatus)}` : '',
+    filters.value.includeInBatch ? '仅看首批样本' : '',
+  ].filter(Boolean)
+  const base = `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，文书已就绪 ${ready} 份。`
+  if (!filterLabels.length) {
+    return `${base} 未关联到真实病历或文书未就绪的病历不会进入批量验证。`
+  }
+  return `${base} 当前筛选：${filterLabels.join('，')}。`
+})
+
 const selectedRecordStats = computed(() => {
   const selectedRecords = records.value.filter((record) =>
     selectedRowKeys.value.includes(record.id),
@@ -802,49 +827,92 @@ const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
     width: 120,
   },
   {
-    title: '关联人工问题',
-    dataIndex: 'issue_preview_text',
-    ellipsis: true,
+    title: '问题摘要',
+    key: 'issue_summary',
+    width: 280,
+    customRender: ({ record }) =>
+      h('div', { class: 'space-y-1.5' }, [
+        ...(resolveIssueSummaryLines(record).length
+          ? resolveIssueSummaryLines(record).map((line, index) =>
+              h(
+                'div',
+                {
+                  class:
+                    index === 0
+                      ? 'text-[13px] leading-6 text-slate-700'
+                      : 'text-[13px] leading-6 text-slate-500',
+                },
+                line,
+              ),
+            )
+          : [
+              h(
+                'div',
+                {
+                  class: 'text-[13px] leading-6 text-slate-400',
+                },
+                '当前没有人工问题摘要',
+              ),
+            ]),
+        h(
+          'div',
+          {
+            class: 'text-[12px] font-medium text-slate-400',
+          },
+          `共 ${record.issue_count || 0} 条问题`,
+        ),
+      ]),
   },
   {
     title: '文书范围',
-    dataIndex: 'candidate_rule_ids',
+    dataIndex: 'document_scope_labels',
     width: 180,
     customRender: ({ record }) =>
-      h(
-        'span',
-        {
-          class:
-            'inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-medium text-cyan-700',
-        },
-        summarizeRecordScope(record),
-      ),
+      h('div', { class: 'flex flex-wrap gap-2' }, buildScopeChips(record)),
   },
   {
     title: '病历关联',
     dataIndex: 'match_status',
-    width: 120,
+    width: 170,
     customRender: ({ value }) =>
-      h(
-        'span',
-        {
-          class: matchStatusTagClass(String(value || '')),
-        },
-        matchStatusLabel(String(value || '')),
-      ),
+      h('div', { class: 'space-y-1.5' }, [
+        h(
+          'span',
+          {
+            class: matchStatusTagClass(String(value || '')),
+          },
+          matchStatusLabel(String(value || '')),
+        ),
+        h(
+          'div',
+          {
+            class: 'text-[12px] leading-5 text-slate-400',
+          },
+          matchStatusHint(String(value || '')),
+        ),
+      ]),
   },
   {
     title: '文书就绪',
     dataIndex: 'bundle_status',
-    width: 120,
+    width: 170,
     customRender: ({ value }) =>
-      h(
-        'span',
-        {
-          class: bundleStatusTagClass(String(value || '')),
-        },
-        bundleStatusLabel(String(value || '')),
-      ),
+      h('div', { class: 'space-y-1.5' }, [
+        h(
+          'span',
+          {
+            class: bundleStatusTagClass(String(value || '')),
+          },
+          bundleStatusLabel(String(value || '')),
+        ),
+        h(
+          'div',
+          {
+            class: 'text-[12px] leading-5 text-slate-400',
+          },
+          bundleStatusHint(String(value || '')),
+        ),
+      ]),
   },
   {
     title: '操作',
@@ -852,55 +920,13 @@ const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
     width: 240,
     fixed: 'right',
     customRender: ({ record }) =>
-      h('div', { class: 'flex gap-2' }, [
+      h('div', { class: 'space-y-2' }, [
+        renderPrimaryAction(record),
         h(
-          'a',
-          {
-            class: 'text-[#1677ff]',
-            onClick: () => openRecordDetail(record),
-          },
-          '查看详情',
+          'div',
+          { class: 'flex flex-wrap gap-x-3 gap-y-1 text-[12px] leading-5' },
+          buildSecondaryActions(record),
         ),
-        record.matched_visit_id
-          ? h(
-              'a',
-              {
-                class: 'text-[#1677ff]',
-                onClick: () => openReviewDrawer(record),
-              },
-              '查看病历',
-            )
-          : h(
-              'span',
-              {
-                class: 'cursor-not-allowed text-slate-300',
-                title: '需先完成病历匹配',
-              },
-              '查看病历',
-            ),
-        selectedPool.value?.latest_job_id
-          ? h(
-              'a',
-              {
-                class: 'text-[#1677ff]',
-                onClick: () =>
-                  openBatchJob(selectedPool.value?.latest_job_id || '', {
-                    visitId: record.matched_visit_id || '',
-                    recordId: resolveRecordIdentifier(record),
-                    label: [
-                      resolveRecordPatientName(record) === '-'
-                        ? ''
-                        : resolveRecordPatientName(record),
-                      record.department || '',
-                      resolveRecordIdentifier(record),
-                    ]
-                      .filter(Boolean)
-                      .join(' · '),
-                  }),
-              },
-              '查看结果',
-            )
-          : null,
       ]),
   },
 ]
@@ -926,6 +952,13 @@ function matchStatusLabel(value: string): string {
   return value || '-'
 }
 
+function matchStatusHint(value: string): string {
+  if (value === 'matched') return '已定位到真实病历，可继续同步文书。'
+  if (value === 'ambiguous') return '同号命中多次住院，请先确认归属病历。'
+  if (value === 'unmatched') return '请核对住院号、姓名或日期后重新匹配。'
+  return '请先完成病历匹配。'
+}
+
 function matchStatusTagClass(value: string): string {
   if (value === 'matched') {
     return 'inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700'
@@ -941,6 +974,13 @@ function bundleStatusLabel(value: string): string {
   if (value === 'missing') return '待同步'
   if (value === 'pending') return '准备中'
   return value || '-'
+}
+
+function bundleStatusHint(value: string): string {
+  if (value === 'ready') return '可以查看病历并发起样本验证。'
+  if (value === 'pending') return '正在刷新文书和 bundle，请稍后再看。'
+  if (value === 'missing') return '下一步执行“同步样本病历”。'
+  return '请先完成病历同步。'
 }
 
 function bundleStatusTagClass(value: string): string {
@@ -994,7 +1034,146 @@ function summarizeRuleScopes(ruleIds: string[]): string {
 }
 
 function summarizeRecordScope(record: ManualSamplePoolRecord): string {
+  const labels = (record.document_scope_labels || []).filter(Boolean)
+  if (labels.length) {
+    return labels.join(' / ')
+  }
   return summarizeRuleScopes(record.candidate_rule_ids || [])
+}
+
+function recordScopeHint(record: ManualSamplePoolRecord): string {
+  if ((record.document_scope_labels || []).length > 0) {
+    return '已按当前病历实际同步到的文书类型识别验证范围。'
+  }
+  if ((record.candidate_rule_ids || []).length > 0) {
+    return '当前仍按样本问题推断范围，待同步后会自动刷新。'
+  }
+  return '当前还没有可识别的文书范围。'
+}
+
+function resolveIssueSummaryLines(record: ManualSamplePoolRecord): string[] {
+  const previews = (record.issue_preview || []).filter(Boolean)
+  if (previews.length > 0) {
+    return previews.slice(0, 2)
+  }
+  return record.issue_preview_text && record.issue_preview_text !== '-'
+    ? [record.issue_preview_text]
+    : []
+}
+
+function buildScopeChips(record: ManualSamplePoolRecord) {
+  const labels = summarizeRecordScope(record)
+    .split(' / ')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (!labels.length || (labels.length === 1 && labels[0] === '-')) {
+    return [
+      h(
+        'span',
+        {
+          class:
+            'inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500',
+        },
+        '待识别',
+      ),
+    ]
+  }
+  return labels.map((label) =>
+    h(
+      'span',
+      {
+        class:
+          'inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-medium text-cyan-700',
+      },
+      label,
+    ),
+  )
+}
+
+function renderPrimaryAction(record: ManualSamplePoolRecord) {
+  const primary = resolvePrimaryAction(record)
+  return h(
+    'button',
+    {
+      type: 'button',
+      class:
+        'inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-[12px] font-medium text-sky-700 transition hover:border-sky-300 hover:bg-sky-100',
+      onClick: primary.handler,
+    },
+    primary.label,
+  )
+}
+
+function buildSecondaryActions(record: ManualSamplePoolRecord) {
+  const actions = []
+  const primary = resolvePrimaryAction(record).key
+  if (primary !== 'detail') {
+    actions.push(
+      h(
+        'a',
+        {
+          class: 'text-slate-500 hover:text-[#1677ff]',
+          onClick: () => openRecordDetail(record),
+        },
+        '查看详情',
+      ),
+    )
+  }
+  if (record.matched_visit_id && primary !== 'review') {
+    actions.push(
+      h(
+        'a',
+        {
+          class: 'text-slate-500 hover:text-[#1677ff]',
+          onClick: () => openReviewDrawer(record),
+        },
+        '查看病历',
+      ),
+    )
+  }
+  if (selectedPool.value?.latest_job_id && record.matched_visit_id) {
+    actions.push(
+      h(
+        'a',
+        {
+          class: 'text-slate-500 hover:text-[#1677ff]',
+          onClick: () =>
+            openBatchJob(selectedPool.value?.latest_job_id || '', {
+              visitId: record.matched_visit_id || '',
+              recordId: resolveRecordIdentifier(record),
+              label: [
+                resolveRecordPatientName(record) === '-' ? '' : resolveRecordPatientName(record),
+                record.department || '',
+                resolveRecordIdentifier(record),
+              ]
+                .filter(Boolean)
+                .join(' · '),
+            }),
+        },
+        '查看结果',
+      ),
+    )
+  }
+  return actions
+}
+
+function resolvePrimaryAction(record: ManualSamplePoolRecord): {
+  key: 'detail' | 'review'
+  label: string
+  handler: () => void
+} {
+  if (record.matched_visit_id && record.bundle_status === 'ready') {
+    return {
+      key: 'review',
+      label: '查看病历',
+      handler: () => openReviewDrawer(record),
+    }
+  }
+  return {
+    key: 'detail',
+    label: '查看详情',
+    handler: () => openRecordDetail(record),
+  }
 }
 
 function isRunnableRecord(record: ManualSamplePoolRecord): boolean {

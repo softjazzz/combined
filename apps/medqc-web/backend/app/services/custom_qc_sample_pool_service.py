@@ -192,6 +192,54 @@ _BUNDLE_SOURCE_TABLE_CATEGORY_MAP: Dict[str, List[str]] = {
     "docpat_commu_record": ["consent_quality"],
 }
 
+_DOCUMENT_SCOPE_LABEL_BY_SOURCE_TABLE: Dict[str, str] = {
+    "admission_record": "入院记录",
+    "first_course_record": "首次病程",
+    "daily_course_record": "日常病程",
+    "senior_course_record": "查房讨论",
+    "rescue_record": "查房讨论",
+    "diffcase_discussion_record": "查房讨论",
+    "death_discussion": "查房讨论",
+    "consultation_record": "会诊记录",
+    "discharge_record": "出院记录",
+    "exam_master": "检查检验",
+    "exam_item_report": "检查检验",
+    "labtest_master": "检查检验",
+    "labtest_item_report": "检查检验",
+    "pathology_exam_master": "检查检验",
+    "pathology_exam_report": "检查检验",
+    "handoff_record": "交接班",
+    "handover_record": "交接班",
+    "presurg_summary": "手术麻醉",
+    "presurg_discussion": "手术麻醉",
+    "surgery_application": "手术麻醉",
+    "surgery_record": "手术麻醉",
+    "surgery_safecheck_record": "手术麻醉",
+    "surgery_risk_assessment": "手术麻醉",
+    "anesthesia_record": "手术麻醉",
+    "postsurg_firstcourse_record": "手术麻醉",
+    "surgery_inform_consent": "知情沟通",
+    "docpat_commu_record": "知情沟通",
+    "inpat_drug_order": "医嘱治疗",
+    "inpat_nondrug_order": "医嘱治疗",
+    "inpat_prescription": "医嘱治疗",
+    "inpat_prescription_item": "医嘱治疗",
+}
+
+_DOCUMENT_SCOPE_LABEL_ORDER: List[str] = [
+    "入院记录",
+    "首次病程",
+    "日常病程",
+    "查房讨论",
+    "会诊记录",
+    "手术麻醉",
+    "出院记录",
+    "检查检验",
+    "交接班",
+    "知情沟通",
+    "医嘱治疗",
+]
+
 
 def _contains_any(text: str, keywords: Sequence[str]) -> bool:
     return any(keyword in text for keyword in keywords)
@@ -230,6 +278,19 @@ def _derive_dynamic_candidate_rule_ids_from_source_tables(source_tables: Sequenc
                 if rule_id not in dynamic_rule_ids:
                     dynamic_rule_ids.append(rule_id)
     return dynamic_rule_ids
+
+
+def _derive_document_scope_labels_from_source_tables(source_tables: Sequence[str]) -> List[str]:
+    normalized_tables = {_safe_text(item).lower() for item in source_tables if _safe_text(item)}
+    if not normalized_tables:
+        return []
+    labels: List[str] = []
+    for label in _DOCUMENT_SCOPE_LABEL_ORDER:
+        for source_table in normalized_tables:
+            if _DOCUMENT_SCOPE_LABEL_BY_SOURCE_TABLE.get(source_table) == label and label not in labels:
+                labels.append(label)
+                break
+    return labels
 
 
 def _merge_candidate_rule_ids(
@@ -1408,6 +1469,13 @@ class CustomQCSamplePoolService:
             rows = session.execute(stmt).mappings().all()
             items = [self._row_to_item(dict(row)) for row in rows]
             items = self._apply_dynamic_candidate_rule_ids(items=items)
+            source_table_map = self._load_bundle_source_table_map(
+                visit_ids=[
+                    str(item.get("matched_visit_id") or "").strip()
+                    for item in items
+                    if str(item.get("matched_visit_id") or "").strip()
+                ]
+            )
 
             grouped: Dict[str, Dict[str, Any]] = {}
             for item in items:
@@ -1427,6 +1495,7 @@ class CustomQCSamplePoolService:
                         "bundle_status": item["bundle_status"],
                         "coverage_types": [],
                         "candidate_rule_ids": [],
+                        "document_scope_labels": [],
                         "issue_count": 0,
                         "issue_preview": [],
                         "sample_item_ids": [],
@@ -1444,6 +1513,13 @@ class CustomQCSamplePoolService:
                 for rule_id in item.get("candidate_rule_ids") or []:
                     if rule_id not in current["candidate_rule_ids"]:
                         current["candidate_rule_ids"].append(rule_id)
+                visit_id = str(item.get("matched_visit_id") or "").strip()
+                if visit_id:
+                    for label in _derive_document_scope_labels_from_source_tables(
+                        sorted(source_table_map.get(visit_id, set()))
+                    ):
+                        if label not in current["document_scope_labels"]:
+                            current["document_scope_labels"].append(label)
 
             matched_visit_ids = [
                 str(item.get("matched_visit_id") or "").strip()
