@@ -976,11 +976,13 @@ async def get_record_qc_detail(
             "progressNote": "",
             "surgeryNote": "",
             "raw_documents": [],
+            "documents_tree": [],
         },
         "admissionNote": "",
         "dischargeNote": "",
         "progressNote": "",
         "surgeryNote": "",
+        "documents_tree": [],
         "exists": False,
     }
 
@@ -1084,6 +1086,7 @@ async def get_record_qc_detail(
             bundle_docs = list(bundle_payload.get("documents") or [])
             if bundle_docs:
                 payload["documents"]["raw_documents"] = bundle_docs
+                payload["documents"]["documents_tree"] = list(bundle_payload.get("documents_tree") or [])
                 payload["documents"]["admissionNote"] = _pick_document_content(bundle_docs, ["admission", "入院"])
                 payload["documents"]["dischargeNote"] = _pick_document_content(bundle_docs, ["discharge", "出院"])
                 payload["documents"]["progressNote"] = _pick_document_content(bundle_docs, ["progress", "病程", "course", "查房", "会诊"])
@@ -1101,6 +1104,7 @@ async def get_record_qc_detail(
         payload["dischargeNote"] = payload["documents"].get("dischargeNote", "")
         payload["progressNote"] = payload["documents"].get("progressNote", "")
         payload["surgeryNote"] = payload["documents"].get("surgeryNote", "")
+        payload["documents_tree"] = payload["documents"].get("documents_tree", [])
         payload["record"]["defect_count"] = len(payload.get("defects", [])) or len(payload.get("review_items", []))
 
         return success_response(

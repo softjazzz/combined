@@ -75,20 +75,68 @@
     >
       <!-- 左侧：病历文书内容 -->
       <div class="flex-1 bg-white rounded-xl border border-slate-100 overflow-hidden flex flex-col">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+        <div class="space-y-3 px-4 py-3 border-b border-slate-100">
           <a-segmented
-            v-model:value="activeDocTab"
-            :options="docTabs"
+            v-if="docGroupOptions.length > 0"
+            v-model:value="activeDocGroup"
+            :options="docGroupOptions"
             size="small"
           />
+          <div
+            v-if="currentGroupDocs.length > 0"
+            class="flex flex-wrap gap-2"
+          >
+            <button
+              v-for="doc in currentGroupDocs"
+              :key="doc.doc_key"
+              type="button"
+              class="rounded-full border px-3 py-1 text-xs transition-all"
+              :class="
+                activeDocKey === doc.doc_key
+                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-blue-100 hover:bg-white hover:text-slate-700'
+              "
+              @click="activeDocKey = doc.doc_key"
+            >
+              {{ renderDocButtonLabel(doc) }}
+            </button>
+          </div>
         </div>
         <div class="flex-1 overflow-y-auto p-5">
           <a-spin :spinning="docLoading">
-            <div
-              v-if="currentDocContent"
-              class="doc-content text-sm leading-relaxed text-slate-700"
-              v-html="sanitizeHtml(currentDocContent)"
-            />
+            <template v-if="currentDoc">
+              <div class="mb-4 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <div class="text-sm font-semibold text-slate-800">
+                  {{ currentDocTitle }}
+                </div>
+                <div
+                  v-if="currentDocMeta"
+                  class="mt-1 text-xs text-slate-400"
+                >
+                  {{ currentDocMeta }}
+                </div>
+              </div>
+              <div
+                v-if="currentDocContent"
+                class="doc-content text-sm leading-relaxed text-slate-700"
+                v-html="sanitizeHtml(currentDocContent)"
+              />
+              <div
+                v-else
+                class="text-center py-12 text-slate-400"
+              >
+                <FileTextOutlined
+                  style="font-size: 36px"
+                  class="mb-3 block"
+                />
+                <p class="text-sm">
+                  {{ docLoading ? '加载中...' : '当前文书暂无可展示内容' }}
+                </p>
+                <p class="text-xs mt-1 text-slate-300">
+                  可切换其它文书继续查看
+                </p>
+              </div>
+            </template>
             <div
               v-else
               class="text-center py-12 text-slate-400"
@@ -302,6 +350,71 @@ interface ReviewIssueItem {
   confidence?: number | null
 }
 
+interface ReviewDocItem {
+  id: string
+  doc_key: string
+  doc_type: string
+  doc_name: string
+  content: string
+  has_content: boolean
+  length: number
+  document_id?: string
+  document_title?: string
+  sort_time?: string
+  record_time?: string
+  source_table?: string
+  group_key?: string
+}
+
+interface ReviewDocTreeNode {
+  id: string
+  doc_key: string
+  doc_type: string
+  title: string
+  record_time?: string
+  has_content: boolean
+  length: number
+}
+
+interface ReviewDocTreeGroup {
+  key: string
+  label: string
+  count: number
+  children: ReviewDocTreeNode[]
+}
+
+const DOC_GROUP_LABELS: Record<string, string> = {
+  all: '全部',
+  frontpage: '病案首页',
+  admission: '入院记录',
+  course: '病程记录',
+  surgery: '手术相关',
+  consult_discussion: '查房讨论',
+  terminal: '出院记录',
+  orders: '医嘱',
+  index_coding_settlement: '首页结算',
+}
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  mr: '病案首页',
+  admission_record: '入院记录',
+  first_course_record: '首次病程记录',
+  daily_course_record: '日常病程记录',
+  senior_course_record: '上级医师查房记录',
+  consultation_record: '会诊记录',
+  rescue_record: '抢救记录',
+  surgery_record: '手术记录',
+  anesthesia_record: '麻醉记录',
+  presurg_summary: '术前小结',
+  presurg_discussion: '术前讨论',
+  surgery_safecheck_record: '手术安全核查记录',
+  postsurg_firstcourse_record: '术后首次病程记录',
+  discharge_record: '出院记录',
+  death_record: '死亡记录',
+  inpat_drug_order: '长期医嘱',
+  inpat_nondrug_order: '临时医嘱',
+}
+
 const props = defineProps<{
   visible: boolean
   record: RecordData | null
@@ -319,62 +432,332 @@ const reviewItemList = ref<ReviewIssueItem[]>([])
 const selectedDefectId = ref<string | null>(null)
 const docLoading = ref(false)
 const recordDetail = ref<Record<string, unknown> | null>(null)
-const activeDocTab = ref('admission')
+const activeDocGroup = ref('all')
+const activeDocKey = ref('')
 
-const docTabs = [
-  { label: '入院记录', value: 'admission' },
-  { label: '出院记录', value: 'discharge' },
-  { label: '病程记录', value: 'progress' },
-  { label: '手术记录', value: 'surgery' },
-]
+function safeText(value: unknown): string {
+  return String(value || '').trim()
+}
 
-// 当前文书内容（根据 Tab 切换，兼容多种后端字段名）
-const currentDocContent = computed(() => {
-  if (!recordDetail.value) return ''
-  const d = recordDetail.value
-  const docs =
-    (d.documents as Record<string, unknown> | undefined) ||
-    (d.document_bundle as Record<string, unknown> | undefined) ||
-    {}
-  const tabMap: Record<string, string> = {
-    admission: String(
-      d.admissionNote ||
-        d.admission_note ||
-        d.admission_record ||
-        docs.admissionNote ||
-        docs.admission_note ||
-        '',
-    ),
-    discharge: String(
-      d.dischargeNote ||
-        d.discharge_note ||
-        d.discharge_record ||
-        d.discharge_summary ||
-        docs.dischargeNote ||
-        docs.discharge_note ||
-        '',
-    ),
-    progress: String(
-      d.progressNote ||
-        d.progress_note ||
-        d.progress_record ||
-        d.course_record ||
-        docs.progressNote ||
-        docs.progress_note ||
-        '',
-    ),
-    surgery: String(
-      d.surgeryNote ||
-        d.surgery_note ||
-        d.surgery_record ||
-        d.operation_record ||
-        docs.surgeryNote ||
-        docs.surgery_note ||
-        '',
-    ),
+function formatDocTime(value?: string): string {
+  const raw = safeText(value)
+  if (!raw) return ''
+  const normalized = raw.endsWith('Z') ? raw : raw.replace(' ', 'T')
+  const date = new Date(normalized)
+  if (!Number.isNaN(date.getTime())) {
+    const formatter = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+    const parts = formatter.formatToParts(date)
+    const get = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((part) => part.type === type)?.value || ''
+    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
   }
-  return tabMap[activeDocTab.value] || ''
+  return raw
+}
+
+function normalizeReviewDocItem(raw: unknown, index: number): ReviewDocItem | null {
+  const source = (raw || {}) as Record<string, unknown>
+  const id =
+    safeText(source.document_id) ||
+    safeText(source.id) ||
+    safeText(source.doc_id) ||
+    `${safeText(source.doc_type || source.type || source.source_table) || 'doc'}-${index}`
+  const docType =
+    safeText(source.doc_type) ||
+    safeText(source.type) ||
+    safeText(source.document_type) ||
+    safeText(source.source_table)
+  const content = safeText(source.content)
+  const hasContent =
+    typeof source.has_content === 'boolean'
+      ? source.has_content
+      : Boolean(content || Number(source.length || 0) > 0)
+  const title =
+    safeText(source.document_title) ||
+    safeText(source.doc_name) ||
+    safeText(source.label) ||
+    DOC_TYPE_LABELS[docType] ||
+    docType ||
+    '未命名文书'
+  return {
+    id,
+    doc_key: safeText(source.doc_key) || `${docType || 'unknown'}::${id}`,
+    doc_type: docType,
+    doc_name: title,
+    content,
+    has_content: hasContent,
+    length: Number(source.length || content.length || 0),
+    document_id: safeText(source.document_id) || id,
+    document_title: safeText(source.document_title) || title,
+    sort_time: safeText(source.sort_time) || safeText(source.record_time) || undefined,
+    record_time: safeText(source.record_time) || safeText(source.sort_time) || undefined,
+    source_table: safeText(source.source_table) || docType || undefined,
+    group_key: safeText(source.group_key) || undefined,
+  }
+}
+
+function inferDocGroupKey(doc: ReviewDocItem): string {
+  const explicit = safeText(doc.group_key)
+  if (explicit) return explicit
+  const docType = safeText(doc.doc_type || doc.source_table).toLowerCase()
+  if (['mr', 'diagnosis', 'mr_surgery', 'mr_cost'].includes(docType)) return 'frontpage'
+  if (docType.includes('admission')) return 'admission'
+  if (docType.includes('consult') || docType.includes('discussion')) return 'consult_discussion'
+  if (docType.includes('course') || docType.includes('rescue') || docType.includes('handoff')) {
+    return 'course'
+  }
+  if (
+    docType.includes('surgery') ||
+    docType.includes('anesthesia') ||
+    docType.includes('presurg')
+  ) {
+    return 'surgery'
+  }
+  if (docType.includes('discharge') || docType.includes('death')) return 'terminal'
+  if (docType.includes('order')) return 'orders'
+  return 'course'
+}
+
+function buildTreeNodeFromDoc(doc: ReviewDocItem): ReviewDocTreeNode {
+  return {
+    id: doc.document_id || doc.id,
+    doc_key: doc.doc_key,
+    doc_type: doc.doc_type,
+    title: doc.document_title || doc.doc_name,
+    record_time: doc.record_time || doc.sort_time,
+    has_content: doc.has_content,
+    length: doc.length,
+  }
+}
+
+function buildFallbackDocTree(docs: ReviewDocItem[]): ReviewDocTreeGroup[] {
+  const groups: Array<{ key: string; label: string }> = [
+    { key: 'all', label: '全部' },
+    { key: 'frontpage', label: DOC_GROUP_LABELS.frontpage },
+    { key: 'admission', label: DOC_GROUP_LABELS.admission },
+    { key: 'course', label: DOC_GROUP_LABELS.course },
+    { key: 'surgery', label: DOC_GROUP_LABELS.surgery },
+    { key: 'consult_discussion', label: DOC_GROUP_LABELS.consult_discussion },
+    { key: 'terminal', label: DOC_GROUP_LABELS.terminal },
+    { key: 'orders', label: DOC_GROUP_LABELS.orders },
+  ]
+  const byGroup = new Map<string, ReviewDocTreeNode[]>()
+  for (const doc of docs) {
+    const node = buildTreeNodeFromDoc(doc)
+    const groupKey = inferDocGroupKey(doc)
+    byGroup.set(groupKey, [...(byGroup.get(groupKey) || []), node])
+    byGroup.set('all', [...(byGroup.get('all') || []), node])
+  }
+  return groups.map((group) => ({
+    key: group.key,
+    label: group.label,
+    count: (byGroup.get(group.key) || []).length,
+    children: byGroup.get(group.key) || [],
+  }))
+}
+
+function normalizeDocTree(rawTree: unknown, docs: ReviewDocItem[]): ReviewDocTreeGroup[] {
+  const groups = Array.isArray(rawTree) ? rawTree : []
+  const normalized = groups
+    .map((rawGroup) => {
+      const source = (rawGroup || {}) as Record<string, unknown>
+      const groupKey = safeText(source.key || source.group_key)
+      const groupLabel =
+        safeText(source.label || source.title || source.name) ||
+        DOC_GROUP_LABELS[groupKey] ||
+        groupKey
+      const rawChildren = Array.isArray(source.children)
+        ? source.children
+        : Array.isArray(source.nodes)
+          ? source.nodes
+          : []
+      const children = rawChildren
+        .map((rawNode) => {
+          const nodeSource = (rawNode || {}) as Record<string, unknown>
+          const id = safeText(nodeSource.id || nodeSource.doc_id || nodeSource.document_id)
+          const docType = safeText(nodeSource.doc_type || nodeSource.type)
+          const docKey = safeText(nodeSource.doc_key) || (docType && id ? `${docType}::${id}` : '')
+          const matched =
+            docs.find((doc) => doc.doc_key === docKey) ||
+            docs.find((doc) => doc.document_id === id && doc.doc_type === docType)
+          return {
+            id: id || docKey || matched?.id || '',
+            doc_key: docKey || matched?.doc_key || '',
+            doc_type: docType || matched?.doc_type || '',
+            title:
+              safeText(nodeSource.title || nodeSource.label || nodeSource.doc_name) ||
+              matched?.doc_name ||
+              DOC_TYPE_LABELS[docType] ||
+              '未命名文书',
+            record_time:
+              safeText(nodeSource.record_time || nodeSource.sort_time) ||
+              matched?.record_time ||
+              matched?.sort_time,
+            has_content:
+              typeof nodeSource.has_content === 'boolean'
+                ? nodeSource.has_content
+                : Boolean(matched?.has_content),
+            length: Number(nodeSource.length || matched?.length || 0),
+          } as ReviewDocTreeNode
+        })
+        .filter((node) => Boolean(node.id))
+
+      return {
+        key: groupKey || groupLabel,
+        label: groupLabel,
+        count: children.length,
+        children,
+      } as ReviewDocTreeGroup
+    })
+    .filter((group) => Boolean(group.key))
+
+  const hasUsefulGroup = normalized.some(
+    (group) => group.key !== 'all' && Array.isArray(group.children) && group.children.length > 0,
+  )
+  if (hasUsefulGroup) return normalized
+  if (docs.length > 0) return buildFallbackDocTree(docs)
+  return normalized
+}
+
+const rawDocumentList = computed(() => {
+  const detail = recordDetail.value
+  if (!detail) return []
+  const documents = (detail.documents as Record<string, unknown> | undefined) || {}
+  const rawDocuments = documents.raw_documents
+  if (Array.isArray(rawDocuments) && rawDocuments.length > 0) {
+    return rawDocuments
+  }
+  const fallbackDocs = [
+    {
+      doc_type: 'admission_record',
+      document_title: '入院记录',
+      content: detail.admissionNote || documents.admissionNote,
+    },
+    {
+      doc_type: 'discharge_record',
+      document_title: '出院记录',
+      content: detail.dischargeNote || documents.dischargeNote,
+    },
+    {
+      doc_type: 'course_record',
+      document_title: '病程记录',
+      content: detail.progressNote || documents.progressNote,
+      group_key: 'course',
+    },
+    {
+      doc_type: 'surgery_record',
+      document_title: '手术相关文书',
+      content: detail.surgeryNote || documents.surgeryNote,
+      group_key: 'surgery',
+    },
+  ]
+  return fallbackDocs.filter((item) => safeText(item.content))
 })
+
+const documentList = computed<ReviewDocItem[]>(() =>
+  rawDocumentList.value
+    .map((item, index) => normalizeReviewDocItem(item, index))
+    .filter((item): item is ReviewDocItem => Boolean(item))
+    .filter((item) => item.has_content),
+)
+
+const documentTree = computed<ReviewDocTreeGroup[]>(() => {
+  const detail = recordDetail.value
+  if (!detail) return []
+  const documents = (detail.documents as Record<string, unknown> | undefined) || {}
+  const rawTree = detail.documents_tree || documents.documents_tree
+  return normalizeDocTree(rawTree, documentList.value)
+})
+
+const displayDocGroups = computed(() =>
+  documentTree.value.filter(
+    (group) => group.key !== 'all' && Array.isArray(group.children) && group.children.length > 0,
+  ),
+)
+
+const docGroupOptions = computed(() =>
+  displayDocGroups.value.map((group) => ({
+    label: `${group.label} (${group.children.length})`,
+    value: group.key,
+  })),
+)
+
+const currentGroupNodes = computed<ReviewDocTreeNode[]>(() => {
+  const groupKey = safeText(activeDocGroup.value)
+  if (!groupKey || groupKey === 'all') {
+    return documentList.value.map((doc) => buildTreeNodeFromDoc(doc))
+  }
+  return displayDocGroups.value.find((group) => group.key === groupKey)?.children || []
+})
+
+function resolveDocByNode(node: ReviewDocTreeNode): ReviewDocItem | undefined {
+  return (
+    documentList.value.find((doc) => doc.doc_key === node.doc_key) ||
+    documentList.value.find(
+      (doc) => doc.document_id === node.id && doc.doc_type === node.doc_type,
+    ) ||
+    documentList.value.find((doc) => doc.doc_type === node.doc_type)
+  )
+}
+
+const currentGroupDocs = computed<ReviewDocItem[]>(() =>
+  currentGroupNodes.value
+    .map((node) => resolveDocByNode(node))
+    .filter((doc): doc is ReviewDocItem => Boolean(doc))
+    .filter((doc, index, list) => list.findIndex((item) => item.doc_key === doc.doc_key) === index),
+)
+
+const currentDoc = computed<ReviewDocItem | null>(() => {
+  if (!currentGroupDocs.value.length) return null
+  return (
+    currentGroupDocs.value.find((doc) => doc.doc_key === activeDocKey.value) ||
+    currentGroupDocs.value[0] ||
+    null
+  )
+})
+
+const currentDocContent = computed(() => currentDoc.value?.content || '')
+const currentDocTitle = computed(
+  () => currentDoc.value?.document_title || currentDoc.value?.doc_name || '病历文书',
+)
+const currentDocMeta = computed(() => {
+  if (!currentDoc.value) return ''
+  const parts = [formatDocTime(currentDoc.value.record_time || currentDoc.value.sort_time)]
+  if (safeText(currentDoc.value.source_table)) {
+    parts.push(`来源表：${safeText(currentDoc.value.source_table)}`)
+  }
+  return parts.filter(Boolean).join(' · ')
+})
+
+function renderDocButtonLabel(doc: ReviewDocItem): string {
+  const time = formatDocTime(doc.record_time || doc.sort_time)
+  if (!time) return doc.document_title || doc.doc_name
+  return `${time.slice(5, 16)} ${doc.document_title || doc.doc_name}`
+}
+
+function syncActiveDocumentSelection() {
+  if (!displayDocGroups.value.length) {
+    activeDocGroup.value = 'all'
+    activeDocKey.value = currentGroupDocs.value[0]?.doc_key || ''
+    return
+  }
+  const validGroupKeys = displayDocGroups.value.map((group) => group.key)
+  if (!validGroupKeys.includes(activeDocGroup.value)) {
+    activeDocGroup.value = validGroupKeys[0]
+  }
+  const validDocKeys = currentGroupDocs.value.map((doc) => doc.doc_key)
+  if (!validDocKeys.includes(activeDocKey.value)) {
+    activeDocKey.value = currentGroupDocs.value[0]?.doc_key || ''
+  }
+}
 
 const displayedIssueCount = computed(() =>
   defectList.value.length > 0 ? defectList.value.length : reviewItemList.value.length,
@@ -523,13 +906,18 @@ const handleClose = () => {
   emit('close')
 }
 
+watch([displayDocGroups, currentGroupDocs], () => {
+  syncActiveDocumentSelection()
+})
+
 // 打开时自动加载
 watch(
   () => props.visible,
   (val) => {
     if (val && props.record) {
       selectedDefectId.value = null
-      activeDocTab.value = 'admission'
+      activeDocGroup.value = 'all'
+      activeDocKey.value = ''
       recordDetail.value = null
       reviewItemList.value = []
       loadDefects()
