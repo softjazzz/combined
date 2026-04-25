@@ -146,6 +146,8 @@ class TestRuleLoading:
         rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
         assert "SC-028" in rule_ids
         assert "LX-010" in rule_ids
+        assert "CL-004" in rule_ids
+        assert "CL-010" in rule_ids
 
     @pytest.mark.asyncio
     async def test_filter_rules_for_course_record_alias(self, service):
@@ -183,6 +185,7 @@ class TestRuleLoading:
         rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
         assert "SC-067" in rule_ids
         assert "LX-015" in rule_ids
+        assert "CL-006" in rule_ids
 
     @pytest.mark.asyncio
     async def test_unknown_document_type_returns_empty(self, service):
