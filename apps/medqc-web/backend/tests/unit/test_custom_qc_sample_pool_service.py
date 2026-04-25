@@ -504,6 +504,39 @@ def test_pick_best_remote_candidate_should_fallback_to_latest_when_only_mr_no_av
     assert chosen["visit_id"] == "2306811"
 
 
+def test_pick_best_local_candidate_should_choose_latest_when_same_patient_matches_multiple_visits():
+    candidates = [
+        SimpleNamespace(
+            visit_id="V001",
+            name="刘德荣",
+            admission_dept_name="关节与运动医学科",
+            discharge_dept_name="关节与运动医学科",
+            admission_datetime="2026-02-01",
+            discharge_datetime="2026-02-10",
+            update_time="2026-02-10",
+        ),
+        SimpleNamespace(
+            visit_id="V002",
+            name="刘德荣",
+            admission_dept_name="关节与运动医学科",
+            discharge_dept_name="关节与运动医学科",
+            admission_datetime="2026-03-22",
+            discharge_datetime="2026-04-07",
+            update_time="2026-04-07",
+        ),
+    ]
+
+    chosen = sample_pool_module._pick_best_local_candidate(
+        candidates=candidates,
+        patient_name="刘德荣",
+        department="关节与运动医学科",
+        qc_date_value=None,
+    )
+
+    assert chosen is not None
+    assert chosen.visit_id == "V002"
+
+
 def test_get_runnable_items_filters_by_selected_record_ids(monkeypatch):
     service = CustomQCSamplePoolService()
     rows = [

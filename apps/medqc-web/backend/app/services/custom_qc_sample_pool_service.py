@@ -640,15 +640,13 @@ def _choose_scored_candidate(
         return ranked[0][1]
     if top_score > 0 and top_score > ranked[1][0]:
         return ranked[0][1]
-    if top_score > 0:
-        return None
-
+    recency_candidates = [candidate for score, candidate in ranked if score == top_score]
     recency_ranked = sorted(
-        ((get_recency_key(candidate), candidate) for _, candidate in ranked),
+        ((get_recency_key(candidate), candidate) for candidate in recency_candidates),
         key=lambda item: item[0],
         reverse=True,
     )
-    if len(recency_ranked) == 1 or recency_ranked[0][0] > recency_ranked[1][0]:
+    if recency_ranked:
         return recency_ranked[0][1]
     return None
 
