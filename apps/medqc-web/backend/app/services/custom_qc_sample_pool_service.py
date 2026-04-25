@@ -1988,6 +1988,7 @@ class CustomQCSamplePoolService:
         results: List[Dict[str, Any]] = []
         total_rows_pulled = 0
         total_rows_upserted = 0
+        bundle_refresh_rows: List[Dict[str, Any]] = []
 
         for index, table_name in enumerate(sync_plan["table_names"], start=1):
             if progress_callback is not None:
@@ -2020,6 +2021,18 @@ class CustomQCSamplePoolService:
                 records=rows,
                 primary_keys=[str(key) for key in (table_config.get("key_fields") or []) if str(key).strip()],
             )
+            for row in rows:
+                institute_id = _safe_text(row.get("institute_id"))
+                patient_id = _safe_text(row.get("patient_id"))
+                visit_id = _safe_text(row.get("visit_id"))
+                if institute_id and patient_id and visit_id:
+                    bundle_refresh_rows.append(
+                        {
+                            "institute_id": institute_id,
+                            "patient_id": patient_id,
+                            "visit_id": visit_id,
+                        }
+                    )
             total_rows_pulled += len(rows)
             total_rows_upserted += upserted
 
@@ -2068,6 +2081,18 @@ class CustomQCSamplePoolService:
                         "total_rows_upserted": total_rows_upserted,
                     }
                 )
+
+        if bundle_refresh_rows:
+            refresh_scene_bundles_for_rows(
+                scene="running",
+                rows=bundle_refresh_rows,
+                policy_version="sample_pool_sync",
+            )
+            refresh_scene_bundles_for_rows(
+                scene="final",
+                rows=bundle_refresh_rows,
+                policy_version="sample_pool_sync",
+            )
 
         if progress_callback is not None:
             progress_callback(

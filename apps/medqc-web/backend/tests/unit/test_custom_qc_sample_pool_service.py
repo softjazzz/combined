@@ -185,8 +185,8 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
     assert result["total_rows_upserted"] == 3
     assert [item["table_name"] for item in result["synced_tables"]] == ["mr", "admission_record", "daily_course_record"]
     assert len(ingest_calls) == 2
-    assert len(refresh_calls) == 4
-    assert [call["scene"] for call in refresh_calls] == ["running", "final", "running", "final"]
+    assert len(refresh_calls) == 6
+    assert [call["scene"] for call in refresh_calls] == ["running", "final", "running", "final", "running", "final"]
     assert progress_events[0]["step_key"] == "resolving"
     assert progress_events[1]["step_key"] == "resolved"
     assert progress_events[-1]["step_key"] == "matching"
