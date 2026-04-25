@@ -17,7 +17,7 @@ from ..core.settings import get_settings
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
 from ..database.models.qc import QCDefect, QCResultBiz
-from ..services.bundles.emr_view import load_bundle_documents
+from ..services.bundles.emr_view import build_documents_tree, load_bundle_documents
 from ..core.permissions import (
     require_permission,
     ResourceType,
@@ -221,16 +221,30 @@ def _load_bundle_payload_for_record(record_id: str) -> Dict[str, Any]:
             content = str(item.get("content") or item.get("assembled_text") or item.get("text_preview") or "").strip()
             if not content:
                 continue
+            doc_type = str(item.get("document_type") or item.get("doc_type") or "").strip()
+            document_id = str(item.get("document_id") or item.get("id") or idx).strip()
+            title = str(item.get("document_title") or item.get("doc_name") or item.get("title") or "").strip()
             docs.append(
                 {
-                    "id": str(item.get("document_id") or item.get("id") or idx),
-                    "document_type": str(item.get("document_type") or item.get("doc_type") or "").strip(),
-                    "doc_type": str(item.get("document_type") or item.get("doc_type") or "").strip(),
-                    "document_title": str(item.get("document_title") or item.get("doc_name") or item.get("title") or "").strip(),
-                    "title": str(item.get("document_title") or item.get("doc_name") or item.get("title") or "").strip(),
+                    "id": document_id,
+                    "doc_id": document_id,
+                    "doc_key": str(item.get("doc_key") or f"{doc_type or 'doc'}::{document_id}").strip(),
+                    "document_type": doc_type,
+                    "doc_type": doc_type,
+                    "document_title": title,
+                    "title": title,
+                    "doc_name": title,
                     "content": content,
                     "record_time": str(item.get("record_time") or item.get("display_time") or "").strip(),
+                    "sort_time": str(item.get("display_time") or item.get("record_time") or "").strip(),
                     "source_table": str(item.get("source_table") or "").strip(),
+                    "group_key": str(item.get("group_key") or "").strip(),
+                    "has_content": True,
+                    "length": len(content),
+                    "sections": list(item.get("sections") or []),
+                    "source_fields": list(item.get("source_fields") or []),
+                    "assembly_status": str(item.get("assembly_status") or "").strip(),
+                    "data_quality_flags": list(item.get("data_quality_flags") or []),
                 }
             )
         return docs
@@ -276,7 +290,7 @@ def _load_bundle_payload_for_record(record_id: str) -> Dict[str, Any]:
             return {
                 "layout_version": "bundle_struct_v1",
                 "documents": docs,
-                "documents_tree": [],
+                "documents_tree": build_documents_tree(docs),
                 "domain_bundle_hits": {scene: True},
                 "empty_reason": "",
             }

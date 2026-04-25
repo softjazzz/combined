@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from functools import lru_cache
 from datetime import date, datetime
 from typing import Any, Iterable, Optional
@@ -125,6 +126,81 @@ _SCENE_BUNDLE_TABLE: dict[str, str] = {
     "frontpage": "frontpage_bundle",
     "coding": "coding_bundle",
     "settlement": "settlement_bundle",
+}
+_EXAM_ATTENTION_DOC_TYPE = "exam_attention_report"
+_LAB_ATTENTION_DOC_TYPE = "lab_attention_report"
+_SCENE_ATTENTION_PRIORITY: tuple[str, ...] = (
+    _EXAM_ATTENTION_DOC_TYPE,
+    _LAB_ATTENTION_DOC_TYPE,
+)
+_SCENE_ATTENTION_FETCH_LIMITS: dict[str, int] = {
+    "exam_master": 20,
+    "labtest_master": 20,
+    "labtest_item_report": 400,
+}
+_LAB_ABNORMAL_FLAGS: set[str] = {"H", "L", "HH", "LL", "+", "++", "+++", "++++"}
+_LAB_POSITIVE_KEYWORDS: tuple[str, ...] = ("阳性", "弱阳性", "强阳性", "可疑", "异常")
+_LAB_EXCLUDED_NAME_KEYWORDS: tuple[str, ...] = ("备注", "ABO", "RH", "血型", "配血")
+_EXAM_ATTENTION_KEYWORDS: tuple[str, ...] = (
+    "阳性",
+    "异常",
+    "提示",
+    "考虑",
+    "符合",
+    "动脉粥样硬化",
+    "斑块",
+    "狭窄",
+    "闭塞",
+    "血栓",
+    "出血",
+    "积液",
+    "结节",
+    "占位",
+)
+_EXAM_NEGATIVE_KEYWORDS: tuple[str, ...] = ("未见明显异常", "阴性", "正常")
+_EXAM_TEXT_FIELDS: tuple[str, ...] = (
+    "exam_result",
+    "exam_impression",
+    "exam_conclusion",
+    "exam_findings",
+    "findings",
+    "impression",
+    "conclusion",
+    "diagnosis",
+    "description",
+    "memo",
+    "summary_text",
+    "content",
+    "record_content",
+)
+_SCENE_GROUP_BY_DOC_TYPE: dict[str, str] = {
+    "mr": "frontpage",
+    "diagnosis": "frontpage",
+    "mr_surgery": "frontpage",
+    "mr_cost": "frontpage",
+    "admission_record": "admission",
+    "first_course_record": "course",
+    "daily_course_record": "course",
+    "senior_course_record": "course",
+    "rescue_record": "course",
+    "consultation_record": "course",
+    _EXAM_ATTENTION_DOC_TYPE: "exam_attention",
+    _LAB_ATTENTION_DOC_TYPE: "exam_attention",
+    "labtest_master": "lab_results",
+    "labtest_item_report": "lab_results",
+    "exam_master": "exam_results",
+    "exam_item_report": "exam_results",
+    "surgery_record": "surgery",
+    "anesthesia_record": "surgery",
+    "presurg_summary": "surgery",
+    "presurg_discussion": "surgery",
+    "postsurg_firstcourse_record": "surgery",
+    "surgery_safecheck_record": "surgery",
+    "discharge_record": "terminal",
+    "death_record": "terminal",
+    "death_discussion": "terminal",
+    "inpat_drug_order": "orders",
+    "inpat_nondrug_order": "orders",
 }
 _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
     "admission": (
@@ -254,6 +330,75 @@ def _normalize_text(value: Any) -> str:
     if not text_value:
         return ""
     return " ".join(text_value.split())
+
+
+def _safe_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    text_value = _normalize_text(value)
+    if not text_value:
+        return None
+    try:
+        return float(text_value)
+    except Exception:
+        return None
+
+
+def _extract_numeric_value(value: Any) -> float | None:
+    text_value = _normalize_text(value)
+    if not text_value:
+        return None
+    matched = re.search(r"-?\d+(?:\.\d+)?", text_value)
+    if not matched:
+        return None
+    try:
+        return float(matched.group(0))
+    except Exception:
+        return None
+
+
+def _parse_reference_range(
+    *,
+    minimum: Any,
+    maximum: Any,
+    reference_range: Any,
+) -> tuple[float | None, float | None]:
+    min_value = _safe_float(minimum)
+    max_value = _safe_float(maximum)
+    if min_value is not None or max_value is not None:
+        return min_value, max_value
+
+    range_text = _normalize_text(reference_range)
+    if not range_text:
+        return None, None
+    matched = re.search(r"(-?\d+(?:\.\d+)?)\s*[-~至]\s*(-?\d+(?:\.\d+)?)", range_text)
+    if not matched:
+        return None, None
+    try:
+        return float(matched.group(1)), float(matched.group(2))
+    except Exception:
+        return None, None
+
+
+def _infer_scene_group_key(document_type: str) -> str:
+    normalized = _normalize_text(document_type).lower()
+    if normalized in _SCENE_GROUP_BY_DOC_TYPE:
+        return _SCENE_GROUP_BY_DOC_TYPE[normalized]
+    if "order" in normalized:
+        return "orders"
+    if "labtest" in normalized:
+        return "lab_results"
+    if "exam" in normalized:
+        return "exam_results"
+    if "attention" in normalized:
+        return "exam_attention"
+    if "surgery" in normalized or "anesthesia" in normalized:
+        return "surgery"
+    if "discharge" in normalized or "death" in normalized:
+        return "terminal"
+    if "admission" in normalized:
+        return "admission"
+    return "course"
 
 
 def _json_safe(value: Any) -> Any:
@@ -783,6 +928,327 @@ def _build_document_hits(docs: dict[str, list[dict[str, Any]]], priority: tuple[
     return {table_name: bool(docs.get(table_name)) for table_name in priority}
 
 
+def _build_attention_line(prefix: str, body: str) -> str:
+    if prefix and body:
+        return f"{prefix} {body}".strip()
+    return body or prefix
+
+
+def _resolve_row_time(row: dict[str, Any], *extra_fields: str) -> str:
+    candidates = (
+        *extra_fields,
+        "report_time",
+        "report_datetime",
+        "record_time",
+        "submit_time",
+        "submit_datetime",
+        "update_time",
+        "modified_time",
+        "create_time",
+    )
+    for field_name in candidates:
+        value = _normalize_text(row.get(field_name))
+        if value:
+            return value
+    return ""
+
+
+def _build_synthetic_document_row(
+    *,
+    document_type: str,
+    visit_id: str,
+    title: str,
+    content: str,
+    record_time: str = "",
+) -> dict[str, Any]:
+    return {
+        "__document_type": document_type,
+        "document_id": f"{document_type}:{visit_id}",
+        "document_title": title,
+        "record_time": record_time,
+        "display_time": record_time,
+        "record_content": content,
+    }
+
+
+def _contains_keyword(text: str, keywords: tuple[str, ...]) -> bool:
+    lowered = _normalize_text(text).lower()
+    if not lowered:
+        return False
+    return any(keyword.lower() in lowered for keyword in keywords)
+
+
+def _extract_exam_attention_text(row: dict[str, Any]) -> str:
+    for field_name in _EXAM_TEXT_FIELDS:
+        value = _normalize_text(row.get(field_name))
+        if value:
+            return value
+    for key, value in row.items():
+        field_name = _normalize_text(key).lower()
+        if not field_name:
+            continue
+        if not any(token in field_name for token in ("result", "finding", "conclusion", "impression", "diagnosis", "content", "memo", "desc")):
+            continue
+        text_value = _normalize_text(value)
+        if text_value:
+            return text_value
+    return ""
+
+
+def _format_lab_reference_range(row: dict[str, Any]) -> str:
+    reference_range = _normalize_text(row.get("reference_range"))
+    if reference_range:
+        return reference_range
+    min_value = _normalize_text(row.get("referencevalue_min"))
+    max_value = _normalize_text(row.get("referencevalue_max"))
+    if min_value or max_value:
+        return f"{min_value}-{max_value}".strip("-")
+    return ""
+
+
+def _build_lab_attention_items(
+    *,
+    lab_master_rows: list[dict[str, Any]],
+    lab_item_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    master_by_test_id: dict[str, dict[str, Any]] = {}
+    for row in lab_master_rows:
+        test_id = _normalize_text(row.get("test_id") or row.get("test_no"))
+        if test_id and test_id not in master_by_test_id:
+            master_by_test_id[test_id] = row
+
+    attention_items: list[dict[str, Any]] = []
+    raw_rows: list[dict[str, Any]] = []
+    timeline_facts: list[dict[str, Any]] = []
+
+    for row in lab_item_rows:
+        item_name = _normalize_text(row.get("item_name") or row.get("item_abbreviation") or row.get("item_code"))
+        if not item_name or _contains_keyword(item_name, _LAB_EXCLUDED_NAME_KEYWORDS):
+            continue
+        result_text = _normalize_text(row.get("result"))
+        abnormal_indicator = _normalize_text(row.get("abnormal_indicator")).upper()
+        reference_range = _format_lab_reference_range(row)
+        result_value = _extract_numeric_value(result_text)
+        reference_min, reference_max = _parse_reference_range(
+            minimum=row.get("referencevalue_min"),
+            maximum=row.get("referencevalue_max"),
+            reference_range=reference_range,
+        )
+        out_of_range = False
+        if result_value is not None:
+            if reference_min is not None and result_value < reference_min:
+                out_of_range = True
+            if reference_max is not None and result_value > reference_max:
+                out_of_range = True
+        positive_hit = _contains_keyword(result_text, _LAB_POSITIVE_KEYWORDS)
+        abnormal_flag_hit = abnormal_indicator in _LAB_ABNORMAL_FLAGS
+        if not (abnormal_flag_hit or positive_hit or out_of_range):
+            continue
+
+        reason_parts: list[str] = []
+        if abnormal_flag_hit:
+            reason_parts.append(f"异常标记 {abnormal_indicator}")
+        if positive_hit:
+            reason_parts.append("结果提示阳性/异常")
+        if out_of_range:
+            reason_parts.append("结果超出参考范围")
+        attention_reason = "；".join(reason_parts) or "检验结果需要关注"
+        report_time = _resolve_row_time(row)
+        unit = _normalize_text(row.get("unit"))
+        test_id = _normalize_text(row.get("test_id") or row.get("test_no"))
+        master_row = master_by_test_id.get(test_id, {})
+        lab_subject = _normalize_text(master_row.get("labtest_subject"))
+
+        line_body = f"{item_name}：{result_text or '未填写'}"
+        if unit:
+            line_body = f"{line_body} {unit}".strip()
+        if reference_range:
+            line_body = f"{line_body}（参考范围 {reference_range}）"
+        line_body = f"{line_body}。关注原因：{attention_reason}。"
+        line_prefix = f"{report_time} · {lab_subject}" if report_time and lab_subject else report_time or lab_subject
+        line_text = _build_attention_line(line_prefix, line_body)
+
+        attention_items.append(
+            {
+                "report_time": report_time,
+                "item_name": item_name,
+                "result": result_text,
+                "unit": unit,
+                "reference_range": reference_range,
+                "abnormal_indicator": abnormal_indicator,
+                "attention_reason": attention_reason,
+                "labtest_subject": lab_subject,
+                "line_text": line_text,
+            }
+        )
+
+        raw_row = dict(row)
+        raw_row["document_id"] = _normalize_text(
+            row.get("document_id")
+            or row.get("sys_index_id")
+            or row.get("print_order_id")
+            or row.get("item_id")
+            or row.get("test_id")
+        ) or f"lab:{test_id}:{_normalize_text(row.get('item_id')) or len(raw_rows) + 1}"
+        raw_row["document_title"] = f"检验明细：{item_name}"
+        raw_row["record_time"] = report_time
+        raw_row["display_time"] = report_time
+        raw_row["record_content"] = line_text
+        raw_rows.append(raw_row)
+
+        timeline_facts.append(
+            {
+                "source_table": "labtest_item_report",
+                "document_type": "labtest_item_report",
+                "field": item_name,
+                "value": line_text,
+            }
+        )
+
+    attention_items.sort(key=lambda item: (_normalize_text(item.get("report_time")), _normalize_text(item.get("item_name"))), reverse=True)
+    raw_rows.sort(key=lambda item: _resolve_row_time(item), reverse=True)
+    timeline_facts.sort(key=lambda item: _normalize_text(item.get("value")), reverse=True)
+    return attention_items, raw_rows, timeline_facts
+
+
+def _build_exam_attention_items(
+    exam_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    attention_items: list[dict[str, Any]] = []
+    raw_rows: list[dict[str, Any]] = []
+    timeline_facts: list[dict[str, Any]] = []
+
+    for row in exam_rows:
+        exam_text = _extract_exam_attention_text(row)
+        if not exam_text:
+            continue
+        if _contains_keyword(exam_text, _EXAM_NEGATIVE_KEYWORDS):
+            continue
+        if not _contains_keyword(exam_text, _EXAM_ATTENTION_KEYWORDS):
+            continue
+
+        exam_name = _normalize_text(
+            row.get("exam_name")
+            or row.get("item_name")
+            or row.get("exam_item_name")
+            or row.get("item_code")
+            or row.get("exam_type")
+        )
+        report_time = _resolve_row_time(row)
+        line_prefix = f"{report_time} · {exam_name}" if report_time and exam_name else report_time or exam_name
+        line_text = _build_attention_line(line_prefix, exam_text)
+
+        attention_items.append(
+            {
+                "report_time": report_time,
+                "exam_name": exam_name,
+                "attention_reason": "检查结果提示异常/阳性发现",
+                "line_text": line_text,
+            }
+        )
+
+        raw_row = dict(row)
+        raw_row["document_id"] = _normalize_text(
+            row.get("document_id")
+            or row.get("sys_index_id")
+            or row.get("exam_no")
+            or row.get("item_no")
+        ) or f"exam:{exam_name or len(raw_rows) + 1}"
+        raw_row["document_title"] = f"检查结果：{exam_name or '未命名检查'}"
+        raw_row["record_time"] = report_time
+        raw_row["display_time"] = report_time
+        raw_row["record_content"] = line_text
+        raw_rows.append(raw_row)
+
+        timeline_facts.append(
+            {
+                "source_table": "exam_master",
+                "document_type": "exam_master",
+                "field": exam_name or "检查结果",
+                "value": line_text,
+            }
+        )
+
+    attention_items.sort(key=lambda item: (_normalize_text(item.get("report_time")), _normalize_text(item.get("exam_name"))), reverse=True)
+    raw_rows.sort(key=lambda item: _resolve_row_time(item), reverse=True)
+    return attention_items, raw_rows, timeline_facts
+
+
+def _build_scene_attention_artifacts(
+    *,
+    source_schema: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
+    extra_docs: dict[str, list[dict[str, Any]]] = {}
+    timeline_facts: list[dict[str, Any]] = []
+
+    exam_rows = _select_records(
+        schema=source_schema,
+        table="exam_master",
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        limit=_SCENE_ATTENTION_FETCH_LIMITS["exam_master"],
+    )
+    lab_master_rows = _select_records(
+        schema=source_schema,
+        table="labtest_master",
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        limit=_SCENE_ATTENTION_FETCH_LIMITS["labtest_master"],
+    )
+    lab_item_rows = _select_records(
+        schema=source_schema,
+        table="labtest_item_report",
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        limit=_SCENE_ATTENTION_FETCH_LIMITS["labtest_item_report"],
+    )
+
+    exam_attention_items, filtered_exam_rows, exam_facts = _build_exam_attention_items(exam_rows)
+    lab_attention_items, filtered_lab_rows, lab_facts = _build_lab_attention_items(
+        lab_master_rows=lab_master_rows,
+        lab_item_rows=lab_item_rows,
+    )
+    timeline_facts.extend(exam_facts)
+    timeline_facts.extend(lab_facts)
+
+    if exam_attention_items:
+        lines = [item["line_text"] for item in exam_attention_items[:12] if _normalize_text(item.get("line_text"))]
+        if lines:
+            extra_docs[_EXAM_ATTENTION_DOC_TYPE] = [
+                _build_synthetic_document_row(
+                    document_type=_EXAM_ATTENTION_DOC_TYPE,
+                    visit_id=visit_id,
+                    title="检查关注摘要",
+                    content="\n".join(f"{idx}. {line}" for idx, line in enumerate(lines, start=1)),
+                    record_time=_normalize_text(exam_attention_items[0].get("report_time")),
+                )
+            ]
+    if lab_attention_items:
+        lines = [item["line_text"] for item in lab_attention_items[:18] if _normalize_text(item.get("line_text"))]
+        if lines:
+            extra_docs[_LAB_ATTENTION_DOC_TYPE] = [
+                _build_synthetic_document_row(
+                    document_type=_LAB_ATTENTION_DOC_TYPE,
+                    visit_id=visit_id,
+                    title="检验关注摘要",
+                    content="\n".join(f"{idx}. {line}" for idx, line in enumerate(lines, start=1)),
+                    record_time=_normalize_text(lab_attention_items[0].get("report_time")),
+                )
+            ]
+    if filtered_exam_rows:
+        extra_docs["exam_master"] = filtered_exam_rows[:20]
+    if filtered_lab_rows:
+        extra_docs["labtest_item_report"] = filtered_lab_rows[:40]
+
+    return extra_docs, timeline_facts
+
+
 def _build_document_inventory(docs: dict[str, list[dict[str, Any]]], schema: str) -> list[dict[str, Any]]:
     inventory: list[dict[str, Any]] = []
     for table_name, rows in docs.items():
@@ -794,6 +1260,7 @@ def _build_document_inventory(docs: dict[str, list[dict[str, Any]]], schema: str
                 {
                     "source_table": table_name,
                     "document_type": table_name,
+                    "group_key": _infer_scene_group_key(table_name),
                     "document_id": assembled.document_id,
                     "document_title": assembled.document_title,
                     "record_time": assembled.record_time or "",
@@ -889,6 +1356,15 @@ def _assemble_scene_bundle(
             visit_id=visit_id,
             limit=3,
         )
+    attention_docs, attention_timeline_facts = _build_scene_attention_artifacts(
+        source_schema=source_schema,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+    )
+    for table_name, rows in attention_docs.items():
+        if rows:
+            docs[table_name] = rows
 
     patient_profile = _fetch_patient_profile(
         source_schema=source_schema,
@@ -898,6 +1374,7 @@ def _assemble_scene_bundle(
     )
     source_documents = _build_document_inventory(docs, source_schema)
     timeline_facts = _build_timeline_facts_from_docs(docs)
+    timeline_facts.extend(attention_timeline_facts)
     structured_context = _build_structured_context(
         scene=scene,
         schema=source_schema,
@@ -906,8 +1383,9 @@ def _assemble_scene_bundle(
         timeline_facts=timeline_facts,
     )
     department = str(structured_context.get("department") or "").strip()
-    document_hits = _build_document_hits(docs, priority)
-    medical_text = _build_medical_text(docs, priority, source_schema)
+    priority_with_attention = tuple(dict.fromkeys([*priority, *[name for name in _SCENE_ATTENTION_PRIORITY if docs.get(name)]]))
+    document_hits = _build_document_hits(docs, priority_with_attention)
+    medical_text = _build_medical_text(docs, priority_with_attention, source_schema)
 
     data_quality_flags: list[str] = []
     for table_name, hit in document_hits.items():
@@ -940,7 +1418,7 @@ def _assemble_scene_bundle(
         mobile=patient_profile["mobile"],
         id_card=patient_profile["id_card"],
     )
-    bundle["source_doc_priority"] = list(priority)
+    bundle["source_doc_priority"] = list(priority_with_attention)
     bundle["compat_strategy"] = "dual-read-single-write"
     bundle["bundle_schema_version"] = BUNDLE_SCHEMA_VERSION_CURRENT
     bundle["source_documents"] = source_documents

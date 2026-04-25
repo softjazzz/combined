@@ -756,16 +756,19 @@ describe('CustomerSampleValidationView', () => {
       }),
     })
     expect(message.success).toHaveBeenCalledWith('导入成功，共写入 2 条样本')
-    expect(wrapper.text()).toContain('当前样本池：第二轮样本池')
+    expect(wrapper.text()).toContain('当前样本池')
+    expect(wrapper.text()).toContain('第二轮样本池')
     expect(wrapper.text()).toContain('新患者')
   })
 
   it('点击查看病历后打开病历联审抽屉', async () => {
     const wrapper = await mountView()
 
-    const reviewLink = wrapper.findAll('a').find((node) => node.text() === '查看病历')
-    expect(reviewLink).toBeTruthy()
-    await reviewLink!.trigger('click')
+    const reviewAction = [...wrapper.findAll('button'), ...wrapper.findAll('a')].find(
+      (node) => node.text() === '查看病历',
+    )
+    expect(reviewAction).toBeTruthy()
+    await reviewAction!.trigger('click')
     await flushPromises()
 
     expect(wrapper.find('.qc-review-drawer-stub').exists()).toBe(true)

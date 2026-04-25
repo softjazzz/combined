@@ -165,3 +165,47 @@ def test_build_render_view_order_table_empty_state():
     assert payload["render_blocks"][0]["block_type"] == "order_table"
     assert payload["render_blocks"][0]["empty"] is True
 
+
+def test_build_documents_tree_should_group_exam_and_lab_documents():
+    documents = [
+        {
+            "id": "exam-attn-1",
+            "doc_id": "exam-attn-1",
+            "doc_key": "exam_attention_report::exam-attn-1",
+            "doc_type": "exam_attention_report",
+            "doc_name": "检查关注摘要",
+            "group_key": "exam_attention",
+            "has_content": True,
+            "length": 120,
+            "sort_time": "2026-03-25 10:00:00",
+        },
+        {
+            "id": "lab-1",
+            "doc_id": "lab-1",
+            "doc_key": "labtest_item_report::lab-1",
+            "doc_type": "labtest_item_report",
+            "doc_name": "检验明细：ESR",
+            "group_key": "lab_results",
+            "has_content": True,
+            "length": 88,
+            "sort_time": "2026-03-25 10:01:00",
+        },
+        {
+            "id": "exam-1",
+            "doc_id": "exam-1",
+            "doc_key": "exam_master::exam-1",
+            "doc_type": "exam_master",
+            "doc_name": "检查结果：血管彩超",
+            "group_key": "exam_results",
+            "has_content": True,
+            "length": 140,
+            "sort_time": "2026-03-25 10:02:00",
+        },
+    ]
+
+    tree = build_documents_tree(documents)
+    by_key = {item["key"]: item for item in tree}
+
+    assert by_key["exam_attention"]["count"] == 1
+    assert by_key["lab_results"]["count"] == 1
+    assert by_key["exam_results"]["count"] == 1

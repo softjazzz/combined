@@ -523,6 +523,9 @@ const DOC_GROUP_LABELS: Record<string, string> = {
   frontpage: '病案首页',
   admission: '入院记录',
   course: '病程记录',
+  exam_attention: '检查检验摘要',
+  lab_results: '检验明细',
+  exam_results: '检查结果',
   surgery: '手术相关',
   consult_discussion: '查房讨论',
   terminal: '出院记录',
@@ -538,6 +541,12 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   senior_course_record: '上级医师查房记录',
   consultation_record: '会诊记录',
   rescue_record: '抢救记录',
+  exam_attention_report: '检查关注摘要',
+  lab_attention_report: '检验关注摘要',
+  exam_master: '检查结果',
+  exam_item_report: '检查结果',
+  labtest_master: '检验申请单',
+  labtest_item_report: '检验明细',
   surgery_record: '手术记录',
   anesthesia_record: '麻醉记录',
   presurg_summary: '术前小结',
@@ -734,6 +743,9 @@ function inferDocGroupKey(doc: ReviewDocItem): string {
   const docType = safeText(doc.doc_type || doc.source_table).toLowerCase()
   if (['mr', 'diagnosis', 'mr_surgery', 'mr_cost'].includes(docType)) return 'frontpage'
   if (docType.includes('admission')) return 'admission'
+  if (docType.includes('attention_report')) return 'exam_attention'
+  if (docType.includes('labtest')) return 'lab_results'
+  if (docType.includes('exam')) return 'exam_results'
   if (docType.includes('consult') || docType.includes('discussion')) return 'consult_discussion'
   if (docType.includes('course') || docType.includes('rescue') || docType.includes('handoff')) {
     return 'course'
@@ -768,6 +780,9 @@ function buildFallbackDocTree(docs: ReviewDocItem[]): ReviewDocTreeGroup[] {
     { key: 'frontpage', label: DOC_GROUP_LABELS.frontpage },
     { key: 'admission', label: DOC_GROUP_LABELS.admission },
     { key: 'course', label: DOC_GROUP_LABELS.course },
+    { key: 'exam_attention', label: DOC_GROUP_LABELS.exam_attention },
+    { key: 'lab_results', label: DOC_GROUP_LABELS.lab_results },
+    { key: 'exam_results', label: DOC_GROUP_LABELS.exam_results },
     { key: 'surgery', label: DOC_GROUP_LABELS.surgery },
     { key: 'consult_discussion', label: DOC_GROUP_LABELS.consult_discussion },
     { key: 'terminal', label: DOC_GROUP_LABELS.terminal },

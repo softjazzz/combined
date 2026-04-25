@@ -340,6 +340,14 @@ def test_derive_dynamic_candidate_rule_ids_from_source_tables_should_cover_opera
     assert "SC-114" in rule_ids
 
 
+def test_document_scope_labels_should_cover_attention_reports():
+    labels = sample_pool_module._derive_document_scope_labels_from_source_tables(
+        ["lab_attention_report", "exam_attention_report"]
+    )
+
+    assert labels == ["检查检验"]
+
+
 def test_apply_dynamic_candidate_rule_ids_should_replace_default_rules_for_blank_intrinsic_rows(monkeypatch):
     service = CustomQCSamplePoolService()
     items = [

@@ -89,3 +89,46 @@ def test_adapt_bundle_to_evidence_payload_should_fallback_to_structured_timeline
             "value": "2026-03-04 09:59:13",
         }
     ]
+
+
+def test_extract_bundle_documents_should_include_attention_reports():
+    bundle = {
+        "scene": "running",
+        "visit_id": "2300354",
+        "source_doc_priority": [
+            "daily_course_record",
+            "exam_attention_report",
+            "lab_attention_report",
+        ],
+        "document_hits": {
+            "daily_course_record": True,
+            "exam_attention_report": True,
+            "lab_attention_report": True,
+        },
+        "structured_context": {
+            "document_inventory": [
+                {
+                    "source_table": "daily_course_record",
+                    "content": "今日日常病程记录正文",
+                },
+                {
+                    "source_table": "exam_attention_report",
+                    "content": "1. 2026-03-22 血管彩超提示动脉粥样硬化。",
+                },
+                {
+                    "source_table": "lab_attention_report",
+                    "content": "1. 2026-03-22 ESR 29，参考范围 0-20，异常标记 H。",
+                },
+            ],
+        },
+    }
+
+    documents = extract_bundle_documents(bundle)
+
+    assert [item["source_table"] for item in documents] == [
+        "daily_course_record",
+        "exam_attention_report",
+        "lab_attention_report",
+    ]
+    assert documents[1]["document_type"] == "检查关注摘要"
+    assert documents[2]["document_type"] == "检验关注摘要"

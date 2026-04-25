@@ -31,9 +31,13 @@ DOC_TYPE_MAP: dict[str, str] = {
     "nursing_record":               "护理记录",
     "discharge_record":             "出院记录",
     "consent_form":                 "知情同意书",
+    "exam_master":                  "检查结果",
     "exam_item_report":             "检查检验报告",
+    "labtest_master":               "检验申请单",
     "labtest_item_report":          "检验报告",
     "medical_order":                "医嘱",
+    "exam_attention_report":        "检查关注摘要",
+    "lab_attention_report":         "检验关注摘要",
     "transfer_in_record":           "转科记录",
     "transfer_out_record":          "转科记录",
 }
