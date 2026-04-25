@@ -74,51 +74,136 @@
       style="height: calc(100vh - 300px)"
     >
       <!-- 左侧：病历文书内容 -->
-      <div class="flex-1 bg-white rounded-xl border border-slate-100 overflow-hidden flex flex-col">
-        <div class="space-y-3 px-4 py-3 border-b border-slate-100">
-          <a-segmented
-            v-if="docGroupOptions.length > 0"
-            v-model:value="activeDocGroup"
-            :options="docGroupOptions"
-            size="small"
-          />
-          <div
-            v-if="currentGroupDocs.length > 0"
-            class="flex flex-wrap gap-2"
-          >
-            <button
-              v-for="doc in currentGroupDocs"
-              :key="doc.doc_key"
-              type="button"
-              class="rounded-full border px-3 py-1 text-xs transition-all"
-              :class="
-                activeDocKey === doc.doc_key
-                  ? 'border-blue-200 bg-blue-50 text-blue-700'
-                  : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-blue-100 hover:bg-white hover:text-slate-700'
-              "
-              @click="activeDocKey = doc.doc_key"
-            >
-              {{ renderDocButtonLabel(doc) }}
-            </button>
+      <div class="flex-1 bg-white rounded-xl border border-slate-100 overflow-hidden flex min-h-0">
+        <aside
+          class="w-[290px] flex-shrink-0 border-r border-slate-100 bg-slate-50/70 flex flex-col min-h-0"
+        >
+          <div class="px-4 py-4 border-b border-slate-100">
+            <div class="text-sm font-semibold text-slate-800">
+              文书目录
+            </div>
+            <div class="mt-1 text-xs text-slate-400">
+              按文书类型和时间组织，优先展示可读的病历结构。
+            </div>
           </div>
-        </div>
-        <div class="flex-1 overflow-y-auto p-5">
-          <a-spin :spinning="docLoading">
-            <template v-if="currentDoc">
-              <div class="mb-4 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <div class="text-sm font-semibold text-slate-800">
+          <div class="px-3 py-3 border-b border-slate-100">
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                v-for="group in displayDocGroups"
+                :key="group.key"
+                type="button"
+                class="rounded-xl border px-3 py-2 text-left transition-all"
+                :class="
+                  activeDocGroup === group.key
+                    ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-blue-100 hover:text-slate-700'
+                "
+                @click="activeDocGroup = group.key"
+              >
+                <div class="text-xs font-semibold">
+                  {{ group.label }}
+                </div>
+                <div class="mt-1 text-[11px] opacity-70">
+                  {{ group.children.length }} 份文书
+                </div>
+              </button>
+            </div>
+          </div>
+          <div
+            v-if="activeDocGroup === 'course' && courseSubtypeOptions.length > 0"
+            class="px-3 py-3 border-b border-slate-100"
+          >
+            <div class="mb-2 text-xs font-medium text-slate-400">
+              病程筛选
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="option in courseSubtypeOptions"
+                :key="option.value"
+                type="button"
+                class="rounded-full border px-3 py-1 text-xs transition-all"
+                :class="
+                  activeCourseSubtype === option.value
+                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 bg-white text-slate-500 hover:border-blue-100 hover:text-slate-700'
+                "
+                @click="activeCourseSubtype = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+          <div class="flex-1 overflow-y-auto px-3 py-3">
+            <template v-if="currentGroupDateGroups.length > 0">
+              <div
+                v-for="dateGroup in currentGroupDateGroups"
+                :key="dateGroup.key"
+                class="mb-4"
+              >
+                <div class="mb-2 px-2 text-xs font-medium text-slate-400">
+                  {{ dateGroup.label }}
+                </div>
+                <div class="space-y-2">
+                  <button
+                    v-for="doc in dateGroup.docs"
+                    :key="doc.doc_key"
+                    type="button"
+                    class="w-full rounded-xl border px-3 py-3 text-left transition-all"
+                    :class="
+                      activeDocKey === doc.doc_key
+                        ? 'border-blue-200 bg-blue-50 shadow-sm'
+                        : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50'
+                    "
+                    @click="activeDocKey = doc.doc_key"
+                  >
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <div class="text-sm font-medium text-slate-800">
+                          {{ renderDocListTitle(doc) }}
+                        </div>
+                        <div class="mt-1 text-xs text-slate-400">
+                          {{ renderDocListMeta(doc) }}
+                        </div>
+                      </div>
+                      <span
+                        v-if="activeDocKey === doc.doc_key"
+                        class="mt-0.5 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700"
+                      >
+                        当前
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </template>
+            <div
+              v-else
+              class="px-3 py-10 text-center text-xs text-slate-400"
+            >
+              当前分组暂无可展示文书
+            </div>
+          </div>
+        </aside>
+        <div class="flex-1 min-w-0 flex flex-col">
+          <div
+            v-if="currentDoc"
+            class="border-b border-slate-100 bg-white px-5 py-4"
+          >
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="text-lg font-semibold text-slate-800">
                   {{ currentDocTitle }}
                 </div>
                 <div
                   v-if="currentDocMeta"
-                  class="mt-1 text-xs text-slate-400"
+                  class="mt-1 text-sm text-slate-400"
                 >
                   {{ currentDocMeta }}
                 </div>
               </div>
               <div
                 v-if="currentDocFlags.length > 0"
-                class="mb-4 flex flex-wrap gap-2"
+                class="flex flex-wrap justify-end gap-2"
               >
                 <span
                   v-for="flag in currentDocFlags"
@@ -128,89 +213,111 @@
                   {{ flag }}
                 </span>
               </div>
-              <div
-                v-if="currentDocFieldList.length > 0"
-                class="mb-4 grid gap-3 md:grid-cols-2"
-              >
+            </div>
+          </div>
+          <div class="flex-1 overflow-y-auto p-5">
+            <a-spin :spinning="docLoading">
+              <template v-if="currentDoc">
                 <div
-                  v-for="field in currentDocFieldList"
-                  :key="field.key"
-                  class="rounded-xl border border-slate-100 bg-white px-4 py-3"
+                  v-if="currentDocFieldList.length > 0"
+                  class="mb-5 rounded-2xl border border-slate-100 bg-white p-4"
                 >
-                  <div class="text-xs font-medium text-slate-400">
-                    {{ field.label }}
+                  <div class="mb-3 text-sm font-semibold text-slate-800">
+                    结构化字段
                   </div>
-                  <div
-                    class="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700"
-                  >
-                    {{ field.value }}
-                  </div>
-                </div>
-              </div>
-              <div
-                v-if="activeReviewIssueSummary"
-                class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"
-              >
-                <div class="font-semibold text-amber-900">
-                  已定位当前质控问题原文
-                </div>
-                <div class="mt-1 leading-6">
-                  {{ activeReviewIssueSummary }}
-                </div>
-              </div>
-              <div
-                v-if="currentDocSectionBlocks.length > 0"
-                class="space-y-4"
-              >
-                <section
-                  v-for="(section, index) in currentDocSectionBlocks"
-                  :key="`${section.title}-${index}`"
-                  class="rounded-xl border border-slate-100 bg-white px-4 py-4"
-                >
-                  <div class="mb-3 flex items-center justify-between gap-3">
-                    <div class="text-sm font-semibold text-slate-800">
-                      {{ section.title }}
-                    </div>
-                    <span
-                      v-if="section.sourceField"
-                      class="text-xs text-slate-300"
-                    >
-                      {{ section.sourceField }}
-                    </span>
-                  </div>
-                  <div class="space-y-3">
+                  <div class="grid gap-x-8 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
                     <div
-                      v-for="block in section.blocks"
-                      :key="block.key"
-                      :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
-                      class="doc-content doc-content--prewrap rounded-lg px-3 py-2 text-sm leading-relaxed text-slate-700 transition-all"
-                      :class="
-                        activeHighlightBlockKey === block.key
-                          ? 'doc-content--active-highlight'
-                          : 'bg-transparent'
-                      "
-                      v-html="renderBlockHtml(block)"
-                    />
+                      v-for="field in currentDocFieldList"
+                      :key="field.key"
+                      class="min-w-0"
+                    >
+                      <div class="text-xs font-medium text-slate-400">
+                        {{ field.label }}
+                      </div>
+                      <div
+                        class="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700"
+                      >
+                        {{ field.value }}
+                      </div>
+                    </div>
                   </div>
-                </section>
-              </div>
-              <div
-                v-else-if="currentDocContent"
-                class="space-y-3"
-              >
+                </div>
                 <div
-                  v-for="block in currentDocPlainBlocks"
-                  :key="block.key"
-                  :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
-                  class="doc-content doc-content--prewrap rounded-lg px-3 py-2 text-sm leading-relaxed text-slate-700 transition-all"
-                  :class="
-                    activeHighlightBlockKey === block.key
-                      ? 'doc-content--active-highlight'
-                      : 'bg-transparent'
-                  "
-                  v-html="renderBlockHtml(block)"
-                />
-              </div>
+                  v-if="activeReviewIssueSummary"
+                  class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"
+                >
+                  <div class="font-semibold text-amber-900">
+                    已定位当前质控问题原文
+                  </div>
+                  <div class="mt-1 leading-6">
+                    {{ activeReviewIssueSummary }}
+                  </div>
+                </div>
+                <div
+                  v-if="currentDocSectionBlocks.length > 0"
+                  class="rounded-2xl border border-slate-100 bg-white"
+                >
+                  <section
+                    v-for="(section, index) in currentDocSectionBlocks"
+                    :key="`${section.title}-${index}`"
+                    class="border-b border-slate-100 px-4 py-4 last:border-b-0"
+                  >
+                    <div class="grid gap-3 md:grid-cols-[120px_minmax(0,1fr)]">
+                      <div class="text-sm font-medium text-slate-500">
+                        {{ section.title }}
+                        v-if="section.sourceField" class="mt-1 block text-xs text-slate-300" >
+                        {{ section.sourceField }}
+                      </div>
+                      <div class="space-y-3">
+                        <div
+                          v-for="block in section.blocks"
+                          :key="block.key"
+                          :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
+                          class="doc-content doc-content--prewrap rounded-lg px-3 py-2 text-sm leading-relaxed text-slate-700 transition-all"
+                          :class="
+                            activeHighlightBlockKey === block.key
+                              ? 'doc-content--active-highlight'
+                              : 'bg-transparent'
+                          "
+                          v-html="renderBlockHtml(block)"
+                        />
+                      </div>
+                    </div>
+                  </section>
+                </div>
+                <div
+                  v-else-if="currentDocContent"
+                  class="space-y-3"
+                >
+                  <div
+                    v-for="block in currentDocPlainBlocks"
+                    :key="block.key"
+                    :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
+                    class="doc-content doc-content--prewrap rounded-lg px-3 py-2 text-sm leading-relaxed text-slate-700 transition-all"
+                    :class="
+                      activeHighlightBlockKey === block.key
+                        ? 'doc-content--active-highlight'
+                        : 'bg-transparent'
+                    "
+                    v-html="renderBlockHtml(block)"
+                  />
+                </div>
+                <div
+                  v-else
+                  class="text-center py-12 text-slate-400"
+                >
+                  <FileTextOutlined
+                    style="font-size: 36px"
+                    class="mb-3 block"
+                  />
+                  <p class="text-sm">
+                    {{ docLoading ? '加载中...' : '当前文书暂无可展示内容' }}
+                  </p>
+                  <p class="text-xs mt-1 text-slate-300">
+                    可切换其它文书继续查看
+                  </p>
+                </div>
+              </template>
               <div
                 v-else
                 class="text-center py-12 text-slate-400"
@@ -220,189 +327,175 @@
                   class="mb-3 block"
                 />
                 <p class="text-sm">
-                  {{ docLoading ? '加载中...' : '当前文书暂无可展示内容' }}
+                  {{ docLoading ? '加载中...' : '暂无文书内容' }}
                 </p>
                 <p class="text-xs mt-1 text-slate-300">
-                  可切换其它文书继续查看
+                  文书数据需从后端病历库获取
                 </p>
               </div>
-            </template>
+            </a-spin>
+          </div>
+        </div>
+
+        <!-- 右侧：缺陷列表 -->
+        <div class="w-[400px] flex-shrink-0 flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-slate-800">
+              质控问题
+              <span class="text-xs text-slate-400 font-normal ml-2">共 {{ displayedIssueCount }} 项</span>
+            </h3>
+            <a-button
+              size="small"
+              type="text"
+              class="text-slate-500"
+              @click="loadDefects"
+            >
+              <ReloadOutlined :spin="defectLoading" />
+            </a-button>
+          </div>
+
+          <a-spin
+            :spinning="defectLoading"
+            class="flex-1 overflow-hidden"
+          >
+            <div
+              v-if="displayedIssueCount === 0"
+              class="text-center py-8 text-slate-400 text-sm"
+            >
+              暂无质控问题
+            </div>
+            <div
+              v-else-if="defectList.length > 0"
+              class="space-y-3 overflow-y-auto pr-1"
+              style="max-height: calc(100vh - 380px)"
+            >
+              <div
+                v-for="defect in defectList"
+                :key="defect.id"
+                class="bg-white rounded-xl border border-slate-100 p-4 hover:shadow-md transition-all cursor-pointer group"
+                :class="{ 'ring-2 ring-blue-200 border-blue-200': selectedDefectId === defect.id }"
+                @click="handleDefectSelect(defect)"
+              >
+                <div class="flex items-start justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="w-2 h-2 rounded-full flex-shrink-0"
+                      :class="{
+                        'bg-rose-500':
+                          defect.severity === 'critical' || defect.severity === 'error',
+                        'bg-amber-500': defect.severity === 'warning',
+                        'bg-blue-500': defect.severity === 'info',
+                      }"
+                    />
+                    <span class="text-sm font-medium text-slate-800">{{ defect.rule_name }}</span>
+                  </div>
+                  <span
+                    class="text-xs px-2 py-0.5 rounded-md font-medium"
+                    :class="{
+                      'bg-amber-50 text-amber-600': defect.status === 'pending',
+                      'bg-blue-50 text-blue-600': defect.status === 'urged',
+                      'bg-emerald-50 text-emerald-600': defect.status === 'approved',
+                      'bg-rose-50 text-rose-600': defect.status === 'rejected',
+                      'bg-slate-100 text-slate-500': defect.status === 'remediated',
+                    }"
+                  >
+                    {{ getDefectStatusText(defect.status) }}
+                  </span>
+                </div>
+                <p class="text-xs text-slate-500 mb-2 line-clamp-2">
+                  {{ defect.description }}
+                </p>
+                <div class="flex items-center gap-4 text-xs text-slate-400">
+                  <span>分类：{{ defect.category }}</span>
+                  <span>位置：{{ defect.location }}</span>
+                </div>
+
+                <!-- 操作按钮（选中时显示） -->
+                <QCReviewActionBar
+                  v-if="selectedDefectId === defect.id"
+                  :defect="defect"
+                  class="mt-3 pt-3 border-t border-slate-100"
+                  @action-done="handleActionDone"
+                />
+              </div>
+            </div>
             <div
               v-else
-              class="text-center py-12 text-slate-400"
+              class="space-y-3 overflow-y-auto pr-1"
+              style="max-height: calc(100vh - 380px)"
             >
-              <FileTextOutlined
-                style="font-size: 36px"
-                class="mb-3 block"
-              />
-              <p class="text-sm">
-                {{ docLoading ? '加载中...' : '暂无文书内容' }}
-              </p>
-              <p class="text-xs mt-1 text-slate-300">
-                文书数据需从后端病历库获取
-              </p>
+              <div
+                v-for="issue in reviewItemList"
+                :key="issue.id"
+                class="bg-white rounded-xl border border-slate-100 p-4 transition-all cursor-pointer"
+                :class="{
+                  'ring-2 ring-blue-200 border-blue-200': selectedReviewIssueId === issue.id,
+                }"
+                @click="handleReviewIssueSelect(issue)"
+              >
+                <div class="flex items-start justify-between gap-3 mb-3">
+                  <div class="min-w-0">
+                    <div class="text-sm font-semibold text-slate-800 break-words">
+                      {{ issue.rule_code ? `${issue.rule_code} · ` : ''
+                      }}{{ issue.rule_name || '质控规则' }}
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
+                      <span
+                        class="px-2 py-0.5 rounded-full border"
+                        :class="getReviewStatusClass(issue.status)"
+                      >
+                        {{ getReviewStatusText(issue.status) }}
+                      </span>
+                      <span
+                        v-if="issue.document_type"
+                        class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
+                      >
+                        {{ issue.document_type }}
+                      </span>
+                      <span
+                        v-if="issue.rule_family"
+                        class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
+                      >
+                        {{ issue.rule_family }}
+                      </span>
+                      <span
+                        v-if="issue.defect_level"
+                        class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
+                      >
+                        {{ issue.defect_level }}
+                      </span>
+                    </div>
+                  </div>
+                  <span
+                    v-if="issue.confidence !== null && issue.confidence !== undefined"
+                    class="text-xs text-slate-400 font-mono flex-shrink-0"
+                  >
+                    {{ Number(issue.confidence).toFixed(2) }}
+                  </span>
+                </div>
+
+                <div
+                  v-if="issue.findings"
+                  class="text-xs text-slate-700 leading-6"
+                >
+                  <span class="text-slate-400">结论：</span>{{ issue.findings }}
+                </div>
+                <div
+                  v-if="issue.evidence"
+                  class="text-xs text-slate-500 leading-6 mt-2"
+                >
+                  <span class="text-slate-400">证据：</span>{{ issue.evidence }}
+                </div>
+                <div
+                  v-if="issue.suggestion"
+                  class="text-xs text-blue-600 leading-6 mt-2"
+                >
+                  <span class="text-slate-400">建议：</span>{{ issue.suggestion }}
+                </div>
+              </div>
             </div>
           </a-spin>
         </div>
-      </div>
-
-      <!-- 右侧：缺陷列表 -->
-      <div class="w-[400px] flex-shrink-0 flex flex-col">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-sm font-bold text-slate-800">
-            质控问题
-            <span class="text-xs text-slate-400 font-normal ml-2">共 {{ displayedIssueCount }} 项</span>
-          </h3>
-          <a-button
-            size="small"
-            type="text"
-            class="text-slate-500"
-            @click="loadDefects"
-          >
-            <ReloadOutlined :spin="defectLoading" />
-          </a-button>
-        </div>
-
-        <a-spin
-          :spinning="defectLoading"
-          class="flex-1 overflow-hidden"
-        >
-          <div
-            v-if="displayedIssueCount === 0"
-            class="text-center py-8 text-slate-400 text-sm"
-          >
-            暂无质控问题
-          </div>
-          <div
-            v-else-if="defectList.length > 0"
-            class="space-y-3 overflow-y-auto pr-1"
-            style="max-height: calc(100vh - 380px)"
-          >
-            <div
-              v-for="defect in defectList"
-              :key="defect.id"
-              class="bg-white rounded-xl border border-slate-100 p-4 hover:shadow-md transition-all cursor-pointer group"
-              :class="{ 'ring-2 ring-blue-200 border-blue-200': selectedDefectId === defect.id }"
-              @click="handleDefectSelect(defect)"
-            >
-              <div class="flex items-start justify-between mb-2">
-                <div class="flex items-center gap-2">
-                  <span
-                    class="w-2 h-2 rounded-full flex-shrink-0"
-                    :class="{
-                      'bg-rose-500': defect.severity === 'critical' || defect.severity === 'error',
-                      'bg-amber-500': defect.severity === 'warning',
-                      'bg-blue-500': defect.severity === 'info',
-                    }"
-                  />
-                  <span class="text-sm font-medium text-slate-800">{{ defect.rule_name }}</span>
-                </div>
-                <span
-                  class="text-xs px-2 py-0.5 rounded-md font-medium"
-                  :class="{
-                    'bg-amber-50 text-amber-600': defect.status === 'pending',
-                    'bg-blue-50 text-blue-600': defect.status === 'urged',
-                    'bg-emerald-50 text-emerald-600': defect.status === 'approved',
-                    'bg-rose-50 text-rose-600': defect.status === 'rejected',
-                    'bg-slate-100 text-slate-500': defect.status === 'remediated',
-                  }"
-                >
-                  {{ getDefectStatusText(defect.status) }}
-                </span>
-              </div>
-              <p class="text-xs text-slate-500 mb-2 line-clamp-2">
-                {{ defect.description }}
-              </p>
-              <div class="flex items-center gap-4 text-xs text-slate-400">
-                <span>分类：{{ defect.category }}</span>
-                <span>位置：{{ defect.location }}</span>
-              </div>
-
-              <!-- 操作按钮（选中时显示） -->
-              <QCReviewActionBar
-                v-if="selectedDefectId === defect.id"
-                :defect="defect"
-                class="mt-3 pt-3 border-t border-slate-100"
-                @action-done="handleActionDone"
-              />
-            </div>
-          </div>
-          <div
-            v-else
-            class="space-y-3 overflow-y-auto pr-1"
-            style="max-height: calc(100vh - 380px)"
-          >
-            <div
-              v-for="issue in reviewItemList"
-              :key="issue.id"
-              class="bg-white rounded-xl border border-slate-100 p-4 transition-all cursor-pointer"
-              :class="{
-                'ring-2 ring-blue-200 border-blue-200': selectedReviewIssueId === issue.id,
-              }"
-              @click="handleReviewIssueSelect(issue)"
-            >
-              <div class="flex items-start justify-between gap-3 mb-3">
-                <div class="min-w-0">
-                  <div class="text-sm font-semibold text-slate-800 break-words">
-                    {{ issue.rule_code ? `${issue.rule_code} · ` : ''
-                    }}{{ issue.rule_name || '质控规则' }}
-                  </div>
-                  <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
-                    <span
-                      class="px-2 py-0.5 rounded-full border"
-                      :class="getReviewStatusClass(issue.status)"
-                    >
-                      {{ getReviewStatusText(issue.status) }}
-                    </span>
-                    <span
-                      v-if="issue.document_type"
-                      class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
-                    >
-                      {{ issue.document_type }}
-                    </span>
-                    <span
-                      v-if="issue.rule_family"
-                      class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
-                    >
-                      {{ issue.rule_family }}
-                    </span>
-                    <span
-                      v-if="issue.defect_level"
-                      class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
-                    >
-                      {{ issue.defect_level }}
-                    </span>
-                  </div>
-                </div>
-                <span
-                  v-if="issue.confidence !== null && issue.confidence !== undefined"
-                  class="text-xs text-slate-400 font-mono flex-shrink-0"
-                >
-                  {{ Number(issue.confidence).toFixed(2) }}
-                </span>
-              </div>
-
-              <div
-                v-if="issue.findings"
-                class="text-xs text-slate-700 leading-6"
-              >
-                <span class="text-slate-400">结论：</span>{{ issue.findings }}
-              </div>
-              <div
-                v-if="issue.evidence"
-                class="text-xs text-slate-500 leading-6 mt-2"
-              >
-                <span class="text-slate-400">证据：</span>{{ issue.evidence }}
-              </div>
-              <div
-                v-if="issue.suggestion"
-                class="text-xs text-blue-600 leading-6 mt-2"
-              >
-                <span class="text-slate-400">建议：</span>{{ issue.suggestion }}
-              </div>
-            </div>
-          </div>
-        </a-spin>
       </div>
     </div>
   </a-drawer>
@@ -488,6 +581,12 @@ interface ReviewDocTreeGroup {
   label: string
   count: number
   children: ReviewDocTreeNode[]
+}
+
+interface ReviewDocDateGroup {
+  key: string
+  label: string
+  docs: ReviewDocItem[]
 }
 
 interface DocParagraphBlock {
@@ -578,9 +677,43 @@ const selectedReviewIssueId = ref<string | null>(null)
 const docLoading = ref(false)
 const recordDetail = ref<Record<string, unknown> | null>(null)
 const activeDocGroup = ref('all')
+const activeCourseSubtype = ref('all')
 const activeDocKey = ref('')
 const activeHighlightTarget = ref<HighlightTarget | null>(null)
 const highlightBlockElements = new Map<string, HTMLElement>()
+
+const FIELD_LABELS: Record<string, string> = {
+  record_time: '记录时间',
+  department: '科室',
+  doctor_name: '医生',
+  recorder_name: '记录者',
+  ward_round_doctor_name: '查房医生',
+  ward_round_type: '查房类型',
+  participant_names: '参加人员',
+  consultation_department: '会诊科室',
+  consultation_doctor_name: '会诊医师',
+  consultation_reason: '会诊理由',
+  consultation_opinion: '会诊意见',
+  chief_complaint: '主诉',
+  present_illness_history: '现病史',
+  past_history: '既往史',
+  personal_history: '个人史',
+  menstrual_history: '月经史',
+  marital_history: '婚育史',
+  family_history: '家族史',
+  diagnosis: '诊断',
+}
+
+const COURSE_SUBTYPE_LABELS: Record<string, string> = {
+  all: '全部',
+  first_course: '首次病程',
+  senior_round: '查房记录',
+  daily_course: '日常病程',
+  consultation: '会诊记录',
+  rescue: '抢救记录',
+  postoperative: '术后病程',
+  other: '其他',
+}
 
 function safeText(value: unknown): string {
   return String(value || '').trim()
@@ -762,6 +895,56 @@ function inferDocGroupKey(doc: ReviewDocItem): string {
   return 'course'
 }
 
+function prettifyFieldLabel(fieldName?: string): string {
+  const raw = safeText(fieldName)
+  if (!raw) return '字段'
+  if (FIELD_LABELS[raw]) return FIELD_LABELS[raw]
+  return raw
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .replace(/\s+/g, ' ')
+}
+
+function inferCourseSubtype(doc: ReviewDocItem): string {
+  const docType = safeText(doc.doc_type || doc.source_table).toLowerCase()
+  if (docType.includes('first_course')) return 'first_course'
+  if (docType.includes('senior_course')) return 'senior_round'
+  if (docType.includes('daily_course')) return 'daily_course'
+  if (docType.includes('consult')) return 'consultation'
+  if (docType.includes('rescue')) return 'rescue'
+  if (docType.includes('postsurg')) return 'postoperative'
+  return 'other'
+}
+
+function parseSortTimestamp(value?: string): number {
+  const raw = safeText(value)
+  if (!raw) return 0
+  const normalized = raw.endsWith('Z') ? raw : raw.replace(' ', 'T')
+  const timestamp = new Date(normalized).getTime()
+  return Number.isNaN(timestamp) ? 0 : timestamp
+}
+
+function sortDocsByTimeDesc(docs: ReviewDocItem[]): ReviewDocItem[] {
+  return [...docs].sort((left, right) => {
+    const timeGap =
+      parseSortTimestamp(right.record_time || right.sort_time) -
+      parseSortTimestamp(left.record_time || left.sort_time)
+    if (timeGap !== 0) return timeGap
+    return safeText(right.document_title).localeCompare(safeText(left.document_title), 'zh-CN')
+  })
+}
+
+function buildDocDateKey(doc: ReviewDocItem): string {
+  const timeText = formatDocTime(doc.record_time || doc.sort_time)
+  if (!timeText) return 'undated'
+  return timeText.slice(0, 10)
+}
+
+function buildDocDateLabel(dateKey: string): string {
+  if (dateKey === 'undated') return '未标记时间'
+  return dateKey
+}
+
 function buildTreeNodeFromDoc(doc: ReviewDocItem): ReviewDocTreeNode {
   return {
     id: doc.document_id || doc.id,
@@ -922,13 +1105,6 @@ const displayDocGroups = computed(() =>
   ),
 )
 
-const docGroupOptions = computed(() =>
-  displayDocGroups.value.map((group) => ({
-    label: `${group.label} (${group.children.length})`,
-    value: group.key,
-  })),
-)
-
 const currentGroupNodes = computed<ReviewDocTreeNode[]>(() => {
   const groupKey = safeText(activeDocGroup.value)
   if (!groupKey || groupKey === 'all') {
@@ -948,17 +1124,55 @@ function resolveDocByNode(node: ReviewDocTreeNode): ReviewDocItem | undefined {
 }
 
 const currentGroupDocs = computed<ReviewDocItem[]>(() =>
-  currentGroupNodes.value
-    .map((node) => resolveDocByNode(node))
-    .filter((doc): doc is ReviewDocItem => Boolean(doc))
-    .filter((doc, index, list) => list.findIndex((item) => item.doc_key === doc.doc_key) === index),
+  sortDocsByTimeDesc(
+    currentGroupNodes.value
+      .map((node) => resolveDocByNode(node))
+      .filter((doc): doc is ReviewDocItem => Boolean(doc))
+      .filter(
+        (doc, index, list) => list.findIndex((item) => item.doc_key === doc.doc_key) === index,
+      ),
+  ),
 )
 
+const courseSubtypeOptions = computed(() => {
+  if (activeDocGroup.value !== 'course') return []
+  const availableTypes = new Set(currentGroupDocs.value.map((doc) => inferCourseSubtype(doc)))
+  const options = [{ label: COURSE_SUBTYPE_LABELS.all, value: 'all' }]
+  Object.entries(COURSE_SUBTYPE_LABELS)
+    .filter(([key]) => key !== 'all' && availableTypes.has(key))
+    .forEach(([key, label]) => {
+      options.push({ label, value: key })
+    })
+  return options
+})
+
+const visibleCurrentGroupDocs = computed<ReviewDocItem[]>(() => {
+  if (activeDocGroup.value !== 'course' || activeCourseSubtype.value === 'all') {
+    return currentGroupDocs.value
+  }
+  return currentGroupDocs.value.filter(
+    (doc) => inferCourseSubtype(doc) === activeCourseSubtype.value,
+  )
+})
+
+const currentGroupDateGroups = computed<ReviewDocDateGroup[]>(() => {
+  const groups = new Map<string, ReviewDocItem[]>()
+  for (const doc of visibleCurrentGroupDocs.value) {
+    const dateKey = buildDocDateKey(doc)
+    groups.set(dateKey, [...(groups.get(dateKey) || []), doc])
+  }
+  return Array.from(groups.entries()).map(([key, docs]) => ({
+    key,
+    label: buildDocDateLabel(key),
+    docs: sortDocsByTimeDesc(docs),
+  }))
+})
+
 const currentDoc = computed<ReviewDocItem | null>(() => {
-  if (!currentGroupDocs.value.length) return null
+  if (!visibleCurrentGroupDocs.value.length) return null
   return (
-    currentGroupDocs.value.find((doc) => doc.doc_key === activeDocKey.value) ||
-    currentGroupDocs.value[0] ||
+    visibleCurrentGroupDocs.value.find((doc) => doc.doc_key === activeDocKey.value) ||
+    visibleCurrentGroupDocs.value[0] ||
     null
   )
 })
@@ -988,7 +1202,7 @@ const currentDocFieldList = computed(() => {
     .filter((field) => field?.used !== false)
     .map((field) => ({
       key: safeText(field?.source_field) || 'field',
-      label: safeText(field?.source_field) || '字段',
+      label: prettifyFieldLabel(field?.source_field),
       value: safeText(field?.raw_value_preview),
     }))
 })
@@ -1041,10 +1255,20 @@ const activeReviewIssueSummary = computed(() => {
   return `已切换到“${target.docTitle}”，并定位到相关原文段落。`
 })
 
-function renderDocButtonLabel(doc: ReviewDocItem): string {
-  const time = formatDocTime(doc.record_time || doc.sort_time)
-  if (!time) return doc.document_title || doc.doc_name
-  return `${time.slice(5, 16)} ${doc.document_title || doc.doc_name}`
+function renderDocListTitle(doc: ReviewDocItem): string {
+  if (activeDocGroup.value === 'course') {
+    return DOC_TYPE_LABELS[safeText(doc.doc_type)] || doc.document_title || doc.doc_name
+  }
+  return doc.document_title || doc.doc_name
+}
+
+function renderDocListMeta(doc: ReviewDocItem): string {
+  const parts = [formatDocTime(doc.record_time || doc.sort_time).slice(11, 19)].filter(Boolean)
+  const sourceTable = safeText(doc.source_table)
+  if (activeDocGroup.value !== 'course' && sourceTable) {
+    parts.push(sourceTable)
+  }
+  return parts.join(' · ')
 }
 
 function setHighlightBlockRef(blockKey: string, el: Element | null) {
@@ -1185,16 +1409,20 @@ async function handleDefectSelect(defect: DefectItem) {
 function syncActiveDocumentSelection() {
   if (!displayDocGroups.value.length) {
     activeDocGroup.value = 'all'
-    activeDocKey.value = currentGroupDocs.value[0]?.doc_key || ''
+    activeDocKey.value = visibleCurrentGroupDocs.value[0]?.doc_key || ''
     return
   }
   const validGroupKeys = displayDocGroups.value.map((group) => group.key)
   if (!validGroupKeys.includes(activeDocGroup.value)) {
     activeDocGroup.value = validGroupKeys[0]
   }
-  const validDocKeys = currentGroupDocs.value.map((doc) => doc.doc_key)
+  const validCourseSubtypes = courseSubtypeOptions.value.map((option) => option.value)
+  if (!validCourseSubtypes.includes(activeCourseSubtype.value)) {
+    activeCourseSubtype.value = 'all'
+  }
+  const validDocKeys = visibleCurrentGroupDocs.value.map((doc) => doc.doc_key)
   if (!validDocKeys.includes(activeDocKey.value)) {
-    activeDocKey.value = currentGroupDocs.value[0]?.doc_key || ''
+    activeDocKey.value = visibleCurrentGroupDocs.value[0]?.doc_key || ''
   }
 }
 
@@ -1345,8 +1573,14 @@ const handleClose = () => {
   emit('close')
 }
 
-watch([displayDocGroups, currentGroupDocs], () => {
+watch([displayDocGroups, visibleCurrentGroupDocs, courseSubtypeOptions], () => {
   syncActiveDocumentSelection()
+})
+
+watch(activeDocGroup, (groupKey) => {
+  if (groupKey !== 'course') {
+    activeCourseSubtype.value = 'all'
+  }
 })
 
 watch([activeHighlightBlockKey, currentDocAllBlocks], async ([blockKey, blocks]) => {
@@ -1364,6 +1598,7 @@ watch(
       selectedDefectId.value = null
       selectedReviewIssueId.value = null
       activeDocGroup.value = 'all'
+      activeCourseSubtype.value = 'all'
       activeDocKey.value = ''
       activeHighlightTarget.value = null
       highlightBlockElements.clear()
@@ -1379,6 +1614,10 @@ watch(
 <style scoped>
 .qc-review-drawer :deep(.ant-drawer-body) {
   padding: 20px;
+  background: #fafbfc;
+}
+
+.qc-review-drawer :deep(.ant-drawer-content) {
   background: #fafbfc;
 }
 
@@ -1398,6 +1637,10 @@ watch(
   box-shadow: inset 0 0 0 1px #f3d57a;
 }
 
+.doc-content:not(.doc-content--active-highlight) {
+  background: transparent;
+}
+
 .doc-content :deep(.doc-content__mark) {
   background: #facc15;
   color: #7c2d12;
@@ -1415,6 +1658,14 @@ watch(
 
 .doc-content :deep(b) {
   color: #1a1a1a;
+}
+
+.qc-review-drawer button {
+  outline: none;
+}
+
+.qc-review-drawer button:focus-visible {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
 .line-clamp-2 {
