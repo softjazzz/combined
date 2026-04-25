@@ -148,11 +148,22 @@
                 </div>
               </div>
               <div
-                v-if="currentDocSectionList.length > 0"
+                v-if="activeReviewIssueSummary"
+                class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"
+              >
+                <div class="font-semibold text-amber-900">
+                  已定位当前质控问题原文
+                </div>
+                <div class="mt-1 leading-6">
+                  {{ activeReviewIssueSummary }}
+                </div>
+              </div>
+              <div
+                v-if="currentDocSectionBlocks.length > 0"
                 class="space-y-4"
               >
                 <section
-                  v-for="(section, index) in currentDocSectionList"
+                  v-for="(section, index) in currentDocSectionBlocks"
                   :key="`${section.title}-${index}`"
                   class="rounded-xl border border-slate-100 bg-white px-4 py-4"
                 >
@@ -167,18 +178,38 @@
                       {{ section.sourceField }}
                     </span>
                   </div>
-                  <div
-                    class="doc-content doc-content--prewrap text-sm leading-relaxed text-slate-700"
-                  >
-                    {{ section.text }}
+                  <div class="space-y-3">
+                    <div
+                      v-for="block in section.blocks"
+                      :key="block.key"
+                      :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
+                      class="doc-content doc-content--prewrap rounded-lg px-3 py-2 text-sm leading-relaxed text-slate-700 transition-all"
+                      :class="
+                        activeHighlightBlockKey === block.key
+                          ? 'doc-content--active-highlight'
+                          : 'bg-transparent'
+                      "
+                      v-html="renderBlockHtml(block)"
+                    />
                   </div>
                 </section>
               </div>
               <div
                 v-else-if="currentDocContent"
-                class="doc-content doc-content--prewrap text-sm leading-relaxed text-slate-700"
+                class="space-y-3"
               >
-                {{ currentDocContent }}
+                <div
+                  v-for="block in currentDocPlainBlocks"
+                  :key="block.key"
+                  :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
+                  class="doc-content doc-content--prewrap rounded-lg px-3 py-2 text-sm leading-relaxed text-slate-700 transition-all"
+                  :class="
+                    activeHighlightBlockKey === block.key
+                      ? 'doc-content--active-highlight'
+                      : 'bg-transparent'
+                  "
+                  v-html="renderBlockHtml(block)"
+                />
               </div>
               <div
                 v-else
@@ -252,7 +283,7 @@
               :key="defect.id"
               class="bg-white rounded-xl border border-slate-100 p-4 hover:shadow-md transition-all cursor-pointer group"
               :class="{ 'ring-2 ring-blue-200 border-blue-200': selectedDefectId === defect.id }"
-              @click="selectedDefectId = defect.id"
+              @click="handleDefectSelect(defect)"
             >
               <div class="flex items-start justify-between mb-2">
                 <div class="flex items-center gap-2">
@@ -304,7 +335,11 @@
             <div
               v-for="issue in reviewItemList"
               :key="issue.id"
-              class="bg-white rounded-xl border border-slate-100 p-4"
+              class="bg-white rounded-xl border border-slate-100 p-4 transition-all cursor-pointer"
+              :class="{
+                'ring-2 ring-blue-200 border-blue-200': selectedReviewIssueId === issue.id,
+              }"
+              @click="handleReviewIssueSelect(issue)"
             >
               <div class="flex items-start justify-between gap-3 mb-3">
                 <div class="min-w-0">
@@ -374,7 +409,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { ReloadOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import { getDefectList, getRecordDetail, type DefectItem } from '@/api/qcAdmin'
 import QCReviewActionBar from './QCReviewActionBar.vue'
@@ -455,6 +490,34 @@ interface ReviewDocTreeGroup {
   children: ReviewDocTreeNode[]
 }
 
+interface DocParagraphBlock {
+  key: string
+  text: string
+}
+
+interface DocSectionBlock {
+  key: string
+  title: string
+  sourceField?: string
+  blocks: DocParagraphBlock[]
+}
+
+interface HighlightTarget {
+  docKey: string
+  blockKey: string
+  snippet: string
+  docTitle: string
+}
+
+type SelectableIssue = {
+  id: string
+  rule_name?: string
+  document_type?: string
+  evidence?: string
+  findings?: string
+  suggestion?: string
+}
+
 const DOC_GROUP_LABELS: Record<string, string> = {
   all: '全部',
   frontpage: '病案首页',
@@ -502,13 +565,88 @@ const defectLoading = ref(false)
 const defectList = ref<DefectItem[]>([])
 const reviewItemList = ref<ReviewIssueItem[]>([])
 const selectedDefectId = ref<string | null>(null)
+const selectedReviewIssueId = ref<string | null>(null)
 const docLoading = ref(false)
 const recordDetail = ref<Record<string, unknown> | null>(null)
 const activeDocGroup = ref('all')
 const activeDocKey = ref('')
+const activeHighlightTarget = ref<HighlightTarget | null>(null)
+const highlightBlockElements = new Map<string, HTMLElement>()
 
 function safeText(value: unknown): string {
   return String(value || '').trim()
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function normalizeSearchText(value: string): string {
+  return safeText(value)
+    .replace(/【[^】]*】/g, '')
+    .replace(/\[[^\]]*]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[：:，,。；;、]/g, '')
+}
+
+function splitReadableParagraphs(text: string): string[] {
+  const normalized = safeText(text).replace(/\r/g, '')
+  if (!normalized) return []
+  const lineBlocks = normalized
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (lineBlocks.length > 1) return lineBlocks
+
+  const sentences = normalized
+    .split(/(?<=[。！？；;])/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (sentences.length <= 1) return [normalized]
+
+  const blocks: string[] = []
+  let current = ''
+  let sentenceCount = 0
+  for (const sentence of sentences) {
+    const next = current ? `${current}${sentence}` : sentence
+    if (current && (next.length > 110 || sentenceCount >= 2)) {
+      blocks.push(current)
+      current = sentence
+      sentenceCount = 1
+    } else {
+      current = next
+      sentenceCount += 1
+    }
+  }
+  if (current) blocks.push(current)
+  return blocks
+}
+
+function extractIssueSearchText(
+  issue: Pick<SelectableIssue, 'evidence' | 'findings' | 'rule_name'>,
+): string {
+  const evidence = safeText(issue.evidence)
+  if (evidence) return evidence
+  const findings = safeText(issue.findings)
+  if (findings) return findings
+  return safeText(issue.rule_name)
+}
+
+function matchesDocType(doc: ReviewDocItem, documentType?: string): boolean {
+  const query = safeText(documentType).toLowerCase()
+  if (!query) return false
+  const candidates = [
+    safeText(doc.doc_type).toLowerCase(),
+    safeText(doc.source_table).toLowerCase(),
+    safeText(doc.document_title).toLowerCase(),
+    safeText(doc.doc_name).toLowerCase(),
+  ]
+  return candidates.some((item) => item && (item.includes(query) || query.includes(item)))
 }
 
 function formatDocTime(value?: string): string {
@@ -852,10 +990,181 @@ const currentDocSectionList = computed(() => {
     .filter((section) => Boolean(section.text))
 })
 
+const currentDocSectionBlocks = computed<DocSectionBlock[]>(() =>
+  currentDocSectionList.value
+    .map((section) => ({
+      key: section.key,
+      title: section.title,
+      sourceField: section.sourceField,
+      blocks: splitReadableParagraphs(section.text).map((text, index) => ({
+        key: `${section.key}-block-${index}`,
+        text,
+      })),
+    }))
+    .filter((section) => section.blocks.length > 0),
+)
+
+const currentDocPlainBlocks = computed<DocParagraphBlock[]>(() =>
+  splitReadableParagraphs(currentDocContent.value).map((text, index) => ({
+    key: `plain-block-${index}`,
+    text,
+  })),
+)
+
+const currentDocAllBlocks = computed<DocParagraphBlock[]>(() => {
+  if (currentDocSectionBlocks.value.length > 0) {
+    return currentDocSectionBlocks.value.flatMap((section) => section.blocks)
+  }
+  return currentDocPlainBlocks.value
+})
+
+const activeHighlightBlockKey = computed(() => activeHighlightTarget.value?.blockKey || '')
+
+const activeReviewIssueSummary = computed(() => {
+  const target = activeHighlightTarget.value
+  if (!target) return ''
+  return `已切换到“${target.docTitle}”，并定位到相关原文段落。`
+})
+
 function renderDocButtonLabel(doc: ReviewDocItem): string {
   const time = formatDocTime(doc.record_time || doc.sort_time)
   if (!time) return doc.document_title || doc.doc_name
   return `${time.slice(5, 16)} ${doc.document_title || doc.doc_name}`
+}
+
+function setHighlightBlockRef(blockKey: string, el: Element | null) {
+  if (el instanceof HTMLElement) {
+    highlightBlockElements.set(blockKey, el)
+    return
+  }
+  highlightBlockElements.delete(blockKey)
+}
+
+function findHighlightTargetInDoc(
+  doc: ReviewDocItem,
+  issue: SelectableIssue,
+): HighlightTarget | null {
+  const queryText = extractIssueSearchText(issue)
+  const normalizedQuery = normalizeSearchText(queryText)
+  if (!normalizedQuery) return null
+
+  const blocks =
+    currentDoc.value?.doc_key === doc.doc_key
+      ? currentDocAllBlocks.value
+      : (() => {
+          const sections = (doc.sections || [])
+            .map((section, index) => {
+              const baseKey = safeText(section?.section_key) || `section-${index}`
+              return splitReadableParagraphs(safeText(section?.text)).map((text, blockIndex) => ({
+                key: `${baseKey}-block-${blockIndex}`,
+                text,
+              }))
+            })
+            .flat()
+          if (sections.length > 0) return sections
+          return splitReadableParagraphs(doc.content).map((text, index) => ({
+            key: `plain-block-${index}`,
+            text,
+          }))
+        })()
+
+  const matchedBlock = blocks.find((block) =>
+    normalizeSearchText(block.text).includes(normalizedQuery),
+  )
+  if (!matchedBlock) return null
+  return {
+    docKey: doc.doc_key,
+    blockKey: matchedBlock.key,
+    snippet: queryText,
+    docTitle: doc.document_title || doc.doc_name || '病历文书',
+  }
+}
+
+function findBestHighlightTarget(issue: SelectableIssue): HighlightTarget | null {
+  const docsByType = documentList.value.filter((doc) => matchesDocType(doc, issue.document_type))
+  for (const doc of docsByType) {
+    const target = findHighlightTargetInDoc(doc, issue)
+    if (target) return target
+  }
+  for (const doc of documentList.value) {
+    const target = findHighlightTargetInDoc(doc, issue)
+    if (target) return target
+  }
+  return null
+}
+
+async function applyHighlightTarget(target: HighlightTarget | null) {
+  if (!target) {
+    activeHighlightTarget.value = null
+    return
+  }
+  const doc = documentList.value.find((item) => item.doc_key === target.docKey)
+  if (!doc) {
+    activeHighlightTarget.value = null
+    return
+  }
+  activeDocGroup.value = inferDocGroupKey(doc)
+  activeDocKey.value = doc.doc_key
+  activeHighlightTarget.value = target
+  await nextTick()
+  const el = highlightBlockElements.get(target.blockKey)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+function renderHighlightedText(text: string, snippet: string): string {
+  const safeTextValue = escapeHtml(text)
+  const normalizedSnippet = normalizeSearchText(snippet)
+  if (!normalizedSnippet) return safeTextValue
+
+  const chars = Array.from(text)
+  let rawStart = -1
+  let rawEnd = -1
+  let normalizedCursor = ''
+  for (let index = 0; index < chars.length; index += 1) {
+    const normalizedChar = normalizeSearchText(chars[index] || '')
+    if (!normalizedChar) continue
+    normalizedCursor += normalizedChar
+    if (normalizedCursor.endsWith(normalizedSnippet)) {
+      rawEnd = index + 1
+      let remaining = normalizedSnippet.length
+      let start = index
+      while (start >= 0 && remaining > 0) {
+        const width = normalizeSearchText(chars[start] || '').length
+        if (width > 0) remaining -= width
+        start -= 1
+      }
+      rawStart = start + 1
+      break
+    }
+  }
+  if (rawStart < 0 || rawEnd <= rawStart) return safeTextValue
+
+  const before = escapeHtml(chars.slice(0, rawStart).join(''))
+  const hit = escapeHtml(chars.slice(rawStart, rawEnd).join(''))
+  const after = escapeHtml(chars.slice(rawEnd).join(''))
+  return `${before}<mark class="doc-content__mark">${hit}</mark>${after}`
+}
+
+function renderBlockHtml(block: DocParagraphBlock): string {
+  const target = activeHighlightTarget.value
+  const html =
+    target?.blockKey === block.key
+      ? renderHighlightedText(block.text, target.snippet)
+      : escapeHtml(block.text)
+  return sanitizeHtml(html)
+}
+
+async function handleReviewIssueSelect(issue: ReviewIssueItem) {
+  selectedReviewIssueId.value = issue.id
+  selectedDefectId.value = null
+  const target = findBestHighlightTarget(issue)
+  await applyHighlightTarget(target)
+}
+
+async function handleDefectSelect(defect: DefectItem) {
+  selectedDefectId.value = defect.id
+  selectedReviewIssueId.value = null
+  activeHighlightTarget.value = null
 }
 
 function syncActiveDocumentSelection() {
@@ -1025,14 +1334,24 @@ watch([displayDocGroups, currentGroupDocs], () => {
   syncActiveDocumentSelection()
 })
 
+watch([activeHighlightBlockKey, currentDocAllBlocks], async ([blockKey, blocks]) => {
+  if (!blockKey || !blocks.some((block) => block.key === blockKey)) return
+  await nextTick()
+  const el = highlightBlockElements.get(blockKey)
+  el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+})
+
 // 打开时自动加载
 watch(
   () => props.visible,
   (val) => {
     if (val && props.record) {
       selectedDefectId.value = null
+      selectedReviewIssueId.value = null
       activeDocGroup.value = 'all'
       activeDocKey.value = ''
+      activeHighlightTarget.value = null
+      highlightBlockElements.clear()
       recordDetail.value = null
       reviewItemList.value = []
       loadDefects()
@@ -1057,6 +1376,18 @@ watch(
 .doc-content--prewrap {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.doc-content--active-highlight {
+  background: #fff7d6;
+  box-shadow: inset 0 0 0 1px #f3d57a;
+}
+
+.doc-content :deep(.doc-content__mark) {
+  background: #facc15;
+  color: #7c2d12;
+  border-radius: 4px;
+  padding: 0 2px;
 }
 
 .doc-content :deep(h4) {
