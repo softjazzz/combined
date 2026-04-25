@@ -117,10 +117,65 @@
                 </div>
               </div>
               <div
-                v-if="currentDocContent"
-                class="doc-content text-sm leading-relaxed text-slate-700"
-                v-html="sanitizeHtml(currentDocContent)"
-              />
+                v-if="currentDocFlags.length > 0"
+                class="mb-4 flex flex-wrap gap-2"
+              >
+                <span
+                  v-for="flag in currentDocFlags"
+                  :key="flag"
+                  class="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-700"
+                >
+                  {{ flag }}
+                </span>
+              </div>
+              <div
+                v-if="currentDocFieldList.length > 0"
+                class="mb-4 grid gap-3 md:grid-cols-2"
+              >
+                <div
+                  v-for="field in currentDocFieldList"
+                  :key="field.key"
+                  class="rounded-xl border border-slate-100 bg-white px-4 py-3"
+                >
+                  <div class="text-xs font-medium text-slate-400">
+                    {{ field.label }}
+                  </div>
+                  <div class="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
+                    {{ field.value }}
+                  </div>
+                </div>
+              </div>
+              <div
+                v-if="currentDocSectionList.length > 0"
+                class="space-y-4"
+              >
+                <section
+                  v-for="(section, index) in currentDocSectionList"
+                  :key="`${section.title}-${index}`"
+                  class="rounded-xl border border-slate-100 bg-white px-4 py-4"
+                >
+                  <div class="mb-3 flex items-center justify-between gap-3">
+                    <div class="text-sm font-semibold text-slate-800">
+                      {{ section.title }}
+                    </div>
+                    <span
+                      v-if="section.sourceField"
+                      class="text-xs text-slate-300"
+                    >
+                      {{ section.sourceField }}
+                    </span>
+                  </div>
+                  <div class="doc-content doc-content--prewrap text-sm leading-relaxed text-slate-700">
+                    {{ section.text }}
+                  </div>
+                </section>
+              </div>
+              <div
+                v-else-if="currentDocContent"
+                class="doc-content doc-content--prewrap text-sm leading-relaxed text-slate-700"
+              >
+                {{ currentDocContent }}
+              </div>
               <div
                 v-else
                 class="text-center py-12 text-slate-400"
@@ -364,6 +419,19 @@ interface ReviewDocItem {
   record_time?: string
   source_table?: string
   group_key?: string
+  source_fields?: Array<{
+    source_field?: string
+    raw_value_preview?: string
+    used?: boolean
+  }>
+  sections?: Array<{
+    section_key?: string
+    section_label?: string
+    text?: string
+    source_field?: string
+  }>
+  assembly_status?: string
+  data_quality_flags?: string[]
 }
 
 interface ReviewDocTreeNode {
@@ -501,6 +569,22 @@ function normalizeReviewDocItem(raw: unknown, index: number): ReviewDocItem | nu
     record_time: safeText(source.record_time) || safeText(source.sort_time) || undefined,
     source_table: safeText(source.source_table) || docType || undefined,
     group_key: safeText(source.group_key) || undefined,
+    source_fields: Array.isArray(source.source_fields)
+      ? source.source_fields
+          .filter((item) => item && typeof item === 'object')
+          .map((item) => item as ReviewDocItem['source_fields'][number])
+      : [],
+    sections: Array.isArray(source.sections)
+      ? source.sections
+          .filter((item) => item && typeof item === 'object')
+          .map((item) => item as ReviewDocItem['sections'][number])
+      : [],
+    assembly_status: safeText(source.assembly_status) || undefined,
+    data_quality_flags: Array.isArray(source.data_quality_flags)
+      ? source.data_quality_flags
+          .map((item) => safeText(item))
+          .filter(Boolean)
+      : [],
   }
 }
 
@@ -731,10 +815,39 @@ const currentDocTitle = computed(
 const currentDocMeta = computed(() => {
   if (!currentDoc.value) return ''
   const parts = [formatDocTime(currentDoc.value.record_time || currentDoc.value.sort_time)]
+  if (safeText(currentDoc.value.assembly_status)) {
+    parts.push(`装配状态：${safeText(currentDoc.value.assembly_status)}`)
+  }
   if (safeText(currentDoc.value.source_table)) {
     parts.push(`来源表：${safeText(currentDoc.value.source_table)}`)
   }
   return parts.filter(Boolean).join(' · ')
+})
+
+const currentDocFlags = computed(() => currentDoc.value?.data_quality_flags || [])
+
+const currentDocFieldList = computed(() => {
+  const fields = currentDoc.value?.source_fields || []
+  return fields
+    .filter((field) => Boolean(safeText(field?.raw_value_preview)))
+    .filter((field) => field?.used !== false)
+    .map((field) => ({
+      key: safeText(field?.source_field) || 'field',
+      label: safeText(field?.source_field) || '字段',
+      value: safeText(field?.raw_value_preview),
+    }))
+})
+
+const currentDocSectionList = computed(() => {
+  const sections = currentDoc.value?.sections || []
+  return sections
+    .map((section, index) => ({
+      key: safeText(section?.section_key) || `section-${index}`,
+      title: safeText(section?.section_label) || `正文段落 ${index + 1}`,
+      text: safeText(section?.text),
+      sourceField: safeText(section?.source_field),
+    }))
+    .filter((section) => Boolean(section.text))
 })
 
 function renderDocButtonLabel(doc: ReviewDocItem): string {
@@ -937,6 +1050,11 @@ watch(
   font-size: 14px;
   line-height: 1.9;
   color: #333;
+}
+
+.doc-content--prewrap {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .doc-content :deep(h4) {
