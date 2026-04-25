@@ -140,7 +140,9 @@
                   <div class="text-xs font-medium text-slate-400">
                     {{ field.label }}
                   </div>
-                  <div class="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
+                  <div
+                    class="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700"
+                  >
                     {{ field.value }}
                   </div>
                 </div>
@@ -165,7 +167,9 @@
                       {{ section.sourceField }}
                     </span>
                   </div>
-                  <div class="doc-content doc-content--prewrap text-sm leading-relaxed text-slate-700">
+                  <div
+                    class="doc-content doc-content--prewrap text-sm leading-relaxed text-slate-700"
+                  >
                     {{ section.text }}
                   </div>
                 </section>
@@ -581,9 +585,7 @@ function normalizeReviewDocItem(raw: unknown, index: number): ReviewDocItem | nu
       : [],
     assembly_status: safeText(source.assembly_status) || undefined,
     data_quality_flags: Array.isArray(source.data_quality_flags)
-      ? source.data_quality_flags
-          .map((item) => safeText(item))
-          .filter(Boolean)
+      ? source.data_quality_flags.map((item) => safeText(item)).filter(Boolean)
       : [],
   }
 }
