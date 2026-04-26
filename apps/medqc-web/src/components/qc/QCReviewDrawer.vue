@@ -742,6 +742,45 @@ const FIELD_LABELS: Record<string, string> = {
   marital_history: '婚育史',
   family_history: '家族史',
   diagnosis: '诊断',
+  admission_condition: '入院情况',
+  treatment_course: '诊疗经过',
+  discharge_order: '出院医嘱',
+  discharge_condition: '出院情况',
+  discharge_diagnosis: '出院诊断',
+  discharge_advice: '出院建议',
+  allergy_history: '过敏史',
+  drug_allergy_history: '药物过敏史',
+  food_allergy_history: '食物过敏史',
+  physical_examination: '体格检查',
+  specialist_examination: '专科检查',
+  auxiliary_examination: '辅助检查',
+  admission_diagnosis: '入院诊断',
+  discharge_medication: '出院带药',
+}
+
+const EN_FIELD_LABELS: Record<string, string> = {
+  'admission condition': '入院情况',
+  'treatment course': '诊疗经过',
+  'discharge order': '出院医嘱',
+  'discharge condition': '出院情况',
+  'discharge diagnosis': '出院诊断',
+  'discharge advice': '出院建议',
+  'chief complaint': '主诉',
+  'history of present illness': '现病史',
+  'present illness history': '现病史',
+  'past history': '既往史',
+  'personal history': '个人史',
+  'menstrual history': '月经史',
+  'marital history': '婚育史',
+  'family history': '家族史',
+  'allergy history': '过敏史',
+  'drug allergy history': '药物过敏史',
+  'food allergy history': '食物过敏史',
+  'physical examination': '体格检查',
+  'specialist examination': '专科检查',
+  'auxiliary examination': '辅助检查',
+  'admission diagnosis': '入院诊断',
+  'discharge medication': '出院带药',
 }
 
 const COURSE_SUBTYPE_LABELS: Record<string, string> = {
@@ -939,6 +978,9 @@ function prettifyFieldLabel(fieldName?: string): string {
   const raw = safeText(fieldName)
   if (!raw) return '字段'
   if (FIELD_LABELS[raw]) return FIELD_LABELS[raw]
+  const normalized = raw.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase()
+  if (FIELD_LABELS[normalized]) return FIELD_LABELS[normalized]
+  if (EN_FIELD_LABELS[normalized]) return EN_FIELD_LABELS[normalized]
   return raw
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase())
@@ -1273,7 +1315,9 @@ const currentDocSectionList = computed(() => {
   return sections
     .map((section, index) => ({
       key: safeText(section?.section_key) || `section-${index}`,
-      title: safeText(section?.section_label) || `正文段落 ${index + 1}`,
+      title: safeText(section?.section_label)
+        ? prettifyFieldLabel(section?.section_label)
+        : `正文段落 ${index + 1}`,
       text: safeText(section?.text),
       sourceField: safeText(section?.source_field),
     }))
