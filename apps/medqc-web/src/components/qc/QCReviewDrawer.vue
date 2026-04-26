@@ -136,6 +136,16 @@
                 <span class="review-tree-node__label">全部</span>
               </button>
 
+              <button
+                v-if="fixedFrontpageDoc"
+                type="button"
+                class="review-tree-node review-tree-node--root"
+                :class="{ 'review-tree-node--active': activeDocGroup === 'frontpage' }"
+                @click="handleSidebarFrontpageClick"
+              >
+                <span class="review-tree-node__label">病案首页(临床医生)</span>
+              </button>
+
               <div
                 v-for="group in visibleSidebarGroups"
                 :key="group.key"
@@ -181,7 +191,12 @@
                     :class="{ 'review-tree-doc--active': activeDocKey === doc.doc_key }"
                     @click="handleSidebarDocClick(group.key, doc)"
                   >
-                    {{ renderSidebarDocLabel(doc) }}
+                    <span class="review-tree-doc__date">
+                      {{ renderSidebarDocDate(doc) }}
+                    </span>
+                    <span class="review-tree-doc__title">
+                      {{ renderSidebarDocTitle(doc) }}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -642,14 +657,14 @@ type SelectableIssue = {
 
 const DOC_GROUP_LABELS: Record<string, string> = {
   all: '全部',
-  frontpage: '病案首页',
+  frontpage: '病案首页(临床医生)',
   admission: '入院记录',
   course: '病程记录',
   exam_attention: '检查检验摘要',
-  lab_results: '检验明细',
-  exam_results: '检查结果',
-  surgery: '手术相关',
-  consult_discussion: '查房讨论',
+  lab_results: '检验报告',
+  exam_results: '检查报告',
+  surgery: '手术相关记录',
+  consult_discussion: '查房/会诊/讨论',
   terminal: '出院记录',
   orders: '医嘱',
   index_coding_settlement: '首页结算',
@@ -1139,9 +1154,17 @@ const sidebarFilterOptions = computed(() => [
   })),
 ])
 
+const fixedFrontpageDoc = computed<ReviewDocItem | null>(() => {
+  const group = displayDocGroups.value.find((item) => item.key === 'frontpage')
+  if (!group) return null
+  return getSidebarGroupDocs(group)[0] || null
+})
+
 const visibleSidebarGroups = computed(() => {
-  if (sidebarDocFilter.value === 'all') return displayDocGroups.value
-  return displayDocGroups.value.filter((group) => group.key === sidebarDocFilter.value)
+  const groups = displayDocGroups.value.filter((group) => group.key !== 'frontpage')
+  if (sidebarDocFilter.value === 'all') return groups
+  if (sidebarDocFilter.value === 'frontpage') return []
+  return groups.filter((group) => group.key === sidebarDocFilter.value)
 })
 
 const currentGroupNodes = computed<ReviewDocTreeNode[]>(() => {
@@ -1349,10 +1372,13 @@ function getSidebarGroupDocs(group: ReviewDocTreeGroup): ReviewDocItem[] {
   )
 }
 
-function renderSidebarDocLabel(doc: ReviewDocItem): string {
+function renderSidebarDocDate(doc: ReviewDocItem): string {
   const time = formatDocTime(doc.record_time || doc.sort_time)
-  const date = time ? time.slice(0, 10) : '未标记时间'
-  return `${date} ${renderDocListTitle(doc)}`
+  return time ? time.slice(0, 10) : '未标记时间'
+}
+
+function renderSidebarDocTitle(doc: ReviewDocItem): string {
+  return renderDocListTitle(doc)
 }
 
 function handleSidebarAllClick() {
@@ -1360,6 +1386,14 @@ function handleSidebarAllClick() {
   activeDocGroup.value = 'all'
   activeCourseSubtype.value = 'all'
   syncActiveDocumentSelection()
+}
+
+function handleSidebarFrontpageClick() {
+  if (!fixedFrontpageDoc.value) return
+  sidebarDocFilter.value = 'frontpage'
+  activeDocGroup.value = 'frontpage'
+  activeCourseSubtype.value = 'all'
+  activeDocKey.value = fixedFrontpageDoc.value.doc_key
 }
 
 function handleSidebarLeafGroupClick(group: ReviewDocTreeGroup) {
@@ -1540,8 +1574,18 @@ function syncActiveDocumentSelection() {
     return
   }
   const validGroupKeys = displayDocGroups.value.map((group) => group.key)
-  if (sidebarDocFilter.value !== 'all' && !validGroupKeys.includes(sidebarDocFilter.value)) {
+  const supportedSidebarFilters = fixedFrontpageDoc.value
+    ? [...validGroupKeys, 'frontpage']
+    : validGroupKeys
+  if (
+    sidebarDocFilter.value !== 'all' &&
+    !supportedSidebarFilters.includes(sidebarDocFilter.value)
+  ) {
     sidebarDocFilter.value = 'all'
+  }
+  if (activeDocGroup.value === 'frontpage' && fixedFrontpageDoc.value) {
+    activeDocKey.value = fixedFrontpageDoc.value.doc_key
+    return
   }
   if (!validGroupKeys.includes(activeDocGroup.value)) {
     activeDocGroup.value = validGroupKeys[0]
@@ -2085,14 +2129,26 @@ watch(
 }
 
 .review-tree-doc {
-  display: block;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
   padding: 7px 18px 7px 38px;
   color: #334155;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.review-tree-doc__date {
+  color: #64748b;
   white-space: nowrap;
+}
+
+.review-tree-doc__title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .review-card__title,
@@ -2514,6 +2570,11 @@ watch(
   .review-structured-row {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .review-tree-doc {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 }
 </style>
