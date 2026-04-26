@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect, text
 
 from app.database.connection import DATABASE_URL
-from app.services.bundles import refresh_scene_bundles_for_rows
+from app.services.bundles import refresh_domain_bundles_for_rows, refresh_scene_bundles_for_rows
 
 
 def _quote_ident(value: str) -> str:
@@ -280,6 +280,12 @@ def import_visit_export(
             bundle_schema="public",
             trigger_source="visit_export_import",
         )
+        domain_stats = refresh_domain_bundles_for_rows(
+            rows=refresh_keys,
+            source_schema="cdm",
+            bundle_schema="public",
+            trigger_source="visit_export_import",
+        )
         for key in refresh_keys:
             bundle_results.append(
                 {
@@ -288,6 +294,7 @@ def import_visit_export(
                     "institute_id": key["institute_id"],
                     "running_refresh": running_stats,
                     "final_refresh": final_stats,
+                    "domain_refresh": domain_stats,
                 }
             )
 

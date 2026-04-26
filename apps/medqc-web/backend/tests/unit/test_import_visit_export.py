@@ -72,6 +72,7 @@ def test_import_visit_export_supports_plain_csv_names_and_multi_patient_bundle_r
         )
 
     refresh_calls: list[dict[str, object]] = []
+    domain_refresh_calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(import_module, "DATABASE_URL", "sqlite:///:memory:")
     monkeypatch.setattr(import_module.sa, "create_engine", lambda _: engine)
@@ -82,7 +83,12 @@ def test_import_visit_export_supports_plain_csv_names_and_multi_patient_bundle_r
         refresh_calls.append(kwargs)
         return {"rows": len(kwargs.get("rows") or [])}
 
+    def _fake_refresh_domain_bundles_for_rows(**kwargs):
+        domain_refresh_calls.append(kwargs)
+        return {"rows": len(kwargs.get("rows") or [])}
+
     monkeypatch.setattr(import_module, "refresh_scene_bundles_for_rows", _fake_refresh_scene_bundles_for_rows)
+    monkeypatch.setattr(import_module, "refresh_domain_bundles_for_rows", _fake_refresh_domain_bundles_for_rows)
 
     result = import_module.import_visit_export(export_dir=export_dir, default_schema="cdm")
 
@@ -90,10 +96,12 @@ def test_import_visit_export_supports_plain_csv_names_and_multi_patient_bundle_r
     assert result["visit_ids"] == ["V1", "V2"]
     assert result["tables"][0]["table"] == "cdm.mr"
     assert len(refresh_calls) == 2
+    assert len(domain_refresh_calls) == 1
     assert refresh_calls[0]["rows"] == [
         {"institute_id": "H1", "patient_id": "P1", "visit_id": "V1"},
         {"institute_id": "H1", "patient_id": "P2", "visit_id": "V2"},
     ]
+    assert domain_refresh_calls[0]["rows"] == refresh_calls[0]["rows"]
 
     with engine.begin() as conn:
         rows = conn.execute(sa.text("select institute_id, patient_id, visit_id, name from mr order by visit_id")).fetchall()

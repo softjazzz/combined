@@ -268,6 +268,35 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "medical_insurance_settlement_cost",
     ),
 }
+_DOMAIN_FETCH_LIMITS: dict[str, int] = {
+    "admission_record": 20,
+    "first_course_record": 50,
+    "daily_course_record": 200,
+    "senior_course_record": 200,
+    "rescue_record": 50,
+    "summary_record": 50,
+    "transfer_in_record": 50,
+    "transfer_out_record": 50,
+    "newborn_record": 50,
+    "medical_order": 100,
+    "exam_item_report": 50,
+    "labtest_item_report": 50,
+    "presurg_summary": 50,
+    "presurg_discussion": 50,
+    "surgery_record": 50,
+    "anesthesia_record": 50,
+    "consent_form": 50,
+    "postsurg_firstcourse_record": 50,
+    "surgery_safecheck_record": 50,
+    "surgery_risk_assessment": 50,
+    "consultation_record": 100,
+    "diffcase_discussion_record": 50,
+    "death_discussion": 50,
+    "handoff_record": 100,
+    "handover_record": 100,
+    "discharge_record": 20,
+    "death_record": 20,
+}
 _DOMAIN_BUNDLE_TABLE: dict[str, str] = {
     "admission": "admission_domain_bundle",
     "course": "course_domain_bundle",
@@ -1558,7 +1587,7 @@ def assemble_domain_bundle(
             institute_id=institute_id,
             patient_id=patient_id,
             visit_id=visit_id,
-            limit=3,
+            limit=_DOMAIN_FETCH_LIMITS.get(table_name, 50),
         )
 
     document_hits = _build_document_hits(docs, priority)
@@ -1687,6 +1716,79 @@ def load_domain_bundle(
             except Exception:
                 payload[field_name] = {} if field_name in {"document_hits", "structured_context"} else []
     return payload
+
+
+def refresh_domain_bundles_for_rows(
+    *,
+    rows: list[dict[str, Any]],
+    policy_version: str = "",
+    source_schema: str | None = None,
+    bundle_schema: str = "public",
+    trigger_source: str = "sync",
+    job_id: str = "",
+    continue_on_error: bool = True,
+    domains: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, int]:
+    effective_source_schema = source_schema or _default_source_schema()
+    ensure_domain_bundle_tables(schema=bundle_schema)
+
+    target_domains = tuple(domains or sorted(_DOMAIN_DOC_PRIORITY.keys()))
+    processed = 0
+    updated = 0
+    skipped = 0
+    failed = 0
+    seen: set[tuple[str, str, str]] = set()
+
+    for row in rows or []:
+        institute_id = str(row.get("institute_id") or "").strip()
+        patient_id = str(row.get("patient_id") or "").strip()
+        visit_id = str(row.get("visit_id") or "").strip()
+        if not (institute_id and patient_id and visit_id):
+            skipped += 1
+            continue
+        key = (institute_id, patient_id, visit_id)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        for execution_domain in target_domains:
+            if execution_domain not in _DOMAIN_DOC_PRIORITY:
+                if _pg_required_in_current_env():
+                    raise ValueError(f"Unsupported domain for bundle refresh: {execution_domain}")
+                continue
+            processed += 1
+            try:
+                bundle = assemble_domain_bundle(
+                    execution_domain=execution_domain,
+                    source_schema=effective_source_schema,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    policy_version=policy_version,
+                )
+                _upsert_domain_bundle(
+                    execution_domain=execution_domain,
+                    bundle=bundle,
+                    bundle_schema=bundle_schema,
+                )
+                updated += 1
+            except Exception as exc:
+                failed += 1
+                logger.warning(
+                    "domain bundle refresh failed domain=%s visit=(%s,%s,%s) source_schema=%s bundle_schema=%s trigger=%s error=%s",
+                    execution_domain,
+                    institute_id,
+                    patient_id,
+                    visit_id,
+                    effective_source_schema,
+                    bundle_schema,
+                    trigger_source,
+                    exc,
+                )
+                if not continue_on_error:
+                    raise
+
+    return {"processed": processed, "updated": updated, "failed": failed, "skipped": skipped}
 
 
 def load_or_assemble_domain_bundle(

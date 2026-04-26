@@ -37,6 +37,7 @@ from .assembly import (
     load_coding_payload_from_bundle,
     load_frontpage_payload_from_bundle,
     load_settlement_payload_from_bundle,
+    refresh_domain_bundles_for_rows,
     refresh_scene_bundles_for_rows,
 )
 from .refresh_manager import (
@@ -73,6 +74,7 @@ __all__ = [
     "ensure_domain_bundle_tables",
     "load_domain_bundle",
     "load_or_assemble_domain_bundle",
+    "refresh_domain_bundles_for_rows",
     "refresh_scene_bundles_for_rows",
     "load_frontpage_payload_from_bundle",
     "load_coding_payload_from_bundle",

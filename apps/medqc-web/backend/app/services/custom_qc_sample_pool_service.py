@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import MedicalRecordFrontpage
-from .bundles.assembly import refresh_scene_bundles_for_rows
+from .bundles.assembly import refresh_domain_bundles_for_rows, refresh_scene_bundles_for_rows
 from .etl_sync import (
     expand_table_groups,
     fetch_remote_rows_by_visit_keys,
@@ -2094,6 +2094,10 @@ class CustomQCSamplePoolService:
             )
             refresh_scene_bundles_for_rows(
                 scene="final",
+                rows=bundle_refresh_rows,
+                policy_version="sample_pool_sync",
+            )
+            refresh_domain_bundles_for_rows(
                 rows=bundle_refresh_rows,
                 policy_version="sample_pool_sync",
             )
