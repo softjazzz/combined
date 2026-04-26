@@ -1,176 +1,180 @@
 <template>
   <a-drawer
     :open="visible"
-    title="病历联审详情"
+    :title="null"
     placement="right"
-    :width="1100"
+    :width="1460"
     class="qc-review-drawer"
     :destroy-on-close="true"
     @close="handleClose"
   >
-    <!-- 顶部：病历基本信息 -->
-    <div class="bg-slate-50 rounded-xl p-4 mb-4 border border-slate-100">
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-3">
-          <div
-            class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm"
-          >
-            {{ (record?.patient_name || '').charAt(0) }}
-          </div>
-          <div>
-            <div class="text-base font-bold text-slate-800">
-              {{ record?.patient_name || '-' }}
+    <div class="review-shell">
+      <header class="review-summary">
+        <div class="review-summary__top">
+          <div class="review-summary__identity">
+            <div class="review-summary__avatar">
+              {{ recordInitial }}
             </div>
-            <div class="text-xs text-slate-400">
-              病案号：{{ record?.record_id || '-' }}
+            <div class="review-summary__identity-main">
+              <div class="review-summary__title-row">
+                <h2 class="review-summary__title">
+                  病历联审详情
+                </h2>
+                <span
+                  class="review-summary__status"
+                  :class="statusClass"
+                >
+                  <span
+                    class="review-summary__status-dot"
+                    :class="statusDotClass"
+                  />
+                  {{ statusText }}
+                </span>
+              </div>
+              <div class="review-summary__patient-row">
+                <span class="review-summary__patient-name">{{ record?.patient_name || '-' }}</span>
+                <span class="review-summary__patient-meta">病案号：{{ record?.record_id || '-' }}</span>
+              </div>
+              <div class="review-summary__hint">
+                目录按文书类型聚合，再按时间倒序浏览。点击右侧质控问题会联动定位左侧原文段落。
+              </div>
+            </div>
+          </div>
+          <div class="review-summary__actions">
+            <div class="review-summary__actions-label">
+              当前工作区
+            </div>
+            <div class="review-summary__actions-value">
+              联审阅读 / 问题定位
             </div>
           </div>
         </div>
-        <span
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border"
-          :class="statusClass"
-        >
-          <span
-            class="w-1.5 h-1.5 rounded-full"
-            :class="statusDotClass"
-          />
-          {{ statusText }}
-        </span>
-      </div>
-      <div class="grid grid-cols-4 gap-4 text-sm">
-        <div>
-          <span class="text-slate-400">科室</span>
-          <div class="font-medium text-slate-700 mt-0.5">
-            {{ record?.department || '-' }}
+        <div class="review-metrics">
+          <div class="review-metric-card">
+            <div class="review-metric-card__label">
+              科室
+            </div>
+            <div class="review-metric-card__value">
+              {{ record?.department || '-' }}
+            </div>
+          </div>
+          <div class="review-metric-card">
+            <div class="review-metric-card__label">
+              出院日期
+            </div>
+            <div class="review-metric-card__value">
+              {{ record?.discharge_date || '-' }}
+            </div>
+          </div>
+          <div class="review-metric-card">
+            <div class="review-metric-card__label">
+              质控得分
+            </div>
+            <div
+              class="review-metric-card__value review-metric-card__value--mono"
+              :style="{ color: getScoreColor(record?.score) }"
+            >
+              {{ record?.score ?? '-' }}
+            </div>
+          </div>
+          <div class="review-metric-card">
+            <div class="review-metric-card__label">
+              缺陷数
+            </div>
+            <div class="review-metric-card__value">
+              {{ record?.defect_count || 0 }}
+            </div>
+          </div>
+          <div class="review-metric-card">
+            <div class="review-metric-card__label">
+              文书数量
+            </div>
+            <div class="review-metric-card__value">
+              {{ documentCount }}
+            </div>
           </div>
         </div>
-        <div>
-          <span class="text-slate-400">出院日期</span>
-          <div class="font-medium text-slate-700 mt-0.5">
-            {{ record?.discharge_date || '-' }}
-          </div>
-        </div>
-        <div>
-          <span class="text-slate-400">质控得分</span>
-          <div
-            class="font-medium font-mono mt-0.5"
-            :style="{ color: getScoreColor(record?.score) }"
-          >
-            {{ record?.score ?? '-' }}
-          </div>
-        </div>
-        <div>
-          <span class="text-slate-400">缺陷数</span>
-          <div class="font-medium text-slate-700 mt-0.5">
-            {{ record?.defect_count || 0 }}
-          </div>
-        </div>
-      </div>
-    </div>
+      </header>
 
-    <!-- 双栏布局：左侧文书 + 右侧缺陷 -->
-    <div
-      class="flex gap-4"
-      style="height: calc(100vh - 300px)"
-    >
-      <!-- 左侧：病历文书内容 -->
-      <div class="flex-1 bg-white rounded-xl border border-slate-100 overflow-hidden flex min-h-0">
-        <aside
-          class="w-[290px] flex-shrink-0 border-r border-slate-100 bg-slate-50/70 flex flex-col min-h-0"
-        >
-          <div class="px-4 py-4 border-b border-slate-100">
-            <div class="text-sm font-semibold text-slate-800">
-              文书目录
-            </div>
-            <div class="mt-1 text-xs text-slate-400">
-              按文书类型和时间组织，优先展示可读的病历结构。
+      <section class="review-workspace">
+        <aside class="review-sidebar">
+          <div class="review-panel__header review-sidebar__header">
+            <div>
+              <div class="review-panel__title">
+                文书目录
+              </div>
+              <div class="review-panel__desc">
+                按文书类型聚合，再按时间倒序浏览。
+              </div>
             </div>
           </div>
-          <div class="px-3 py-3 border-b border-slate-100">
-            <div class="grid grid-cols-2 gap-2">
-              <button
-                v-for="group in displayDocGroups"
-                :key="group.key"
-                type="button"
-                class="rounded-xl border px-3 py-2 text-left transition-all"
-                :class="
-                  activeDocGroup === group.key
-                    ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-sm'
-                    : 'border-slate-200 bg-white text-slate-500 hover:border-blue-100 hover:text-slate-700'
-                "
-                @click="activeDocGroup = group.key"
-              >
-                <div class="text-xs font-semibold">
-                  {{ group.label }}
-                </div>
-                <div class="mt-1 text-[11px] opacity-70">
-                  {{ group.children.length }} 份文书
-                </div>
-              </button>
-            </div>
+          <div class="review-sidebar__group-grid">
+            <button
+              v-for="group in displayDocGroups"
+              :key="group.key"
+              type="button"
+              class="review-group-card"
+              :class="{ 'review-group-card--active': activeDocGroup === group.key }"
+              @click="activeDocGroup = group.key"
+            >
+              <div class="review-group-card__label">
+                {{ group.label }}
+              </div>
+              <div class="review-group-card__count">
+                {{ group.children.length }} 份文书
+              </div>
+            </button>
           </div>
           <div
             v-if="activeDocGroup === 'course' && courseSubtypeOptions.length > 0"
-            class="px-3 py-3 border-b border-slate-100"
+            class="review-sidebar__filter"
           >
-            <div class="mb-2 text-xs font-medium text-slate-400">
+            <div class="review-sidebar__filter-label">
               病程筛选
             </div>
-            <div class="flex flex-wrap gap-2">
+            <div class="review-sidebar__chips">
               <button
                 v-for="option in courseSubtypeOptions"
                 :key="option.value"
                 type="button"
-                class="rounded-full border px-3 py-1 text-xs transition-all"
-                :class="
-                  activeCourseSubtype === option.value
-                    ? 'border-blue-200 bg-blue-50 text-blue-700'
-                    : 'border-slate-200 bg-white text-slate-500 hover:border-blue-100 hover:text-slate-700'
-                "
+                class="review-chip"
+                :class="{ 'review-chip--active': activeCourseSubtype === option.value }"
                 @click="activeCourseSubtype = option.value"
               >
                 {{ option.label }}
               </button>
             </div>
           </div>
-          <div class="flex-1 overflow-y-auto px-3 py-3">
+          <div class="review-sidebar__list">
             <template v-if="currentGroupDateGroups.length > 0">
               <div
                 v-for="dateGroup in currentGroupDateGroups"
                 :key="dateGroup.key"
-                class="mb-4"
+                class="review-date-block"
               >
-                <div class="mb-2 px-2 text-xs font-medium text-slate-400">
+                <div class="review-date-block__label">
                   {{ dateGroup.label }}
                 </div>
-                <div class="space-y-2">
+                <div class="review-date-block__docs">
                   <button
                     v-for="doc in dateGroup.docs"
                     :key="doc.doc_key"
                     type="button"
-                    class="w-full rounded-xl border px-3 py-3 text-left transition-all"
-                    :class="
-                      activeDocKey === doc.doc_key
-                        ? 'border-blue-200 bg-blue-50 shadow-sm'
-                        : 'border-transparent bg-white hover:border-slate-200 hover:bg-slate-50'
-                    "
+                    class="review-doc-card"
+                    :class="{ 'review-doc-card--active': activeDocKey === doc.doc_key }"
                     @click="activeDocKey = doc.doc_key"
                   >
-                    <div class="flex items-start justify-between gap-3">
-                      <div class="min-w-0">
-                        <div class="text-sm font-medium text-slate-800">
-                          {{ renderDocListTitle(doc) }}
-                        </div>
-                        <div class="mt-1 text-xs text-slate-400">
-                          {{ renderDocListMeta(doc) }}
-                        </div>
+                    <div class="review-doc-card__header">
+                      <div class="review-doc-card__title">
+                        {{ renderDocListTitle(doc) }}
                       </div>
                       <span
                         v-if="activeDocKey === doc.doc_key"
-                        class="mt-0.5 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700"
-                      >
-                        当前
-                      </span>
+                        class="review-doc-card__tag"
+                      >当前</span>
+                    </div>
+                    <div class="review-doc-card__meta">
+                      {{ renderDocListMeta(doc) || '未标记时间' }}
                     </div>
                   </button>
                 </div>
@@ -178,176 +182,180 @@
             </template>
             <div
               v-else
-              class="px-3 py-10 text-center text-xs text-slate-400"
+              class="review-empty review-empty--sidebar"
             >
-              当前分组暂无可展示文书
+              <div class="review-empty__title">
+                当前分组暂无可展示文书
+              </div>
+              <div class="review-empty__desc">
+                请切换其他文书分组继续查看
+              </div>
             </div>
           </div>
         </aside>
-        <div class="flex-1 min-w-0 flex flex-col">
+
+        <main class="review-content">
           <div
             v-if="currentDoc"
-            class="border-b border-slate-100 bg-white px-5 py-4"
+            class="review-panel__header review-content__header"
           >
-            <div class="flex items-start justify-between gap-4">
-              <div class="min-w-0">
-                <div class="text-lg font-semibold text-slate-800">
-                  {{ currentDocTitle }}
-                </div>
-                <div
-                  v-if="currentDocMeta"
-                  class="mt-1 text-sm text-slate-400"
-                >
-                  {{ currentDocMeta }}
-                </div>
-              </div>
-              <div
-                v-if="currentDocFlags.length > 0"
-                class="flex flex-wrap justify-end gap-2"
-              >
+            <div class="review-content__header-main">
+              <div class="review-content__title-row">
+                <span class="review-content__type-badge">{{ currentDocTypeLabel }}</span>
                 <span
-                  v-for="flag in currentDocFlags"
-                  :key="flag"
-                  class="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-700"
-                >
-                  {{ flag }}
-                </span>
+                  v-if="currentDocReadableTime"
+                  class="review-content__time"
+                >记录时间：{{ currentDocReadableTime }}</span>
+              </div>
+              <h3 class="review-content__title">
+                {{ currentDocTitle }}
+              </h3>
+              <div
+                v-if="currentDocMeta"
+                class="review-content__meta"
+              >
+                {{ currentDocMeta }}
               </div>
             </div>
+            <div
+              v-if="currentDocVisibleFlags.length > 0"
+              class="review-content__flags"
+            >
+              <span
+                v-for="flag in currentDocVisibleFlags"
+                :key="flag"
+                class="review-flag"
+              >
+                {{ flag }}
+              </span>
+            </div>
           </div>
-          <div class="flex-1 overflow-y-auto p-5">
+
+          <div class="review-content__body">
             <a-spin :spinning="docLoading">
               <template v-if="currentDoc">
                 <div
-                  v-if="currentDocFieldList.length > 0"
-                  class="mb-5 rounded-2xl border border-slate-100 bg-white p-4"
+                  v-if="activeReviewIssueSummary"
+                  class="review-alert"
                 >
-                  <div class="mb-3 text-sm font-semibold text-slate-800">
+                  <div class="review-alert__title">
+                    已定位当前质控问题原文
+                  </div>
+                  <div class="review-alert__desc">
+                    {{ activeReviewIssueSummary }}
+                  </div>
+                </div>
+
+                <div
+                  v-if="currentDocFieldList.length > 0"
+                  class="review-card review-card--fields"
+                >
+                  <div class="review-card__title">
                     结构化字段
                   </div>
-                  <div class="grid gap-x-8 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div class="review-field-grid">
                     <div
                       v-for="field in currentDocFieldList"
                       :key="field.key"
-                      class="min-w-0"
+                      class="review-field-item"
                     >
-                      <div class="text-xs font-medium text-slate-400">
+                      <div class="review-field-item__label">
                         {{ field.label }}
                       </div>
-                      <div
-                        class="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700"
-                      >
+                      <div class="review-field-item__value">
                         {{ field.value }}
                       </div>
                     </div>
                   </div>
                 </div>
-                <div
-                  v-if="activeReviewIssueSummary"
-                  class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800"
-                >
-                  <div class="font-semibold text-amber-900">
-                    已定位当前质控问题原文
-                  </div>
-                  <div class="mt-1 leading-6">
-                    {{ activeReviewIssueSummary }}
-                  </div>
-                </div>
+
                 <div
                   v-if="currentDocSectionBlocks.length > 0"
-                  class="rounded-2xl border border-slate-100 bg-white"
+                  class="review-card review-card--content"
                 >
                   <section
                     v-for="(section, index) in currentDocSectionBlocks"
                     :key="`${section.title}-${index}`"
-                    class="border-b border-slate-100 px-4 py-4 last:border-b-0"
+                    class="review-section"
                   >
-                    <div class="grid gap-3 md:grid-cols-[120px_minmax(0,1fr)]">
-                      <div class="text-sm font-medium text-slate-500">
-                        {{ section.title }}
-                        v-if="section.sourceField" class="mt-1 block text-xs text-slate-300" >
-                        {{ section.sourceField }}
-                      </div>
-                      <div class="space-y-3">
-                        <div
-                          v-for="block in section.blocks"
-                          :key="block.key"
-                          :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
-                          class="doc-content doc-content--prewrap rounded-lg px-3 py-2 text-sm leading-relaxed text-slate-700 transition-all"
-                          :class="
-                            activeHighlightBlockKey === block.key
-                              ? 'doc-content--active-highlight'
-                              : 'bg-transparent'
-                          "
-                          v-html="renderBlockHtml(block)"
-                        />
-                      </div>
+                    <div class="review-section__label">
+                      {{ section.title }}
+                    </div>
+                    <div class="review-section__body">
+                      <div
+                        v-for="block in section.blocks"
+                        :key="block.key"
+                        :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
+                        class="doc-content doc-content--prewrap review-paragraph"
+                        :class="{
+                          'doc-content--active-highlight': activeHighlightBlockKey === block.key,
+                        }"
+                        v-html="renderBlockHtml(block)"
+                      />
                     </div>
                   </section>
                 </div>
+
                 <div
                   v-else-if="currentDocContent"
-                  class="space-y-3"
+                  class="review-card review-card--content"
                 >
                   <div
                     v-for="block in currentDocPlainBlocks"
                     :key="block.key"
                     :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
-                    class="doc-content doc-content--prewrap rounded-lg px-3 py-2 text-sm leading-relaxed text-slate-700 transition-all"
-                    :class="
-                      activeHighlightBlockKey === block.key
-                        ? 'doc-content--active-highlight'
-                        : 'bg-transparent'
-                    "
+                    class="doc-content doc-content--prewrap review-paragraph"
+                    :class="{
+                      'doc-content--active-highlight': activeHighlightBlockKey === block.key,
+                    }"
                     v-html="renderBlockHtml(block)"
                   />
                 </div>
+
                 <div
                   v-else
-                  class="text-center py-12 text-slate-400"
+                  class="review-empty"
                 >
-                  <FileTextOutlined
-                    style="font-size: 36px"
-                    class="mb-3 block"
-                  />
-                  <p class="text-sm">
+                  <FileTextOutlined class="review-empty__icon" />
+                  <div class="review-empty__title">
                     {{ docLoading ? '加载中...' : '当前文书暂无可展示内容' }}
-                  </p>
-                  <p class="text-xs mt-1 text-slate-300">
+                  </div>
+                  <div class="review-empty__desc">
                     可切换其它文书继续查看
-                  </p>
+                  </div>
                 </div>
               </template>
+
               <div
                 v-else
-                class="text-center py-12 text-slate-400"
+                class="review-empty"
               >
-                <FileTextOutlined
-                  style="font-size: 36px"
-                  class="mb-3 block"
-                />
-                <p class="text-sm">
+                <FileTextOutlined class="review-empty__icon" />
+                <div class="review-empty__title">
                   {{ docLoading ? '加载中...' : '暂无文书内容' }}
-                </p>
-                <p class="text-xs mt-1 text-slate-300">
-                  文书数据需从后端病历库获取
-                </p>
+                </div>
+                <div class="review-empty__desc">
+                  当前病历尚未装配可阅读文书
+                </div>
               </div>
             </a-spin>
           </div>
-        </div>
+        </main>
 
-        <!-- 右侧：缺陷列表 -->
-        <div class="w-[400px] flex-shrink-0 flex flex-col">
-          <div class="flex items-center justify-between mb-3">
-            <h3 class="text-sm font-bold text-slate-800">
-              质控问题
-              <span class="text-xs text-slate-400 font-normal ml-2">共 {{ displayedIssueCount }} 项</span>
-            </h3>
+        <aside class="review-issues">
+          <div class="review-panel__header review-issues__header">
+            <div>
+              <div class="review-panel__title">
+                质控问题
+              </div>
+              <div class="review-panel__desc">
+                共 {{ displayedIssueCount }} 项，点击问题可联动定位左侧原文。
+              </div>
+            </div>
             <a-button
               size="small"
               type="text"
-              class="text-slate-500"
+              class="review-issues__reload"
               @click="loadDefects"
             >
               <ReloadOutlined :spin="defectLoading" />
@@ -356,111 +364,112 @@
 
           <a-spin
             :spinning="defectLoading"
-            class="flex-1 overflow-hidden"
+            class="review-issues__body"
           >
             <div
               v-if="displayedIssueCount === 0"
-              class="text-center py-8 text-slate-400 text-sm"
+              class="review-empty review-empty--issues"
             >
-              暂无质控问题
+              <div class="review-empty__title">
+                暂无质控问题
+              </div>
+              <div class="review-empty__desc">
+                当前病历没有待联审的质控项
+              </div>
             </div>
+
             <div
               v-else-if="defectList.length > 0"
-              class="space-y-3 overflow-y-auto pr-1"
-              style="max-height: calc(100vh - 380px)"
+              class="review-issue-list"
             >
               <div
                 v-for="defect in defectList"
                 :key="defect.id"
-                class="bg-white rounded-xl border border-slate-100 p-4 hover:shadow-md transition-all cursor-pointer group"
-                :class="{ 'ring-2 ring-blue-200 border-blue-200': selectedDefectId === defect.id }"
+                class="review-issue-card"
+                :class="{ 'review-issue-card--active': selectedDefectId === defect.id }"
                 @click="handleDefectSelect(defect)"
               >
-                <div class="flex items-start justify-between mb-2">
-                  <div class="flex items-center gap-2">
+                <div class="review-issue-card__top">
+                  <div class="review-issue-card__title-wrap">
                     <span
-                      class="w-2 h-2 rounded-full flex-shrink-0"
+                      class="review-issue-card__dot"
                       :class="{
-                        'bg-rose-500':
+                        'review-issue-card__dot--critical':
                           defect.severity === 'critical' || defect.severity === 'error',
-                        'bg-amber-500': defect.severity === 'warning',
-                        'bg-blue-500': defect.severity === 'info',
+                        'review-issue-card__dot--warning': defect.severity === 'warning',
+                        'review-issue-card__dot--info': defect.severity === 'info',
                       }"
                     />
-                    <span class="text-sm font-medium text-slate-800">{{ defect.rule_name }}</span>
+                    <span class="review-issue-card__title">{{ defect.rule_name }}</span>
                   </div>
                   <span
-                    class="text-xs px-2 py-0.5 rounded-md font-medium"
+                    class="review-issue-card__status"
                     :class="{
-                      'bg-amber-50 text-amber-600': defect.status === 'pending',
-                      'bg-blue-50 text-blue-600': defect.status === 'urged',
-                      'bg-emerald-50 text-emerald-600': defect.status === 'approved',
-                      'bg-rose-50 text-rose-600': defect.status === 'rejected',
-                      'bg-slate-100 text-slate-500': defect.status === 'remediated',
+                      'review-issue-card__status--pending': defect.status === 'pending',
+                      'review-issue-card__status--urged': defect.status === 'urged',
+                      'review-issue-card__status--approved': defect.status === 'approved',
+                      'review-issue-card__status--rejected': defect.status === 'rejected',
+                      'review-issue-card__status--remediated': defect.status === 'remediated',
                     }"
                   >
                     {{ getDefectStatusText(defect.status) }}
                   </span>
                 </div>
-                <p class="text-xs text-slate-500 mb-2 line-clamp-2">
+                <div class="review-issue-card__summary line-clamp-2">
                   {{ defect.description }}
-                </p>
-                <div class="flex items-center gap-4 text-xs text-slate-400">
+                </div>
+                <div class="review-issue-card__meta">
                   <span>分类：{{ defect.category }}</span>
                   <span>位置：{{ defect.location }}</span>
                 </div>
-
-                <!-- 操作按钮（选中时显示） -->
                 <QCReviewActionBar
                   v-if="selectedDefectId === defect.id"
                   :defect="defect"
-                  class="mt-3 pt-3 border-t border-slate-100"
+                  class="review-issue-card__actions"
                   @action-done="handleActionDone"
                 />
               </div>
             </div>
+
             <div
               v-else
-              class="space-y-3 overflow-y-auto pr-1"
-              style="max-height: calc(100vh - 380px)"
+              class="review-issue-list"
             >
               <div
                 v-for="issue in reviewItemList"
                 :key="issue.id"
-                class="bg-white rounded-xl border border-slate-100 p-4 transition-all cursor-pointer"
-                :class="{
-                  'ring-2 ring-blue-200 border-blue-200': selectedReviewIssueId === issue.id,
-                }"
+                class="review-issue-card"
+                :class="{ 'review-issue-card--active': selectedReviewIssueId === issue.id }"
                 @click="handleReviewIssueSelect(issue)"
               >
-                <div class="flex items-start justify-between gap-3 mb-3">
-                  <div class="min-w-0">
-                    <div class="text-sm font-semibold text-slate-800 break-words">
+                <div class="review-issue-card__top review-issue-card__top--start">
+                  <div class="review-issue-card__title-block">
+                    <div class="review-issue-card__title">
                       {{ issue.rule_code ? `${issue.rule_code} · ` : ''
                       }}{{ issue.rule_name || '质控规则' }}
                     </div>
-                    <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
+                    <div class="review-issue-card__chips">
                       <span
-                        class="px-2 py-0.5 rounded-full border"
+                        class="review-issue-card__pill"
                         :class="getReviewStatusClass(issue.status)"
                       >
                         {{ getReviewStatusText(issue.status) }}
                       </span>
                       <span
                         v-if="issue.document_type"
-                        class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
+                        class="review-issue-card__pill review-issue-card__pill--plain"
                       >
                         {{ issue.document_type }}
                       </span>
                       <span
                         v-if="issue.rule_family"
-                        class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
+                        class="review-issue-card__pill review-issue-card__pill--plain"
                       >
                         {{ issue.rule_family }}
                       </span>
                       <span
                         v-if="issue.defect_level"
-                        class="px-2 py-0.5 rounded-full bg-slate-50 text-slate-500 border border-slate-200"
+                        class="review-issue-card__pill review-issue-card__pill--plain"
                       >
                         {{ issue.defect_level }}
                       </span>
@@ -468,35 +477,37 @@
                   </div>
                   <span
                     v-if="issue.confidence !== null && issue.confidence !== undefined"
-                    class="text-xs text-slate-400 font-mono flex-shrink-0"
+                    class="review-issue-card__confidence"
                   >
                     {{ Number(issue.confidence).toFixed(2) }}
                   </span>
                 </div>
-
                 <div
                   v-if="issue.findings"
-                  class="text-xs text-slate-700 leading-6"
+                  class="review-issue-card__section"
                 >
-                  <span class="text-slate-400">结论：</span>{{ issue.findings }}
+                  <span class="review-issue-card__section-label">结论</span>
+                  <span>{{ issue.findings }}</span>
                 </div>
                 <div
                   v-if="issue.evidence"
-                  class="text-xs text-slate-500 leading-6 mt-2"
+                  class="review-issue-card__section"
                 >
-                  <span class="text-slate-400">证据：</span>{{ issue.evidence }}
+                  <span class="review-issue-card__section-label">证据</span>
+                  <span>{{ issue.evidence }}</span>
                 </div>
                 <div
                   v-if="issue.suggestion"
-                  class="text-xs text-blue-600 leading-6 mt-2"
+                  class="review-issue-card__section review-issue-card__section--suggestion"
                 >
-                  <span class="text-slate-400">建议：</span>{{ issue.suggestion }}
+                  <span class="review-issue-card__section-label">建议</span>
+                  <span>{{ issue.suggestion }}</span>
                 </div>
               </div>
             </div>
           </a-spin>
-        </div>
-      </div>
+        </aside>
+      </section>
     </div>
   </a-drawer>
 </template>
@@ -1181,19 +1192,41 @@ const currentDocContent = computed(() => currentDoc.value?.content || '')
 const currentDocTitle = computed(
   () => currentDoc.value?.document_title || currentDoc.value?.doc_name || '病历文书',
 )
+const currentDocTypeLabel = computed(() => {
+  const doc = currentDoc.value
+  if (!doc) return '病历文书'
+  return DOC_TYPE_LABELS[safeText(doc.doc_type)] || doc.doc_name || '病历文书'
+})
+const currentDocReadableTime = computed(() =>
+  formatDocTime(currentDoc.value?.record_time || currentDoc.value?.sort_time),
+)
 const currentDocMeta = computed(() => {
   if (!currentDoc.value) return ''
-  const parts = [formatDocTime(currentDoc.value.record_time || currentDoc.value.sort_time)]
-  if (safeText(currentDoc.value.assembly_status)) {
-    parts.push(`装配状态：${safeText(currentDoc.value.assembly_status)}`)
+  const parts: string[] = []
+  if (currentDoc.value.document_id) {
+    parts.push(`文书编号：${currentDoc.value.document_id}`)
   }
-  if (safeText(currentDoc.value.source_table)) {
-    parts.push(`来源表：${safeText(currentDoc.value.source_table)}`)
-  }
+  if (currentDoc.value.length) parts.push(`正文长度：${currentDoc.value.length}`)
   return parts.filter(Boolean).join(' · ')
 })
 
-const currentDocFlags = computed(() => currentDoc.value?.data_quality_flags || [])
+function mapCurrentDocFlag(flag: string): string | null {
+  const raw = safeText(flag)
+  if (!raw) return null
+  const known: Record<string, string> = {
+    partial: '结构待完善',
+  }
+  if (known[raw]) return known[raw]
+  return /[\u4e00-\u9fa5]/.test(raw) ? raw : null
+}
+
+const currentDocVisibleFlags = computed(() =>
+  (currentDoc.value?.data_quality_flags || [])
+    .map((flag) => mapCurrentDocFlag(flag))
+    .filter((flag): flag is string => Boolean(flag)),
+)
+
+const documentCount = computed(() => documentList.value.length)
 
 const currentDocFieldList = computed(() => {
   const fields = currentDoc.value?.source_fields || []
@@ -1263,10 +1296,14 @@ function renderDocListTitle(doc: ReviewDocItem): string {
 }
 
 function renderDocListMeta(doc: ReviewDocItem): string {
-  const parts = [formatDocTime(doc.record_time || doc.sort_time).slice(11, 19)].filter(Boolean)
-  const sourceTable = safeText(doc.source_table)
-  if (activeDocGroup.value !== 'course' && sourceTable) {
-    parts.push(sourceTable)
+  const time = formatDocTime(doc.record_time || doc.sort_time)
+  const parts: string[] = []
+  if (time) {
+    parts.push(activeDocGroup.value === 'course' ? time.slice(11, 19) : time)
+  }
+  const typeLabel = DOC_TYPE_LABELS[safeText(doc.doc_type)]
+  if (typeLabel && activeDocGroup.value !== 'course' && typeLabel !== renderDocListTitle(doc)) {
+    parts.push(typeLabel)
   }
   return parts.join(' · ')
 }
@@ -1342,7 +1379,11 @@ async function applyHighlightTarget(target: HighlightTarget | null) {
     activeHighlightTarget.value = null
     return
   }
-  activeDocGroup.value = inferDocGroupKey(doc)
+  const nextGroup = inferDocGroupKey(doc)
+  activeDocGroup.value = nextGroup
+  if (nextGroup === 'course') {
+    activeCourseSubtype.value = 'all'
+  }
   activeDocKey.value = doc.doc_key
   activeHighlightTarget.value = target
   await nextTick()
@@ -1429,6 +1470,8 @@ function syncActiveDocumentSelection() {
 const displayedIssueCount = computed(() =>
   defectList.value.length > 0 ? defectList.value.length : reviewItemList.value.length,
 )
+
+const recordInitial = computed(() => safeText(props.record?.patient_name).charAt(0) || '病')
 
 /**
  * HTML 净化：移除 script/iframe/事件属性，防止 XSS
@@ -1612,19 +1655,729 @@ watch(
 </script>
 
 <style scoped>
-.qc-review-drawer :deep(.ant-drawer-body) {
-  padding: 20px;
-  background: #fafbfc;
+.qc-review-drawer :deep(.ant-drawer-content) {
+  background: #f5f7fa;
 }
 
-.qc-review-drawer :deep(.ant-drawer-content) {
-  background: #fafbfc;
+.qc-review-drawer :deep(.ant-drawer-header) {
+  display: none;
+}
+
+.qc-review-drawer :deep(.ant-drawer-body) {
+  padding: 24px;
+  background: #f5f7fa;
+}
+
+.review-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: calc(100vh - 72px);
+}
+
+.review-summary {
+  border: 1px solid #e8edf5;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+  padding: 24px;
+}
+
+.review-summary__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.review-summary__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.review-summary__avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+  color: #2563eb;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.review-summary__identity-main {
+  min-width: 0;
+}
+
+.review-summary__title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.review-summary__title {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.3;
+  font-weight: 700;
+  color: #172554;
+}
+
+.review-summary__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.review-summary__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.review-summary__patient-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.review-summary__patient-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.review-summary__patient-meta,
+.review-summary__hint,
+.review-summary__actions-label,
+.review-panel__desc,
+.review-content__meta,
+.review-content__time,
+.review-doc-card__meta,
+.review-date-block__label,
+.review-field-item__label,
+.review-empty__desc,
+.review-issue-card__meta,
+.review-issue-card__confidence {
+  color: #7b8aa5;
+}
+
+.review-summary__hint {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.review-summary__actions {
+  min-width: 180px;
+  border-radius: 16px;
+  border: 1px solid #e8edf5;
+  background: rgba(248, 250, 252, 0.9);
+  padding: 14px 16px;
+}
+
+.review-summary__actions-label {
+  font-size: 12px;
+}
+
+.review-summary__actions-value {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.review-metrics {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.review-metric-card {
+  border: 1px solid #e8edf5;
+  border-radius: 18px;
+  background: #fff;
+  padding: 16px 18px;
+}
+
+.review-metric-card__label {
+  font-size: 12px;
+  color: #7b8aa5;
+}
+
+.review-metric-card__value {
+  margin-top: 8px;
+  font-size: 18px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: #1e293b;
+  word-break: break-word;
+}
+
+.review-metric-card__value--mono {
+  font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.review-workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 288px minmax(0, 1fr) 372px;
+  gap: 18px;
+}
+
+.review-sidebar,
+.review-content,
+.review-issues {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e8edf5;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.review-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.review-panel__title {
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 700;
+  color: #172554;
+}
+
+.review-panel__desc {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.review-sidebar__group-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid #eef2f7;
+  background: #fbfdff;
+}
+
+.review-group-card,
+.review-chip,
+.review-doc-card {
+  border: 1px solid #dbe4f0;
+  background: #fff;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.review-group-card {
+  border-radius: 16px;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.review-group-card:hover,
+.review-doc-card:hover,
+.review-chip:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.08);
+}
+
+.review-group-card--active,
+.review-doc-card--active,
+.review-chip--active {
+  border-color: #60a5fa;
+  background: #eff6ff;
+  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.12);
+}
+
+.review-group-card__label,
+.review-doc-card__title,
+.review-card__title,
+.review-alert__title,
+.review-empty__title,
+.review-field-item__value,
+.review-issue-card__title,
+.review-section__label {
+  color: #1e293b;
+}
+
+.review-group-card__label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.review-group-card__count {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #7b8aa5;
+}
+
+.review-sidebar__filter {
+  padding: 14px 16px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.review-sidebar__filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+
+.review-sidebar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.review-chip {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.review-sidebar__list,
+.review-content__body,
+.review-issues__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.review-sidebar__list {
+  padding: 14px 16px 18px;
+  background: linear-gradient(180deg, #fcfdff 0%, #ffffff 100%);
+}
+
+.review-date-block + .review-date-block {
+  margin-top: 18px;
+}
+
+.review-date-block__label {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  padding: 0 4px;
+}
+
+.review-date-block__docs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.review-doc-card {
+  border-radius: 16px;
+  padding: 14px;
+  text-align: left;
+}
+
+.review-doc-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.review-doc-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.review-doc-card__meta {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.review-doc-card__tag {
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  flex-shrink: 0;
+}
+
+.review-content__header {
+  align-items: center;
+}
+
+.review-content__header-main {
+  min-width: 0;
+}
+
+.review-content__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.review-content__type-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.review-content__title {
+  margin: 10px 0 0;
+  font-size: 24px;
+  line-height: 1.4;
+  font-weight: 700;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.review-content__meta {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.review-content__flags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.review-flag {
+  border-radius: 999px;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #b45309;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.review-content__body {
+  padding: 20px;
+  background: #f8fafc;
+}
+
+.review-card {
+  border: 1px solid #e8edf5;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.03);
+}
+
+.review-card + .review-card,
+.review-alert + .review-card,
+.review-card + .review-empty,
+.review-alert + .review-empty,
+.review-alert + .review-card--content,
+.review-card--fields + .review-card--content {
+  margin-top: 16px;
+}
+
+.review-card__title {
+  font-size: 15px;
+  font-weight: 700;
+  padding: 18px 20px 0;
+}
+
+.review-field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px 24px;
+  padding: 18px 20px 22px;
+}
+
+.review-field-item__label {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.review-field-item__value {
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.review-alert {
+  border: 1px solid #fde68a;
+  border-radius: 16px;
+  background: #fffbeb;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.review-alert__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.review-alert__desc {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #b45309;
+}
+
+.review-section + .review-section {
+  border-top: 1px solid #eef2f7;
+}
+
+.review-section {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 18px;
+  padding: 20px;
+}
+
+.review-section__label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.review-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-paragraph {
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fbfdff;
+  border: 1px solid transparent;
+}
+
+.review-empty {
+  min-height: 220px;
+  border: 1px dashed #d9e2ef;
+  border-radius: 18px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+}
+
+.review-empty--sidebar,
+.review-empty--issues {
+  min-height: 180px;
+}
+
+.review-empty__icon {
+  font-size: 36px;
+  color: #94a3b8;
+  margin-bottom: 12px;
+}
+
+.review-empty__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.review-empty__desc {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.review-issues__reload {
+  color: #64748b;
+}
+
+.review-issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 18px 22px;
+}
+
+.review-issue-card {
+  border: 1px solid #e8edf5;
+  border-radius: 18px;
+  background: #fff;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.review-issue-card:hover,
+.review-issue-card--active {
+  border-color: #93c5fd;
+  box-shadow: 0 10px 24px rgba(59, 130, 246, 0.12);
+}
+
+.review-issue-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.review-issue-card__top--start {
+  align-items: flex-start;
+}
+
+.review-issue-card__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.review-issue-card__title-block {
+  min-width: 0;
+}
+
+.review-issue-card__title {
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.review-issue-card__dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: #3b82f6;
+}
+
+.review-issue-card__dot--critical {
+  background: #f43f5e;
+}
+
+.review-issue-card__dot--warning {
+  background: #f59e0b;
+}
+
+.review-issue-card__dot--info {
+  background: #3b82f6;
+}
+
+.review-issue-card__status,
+.review-issue-card__pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.review-issue-card__status--pending {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.review-issue-card__status--urged {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.review-issue-card__status--approved {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.review-issue-card__status--rejected {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+.review-issue-card__status--remediated {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.review-issue-card__summary,
+.review-issue-card__section {
+  font-size: 13px;
+  line-height: 1.75;
+  color: #475569;
+}
+
+.review-issue-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.review-issue-card__actions {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eef2f7;
+}
+
+.review-issue-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.review-issue-card__pill--plain {
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+.review-issue-card__section + .review-issue-card__section {
+  margin-top: 8px;
+}
+
+.review-issue-card__section-label {
+  color: #94a3b8;
+  margin-right: 8px;
+}
+
+.review-issue-card__section--suggestion {
+  color: #2563eb;
 }
 
 .doc-content {
   font-size: 14px;
-  line-height: 1.9;
-  color: #333;
+  line-height: 1.95;
+  color: #334155;
 }
 
 .doc-content--prewrap {
@@ -1634,34 +2387,15 @@ watch(
 
 .doc-content--active-highlight {
   background: #fff7d6;
+  border-color: #f3d57a;
   box-shadow: inset 0 0 0 1px #f3d57a;
 }
 
-.doc-content:not(.doc-content--active-highlight) {
-  background: transparent;
-}
-
 .doc-content :deep(.doc-content__mark) {
-  background: #facc15;
+  background: #fde68a;
   color: #7c2d12;
   border-radius: 4px;
   padding: 0 2px;
-}
-
-.doc-content :deep(h4) {
-  color: #1a1a1a;
-  font-size: 16px;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid #3b82f6;
-}
-
-.doc-content :deep(b) {
-  color: #1a1a1a;
-}
-
-.qc-review-drawer button {
-  outline: none;
 }
 
 .qc-review-drawer button:focus-visible {
@@ -1673,5 +2407,51 @@ watch(
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+@media (max-width: 1680px) {
+  .review-workspace {
+    grid-template-columns: 272px minmax(0, 1fr) 340px;
+  }
+
+  .review-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1440px) {
+  .review-workspace {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .review-issues {
+    grid-column: 1 / -1;
+    min-height: 320px;
+  }
+
+  .review-summary__top {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 1100px) {
+  .review-metrics,
+  .review-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .review-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .review-sidebar,
+  .review-issues {
+    min-height: 280px;
+  }
+
+  .review-section {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 }
 </style>
