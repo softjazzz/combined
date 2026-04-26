@@ -24,19 +24,40 @@ def _qualified_table(schema: str, table: str) -> str:
     return f"{_quote_ident(schema)}.{_quote_ident(table)}"
 
 
+def _resolve_csv_target(path: Path, *, default_schema: str) -> tuple[str, str]:
+    stem = path.name[:-4]
+    if "." in stem:
+        schema, table = stem.split(".", 1)
+        return schema, table
+    return default_schema, stem
+
+
 def _read_csv_rows(path: Path) -> tuple[list[str], list[dict[str, Any]]]:
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        fieldnames = [str(item or "").strip() for item in list(reader.fieldnames or []) if str(item or "").strip()]
-        rows = []
-        for raw in reader:
-            normalized = {}
-            for field in fieldnames:
-                value = raw.get(field)
-                text_value = str(value).strip() if value is not None else ""
-                normalized[field] = text_value if text_value != "" else None
-            rows.append(normalized)
-    return fieldnames, rows
+    last_error: Exception | None = None
+    for encoding in ("utf-8-sig", "utf-8", "gb18030", "gbk"):
+        try:
+            with path.open("r", encoding=encoding, newline="") as handle:
+                reader = csv.DictReader(handle)
+                fieldnames = [
+                    str(item or "").strip()
+                    for item in list(reader.fieldnames or [])
+                    if str(item or "").strip()
+                ]
+                rows = []
+                for raw in reader:
+                    normalized = {}
+                    for field in fieldnames:
+                        value = raw.get(field)
+                        text_value = str(value).strip() if value is not None else ""
+                        normalized[field] = text_value if text_value != "" else None
+                    rows.append(normalized)
+            return fieldnames, rows
+        except UnicodeDecodeError as exc:
+            last_error = exc
+            continue
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"无法读取 CSV 文件: {path}")
 
 
 def _ensure_schema(conn: sa.Connection, schema: str) -> None:
@@ -82,6 +103,29 @@ def _visit_ids(rows: list[dict[str, Any]]) -> list[str]:
     return seen
 
 
+def _collect_refresh_keys(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    seen: set[tuple[str, str, str]] = set()
+    out: list[dict[str, str]] = []
+    for row in rows:
+        institute_id = str(row.get("institute_id") or "").strip()
+        patient_id = str(row.get("patient_id") or "").strip()
+        visit_id = str(row.get("visit_id") or "").strip()
+        if not institute_id or not patient_id or not visit_id:
+            continue
+        key = (institute_id, patient_id, visit_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+            }
+        )
+    return out
+
+
 def _delete_existing_rows(
     conn: sa.Connection,
     *,
@@ -93,8 +137,8 @@ def _delete_existing_rows(
         return
     sql = text(
         f"DELETE FROM {_qualified_table(schema, table)} "
-        f"WHERE {_quote_ident('visit_id')} = ANY(:visit_ids)"
-    )
+        f"WHERE {_quote_ident('visit_id')} IN :visit_ids"
+    ).bindparams(sa.bindparam("visit_ids", expanding=True))
     conn.execute(sql, {"visit_ids": visit_ids})
 
 
@@ -149,6 +193,7 @@ def import_visit_export(
     export_dir: Path,
     create_missing_tables: bool = True,
     rebuild_bundles: bool = True,
+    default_schema: str = "cdm",
 ) -> dict[str, Any]:
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL 未配置，无法导入 visit export")
@@ -162,22 +207,23 @@ def import_visit_export(
     imported_tables: list[dict[str, Any]] = []
     missing_created: list[str] = []
     all_visit_ids: list[str] = []
-    institute_id = ""
-    patient_id = ""
+    refresh_keys: list[dict[str, str]] = []
+    refresh_seen: set[tuple[str, str, str]] = set()
 
     with engine.begin() as conn:
         for path in csv_files:
-            stem = path.name[:-4]
-            schema, table = stem.split(".", 1)
+            schema, table = _resolve_csv_target(path, default_schema=default_schema)
             columns, rows = _read_csv_rows(path)
             visit_ids = _visit_ids(rows)
             for visit_id in visit_ids:
                 if visit_id not in all_visit_ids:
                     all_visit_ids.append(visit_id)
-            if rows and not institute_id:
-                institute_id = str(rows[0].get("institute_id") or "").strip()
-            if rows and not patient_id:
-                patient_id = str(rows[0].get("patient_id") or "").strip()
+            for key in _collect_refresh_keys(rows):
+                dedupe_key = (key["institute_id"], key["patient_id"], key["visit_id"])
+                if dedupe_key in refresh_seen:
+                    continue
+                refresh_seen.add(dedupe_key)
+                refresh_keys.append(key)
 
             exists = inspector.has_table(table, schema=schema)
             created_now = False
@@ -218,34 +264,28 @@ def import_visit_export(
 
     bundle_results = []
     if rebuild_bundles:
-        if not institute_id or not patient_id or not all_visit_ids:
+        if not refresh_keys:
             raise RuntimeError("导入完成，但未解析出 institute_id/patient_id/visit_id，无法重建 bundle")
-        refresh_rows = [
-            {
-                "institute_id": institute_id,
-                "patient_id": patient_id,
-                "visit_id": visit_id,
-            }
-            for visit_id in all_visit_ids
-        ]
         running_stats = refresh_scene_bundles_for_rows(
             scene="running",
-            rows=refresh_rows,
+            rows=refresh_keys,
             source_schema="cdm",
             bundle_schema="public",
             trigger_source="visit_export_import",
         )
         final_stats = refresh_scene_bundles_for_rows(
             scene="final",
-            rows=refresh_rows,
+            rows=refresh_keys,
             source_schema="cdm",
             bundle_schema="public",
             trigger_source="visit_export_import",
         )
-        for visit_id in all_visit_ids:
+        for key in refresh_keys:
             bundle_results.append(
                 {
-                    "visit_id": visit_id,
+                    "visit_id": key["visit_id"],
+                    "patient_id": key["patient_id"],
+                    "institute_id": key["institute_id"],
                     "running_refresh": running_stats,
                     "final_refresh": final_stats,
                 }
@@ -253,9 +293,8 @@ def import_visit_export(
 
     return {
         "export_dir": str(export_dir),
-        "institute_id": institute_id,
-        "patient_id": patient_id,
         "visit_ids": all_visit_ids,
+        "refresh_key_count": len(refresh_keys),
         "created_tables": missing_created,
         "tables": imported_tables,
         "bundle_results": bundle_results,
@@ -267,12 +306,14 @@ def main() -> None:
     parser.add_argument("export_dir", help="visit_export 目录")
     parser.add_argument("--no-create-missing", action="store_true", help="缺表时跳过，不自动创建")
     parser.add_argument("--no-rebuild-bundles", action="store_true", help="导入后不重建 running/final bundle")
+    parser.add_argument("--default-schema", default="cdm", help="CSV 文件名不带 schema 时使用的默认 schema")
     args = parser.parse_args()
 
     result = import_visit_export(
         export_dir=Path(args.export_dir).resolve(),
         create_missing_tables=not bool(args.no_create_missing),
         rebuild_bundles=not bool(args.no_rebuild_bundles),
+        default_schema=str(args.default_schema or "cdm").strip() or "cdm",
     )
     import json
     print(json.dumps(result, ensure_ascii=False, indent=2))
