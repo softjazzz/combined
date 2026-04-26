@@ -247,69 +247,81 @@
                 </div>
 
                 <div
-                  v-if="currentDocFieldList.length > 0"
-                  class="review-card review-card--fields"
+                  v-if="
+                    currentDocFieldList.length > 0 ||
+                      currentDocSectionBlocks.length > 0 ||
+                      currentDocContent
+                  "
+                  class="review-card review-card--structured"
                 >
-                  <div class="review-card__title">
-                    结构化字段
-                  </div>
-                  <div class="review-field-grid">
+                  <div class="review-structured-list">
                     <div
                       v-for="field in currentDocFieldList"
                       :key="field.key"
-                      class="review-field-item"
+                      class="review-structured-row"
                     >
-                      <div class="review-field-item__label">
+                      <div class="review-structured-row__label">
                         {{ field.label }}
                       </div>
-                      <div class="review-field-item__value">
-                        {{ field.value }}
+                      <div class="review-structured-row__content">
+                        <div
+                          :ref="(el) => setHighlightBlockRef(field.blockKey, el as Element | null)"
+                          class="doc-content doc-content--prewrap review-paragraph review-paragraph--inline"
+                          :class="{
+                            'doc-content--active-highlight':
+                              activeHighlightBlockKey === field.blockKey,
+                          }"
+                          v-html="renderBlockHtml({ key: field.blockKey, text: field.value })"
+                        />
+                      </div>
+                    </div>
+
+                    <template v-if="currentDocSectionBlocks.length > 0">
+                      <div
+                        v-for="(section, index) in currentDocSectionBlocks"
+                        :key="`${section.title}-${index}`"
+                        class="review-structured-row"
+                      >
+                        <div class="review-structured-row__label">
+                          {{ section.title }}
+                        </div>
+                        <div class="review-structured-row__content">
+                          <div
+                            v-for="block in section.blocks"
+                            :key="block.key"
+                            :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
+                            class="doc-content doc-content--prewrap review-paragraph"
+                            :class="{
+                              'doc-content--active-highlight':
+                                activeHighlightBlockKey === block.key,
+                            }"
+                            v-html="renderBlockHtml(block)"
+                          />
+                        </div>
+                      </div>
+                    </template>
+
+                    <div
+                      v-else-if="currentDocContent"
+                      class="review-structured-row"
+                    >
+                      <div class="review-structured-row__label">
+                        记录内容
+                      </div>
+                      <div class="review-structured-row__content">
+                        <div
+                          v-for="block in currentDocPlainBlocks"
+                          :key="block.key"
+                          :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
+                          class="doc-content doc-content--prewrap review-paragraph"
+                          :class="{
+                            'doc-content--active-highlight': activeHighlightBlockKey === block.key,
+                          }"
+                          v-html="renderBlockHtml(block)"
+                        />
                       </div>
                     </div>
                   </div>
-                </div>
-
-                <div
-                  v-if="currentDocSectionBlocks.length > 0"
-                  class="review-card review-card--content"
-                >
-                  <section
-                    v-for="(section, index) in currentDocSectionBlocks"
-                    :key="`${section.title}-${index}`"
-                    class="review-section"
-                  >
-                    <div class="review-section__label">
-                      {{ section.title }}
-                    </div>
-                    <div class="review-section__body">
-                      <div
-                        v-for="block in section.blocks"
-                        :key="block.key"
-                        :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
-                        class="doc-content doc-content--prewrap review-paragraph"
-                        :class="{
-                          'doc-content--active-highlight': activeHighlightBlockKey === block.key,
-                        }"
-                        v-html="renderBlockHtml(block)"
-                      />
-                    </div>
-                  </section>
-                </div>
-
-                <div
-                  v-else-if="currentDocContent"
-                  class="review-card review-card--content"
-                >
-                  <div
-                    v-for="block in currentDocPlainBlocks"
-                    :key="block.key"
-                    :ref="(el) => setHighlightBlockRef(block.key, el as Element | null)"
-                    class="doc-content doc-content--prewrap review-paragraph"
-                    :class="{
-                      'doc-content--active-highlight': activeHighlightBlockKey === block.key,
-                    }"
-                    v-html="renderBlockHtml(block)"
-                  />
                 </div>
 
                 <div
@@ -916,6 +928,18 @@ function prettifyFieldLabel(fieldName?: string): string {
     .replace(/\s+/g, ' ')
 }
 
+function buildDocFieldList(doc?: ReviewDocItem | null) {
+  const fields = doc?.source_fields || []
+  return fields
+    .filter((field) => field?.used !== false)
+    .map((field, index) => ({
+      key: safeText(field?.source_field) || `field-${index}`,
+      blockKey: `field-block-${safeText(field?.source_field) || index}`,
+      label: prettifyFieldLabel(field?.source_field),
+      value: safeText(field?.raw_value_preview),
+    }))
+}
+
 function inferCourseSubtype(doc: ReviewDocItem): string {
   const docType = safeText(doc.doc_type || doc.source_table).toLowerCase()
   if (docType.includes('first_course')) return 'first_course'
@@ -1228,17 +1252,7 @@ const currentDocVisibleFlags = computed(() =>
 
 const documentCount = computed(() => documentList.value.length)
 
-const currentDocFieldList = computed(() => {
-  const fields = currentDoc.value?.source_fields || []
-  return fields
-    .filter((field) => Boolean(safeText(field?.raw_value_preview)))
-    .filter((field) => field?.used !== false)
-    .map((field) => ({
-      key: safeText(field?.source_field) || 'field',
-      label: prettifyFieldLabel(field?.source_field),
-      value: safeText(field?.raw_value_preview),
-    }))
-})
+const currentDocFieldList = computed(() => buildDocFieldList(currentDoc.value))
 
 const currentDocSectionList = computed(() => {
   const sections = currentDoc.value?.sections || []
@@ -1273,7 +1287,23 @@ const currentDocPlainBlocks = computed<DocParagraphBlock[]>(() =>
   })),
 )
 
+const currentDocFieldBlocks = computed<DocParagraphBlock[]>(() =>
+  currentDocFieldList.value
+    .filter((field) => Boolean(safeText(field.value)))
+    .map((field) => ({
+      key: field.blockKey,
+      text: field.value,
+    })),
+)
+
 const currentDocAllBlocks = computed<DocParagraphBlock[]>(() => {
+  if (currentDocFieldBlocks.value.length > 0) {
+    const contentBlocks =
+      currentDocSectionBlocks.value.length > 0
+        ? currentDocSectionBlocks.value.flatMap((section) => section.blocks)
+        : currentDocPlainBlocks.value
+    return [...currentDocFieldBlocks.value, ...contentBlocks]
+  }
   if (currentDocSectionBlocks.value.length > 0) {
     return currentDocSectionBlocks.value.flatMap((section) => section.blocks)
   }
@@ -1328,6 +1358,12 @@ function findHighlightTargetInDoc(
     currentDoc.value?.doc_key === doc.doc_key
       ? currentDocAllBlocks.value
       : (() => {
+          const fieldBlocks = buildDocFieldList(doc)
+            .map((field) => ({
+              key: field.blockKey,
+              text: field.value,
+            }))
+            .filter((field) => Boolean(safeText(field.text)))
           const sections = (doc.sections || [])
             .map((section, index) => {
               const baseKey = safeText(section?.section_key) || `section-${index}`
@@ -1337,11 +1373,12 @@ function findHighlightTargetInDoc(
               }))
             })
             .flat()
-          if (sections.length > 0) return sections
-          return splitReadableParagraphs(doc.content).map((text, index) => ({
+          if (sections.length > 0) return [...fieldBlocks, ...sections]
+          const plainBlocks = splitReadableParagraphs(doc.content).map((text, index) => ({
             key: `plain-block-${index}`,
             text,
           }))
+          return [...fieldBlocks, ...plainBlocks]
         })()
 
   const matchedBlock = blocks.find((block) =>
@@ -2110,23 +2147,34 @@ watch(
   padding: 18px 20px 0;
 }
 
-.review-field-grid {
+.review-structured-list {
+  padding: 10px 0;
+}
+
+.review-structured-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px 24px;
-  padding: 18px 20px 22px;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 18px;
+  padding: 12px 20px;
+  border-top: 1px solid #eef2f7;
 }
 
-.review-field-item__label {
-  font-size: 12px;
-  margin-bottom: 8px;
+.review-structured-row:first-child {
+  border-top: 0;
 }
 
-.review-field-item__value {
+.review-structured-row__label {
   font-size: 14px;
-  line-height: 1.8;
-  white-space: pre-wrap;
+  line-height: 1.9;
+  color: #64748b;
   word-break: break-word;
+}
+
+.review-structured-row__content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
 }
 
 .review-alert {
@@ -2150,34 +2198,19 @@ watch(
   color: #b45309;
 }
 
-.review-section + .review-section {
-  border-top: 1px solid #eef2f7;
-}
-
-.review-section {
-  display: grid;
-  grid-template-columns: 140px minmax(0, 1fr);
-  gap: 18px;
-  padding: 20px;
-}
-
-.review-section__label {
-  font-size: 14px;
-  font-weight: 700;
-  color: #475569;
-}
-
-.review-section__body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .review-paragraph {
-  border-radius: 12px;
-  padding: 14px 16px;
-  background: #fbfdff;
-  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.review-paragraph + .review-paragraph {
+  margin-top: 10px;
+}
+
+.review-paragraph--inline {
+  margin-top: 0;
 }
 
 .review-empty {
@@ -2436,10 +2469,6 @@ watch(
 
 @media (max-width: 1100px) {
   .review-metrics,
-  .review-field-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .review-workspace {
     grid-template-columns: 1fr;
   }
@@ -2449,7 +2478,7 @@ watch(
     min-height: 280px;
   }
 
-  .review-section {
+  .review-structured-row {
     grid-template-columns: 1fr;
     gap: 12px;
   }
