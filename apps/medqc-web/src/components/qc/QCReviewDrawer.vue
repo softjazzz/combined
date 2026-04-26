@@ -104,78 +104,84 @@
                 文书目录
               </div>
               <div class="review-panel__desc">
-                按文书类型聚合，再按时间倒序浏览。
+                按单据类型和时间浏览完整病历。
               </div>
             </div>
           </div>
-          <div class="review-sidebar__group-grid">
-            <button
-              v-for="group in displayDocGroups"
-              :key="group.key"
-              type="button"
-              class="review-group-card"
-              :class="{ 'review-group-card--active': activeDocGroup === group.key }"
-              @click="activeDocGroup = group.key"
-            >
-              <div class="review-group-card__label">
-                {{ group.label }}
-              </div>
-              <div class="review-group-card__count">
-                {{ group.children.length }} 份文书
-              </div>
-            </button>
-          </div>
-          <div
-            v-if="activeDocGroup === 'course' && courseSubtypeOptions.length > 0"
-            class="review-sidebar__filter"
-          >
-            <div class="review-sidebar__filter-label">
-              病程筛选
-            </div>
-            <div class="review-sidebar__chips">
-              <button
-                v-for="option in courseSubtypeOptions"
-                :key="option.value"
-                type="button"
-                class="review-chip"
-                :class="{ 'review-chip--active': activeCourseSubtype === option.value }"
-                @click="activeCourseSubtype = option.value"
+          <div class="review-sidebar__toolbar">
+            <label class="review-sidebar__select-wrap">
+              <span class="review-sidebar__select-label">单据范围</span>
+              <select
+                v-model="sidebarDocFilter"
+                class="review-sidebar__select"
               >
-                {{ option.label }}
-              </button>
-            </div>
+                <option
+                  v-for="option in sidebarFilterOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
           </div>
           <div class="review-sidebar__list">
-            <template v-if="currentGroupDateGroups.length > 0">
-              <div
-                v-for="dateGroup in currentGroupDateGroups"
-                :key="dateGroup.key"
-                class="review-date-block"
+            <template v-if="visibleSidebarGroups.length > 0">
+              <button
+                type="button"
+                class="review-tree-node review-tree-node--root"
+                :class="{ 'review-tree-node--active': activeDocGroup === 'all' }"
+                @click="handleSidebarAllClick"
               >
-                <div class="review-date-block__label">
-                  {{ dateGroup.label }}
-                </div>
-                <div class="review-date-block__docs">
+                <span class="review-tree-node__label">全部</span>
+              </button>
+
+              <div
+                v-for="group in visibleSidebarGroups"
+                :key="group.key"
+                class="review-tree-group"
+              >
+                <button
+                  type="button"
+                  class="review-tree-node"
+                  :class="{
+                    'review-tree-node--active': activeDocGroup === group.key,
+                    'review-tree-node--expanded': isSidebarGroupExpanded(group.key),
+                  }"
+                  @click="
+                    isSidebarGroupExpandable(group)
+                      ? handleSidebarGroupHeaderClick(group)
+                      : handleSidebarLeafGroupClick(group)
+                  "
+                >
+                  <span
+                    v-if="isSidebarGroupExpandable(group)"
+                    class="review-tree-node__caret"
+                  >
+                    {{ isSidebarGroupExpanded(group.key) ? '⌄' : '›' }}
+                  </span>
+                  <span
+                    v-else
+                    class="review-tree-node__spacer"
+                  />
+                  <span class="review-tree-node__label">
+                    {{ group.label }}
+                  </span>
+                </button>
+
+                <div
+                  v-if="isSidebarGroupExpandable(group) && isSidebarGroupExpanded(group.key)"
+                  class="review-tree-children"
+                >
                   <button
-                    v-for="doc in dateGroup.docs"
+                    v-for="doc in getSidebarGroupDocs(group)"
                     :key="doc.doc_key"
                     type="button"
-                    class="review-doc-card"
-                    :class="{ 'review-doc-card--active': activeDocKey === doc.doc_key }"
-                    @click="activeDocKey = doc.doc_key"
+                    class="review-tree-doc"
+                    :class="{ 'review-tree-doc--active': activeDocKey === doc.doc_key }"
+                    @click="handleSidebarDocClick(group.key, doc)"
                   >
-                    <div class="review-doc-card__header">
-                      <div class="review-doc-card__title">
-                        {{ renderDocListTitle(doc) }}
-                      </div>
-                      <span
-                        v-if="activeDocKey === doc.doc_key"
-                        class="review-doc-card__tag"
-                      >当前</span>
-                    </div>
-                    <div class="review-doc-card__meta">
-                      {{ renderDocListMeta(doc) || '未标记时间' }}
-                    </div>
+                    {{ renderSidebarDocLabel(doc) }}
                   </button>
                 </div>
               </div>
@@ -606,12 +612,6 @@ interface ReviewDocTreeGroup {
   children: ReviewDocTreeNode[]
 }
 
-interface ReviewDocDateGroup {
-  key: string
-  label: string
-  docs: ReviewDocItem[]
-}
-
 interface DocParagraphBlock {
   key: string
   text: string
@@ -702,6 +702,8 @@ const recordDetail = ref<Record<string, unknown> | null>(null)
 const activeDocGroup = ref('all')
 const activeCourseSubtype = ref('all')
 const activeDocKey = ref('')
+const sidebarDocFilter = ref('all')
+const expandedSidebarGroups = ref<string[]>(['course'])
 const activeHighlightTarget = ref<HighlightTarget | null>(null)
 const highlightBlockElements = new Map<string, HTMLElement>()
 
@@ -969,17 +971,6 @@ function sortDocsByTimeDesc(docs: ReviewDocItem[]): ReviewDocItem[] {
   })
 }
 
-function buildDocDateKey(doc: ReviewDocItem): string {
-  const timeText = formatDocTime(doc.record_time || doc.sort_time)
-  if (!timeText) return 'undated'
-  return timeText.slice(0, 10)
-}
-
-function buildDocDateLabel(dateKey: string): string {
-  if (dateKey === 'undated') return '未标记时间'
-  return dateKey
-}
-
 function buildTreeNodeFromDoc(doc: ReviewDocItem): ReviewDocTreeNode {
   return {
     id: doc.document_id || doc.id,
@@ -1140,6 +1131,19 @@ const displayDocGroups = computed(() =>
   ),
 )
 
+const sidebarFilterOptions = computed(() => [
+  { label: '所有单据', value: 'all' },
+  ...displayDocGroups.value.map((group) => ({
+    label: group.label,
+    value: group.key,
+  })),
+])
+
+const visibleSidebarGroups = computed(() => {
+  if (sidebarDocFilter.value === 'all') return displayDocGroups.value
+  return displayDocGroups.value.filter((group) => group.key === sidebarDocFilter.value)
+})
+
 const currentGroupNodes = computed<ReviewDocTreeNode[]>(() => {
   const groupKey = safeText(activeDocGroup.value)
   if (!groupKey || groupKey === 'all') {
@@ -1188,19 +1192,6 @@ const visibleCurrentGroupDocs = computed<ReviewDocItem[]>(() => {
   return currentGroupDocs.value.filter(
     (doc) => inferCourseSubtype(doc) === activeCourseSubtype.value,
   )
-})
-
-const currentGroupDateGroups = computed<ReviewDocDateGroup[]>(() => {
-  const groups = new Map<string, ReviewDocItem[]>()
-  for (const doc of visibleCurrentGroupDocs.value) {
-    const dateKey = buildDocDateKey(doc)
-    groups.set(dateKey, [...(groups.get(dateKey) || []), doc])
-  }
-  return Array.from(groups.entries()).map(([key, docs]) => ({
-    key,
-    label: buildDocDateLabel(key),
-    docs: sortDocsByTimeDesc(docs),
-  }))
 })
 
 const currentDoc = computed<ReviewDocItem | null>(() => {
@@ -1325,17 +1316,74 @@ function renderDocListTitle(doc: ReviewDocItem): string {
   return doc.document_title || doc.doc_name
 }
 
-function renderDocListMeta(doc: ReviewDocItem): string {
+function isSidebarGroupExpandable(group: ReviewDocTreeGroup): boolean {
+  return group.children.length > 1
+}
+
+function isSidebarGroupExpanded(groupKey: string): boolean {
+  return expandedSidebarGroups.value.includes(groupKey)
+}
+
+function ensureSidebarGroupExpanded(groupKey: string) {
+  if (!expandedSidebarGroups.value.includes(groupKey)) {
+    expandedSidebarGroups.value = [...expandedSidebarGroups.value, groupKey]
+  }
+}
+
+function toggleSidebarGroup(groupKey: string) {
+  if (isSidebarGroupExpanded(groupKey)) {
+    expandedSidebarGroups.value = expandedSidebarGroups.value.filter((key) => key !== groupKey)
+    return
+  }
+  ensureSidebarGroupExpanded(groupKey)
+}
+
+function getSidebarGroupDocs(group: ReviewDocTreeGroup): ReviewDocItem[] {
+  return sortDocsByTimeDesc(
+    group.children
+      .map((node) => resolveDocByNode(node))
+      .filter((doc): doc is ReviewDocItem => Boolean(doc))
+      .filter(
+        (doc, index, list) => list.findIndex((item) => item.doc_key === doc.doc_key) === index,
+      ),
+  )
+}
+
+function renderSidebarDocLabel(doc: ReviewDocItem): string {
   const time = formatDocTime(doc.record_time || doc.sort_time)
-  const parts: string[] = []
-  if (time) {
-    parts.push(activeDocGroup.value === 'course' ? time.slice(11, 19) : time)
+  const date = time ? time.slice(0, 10) : '未标记时间'
+  return `${date} ${renderDocListTitle(doc)}`
+}
+
+function handleSidebarAllClick() {
+  sidebarDocFilter.value = 'all'
+  activeDocGroup.value = 'all'
+  activeCourseSubtype.value = 'all'
+  syncActiveDocumentSelection()
+}
+
+function handleSidebarLeafGroupClick(group: ReviewDocTreeGroup) {
+  activeDocGroup.value = group.key
+  activeCourseSubtype.value = 'all'
+  const firstDoc = getSidebarGroupDocs(group)[0]
+  if (firstDoc) activeDocKey.value = firstDoc.doc_key
+}
+
+function handleSidebarGroupHeaderClick(group: ReviewDocTreeGroup) {
+  activeDocGroup.value = group.key
+  activeCourseSubtype.value = 'all'
+  toggleSidebarGroup(group.key)
+  const firstDoc = getSidebarGroupDocs(group)[0]
+  if (firstDoc && !getSidebarGroupDocs(group).some((doc) => doc.doc_key === activeDocKey.value)) {
+    activeDocKey.value = firstDoc.doc_key
   }
-  const typeLabel = DOC_TYPE_LABELS[safeText(doc.doc_type)]
-  if (typeLabel && activeDocGroup.value !== 'course' && typeLabel !== renderDocListTitle(doc)) {
-    parts.push(typeLabel)
-  }
-  return parts.join(' · ')
+}
+
+function handleSidebarDocClick(groupKey: string, doc: ReviewDocItem) {
+  activeDocGroup.value = groupKey
+  activeCourseSubtype.value = 'all'
+  ensureSidebarGroupExpanded(groupKey)
+  activeDocKey.value = doc.doc_key
 }
 
 function setHighlightBlockRef(blockKey: string, el: Element | null) {
@@ -1487,10 +1535,14 @@ async function handleDefectSelect(defect: DefectItem) {
 function syncActiveDocumentSelection() {
   if (!displayDocGroups.value.length) {
     activeDocGroup.value = 'all'
+    sidebarDocFilter.value = 'all'
     activeDocKey.value = visibleCurrentGroupDocs.value[0]?.doc_key || ''
     return
   }
   const validGroupKeys = displayDocGroups.value.map((group) => group.key)
+  if (sidebarDocFilter.value !== 'all' && !validGroupKeys.includes(sidebarDocFilter.value)) {
+    sidebarDocFilter.value = 'all'
+  }
   if (!validGroupKeys.includes(activeDocGroup.value)) {
     activeDocGroup.value = validGroupKeys[0]
   }
@@ -1663,6 +1715,11 @@ watch(activeDocGroup, (groupKey) => {
   }
 })
 
+watch(sidebarDocFilter, (groupKey) => {
+  if (groupKey === 'all') return
+  ensureSidebarGroupExpanded(groupKey)
+})
+
 watch([activeHighlightBlockKey, currentDocAllBlocks], async ([blockKey, blocks]) => {
   if (!blockKey || !blocks.some((block) => block.key === blockKey)) return
   await nextTick()
@@ -1680,6 +1737,8 @@ watch(
       activeDocGroup.value = 'all'
       activeCourseSubtype.value = 'all'
       activeDocKey.value = ''
+      sidebarDocFilter.value = 'all'
+      expandedSidebarGroups.value = ['course']
       activeHighlightTarget.value = null
       highlightBlockElements.clear()
       recordDetail.value = null
@@ -1804,9 +1863,6 @@ watch(
 .review-panel__desc,
 .review-content__meta,
 .review-content__time,
-.review-doc-card__meta,
-.review-date-block__label,
-.review-field-item__label,
 .review-empty__desc,
 .review-issue-card__meta,
 .review-issue-card__confidence {
@@ -1913,90 +1969,46 @@ watch(
   line-height: 1.6;
 }
 
-.review-sidebar__group-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.review-card__title,
+.review-alert__title,
+.review-empty__title,
+.review-issue-card__title {
+  color: #1e293b;
+}
+
+.review-sidebar__toolbar {
   padding: 16px 16px 14px;
   border-bottom: 1px solid #eef2f7;
   background: #fbfdff;
 }
 
-.review-group-card,
-.review-chip,
-.review-doc-card {
-  border: 1px solid #dbe4f0;
-  background: #fff;
-  transition: all 0.2s ease;
-  outline: none;
-}
-
-.review-group-card {
-  border-radius: 16px;
-  padding: 12px 14px;
-  text-align: left;
-}
-
-.review-group-card:hover,
-.review-doc-card:hover,
-.review-chip:hover {
-  border-color: #93c5fd;
-  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.08);
-}
-
-.review-group-card--active,
-.review-doc-card--active,
-.review-chip--active {
-  border-color: #60a5fa;
-  background: #eff6ff;
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.12);
-}
-
-.review-group-card__label,
-.review-doc-card__title,
-.review-card__title,
-.review-alert__title,
-.review-empty__title,
-.review-field-item__value,
-.review-issue-card__title,
-.review-section__label {
-  color: #1e293b;
-}
-
-.review-group-card__label {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.review-group-card__count {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #7b8aa5;
-}
-
-.review-sidebar__filter {
-  padding: 14px 16px;
-  border-bottom: 1px solid #eef2f7;
-}
-
-.review-sidebar__filter-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-  margin-bottom: 10px;
-}
-
-.review-sidebar__chips {
+.review-sidebar__select-wrap {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
 }
 
-.review-chip {
-  border-radius: 999px;
-  padding: 6px 12px;
+.review-sidebar__select-label {
   font-size: 12px;
-  color: #475569;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.review-sidebar__select {
+  width: 100%;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #fff;
+  color: #1e293b;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  outline: none;
+}
+
+.review-sidebar__select:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
 .review-sidebar__list,
@@ -2008,62 +2020,83 @@ watch(
 }
 
 .review-sidebar__list {
-  padding: 14px 16px 18px;
+  padding: 10px 0 16px;
   background: linear-gradient(180deg, #fcfdff 0%, #ffffff 100%);
 }
 
-.review-date-block + .review-date-block {
-  margin-top: 18px;
+.review-tree-group + .review-tree-group {
+  margin-top: 2px;
 }
 
-.review-date-block__label {
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 10px;
-  padding: 0 4px;
-}
-
-.review-date-block__docs {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.review-doc-card {
-  border-radius: 16px;
-  padding: 14px;
+.review-tree-node,
+.review-tree-doc {
+  width: 100%;
+  border: 0;
+  background: transparent;
   text-align: left;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+  outline: none;
 }
 
-.review-doc-card__header {
+.review-tree-node {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.review-doc-card__title {
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  color: #1e293b;
   font-size: 14px;
-  font-weight: 600;
-  line-height: 1.5;
-  word-break: break-word;
+  line-height: 1.6;
 }
 
-.review-doc-card__meta {
-  margin-top: 6px;
-  font-size: 12px;
+.review-tree-node:hover,
+.review-tree-doc:hover {
+  background: #f8fbff;
 }
 
-.review-doc-card__tag {
-  border-radius: 999px;
-  background: #dbeafe;
+.review-tree-node--root {
+  padding-top: 6px;
+}
+
+.review-tree-node--active,
+.review-tree-doc--active {
   color: #2563eb;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  flex-shrink: 0;
+  background: #eff6ff;
 }
 
+.review-tree-node__caret,
+.review-tree-node__spacer {
+  width: 12px;
+  flex-shrink: 0;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.review-tree-node__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-tree-children {
+  padding: 2px 0 6px 0;
+}
+
+.review-tree-doc {
+  display: block;
+  padding: 7px 18px 7px 38px;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.review-card__title,
+.review-card__title,
 .review-content__header {
   align-items: center;
 }
