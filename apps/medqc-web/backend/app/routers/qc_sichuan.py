@@ -13,6 +13,7 @@ from ..core.response import success_response, paginated_response, error_response
 from ..services.sichuan_qc_service import SichuanQCService, RuleSourceGuardError
 from ..services.llm_config_loader import LLMConfigLoader
 from ..services.qc_input_adapters import evaluate_running_final_bundle
+from ..services.qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
 from ..services.fast_screen_qc import (
     EXECUTION_STRATEGY_FAST_SCREEN,
     normalize_execution_strategy,
@@ -27,6 +28,12 @@ from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
 from ..core.security import require_admin, get_current_user
 from ..services.custom_qc_workspace_service import CustomQCWorkspaceService
+from ..services.sample_programmatic_evidence import build_programmatic_evidence_payload
+from ..services.sample_validation_rule_sets import (
+    apply_programmatic_rule_runtime_overrides,
+    get_sample_programmatic_rule_set,
+    is_workspace_batch_draft_id,
+)
 from ..services.effect_priority_qc import (
     BATCH_OUTPUT_MODE_FULL,
     DEFAULT_MAX_REFINE_CANDIDATES,
@@ -246,6 +253,12 @@ def _current_user_id(current_user: Dict[str, Any]) -> str:
         .strip()
         or "anonymous"
     )
+
+
+def _is_workspace_batch_job(job: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(job, dict):
+        return False
+    return is_workspace_batch_draft_id(job.get("draft_id"))
 
 
 def _normalize_quality_profile(value: Any) -> str:
@@ -871,6 +884,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         rule_set_key = str(filters.get("rule_set_key") or "").strip()
         rule_set_name = str(filters.get("rule_set_name") or "").strip()
         rule_set_version = str(filters.get("rule_set_version") or "").strip()
+        validation_mode = str(filters.get("validation_mode") or "").strip().lower() or "sc"
+        programmatic_rule_set = get_sample_programmatic_rule_set()
+        is_programmatic_mode = (
+            validation_mode == "programmatic" or rule_set_key == programmatic_rule_set.key
+        )
         execution_strategy = normalize_execution_strategy(filters.get("execution_strategy"))
         quality_profile = _normalize_quality_profile(filters.get("quality_profile"))
         bucket_strategy = _normalize_bucket_strategy(filters.get("bucket_strategy"))
@@ -946,6 +964,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         valid_rule_ids: List[str] = []
         for rule_id in rule_ids:
             rule = qc_service.get_rule_by_id(rule_id)
+            if rule and is_programmatic_mode:
+                rule = apply_programmatic_rule_runtime_overrides(rule)
             rule_name = str((rule or {}).get("name") or rule_id)
             rule_code = str((rule or {}).get("rule_code") or rule_id)
             rule_job_id = str(uuid.uuid4())
@@ -976,6 +996,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             else:
                 valid_rule_ids.append(rule_id)
             rule_states[rule_id] = state
+        valid_rules = [
+            dict(rule_states[rule_id]["rule"])
+            for rule_id in valid_rule_ids
+            if isinstance(rule_states[rule_id].get("rule"), dict)
+        ]
 
         def _build_progress_patch(processed_records_count: int) -> Dict[str, Any]:
             return {
@@ -1042,7 +1067,65 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_cot_summary: Dict[str, Any] = {}
                 record_refine_summary: Dict[str, Any] = {}
 
-                if current_scope == "final" and institute_id and patient_id and visit_id:
+                if is_programmatic_mode:
+                    bundle_payload: Optional[Dict[str, Any]] = None
+                    attempted_scenes: List[str] = []
+                    if institute_id and patient_id and visit_id:
+                        candidate_scenes = [
+                            scene
+                            for scene in (
+                                current_scope,
+                                "running",
+                                "final",
+                            )
+                            if scene in {"running", "final"} and scene not in attempted_scenes
+                        ]
+                        for scene in candidate_scenes:
+                            attempted_scenes.append(scene)
+                            try:
+                                bundle_payload = load_running_final_bundle(
+                                    scene=scene,
+                                    institute_id=institute_id,
+                                    patient_id=patient_id,
+                                    visit_id=visit_id,
+                                    schema="public",
+                                )
+                                break
+                            except Exception:
+                                continue
+                    used_bundle_path = bundle_payload is not None
+                    if not used_bundle_path and institute_id and patient_id and visit_id:
+                        bundle_fallback_reason = "未加载到 running/final bundle，回退 medical_text + timeline_missing"
+                    evidence_payload = build_programmatic_evidence_payload(
+                        bundle=bundle_payload,
+                        medical_text=str(record.get("medical_text") or ""),
+                    )
+                    result = await qc_service.evaluate_document_with_rules(
+                        document_id=record_id or "unknown",
+                        content=str((bundle_payload or {}).get("medical_text") or record.get("medical_text") or ""),
+                        document_type=document_type,
+                        rules=valid_rules,
+                        evidence_source="timeline" if used_bundle_path else "medical_text_fallback",
+                        evidence_payload=evidence_payload,
+                        bucket_strategy=bucket_strategy,
+                        quality_profile=quality_profile,
+                        batch_output_mode=batch_output_mode,
+                        enable_selective_refine=enable_selective_refine,
+                        refine_confidence_threshold=refine_confidence_threshold,
+                        max_refine_candidates=max_refine_candidates,
+                    )
+                    token_usage = dict(result.get("token_usage") or {})
+                    record_total_tokens = int(token_usage.get("total_tokens") or 0)
+                    record_total_prompt_tokens = int(token_usage.get("prompt_tokens") or 0)
+                    record_total_completion_tokens = int(token_usage.get("completion_tokens") or 0)
+                    record_total_api_time = float(result.get("api_time") or 0.0)
+                    record_first_result_latency = float(result.get("first_result_latency") or 0.0)
+                    record_first_result_source = str(result.get("first_result_source") or "")
+                    record_pack_metrics = dict(result.get("pack_metrics") or {})
+                    record_cot_summary = dict(result.get("cot_summary") or {})
+                    record_refine_summary = dict(result.get("refine_summary") or {})
+                    eval_items = list(result.get("evaluation_results") or [])
+                elif current_scope == "final" and institute_id and patient_id and visit_id:
                     used_bundle_path = True
                     try:
                         if execution_strategy == EXECUTION_STRATEGY_FAST_SCREEN:
@@ -1880,7 +1963,7 @@ async def get_workspace_batch_job(
 ):
     workspace = _sichuan_workspace_service()
     job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
-    if not job or str(job.get("draft_id") or "") != "sichuan-rule-library":
+    if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     return success_response(
         data={
@@ -1911,7 +1994,7 @@ async def cancel_workspace_batch_job(
 ):
     workspace = _sichuan_workspace_service()
     job = workspace.cancel_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
-    if not job or str(job.get("draft_id") or "") != "sichuan-rule-library":
+    if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     return success_response(
         data=job,
@@ -1929,7 +2012,7 @@ async def retry_workspace_batch_job(
 ):
     workspace = _sichuan_workspace_service()
     job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
-    if not job or str(job.get("draft_id") or "") != "sichuan-rule-library":
+    if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     background_tasks.add_task(_run_sichuan_workspace_batch_job, job_id)
     return success_response(
@@ -1949,7 +2032,7 @@ async def get_workspace_batch_job_debug(
 ):
     workspace = _sichuan_workspace_service()
     job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
-    if not job or str(job.get("draft_id") or "") != "sichuan-rule-library":
+    if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     return success_response(
         data=_build_debug_snapshot(job, rule_job_id=rule_job_id, item_limit=item_limit),
@@ -1967,7 +2050,7 @@ async def export_workspace_batch_job(
 ):
     workspace = _sichuan_workspace_service()
     job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
-    if not job or str(job.get("draft_id") or "") != "sichuan-rule-library":
+    if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     if str(format or "").lower() == "csv":

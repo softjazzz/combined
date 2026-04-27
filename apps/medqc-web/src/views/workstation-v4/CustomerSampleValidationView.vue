@@ -54,6 +54,7 @@
                       class="w-full min-w-[220px] customer-sample-toolbar-select"
                       size="middle"
                       :options="validationModeOptions"
+                      @change="handleValidationModeChange"
                     />
                   </div>
                 </div>
@@ -311,8 +312,13 @@
                 <div
                   class="flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
                 >
-                  <span class="mr-2">仅首批</span>
-                  <a-switch v-model:checked="filters.includeInBatch" />
+                  <span class="mr-2">{{
+                    selectedValidationMode === 'programmatic' ? '首批筛选已关闭' : '仅首批'
+                  }}</span>
+                  <a-switch
+                    v-model:checked="filters.includeInBatch"
+                    :disabled="selectedValidationMode === 'programmatic'"
+                  />
                 </div>
                 <div
                   class="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
@@ -719,27 +725,47 @@ const parallelOptions = [
 const validationModeOptions = [
   { label: '客户专项规则包模式', value: 'customer' },
   { label: 'SC 样本规则模式', value: 'sc' },
+  { label: '硬门槛程序规则模式', value: 'programmatic' },
 ]
 
 const summaryCards = computed(() => {
   const pool = selectedPool.value
-  const issueSampleLabel = selectedValidationMode.value === 'customer' ? '问题样本' : '内涵样本'
+  const issueSampleLabel =
+    selectedValidationMode.value === 'customer'
+      ? '问题样本'
+      : selectedValidationMode.value === 'programmatic'
+        ? '程序样本'
+        : '内涵样本'
+  const issueSampleValue =
+    selectedValidationMode.value === 'programmatic'
+      ? (pool?.programmatic_items ?? 0)
+      : (pool?.llm_intrinsic_items ?? 0)
   const issueSampleHelp =
     selectedValidationMode.value === 'customer'
       ? '当前纳入客户专项规则包验证的问题样本'
-      : '当前纳入 LLM 验证的问题样本'
+      : selectedValidationMode.value === 'programmatic'
+        ? '当前纳入样本硬门槛程序规则包的样本'
+        : '当前纳入 LLM 验证的问题样本'
+  const runnableValue =
+    selectedValidationMode.value === 'programmatic'
+      ? (pool?.matched_items ?? 0)
+      : (pool?.ready_items ?? 0)
+  const runnableHelp =
+    selectedValidationMode.value === 'programmatic'
+      ? '已匹配且已同步，可直接发起程序规则验证'
+      : 'running bundle 已就绪，可直接发起验证'
   return [
     { label: '样本总数', value: pool?.total_items ?? 0, help: 'Sheet2 导入后的样本总量' },
     {
       label: issueSampleLabel,
-      value: pool?.llm_intrinsic_items ?? 0,
+      value: issueSampleValue,
       help: issueSampleHelp,
     },
     { label: '已匹配病历', value: pool?.matched_items ?? 0, help: '已映射到系统病历主键的样本数' },
     {
       label: '可运行样本',
-      value: pool?.ready_items ?? 0,
-      help: 'running bundle 已就绪，可直接发起验证',
+      value: runnableValue,
+      help: runnableHelp,
     },
   ]
 })
@@ -750,18 +776,24 @@ const currentScopeDescription = computed(() => {
   const total = pagination.value.total || 0
   const matched = records.value.filter((record) => record.match_status === 'matched').length
   const ready = records.value.filter((record) => record.bundle_status === 'ready').length
+  const synced = records.value.filter((record) => record.sync_status === 'synced').length
   const modeLabel = validationModeLabel(selectedValidationMode.value)
   const filterLabels = [
     `验证模式：${modeLabel}`,
     filters.value.coverageType ? `样本范围：${coverageLabel(filters.value.coverageType)}` : '',
     filters.value.matchStatus ? `病历关联：${matchStatusLabel(filters.value.matchStatus)}` : '',
-    filters.value.includeInBatch ? '仅看首批样本' : '',
+    selectedValidationMode.value !== 'programmatic' && filters.value.includeInBatch
+      ? '仅看首批样本'
+      : '',
   ].filter(Boolean)
-  const base = `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，文书已就绪 ${ready} 份。`
+  const base =
+    selectedValidationMode.value === 'programmatic'
+      ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份、已同步 ${synced} 份。`
+      : `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，文书已就绪 ${ready} 份。`
   if (!filterLabels.length) {
-    return `${base} 未关联到真实病历或文书未就绪的病历不会进入批量验证。`
+    return `${base} ${runnableRequirementHint()}`
   }
-  return `${base} 当前筛选：${filterLabels.join('，')}。`
+  return `${base} 当前筛选：${filterLabels.join('，')}。${runnableRequirementHint()}`
 })
 
 const selectedRecordStats = computed(() => {
@@ -972,6 +1004,7 @@ function coverageLabel(value: string): string {
 }
 
 function validationModeLabel(value: string): string {
+  if (value === 'programmatic') return '硬门槛程序规则模式'
   if (value === 'sc') return 'SC 样本规则模式'
   return '客户专项规则包模式'
 }
@@ -1073,6 +1106,9 @@ function summarizeRecordScope(record: ManualSamplePoolRecord): string {
   if (labels.length) {
     return labels.join(' / ')
   }
+  if (selectedValidationMode.value === 'programmatic') {
+    return '样本硬门槛程序规则包 v1'
+  }
   if (selectedValidationMode.value === 'customer') {
     return '客户专项规则包'
   }
@@ -1082,6 +1118,9 @@ function summarizeRecordScope(record: ManualSamplePoolRecord): string {
 function recordScopeHint(record: ManualSamplePoolRecord): string {
   if ((record.document_scope_labels || []).length > 0) {
     return '已按当前病历实际同步到的文书类型识别验证范围。'
+  }
+  if (selectedValidationMode.value === 'programmatic') {
+    return '当前按固定硬门槛程序规则包执行，不再依赖单条样本候选规则。'
   }
   if (selectedValidationMode.value === 'customer') {
     return '当前按客户专项规则包执行，原始 Excel 问题仅作为对照上下文保留。'
@@ -1218,12 +1257,26 @@ function resolvePrimaryAction(record: ManualSamplePoolRecord): {
 }
 
 function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
+  if (selectedValidationMode.value === 'programmatic') {
+    return (
+      record.match_status === 'matched' &&
+      record.sync_status === 'synced' &&
+      !!record.matched_visit_id
+    )
+  }
   return (
     record.match_status === 'matched' &&
     record.sync_status === 'synced' &&
     record.bundle_status === 'ready' &&
     !!record.matched_visit_id
   )
+}
+
+function runnableRequirementHint(): string {
+  if (selectedValidationMode.value === 'programmatic') {
+    return '未关联到真实病历或尚未同步的病历不会进入程序规则批量验证。'
+  }
+  return '未关联到真实病历或文书未就绪的病历不会进入批量验证。'
 }
 
 async function loadPools() {
@@ -1255,7 +1308,8 @@ async function loadRecords() {
   const result = await getManualSamplePoolRecords(selectedPoolId.value, {
     coverage_type: filters.value.coverageType,
     match_status: filters.value.matchStatus,
-    include_in_batch_1: filters.value.includeInBatch,
+    include_in_batch_1:
+      selectedValidationMode.value === 'programmatic' ? undefined : filters.value.includeInBatch,
     q: filters.value.query || undefined,
     page: pagination.value.page,
     page_size: pagination.value.pageSize,
@@ -1281,12 +1335,24 @@ async function handlePoolChange() {
   await loadRecords()
 }
 
+async function handleValidationModeChange(mode: ManualSampleValidationMode) {
+  if (mode === 'programmatic') {
+    filters.value.coverageType = 'programmatic'
+    filters.value.includeInBatch = false
+  } else if (mode === 'sc' && filters.value.coverageType === 'programmatic') {
+    filters.value.coverageType = 'llm_intrinsic'
+  }
+  pagination.value.page = 1
+  selectedRowKeys.value = []
+  await loadRecords()
+}
+
 function resetFilters() {
   filters.value = {
     query: '',
     coverageType: undefined,
     matchStatus: undefined,
-    includeInBatch: true,
+    includeInBatch: selectedValidationMode.value !== 'programmatic',
   }
   pagination.value.page = 1
   selectedRowKeys.value = []
@@ -1413,8 +1479,8 @@ async function handleSyncPoolRecords() {
   if (!selectedPoolId.value) return
   syncLoading.value = true
   const result = await syncManualSamplePoolRecords(selectedPoolId.value, {
-    only_intrinsic: true,
-    include_in_batch_1: true,
+    only_intrinsic: selectedValidationMode.value !== 'programmatic',
+    include_in_batch_1: selectedValidationMode.value !== 'programmatic',
   })
   syncLoading.value = false
   if (!result.success || !result.data) {
@@ -1430,7 +1496,11 @@ async function handleRunPool() {
   const { selectedCount, runnableCount, skippedCount, runnableRecordIds } =
     selectedRecordStats.value
   if (selectedCount > 0 && runnableCount === 0) {
-    message.warning('当前选中的病历还未完成匹配、同步或 bundle 准备，暂时无法发起验证')
+    message.warning(
+      selectedValidationMode.value === 'programmatic'
+        ? '当前选中的病历还未完成匹配或同步，暂时无法发起程序规则验证'
+        : '当前选中的病历还未完成匹配、同步或 bundle 准备，暂时无法发起验证',
+    )
     return
   }
   if (selectedCount > 0 && skippedCount > 0) {

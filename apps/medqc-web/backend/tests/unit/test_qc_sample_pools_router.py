@@ -6,6 +6,7 @@ import pytest
 from fastapi import BackgroundTasks
 
 from app.routers import qc_sample_pools
+from app.services.sample_validation_rule_sets import SAMPLE_PROGRAMMATIC_RULE_IDS
 
 
 class _SamplePoolServiceStub:
@@ -21,10 +22,11 @@ class _SamplePoolServiceStub:
             "name": "手工问题样本池-首轮验证",
         }
 
-    def get_runnable_items(self, *, pool_id: str, item_ids: list[str], record_ids: list[str]):
+    def get_runnable_items(self, *, pool_id: str, validation_mode: str, item_ids: list[str], record_ids: list[str]):
         self.get_runnable_items_calls.append(
             {
                 "pool_id": pool_id,
+                "validation_mode": validation_mode,
                 "item_ids": list(item_ids),
                 "record_ids": list(record_ids),
             }
@@ -171,6 +173,7 @@ class _SamplePoolLifecycleServiceStub:
                 "matched_visit_id": row.get("visit_id") or row.get("mr_no"),
                 "candidate_rule_ids": ["SC-023"] if index == 0 else ["SC-026"],
                 "manual_issue_text": row.get("manual_issue_text") or "",
+                "coverage_type": "programmatic" if index == 0 else "llm_intrinsic",
             }
             for index, row in enumerate(rows)
         ]
@@ -219,7 +222,7 @@ class _SamplePoolLifecycleServiceStub:
             page_size=page_size,
         )
 
-    def get_runnable_items(self, *, pool_id: str, item_ids: list[str], record_ids: list[str]):
+    def get_runnable_items(self, *, pool_id: str, validation_mode: str, item_ids: list[str], record_ids: list[str]):
         items = list(self.items_by_pool[pool_id])
         if item_ids:
             items = [item for item in items if item["id"] in item_ids]
@@ -269,6 +272,7 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
     assert sample_service.get_runnable_items_calls == [
         {
             "pool_id": "pool-1",
+            "validation_mode": "sc",
             "item_ids": ["item-1", "item-2"],
             "record_ids": ["V001", "V002"],
         }
@@ -489,3 +493,36 @@ async def test_run_sample_pool_intrinsic_validation_should_use_customer_rule_pac
     assert response["data"]["validation_mode"] == "customer"
     assert response["data"]["rule_set_name"] == "客户专项规则包 v1"
     assert response["data"]["rule_ids"] == ["CL-001", "CL-002"]
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_use_fixed_programmatic_rule_pack(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V001"],
+            sample_item_ids=["item-1"],
+            max_parallel_records=2,
+            validation_mode="programmatic",
+        ),
+        background_tasks=BackgroundTasks(),
+        current_user={"id": "tester"},
+    )
+
+    created = workspace_service.create_batch_job_calls[0]
+    assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "programmatic"
+    assert created["draft"]["id"] == "sample-programmatic-gate"
+    assert created["draft"]["rule_code"] == "SAMPLE-PROGRAMMATIC-GATE"
+    assert created["filters"]["validation_mode"] == "programmatic"
+    assert created["filters"]["rule_set_key"] == "sample_programmatic_gate_v1"
+    assert created["filters"]["rule_set_name"] == "样本硬门槛程序规则包 v1"
+    assert created["draft_ids"] == list(SAMPLE_PROGRAMMATIC_RULE_IDS)
+    assert response["data"]["rule_ids"] == list(SAMPLE_PROGRAMMATIC_RULE_IDS)

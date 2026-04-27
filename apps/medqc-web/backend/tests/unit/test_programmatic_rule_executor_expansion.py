@@ -10,7 +10,11 @@ def test_programmatic_rule_specs_should_expand_to_20_plus():
     # P1 目标：程序化规则从 10 条扩展到 20~30 条高价值规则
     assert len(PROGRAMMATIC_RULE_SPECS) >= 20
     assert "SC-022" in PROGRAMMATIC_RULE_SPECS
+    assert "SC-048" in PROGRAMMATIC_RULE_SPECS
+    assert "SC-049" in PROGRAMMATIC_RULE_SPECS
     assert "SC-096" in PROGRAMMATIC_RULE_SPECS
+    assert "LXE-18" in PROGRAMMATIC_RULE_SPECS
+    assert "LXE-35" in PROGRAMMATIC_RULE_SPECS
     assert "LX-026" in PROGRAMMATIC_RULE_SPECS
 
 
@@ -57,3 +61,119 @@ def test_surgery_24h_time_window_should_pass_when_in_time(rule_id: str):
     )
 
     assert result["status"] == "compliant"
+
+
+def test_sc048_should_use_timeline_for_attending_round():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-048", "name": "入院48小时内主治医师首次查房"},
+        medical_record={
+            "content": "",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "admission_time": "2026-04-01 08:00:00",
+                    "documents": {
+                        "first_course_record": [],
+                        "daily_course_record": [
+                            {
+                                "document_id": "D1",
+                                "title": "主治医师查房记录",
+                                "authored_at": "2026-04-02 07:00:00",
+                                "author_role": "attending",
+                            }
+                        ],
+                        "senior_course_record": [],
+                    },
+                    "risk_flags": ["normal"],
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "compliant"
+    assert result["metadata"]["evidence_source"] == "timeline"
+
+
+def test_sc049_should_fail_when_senior_round_exceeds_72h():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-049", "name": "入院72小时内高级职称首次查房"},
+        medical_record={
+            "content": "",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "admission_time": "2026-04-01 08:00:00",
+                    "documents": {
+                        "first_course_record": [],
+                        "daily_course_record": [],
+                        "senior_course_record": [
+                            {
+                                "document_id": "D2",
+                                "title": "副主任医师查房记录",
+                                "authored_at": "2026-04-04 12:30:00",
+                                "author_role": "senior",
+                            }
+                        ],
+                    },
+                    "risk_flags": ["normal"],
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "non_compliant"
+    assert "72" in result["findings"]
+
+
+def test_lxe18_should_return_uncertain_when_timeline_missing():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "LXE-18", "name": "非危重症患者3天未完成一次病程"},
+        medical_record={"content": "仅有大段病历文本，缺少时间轴"},
+    )
+
+    assert result["status"] == "uncertain"
+    assert result["metadata"]["evidence_source"] == "timeline_missing"
+
+
+def test_lxe35_should_fail_when_postop_day_missing():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "LXE-35", "name": "术后未连续3天书写病程记录"},
+        medical_record={
+            "content": "",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "admission_time": "2026-04-01 08:00:00",
+                    "documents": {
+                        "first_course_record": [],
+                        "daily_course_record": [
+                            {
+                                "document_id": "P1",
+                                "title": "术后病程记录",
+                                "authored_at": "2026-04-02 09:00:00",
+                            },
+                            {
+                                "document_id": "P3",
+                                "title": "术后病程记录",
+                                "authored_at": "2026-04-04 10:00:00",
+                            },
+                        ],
+                        "senior_course_record": [],
+                        "surgery_record": [
+                            {
+                                "document_id": "S1",
+                                "title": "手术记录",
+                                "authored_at": "2026-04-01 18:00:00",
+                                "surgery_end_at": "2026-04-01 18:00:00",
+                            }
+                        ],
+                    },
+                    "risk_flags": ["normal"],
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "non_compliant"
+    assert "第 2 天" in result["findings"]

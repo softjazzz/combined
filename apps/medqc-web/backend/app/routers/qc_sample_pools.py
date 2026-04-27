@@ -20,6 +20,10 @@ from ..services.customer_rule_sets import (
     CUSTOMER_LUXIAN_RULE_SET_KEY,
     get_customer_luxian_rule_set,
 )
+from ..services.sample_validation_rule_sets import (
+    get_sample_programmatic_rule_set,
+    resolve_sample_validation_pseudo_draft,
+)
 
 
 router = APIRouter(
@@ -67,7 +71,7 @@ class SamplePoolRunRequest(BaseModel):
     max_parallel_records: Optional[int] = Field(default=None, description="病历级并发数")
     sample_item_ids: list[str] = Field(default_factory=list, description="选中的样本项 ID")
     record_ids: list[str] = Field(default_factory=list, description="选中的真实病历 visit_id")
-    validation_mode: str = Field(default="customer", description="验证模式：customer/sc")
+    validation_mode: str = Field(default="customer", description="验证模式：customer/sc/programmatic")
     rule_set_key: Optional[str] = Field(default=None, description="指定规则包 key，仅客户专项模式使用")
 
 
@@ -394,8 +398,13 @@ async def run_sample_pool_intrinsic_validation(
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
 
+    validation_mode = str(payload.validation_mode or "customer").strip().lower() or "customer"
+    if validation_mode not in {"customer", "sc", "programmatic"}:
+        raise HTTPException(status_code=422, detail="未知验证模式，仅支持 customer、sc 或 programmatic")
+
     runnable_items = service.get_runnable_items(
         pool_id=pool_id,
+        validation_mode=validation_mode,
         item_ids=payload.sample_item_ids,
         record_ids=payload.record_ids,
     )
@@ -416,10 +425,6 @@ async def run_sample_pool_intrinsic_validation(
     if not record_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有已匹配的病历")
 
-    validation_mode = str(payload.validation_mode or "customer").strip().lower() or "customer"
-    if validation_mode not in {"customer", "sc"}:
-        raise HTTPException(status_code=422, detail="未知验证模式，仅支持 customer 或 sc")
-
     if validation_mode == "customer":
         requested_rule_set_key = str(payload.rule_set_key or CUSTOMER_LUXIAN_RULE_SET_KEY).strip() or CUSTOMER_LUXIAN_RULE_SET_KEY
         if requested_rule_set_key != CUSTOMER_LUXIAN_RULE_SET_KEY:
@@ -429,7 +434,7 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_key = customer_rule_set.key
         rule_set_name = customer_rule_set.name
         rule_set_version = customer_rule_set.version
-    else:
+    elif validation_mode == "sc":
         rule_ids = sorted(
             {
                 str(rule_id).strip()
@@ -441,6 +446,12 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_key = ""
         rule_set_name = "SC样本规则模式"
         rule_set_version = "running-batch-1"
+    else:
+        programmatic_rule_set = get_sample_programmatic_rule_set()
+        rule_ids = list(programmatic_rule_set.rule_ids)
+        rule_set_key = programmatic_rule_set.key
+        rule_set_name = programmatic_rule_set.name
+        rule_set_version = programmatic_rule_set.version
 
     if not rule_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有可执行规则")
@@ -475,12 +486,11 @@ async def run_sample_pool_intrinsic_validation(
     if not records:
         raise HTTPException(status_code=422, detail="样本池匹配病历未同步到当前 PG，无法执行")
 
-    pseudo_draft = {
-        "id": "sichuan-rule-library",
-        "rule_code": "SC-SAMPLE-POOL",
-        "name": f"{pool['name']}样本验证任务({len(rule_ids)}条规则)",
-        "scene": "running",
-    }
+    pseudo_draft = resolve_sample_validation_pseudo_draft(
+        validation_mode=validation_mode,
+        pool_name=str(pool.get("name") or ""),
+        rule_count=len(rule_ids),
+    )
     job = workspace.create_batch_job(
         draft=pseudo_draft,
         created_by=_current_user_id(current_user),

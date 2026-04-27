@@ -18,6 +18,7 @@ from ..database.connection import DB_SCHEMA_MODE, SessionLocal, engine
 from ..database.models.cdm import AdmissionRecord, DischargeRecord, MedicalRecordFrontpage
 from ..database.models.qc import QCDefect, QCResultBiz
 from ..services.bundles.emr_view import build_documents_tree, load_bundle_documents
+from ..services.sample_validation_rule_sets import WORKSPACE_BATCH_DRAFT_IDS
 from ..core.permissions import (
     require_permission,
     ResourceType,
@@ -388,16 +389,16 @@ def _load_review_items_from_latest_batch(record_id: str) -> Dict[str, Any]:
     if engine is None:
         return {"review_items": [], "review_job": None}
     schema = _workspace_schema()
+    draft_id_list = ", ".join(f"'{draft_id}'" for draft_id in sorted(WORKSPACE_BATCH_DRAFT_IDS))
     sql = text(
         f"""
         SELECT id, created_at, items_json
         FROM {schema}.custom_qc_batch_jobs
-        WHERE draft_id = 'sichuan-rule-library'
-          AND scope = 'final'
+        WHERE draft_id IN ({draft_id_list})
           AND status = 'completed'
           AND items_json IS NOT NULL
         ORDER BY created_at DESC
-        LIMIT 20
+        LIMIT 50
         """
     )
     with engine.connect() as conn:

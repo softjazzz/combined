@@ -1653,7 +1653,7 @@ class SichuanQCService:
             rule_ids=rule_ids,
         )
 
-        orchestrated = await self._evaluate_rules_orchestrated(
+        return await self.evaluate_document_with_rules(
             document_id=document_id,
             content=content,
             document_type=document_type,
@@ -1668,10 +1668,45 @@ class SichuanQCService:
             max_refine_candidates=max_refine_candidates,
             use_execution_cache=use_execution_cache,
         )
+
+    async def evaluate_document_with_rules(
+        self,
+        *,
+        document_id: str,
+        content: str,
+        document_type: str,
+        rules: List[Dict[str, Any]],
+        evidence_source: str = "medical_text",
+        evidence_payload: Optional[Dict[str, Any]] = None,
+        bucket_strategy: str = "domain_only",
+        quality_profile: str = QUALITY_PROFILE_THROUGHPUT,
+        batch_output_mode: str = BATCH_OUTPUT_MODE_FULL,
+        enable_selective_refine: bool = False,
+        refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+        max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
+        use_execution_cache: bool = True,
+    ) -> Dict[str, Any]:
+        prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
+
+        orchestrated = await self._evaluate_rules_orchestrated(
+            document_id=document_id,
+            content=content,
+            document_type=document_type,
+            rules=prepared_rules,
+            evidence_source=evidence_source,
+            evidence_payload=evidence_payload,
+            bucket_strategy=bucket_strategy,
+            quality_profile=quality_profile,
+            batch_output_mode=batch_output_mode,
+            enable_selective_refine=enable_selective_refine,
+            refine_confidence_threshold=refine_confidence_threshold,
+            max_refine_candidates=max_refine_candidates,
+            use_execution_cache=use_execution_cache,
+        )
         return self._build_document_evaluation_result(
             document_id=document_id,
             document_type=document_type,
-            rules=rules,
+            rules=prepared_rules,
             orchestrated=orchestrated,
         )
 

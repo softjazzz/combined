@@ -408,7 +408,7 @@ def test_get_runnable_items_should_enrich_candidate_rules_from_bundle(monkeypatc
         },
     )
 
-    result = service.get_runnable_items(pool_id="pool-1")
+    result = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
 
     assert len(result) == 1
     assert "SC-093" in result[0]["candidate_rule_ids"]
@@ -572,9 +572,44 @@ def test_get_runnable_items_filters_by_selected_record_ids(monkeypatch):
 
     runnable = service.get_runnable_items(
         pool_id="pool-1",
-        include_in_batch_1=True,
+        validation_mode="sc",
         record_ids=["V001"],
     )
 
     assert len(runnable) == 1
     assert runnable[0]["matched_visit_id"] == "V001"
+
+
+def test_get_runnable_items_should_allow_programmatic_without_bundle_ready_or_batch1(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "张三",
+            "mr_no": "ZY001",
+            "department": "普外科",
+            "manual_issue_text": "三天未记录病程",
+            "coverage_type": "programmatic",
+            "candidate_rule_ids_json": "[]",
+            "include_in_batch_1": False,
+            "matched_visit_id": "V009",
+            "matched_patient_id": "P009",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "missing",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+
+    runnable = service.get_runnable_items(
+        pool_id="pool-1",
+        validation_mode="programmatic",
+        record_ids=["V009"],
+    )
+
+    assert len(runnable) == 1
+    assert runnable[0]["coverage_type"] == "programmatic"

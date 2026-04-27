@@ -915,4 +915,92 @@ describe('CustomerSampleValidationView', () => {
       validation_mode: 'sc',
     })
   })
+
+  it('切换到硬门槛程序规则模式后应允许 bundle 未就绪但已同步病历提交', async () => {
+    const wrapper = await mountView()
+
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: {
+          ...buildPool(),
+          programmatic_items: 1,
+        },
+        items: [
+          buildRecord({
+            id: 'V008',
+            matched_visit_id: 'V008',
+            bundle_status: 'pending',
+            sync_status: 'synced',
+            coverage_types: ['programmatic'],
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+
+    const selectElements = wrapper.findAll('select')
+    const modeSelect = selectElements.find((node) =>
+      node.findAll('option').some((option) => option.text() === '硬门槛程序规则模式'),
+    )
+    expect(modeSelect).toBeTruthy()
+    await modeSelect!.setValue('programmatic')
+    await flushPromises()
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起选中病历验证'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
+      record_ids: ['V008'],
+      max_parallel_records: 4,
+      validation_mode: 'programmatic',
+    })
+  })
+
+  it('程序规则模式同步样本病历时不再限制内涵和首批', async () => {
+    const wrapper = await mountView()
+
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: {
+          ...buildPool(),
+          programmatic_items: 1,
+        },
+        items: [buildRecord({ coverage_types: ['programmatic'] })],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+
+    const selectElements = wrapper.findAll('select')
+    const modeSelect = selectElements.find((node) =>
+      node.findAll('option').some((option) => option.text() === '硬门槛程序规则模式'),
+    )
+    expect(modeSelect).toBeTruthy()
+    await modeSelect!.setValue('programmatic')
+    await flushPromises()
+
+    const syncButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('同步样本病历'))
+    expect(syncButton).toBeTruthy()
+    await syncButton!.trigger('click')
+    await flushPromises()
+
+    expect(syncManualSamplePoolRecords).toHaveBeenLastCalledWith('pool-1', {
+      only_intrinsic: false,
+      include_in_batch_1: false,
+    })
+  })
 })

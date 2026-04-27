@@ -1727,27 +1727,42 @@ class CustomQCSamplePoolService:
         self,
         *,
         pool_id: str,
-        coverage_type: str = "llm_intrinsic",
-        include_in_batch_1: bool = True,
+        validation_mode: str,
         item_ids: Optional[Sequence[str]] = None,
         record_ids: Optional[Sequence[str]] = None,
     ) -> List[Dict[str, Any]]:
         session = _session()
         try:
+            normalized_mode = _safe_text(validation_mode).lower() or "customer"
+            clauses = [
+                self._item_table.c.pool_id == pool_id,
+                self._item_table.c.match_status == "matched",
+                self._item_table.c.sync_status == "synced",
+            ]
+            if normalized_mode == "customer":
+                clauses.append(self._item_table.c.bundle_status == "ready")
+            elif normalized_mode == "sc":
+                clauses.extend(
+                    [
+                        self._item_table.c.coverage_type == "llm_intrinsic",
+                        self._item_table.c.include_in_batch_1.is_(True),
+                        self._item_table.c.bundle_status == "ready",
+                    ]
+                )
+            elif normalized_mode == "programmatic":
+                clauses.extend(
+                    [
+                        self._item_table.c.coverage_type == "programmatic",
+                        self._item_table.c.matched_visit_id.is_not(None),
+                    ]
+                )
+            else:
+                raise ValueError(f"未知验证模式: {validation_mode}")
             stmt = (
                 select(self._item_table)
-                .where(
-                    and_(
-                        self._item_table.c.pool_id == pool_id,
-                        self._item_table.c.coverage_type == coverage_type,
-                        self._item_table.c.match_status == "matched",
-                        self._item_table.c.sync_status == "synced",
-                    )
-                )
+                .where(and_(*clauses))
                 .order_by(self._item_table.c.row_no.asc())
             )
-            if include_in_batch_1:
-                stmt = stmt.where(self._item_table.c.include_in_batch_1.is_(True))
             if item_ids:
                 normalized_ids = [str(item_id).strip() for item_id in item_ids if str(item_id).strip()]
                 if normalized_ids:
