@@ -380,6 +380,14 @@ def _normalize_text(value: Any) -> str:
     return " ".join(text_value.split())
 
 
+def _first_nonempty_string(*values: Any) -> str:
+    for value in values:
+        normalized = str(value or "").strip()
+        if normalized:
+            return normalized
+    return ""
+
+
 def _safe_float(value: Any) -> float | None:
     if value is None:
         return None
@@ -632,6 +640,7 @@ def _build_structured_context(
     docs: dict[str, list[dict[str, Any]]],
     source_documents: list[dict[str, Any]] | None = None,
     timeline_facts: list[dict[str, Any]] | None = None,
+    context_rows: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     if scene == "running":
         anchor_table = "admission_record"
@@ -690,6 +699,19 @@ def _build_structured_context(
     if not text_available_tables:
         quality_status = "text_unavailable"
 
+    admission_rows = docs.get("admission_record") or []
+    admission = admission_rows[0] if admission_rows else {}
+    mr_rows = (context_rows or {}).get("mr") or docs.get("mr") or []
+    mr = mr_rows[0] if mr_rows else {}
+    timeline_admission_datetime = ""
+    for fact in timeline_facts or []:
+        field = str(fact.get("field") or "").strip()
+        if field not in {"admission_datetime", "admission_time", "admission_date"}:
+            continue
+        timeline_admission_datetime = _first_nonempty_string(fact.get("value"))
+        if timeline_admission_datetime:
+            break
+
     return {
         "anchor_table": anchor_table,
         "primary_document_type": primary_document_type,
@@ -701,10 +723,18 @@ def _build_structured_context(
             or ""
         ).strip(),
         "admission_datetime": str(
-            anchor.get("admission_datetime")
-            or anchor.get("admission_time")
-            or anchor.get("admission_date")
-            or ""
+            _first_nonempty_string(
+                anchor.get("admission_datetime"),
+                anchor.get("admission_time"),
+                anchor.get("admission_date"),
+                admission.get("admission_datetime"),
+                admission.get("admission_time"),
+                admission.get("admission_date"),
+                mr.get("admission_datetime"),
+                mr.get("admission_time"),
+                mr.get("admission_date"),
+                timeline_admission_datetime,
+            )
         ).strip(),
         "discharge_datetime": str(
             anchor.get("discharge_datetime")
@@ -1404,6 +1434,16 @@ def _assemble_scene_bundle(
             visit_id=visit_id,
             limit=3,
         )
+    context_rows: dict[str, list[dict[str, Any]]] = {}
+    if scene == "final":
+        context_rows["mr"] = _select_records(
+            schema=source_schema,
+            table="mr",
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            limit=1,
+        )
     attention_docs, attention_timeline_facts = _build_scene_attention_artifacts(
         source_schema=source_schema,
         institute_id=institute_id,
@@ -1429,6 +1469,7 @@ def _assemble_scene_bundle(
         docs=docs,
         source_documents=source_documents,
         timeline_facts=timeline_facts,
+        context_rows=context_rows,
     )
     department = str(structured_context.get("department") or "").strip()
     priority_with_attention = tuple(dict.fromkeys([*priority, *[name for name in _SCENE_ATTENTION_PRIORITY if docs.get(name)]]))
