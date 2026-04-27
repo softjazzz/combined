@@ -388,6 +388,58 @@ def _first_nonempty_string(*values: Any) -> str:
     return ""
 
 
+_ADMISSION_PRIMARY_FIELDS: tuple[str, ...] = (
+    "admission_datetime",
+    "admission_time",
+    "admission_date",
+)
+_ADMISSION_FALLBACK_FIELDS: tuple[str, ...] = (
+    "record_time",
+)
+
+
+def _first_nonempty_row_value(row: dict[str, Any], fields: Iterable[str]) -> str:
+    if not row:
+        return ""
+    return _first_nonempty_string(*(row.get(field_name) for field_name in fields))
+
+
+def _resolve_admission_datetime(
+    *,
+    anchor: dict[str, Any] | None = None,
+    admission: dict[str, Any] | None = None,
+    mr: dict[str, Any] | None = None,
+    timeline_facts: list[dict[str, Any]] | None = None,
+) -> str:
+    anchor = anchor or {}
+    admission = admission or {}
+    mr = mr or {}
+
+    timeline_primary = ""
+    timeline_record_time = ""
+    for fact in timeline_facts or []:
+        field = _normalize_text(fact.get("field"))
+        source_table = _normalize_text(fact.get("source_table"))
+        value = _first_nonempty_string(fact.get("value"))
+        if not value:
+            continue
+        if field in _ADMISSION_PRIMARY_FIELDS and not timeline_primary:
+            timeline_primary = value
+        if source_table == "admission_record" and field in _ADMISSION_FALLBACK_FIELDS and not timeline_record_time:
+            timeline_record_time = value
+        if timeline_primary and timeline_record_time:
+            break
+
+    return _first_nonempty_string(
+        _first_nonempty_row_value(admission, _ADMISSION_PRIMARY_FIELDS),
+        _first_nonempty_row_value(admission, _ADMISSION_FALLBACK_FIELDS),
+        _first_nonempty_row_value(mr, _ADMISSION_PRIMARY_FIELDS),
+        _first_nonempty_row_value(anchor, _ADMISSION_PRIMARY_FIELDS),
+        timeline_primary,
+        timeline_record_time,
+    )
+
+
 def _safe_float(value: Any) -> float | None:
     if value is None:
         return None
@@ -703,14 +755,6 @@ def _build_structured_context(
     admission = admission_rows[0] if admission_rows else {}
     mr_rows = (context_rows or {}).get("mr") or docs.get("mr") or []
     mr = mr_rows[0] if mr_rows else {}
-    timeline_admission_datetime = ""
-    for fact in timeline_facts or []:
-        field = str(fact.get("field") or "").strip()
-        if field not in {"admission_datetime", "admission_time", "admission_date"}:
-            continue
-        timeline_admission_datetime = _first_nonempty_string(fact.get("value"))
-        if timeline_admission_datetime:
-            break
 
     return {
         "anchor_table": anchor_table,
@@ -723,18 +767,11 @@ def _build_structured_context(
             or ""
         ).strip(),
         "admission_datetime": str(
-            _first_nonempty_string(
-                anchor.get("admission_datetime"),
-                anchor.get("admission_time"),
-                anchor.get("admission_date"),
-                admission.get("admission_datetime"),
-                admission.get("admission_time"),
-                admission.get("admission_date"),
-                admission.get("record_time"),
-                mr.get("admission_datetime"),
-                mr.get("admission_time"),
-                mr.get("admission_date"),
-                timeline_admission_datetime,
+            _resolve_admission_datetime(
+                anchor=anchor,
+                admission=admission,
+                mr=mr,
+                timeline_facts=list(timeline_facts or []),
             )
         ).strip(),
         "discharge_datetime": str(
@@ -838,6 +875,7 @@ def _build_frontpage_coding_context(
     *,
     docs: dict[str, list[dict[str, Any]]],
     patient_profile: dict[str, str],
+    timeline_facts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     mr_rows = docs.get("mr") or []
     diagnosis_rows = docs.get("diagnosis") or []
@@ -927,11 +965,11 @@ def _build_frontpage_coding_context(
         or mr.get("identity_no")
         or ""
     ).strip()
-    admission_datetime = str(
-        admission.get("admission_datetime")
-        or admission.get("admission_time")
-        or mr.get("admission_datetime")
-        or ""
+    admission_datetime = _resolve_admission_datetime(
+        anchor=mr,
+        admission=admission,
+        mr=mr,
+        timeline_facts=list(timeline_facts or []),
     ).strip()
     discharge_datetime = str(
         discharge.get("discharge_datetime")
@@ -1517,6 +1555,7 @@ def _assemble_scene_bundle(
         bundle["structured_context"]["frontpage_coding"] = _build_frontpage_coding_context(
             docs=docs,
             patient_profile=patient_profile,
+            timeline_facts=timeline_facts,
         )
     if scene == "settlement":
         bundle["structured_context"]["settlement_payload"] = _build_settlement_payload(
