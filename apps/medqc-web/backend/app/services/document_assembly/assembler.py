@@ -290,6 +290,33 @@ _MULTI_FIELD_RULES: dict[str, tuple[AssemblyFieldSpec, ...]] = {
     ),
 }
 
+_SURGERY_FIELD_ORDER: tuple[tuple[str, str], ...] = (
+    ("record_time", "记录时间"),
+    ("dept_name", "科室"),
+    ("ward_name", "病房"),
+    ("submitter", "记录者"),
+    ("surgeon_sign", "手术医生签名"),
+    ("presurg_summary", "术前小结"),
+    ("surgery_name", "手术项目"),
+    ("surgery_code", "手术编码"),
+    ("surgery_level", "手术等级"),
+    ("surgeon", "手术医师"),
+    ("first_assistant", "手术I助"),
+    ("second_assistant", "手术II助"),
+    ("anesthesiologist", "麻醉医师"),
+    ("anesthesia_method", "麻醉方式"),
+    ("preoperative_diagnosis", "术前诊断"),
+    ("intraoperative_diagnosis", "术中诊断"),
+    ("postoperative_diagnosis", "术后诊断"),
+    ("surgery_process", "手术经过"),
+    ("surgical_incisionheal_level", "切口愈合等级"),
+    ("surgery_begin_time", "手术开始时间"),
+    ("surgery_end_time", "手术结束时间"),
+    ("blood_loss", "失血量"),
+    ("other_content", "其他内容"),
+    ("record_content", "记录内容"),
+)
+
 
 def _normalize_text(value: Any) -> str:
     if value is None:
@@ -398,6 +425,22 @@ def _assemble_surgery_record_text(payload: dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
+def _build_surgery_source_fields(payload: dict[str, Any]) -> list[DocumentSourceField]:
+    fields: list[DocumentSourceField] = []
+    for field_name, _label in _SURGERY_FIELD_ORDER:
+        field_value = _merge_field_text(payload, field_name)
+        fields.append(
+            DocumentSourceField(
+                source_table="surgery_record",
+                source_field=field_name,
+                source_path=None,
+                used=True,
+                raw_value_preview=field_value,
+            )
+        )
+    return fields
+
+
 def _assemble_presurg_discussion_text(payload: dict[str, Any]) -> str:
     record_content = _merge_field_text(payload, "record_content")
     if record_content:
@@ -481,24 +524,7 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
 
     if document_type == "surgery_record":
         assembled_text = _assemble_surgery_record_text(payload)
-        source_fields.append(
-            DocumentSourceField(
-                source_table=document_type,
-                source_field="surgery_record_template",
-                source_path=None,
-                used=bool(assembled_text),
-                raw_value_preview=assembled_text[:120],
-            )
-        )
-        sections.append(
-            AssembledSection(
-                section_key="surgery_record_template",
-                section_label="正文",
-                text=assembled_text,
-                source_field="surgery_record_template",
-                order_index=0,
-            )
-        )
+        source_fields.extend(_build_surgery_source_fields(payload))
         if _is_non_content_placeholder(_merge_field_text(payload, "record_content")):
             flags.append("record_content_placeholder")
     elif document_type == "presurg_discussion":

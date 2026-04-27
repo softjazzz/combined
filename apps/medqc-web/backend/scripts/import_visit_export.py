@@ -94,6 +94,27 @@ def _create_lightweight_table(
         )
 
 
+def _ensure_table_columns(
+    conn: sa.Connection,
+    *,
+    schema: str,
+    table: str,
+    existing_columns: list[str],
+    csv_columns: list[str],
+) -> list[str]:
+    missing_columns = [col for col in csv_columns if col not in existing_columns]
+    supports_if_not_exists = conn.dialect.name not in {"sqlite"}
+    for column in missing_columns:
+        if_clause = " IF NOT EXISTS" if supports_if_not_exists else ""
+        conn.execute(
+            text(
+                f"ALTER TABLE {_qualified_table(schema, table)} "
+                f"ADD COLUMN{if_clause} {_quote_ident(column)} TEXT NULL"
+            )
+        )
+    return missing_columns
+
+
 def _visit_ids(rows: list[dict[str, Any]]) -> list[str]:
     seen = []
     for row in rows:
@@ -206,6 +227,7 @@ def import_visit_export(
 
     imported_tables: list[dict[str, Any]] = []
     missing_created: list[str] = []
+    altered_tables: list[dict[str, Any]] = []
     all_visit_ids: list[str] = []
     refresh_keys: list[dict[str, str]] = []
     refresh_seen: set[tuple[str, str, str]] = set()
@@ -248,6 +270,24 @@ def import_visit_export(
             column_types = {col["name"]: col.get("type") for col in reflected_columns}
             if created_now:
                 column_types = {col: "text" for col in columns}
+            else:
+                added_columns = _ensure_table_columns(
+                    conn,
+                    schema=schema,
+                    table=table,
+                    existing_columns=table_columns,
+                    csv_columns=columns,
+                )
+                if added_columns:
+                    altered_tables.append(
+                        {
+                            "table": f"{schema}.{table}",
+                            "added_columns": added_columns,
+                        }
+                    )
+                    table_columns = [*table_columns, *added_columns]
+                    for column in added_columns:
+                        column_types[column] = "text"
             insert_columns = [col for col in columns if col in table_columns]
             if "visit_id" not in table_columns:
                 raise RuntimeError(f"{schema}.{table} 缺少 visit_id，当前脚本不支持导入")
@@ -303,6 +343,7 @@ def import_visit_export(
         "visit_ids": all_visit_ids,
         "refresh_key_count": len(refresh_keys),
         "created_tables": missing_created,
+        "altered_tables": altered_tables,
         "tables": imported_tables,
         "bundle_results": bundle_results,
     }
