@@ -134,12 +134,21 @@ def _sort_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(events, key=lambda item: (_safe_text(item.get("authored_at")) or "9999-99-99 99:99:99", _safe_text(item.get("document_id"))))
 
 
-def _extract_timeline_fact_datetime(facts: list[Any], fields: tuple[str, ...]) -> str:
+def _extract_timeline_fact_datetime(
+    facts: list[Any],
+    fields: tuple[str, ...],
+    *,
+    source_tables: tuple[str, ...] = (),
+) -> str:
     normalized_fields = {field.strip().lower() for field in fields if field.strip()}
+    normalized_sources = {table.strip().lower() for table in source_tables if table.strip()}
     for raw_fact in facts:
         fact = _safe_dict(raw_fact)
         field = _safe_text(fact.get("field")).lower()
         if field not in normalized_fields:
+            continue
+        source_table = _safe_text(fact.get("source_table") or fact.get("document_type")).lower()
+        if normalized_sources and source_table not in normalized_sources:
             continue
         parsed = _parse_datetime(fact.get("value"))
         if parsed:
@@ -218,6 +227,11 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
         _parse_datetime(structured.get("admission_datetime"))
         or _parse_datetime(bundle_payload.get("admission_datetime"))
         or _extract_timeline_fact_datetime(timeline_facts, ("admission_time", "admission_datetime"))
+        or _extract_timeline_fact_datetime(
+            timeline_facts,
+            ("record_time",),
+            source_tables=("admission_record",),
+        )
         or _extract_datetime_by_labels(
             "\n".join(_safe_text(item.get("content")) for item in documents.get("admission_record") or []),
             ("入院日期", "入院时间"),

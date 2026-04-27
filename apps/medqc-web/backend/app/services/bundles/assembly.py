@@ -730,6 +730,7 @@ def _build_structured_context(
                 admission.get("admission_datetime"),
                 admission.get("admission_time"),
                 admission.get("admission_date"),
+                admission.get("record_time"),
                 mr.get("admission_datetime"),
                 mr.get("admission_time"),
                 mr.get("admission_date"),

@@ -44,3 +44,32 @@ def test_build_programmatic_evidence_payload_should_flatten_structured_documents
     assert payload["primary_document_text"].count("首次病程记录") == 1
     assert "记录时间：2026-04-01 08:30:00" in payload["primary_document_text"]
     assert "出院时间：2026-04-05 08:00:00" in payload["primary_document_text"]
+
+
+def test_build_programmatic_evidence_payload_should_fallback_to_admission_record_timeline_record_time():
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "timeline_facts": [
+                {
+                    "source_table": "admission_record",
+                    "field": "record_time",
+                    "value": "2026-01-24 20:42:25",
+                }
+            ],
+            "structured_context": {
+                "documents": {
+                    "admission_record": [
+                        {
+                            "document_id": "A1",
+                            "document_title": "入院记录",
+                            "display_time": "2026-01-24 20:42:25",
+                            "text_preview": "主诉：腹痛待诊。",
+                        }
+                    ]
+                }
+            },
+        }
+    )
+
+    assert payload["programmatic_timeline"]["admission_time"] == "2026-01-24 20:42:25"
+    assert "入院时间：2026-01-24 20:42:25" in payload["primary_document_text"]
