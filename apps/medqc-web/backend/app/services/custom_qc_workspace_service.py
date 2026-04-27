@@ -102,6 +102,14 @@ def _to_iso_date(value: Any) -> str:
     return str(value)[:10]
 
 
+def _to_iso_datetime(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.isoformat(sep=" ", timespec="seconds")
+    return str(value).strip()
+
+
 def _draft_schema() -> Optional[str]:
     return "qc" if DB_SCHEMA_MODE == "split" else None
 
@@ -906,6 +914,8 @@ class CustomQCWorkspaceService:
         item_scope = "final" if effective_discharge_datetime else "running"
         item_department = _safe_text(row.discharge_dept_name or row.admission_dept_name)
         return {
+            "institute_id": _safe_text(getattr(row, "institute_id", "")),
+            "patient_id": _safe_text(getattr(row, "patient_id", "")),
             "record_id": _safe_text(row.visit_id),
             "visit_id": _safe_text(row.visit_id),
             "patient_name": _safe_text(row.name),
@@ -916,7 +926,10 @@ class CustomQCWorkspaceService:
             "doctor": _safe_text(row.attending_physician_sign),
             "admission_date": _to_iso_date(row.admission_datetime),
             "discharge_date": _to_iso_date(effective_discharge_datetime),
+            "admission_datetime": _to_iso_datetime(row.admission_datetime),
+            "discharge_datetime": _to_iso_datetime(effective_discharge_datetime),
             "status": "completed" if item_scope == "final" else "running",
+            "medical_text": _safe_text(row.record_content),
             "medical_text_length": len(_safe_text(row.record_content)),
         }
 
@@ -1095,7 +1108,8 @@ class CustomQCWorkspaceService:
             medical_text = _safe_text(item.get("medical_text"))
             if not medical_text and source is not None:
                 medical_text = _safe_text(source.record_content)
-            hydrated.append(
+            hydrated_item = dict(item)
+            hydrated_item.update(
                 {
                     "institute_id": _safe_text(item.get("institute_id") or (source.institute_id if source else "")),
                     "patient_id": _safe_text(item.get("patient_id") or (source.patient_id if source else "")),
@@ -1107,6 +1121,7 @@ class CustomQCWorkspaceService:
                     "medical_text": medical_text,
                 }
             )
+            hydrated.append(hydrated_item)
         return hydrated
 
     def save_last_test_summary(

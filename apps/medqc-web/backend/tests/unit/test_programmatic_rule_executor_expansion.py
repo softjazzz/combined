@@ -22,7 +22,16 @@ def test_sc104_exists_all_should_fail_when_missing_any_required_record():
     executor = ProgrammaticRuleExecutor()
     result = executor.evaluate(
         rule={"rule_id": "SC-104", "name": "术后首次病程与麻醉术后访视记录完整性"},
-        medical_record={"content": "已见术后首次病程记录，未见麻醉访视内容"},
+        medical_record={
+            "content": "已见术后首次病程记录，未见麻醉访视内容",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "documents": {
+                        "surgery_record": [{"document_id": "S1", "authored_at": "2026-04-01 10:00:00"}],
+                    }
+                }
+            },
+        },
     )
 
     assert result["status"] == "non_compliant"
@@ -56,7 +65,14 @@ def test_surgery_24h_time_window_should_pass_when_in_time(rule_id: str):
                 "手术结束时间：2026-04-01 10:00\n"
                 "记录时间：2026-04-02 08:00\n"
                 "手术记录内容"
-            )
+            ),
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "documents": {
+                        "surgery_record": [{"document_id": "S1", "authored_at": "2026-04-01 10:00:00"}],
+                    }
+                }
+            },
         },
     )
 
@@ -177,3 +193,47 @@ def test_lxe35_should_fail_when_postop_day_missing():
 
     assert result["status"] == "non_compliant"
     assert "第 2 天" in result["findings"]
+
+
+def test_sc095_should_be_not_applicable_without_surgery_context():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-095", "name": "无手术记录"},
+        medical_record={
+            "content": "首次病程记录\n出院记录",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "documents": {
+                        "surgery_record": [],
+                        "presurg_discussion": [],
+                        "presurg_summary": [],
+                        "surgery_safecheck_record": [],
+                        "anesthesia_record": [],
+                    }
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "not_applicable"
+    assert result["applicability"]["is_applicable"] is False
+
+
+def test_sc067_should_be_not_applicable_without_consultation_context():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-067", "name": "会诊病人无会诊记录(会诊单)"},
+        medical_record={
+            "content": "首次病程记录\n出院记录",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "documents": {
+                        "consultation_record": [],
+                    }
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "not_applicable"
+    assert result["applicability"]["is_applicable"] is False

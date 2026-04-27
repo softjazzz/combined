@@ -12,12 +12,16 @@ _DATETIME_PATTERNS = (
 )
 
 _SOURCE_TABLES = (
+    "admission_record",
     "first_course_record",
     "daily_course_record",
     "senior_course_record",
     "consultation_record",
     "presurg_discussion",
+    "presurg_summary",
     "surgery_record",
+    "surgery_safecheck_record",
+    "anesthesia_record",
     "discharge_record",
 )
 
@@ -130,10 +134,72 @@ def _sort_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(events, key=lambda item: (_safe_text(item.get("authored_at")) or "9999-99-99 99:99:99", _safe_text(item.get("document_id"))))
 
 
+def _extract_timeline_fact_datetime(facts: list[Any], fields: tuple[str, ...]) -> str:
+    normalized_fields = {field.strip().lower() for field in fields if field.strip()}
+    for raw_fact in facts:
+        fact = _safe_dict(raw_fact)
+        field = _safe_text(fact.get("field")).lower()
+        if field not in normalized_fields:
+            continue
+        parsed = _parse_datetime(fact.get("value"))
+        if parsed:
+            return parsed
+    return ""
+
+
+def _flatten_inventory_items(structured: dict[str, Any], bundle_payload: dict[str, Any]) -> list[dict[str, Any]]:
+    inventory_items = _safe_list(bundle_payload.get("source_documents")) or _safe_list(structured.get("document_inventory"))
+    if inventory_items:
+        return [_safe_dict(item) for item in inventory_items if _safe_dict(item)]
+
+    flattened: list[dict[str, Any]] = []
+    documents = _safe_dict(structured.get("documents"))
+    for source_table, raw_items in documents.items():
+        for raw_item in _safe_list(raw_items):
+            item = _safe_dict(raw_item)
+            if not item:
+                continue
+            item.setdefault("source_table", source_table)
+            item.setdefault("document_type", source_table)
+            flattened.append(item)
+    return flattened
+
+
+def _build_supplement_text(
+    *,
+    admission_time: str,
+    discharge_time: str,
+    documents: dict[str, list[dict[str, Any]]],
+) -> str:
+    lines: list[str] = []
+    if admission_time:
+        lines.append(f"入院时间：{admission_time}")
+    if discharge_time:
+        lines.append(f"出院时间：{discharge_time}")
+    for source_table, events in documents.items():
+        for event in events:
+            title = _safe_text(event.get("title") or source_table)
+            if title:
+                lines.append(title)
+            authored_at = _safe_text(event.get("authored_at"))
+            if authored_at:
+                lines.append(f"记录时间：{authored_at}")
+            request_at = _safe_text(event.get("request_at"))
+            if request_at:
+                lines.append(f"会诊申请时间：{request_at}")
+            surgery_end_at = _safe_text(event.get("surgery_end_at"))
+            if surgery_end_at:
+                lines.append(f"手术结束时间：{surgery_end_at}")
+            content = _safe_text(event.get("content"))
+            if content:
+                lines.append(content)
+    return "\n".join(line for line in lines if line)
+
+
 def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medical_text: str = "") -> dict[str, Any]:
     bundle_payload = dict(bundle or {})
     structured = _safe_dict(bundle_payload.get("structured_context"))
-    inventory_items = _safe_list(bundle_payload.get("source_documents")) or _safe_list(structured.get("document_inventory"))
+    inventory_items = _flatten_inventory_items(structured, bundle_payload)
 
     documents: dict[str, list[dict[str, Any]]] = {table_name: [] for table_name in _SOURCE_TABLES}
     for raw_item in inventory_items:
@@ -146,19 +212,40 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
     for table_name, items in documents.items():
         documents[table_name] = _sort_events(items)
 
+    timeline_facts = list(bundle_payload.get("timeline_facts") or structured.get("timeline_facts") or [])
     medical_text_value = _safe_text(bundle_payload.get("medical_text")) or _safe_text(medical_text)
     admission_time = (
         _parse_datetime(structured.get("admission_datetime"))
+        or _parse_datetime(bundle_payload.get("admission_datetime"))
+        or _extract_timeline_fact_datetime(timeline_facts, ("admission_time", "admission_datetime"))
+        or _extract_datetime_by_labels(
+            "\n".join(_safe_text(item.get("content")) for item in documents.get("admission_record") or []),
+            ("入院日期", "入院时间"),
+        )
         or _extract_datetime_by_labels(medical_text_value, ("入院日期", "入院时间"))
     )
     discharge_time = (
         _parse_datetime(structured.get("discharge_datetime"))
+        or _parse_datetime(bundle_payload.get("discharge_datetime"))
+        or _extract_timeline_fact_datetime(timeline_facts, ("discharge_time", "discharge_datetime", "death_time"))
+        or _extract_datetime_by_labels(
+            "\n".join(_safe_text(item.get("content")) for item in documents.get("discharge_record") or []),
+            ("出院日期", "出院时间", "死亡时间"),
+        )
         or _extract_datetime_by_labels(medical_text_value, ("出院日期", "出院时间", "死亡时间"))
     )
+    supplement_text = _build_supplement_text(
+        admission_time=admission_time,
+        discharge_time=discharge_time,
+        documents=documents,
+    )
+    primary_document_text = medical_text_value
+    if supplement_text:
+        primary_document_text = "\n\n".join(part for part in (primary_document_text, supplement_text) if part).strip()
 
     return {
-        "primary_document_text": medical_text_value,
-        "timeline_facts": list(bundle_payload.get("timeline_facts") or structured.get("timeline_facts") or []),
+        "primary_document_text": primary_document_text,
+        "timeline_facts": timeline_facts,
         "document_hits": dict(bundle_payload.get("document_hits") or {}),
         "data_quality_flags": list(bundle_payload.get("data_quality_flags") or []),
         "programmatic_timeline": {
@@ -171,4 +258,3 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
             ),
         },
     }
-

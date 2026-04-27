@@ -273,6 +273,8 @@ class ProgrammaticRuleExecutor:
     _ADMISSION_TIME_LABELS = ("入院日期", "入院时间")
     _DISCHARGE_TIME_LABELS = ("出院日期", "出院时间", "死亡时间")
     _COMPLETION_TIME_LABELS = ("记录时间", "记录日期", "书写时间", "完成时间")
+    _SURGERY_CONTEXT_RULE_IDS = {"SC-082", "SC-095", "SC-096", "LXE-35", "SC-104"}
+    _CONSULTATION_CONTEXT_RULE_IDS = {"SC-067", "SC-071"}
 
     def can_execute(self, rule: dict[str, Any]) -> bool:
         rule_id = str(rule.get("rule_id") or "").strip().upper()
@@ -292,21 +294,34 @@ class ProgrammaticRuleExecutor:
 
         content = str(medical_record.get("content") or "")
         started_at = datetime.utcnow()
-        (
-            status,
-            is_compliant,
-            findings,
-            evidence,
-            suggestion,
-            confidence,
-            applicability,
-            evidence_source,
-        ) = self._dispatch(
-            spec=spec,
-            rule=rule,
-            medical_record=medical_record,
-            content=content,
-        )
+        guard_result = self._guard_rule_applicability(rule_id=rule_id, medical_record=medical_record, content=content)
+        if guard_result is not None:
+            (
+                status,
+                is_compliant,
+                findings,
+                evidence,
+                suggestion,
+                confidence,
+                applicability,
+                evidence_source,
+            ) = guard_result
+        else:
+            (
+                status,
+                is_compliant,
+                findings,
+                evidence,
+                suggestion,
+                confidence,
+                applicability,
+                evidence_source,
+            ) = self._dispatch(
+                spec=spec,
+                rule=rule,
+                medical_record=medical_record,
+                content=content,
+            )
         api_time = (datetime.utcnow() - started_at).total_seconds()
 
         return {
@@ -333,6 +348,37 @@ class ProgrammaticRuleExecutor:
                 "evidence_source": evidence_source,
             },
         }
+
+    def _guard_rule_applicability(
+        self,
+        *,
+        rule_id: str,
+        medical_record: dict[str, Any],
+        content: str,
+    ) -> Optional[tuple[str, bool, str, str, str, float, dict[str, Any], str]]:
+        if rule_id in self._SURGERY_CONTEXT_RULE_IDS and not self._has_surgery_context(medical_record, content):
+            return (
+                "not_applicable",
+                True,
+                "未识别到围术期上下文，本规则不适用。",
+                "未命中手术/麻醉/术前讨论相关结构化文书",
+                "",
+                0.9,
+                {"is_applicable": False, "reason": "missing_surgery_context", "method": "program_context_guard"},
+                "timeline",
+            )
+        if rule_id in self._CONSULTATION_CONTEXT_RULE_IDS and not self._has_consultation_context(medical_record, content):
+            return (
+                "not_applicable",
+                True,
+                "未识别到会诊上下文，本规则不适用。",
+                "未命中会诊相关结构化文书或文本线索",
+                "",
+                0.9,
+                {"is_applicable": False, "reason": "missing_consultation_context", "method": "program_context_guard"},
+                "timeline",
+            )
+        return None
 
     def _dispatch(
         self,
@@ -861,6 +907,21 @@ class ProgrammaticRuleExecutor:
                 return timeline
         timeline = medical_record.get("programmatic_timeline")
         return dict(timeline) if isinstance(timeline, dict) else {}
+
+    def _has_surgery_context(self, medical_record: dict[str, Any], content: str) -> bool:
+        timeline = self._get_programmatic_timeline(medical_record)
+        documents = dict(timeline.get("documents") or {})
+        for key in ("surgery_record", "presurg_discussion", "presurg_summary", "surgery_safecheck_record", "anesthesia_record"):
+            if list(documents.get(key) or []):
+                return True
+        return False
+
+    def _has_consultation_context(self, medical_record: dict[str, Any], content: str) -> bool:
+        timeline = self._get_programmatic_timeline(medical_record)
+        documents = dict(timeline.get("documents") or {})
+        if list(documents.get("consultation_record") or []):
+            return True
+        return False
 
     def _collect_course_events(self, timeline: dict[str, Any]) -> list[dict[str, Any]]:
         documents = dict(timeline.get("documents") or {})

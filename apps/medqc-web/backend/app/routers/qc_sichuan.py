@@ -1071,12 +1071,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     bundle_payload: Optional[Dict[str, Any]] = None
                     attempted_scenes: List[str] = []
                     if institute_id and patient_id and visit_id:
+                        record_scope = str(record.get("scope") or "").strip().lower()
+                        preferred_scenes = ["final", "running"] if record_scope == "final" else ["running", "final"]
                         candidate_scenes = [
                             scene
                             for scene in (
                                 current_scope,
-                                "running",
-                                "final",
+                                *preferred_scenes,
                             )
                             if scene in {"running", "final"} and scene not in attempted_scenes
                         ]
@@ -1100,9 +1101,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         bundle=bundle_payload,
                         medical_text=str(record.get("medical_text") or ""),
                     )
+                    primary_document_text = str(
+                        evidence_payload.get("primary_document_text")
+                        or (bundle_payload or {}).get("medical_text")
+                        or record.get("medical_text")
+                        or ""
+                    )
                     result = await qc_service.evaluate_document_with_rules(
                         document_id=record_id or "unknown",
-                        content=str((bundle_payload or {}).get("medical_text") or record.get("medical_text") or ""),
+                        content=primary_document_text,
                         document_type=document_type,
                         rules=valid_rules,
                         evidence_source="timeline" if used_bundle_path else "medical_text_fallback",
