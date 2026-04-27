@@ -1217,8 +1217,7 @@ const rawDocumentList = computed(() => {
 const documentList = computed<ReviewDocItem[]>(() =>
   rawDocumentList.value
     .map((item, index) => normalizeReviewDocItem(item, index))
-    .filter((item): item is ReviewDocItem => Boolean(item))
-    .filter((item) => item.has_content),
+    .filter((item): item is ReviewDocItem => Boolean(item)),
 )
 
 const documentTree = computed<ReviewDocTreeGroup[]>(() => {
