@@ -999,11 +999,69 @@ function buildDocFieldList(doc?: ReviewDocItem | null) {
     }))
 }
 
+function buildCourseTitleProbeText(doc: ReviewDocItem): string {
+  return [
+    safeText(doc.document_title),
+    safeText(doc.doc_name),
+    safeText(doc.content),
+    ...(doc.sections || []).map((section) => safeText(section?.text)),
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function inferCourseDisplayTitle(doc: ReviewDocItem): string {
+  const docType = safeText(doc.doc_type || doc.source_table).toLowerCase()
+  const originalTitle = safeText(doc.document_title || doc.doc_name)
+  const probeText = buildCourseTitleProbeText(doc)
+
+  if (docType.includes('first_course')) return originalTitle || '首次病程记录'
+  if (docType.includes('consult')) return originalTitle || '会诊记录'
+  if (docType.includes('rescue')) return originalTitle || '抢救记录'
+  if (docType.includes('postsurg')) return originalTitle || '术后病程记录'
+
+  if (docType.includes('senior_course')) {
+    if (originalTitle) return originalTitle
+    if (/主任医师.*查房|副主任医师.*查房|主治医师.*查房/u.test(probeText)) {
+      const matched = probeText.match(
+        /[^。；\n]{0,24}(?:主任医师|副主任医师|主治医师)[^。；\n]{0,12}查房记录?/u,
+      )
+      return matched?.[0]?.trim() || '上级医师查房记录'
+    }
+    if (/查房/u.test(probeText)) return '查房记录'
+    return '上级医师查房记录'
+  }
+
+  if (docType.includes('daily_course')) {
+    if (originalTitle && originalTitle !== '日常病程记录') return originalTitle
+    if (/转入/u.test(probeText)) return '转入记录'
+    if (/转出/u.test(probeText)) return '转出记录'
+    if (/会诊/u.test(probeText)) return '会诊记录'
+    if (/主任医师.*查房|副主任医师.*查房|主治医师.*查房/u.test(probeText)) return '上级医师查房记录'
+    if (/今日查房|查房内容|查房记录|查房/u.test(probeText)) return '查房记录'
+    return originalTitle || '日常病程记录'
+  }
+
+  return originalTitle || DOC_TYPE_LABELS[safeText(doc.doc_type)] || '病历文书'
+}
+
 function inferCourseSubtype(doc: ReviewDocItem): string {
   const docType = safeText(doc.doc_type || doc.source_table).toLowerCase()
   if (docType.includes('first_course')) return 'first_course'
   if (docType.includes('senior_course')) return 'senior_round'
-  if (docType.includes('daily_course')) return 'daily_course'
+  if (docType.includes('daily_course')) {
+    const probeText = buildCourseTitleProbeText(doc)
+    if (
+      /主任医师.*查房|副主任医师.*查房|主治医师.*查房|今日查房|查房内容|查房记录|查房/u.test(
+        probeText,
+      )
+    ) {
+      return 'senior_round'
+    }
+    if (/会诊/u.test(probeText)) return 'consultation'
+    if (/术后/u.test(probeText)) return 'postoperative'
+    return 'daily_course'
+  }
   if (docType.includes('consult')) return 'consultation'
   if (docType.includes('rescue')) return 'rescue'
   if (docType.includes('postsurg')) return 'postoperative'
@@ -1378,7 +1436,7 @@ const activeReviewIssueSummary = computed(() => {
 
 function renderDocListTitle(doc: ReviewDocItem): string {
   if (activeDocGroup.value === 'course') {
-    return DOC_TYPE_LABELS[safeText(doc.doc_type)] || doc.document_title || doc.doc_name
+    return inferCourseDisplayTitle(doc)
   }
   return doc.document_title || doc.doc_name
 }
