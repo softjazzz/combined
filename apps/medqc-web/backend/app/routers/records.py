@@ -340,6 +340,50 @@ def _map_batch_item_to_review_item(item: Dict[str, Any], *, job_id: str, created
     }
 
 
+def _apply_document_payload(target: Dict[str, Any], docs: List[Dict[str, Any]], tree: Optional[List[Dict[str, Any]]] = None) -> None:
+    target["raw_documents"] = list(docs or [])
+    target["documents_tree"] = list(tree or [])
+    target["admissionNote"] = _pick_document_content(docs, ["admission", "入院"])
+    target["dischargeNote"] = _pick_document_content(docs, ["discharge", "出院"])
+    target["progressNote"] = _pick_document_content(docs, ["progress", "病程", "course", "查房", "会诊"])
+    target["surgeryNote"] = _pick_document_content(docs, ["surgery", "operation", "手术", "麻醉", "术前", "术后"])
+
+
+def _should_prefer_bundle_documents(existing_docs: List[Dict[str, Any]], bundle_docs: List[Dict[str, Any]]) -> bool:
+    if not bundle_docs:
+        return False
+    if not existing_docs:
+        return True
+
+    existing_keys = {
+        str(item.get("doc_key") or item.get("document_id") or item.get("id") or "").strip()
+        for item in existing_docs
+        if isinstance(item, dict)
+    }
+    bundle_keys = {
+        str(item.get("doc_key") or item.get("document_id") or item.get("id") or "").strip()
+        for item in bundle_docs
+        if isinstance(item, dict)
+    }
+    if bundle_keys and len(bundle_keys) > len(existing_keys):
+        return True
+
+    existing_types = {
+        str(item.get("doc_type") or item.get("document_type") or item.get("source_table") or "").strip()
+        for item in existing_docs
+        if isinstance(item, dict)
+    }
+    bundle_types = {
+        str(item.get("doc_type") or item.get("document_type") or item.get("source_table") or "").strip()
+        for item in bundle_docs
+        if isinstance(item, dict)
+    }
+    if len(bundle_types) > len(existing_types):
+        return True
+
+    return len(bundle_docs) > len(existing_docs)
+
+
 def _load_review_items_from_latest_batch(record_id: str) -> Dict[str, Any]:
     if engine is None:
         return {"review_items": [], "review_job": None}
@@ -1078,11 +1122,7 @@ async def get_record_qc_detail(
                     .limit(200)
                 )
                 docs = list(getattr(docs_resp, "data", None) or [])
-                payload["documents"]["raw_documents"] = docs
-                payload["documents"]["admissionNote"] = _pick_document_content(docs, ["admission", "入院"])
-                payload["documents"]["dischargeNote"] = _pick_document_content(docs, ["discharge", "出院"])
-                payload["documents"]["progressNote"] = _pick_document_content(docs, ["progress", "病程"])
-                payload["documents"]["surgeryNote"] = _pick_document_content(docs, ["surgery", "operation", "手术"])
+                _apply_document_payload(payload["documents"], docs)
                 if docs:
                     payload["exists"] = True
             except Exception as exc:
@@ -1095,17 +1135,15 @@ async def get_record_qc_detail(
                 payload["documents"]["admissionNote"] = payload["admissionNote"]
                 payload["exists"] = True
 
-        if not payload["documents"]["raw_documents"]:
-            bundle_payload = _load_bundle_payload_for_record(record_id)
-            bundle_docs = list(bundle_payload.get("documents") or [])
-            if bundle_docs:
-                payload["documents"]["raw_documents"] = bundle_docs
-                payload["documents"]["documents_tree"] = list(bundle_payload.get("documents_tree") or [])
-                payload["documents"]["admissionNote"] = _pick_document_content(bundle_docs, ["admission", "入院"])
-                payload["documents"]["dischargeNote"] = _pick_document_content(bundle_docs, ["discharge", "出院"])
-                payload["documents"]["progressNote"] = _pick_document_content(bundle_docs, ["progress", "病程", "course", "查房", "会诊"])
-                payload["documents"]["surgeryNote"] = _pick_document_content(bundle_docs, ["surgery", "operation", "手术", "麻醉", "术前", "术后"])
-                payload["exists"] = True
+        bundle_payload = _load_bundle_payload_for_record(record_id)
+        bundle_docs = list(bundle_payload.get("documents") or [])
+        if _should_prefer_bundle_documents(payload["documents"]["raw_documents"], bundle_docs):
+            _apply_document_payload(
+                payload["documents"],
+                bundle_docs,
+                list(bundle_payload.get("documents_tree") or []),
+            )
+            payload["exists"] = True
 
         if not payload["defects"]:
             review_payload = _load_review_items_from_latest_batch(record_id)
