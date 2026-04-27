@@ -79,6 +79,31 @@ def test_surgery_24h_time_window_should_pass_when_in_time(rule_id: str):
     assert result["status"] == "compliant"
 
 
+@pytest.mark.parametrize("rule_id", ["SC-096", "LX-026"])
+def test_surgery_24h_time_window_should_return_uncertain_when_anchor_year_is_dirty(rule_id: str):
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": rule_id, "name": "术后24小时完成"},
+        medical_record={
+            "content": (
+                "手术结束时间：2000-02-03 16:30\n"
+                "记录时间：2026-02-03 17:57\n"
+                "手术记录内容"
+            ),
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "documents": {
+                        "surgery_record": [{"document_id": "S1", "authored_at": "2026-02-03 17:57:00"}],
+                    }
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "uncertain"
+    assert "脏值" in str(result.get("findings") or "")
+
+
 def test_sc048_should_use_timeline_for_attending_round():
     executor = ProgrammaticRuleExecutor()
     result = executor.evaluate(
@@ -110,10 +135,71 @@ def test_sc048_should_use_timeline_for_attending_round():
     assert result["metadata"]["evidence_source"] == "timeline"
 
 
+def test_sc048_should_allow_title_based_attending_identification_when_author_role_missing():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-048", "name": "入院48小时内主治医师首次查房"},
+        medical_record={
+            "content": "",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "admission_time": "2026-04-01 08:00:00",
+                    "documents": {
+                        "first_course_record": [],
+                        "daily_course_record": [
+                            {
+                                "document_id": "D1",
+                                "title": "主治医师查房记录",
+                                "authored_at": "2026-04-02 06:30:00",
+                                "author_role": "",
+                            }
+                        ],
+                        "senior_course_record": [],
+                    },
+                    "risk_flags": ["normal"],
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "compliant"
+
+
+def test_sc048_should_not_treat_responsible_doctor_as_attending_round():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-048", "name": "入院48小时内主治医师首次查房"},
+        medical_record={
+            "content": "",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "admission_time": "2026-04-01 08:00:00",
+                    "documents": {
+                        "first_course_record": [],
+                        "daily_course_record": [
+                            {
+                                "document_id": "D1",
+                                "title": "责任医师查房记录",
+                                "authored_at": "2026-04-01 20:00:00",
+                                "author_role": "attending",
+                            }
+                        ],
+                        "senior_course_record": [],
+                    },
+                    "risk_flags": ["normal"],
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "non_compliant"
+    assert "未找到主治医师首次查房记录" in result["findings"]
+
+
 def test_sc049_should_fail_when_senior_round_exceeds_72h():
     executor = ProgrammaticRuleExecutor()
     result = executor.evaluate(
-        rule={"rule_id": "SC-049", "name": "入院72小时内高级职称首次查房"},
+        rule={"rule_id": "SC-049", "name": "入院72小时内副主任/主任医师首次查房"},
         medical_record={
             "content": "",
             "evidence_payload": {
@@ -139,6 +225,68 @@ def test_sc049_should_fail_when_senior_round_exceeds_72h():
 
     assert result["status"] == "non_compliant"
     assert "72" in result["findings"]
+
+
+def test_sc049_should_not_accept_medical_group_leader_as_senior_round():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-049", "name": "入院72小时内副主任/主任医师首次查房"},
+        medical_record={
+            "content": "",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "admission_time": "2026-04-01 08:00:00",
+                    "documents": {
+                        "first_course_record": [],
+                        "daily_course_record": [],
+                        "senior_course_record": [
+                            {
+                                "document_id": "D2",
+                                "title": "医疗组长查房记录",
+                                "authored_at": "2026-04-02 09:00:00",
+                                "author_role": "senior",
+                            }
+                        ],
+                    },
+                    "risk_flags": ["normal"],
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "non_compliant"
+    assert "副主任/主任医师" in result["findings"]
+
+
+def test_sc049_should_not_accept_generic_senior_title_without_deputy_or_chief():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-049", "name": "入院72小时内副主任/主任医师首次查房"},
+        medical_record={
+            "content": "",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "admission_time": "2026-04-01 08:00:00",
+                    "documents": {
+                        "first_course_record": [],
+                        "daily_course_record": [],
+                        "senior_course_record": [
+                            {
+                                "document_id": "D2",
+                                "title": "高级职称查房记录",
+                                "authored_at": "2026-04-02 09:00:00",
+                                "author_role": "senior",
+                            }
+                        ],
+                    },
+                    "risk_flags": ["normal"],
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "non_compliant"
+    assert "副主任/主任医师" in result["findings"]
 
 
 def test_lxe18_should_return_uncertain_when_timeline_missing():

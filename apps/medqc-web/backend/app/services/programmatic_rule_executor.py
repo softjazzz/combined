@@ -69,7 +69,7 @@ PROGRAMMATIC_RULE_SPECS: dict[str, ProgrammaticRuleSpec] = {
     "SC-049": ProgrammaticRuleSpec(
         rule_id="SC-049",
         strategy="timeline_senior_round_72h",
-        description="入院 72 小时内高级职称/副主任以上首次查房",
+        description="入院 72 小时内副主任/主任医师首次查房",
     ),
     "SC-028": ProgrammaticRuleSpec(
         rule_id="SC-028",
@@ -275,6 +275,35 @@ class ProgrammaticRuleExecutor:
     _COMPLETION_TIME_LABELS = ("记录时间", "记录日期", "书写时间", "完成时间")
     _SURGERY_CONTEXT_RULE_IDS = {"SC-082", "SC-095", "SC-096", "LXE-35", "SC-104"}
     _CONSULTATION_CONTEXT_RULE_IDS = {"SC-067", "SC-071"}
+    _ATTENDING_ROLE_MARKERS = ("主治医师", "主治查房", "attending physician")
+    _SENIOR_ROLE_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房")
+    _ATTENDING_EXCLUSION_MARKERS = (
+        "住院医师",
+        "住院总",
+        "责任医师",
+        "经治医师",
+        "管床医师",
+        "医疗组长",
+        "科主任",
+        "高级职称",
+        "副主任医师",
+        "主任医师",
+        "副主任查房",
+        "主任查房",
+    )
+    _SENIOR_EXCLUSION_MARKERS = (
+        "主治医师",
+        "主治查房",
+        "住院医师",
+        "住院总",
+        "责任医师",
+        "经治医师",
+        "管床医师",
+        "医疗组长",
+        "科主任",
+        "高级职称",
+        "上级医师",
+    )
 
     def can_execute(self, rule: dict[str, Any]) -> bool:
         rule_id = str(rule.get("rule_id") or "").strip().upper()
@@ -593,6 +622,23 @@ class ProgrammaticRuleExecutor:
                 "medical_text",
             )
         delta_hours = (completion_dt - anchor_dt).total_seconds() / 3600
+        anomaly_reason = self._detect_time_window_anomaly(
+            anchor_dt=anchor_dt,
+            completion_dt=completion_dt,
+            anchor_labels=anchor_labels,
+            max_hours=max_hours,
+        )
+        if anomaly_reason:
+            return (
+                "uncertain",
+                False,
+                anomaly_reason,
+                f"锚点={anchor_raw}；完成={completion_raw}；间隔={delta_hours:.1f}h",
+                "请先核对源文书中的关键时间字段，确认是否存在脏值或录入错误。",
+                0.75,
+                {"is_applicable": True, "reason": "suspicious_time_pair", "method": "program_time_guard"},
+                "timeline",
+            )
         evidence = f"锚点={anchor_raw}；完成={completion_raw}；间隔={delta_hours:.1f}h"
         if delta_hours <= max_hours:
             return (
@@ -615,6 +661,26 @@ class ProgrammaticRuleExecutor:
             {"is_applicable": True, "reason": "", "method": "program_time_window"},
             "medical_text",
         )
+
+    def _detect_time_window_anomaly(
+        self,
+        *,
+        anchor_dt: datetime,
+        completion_dt: datetime,
+        anchor_labels: tuple[str, ...],
+        max_hours: int,
+    ) -> str:
+        delta_hours = (completion_dt - anchor_dt).total_seconds() / 3600
+        if delta_hours < 0:
+            return "完成时间早于锚点时间，时间字段疑似异常，无法直接判定。"
+        normalized_anchor_labels = "".join(anchor_labels)
+        if "手术" in normalized_anchor_labels:
+            year_gap = abs(completion_dt.year - anchor_dt.year)
+            if year_gap >= 2:
+                return "手术结束时间与文书完成时间跨年差异过大，疑似源数据时间脏值，无法直接判定。"
+            if delta_hours > max(max_hours * 10, 24 * 30):
+                return "手术结束时间与文书完成时间间隔异常偏大，疑似源数据时间脏值，无法直接判定。"
+        return ""
 
     def _evaluate_required_fields_from_title(
         self,
@@ -673,7 +739,7 @@ class ProgrammaticRuleExecutor:
         events = [
             event
             for event in self._collect_course_events(timeline)
-            if str(event.get("author_role") or "") == "attending"
+            if self._resolve_course_round_role(event) == "attending"
         ]
         if not events:
             return (
@@ -722,21 +788,21 @@ class ProgrammaticRuleExecutor:
     ) -> tuple[str, bool, str, str, str, float, dict[str, Any], str]:
         timeline = self._get_programmatic_timeline(medical_record)
         if not timeline:
-            return self._build_uncertain_timeline_result("缺少结构化时间轴，无法判断高级职称首次查房时效。")
+            return self._build_uncertain_timeline_result("缺少结构化时间轴，无法判断副主任/主任医师首次查房时效。")
         admission_time = self._parse_datetime(str(timeline.get("admission_time") or ""))
         if admission_time is None:
-            return self._build_uncertain_timeline_result("缺少入院时间，无法判断高级职称首次查房时效。")
+            return self._build_uncertain_timeline_result("缺少入院时间，无法判断副主任/主任医师首次查房时效。")
         events = [
             event
             for event in self._collect_course_events(timeline)
-            if str(event.get("author_role") or "") == "senior"
+            if self._resolve_course_round_role(event) == "senior"
         ]
         if not events:
             return (
                 "non_compliant",
                 False,
-                "未找到副主任及以上首次查房记录。",
-                "时间轴未命中高级职称查房事件",
+                "未找到副主任/主任医师首次查房记录。",
+                "时间轴未命中副主任/主任医师查房事件",
                 "请补充副主任/主任医师首次查房记录并确保入院 72 小时内完成。",
                 0.9,
                 {"is_applicable": True, "reason": "", "method": "timeline_senior_round"},
@@ -745,14 +811,14 @@ class ProgrammaticRuleExecutor:
         first_event = events[0]
         authored_at = self._parse_datetime(str(first_event.get("authored_at") or ""))
         if authored_at is None:
-            return self._build_uncertain_timeline_result("高级职称查房事件缺少书写时间。")
+            return self._build_uncertain_timeline_result("副主任/主任医师查房事件缺少书写时间。")
         delta_hours = (authored_at - admission_time).total_seconds() / 3600
-        evidence = f"入院={admission_time.isoformat(sep=' ', timespec='seconds')}；首次高级查房={authored_at.isoformat(sep=' ', timespec='seconds')}；间隔={delta_hours:.1f}h"
+        evidence = f"入院={admission_time.isoformat(sep=' ', timespec='seconds')}；首次副主任/主任查房={authored_at.isoformat(sep=' ', timespec='seconds')}；间隔={delta_hours:.1f}h"
         if delta_hours <= max_hours:
             return (
                 "compliant",
                 True,
-                "高级职称首次查房时效符合要求。",
+                "副主任/主任医师首次查房时效符合要求。",
                 evidence,
                 "",
                 0.92,
@@ -762,7 +828,7 @@ class ProgrammaticRuleExecutor:
         return (
             "non_compliant",
             False,
-            "高级职称首次查房超过 72 小时。",
+            "副主任/主任医师首次查房超过 72 小时。",
             evidence,
             "请补充副主任/主任医师首次查房记录，并校正入院后 72 小时内完成的时效要求。",
             0.92,
@@ -938,6 +1004,42 @@ class ProgrammaticRuleExecutor:
                 events.append(event)
         events.sort(key=lambda item: str(item.get("authored_at") or ""))
         return events
+
+    def _resolve_course_round_role(self, event: dict[str, Any]) -> str:
+        haystack = self._build_course_round_haystack(event)
+        raw_role = str(event.get("author_role") or "").strip().lower()
+        if self._contains_any(haystack, self._SENIOR_ROLE_MARKERS):
+            return "senior"
+        if self._contains_any(haystack, self._ATTENDING_ROLE_MARKERS):
+            if self._contains_any(haystack, self._ATTENDING_EXCLUSION_MARKERS):
+                return ""
+            return "attending"
+        if raw_role in {"deputy_chief", "chief", "deputy_chief_physician", "chief_physician"}:
+            if self._contains_any(haystack, self._SENIOR_EXCLUSION_MARKERS):
+                return ""
+            return "senior"
+        if raw_role in {"attending", "attending_physician"}:
+            if self._contains_any(haystack, self._ATTENDING_EXCLUSION_MARKERS):
+                return ""
+            return "attending"
+        return ""
+
+    @staticmethod
+    def _build_course_round_haystack(event: dict[str, Any]) -> str:
+        parts = [
+            str(event.get("author_role") or ""),
+            str(event.get("title") or ""),
+            str(event.get("author_title") or ""),
+            str(event.get("author_name") or ""),
+            str(event.get("content") or ""),
+            str(event.get("content_preview") or ""),
+            str(event.get("raw_text") or ""),
+        ]
+        return "\n".join(parts).lower()
+
+    @staticmethod
+    def _contains_any(haystack: str, markers: tuple[str, ...]) -> bool:
+        return any(marker.lower() in haystack for marker in markers if marker)
 
     @staticmethod
     def _extract_fields_from_title(title: str) -> list[str]:
