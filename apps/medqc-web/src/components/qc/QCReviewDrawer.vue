@@ -1036,9 +1036,8 @@ function inferCourseDisplayTitle(doc: ReviewDocItem): string {
     if (originalTitle && originalTitle !== '日常病程记录') return originalTitle
     if (/转入/u.test(probeText)) return '转入记录'
     if (/转出/u.test(probeText)) return '转出记录'
-    if (/会诊/u.test(probeText)) return '会诊记录'
-    if (/主任医师.*查房|副主任医师.*查房|主治医师.*查房/u.test(probeText)) return '上级医师查房记录'
-    if (/今日查房|查房内容|查房记录|查房/u.test(probeText)) return '查房记录'
+    if (/今日查房/u.test(probeText)) return '今日查房'
+    if (/查房内容|查房记录|查房/u.test(probeText)) return '查房记录'
     return originalTitle || '日常病程记录'
   }
 
@@ -1050,16 +1049,6 @@ function inferCourseSubtype(doc: ReviewDocItem): string {
   if (docType.includes('first_course')) return 'first_course'
   if (docType.includes('senior_course')) return 'senior_round'
   if (docType.includes('daily_course')) {
-    const probeText = buildCourseTitleProbeText(doc)
-    if (
-      /主任医师.*查房|副主任医师.*查房|主治医师.*查房|今日查房|查房内容|查房记录|查房/u.test(
-        probeText,
-      )
-    ) {
-      return 'senior_round'
-    }
-    if (/会诊/u.test(probeText)) return 'consultation'
-    if (/术后/u.test(probeText)) return 'postoperative'
     return 'daily_course'
   }
   if (docType.includes('consult')) return 'consultation'
