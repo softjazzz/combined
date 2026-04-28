@@ -85,6 +85,20 @@ def test_sc_content_v1_rules_should_exist_in_sichuan_rule_source():
     assert missing == []
 
 
+def test_sc_036_should_use_stricter_abnormal_exam_analysis_prompt():
+    service = SichuanQCService()
+
+    raw_rule = service.get_rule_by_id("SC-036")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    prompt = str(rule.get("custom_prompt") or "")
+    assert "仅罗列检查结果" in prompt
+    assert "较前好转" in prompt
+    assert "炎症指标好转" in prompt
+    assert "默认视为分析不足" in prompt
+
+
 def test_rule_set_list_should_expose_new_launch_rule_sets():
     items = list_sichuan_rule_sets()
     keys = {item["rule_set_key"] for item in items}

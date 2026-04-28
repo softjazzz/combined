@@ -50,6 +50,18 @@ from .sc_rule_family import (
 
 logger = logging.getLogger(__name__)
 
+_SC_036_STRICT_CUSTOM_PROMPT = """【检查要点】
+1. 本规则专门检查病程记录中是否对重要辅助检查结果，尤其是异常检查结果，进行了充分分析并给出处理意见。
+2. 合规必须同时满足以下至少两层信息：
+   (a) 明确指出具体异常结果或异常趋势；
+   (b) 结合当前诊断、病情变化或围术期风险说明其临床意义/可能原因；
+   (c) 给出针对性的处置、复查、会诊、观察重点或方案调整。
+3. 仅罗列检查结果，或仅写“较前好转”“继续观察”“继续原方案”“炎症指标好转”等笼统总结，而未解释具体异常项的意义、原因或后续处理，不算充分分析，应判定为不合规。
+4. 若病程中已经明确写出：异常结果提示什么问题、为何如此判断、已采取什么处理或后续计划，例如“尿常规提示泌尿道感染，予左氧氟沙星抗感染，并请泌尿外科会诊”，可判定为合规。
+5. 如病历只有正常结果，或虽有轻微波动但无临床意义且记录中已说明病情稳定，可谨慎判定为合规；若证据不足，请在 findings 中说明不足原因，不要过度推断。
+6. 【重点收紧】遇到“ESR/PCT/CRP异常后仅写炎症指标较前好转”“肾功异常后仅写继续观察”这类表述时，默认视为分析不足，除非同段或紧邻病程中还有明确的异常原因解释和处理计划。
+7. 【格式要求】你必须严格返回纯JSON格式，禁止输出任何分析过程、思考步骤或解释性文字。"""
+
 # SichuanQCLLMClient 已拆分至 qc_llm_client.py
 # 通过上方 import 重新导出，外部引用不受影响
 
@@ -111,6 +123,10 @@ class SichuanQCService:
         normalized = dict(rule or {})
         rule_id = str(normalized.get("rule_id") or "").strip().upper()
         rule_code = str(normalized.get("rule_code") or "").strip()
+
+        if rule_id == "SC-036":
+            normalized["custom_prompt"] = _SC_036_STRICT_CUSTOM_PROMPT
+            normalized["prompt_version"] = "runtime-override-sc036-v2"
 
         raw_executor_type = str(normalized.get("executor_type") or "").strip().lower()
         executor_type = raw_executor_type
