@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from app.services.qc_rule_sets import (
     SC_CONTENT_FULL_V1_RULE_IDS,
     SC_CONTENT_LAUNCH_A_V1_RULE_IDS,
@@ -115,6 +118,18 @@ def test_sc_039_should_use_text_only_critical_value_prompt():
     assert "接电脑危急值" in prompt
     assert "接到危急值后未查看患者情况" in prompt
     assert "confidence_requirement" not in prompt
+
+
+def test_sc_084_sc_085_should_align_with_presurg_discussion():
+    service = SichuanQCService()
+
+    for rule_id in ("SC-084", "SC-085"):
+        raw_rule = service.get_rule_by_id(rule_id)
+        assert raw_rule is not None
+        rule = service._ensure_rule_execution_meta(raw_rule)
+        prompt = str(rule.get("custom_prompt") or "")
+        assert "术前讨论" in prompt
+        assert "适用文书: ['operation_record']" not in prompt
 
 
 def test_sc_039_should_prefer_daily_course_candidate_with_low_potassium_context():
@@ -727,3 +742,42 @@ def test_sc_content_launch_c_v1_should_cover_observation_rules():
     assert rule_set.max_refine_candidates == 0
     assert list(rule_set.rule_ids) == list(SC_CONTENT_LAUNCH_C_V1_RULE_IDS)
     assert len(rule_set.rule_ids) == 9
+
+
+def test_sc_cross_document_rules_should_align_with_pdf_mapping():
+    expected = {
+        "SC-065": [
+            "summary_record",
+            "handoff_record",
+            "handover_record",
+            "transfer_in_record",
+            "transfer_out_record",
+        ],
+        "SC-086": [
+            "presurg_summary",
+            "senior_course_record",
+            "anesthesia_record",
+        ],
+        "SC-104": [
+            "postsurg_firstcourse_record",
+            "anesthesia_record",
+        ],
+        "SC-107": [
+            "daily_course_record",
+            "senior_course_record",
+        ],
+        "SC-113": [
+            "daily_course_record",
+            "presurg_summary",
+        ],
+    }
+    source_paths = [
+        Path(__file__).resolve().parents[2] / "app" / "data" / "sichuan_rules_146.json",
+        Path(__file__).resolve().parents[2] / "app" / "data" / "sichuan_rules_146_updated.json",
+    ]
+
+    for path in source_paths:
+        rules = json.loads(path.read_text(encoding="utf-8"))
+        for rule_id, applicable_documents in expected.items():
+            rule = next(item for item in rules if item["rule_id"] == rule_id)
+            assert list(rule["applicable_documents"]) == applicable_documents
