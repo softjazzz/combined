@@ -1644,6 +1644,135 @@ def _upsert_scene_bundle(
         )
 
 
+def _load_scene_bundle(
+    *,
+    scene: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    schema: str,
+) -> dict[str, Any] | None:
+    table_name = _SCENE_BUNDLE_TABLE.get(scene)
+    if not table_name:
+        raise ValueError(f"Unsupported scene bundle table: {scene}")
+    if not _ensure_engine_available("scene bundle loading"):
+        return None
+
+    sql = text(
+        f"""
+        SELECT
+            institute_id,
+            patient_id,
+            visit_id,
+            scene,
+            department,
+            admission_datetime,
+            discharge_datetime,
+            medical_text,
+            structured_context,
+            document_hits,
+            text_available,
+            data_quality_flags,
+            patient_name_masked,
+            mobile_masked,
+            id_card_masked,
+            source_doc_priority,
+            compat_strategy,
+            bundle_schema_version,
+            policy_version,
+            bundle_updated_at
+        FROM {_qualified_table(schema, table_name)}
+        WHERE institute_id = :institute_id
+          AND patient_id = :patient_id
+          AND visit_id = :visit_id
+        LIMIT 1
+        """
+    )
+    with engine.connect() as conn:
+        row = conn.execute(
+            sql,
+            {
+                "institute_id": institute_id,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+            },
+        ).mappings().first()
+    if not row:
+        return None
+
+    payload = dict(row)
+    for field_name in ("structured_context", "document_hits", "data_quality_flags", "source_doc_priority"):
+        value = payload.get(field_name)
+        if isinstance(value, str):
+            try:
+                payload[field_name] = json.loads(value)
+            except Exception:
+                payload[field_name] = {} if field_name in {"structured_context", "document_hits"} else []
+        elif value is None:
+            payload[field_name] = {} if field_name in {"structured_context", "document_hits"} else []
+    return payload
+
+
+def _scene_bundle_has_usable_content(bundle: dict[str, Any] | None) -> bool:
+    if not isinstance(bundle, dict) or not bundle:
+        return False
+    if bool(bundle.get("text_available")) and str(bundle.get("medical_text") or "").strip():
+        return True
+    document_hits = dict(bundle.get("document_hits") or {})
+    if any(bool(hit) for hit in document_hits.values()):
+        return True
+    structured_context = dict(bundle.get("structured_context") or {})
+    documents = dict(structured_context.get("documents") or {})
+    for rows in documents.values():
+        if isinstance(rows, list) and rows:
+            return True
+    inventory = list(structured_context.get("document_inventory") or [])
+    return bool(inventory)
+
+
+def load_or_assemble_scene_bundle(
+    *,
+    scene: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    policy_version: str = "",
+    source_schema: str | None = None,
+    bundle_schema: str = "public",
+    force_refresh: bool = False,
+    force_refresh_if_empty: bool = True,
+) -> dict[str, Any]:
+    if scene not in _SCENE_BUNDLE_TABLE:
+        raise ValueError(f"Unsupported scene bundle table: {scene}")
+    ensure_scene_bundle_tables(schema=bundle_schema)
+
+    if not force_refresh:
+        existing = _load_scene_bundle(
+            scene=scene,
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            schema=bundle_schema,
+        )
+        if (
+            existing
+            and str(existing.get("bundle_schema_version") or "") == BUNDLE_SCHEMA_VERSION_CURRENT
+            and (not force_refresh_if_empty or _scene_bundle_has_usable_content(existing))
+        ):
+            return existing
+
+    bundle = _assemble_scene_bundle(
+        scene=scene,
+        source_schema=source_schema or _default_source_schema(),
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        policy_version=policy_version,
+    )
+    _upsert_scene_bundle(scene=scene, bundle=bundle, bundle_schema=bundle_schema)
+    return bundle
+
+
 def assemble_domain_bundle(
     *,
     execution_domain: str,

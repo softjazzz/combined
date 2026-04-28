@@ -1,7 +1,51 @@
 import pytest
 
+import app.services.qc_input_adapters.running_final_bundle_runtime as runtime_module
 from app.services.qc_input_adapters.running_final_bundle_runtime import evaluate_running_final_bundle
 from app.services.sichuan_qc_service import SichuanQCService
+
+
+def test_load_running_final_bundle_should_use_scene_bundle_auto_refresh(monkeypatch):
+    monkeypatch.setattr(runtime_module, "engine", object())
+
+    calls = []
+
+    def _fake_load_or_assemble_scene_bundle(**kwargs):
+        calls.append(dict(kwargs))
+        return {
+            "scene": "final",
+            "visit_id": "V001",
+            "medical_text": "病历正文",
+            "structured_context": {"documents": {"consultation_record": [{"text_preview": "会诊正文"}]}},
+            "document_hits": {"consultation_record": True},
+            "data_quality_flags": [],
+            "source_doc_priority": ["consultation_record"],
+            "text_available": True,
+            "bundle_schema_version": "bundle-v2",
+        }
+
+    monkeypatch.setattr(runtime_module, "load_or_assemble_scene_bundle", _fake_load_or_assemble_scene_bundle)
+
+    bundle = runtime_module.load_running_final_bundle(
+        scene="final",
+        institute_id="HOSP-001",
+        patient_id="PAT-001",
+        visit_id="V001",
+        schema="public",
+    )
+
+    assert bundle["document_hits"]["consultation_record"] is True
+    assert calls == [
+        {
+            "scene": "final",
+            "institute_id": "HOSP-001",
+            "patient_id": "PAT-001",
+            "visit_id": "V001",
+            "bundle_schema": "public",
+            "force_refresh": False,
+            "force_refresh_if_empty": True,
+        }
+    ]
 
 
 @pytest.mark.asyncio

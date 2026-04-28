@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sqlalchemy import text
-
 from ...database.connection import engine
+from ..bundles import load_or_assemble_scene_bundle
 from ..sichuan_qc_service import SichuanQCService
 from .running_final_bundle_adapter import adapt_bundle_to_sichuan_eval_args
 
@@ -46,50 +45,18 @@ def load_running_final_bundle(
     if engine is None:
         raise RuntimeError("DATABASE_URL is not configured; bundle loading unavailable.")
     normalized_scene = _normalize_scene(scene)
-    table_name = _SCENE_TABLE[normalized_scene]
-    sql = text(
-        f"""
-        SELECT
-            institute_id,
-            patient_id,
-            visit_id,
-            scene,
-            department,
-            admission_datetime,
-            discharge_datetime,
-            medical_text,
-            structured_context,
-            document_hits,
-            text_available,
-            data_quality_flags,
-            patient_name_masked,
-            mobile_masked,
-            id_card_masked,
-            source_doc_priority,
-            compat_strategy,
-            bundle_schema_version,
-            policy_version,
-            bundle_updated_at
-        FROM {schema}.{table_name}
-        WHERE institute_id = :institute_id
-          AND patient_id = :patient_id
-          AND visit_id = :visit_id
-        LIMIT 1
-        """
+    payload = load_or_assemble_scene_bundle(
+        scene=normalized_scene,
+        institute_id=str(institute_id or "").strip(),
+        patient_id=str(patient_id or "").strip(),
+        visit_id=str(visit_id or "").strip(),
+        bundle_schema=schema,
+        force_refresh=False,
+        force_refresh_if_empty=True,
     )
-    with engine.connect() as conn:
-        row = conn.execute(
-            sql,
-            {
-                "institute_id": str(institute_id or "").strip(),
-                "patient_id": str(patient_id or "").strip(),
-                "visit_id": str(visit_id or "").strip(),
-            },
-        ).mappings().first()
-    if not row:
+    if not payload:
         raise LookupError(f"Bundle not found: {normalized_scene} {institute_id}/{patient_id}/{visit_id}")
 
-    payload = dict(row)
     payload["structured_context"] = _loads_json(payload.get("structured_context"))
     payload["document_hits"] = _loads_json(payload.get("document_hits"))
     payload["data_quality_flags"] = _loads_json(payload.get("data_quality_flags"))
