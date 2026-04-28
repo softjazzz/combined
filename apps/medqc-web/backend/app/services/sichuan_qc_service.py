@@ -1400,6 +1400,64 @@ class SichuanQCService:
                 score -= 40
             if "出院医嘱" in content:
                 score -= 25
+        elif normalized_rule_id == "SC-033" and content:
+            weighted_patterns = (
+                ("输注", 80),
+                ("左氧氟沙星", 90),
+                ("抗感染", 80),
+                ("补钾", 85),
+                ("静脉补", 75),
+                ("停药", 65),
+                ("改用", 60),
+                ("处理", 55),
+                ("对症", 45),
+                ("复查", 30),
+                ("瘙痒", 35),
+                ("肿痛", 35),
+                ("麻木", 35),
+                ("不适", 20),
+            )
+            for keyword, weight in weighted_patterns:
+                if keyword in content:
+                    score += weight
+            discharge_like_patterns = (
+                "办理出院",
+                "出院医嘱",
+                "门诊随访",
+                "随访周期",
+                "随访日期",
+                "患者拒绝完善",
+            )
+            for keyword in discharge_like_patterns:
+                if keyword in content:
+                    score -= 70
+            if "出院情况" in content:
+                score -= 60
+        elif normalized_rule_id == "SC-026" and content:
+            weighted_patterns = (
+                ("鉴别诊断", 120),
+                ("诊断依据", 100),
+                ("目前诊断", 60),
+                ("不除外", 55),
+                ("待排", 45),
+                ("辅助检查", 30),
+                ("主诉", 25),
+                ("查体", 25),
+            )
+            for keyword, weight in weighted_patterns:
+                if keyword in content:
+                    score += weight
+            discharge_like_patterns = (
+                "办理出院",
+                "出院医嘱",
+                "症状缓解",
+                "病情较前明显好转",
+                "今日予以办理出院",
+                "准许后今日办理出院",
+            )
+            for keyword in discharge_like_patterns:
+                if keyword in content:
+                    score -= 90
 
         return (score, has_content, display_time)
 
@@ -1591,6 +1649,13 @@ class SichuanQCService:
                 source_documents,
                 list(routing.primary_doc_types),
             )
+            if normalized_rule_id in {"SC-026", "SC-027"} and not any(
+                str(item.get("content") or "").strip() for item in primary_candidates
+            ):
+                primary_candidates = self._find_source_documents_for_types(
+                    source_documents,
+                    ["senior_course_record", "daily_course_record", "first_course_record"],
+                )
             auxiliary_candidates = self._find_source_documents_for_types(
                 source_documents,
                 list(routing.aux_doc_types),
@@ -1644,6 +1709,12 @@ class SichuanQCService:
             "first_course_record",
         }:
             primary_doc_type = "日常病程记录"
+        elif normalized_rule_id in {"SC-026", "SC-027"} and str(primary_document.get("source_table") or "") in {
+            "daily_course_record",
+            "senior_course_record",
+            "first_course_record",
+        }:
+            primary_doc_type = "首次病程记录"
         return RuleExecutionInput(
             rule_id=str(rule.get("rule_id") or ""),
             document_type=primary_doc_type,
@@ -1815,6 +1886,179 @@ class SichuanQCService:
         return normalized
 
     @staticmethod
+    def _apply_sc008_text_only_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id != "SC-008":
+            return engine_result
+
+        status = str(engine_result.get("status") or "").strip().lower()
+        primary_text = str(rule_input.primary_medical_text or "").strip()
+        if status == "non_compliant" or not primary_text:
+            return engine_result
+
+        first_line = next((line.strip() for line in primary_text.splitlines() if line.strip()), "")
+        if not first_line:
+            return engine_result
+
+        trauma_keywords = ("车祸", "撞伤", "摔伤", "坠伤", "刀伤", "打伤", "外伤")
+        generic_injury_keywords = ("受伤", "外伤")
+        concrete_symptom_keywords = (
+            "疼痛",
+            "发热",
+            "咳嗽",
+            "胸痛",
+            "腹痛",
+            "头痛",
+            "头晕",
+            "昏迷",
+            "呕吐",
+            "出血",
+            "骨折",
+            "麻木",
+            "肿胀",
+            "呼吸困难",
+        )
+        has_trauma_context = any(keyword in first_line for keyword in trauma_keywords)
+        only_generic_injury = any(keyword in first_line for keyword in generic_injury_keywords) and not any(
+            keyword in first_line for keyword in concrete_symptom_keywords
+        )
+        has_duration = bool(re.search(r"\d+\+?(?:分钟|小时|天)", first_line))
+        if not (has_trauma_context and only_generic_injury and has_duration):
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc008_text_only"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": "主诉仅描述受伤经过/部位及持续时间，未突出主要症状或体征，难以直接导出第一诊断，书写不规范。",
+                "evidence": first_line[:200],
+                "suggestion": "请在主诉中补充能够直接支持主要诊断的关键症状或体征，并保留持续时间。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.82),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    @staticmethod
+    def _apply_sc033_text_only_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id != "SC-033":
+            return engine_result
+
+        status = str(engine_result.get("status") or "").strip().lower()
+        primary_text = str(rule_input.primary_medical_text or "").strip()
+        if status == "non_compliant" or not primary_text:
+            return engine_result
+
+        generic_management_patterns = (
+            "密观患者病情变化，如有不适，及时处理",
+            "密切观察患者病情变化，如有不适，及时处理",
+            "继续观察患者病情变化",
+            "继续当前治疗方案",
+            "继续治疗",
+            "继续观察",
+            "暂无特殊处理",
+        )
+        detailed_action_keywords = (
+            "给予",
+            "加用",
+            "停用",
+            "改用",
+            "补液",
+            "补钾",
+            "抗感染",
+            "止痛",
+            "复查",
+            "会诊",
+            "输注",
+            "调整",
+            "拟予以",
+        )
+        has_generic_management = any(keyword in primary_text for keyword in generic_management_patterns)
+        has_detailed_action = any(keyword in primary_text for keyword in detailed_action_keywords)
+        if not (has_generic_management and not has_detailed_action):
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc033_text_only"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": "病程记录仅作笼统观察性表述，未结合当日检查/病情变化给出明确分析判断或具体处理措施。",
+                "evidence": primary_text[:200],
+                "suggestion": "请补充当日病情变化的分析依据，以及对应的具体处理、用药或复查计划。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.82),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    @staticmethod
+    def _apply_sc026_text_only_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id != "SC-026":
+            return engine_result
+
+        status = str(engine_result.get("status") or "").strip().lower()
+        primary_text = str(rule_input.primary_medical_text or "").strip()
+        if status == "non_compliant" or not primary_text:
+            return engine_result
+
+        has_differential_heading = "鉴别诊断" in primary_text
+        has_reasoning_context = any(
+            keyword in primary_text
+            for keyword in ("腹痛", "腹泻", "纳差", "干呕", "右下腹", "附件区", "肝硬化")
+        )
+        thin_differential = False
+        if not has_differential_heading and has_reasoning_context:
+            thin_differential = True
+        elif has_differential_heading:
+            diff_segment = primary_text.split("鉴别诊断", 1)[-1][:220]
+            has_multiple_candidates = any(token in diff_segment for token in ("；", ";", "2、", "②", "其二"))
+            has_weak_reasoning = any(token in diff_segment for token in ("待排", "不除外", "表现为", "完善"))
+            if not has_multiple_candidates and has_weak_reasoning:
+                thin_differential = True
+
+        if not thin_differential:
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc026_text_only"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": "当前病程文本未见充分的鉴别诊断推理，表现为未单列鉴别诊断，或仅列单一候选疾病且排除依据不足。",
+                "evidence": primary_text[:220],
+                "suggestion": "请补充与当前症状/检查相匹配的主要鉴别疾病，并写明支持或不支持依据。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.82),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    @staticmethod
     def _parse_display_time(value: Any) -> Optional[datetime]:
         text = str(value or "").strip()
         if not text:
@@ -1973,6 +2217,18 @@ class SichuanQCService:
             engine_result=engine_result,
         )
         normalized = self._apply_sc069_text_only_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
+        normalized = self._apply_sc008_text_only_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
+        normalized = self._apply_sc033_text_only_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
+        normalized = self._apply_sc026_text_only_fallback(
             rule_input=rule_input,
             engine_result=normalized,
         )

@@ -231,6 +231,115 @@ def test_sc_069_should_fallback_to_non_compliant_when_signature_is_missing():
     assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc069_text_only"
 
 
+def test_sc_008_should_fallback_to_non_compliant_when_chief_complaint_only_mentions_trauma_event():
+    service = SichuanQCService()
+    normalized = service._apply_sc008_text_only_fallback(
+        rule_input=RuleExecutionInput(
+            rule_id="SC-008",
+            document_type="入院记录",
+            execution_domain="admission",
+            primary_medical_text=(
+                "车祸致头面部、胸部等多处受伤40+分钟。\n"
+                "患者于40+分钟前走路时被一辆三轮车撞伤起病。"
+            ),
+            supporting_evidence=[],
+            timeline_facts=[],
+            source_documents=[],
+        ),
+        engine_result={
+            "rule_id": "SC-008",
+            "status": "uncertain",
+            "is_compliant": True,
+            "findings": "LLM 未返回任何内容。",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.7,
+            "metadata": {
+                "executor_type": "llm",
+                "llm_fallback": False,
+            },
+        },
+    )
+
+    assert normalized["status"] == "non_compliant"
+    assert normalized["is_compliant"] is False
+    assert "未突出主要症状或体征" in str(normalized["findings"])
+    assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc008_text_only"
+
+
+def test_sc_033_should_fallback_to_non_compliant_when_note_only_says_observe_and_handle_if_needed():
+    service = SichuanQCService()
+    normalized = service._apply_sc033_text_only_fallback(
+        rule_input=RuleExecutionInput(
+            rule_id="SC-033",
+            document_type="日常病程记录",
+            execution_domain="course",
+            primary_medical_text=(
+                "查房内容：患者昨日C13呼气试验检查时因方法错误，导致无检查结果，"
+                "耗材已使用，今日再次行C13呼气试验检查。密观患者病情变化，如有不适，及时处理。"
+            ),
+            supporting_evidence=[],
+            timeline_facts=[],
+            source_documents=[],
+        ),
+        engine_result={
+            "rule_id": "SC-033",
+            "status": "uncertain",
+            "is_compliant": True,
+            "findings": "LLM 未返回任何内容。",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.7,
+            "metadata": {
+                "executor_type": "llm",
+                "llm_fallback": False,
+            },
+        },
+    )
+
+    assert normalized["status"] == "non_compliant"
+    assert normalized["is_compliant"] is False
+    assert "笼统观察性表述" in str(normalized["findings"])
+    assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc033_text_only"
+
+
+def test_sc_026_should_fallback_to_non_compliant_when_differential_is_missing_or_too_thin():
+    service = SichuanQCService()
+    normalized = service._apply_sc026_text_only_fallback(
+        rule_input=RuleExecutionInput(
+            rule_id="SC-026",
+            document_type="首次病程记录",
+            execution_domain="course",
+            primary_medical_text=(
+                "患者14岁青少年，主要表现为腹痛腹泻4天。"
+                "目前诊断：1、感染性腹泻；2、急性胃黏膜病变。"
+                "鉴别诊断：细菌性痢疾：表现为腹痛、腹泻，为粘液脓血便、里急后重等，完善大便培养排除。"
+            ),
+            supporting_evidence=[],
+            timeline_facts=[],
+            source_documents=[],
+        ),
+        engine_result={
+            "rule_id": "SC-026",
+            "status": "uncertain",
+            "is_compliant": True,
+            "findings": "LLM 未返回任何内容。",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.7,
+            "metadata": {
+                "executor_type": "llm",
+                "llm_fallback": False,
+            },
+        },
+    )
+
+    assert normalized["status"] == "non_compliant"
+    assert normalized["is_compliant"] is False
+    assert "鉴别诊断推理" in str(normalized["findings"])
+    assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc026_text_only"
+
+
 def test_sc_146_should_prefer_senior_course_note_over_discharge_daily_note():
     service = SichuanQCService()
     raw_rule = service.get_rule_by_id("SC-146")
@@ -287,6 +396,150 @@ def test_sc_146_should_prefer_senior_course_note_over_discharge_daily_note():
 
     assert "明日行左眼下睑睑内翻矫正术" in rule_input.primary_medical_text
     assert any(item.get("source_table") == "inpat_nondrug_order" for item in rule_input.supporting_evidence)
+
+
+def test_sc_033_should_prefer_medication_change_daily_note_over_discharge_like_note():
+    service = SichuanQCService()
+    raw_rule = service.get_rule_by_id("SC-033")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    routing = route_rule_to_domain(rule)
+    rule_input = service._build_rule_execution_input_from_bundle(
+        rule=rule,
+        routing=routing,
+        domain_bundle={
+            "execution_domain": "course",
+            "timeline_facts": [],
+            "source_documents": [
+                {
+                    "document_type": "daily_course_record",
+                    "document_title": "日常病程记录",
+                    "display_time": "2025-07-10 10:00:00",
+                    "content": (
+                        "患者未诉腹泻,腹痛不适,精神饮食夜休可,大小便外观无异常。"
+                        "患者拒绝完善胃肠镜检查,于今日办理出院。出院医嘱:门诊随访。"
+                    ),
+                    "source_table": "daily_course_record",
+                    "document_id": "daily-discharge",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "partial",
+                    "data_quality_flags": [],
+                },
+                {
+                    "document_type": "daily_course_record",
+                    "document_title": "日常病程记录",
+                    "display_time": "2025-07-07 09:00:00",
+                    "content": (
+                        "查房内容：患者输注左氧氟沙星过程中出现左前壁皮肤麻木、瘙痒、肿痛，"
+                        "输注结束后症状缓解。"
+                    ),
+                    "source_table": "daily_course_record",
+                    "document_id": "daily-medication",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "assembled",
+                    "data_quality_flags": [],
+                },
+            ],
+        },
+    )
+
+    assert "左氧氟沙星" in rule_input.primary_medical_text
+    assert "办理出院" not in rule_input.primary_medical_text
+
+
+def test_sc_026_should_fallback_to_senior_note_when_first_course_is_empty():
+    service = SichuanQCService()
+    raw_rule = service.get_rule_by_id("SC-026")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    routing = route_rule_to_domain(rule)
+    rule_input = service._build_rule_execution_input_from_bundle(
+        rule=rule,
+        routing=routing,
+        domain_bundle={
+            "execution_domain": "course",
+            "timeline_facts": [],
+            "source_documents": [
+                {
+                    "document_type": "first_course_record",
+                    "document_title": "首次病程记录",
+                    "display_time": "2025-10-16 21:40:00",
+                    "content": "",
+                    "source_table": "first_course_record",
+                    "document_id": "first-empty",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "empty_document",
+                    "data_quality_flags": [],
+                },
+                {
+                    "document_type": "senior_course_record",
+                    "document_title": "主治医师查房记录",
+                    "display_time": "2025-10-17 08:08:44",
+                    "content": "患者腹痛原因待诊，右侧附件区脂肪密度影，畸胎瘤不除外，建议结合专科检查。",
+                    "source_table": "senior_course_record",
+                    "document_id": "senior-fallback",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "assembled",
+                    "data_quality_flags": [],
+                },
+            ],
+        },
+    )
+
+    assert "畸胎瘤不除外" in rule_input.primary_medical_text
+    assert rule_input.document_type == "首次病程记录"
+
+
+def test_sc_026_should_prefer_reasoning_note_over_discharge_like_senior_note():
+    service = SichuanQCService()
+    raw_rule = service.get_rule_by_id("SC-026")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    routing = route_rule_to_domain(rule)
+    rule_input = service._build_rule_execution_input_from_bundle(
+        rule=rule,
+        routing=routing,
+        domain_bundle={
+            "execution_domain": "course",
+            "timeline_facts": [],
+            "source_documents": [
+                {
+                    "document_type": "senior_course_record",
+                    "document_title": "主治医师查房记录",
+                    "display_time": "2025-10-20 08:07:02",
+                    "content": "患者症状缓解，今日予以办理出院。出院医嘱：门诊随访。",
+                    "source_table": "senior_course_record",
+                    "document_id": "senior-discharge",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "assembled",
+                    "data_quality_flags": [],
+                },
+                {
+                    "document_type": "senior_course_record",
+                    "document_title": "主治医师查房记录",
+                    "display_time": "2025-10-17 08:08:44",
+                    "content": "目前诊断：阑尾炎待排。诊断依据：右下腹压痛、反跳痛。鉴别诊断：右侧附件区脂肪密度影，畸胎瘤不除外。",
+                    "source_table": "senior_course_record",
+                    "document_id": "senior-reasoning",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "assembled",
+                    "data_quality_flags": [],
+                },
+            ],
+        },
+    )
+
+    assert "鉴别诊断" in rule_input.primary_medical_text
+    assert "办理出院" not in rule_input.primary_medical_text
 
 
 def test_sc_146_should_fallback_to_uncertain_when_visible_order_time_is_after_preop_note():

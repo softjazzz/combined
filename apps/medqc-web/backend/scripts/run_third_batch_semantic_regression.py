@@ -28,7 +28,6 @@ DEFAULT_RECORD_IDS: tuple[str, ...] = (
     "2073404",
     "2194387",
     "1880557",
-    "2298532",
     "2048454",
 )
 DEFAULT_EXPECTATIONS: dict[str, dict[str, str]] = {
@@ -39,7 +38,6 @@ DEFAULT_EXPECTATIONS: dict[str, dict[str, str]] = {
     "2073404": {"SC-008": "non_compliant"},
     "2194387": {"SC-008": "non_compliant"},
     "1880557": {"SC-033": "non_compliant"},
-    "2298532": {"SC-033": "non_compliant"},
     "2048454": {"SC-033": "non_compliant"},
 }
 
