@@ -73,3 +73,41 @@ def test_build_programmatic_evidence_payload_should_fallback_to_admission_record
 
     assert payload["programmatic_timeline"]["admission_time"] == "2026-01-24 20:42:25"
     assert "入院时间：2026-01-24 20:42:25" in payload["primary_document_text"]
+
+
+def test_build_programmatic_evidence_payload_should_classify_course_round_roles_strictly():
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "structured_context": {
+                "documents": {
+                    "senior_course_record": [
+                        {
+                            "document_id": "R1",
+                            "document_title": "王标主治医师查房记录",
+                            "display_time": "2026-04-14 08:03:17",
+                            "text_preview": "今日王标主治医师查看病房后指出：病情稳定。",
+                        },
+                        {
+                            "document_id": "R2",
+                            "document_title": "王飞副主任医师查房记录",
+                            "display_time": "2026-04-15 08:03:38",
+                            "text_preview": "今日王飞副主任医师查看病房后指出：病情平稳。",
+                        },
+                        {
+                            "document_id": "R3",
+                            "document_title": "某某医疗组长查房记录",
+                            "display_time": "2026-04-16 08:00:00",
+                            "text_preview": "今日医疗组长查看病房后指出：继续观察。",
+                        },
+                    ]
+                }
+            }
+        }
+    )
+
+    events = payload["programmatic_timeline"]["documents"]["senior_course_record"]
+    assert events[0]["author_role"] == "attending"
+    assert events[0]["author_title"] == "主治医师"
+    assert events[1]["author_role"] == "senior"
+    assert events[1]["author_title"] == "副主任医师"
+    assert events[2]["author_role"] == ""

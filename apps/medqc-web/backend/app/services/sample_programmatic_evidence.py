@@ -25,6 +25,36 @@ _SOURCE_TABLES = (
     "discharge_record",
 )
 
+_ATTENDING_ROLE_MARKERS = ("主治医师", "主治查房", "attending physician")
+_SENIOR_ROLE_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房")
+_ATTENDING_EXCLUSION_MARKERS = (
+    "住院医师",
+    "住院总",
+    "责任医师",
+    "经治医师",
+    "管床医师",
+    "医疗组长",
+    "科主任",
+    "高级职称",
+    "副主任医师",
+    "主任医师",
+    "副主任查房",
+    "主任查房",
+)
+_SENIOR_EXCLUSION_MARKERS = (
+    "主治医师",
+    "主治查房",
+    "住院医师",
+    "住院总",
+    "责任医师",
+    "经治医师",
+    "管床医师",
+    "医疗组长",
+    "科主任",
+    "高级职称",
+    "上级医师",
+)
+
 
 def _safe_text(value: Any) -> str:
     return str(value or "").strip()
@@ -90,13 +120,40 @@ def _extract_datetime_by_labels(text: str, labels: tuple[str, ...]) -> str:
     return ""
 
 
-def _classify_author_role(title: str, content: str) -> str:
-    haystack = f"{title}\n{content}"
-    if any(token in haystack for token in ("副主任", "主任医师", "主任查房", "高级职称", "医疗组长", "科主任")):
-        return "senior"
-    if "主治" in haystack:
-        return "attending"
-    return ""
+def _contains_any(haystack: str, markers: tuple[str, ...]) -> bool:
+    return any(marker.lower() in haystack for marker in markers if marker)
+
+
+def _build_course_round_haystack(title: str, content: str) -> str:
+    return "\n".join(part for part in (title, content) if part).lower()
+
+
+def _extract_author_name_and_title(title: str, content: str) -> tuple[str, str]:
+    haystack = "\n".join(part for part in (title, content) if part)
+    patterns = (
+        (r"([\u4e00-\u9fa5]{2,4})(副主任医师)", "副主任医师"),
+        (r"([\u4e00-\u9fa5]{2,4})(主任医师)", "主任医师"),
+        (r"([\u4e00-\u9fa5]{2,4})(主治医师)", "主治医师"),
+    )
+    for pattern, normalized_title in patterns:
+        match = re.search(pattern, haystack)
+        if match:
+            return match.group(1), normalized_title
+    return "", ""
+
+
+def _classify_course_round_role(title: str, content: str) -> tuple[str, str, str]:
+    haystack = _build_course_round_haystack(title, content)
+    author_name, author_title = _extract_author_name_and_title(title, content)
+    if _contains_any(haystack, _SENIOR_ROLE_MARKERS):
+        if _contains_any(haystack, _SENIOR_EXCLUSION_MARKERS):
+            return "", author_name, author_title
+        return "senior", author_name, author_title or "副主任/主任医师"
+    if _contains_any(haystack, _ATTENDING_ROLE_MARKERS):
+        if _contains_any(haystack, _ATTENDING_EXCLUSION_MARKERS):
+            return "", author_name, author_title
+        return "attending", author_name, author_title or "主治医师"
+    return "", author_name, author_title
 
 
 def _extract_risk_flags(*texts: str) -> list[str]:
@@ -114,6 +171,7 @@ def _extract_risk_flags(*texts: str) -> list[str]:
 def _build_event(item: dict[str, Any]) -> dict[str, Any]:
     content = _safe_text(item.get("content") or item.get("text_preview"))
     title = _safe_text(item.get("document_title") or item.get("title") or item.get("document_type"))
+    author_role, author_name, author_title = _classify_course_round_role(title, content)
     authored_at = _parse_datetime(item.get("display_time") or item.get("record_time"))
     if not authored_at:
         authored_at = _extract_datetime_by_labels(content, ("记录时间", "记录日期", "书写时间", "完成时间"))
@@ -122,10 +180,14 @@ def _build_event(item: dict[str, Any]) -> dict[str, Any]:
         "title": title,
         "authored_at": authored_at,
         "signed": any(token in content for token in ("签名", "签字", "审核医师", "审阅医师")),
-        "author_role": _classify_author_role(title, content),
+        "author_role": author_role,
+        "author_name": author_name,
+        "author_title": author_title,
         "request_at": _extract_datetime_by_labels(content, ("会诊申请时间", "申请时间")),
         "surgery_end_at": _extract_datetime_by_labels(content, ("手术结束时间", "术毕时间", "手术时间", "手术日期")),
         "source_table": _safe_text(item.get("source_table") or item.get("document_type")),
+        "content_preview": content[:300],
+        "raw_text": content,
         "content": content,
     }
 
