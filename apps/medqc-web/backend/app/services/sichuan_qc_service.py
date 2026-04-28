@@ -1352,6 +1352,41 @@ class SichuanQCService:
         return matched
 
     @staticmethod
+    def _score_primary_candidate_for_rule(
+        *,
+        rule_id: str,
+        candidate: Dict[str, Any],
+    ) -> Tuple[int, int, str]:
+        content = str(candidate.get("content") or "").strip()
+        display_time = str(candidate.get("display_time") or candidate.get("record_time") or "")
+        has_content = 1 if content else 0
+        normalized_rule_id = str(rule_id or "").strip().upper()
+        score = 0
+
+        if normalized_rule_id == "SC-039" and content:
+            lowered = content.lower()
+            weighted_patterns = (
+                ("危急值", 100),
+                ("低钾", 90),
+                ("静脉补钾", 80),
+                ("补钾", 70),
+                ("电解质", 20),
+                ("查看患者", 20),
+                ("复查", 10),
+            )
+            for keyword, weight in weighted_patterns:
+                if keyword in content:
+                    score += weight
+            if re.search(r"\bK\s*\d+(?:\.\d+)?\s*mmol/?l\b", lowered):
+                score += 60
+            if re.search(r"\bCa\s*\d+(?:\.\d+)?\s*mmol/?l\b", lowered):
+                score += 10
+            if re.search(r"\bMg\s*\d+(?:\.\d+)?\s*mmol/?l\b", lowered):
+                score += 10
+
+        return (score, has_content, display_time)
+
+    @staticmethod
     def _canonical_doc_type(document_type: Any) -> str:
         text = str(document_type or "").strip()
         if not text:
@@ -1527,6 +1562,14 @@ class SichuanQCService:
             source_documents,
             list(routing.aux_doc_types),
         )
+        if primary_candidates:
+            primary_candidates.sort(
+                key=lambda item: self._score_primary_candidate_for_rule(
+                    rule_id=str(rule.get("rule_id") or ""),
+                    candidate=item,
+                ),
+                reverse=True,
+            )
 
         primary_document = next(
             (item for item in primary_candidates if str(item.get("content") or "").strip()),
@@ -1649,6 +1692,104 @@ class SichuanQCService:
                 "data_quality_flags": domain_bundle.get("data_quality_flags") or [],
             },
         }
+
+    @staticmethod
+    def _apply_sc039_text_only_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id != "SC-039":
+            return engine_result
+
+        status = str(engine_result.get("status") or "").strip().lower()
+        primary_text = str(rule_input.primary_medical_text or "").strip()
+        lowered = primary_text.lower()
+        if status == "non_compliant" or not primary_text:
+            return engine_result
+
+        has_k_value = bool(re.search(r"\bk\s*\d+(?:\.\d+)?\s*mmol/?l\b", lowered))
+        has_crisis_keyword = any(
+            keyword in primary_text
+            for keyword in ("危急值", "接危急值", "危急值回报", "危急值处理", "接电脑危急值")
+        )
+        has_electrolyte_context = any(
+            keyword in primary_text
+            for keyword in ("低钾", "补钾", "静脉补", "电解质", "复查电解质")
+        )
+        if not (has_crisis_keyword or (has_k_value and has_electrolyte_context)):
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc039_text_only"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": "病程记录已涉及危急值/电解质异常处置语境，但未完整记录危急值报告时间、处置时间、具体处理闭环或复查结果。",
+                "evidence": primary_text[:200],
+                "suggestion": "请补充危急值接收时间、患者当时情况、具体处理措施、复查结果及处理后观察。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.82),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    @staticmethod
+    def _apply_sc069_text_only_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id != "SC-069":
+            return engine_result
+
+        status = str(engine_result.get("status") or "").strip().lower()
+        primary_text = str(rule_input.primary_medical_text or "").strip()
+        if status == "non_compliant" or not primary_text:
+            return engine_result
+
+        missing_signature = bool(re.search(r"医生签名[:：]\s*$", primary_text))
+        missing_dept = "科" not in primary_text[:40]
+        if not (missing_signature or missing_dept):
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc069_text_only"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": "会诊记录存在关键书写要素缺失，至少缺少会诊医师签名或明确科别信息。",
+                "evidence": primary_text[:200],
+                "suggestion": "请补全会诊医师签名，并明确标注会诊医师所在科别及会诊时间。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.9),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    def _apply_rule_text_only_fallbacks(
+        self,
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized = self._apply_sc039_text_only_fallback(
+            rule_input=rule_input,
+            engine_result=engine_result,
+        )
+        normalized = self._apply_sc069_text_only_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
+        return normalized
 
     async def evaluate_document(
         self,
@@ -1994,7 +2135,10 @@ class SichuanQCService:
         orchestrated_results = list(orchestrated.get("results") or [])
         if not orchestrated_results:
             raise ValueError("规则执行失败：未返回结果")
-        engine_result = orchestrated_results[0]
+        engine_result = self._apply_rule_text_only_fallbacks(
+            rule_input=rule_input,
+            engine_result=orchestrated_results[0],
+        )
 
         evaluation_results = [
             {

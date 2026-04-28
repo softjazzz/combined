@@ -1027,6 +1027,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             ]
             if normalized_rule_ids:
                 record_rule_map[normalized_record_id] = normalized_rule_ids
+        prefer_rule_level_visit_eval = (
+            validation_mode == "sc"
+            and str(filters.get("source") or "").strip().lower().startswith("manual_problem_sample_pool")
+        )
 
         def _build_progress_patch(processed_records_count: int) -> Dict[str, Any]:
             return {
@@ -1103,6 +1107,65 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_refine_summary: Dict[str, Any] = {}
                 bundle_scene = ""
 
+                async def _evaluate_rule_level_visit_bundle() -> bool:
+                    nonlocal eval_items
+                    nonlocal record_total_tokens
+                    nonlocal record_total_prompt_tokens
+                    nonlocal record_total_completion_tokens
+                    nonlocal record_total_api_time
+                    nonlocal record_first_result_latency
+                    nonlocal record_first_result_source
+                    nonlocal record_pack_metrics
+
+                    if not (institute_id and patient_id and visit_id and active_rule_ids):
+                        return False
+
+                    aggregated_items: List[Dict[str, Any]] = []
+                    aggregated_tokens = 0
+                    aggregated_api_time = 0.0
+                    first_latency = 0.0
+                    first_source = ""
+                    for single_rule_id in active_rule_ids:
+                        single_result = await qc_service.evaluate_rule_for_visit(
+                            rule_id=single_rule_id,
+                            institute_id=institute_id,
+                            patient_id=patient_id,
+                            visit_id=visit_id,
+                            source_schema="cdm",
+                            bundle_schema="public",
+                        )
+                        per_rule_items = list(
+                            single_result.get("evaluation_results")
+                            or single_result.get("parsed_evaluation_results")
+                            or []
+                        )
+                        if not per_rule_items:
+                            raise ValueError(f"规则级 visit 评估未返回结果: {single_rule_id}")
+                        aggregated_items.extend(per_rule_items)
+                        token_usage = dict(single_result.get("token_usage") or {})
+                        aggregated_tokens += int(token_usage.get("total_tokens") or 0)
+                        aggregated_api_time += float(single_result.get("api_time") or 0.0)
+                        if first_latency <= 0:
+                            first_latency = float(single_result.get("api_time") or 0.0)
+                            first_source = "rule_for_visit"
+
+                    eval_items = aggregated_items
+                    record_total_tokens = aggregated_tokens
+                    record_total_prompt_tokens = 0
+                    record_total_completion_tokens = 0
+                    record_total_api_time = aggregated_api_time
+                    record_first_result_latency = first_latency
+                    record_first_result_source = first_source
+                    record_pack_metrics = {
+                        "total_packs": len(active_rule_ids),
+                        "avg_pack_size": 1.0,
+                        "fallback_packs": 0,
+                        "single_rule_retries": 0,
+                        "pack_parse_retry_count": 0,
+                        "context_tokens_estimate": 0,
+                    }
+                    return True
+
                 if is_programmatic_mode:
                     bundle_payload: Optional[Dict[str, Any]] = None
                     attempted_scenes: List[str] = []
@@ -1176,6 +1239,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
                 if (
                     not is_programmatic_mode
+                    and prefer_rule_level_visit_eval
+                    and len(active_rule_ids) == 1
+                    and institute_id
+                    and patient_id
+                    and visit_id
+                ):
+                    used_bundle_path = await _evaluate_rule_level_visit_bundle()
+                elif (
+                    not is_programmatic_mode
                     and bundle_scene
                     and institute_id
                     and patient_id
@@ -1228,15 +1300,30 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         record_cot_summary = dict(single_result.get("cot_summary") or {})
                         record_refine_summary = dict(single_result.get("refine_summary") or {})
                     except Exception as bundle_exc:
-                        used_bundle_path = False
-                        bundle_fallback_reason = f"bundle 一次性评估失败: {bundle_exc}"
-                        logger.warning(
-                            "批量任务 %s 病历 %s bundle 一次性评估失败(scene=%s)，回退长文本评估",
-                            job_id,
-                            record_id or visit_id or "unknown",
-                            bundle_scene,
-                            exc_info=True,
-                        )
+                        if prefer_rule_level_visit_eval and len(active_rule_ids) == 1:
+                            try:
+                                used_bundle_path = await _evaluate_rule_level_visit_bundle()
+                                bundle_fallback_reason = f"scene bundle 评估失败，已回退 rule_for_visit: {bundle_exc}"
+                            except Exception:
+                                used_bundle_path = False
+                                bundle_fallback_reason = f"bundle 一次性评估失败: {bundle_exc}"
+                                logger.warning(
+                                    "批量任务 %s 病历 %s bundle 一次性评估失败(scene=%s)，规则级 visit 回退也失败，最终回退长文本评估",
+                                    job_id,
+                                    record_id or visit_id or "unknown",
+                                    bundle_scene,
+                                    exc_info=True,
+                                )
+                        else:
+                            used_bundle_path = False
+                            bundle_fallback_reason = f"bundle 一次性评估失败: {bundle_exc}"
+                            logger.warning(
+                                "批量任务 %s 病历 %s bundle 一次性评估失败(scene=%s)，回退长文本评估",
+                                job_id,
+                                record_id or visit_id or "unknown",
+                                bundle_scene,
+                                exc_info=True,
+                            )
                 elif current_scope in {"final", "all"}:
                     bundle_fallback_reason = "缺少 bundle 主键(institute_id/patient_id/visit_id)"
 

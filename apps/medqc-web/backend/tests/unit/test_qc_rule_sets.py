@@ -8,6 +8,8 @@ from app.services.qc_rule_sets import (
     list_sichuan_rule_sets,
 )
 from app.services.sichuan_qc_service import SichuanQCService
+from app.services.rule_domain_router import route_rule_to_domain
+from app.services.rule_domain_router import RuleExecutionInput
 
 
 def test_sc_content_v1_rule_set_should_be_fixed_first_batch():
@@ -113,6 +115,120 @@ def test_sc_039_should_use_text_only_critical_value_prompt():
     assert "接电脑危急值" in prompt
     assert "接到危急值后未查看患者情况" in prompt
     assert "confidence_requirement" not in prompt
+
+
+def test_sc_039_should_prefer_daily_course_candidate_with_low_potassium_context():
+    service = SichuanQCService()
+    raw_rule = service.get_rule_by_id("SC-039")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    routing = route_rule_to_domain(rule)
+    rule_input = service._build_rule_execution_input_from_bundle(
+        rule=rule,
+        routing=routing,
+        domain_bundle={
+            "execution_domain": "course",
+            "timeline_facts": [],
+            "source_documents": [
+                {
+                    "document_type": "daily_course_record",
+                    "document_title": "日常病程记录",
+                    "display_time": "2025-09-06 21:58:58",
+                    "content": "查房内容：患者病情平稳，继续给予患者对症支持治疗，观察患者病情变化。",
+                },
+                {
+                    "document_type": "daily_course_record",
+                    "document_title": "日常病程记录",
+                    "display_time": "2025-09-21 09:54:42",
+                    "content": (
+                        "查房内容：患者心慌不适。辅助检查：2025-09-18 电解质:Ca 1.65mmol/l,"
+                        "Mg 0.59mmol/l,K 2.12mmol/l。诊疗计划：注意动态复查电解质，静脉补钾。"
+                    ),
+                },
+                {
+                    "document_type": "senior_course_record",
+                    "document_title": "上级查房记录",
+                    "display_time": "2025-09-18 10:27:00",
+                    "content": "上级医师提示患者严重低钾血症，予以加强静脉补钾。",
+                },
+            ],
+        },
+    )
+
+    assert "K 2.12mmol/l" in rule_input.primary_medical_text
+    assert "静脉补钾" in rule_input.primary_medical_text
+
+
+def test_sc_039_should_fallback_to_non_compliant_when_llm_returns_empty_on_low_potassium_text():
+    service = SichuanQCService()
+    normalized = service._apply_sc039_text_only_fallback(
+        rule_input=RuleExecutionInput(
+            rule_id="SC-039",
+            document_type="日常病程记录",
+            execution_domain="course",
+            primary_medical_text=(
+                "辅助检查：K 2.12mmol/l。诊疗计划：注意动态复查电解质，静脉补钾。"
+            ),
+            supporting_evidence=[],
+            timeline_facts=[],
+            source_documents=[],
+        ),
+        engine_result={
+            "rule_id": "SC-039",
+            "status": "uncertain",
+            "is_compliant": True,
+            "findings": "LLM 未返回任何内容。",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.7,
+            "metadata": {
+                "executor_type": "llm",
+                "llm_fallback": False,
+            },
+        },
+    )
+
+    assert normalized["status"] == "non_compliant"
+    assert normalized["is_compliant"] is False
+    assert "危急值/电解质异常处置语境" in str(normalized["findings"])
+    assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc039_text_only"
+
+
+def test_sc_069_should_fallback_to_non_compliant_when_signature_is_missing():
+    service = SichuanQCService()
+    normalized = service._apply_sc069_text_only_fallback(
+        rule_input=RuleExecutionInput(
+            rule_id="SC-069",
+            document_type="会诊记录",
+            execution_domain="consult_discussion",
+            primary_medical_text=(
+                "肿瘤科,患者贫血原因待查,故请贵科会诊协助诊治,李庆梅医生:2026-04-06,"
+                "建议进一步完善贫血三项。 医生签名:"
+            ),
+            supporting_evidence=[],
+            timeline_facts=[],
+            source_documents=[],
+        ),
+        engine_result={
+            "rule_id": "SC-069",
+            "status": "uncertain",
+            "is_compliant": True,
+            "findings": "LLM 未返回任何内容。",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.7,
+            "metadata": {
+                "executor_type": "llm",
+                "llm_fallback": False,
+            },
+        },
+    )
+
+    assert normalized["status"] == "non_compliant"
+    assert normalized["is_compliant"] is False
+    assert "缺少会诊医师签名" in str(normalized["findings"])
+    assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc069_text_only"
 
 
 def test_rule_set_list_should_expose_new_launch_rule_sets():

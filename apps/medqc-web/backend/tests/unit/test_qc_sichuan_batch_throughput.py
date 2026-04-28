@@ -542,6 +542,86 @@ async def test_workspace_batch_all_should_use_final_bundle_when_record_scope_is_
 
 
 @pytest.mark.asyncio
+async def test_sample_pool_single_rule_records_should_prefer_rule_level_visit_eval(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["scope"] = "all"
+    workspace.job["filters"] = {
+        "rule_ids": ["SC-039", "SC-069"],
+        "source": "manual_problem_sample_pool_second_batch_regression",
+        "validation_mode": "sc",
+        "record_rule_map": {
+            "visit-001": ["SC-039"],
+            "visit-002": ["SC-069"],
+        },
+        "execution_strategy": "standard",
+        "quality_profile": "throughput_v1",
+        "bucket_strategy": "fixed_packs",
+        "batch_output_mode": "minimal",
+        "enable_selective_refine": False,
+        "max_refine_candidates": 0,
+        "date_field": "admission",
+    }
+    workspace.job["record_ids"] = ["visit-001", "visit-002"]
+    service = _ServiceStub(status_by_rule={"SC-039": "non_compliant", "SC-069": "non_compliant"})
+
+    def _collect_records_with_final_scope(
+        *,
+        scope: str,
+        department: Optional[str],
+        doctor: Optional[str],
+        date_field: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        keyword: Optional[str],
+        record_ids: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        ids = list(record_ids or [])
+        return [
+            {
+                "record_id": rid,
+                "visit_id": rid,
+                "patient_name": f"患者{idx + 1}",
+                "department": "内科",
+                "scope": "final",
+            }
+            for idx, rid in enumerate(ids)
+        ]
+
+    def _hydrate_with_bundle_keys(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                **item,
+                "institute_id": "HOSP-001",
+                "patient_id": f"PAT-{item.get('visit_id')}",
+                "medical_text": "",
+            }
+            for item in records
+        ]
+
+    workspace.collect_records = _collect_records_with_final_scope  # type: ignore[assignment]
+    workspace.hydrate_records_with_medical_text = _hydrate_with_bundle_keys  # type: ignore[assignment]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    async def _should_not_call_bundle_eval(**kwargs: Any) -> Dict[str, Any]:
+        raise AssertionError("单病历单规则样本验证应优先走 evaluate_rule_for_visit")
+
+    monkeypatch.setattr(qc_sichuan, "evaluate_running_final_bundle", _should_not_call_bundle_eval)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.summary is not None
+    assert service.evaluate_rule_for_visit_calls == 2
+    assert len(workspace.items) == 2
+    assert {str(item.get("rule_id")) for item in workspace.items} == {"SC-039", "SC-069"}
+    assert int(workspace.summary.get("issue_records") or 0) == 2
+
+
+@pytest.mark.asyncio
 async def test_workspace_batch_final_fast_screen_should_use_fast_screen_path(monkeypatch):
     workspace = _WorkspaceStub()
     workspace.job["filters"] = {
