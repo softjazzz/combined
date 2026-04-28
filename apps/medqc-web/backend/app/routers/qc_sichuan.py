@@ -76,6 +76,16 @@ def _enforce_sc_source_guard(
         raise HTTPException(status_code=503, detail=str(exc))
 
 
+def _resolve_workspace_bundle_scene(*, current_scope: str, record_scope: str) -> str:
+    normalized_current = str(current_scope or "").strip().lower()
+    normalized_record = str(record_scope or "").strip().lower()
+    if normalized_current in {"running", "final"}:
+        return normalized_current
+    if normalized_current == "all" and normalized_record in {"running", "final"}:
+        return normalized_record
+    return ""
+
+
 async def _rule_source_monitor_loop() -> None:
     while True:
         try:
@@ -1066,6 +1076,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_pack_metrics: Dict[str, Any] = {}
                 record_cot_summary: Dict[str, Any] = {}
                 record_refine_summary: Dict[str, Any] = {}
+                bundle_scene = ""
 
                 if is_programmatic_mode:
                     bundle_payload: Optional[Dict[str, Any]] = None
@@ -1132,10 +1143,22 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     record_cot_summary = dict(result.get("cot_summary") or {})
                     record_refine_summary = dict(result.get("refine_summary") or {})
                     eval_items = list(result.get("evaluation_results") or [])
-                elif current_scope == "final" and institute_id and patient_id and visit_id:
+                else:
+                    bundle_scene = _resolve_workspace_bundle_scene(
+                        current_scope=current_scope,
+                        record_scope=str(record.get("scope") or ""),
+                    )
+
+                if (
+                    not is_programmatic_mode
+                    and bundle_scene
+                    and institute_id
+                    and patient_id
+                    and visit_id
+                ):
                     used_bundle_path = True
                     try:
-                        if execution_strategy == EXECUTION_STRATEGY_FAST_SCREEN:
+                        if bundle_scene == "final" and execution_strategy == EXECUTION_STRATEGY_FAST_SCREEN:
                             single_result = await run_final_fast_screen(
                                 qc_service=qc_service,
                                 institute_id=institute_id,
@@ -1149,7 +1172,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         else:
                             single_result = await evaluate_running_final_bundle(
                                 qc_service=qc_service,
-                                scene="final",
+                                scene=bundle_scene,
                                 institute_id=institute_id,
                                 patient_id=patient_id,
                                 visit_id=visit_id,
@@ -1183,12 +1206,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         used_bundle_path = False
                         bundle_fallback_reason = f"bundle 一次性评估失败: {bundle_exc}"
                         logger.warning(
-                            "终末批量任务 %s 病历 %s bundle 一次性评估失败，回退长文本评估",
+                            "批量任务 %s 病历 %s bundle 一次性评估失败(scene=%s)，回退长文本评估",
                             job_id,
                             record_id or visit_id or "unknown",
+                            bundle_scene,
                             exc_info=True,
                         )
-                elif current_scope == "final":
+                elif current_scope in {"final", "all"}:
                     bundle_fallback_reason = "缺少 bundle 主键(institute_id/patient_id/visit_id)"
 
                 if not used_bundle_path:

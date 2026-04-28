@@ -288,6 +288,14 @@ class _ServiceStub:
         }
 
 
+def test_resolve_workspace_bundle_scene_should_follow_record_scope_when_scope_is_all():
+    assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="all", record_scope="final") == "final"
+    assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="all", record_scope="running") == "running"
+    assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="final", record_scope="running") == "final"
+    assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="running", record_scope="final") == "running"
+    assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="all", record_scope="") == ""
+
+
 @pytest.mark.asyncio
 async def test_workspace_batch_should_call_evaluate_once_per_record(monkeypatch):
     workspace = _WorkspaceStub()
@@ -427,6 +435,110 @@ async def test_workspace_batch_final_should_prefer_bundle_path(monkeypatch):
     assert {str(call.get("bundle_schema") or "") for call in service.evaluate_rule_for_visit_args} == {"public"}
     assert int(workspace.summary.get("issue_records") or 0) == 2
     assert int(workspace.summary.get("uncertain_records") or 0) == 2
+
+
+@pytest.mark.asyncio
+async def test_workspace_batch_all_should_use_final_bundle_when_record_scope_is_final(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["scope"] = "all"
+    service = _ServiceStub(
+        status_by_rule={
+            "SC-001": "non_compliant",
+            "SC-002": "uncertain",
+            "SC-003": "compliant",
+        }
+    )
+
+    def _collect_records_with_final_scope(
+        *,
+        scope: str,
+        department: Optional[str],
+        doctor: Optional[str],
+        date_field: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        keyword: Optional[str],
+        record_ids: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        ids = list(record_ids or [])
+        return [
+            {
+                "record_id": rid,
+                "visit_id": rid,
+                "patient_name": f"患者{idx + 1}",
+                "department": "骨科",
+                "scope": "final",
+            }
+            for idx, rid in enumerate(ids)
+        ]
+
+    def _hydrate_with_bundle_keys(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                **item,
+                "institute_id": "HOSP-001",
+                "patient_id": f"PAT-{item.get('visit_id')}",
+                "medical_text": f"fallback-text-{item.get('visit_id')}",
+            }
+            for item in records
+        ]
+
+    workspace.collect_records = _collect_records_with_final_scope  # type: ignore[assignment]
+    workspace.hydrate_records_with_medical_text = _hydrate_with_bundle_keys  # type: ignore[assignment]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    async def _fake_evaluate_running_final_bundle(
+        *,
+        qc_service,
+        scene: str,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
+        rule_ids: List[str],
+        schema: str = "public",
+        **_: Any,
+    ) -> Dict[str, Any]:
+        assert scene == "final"
+        evaluation_results: List[Dict[str, Any]] = []
+        total_tokens = 0
+        total_api_time = 0.0
+        for rule_id in rule_ids:
+            rule_result = await qc_service.evaluate_rule_for_visit(
+                rule_id=rule_id,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                bundle_schema=schema,
+            )
+            evaluation_results.extend(list(rule_result.get("evaluation_results") or []))
+            total_tokens += int(((rule_result.get("token_usage") or {}).get("total_tokens")) or 0)
+            total_api_time += float(rule_result.get("api_time") or 0.0)
+        return {
+            "evaluation_results": evaluation_results,
+            "token_usage": {"total_tokens": total_tokens},
+            "api_time": total_api_time,
+            "pack_metrics": {
+                "total_packs": 1,
+                "avg_pack_size": max(1, len(rule_ids)),
+                "fallback_packs": 0,
+                "pack_parse_retry_count": 0,
+                "single_rule_retries": 0,
+                "context_tokens_estimate": 240,
+            },
+        }
+
+    monkeypatch.setattr(qc_sichuan, "evaluate_running_final_bundle", _fake_evaluate_running_final_bundle)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.summary is not None
+    assert service.evaluate_calls == 0
+    assert service.evaluate_rule_for_visit_calls == 6
 
 
 @pytest.mark.asyncio
