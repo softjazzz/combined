@@ -155,7 +155,7 @@ def _find_pool_id(service: CustomQCSamplePoolService) -> str:
     raise RuntimeError(f"未找到样本池: {TARGET_POOL_NAME}")
 
 
-def _find_latest_second_batch_job_id(workspace: CustomQCWorkspaceService) -> str:
+def _list_recent_second_batch_job_ids(workspace: CustomQCWorkspaceService) -> list[str]:
     session = _session()
     try:
         table = _batch_jobs_table()
@@ -175,6 +175,7 @@ def _find_latest_second_batch_job_id(workspace: CustomQCWorkspaceService) -> str
     finally:
         session.close()
 
+    result: list[str] = []
     for row in rows:
         job_id = _safe_text(row.get("id"))
         if not job_id:
@@ -188,9 +189,11 @@ def _find_latest_second_batch_job_id(workspace: CustomQCWorkspaceService) -> str
             for item in list(filters.get("rule_ids") or [])
             if _safe_text(item)
         }
-        if rule_ids == SECOND_BATCH_RULE_ID_SET:
-            return job_id
-    raise RuntimeError("未找到最近的第二批语义规则回归 batch")
+        if rule_ids and rule_ids.issubset(SECOND_BATCH_RULE_ID_SET):
+            result.append(job_id)
+    if not result:
+        raise RuntimeError("未找到最近的第二批语义规则回归 batch")
+    return result
 
 
 def _get_sample_pool_row(
@@ -223,18 +226,44 @@ def _get_job_rule_result(
     return None
 
 
+def _pick_latest_case_job(
+    workspace: CustomQCWorkspaceService,
+    *,
+    recent_job_ids: list[str],
+    record_id: str,
+    rule_id: str,
+) -> tuple[str, dict[str, Any] | None]:
+    normalized_rule_id = _safe_text(rule_id).upper()
+    for job_id in recent_job_ids:
+        job = workspace.get_batch_job_for_processing(job_id=job_id) or {}
+        filters = dict(job.get("filters") or {})
+        rule_ids = {
+            _safe_text(item).upper()
+            for item in list(filters.get("rule_ids") or [])
+            if _safe_text(item)
+        }
+        if normalized_rule_id not in rule_ids:
+            continue
+        result = _get_job_rule_result(
+            workspace,
+            job_id=job_id,
+            record_id=record_id,
+            rule_id=rule_id,
+        )
+        return job_id, result
+    return "", None
+
+
 def _build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     pool_service = CustomQCSamplePoolService()
     workspace = CustomQCWorkspaceService()
     pool_id = _find_pool_id(pool_service)
-    primary_batch_job_id = _find_latest_second_batch_job_id(workspace)
-    job = workspace.get_batch_job_for_processing(job_id=primary_batch_job_id) or {}
-    job_filters = dict(job.get("filters") or {})
+    recent_job_ids = _list_recent_second_batch_job_ids(workspace)
     rows: list[dict[str, Any]] = []
     summary = {
         "pool_id": pool_id,
         "target_pool_name": TARGET_POOL_NAME,
-        "primary_batch_job_id": primary_batch_job_id,
+        "primary_batch_job_ids": recent_job_ids,
         "case_count": len(MATRIX_CASES),
         "core_case_count": 0,
         "observe_case_count": 0,
@@ -242,14 +271,14 @@ def _build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
         "batch_hit_count": 0,
         "batch_miss_count": 0,
         "cases_with_narrowed_primary_rule": 0,
-        "execution_strategy": _safe_text(job_filters.get("execution_strategy")),
+        "execution_strategy": "standard",
     }
     for case in MATRIX_CASES:
         pool_row = _get_sample_pool_row(pool_service, pool_id=pool_id, record_id=case.record_id) or {}
         candidate_rules = _normalize_rule_ids(pool_row.get("candidate_rule_ids"))
-        primary_batch_result = _get_job_rule_result(
+        primary_batch_job_id, primary_batch_result = _pick_latest_case_job(
             workspace,
-            job_id=primary_batch_job_id,
+            recent_job_ids=recent_job_ids,
             record_id=case.record_id,
             rule_id=case.primary_rule_id,
         )
