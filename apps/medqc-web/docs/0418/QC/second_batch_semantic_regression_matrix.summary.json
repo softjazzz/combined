@@ -3,10 +3,11 @@
   "target_pool_name": "0426",
   "primary_batch_job_id": "bbabe010-a73d-4863-817b-1e1c922a4e8b",
   "case_count": 6,
-  "core_case_count": 4,
+  "core_case_count": 3,
   "observe_case_count": 2,
+  "skip_case_count": 1,
   "batch_hit_count": 1,
-  "batch_miss_count": 5,
+  "batch_miss_count": 4,
   "cases_with_narrowed_primary_rule": 4,
   "execution_strategy": "standard"
 }
