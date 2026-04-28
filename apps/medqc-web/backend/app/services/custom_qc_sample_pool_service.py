@@ -367,6 +367,25 @@ def _looks_like_progress_order_consistency_issue(text: str) -> bool:
     )
 
 
+def _looks_like_operation_record_quality_issue(text: str) -> bool:
+    if not _contains_any(
+        text,
+        (
+            "手术记录",
+            "主刀医生签名",
+            "签名异常",
+            "手术结束时间",
+            "记录错误",
+            "描述不清",
+            "手术名称",
+        ),
+    ):
+        return False
+    if _looks_like_progress_order_consistency_issue(text) and "手术记录" not in text:
+        return False
+    return True
+
+
 @lru_cache(maxsize=1)
 def _load_issue_category_rule_map() -> Dict[str, List[str]]:
     mapping_path = Path(__file__).resolve().parents[2] / "data" / "synthetic_qc" / "sheet2_intrinsic_issue_mapping.json"
@@ -553,6 +572,16 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "exclude_reason": "",
         }
 
+    if _looks_like_operation_record_quality_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "operation_record_quality",
+            "expected_scene": "final",
+            "candidate_rule_ids": ["SC-097", "SC-098"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
     if _looks_like_progress_order_consistency_issue(normalized):
         return {
             "coverage_type": "llm_intrinsic",
@@ -628,6 +657,7 @@ _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
     "critical_value_management": ["SC-039"],
     "progress_order_consistency": ["SC-146"],
     "senior_round_content": ["SC-049", "SC-050", "SC-052"],
+    "operation_record_quality": ["SC-097", "SC-098"],
 }
 
 _SAMPLE_SC_PRIMARY_RULE_WHITELIST: Dict[str, List[str]] = {
@@ -637,6 +667,7 @@ _SAMPLE_SC_PRIMARY_RULE_WHITELIST: Dict[str, List[str]] = {
     "senior_round_content": ["SC-050"],
     "daily_course_analysis": ["SC-036"],
     "progress_order_consistency": ["SC-146"],
+    "operation_record_quality": ["SC-097"],
 }
 
 
@@ -705,6 +736,9 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
         ):
             return ["SC-033"]
         return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
+
+    if issue_category == "operation_record_quality":
+        return ["SC-097"]
 
     return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
 

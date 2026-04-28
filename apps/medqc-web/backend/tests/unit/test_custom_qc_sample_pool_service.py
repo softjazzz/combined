@@ -129,6 +129,13 @@ def test_classify_progress_order_consistency_issue():
     assert result["candidate_rule_ids"] == ["SC-146"]
 
 
+def test_classify_operation_record_quality_issue():
+    result = classify_manual_issue_text("手术记录手术结束时间错误（1月26日10：00误写为1月27日10:00）")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "operation_record_quality"
+    assert result["candidate_rule_ids"] == ["SC-097", "SC-098"]
+
+
 def test_build_sample_pool_item_classification_update_should_support_second_batch_categories():
     consultation_patch = sample_pool_module.build_sample_pool_item_classification_update(
         {"manual_issue_text": "2026年2月4日会诊记录中存在大量复制其他科室会诊意见的情况，并无综合会诊结果提出建设性诊疗意见。"}
@@ -146,6 +153,15 @@ def test_build_sample_pool_item_classification_update_should_support_second_batc
     assert critical_patch["candidate_rule_ids_json"] == '["SC-039"]'
     assert order_patch["issue_category"] == "progress_order_consistency"
     assert order_patch["candidate_rule_ids_json"] == '["SC-146"]'
+
+
+def test_build_sample_pool_item_classification_update_should_support_operation_record_quality():
+    patch = sample_pool_module.build_sample_pool_item_classification_update(
+        {"manual_issue_text": "手术记录中手术名称与术前讨论及术前小结中手术名称不一致"}
+    )
+
+    assert patch["issue_category"] == "operation_record_quality"
+    assert patch["candidate_rule_ids_json"] == '["SC-097", "SC-098"]'
 
 
 def test_refresh_pool_item_classifications_should_update_existing_items(monkeypatch):
@@ -1053,6 +1069,43 @@ def test_get_runnable_items_sc_should_whitelist_progress_order_consistency_prima
 
     assert len(runnable) == 1
     assert runnable[0]["candidate_rule_ids"] == ["SC-146"]
+
+
+def test_get_runnable_items_sc_should_whitelist_operation_record_quality_primary_rule(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "蒋齐芬",
+            "mr_no": "337281",
+            "department": "骨科",
+            "manual_issue_text": "手术记录中手术名称与术前讨论及术前小结中手术名称不一致",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "operation_record_quality",
+            "candidate_rule_ids_json": '["SC-097","SC-098"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "1888334",
+            "matched_patient_id": "P009",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"1888334": {"surgery_record", "presurg_summary", "presurg_discussion"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-097"]
 
 
 def test_get_runnable_items_should_allow_programmatic_without_bundle_ready_or_batch1(monkeypatch):
