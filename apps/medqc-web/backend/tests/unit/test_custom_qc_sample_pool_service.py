@@ -35,6 +35,29 @@ class _FakeSession:
         return None
 
 
+class _FakeRefreshSession:
+    def __init__(self, rows):
+        self._rows = rows
+        self.updates = []
+        self.committed = False
+
+    def execute(self, stmt):
+        if getattr(stmt, "is_select", False):
+            return _FakeExecuteResult(self._rows)
+        if getattr(stmt, "is_update", False):
+            compile_state = stmt._compile_state_factory(stmt, None)  # type: ignore[attr-defined]
+            values = dict(getattr(compile_state, "_dict_parameters", {}) or {})
+            self.updates.append(values)
+            return _FakeExecuteResult([])
+        return _FakeExecuteResult([])
+
+    def commit(self):
+        self.committed = True
+
+    def close(self):
+        return None
+
+
 def test_classify_first_course_intrinsic_issue():
     result = classify_manual_issue_text("首次病程记录鉴别诊断不全面")
     assert result["coverage_type"] == "llm_intrinsic"
@@ -104,6 +127,76 @@ def test_classify_progress_order_consistency_issue():
     assert result["coverage_type"] == "llm_intrinsic"
     assert result["issue_category"] == "progress_order_consistency"
     assert result["candidate_rule_ids"] == ["SC-146"]
+
+
+def test_build_sample_pool_item_classification_update_should_support_second_batch_categories():
+    consultation_patch = sample_pool_module.build_sample_pool_item_classification_update(
+        {"manual_issue_text": "2026年2月4日会诊记录中存在大量复制其他科室会诊意见的情况，并无综合会诊结果提出建设性诊疗意见。"}
+    )
+    critical_patch = sample_pool_module.build_sample_pool_item_classification_update(
+        {"manual_issue_text": "2026年3月11日危急值处理记录仅描写K 2.76mmol/L，行静脉补钾，未描述危急值报告、处置时间及具体补钾情况。"}
+    )
+    order_patch = sample_pool_module.build_sample_pool_item_classification_update(
+        {"manual_issue_text": "在术前小结及术前讨论之前，已经下达手术医嘱。"}
+    )
+
+    assert consultation_patch["issue_category"] == "consultation_record_quality"
+    assert consultation_patch["candidate_rule_ids_json"] == '["SC-069"]'
+    assert critical_patch["issue_category"] == "critical_value_management"
+    assert critical_patch["candidate_rule_ids_json"] == '["SC-039"]'
+    assert order_patch["issue_category"] == "progress_order_consistency"
+    assert order_patch["candidate_rule_ids_json"] == '["SC-146"]'
+
+
+def test_refresh_pool_item_classifications_should_update_existing_items(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "manual_issue_text": "2026年2月4日会诊记录中存在大量复制其他科室会诊意见的情况，并无综合会诊结果提出建设性诊疗意见。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "consultation_execution",
+            "expected_scene": "running",
+            "candidate_rule_ids_json": '["SC-070"]',
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        },
+        {
+            "id": "item-2",
+            "pool_id": "pool-1",
+            "row_no": 2,
+            "manual_issue_text": "在术前小结及术前讨论之前，已经下达手术医嘱。",
+            "coverage_type": "unsupported",
+            "issue_category": "unclassified",
+            "expected_scene": "running",
+            "candidate_rule_ids_json": "[]",
+            "include_in_batch_1": False,
+            "exclude_reason": "当前未归入首批内涵问题分类，请人工确认",
+        },
+    ]
+    fake_session = _FakeRefreshSession(rows)
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: fake_session)
+    monkeypatch.setattr(service, "_update_pool_counters", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(service, "get_pool", lambda **_: {"id": "pool-1"})
+
+    result = service.refresh_pool_item_classifications(pool_id="pool-1")
+
+    assert result["scanned"] == 2
+    assert result["updated"] == 2
+    assert result["changed_categories"] == 2
+    assert result["changed_coverages"] == 1
+    assert fake_session.committed is True
+    categories = {getattr(item["issue_category"], "value", item["issue_category"]) for item in fake_session.updates}
+    candidate_rules = {
+        getattr(item["candidate_rule_ids_json"], "value", item["candidate_rule_ids_json"])
+        for item in fake_session.updates
+    }
+    assert "consultation_record_quality" in categories
+    assert "progress_order_consistency" in categories
+    assert '["SC-069"]' in candidate_rules
+    assert '["SC-146"]' in candidate_rules
 
 
 def test_classify_empty_issue_defaults_to_intrinsic_record_batch():

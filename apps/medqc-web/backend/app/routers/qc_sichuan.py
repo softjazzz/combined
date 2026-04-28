@@ -1011,6 +1011,22 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             for rule_id in valid_rule_ids
             if isinstance(rule_states[rule_id].get("rule"), dict)
         ]
+        record_rule_map_raw = dict(filters.get("record_rule_map") or {})
+        record_rule_map: Dict[str, List[str]] = {}
+        for raw_record_id, raw_rule_ids in record_rule_map_raw.items():
+            normalized_record_id = str(raw_record_id or "").strip()
+            if not normalized_record_id:
+                continue
+            normalized_rule_ids = [
+                rule_id
+                for rule_id in (
+                    str(item or "").strip().upper()
+                    for item in list(raw_rule_ids or [])
+                )
+                if rule_id in rule_states
+            ]
+            if normalized_rule_ids:
+                record_rule_map[normalized_record_id] = normalized_rule_ids
 
         def _build_progress_patch(processed_records_count: int) -> Dict[str, Any]:
             return {
@@ -1052,6 +1068,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             patient_id = str(record.get("patient_id") or "").strip()
             current_scope = str(current.get("scope") or "all").strip().lower()
             document_type = _resolve_document_type(current_scope, str(record.get("scope") or ""))
+            active_rule_ids = (
+                list(record_rule_map.get(visit_id) or record_rule_map.get(record_id) or [])
+                or list(valid_rule_ids)
+            )
+            active_rules = [
+                dict(rule_states[rule_id]["rule"])
+                for rule_id in active_rule_ids
+                if isinstance(rule_states[rule_id].get("rule"), dict)
+            ]
             items_by_rule: Dict[str, List[Dict[str, Any]]] = {rule_id: [] for rule_id in valid_rule_ids}
             failed_by_rule: Dict[str, List[Dict[str, Any]]] = {rule_id: [] for rule_id in valid_rule_ids}
             rule_stats: Dict[str, Dict[str, Any]] = {
@@ -1122,7 +1147,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         document_id=record_id or "unknown",
                         content=primary_document_text,
                         document_type=document_type,
-                        rules=valid_rules,
+                        rules=active_rules,
                         evidence_source="timeline" if used_bundle_path else "medical_text_fallback",
                         evidence_payload=evidence_payload,
                         bucket_strategy=bucket_strategy,
@@ -1165,7 +1190,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 patient_id=patient_id,
                                 visit_id=visit_id,
                                 source_schema="cdm",
-                                rule_ids=valid_rule_ids,
+                                rule_ids=active_rule_ids,
                                 quality_profile=quality_profile,
                                 batch_output_mode=batch_output_mode,
                             )
@@ -1176,7 +1201,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 institute_id=institute_id,
                                 patient_id=patient_id,
                                 visit_id=visit_id,
-                                rule_ids=valid_rule_ids,
+                                rule_ids=active_rule_ids,
                                 schema="public",
                                 bucket_strategy=bucket_strategy,
                                 quality_profile=quality_profile,
@@ -1220,7 +1245,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         document_id=record_id or "unknown",
                         content=str(record.get("medical_text") or ""),
                         document_type=document_type,
-                        rule_ids=valid_rule_ids,
+                        rule_ids=active_rule_ids,
                         bucket_strategy=bucket_strategy,
                         quality_profile=quality_profile,
                         batch_output_mode=batch_output_mode,
@@ -1255,14 +1280,14 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 has_issue = False
                 has_uncertain = False
 
-                fallback_tokens_per_rule = int(record_total_tokens / max(1, len(valid_rule_ids)))
-                fallback_prompt_tokens_per_rule = int(record_total_prompt_tokens / max(1, len(valid_rule_ids)))
+                fallback_tokens_per_rule = int(record_total_tokens / max(1, len(active_rule_ids)))
+                fallback_prompt_tokens_per_rule = int(record_total_prompt_tokens / max(1, len(active_rule_ids)))
                 fallback_completion_tokens_per_rule = int(
-                    record_total_completion_tokens / max(1, len(valid_rule_ids))
+                    record_total_completion_tokens / max(1, len(active_rule_ids))
                 )
-                fallback_api_per_rule = float(record_total_api_time / max(1, len(valid_rule_ids)))
+                fallback_api_per_rule = float(record_total_api_time / max(1, len(active_rule_ids)))
 
-                for rule_id in valid_rule_ids:
+                for rule_id in active_rule_ids:
                     normalized_rule_id = str(rule_id).strip().upper()
                     state = rule_states[rule_id]
                     rule = state["rule"]

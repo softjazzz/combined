@@ -292,10 +292,15 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
     assert created["run_mode"] == "parallel"
     assert created["record_ids"] == ["V001", "V002"]
     assert created["draft_ids"] == ["SC-023", "SC-024", "SC-026"]
+    assert created["filters"]["execution_strategy"] == "fast_screen"
     assert created["filters"]["selected_record_ids"] == ["V001", "V002"]
     assert created["filters"]["selected_sample_item_ids"] == ["item-1", "item-2"]
     assert created["filters"]["selected_sample_count"] == 2
     assert created["filters"]["dedup_record_count"] == 2
+    assert created["filters"]["record_rule_map"] == {
+        "V001": ["SC-023", "SC-024"],
+        "V002": ["SC-026"],
+    }
     assert created["filters"]["max_parallel_records"] == 2
     assert created["filters"]["model_code"] == "qwen3.6-35b-a3b"
     assert created["filters"]["temperature"] == 0.2
@@ -388,6 +393,9 @@ async def test_import_list_records_and_run_should_form_sample_pool_validation_ch
         "item-1",
         "item-2",
     ]
+    assert workspace_service.create_batch_job_calls[0]["filters"]["record_rule_map"] == {
+        "V001": ["SC-023", "SC-026"],
+    }
     assert workspace_service.create_batch_job_calls[0]["filters"]["max_parallel_records"] == 4
     assert workspace_service.create_batch_job_calls[0]["filters"]["effective_scope"] == "running"
     assert workspace_service.create_batch_job_calls[0]["filters"]["validation_mode"] == "sc"
@@ -526,3 +534,43 @@ async def test_run_sample_pool_intrinsic_validation_should_use_fixed_programmati
     assert created["filters"]["rule_set_name"] == "样本硬门槛程序规则包 v1"
     assert created["draft_ids"] == list(SAMPLE_PROGRAMMATIC_RULE_IDS)
     assert response["data"]["rule_ids"] == list(SAMPLE_PROGRAMMATIC_RULE_IDS)
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_fallback_to_standard_for_non_fast_screen_sc_rules(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    def _custom_runnable_items(**_kwargs):
+        return [
+            {
+                "id": "item-69",
+                "matched_visit_id": "V069",
+                "candidate_rule_ids": ["SC-069"],
+            }
+        ]
+
+    workspace_service.records_by_scope["running"] = [{"record_id": "V069", "visit_id": "V069"}]
+    monkeypatch.setattr(sample_service, "get_runnable_items", _custom_runnable_items)
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V069"],
+            sample_item_ids=["item-69"],
+            max_parallel_records=2,
+            validation_mode="sc",
+        ),
+        background_tasks=BackgroundTasks(),
+        current_user={"id": "tester"},
+    )
+
+    created = workspace_service.create_batch_job_calls[0]
+    assert created["draft_ids"] == ["SC-069"]
+    assert created["filters"]["execution_strategy"] == "standard"
+    assert created["filters"]["record_rule_map"] == {"V069": ["SC-069"]}
+    assert response["data"]["rule_ids"] == ["SC-069"]

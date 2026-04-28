@@ -605,6 +605,19 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
     }
 
 
+def build_sample_pool_item_classification_update(row: Dict[str, Any]) -> Dict[str, Any]:
+    manual_issue_text = _safe_text(row.get("manual_issue_text"))
+    classification = classify_manual_issue_text(manual_issue_text)
+    return {
+        "coverage_type": classification["coverage_type"],
+        "issue_category": classification["issue_category"],
+        "expected_scene": classification["expected_scene"],
+        "candidate_rule_ids_json": _safe_json_dumps(classification["candidate_rule_ids"]),
+        "include_in_batch_1": bool(classification["include_in_batch_1"]),
+        "exclude_reason": _safe_text(classification["exclude_reason"]),
+    }
+
+
 _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
     "record_list_intrinsic": list(_DEFAULT_INTRINSIC_RULE_IDS),
     "first_course_reasoning": ["SC-023", "SC-024", "SC-025", "SC-026", "SC-027"],
@@ -1558,6 +1571,89 @@ class CustomQCSamplePoolService:
             self._update_pool_counters(session, pool_id)
             session.commit()
             return self.get_pool(pool_id=pool_id) or {"id": pool_id}
+        finally:
+            session.close()
+
+    def refresh_pool_item_classifications(
+        self,
+        *,
+        pool_id: str,
+        item_ids: Optional[Sequence[str]] = None,
+        only_unclassified: bool = False,
+    ) -> Dict[str, Any]:
+        session = _session()
+        try:
+            clauses = [self._item_table.c.pool_id == pool_id]
+            if only_unclassified:
+                clauses.append(self._item_table.c.issue_category == "unclassified")
+            normalized_item_ids = [str(item_id).strip() for item_id in list(item_ids or []) if str(item_id).strip()]
+            if normalized_item_ids:
+                clauses.append(self._item_table.c.id.in_(normalized_item_ids))
+
+            stmt = (
+                select(self._item_table)
+                .where(and_(*clauses))
+                .order_by(self._item_table.c.row_no.asc())
+            )
+            rows = session.execute(stmt).mappings().all()
+            if not rows:
+                return {
+                    "pool_id": pool_id,
+                    "scanned": 0,
+                    "updated": 0,
+                    "changed_categories": 0,
+                    "changed_coverages": 0,
+                    "pool": self.get_pool(pool_id=pool_id),
+                }
+
+            updated = 0
+            changed_categories = 0
+            changed_coverages = 0
+            for row in rows:
+                row_dict = dict(row)
+                patch = build_sample_pool_item_classification_update(row_dict)
+                current_category = _safe_text(row_dict.get("issue_category"), "unclassified")
+                current_coverage = _safe_text(row_dict.get("coverage_type"), "unsupported")
+                current_expected_scene = _safe_text(row_dict.get("expected_scene"), "running")
+                current_candidate_rule_ids_json = _safe_text(row_dict.get("candidate_rule_ids_json"), "[]")
+                current_exclude_reason = _safe_text(row_dict.get("exclude_reason"))
+                current_include_in_batch_1 = bool(row_dict.get("include_in_batch_1"))
+
+                if current_category != patch["issue_category"]:
+                    changed_categories += 1
+                if current_coverage != patch["coverage_type"]:
+                    changed_coverages += 1
+
+                if (
+                    current_category == patch["issue_category"]
+                    and current_coverage == patch["coverage_type"]
+                    and current_expected_scene == patch["expected_scene"]
+                    and current_candidate_rule_ids_json == patch["candidate_rule_ids_json"]
+                    and current_exclude_reason == patch["exclude_reason"]
+                    and current_include_in_batch_1 == patch["include_in_batch_1"]
+                ):
+                    continue
+
+                session.execute(
+                    update(self._item_table)
+                    .where(self._item_table.c.id == row_dict["id"])
+                    .values(
+                        **patch,
+                        updated_at=_now_utc(),
+                    )
+                )
+                updated += 1
+
+            self._update_pool_counters(session, pool_id)
+            session.commit()
+            return {
+                "pool_id": pool_id,
+                "scanned": len(rows),
+                "updated": updated,
+                "changed_categories": changed_categories,
+                "changed_coverages": changed_coverages,
+                "pool": self.get_pool(pool_id=pool_id),
+            }
         finally:
             session.close()
 

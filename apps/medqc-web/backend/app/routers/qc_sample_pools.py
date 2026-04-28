@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from ..core.response import get_trace_id, success_response
 from ..core.security import get_current_user, require_roles
+from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_STRATEGY_STANDARD, get_fast_screen_full_rule_ids
 from ..routers.qc_sichuan import _run_sichuan_workspace_batch_job
 from ..services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
@@ -35,6 +36,7 @@ router = APIRouter(
 _IMPORT_UPLOAD_DIR = (
     Path(__file__).resolve().parents[2] / "data" / "sample_pool_uploads"
 )
+_FAST_SCREEN_FULL_RULE_ID_SET = {str(item).strip().upper() for item in get_fast_screen_full_rule_ids() if str(item).strip()}
 
 
 def _service() -> CustomQCSamplePoolService:
@@ -51,6 +53,19 @@ def _current_user_id(current_user: Dict[str, Any]) -> str:
         .strip()
         or "anonymous"
     )
+
+
+def _resolve_sample_validation_execution_strategy(*, validation_mode: str, rule_ids: list[str]) -> str:
+    if str(validation_mode or "").strip().lower() != "sc":
+        return EXECUTION_STRATEGY_FAST_SCREEN
+    normalized_rule_ids = {
+        str(rule_id or "").strip().upper()
+        for rule_id in list(rule_ids or [])
+        if str(rule_id or "").strip()
+    }
+    if normalized_rule_ids and normalized_rule_ids.issubset(_FAST_SCREEN_FULL_RULE_ID_SET):
+        return EXECUTION_STRATEGY_FAST_SCREEN
+    return EXECUTION_STRATEGY_STANDARD
 
 
 class SamplePoolImportRequest(BaseModel):
@@ -422,6 +437,16 @@ async def run_sample_pool_intrinsic_validation(
             if str(item.get("matched_visit_id") or "").strip()
         }
     )
+    record_rule_map: Dict[str, list[str]] = {}
+    for item in runnable_items:
+        record_id = str(item.get("matched_visit_id") or "").strip()
+        if not record_id:
+            continue
+        bucket = record_rule_map.setdefault(record_id, [])
+        for rule_id in list(item.get("candidate_rule_ids") or []):
+            normalized_rule_id = str(rule_id or "").strip()
+            if normalized_rule_id and normalized_rule_id not in bucket:
+                bucket.append(normalized_rule_id)
     if not record_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有已匹配的病历")
 
@@ -455,6 +480,10 @@ async def run_sample_pool_intrinsic_validation(
 
     if not rule_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有可执行规则")
+    execution_strategy = _resolve_sample_validation_execution_strategy(
+        validation_mode=validation_mode,
+        rule_ids=rule_ids,
+    )
 
     workspace = _workspace_service()
     requested_scope = str(pool.get("scene") or "running").strip().lower() or "running"
@@ -500,7 +529,7 @@ async def run_sample_pool_intrinsic_validation(
             "rule_set_key": rule_set_key,
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,
-            "execution_strategy": "fast_screen",
+            "execution_strategy": execution_strategy,
             "quality_profile": "throughput_v1",
             "bucket_strategy": "fixed_packs",
             "batch_output_mode": "minimal",
@@ -513,6 +542,7 @@ async def run_sample_pool_intrinsic_validation(
             "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
             "selected_sample_count": len(runnable_items),
             "dedup_record_count": len(record_ids),
+            "record_rule_map": record_rule_map,
             "department": payload.department,
             "doctor": payload.doctor,
             "temperature": payload.temperature,
