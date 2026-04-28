@@ -640,6 +640,75 @@ _SAMPLE_SC_PRIMARY_RULE_WHITELIST: Dict[str, List[str]] = {
 }
 
 
+def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_text: Any) -> List[str]:
+    normalized = _normalize_issue_text(manual_issue_text)
+    if not normalized:
+        return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
+
+    if issue_category == "first_course_reasoning":
+        if _contains_any(
+            normalized,
+            (
+                "诊疗计划",
+                "未提出具体诊疗计划",
+                "未说明具体措施",
+                "计划不完整",
+                "计划不全面",
+                "计划不具体",
+            ),
+        ):
+            return ["SC-027"]
+        if _contains_any(
+            normalized,
+            (
+                "鉴别诊断",
+                "诊断依据",
+                "未查hcg",
+                "未考虑宫外孕",
+                "鉴别不全",
+                "鉴别不充分",
+                "仅鉴别",
+            ),
+        ):
+            return ["SC-026"]
+        return ["SC-026"]
+
+    if issue_category == "admission_consistency":
+        if _contains_any(
+            normalized,
+            (
+                "主诉",
+                "现病史",
+                "不能导出第一诊断",
+                "无法推导出主要诊断",
+                "不足以支撑诊断",
+                "诊治经过不详",
+            ),
+        ):
+            return ["SC-008"]
+        return ["SC-008"]
+
+    if issue_category == "daily_course_analysis":
+        if _contains_any(
+            normalized,
+            (
+                "用药",
+                "抗菌药",
+                "补钾",
+                "处理措施",
+                "未给处理",
+                "无处理",
+                "未记录使用情况",
+                "未体现具体用药处理",
+                "未给出处理措施",
+            ),
+        ):
+            return ["SC-033"]
+        return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
+
+    return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
+
+
 def _looks_like_rule_id(value: str) -> bool:
     text = _safe_text(value)
     if not text:
@@ -695,7 +764,10 @@ def _apply_sample_sc_rule_whitelist(items: Sequence[Dict[str, Any]]) -> List[Dic
     for raw_item in items:
         item = dict(raw_item)
         issue_category = _safe_text(item.get("issue_category"), "unclassified")
-        whitelist_rule_ids = _SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category)
+        whitelist_rule_ids = _resolve_sample_sc_primary_rule_ids(
+            issue_category=issue_category,
+            manual_issue_text=item.get("manual_issue_text"),
+        )
         if whitelist_rule_ids:
             item["candidate_rule_ids"] = list(whitelist_rule_ids)
         filtered_items.append(item)

@@ -833,6 +833,117 @@ def test_get_runnable_items_sc_should_whitelist_daily_course_analysis_primary_ru
     assert runnable[0]["candidate_rule_ids"] == ["SC-036"]
 
 
+def test_get_runnable_items_sc_should_narrow_sc026_for_first_course_reasoning(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "患者甲",
+            "mr_no": "ZY006",
+            "department": "妇科",
+            "manual_issue_text": "育龄期女性右下腹痛入院，未查HCG，未考虑宫外孕，鉴别诊断考虑欠妥。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "first_course_reasoning",
+            "candidate_rule_ids_json": '["SC-023","SC-024","SC-025","SC-026","SC-027"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V006",
+            "matched_patient_id": "P006",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"V006": {"first_course_record", "admission_record"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-026"]
+
+
+def test_get_runnable_items_sc_should_narrow_sc008_for_admission_consistency(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "患者乙",
+            "mr_no": "ZY007",
+            "department": "创伤外科",
+            "manual_issue_text": "主诉仅写车祸伤40+分钟，没有主要症状或体征，无法导出第一诊断。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "admission_consistency",
+            "candidate_rule_ids_json": '["SC-008","SC-009","SC-010","SC-011","SC-012","SC-018","SC-019","SC-020"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V007",
+            "matched_patient_id": "P007",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"V007": {"admission_record"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-008"]
+
+
+def test_get_runnable_items_sc_should_narrow_sc033_for_daily_course_analysis(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "患者丙",
+            "mr_no": "ZY008",
+            "department": "普外科",
+            "manual_issue_text": "低钾血症持续加重，病程未做诊断也未给出处理措施。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "daily_course_analysis",
+            "candidate_rule_ids_json": '["SC-032","SC-033","SC-036"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V008",
+            "matched_patient_id": "P008",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"V008": {"daily_course_record", "lab_attention_report"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-033"]
+
+
 def test_get_runnable_items_sc_should_whitelist_consultation_record_quality_primary_rule(monkeypatch):
     service = CustomQCSamplePoolService()
     rows = [
