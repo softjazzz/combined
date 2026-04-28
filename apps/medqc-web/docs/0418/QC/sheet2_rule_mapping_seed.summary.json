@@ -4,9 +4,8 @@
   "unique_issue_count": 271,
   "mapping_type_breakdown": {
     "direct_match": 96,
-    "extend_existing": 56,
-    "manual_review": 113,
-    "new_rule": 6
+    "extend_existing": 62,
+    "manual_review": 113
   },
   "execution_type_breakdown": {
     "programmatic": 39,
@@ -16,12 +15,11 @@
   },
   "current_status_breakdown": {
     "implemented": 26,
-    "ready_in_rule_library": 59,
+    "ready_in_rule_library": 88,
     "manual_review": 113,
-    "todo_semantic": 30,
     "partial": 29,
-    "new_rule_needed": 6,
     "todo_programmatic": 7,
+    "todo_semantic": 7,
     "deferred_data_gap": 1
   },
   "unmapped_examples": [

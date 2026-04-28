@@ -54,7 +54,35 @@ def test_classify_consultation_execution_issue():
     result = classify_manual_issue_text("会诊意见未在病程中落实")
     assert result["coverage_type"] == "llm_intrinsic"
     assert result["issue_category"] == "consultation_execution"
-    assert result["candidate_rule_ids"] == ["SC-070"]
+    assert result["candidate_rule_ids"] == ["SC-070", "LX-016"]
+
+
+def test_classify_consultation_execution_followthrough_issue():
+    result = classify_manual_issue_text("3月9日请会诊执行记录描述为遵执，但实际未按会诊意见执行")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "consultation_execution"
+    assert result["candidate_rule_ids"] == ["SC-070", "LX-016"]
+    assert result["include_in_batch_1"] is True
+
+
+def test_classify_senior_round_content_issue():
+    result = classify_manual_issue_text("3月10日副主任医师查房记录内容空洞，无病情分析，无诊疗意见。")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "senior_round_content"
+    assert result["candidate_rule_ids"] == ["SC-049", "SC-050", "SC-052"]
+
+
+def test_classify_senior_round_timeliness_issue_should_remain_programmatic():
+    result = classify_manual_issue_text("48小时无主治医师查房记录、72小时无高级职称医师查房记录")
+    assert result["coverage_type"] == "programmatic"
+    assert result["issue_category"] == "timeliness_or_presence"
+
+
+def test_classify_daily_course_analysis_issue():
+    result = classify_manual_issue_text("4.1异常检查检验结果病程记录未分析和记录")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "daily_course_analysis"
+    assert result["candidate_rule_ids"] == ["SC-032", "SC-033", "SC-036"]
 
 
 def test_classify_empty_issue_defaults_to_intrinsic_record_batch():

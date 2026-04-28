@@ -249,6 +249,67 @@ def _contains_any(text: str, keywords: Sequence[str]) -> bool:
     return any(keyword in text for keyword in keywords)
 
 
+def _looks_like_consultation_execution_issue(text: str) -> bool:
+    if "会诊" not in text:
+        return False
+    if not _contains_any(
+        text,
+        (
+            "会诊执行记录",
+            "执行情况",
+            "遵会诊意见",
+            "会诊意见未在病程中落实",
+            "会诊意见执行记录",
+            "未落实会诊意见",
+            "会诊后均未",
+            "未按会诊意见执行",
+            "会诊意见执行",
+        ),
+    ):
+        return False
+    return not _contains_any(text, ("无会诊记录", "会诊记录无记录", "无麻醉科会诊记录"))
+
+
+def _looks_like_senior_round_content_issue(text: str) -> bool:
+    if not _contains_any(
+        text,
+        ("查房", "上级医师", "主治医师", "副主任医师", "主任医师", "三级医师查房", "三级查房"),
+    ):
+        return False
+    if _contains_any(
+        text,
+        (
+            "48小时",
+            "72小时",
+            "未及时",
+            "无上级医生查房记录",
+            "无上级医师查房记录",
+            "无主治医师查房记录",
+            "无副主任医师查房记录",
+            "未查见副主任医师查房记录",
+        ),
+    ):
+        return False
+    return _contains_any(
+        text,
+        (
+            "内容空洞",
+            "无内容",
+            "复制粘贴",
+            "内容却是",
+            "涉嫌伪造病历",
+            "病情分析较为简单",
+            "无病情分析",
+            "无诊疗意见",
+            "身份异常",
+            "本人查房",
+            "执行不到位",
+            "落实不到位",
+            "相关处理",
+        ),
+    )
+
+
 @lru_cache(maxsize=1)
 def _load_issue_category_rule_map() -> Dict[str, List[str]]:
     mapping_path = Path(__file__).resolve().parents[2] / "data" / "synthetic_qc" / "sheet2_intrinsic_issue_mapping.json"
@@ -395,6 +456,26 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "exclude_reason": "",
         }
 
+    if _looks_like_consultation_execution_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "consultation_execution",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-070", "LX-016"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_senior_round_content_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "senior_round_content",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-049", "SC-050", "SC-052"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
     if _contains_any(
         normalized,
         (
@@ -412,26 +493,6 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "issue_category": "daily_course_analysis",
             "expected_scene": "running",
             "candidate_rule_ids": ["SC-032", "SC-033", "SC-036"],
-            "include_in_batch_1": True,
-            "exclude_reason": "",
-        }
-
-    if _contains_any(normalized, ("会诊", "遵会诊意见", "执行", "落实")):
-        return {
-            "coverage_type": "llm_intrinsic",
-            "issue_category": "consultation_execution",
-            "expected_scene": "running",
-            "candidate_rule_ids": ["SC-070"],
-            "include_in_batch_1": True,
-            "exclude_reason": "",
-        }
-
-    if _contains_any(normalized, ("查房", "上级医师", "主任查房", "副主任查房")):
-        return {
-            "coverage_type": "llm_intrinsic",
-            "issue_category": "senior_round_content",
-            "expected_scene": "running",
-            "candidate_rule_ids": ["SC-050"],
             "include_in_batch_1": True,
             "exclude_reason": "",
         }
@@ -462,8 +523,8 @@ _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
     "first_course_reasoning": ["SC-023", "SC-024", "SC-025", "SC-026", "SC-027"],
     "admission_consistency": ["SC-008", "SC-009", "SC-010", "SC-011", "SC-012", "SC-018", "SC-019", "SC-020"],
     "daily_course_analysis": ["SC-032", "SC-033", "SC-036"],
-    "consultation_execution": ["SC-070"],
-    "senior_round_content": ["SC-050"],
+    "consultation_execution": ["SC-070", "LX-016"],
+    "senior_round_content": ["SC-049", "SC-050", "SC-052"],
 }
 
 

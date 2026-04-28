@@ -162,7 +162,7 @@
       "documents_required": ["consultation_record", "daily_course_record"],
       "defect_injection": ["会诊意见存在", "执行记录只写遵会诊意见执行，不写具体动作"],
       "representative_examples": ["请会诊执行记录书写不规范仅描述遵会诊意见执行"],
-      "expected_rule_ids": ["SC-070"]
+      "expected_rule_ids": ["SC-070", "LX-016"]
     },
     {
       "issue_type": "D2_consultation_execution_copy_paste",
@@ -173,7 +173,7 @@
       "documents_required": ["consultation_record", "consultation_execution_record"],
       "defect_injection": ["执行记录与会诊意见文本高度一致", "缺少本病历具体执行动作"],
       "representative_examples": ["请会诊执行记录复制粘贴严重"],
-      "expected_rule_ids": ["SC-070"]
+      "expected_rule_ids": ["SC-070", "LX-016"]
     },
     {
       "issue_type": "D3_consultation_execution_no_specific_actions",
@@ -184,7 +184,7 @@
       "documents_required": ["consultation_record", "daily_course_record"],
       "defect_injection": ["病程记录未体现药物、检查、观察或诊疗调整", "仅笼统表述已执行"],
       "representative_examples": ["不能体现会诊执行情况"],
-      "expected_rule_ids": ["SC-070"]
+      "expected_rule_ids": ["SC-070", "LX-016"]
     },
     {
       "issue_type": "E1_senior_round_no_targeted_judgement",
@@ -195,7 +195,7 @@
       "documents_required": ["senior_course_record", "daily_course_record", "vital_sign_summary"],
       "defect_injection": ["连续异常指标存在", "查房内容模板化，不对关键问题做诊疗分析或修正"],
       "representative_examples": ["血压持续异常，上级查房未修正诊断"],
-      "expected_rule_ids": ["SC-050"]
+      "expected_rule_ids": ["SC-049", "SC-050", "SC-052"]
     },
     {
       "issue_type": "E2_senior_round_copy_paste",
@@ -206,7 +206,7 @@
       "documents_required": ["senior_course_record"],
       "defect_injection": ["连续两日上级查房记录仅改日期", "查房内容高度重复"],
       "representative_examples": ["两天查房记录高度重复"],
-      "expected_rule_ids": ["SC-050"]
+      "expected_rule_ids": ["SC-049", "SC-050", "SC-052"]
     },
     {
       "issue_type": "A4_admission_external_exam_inaccurate",
@@ -289,7 +289,7 @@
         "请会诊执行记录描述为遵执，但实际未按会诊意见执行",
         "仍然开具与会诊意见相反的治疗项目"
       ],
-      "expected_rule_ids": ["SC-070"]
+      "expected_rule_ids": ["SC-070", "LX-016"]
     },
     {
       "issue_type": "E3_senior_round_no_revision_of_diagnosis",
@@ -306,7 +306,7 @@
         "连续监测三日后上级医师查房未对诊断进行修正",
         "低钾进一步加重，无处理"
       ],
-      "expected_rule_ids": ["SC-050"]
+      "expected_rule_ids": ["SC-049", "SC-050", "SC-052"]
     },
     {
       "issue_type": "Z01_admission_history_core",
