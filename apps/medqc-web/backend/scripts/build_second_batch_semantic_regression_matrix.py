@@ -72,9 +72,10 @@ MATRIX_CASES: tuple[MatrixCase, ...] = (
         manual_issue_text="2026年3月11日危急值处理记录尽描写“ 2026-03-11 电解质3:K 2.76mmol/l,行静脉补钾。”未描述危急值报告、处置时间及具体补钾情况",
         primary_rule_id="SC-039",
         expected_status="non_compliant",
-        expected_hit_type="exact_hit",
+        expected_hit_type="skip",
         target_document_type="日常病程记录",
-        notes="第二批 SC-039 锚点之一。当前样本验证链路已修复串扰，但该样本仍未稳定命中。",
+        current_status="skip",
+        notes="skip：0426快照与本地PG均未找到该条危急值原始正文，不再作为当前阶段SC-039验收阻塞项。",
     ),
     MatrixCase(
         case_id="semantic-b2-core-003",
@@ -237,6 +238,7 @@ def _build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
         "case_count": len(MATRIX_CASES),
         "core_case_count": 0,
         "observe_case_count": 0,
+        "skip_case_count": 0,
         "batch_hit_count": 0,
         "batch_miss_count": 0,
         "cases_with_narrowed_primary_rule": 0,
@@ -255,12 +257,15 @@ def _build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
         batch_hit = primary_batch_status == case.expected_status.lower()
         if case.current_status == "observe":
             summary["observe_case_count"] += 1
+        elif case.current_status == "skip":
+            summary["skip_case_count"] += 1
         else:
             summary["core_case_count"] += 1
-        if batch_hit:
-            summary["batch_hit_count"] += 1
-        else:
-            summary["batch_miss_count"] += 1
+        if case.current_status != "skip":
+            if batch_hit:
+                summary["batch_hit_count"] += 1
+            else:
+                summary["batch_miss_count"] += 1
         if candidate_rules == [case.primary_rule_id]:
             summary["cases_with_narrowed_primary_rule"] += 1
         rows.append(
