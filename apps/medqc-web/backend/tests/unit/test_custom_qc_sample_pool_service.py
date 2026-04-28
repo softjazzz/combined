@@ -136,6 +136,20 @@ def test_classify_operation_record_quality_issue():
     assert result["candidate_rule_ids"] == ["SC-097", "SC-098"]
 
 
+def test_classify_operation_preop_mdt_issue():
+    result = classify_manual_issue_text("四级肿瘤手术，多学科会诊不能代替MDT")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "operation_preop_mdt"
+    assert result["candidate_rule_ids"] == ["SC-083"]
+
+
+def test_classify_operation_preop_conclusion_issue():
+    result = classify_manual_issue_text("术前讨论记录未明确手术时间及手术医生")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "operation_preop_conclusion"
+    assert result["candidate_rule_ids"] == ["SC-084", "SC-085"]
+
+
 def test_build_sample_pool_item_classification_update_should_support_second_batch_categories():
     consultation_patch = sample_pool_module.build_sample_pool_item_classification_update(
         {"manual_issue_text": "2026年2月4日会诊记录中存在大量复制其他科室会诊意见的情况，并无综合会诊结果提出建设性诊疗意见。"}
@@ -162,6 +176,24 @@ def test_build_sample_pool_item_classification_update_should_support_operation_r
 
     assert patch["issue_category"] == "operation_record_quality"
     assert patch["candidate_rule_ids_json"] == '["SC-097", "SC-098"]'
+
+
+def test_build_sample_pool_item_classification_update_should_support_operation_preop_mdt():
+    patch = sample_pool_module.build_sample_pool_item_classification_update(
+        {"manual_issue_text": "四级肿瘤手术，多学科会诊不能代替MDT"}
+    )
+
+    assert patch["issue_category"] == "operation_preop_mdt"
+    assert patch["candidate_rule_ids_json"] == '["SC-083"]'
+
+
+def test_build_sample_pool_item_classification_update_should_support_operation_preop_conclusion():
+    patch = sample_pool_module.build_sample_pool_item_classification_update(
+        {"manual_issue_text": "术前讨论记录未明确手术时间及手术医生"}
+    )
+
+    assert patch["issue_category"] == "operation_preop_conclusion"
+    assert patch["candidate_rule_ids_json"] == '["SC-084", "SC-085"]'
 
 
 def test_refresh_pool_item_classifications_should_update_existing_items(monkeypatch):
@@ -1106,6 +1138,80 @@ def test_get_runnable_items_sc_should_whitelist_operation_record_quality_primary
 
     assert len(runnable) == 1
     assert runnable[0]["candidate_rule_ids"] == ["SC-097"]
+
+
+def test_get_runnable_items_sc_should_whitelist_operation_preop_mdt_primary_rule(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "测试患者",
+            "mr_no": "1001",
+            "department": "外科",
+            "manual_issue_text": "四级肿瘤手术，多学科会诊不能代替MDT",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "operation_preop_mdt",
+            "candidate_rule_ids_json": '["SC-083"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "287562",
+            "matched_patient_id": "P011",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"287562": {"presurg_discussion", "consultation_record"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-083"]
+
+
+def test_get_runnable_items_sc_should_whitelist_operation_preop_conclusion_primary_rule(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "测试患者",
+            "mr_no": "1002",
+            "department": "外科",
+            "manual_issue_text": "术前讨论记录未明确手术时间及手术医生",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "operation_preop_conclusion",
+            "candidate_rule_ids_json": '["SC-084","SC-085"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "371285",
+            "matched_patient_id": "P012",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"371285": {"presurg_discussion", "presurg_summary"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-085"]
 
 
 def test_get_runnable_items_should_allow_programmatic_without_bundle_ready_or_batch1(monkeypatch):

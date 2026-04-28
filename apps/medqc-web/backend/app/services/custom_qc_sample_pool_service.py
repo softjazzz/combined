@@ -386,6 +386,29 @@ def _looks_like_operation_record_quality_issue(text: str) -> bool:
     return True
 
 
+def _looks_like_operation_preop_mdt_issue(text: str) -> bool:
+    if not _contains_any(text, ("MDT", "多学科讨论", "多学科会诊")):
+        return False
+    return _contains_any(text, ("四级手术", "四级肿瘤手术", "术前讨论"))
+
+
+def _looks_like_operation_preop_conclusion_issue(text: str) -> bool:
+    if "术前讨论" not in text:
+        return False
+    return _contains_any(
+        text,
+        (
+            "结论未记入病历",
+            "结果未记入病历",
+            "术前讨论记录未明确",
+            "讨论内容未书写明确",
+            "缺少参与人员发言",
+            "未明确手术时间",
+            "未明确手术医生",
+        ),
+    )
+
+
 @lru_cache(maxsize=1)
 def _load_issue_category_rule_map() -> Dict[str, List[str]]:
     mapping_path = Path(__file__).resolve().parents[2] / "data" / "synthetic_qc" / "sheet2_intrinsic_issue_mapping.json"
@@ -572,6 +595,26 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "exclude_reason": "",
         }
 
+    if _looks_like_operation_preop_mdt_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "operation_preop_mdt",
+            "expected_scene": "final",
+            "candidate_rule_ids": ["SC-083"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_operation_preop_conclusion_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "operation_preop_conclusion",
+            "expected_scene": "final",
+            "candidate_rule_ids": ["SC-084", "SC-085"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
     if _looks_like_operation_record_quality_issue(normalized):
         return {
             "coverage_type": "llm_intrinsic",
@@ -657,6 +700,8 @@ _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
     "critical_value_management": ["SC-039"],
     "progress_order_consistency": ["SC-146"],
     "senior_round_content": ["SC-049", "SC-050", "SC-052"],
+    "operation_preop_mdt": ["SC-083"],
+    "operation_preop_conclusion": ["SC-084", "SC-085"],
     "operation_record_quality": ["SC-097", "SC-098"],
 }
 
@@ -667,6 +712,8 @@ _SAMPLE_SC_PRIMARY_RULE_WHITELIST: Dict[str, List[str]] = {
     "senior_round_content": ["SC-050"],
     "daily_course_analysis": ["SC-036"],
     "progress_order_consistency": ["SC-146"],
+    "operation_preop_mdt": ["SC-083"],
+    "operation_preop_conclusion": ["SC-084"],
     "operation_record_quality": ["SC-097"],
 }
 
@@ -739,6 +786,23 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
 
     if issue_category == "operation_record_quality":
         return ["SC-097"]
+
+    if issue_category == "operation_preop_mdt":
+        return ["SC-083"]
+
+    if issue_category == "operation_preop_conclusion":
+        if _contains_any(
+            normalized,
+            (
+                "未明确手术时间",
+                "未明确手术医生",
+                "讨论内容未书写明确",
+                "缺少参与人员发言",
+                "缺项",
+            ),
+        ):
+            return ["SC-085"]
+        return ["SC-084"]
 
     return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
 
