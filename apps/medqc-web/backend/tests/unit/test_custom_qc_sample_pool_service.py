@@ -65,6 +65,13 @@ def test_classify_consultation_execution_followthrough_issue():
     assert result["include_in_batch_1"] is True
 
 
+def test_classify_consultation_record_quality_issue():
+    result = classify_manual_issue_text("2026年2月4日会诊记录中存在大量复制其他科室会诊意见的情况，并无综合会诊结果提出建设性诊疗意见。")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "consultation_record_quality"
+    assert result["candidate_rule_ids"] == ["SC-069"]
+
+
 def test_classify_senior_round_content_issue():
     result = classify_manual_issue_text("3月10日副主任医师查房记录内容空洞，无病情分析，无诊疗意见。")
     assert result["coverage_type"] == "llm_intrinsic"
@@ -83,6 +90,20 @@ def test_classify_daily_course_analysis_issue():
     assert result["coverage_type"] == "llm_intrinsic"
     assert result["issue_category"] == "daily_course_analysis"
     assert result["candidate_rule_ids"] == ["SC-032", "SC-033", "SC-036"]
+
+
+def test_classify_critical_value_management_issue():
+    result = classify_manual_issue_text("2026年3月11日危急值处理记录仅描写K 2.76mmol/L，行静脉补钾，未描述危急值报告、处置时间及具体补钾情况。")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "critical_value_management"
+    assert result["candidate_rule_ids"] == ["SC-039"]
+
+
+def test_classify_progress_order_consistency_issue():
+    result = classify_manual_issue_text("在术前小结及术前讨论之前，已经下达手术医嘱。")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "progress_order_consistency"
+    assert result["candidate_rule_ids"] == ["SC-146"]
 
 
 def test_classify_empty_issue_defaults_to_intrinsic_record_batch():
@@ -606,6 +627,228 @@ def test_get_runnable_items_filters_by_selected_record_ids(monkeypatch):
 
     assert len(runnable) == 1
     assert runnable[0]["matched_visit_id"] == "V001"
+
+
+def test_get_runnable_items_sc_should_whitelist_consultation_execution_primary_rule(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "黄显秀",
+            "mr_no": "ZY001",
+            "department": "神经内科",
+            "manual_issue_text": "遵会诊意见但实际并未按照会诊意见执行。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "consultation_execution",
+            "candidate_rule_ids_json": '["SC-070","LX-016"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V001",
+            "matched_patient_id": "P001",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"V001": {"consultation_record", "daily_course_record", "senior_course_record"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-070"]
+
+
+def test_get_runnable_items_sc_should_whitelist_senior_round_content_primary_rule(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "付学云",
+            "mr_no": "ZY002",
+            "department": "肿瘤科",
+            "manual_issue_text": "主治医师查房记录无内容。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "senior_round_content",
+            "candidate_rule_ids_json": '["SC-049","SC-050","SC-052"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V002",
+            "matched_patient_id": "P002",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"V002": {"senior_course_record", "admission_record", "discharge_record"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-050"]
+
+
+def test_get_runnable_items_sc_should_whitelist_daily_course_analysis_primary_rule(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "范永勤",
+            "mr_no": "ZY003",
+            "department": "脊柱外科",
+            "manual_issue_text": "检验结果异常，病程记录未分析。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "daily_course_analysis",
+            "candidate_rule_ids_json": '["SC-032","SC-033","SC-036"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V003",
+            "matched_patient_id": "P003",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"V003": {"daily_course_record", "lab_attention_report", "consultation_record"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-036"]
+
+
+def test_get_runnable_items_sc_should_whitelist_consultation_record_quality_primary_rule(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "张某",
+            "mr_no": "ZY004",
+            "department": "肿瘤科",
+            "manual_issue_text": "会诊记录中存在大量复制其他科室会诊意见的情况，并无综合会诊结果提出建设性诊疗意见。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "consultation_record_quality",
+            "candidate_rule_ids_json": '["SC-069"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V004",
+            "matched_patient_id": "P004",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"V004": {"consultation_record", "daily_course_record"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-069"]
+
+
+def test_get_runnable_items_sc_should_whitelist_critical_value_management_primary_rule(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "李某",
+            "mr_no": "ZY005",
+            "department": "心内科",
+            "manual_issue_text": "危急值处理记录仅描写补钾，未描述危急值报告、处置时间及具体补钾情况。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "critical_value_management",
+            "candidate_rule_ids_json": '["SC-039"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V005",
+            "matched_patient_id": "P005",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"V005": {"daily_course_record"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-039"]
+
+
+def test_get_runnable_items_sc_should_whitelist_progress_order_consistency_primary_rule(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "王某",
+            "mr_no": "ZY006",
+            "department": "普外科",
+            "manual_issue_text": "在术前小结及术前讨论之前，已经下达手术医嘱。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "progress_order_consistency",
+            "candidate_rule_ids_json": '["SC-146"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V006",
+            "matched_patient_id": "P006",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"V006": {"presurg_summary", "presurg_discussion", "daily_course_record"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == ["SC-146"]
 
 
 def test_get_runnable_items_should_allow_programmatic_without_bundle_ready_or_batch1(monkeypatch):

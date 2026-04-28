@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import desc, select
+
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_ROOT.parents[2]
 DOC_ROOT = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "QC"
@@ -18,12 +20,16 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService
-from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+from app.services.custom_qc_workspace_service import (
+    CustomQCWorkspaceService,
+    _batch_jobs_table,
+    _session,
+)
 
 
 TARGET_POOL_NAME = "0426"
-PRIMARY_BATCH_JOB_ID = "d2760286-7714-4c8e-a1c1-2dd92e7e855e"
-LEGACY_BATCH_JOB_ID = "58bf98e6-e57d-45b2-9714-5dd3658f9f3e"
+SAMPLE_SC_DRAFT_ID = "sc-sample-rule-library"
+PRIMARY_RULE_ID_SET = {"SC-036", "SC-050", "SC-070"}
 
 
 @dataclass(frozen=True)
@@ -144,6 +150,60 @@ def _safe_text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _extract_job_rule_ids(job: dict[str, Any]) -> set[str]:
+    result: set[str] = set()
+    for item in list(job.get("items") or []):
+        rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+        if rule_id:
+            result.add(rule_id)
+    return result
+
+
+def _find_latest_sample_sc_batch_ids(workspace: CustomQCWorkspaceService) -> tuple[str, str]:
+    session = _session()
+    try:
+        table = _batch_jobs_table()
+        rows = (
+            session.execute(
+                select(table.c.id)
+                .where(
+                    table.c.draft_id == SAMPLE_SC_DRAFT_ID,
+                    table.c.status == "completed",
+                )
+                .order_by(desc(table.c.created_at))
+                .limit(20)
+            )
+            .mappings()
+            .all()
+        )
+    finally:
+        session.close()
+
+    primary_job_id = ""
+    legacy_job_id = ""
+    for row in rows:
+        job_id = _safe_text(row.get("id"))
+        if not job_id:
+            continue
+        job = workspace.get_batch_job_for_processing(job_id=job_id) or {}
+        rule_ids = _extract_job_rule_ids(job)
+        if not rule_ids:
+            continue
+        if not primary_job_id and rule_ids.issubset(PRIMARY_RULE_ID_SET):
+            primary_job_id = job_id
+            continue
+        if not legacy_job_id and not rule_ids.issubset(PRIMARY_RULE_ID_SET):
+            legacy_job_id = job_id
+        if primary_job_id and legacy_job_id:
+            break
+
+    if not primary_job_id:
+        raise RuntimeError("未找到最近的第一批语义主规则白名单 batch")
+    if not legacy_job_id:
+        legacy_job_id = primary_job_id
+    return primary_job_id, legacy_job_id
+
+
 def _find_pool_id(service: CustomQCSamplePoolService) -> str:
     result = service.list_pools(page=1, page_size=50, query=TARGET_POOL_NAME)
     for item in list(result.items or []):
@@ -188,12 +248,13 @@ def _build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     pool_service = CustomQCSamplePoolService()
     workspace = CustomQCWorkspaceService()
     pool_id = _find_pool_id(pool_service)
+    primary_batch_job_id, legacy_batch_job_id = _find_latest_sample_sc_batch_ids(workspace)
     rows: list[dict[str, Any]] = []
     summary = {
         "pool_id": pool_id,
         "target_pool_name": TARGET_POOL_NAME,
-        "primary_batch_job_id": PRIMARY_BATCH_JOB_ID,
-        "legacy_batch_job_id": LEGACY_BATCH_JOB_ID,
+        "primary_batch_job_id": primary_batch_job_id,
+        "legacy_batch_job_id": legacy_batch_job_id,
         "case_count": len(MATRIX_CASES),
         "core_case_count": 0,
         "observe_case_count": 0,
@@ -206,13 +267,13 @@ def _build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
         candidate_rules = _normalize_rule_ids(pool_row.get("candidate_rule_ids"))
         primary_batch_result = _get_job_rule_result(
             workspace,
-            job_id=PRIMARY_BATCH_JOB_ID,
+            job_id=primary_batch_job_id,
             record_id=case.record_id,
             rule_id=case.primary_rule_id,
         )
         legacy_batch_result = _get_job_rule_result(
             workspace,
-            job_id=LEGACY_BATCH_JOB_ID,
+            job_id=legacy_batch_job_id,
             record_id=case.record_id,
             rule_id=case.primary_rule_id,
         )
@@ -247,11 +308,11 @@ def _build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
                 "expected_status": case.expected_status,
                 "expected_hit_type": case.expected_hit_type,
                 "target_document_type": case.target_document_type,
-                "primary_batch_job_id": PRIMARY_BATCH_JOB_ID,
+                "primary_batch_job_id": primary_batch_job_id,
                 "primary_batch_status": primary_batch_status or "missing",
                 "primary_batch_target_document_type": _safe_text((primary_batch_result or {}).get("target_document_type")),
                 "primary_batch_findings": _safe_text((primary_batch_result or {}).get("findings")),
-                "legacy_batch_job_id": LEGACY_BATCH_JOB_ID,
+                "legacy_batch_job_id": legacy_batch_job_id,
                 "legacy_batch_status": _safe_text((legacy_batch_result or {}).get("status")).lower() or "missing",
                 "legacy_batch_target_document_type": _safe_text((legacy_batch_result or {}).get("target_document_type")),
                 "legacy_batch_findings": _safe_text((legacy_batch_result or {}).get("findings")),

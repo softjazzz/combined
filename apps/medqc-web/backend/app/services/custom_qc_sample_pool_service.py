@@ -270,6 +270,27 @@ def _looks_like_consultation_execution_issue(text: str) -> bool:
     return not _contains_any(text, ("无会诊记录", "会诊记录无记录", "无麻醉科会诊记录"))
 
 
+def _looks_like_consultation_record_quality_issue(text: str) -> bool:
+    if "会诊" not in text:
+        return False
+    if _looks_like_consultation_execution_issue(text):
+        return False
+    return _contains_any(
+        text,
+        (
+            "会诊记录",
+            "综合会诊结果",
+            "建设性诊疗意见",
+            "复制其他科室会诊意见",
+            "复制粘贴",
+            "照抄",
+            "结论不足",
+            "建议不足",
+            "内容空洞",
+        ),
+    )
+
+
 def _looks_like_senior_round_content_issue(text: str) -> bool:
     if not _contains_any(
         text,
@@ -306,6 +327,42 @@ def _looks_like_senior_round_content_issue(text: str) -> bool:
             "执行不到位",
             "落实不到位",
             "相关处理",
+        ),
+    )
+
+
+def _looks_like_critical_value_management_issue(text: str) -> bool:
+    if "危急值" not in text:
+        return False
+    return _contains_any(
+        text,
+        (
+            "报告时间",
+            "处置时间",
+            "处理记录",
+            "处理不充分",
+            "未描述",
+            "未记录",
+            "补钾",
+            "具体处理",
+            "具体补钾",
+        ),
+    )
+
+
+def _looks_like_progress_order_consistency_issue(text: str) -> bool:
+    if not _contains_any(text, ("医嘱", "病程记录", "术前小结", "术前讨论", "手术医嘱")):
+        return False
+    return _contains_any(
+        text,
+        (
+            "不一致",
+            "早于",
+            "先于",
+            "之前",
+            "已经下达",
+            "相反",
+            "矛盾",
         ),
     )
 
@@ -466,12 +523,42 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "exclude_reason": "",
         }
 
+    if _looks_like_consultation_record_quality_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "consultation_record_quality",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-069"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
     if _looks_like_senior_round_content_issue(normalized):
         return {
             "coverage_type": "llm_intrinsic",
             "issue_category": "senior_round_content",
             "expected_scene": "running",
             "candidate_rule_ids": ["SC-049", "SC-050", "SC-052"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_critical_value_management_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "critical_value_management",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-039"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_progress_order_consistency_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "progress_order_consistency",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-146"],
             "include_in_batch_1": True,
             "exclude_reason": "",
         }
@@ -524,7 +611,19 @@ _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
     "admission_consistency": ["SC-008", "SC-009", "SC-010", "SC-011", "SC-012", "SC-018", "SC-019", "SC-020"],
     "daily_course_analysis": ["SC-032", "SC-033", "SC-036"],
     "consultation_execution": ["SC-070", "LX-016"],
+    "consultation_record_quality": ["SC-069"],
+    "critical_value_management": ["SC-039"],
+    "progress_order_consistency": ["SC-146"],
     "senior_round_content": ["SC-049", "SC-050", "SC-052"],
+}
+
+_SAMPLE_SC_PRIMARY_RULE_WHITELIST: Dict[str, List[str]] = {
+    "consultation_execution": ["SC-070"],
+    "consultation_record_quality": ["SC-069"],
+    "critical_value_management": ["SC-039"],
+    "senior_round_content": ["SC-050"],
+    "daily_course_analysis": ["SC-036"],
+    "progress_order_consistency": ["SC-146"],
 }
 
 
@@ -576,6 +675,18 @@ def _fallback_candidate_rule_ids(
     if classification.get("coverage_type") != "llm_intrinsic":
         return []
     return _normalize_candidate_rule_ids(classification.get("candidate_rule_ids"))
+
+
+def _apply_sample_sc_rule_whitelist(items: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    filtered_items: List[Dict[str, Any]] = []
+    for raw_item in items:
+        item = dict(raw_item)
+        issue_category = _safe_text(item.get("issue_category"), "unclassified")
+        whitelist_rule_ids = _SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category)
+        if whitelist_rule_ids:
+            item["candidate_rule_ids"] = list(whitelist_rule_ids)
+        filtered_items.append(item)
+    return filtered_items
 
 
 def load_manual_case_rows_from_excel(*, file_path: str, sheet_name: str = "Sheet2") -> List[Dict[str, Any]]:
@@ -1834,6 +1945,9 @@ class CustomQCSamplePoolService:
                     stmt = stmt.where(self._item_table.c.matched_visit_id.in_(normalized_record_ids))
             rows = session.execute(stmt).mappings().all()
             items = [self._row_to_item(dict(row)) for row in rows]
+            if normalized_mode == "sc":
+                items = self._apply_dynamic_candidate_rule_ids(items=items)
+                return _apply_sample_sc_rule_whitelist(items)
             return self._apply_dynamic_candidate_rule_ids(items=items)
         finally:
             session.close()
