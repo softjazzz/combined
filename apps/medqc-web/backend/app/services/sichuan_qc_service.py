@@ -1383,6 +1383,23 @@ class SichuanQCService:
                 score += 10
             if re.search(r"\bMg\s*\d+(?:\.\d+)?\s*mmol/?l\b", lowered):
                 score += 10
+        elif normalized_rule_id == "SC-146" and content:
+            weighted_patterns = (
+                ("手术", 70),
+                ("明日行", 60),
+                ("诊疗计划", 50),
+                ("医嘱", 45),
+                ("术前", 40),
+                ("复查", 20),
+                ("继续目前治疗方案", 10),
+            )
+            for keyword, weight in weighted_patterns:
+                if keyword in content:
+                    score += weight
+            if "出院情况" in content:
+                score -= 40
+            if "出院医嘱" in content:
+                score -= 25
 
         return (score, has_content, display_time)
 
@@ -1554,14 +1571,30 @@ class SichuanQCService:
         domain_bundle: Dict[str, Any],
     ) -> RuleExecutionInput:
         source_documents = list(domain_bundle.get("source_documents") or [])
-        primary_candidates = self._find_source_documents_for_types(
-            source_documents,
-            list(routing.primary_doc_types),
-        )
-        auxiliary_candidates = self._find_source_documents_for_types(
-            source_documents,
-            list(routing.aux_doc_types),
-        )
+        normalized_rule_id = str(rule.get("rule_id") or "").strip().upper()
+        if normalized_rule_id == "SC-146":
+            primary_candidates = self._find_source_documents_for_types(
+                source_documents,
+                ["daily_course_record", "senior_course_record", "first_course_record"],
+            )
+            auxiliary_candidates = self._find_source_documents_for_types(
+                source_documents,
+                ["inpat_drug_order", "inpat_nondrug_order"],
+            )
+            if not auxiliary_candidates:
+                auxiliary_candidates = self._find_source_documents_for_types(
+                    source_documents,
+                    list(routing.aux_doc_types),
+                )
+        else:
+            primary_candidates = self._find_source_documents_for_types(
+                source_documents,
+                list(routing.primary_doc_types),
+            )
+            auxiliary_candidates = self._find_source_documents_for_types(
+                source_documents,
+                list(routing.aux_doc_types),
+            )
         if primary_candidates:
             primary_candidates.sort(
                 key=lambda item: self._score_primary_candidate_for_rule(
@@ -1605,6 +1638,12 @@ class SichuanQCService:
         primary_doc_type = display_name_for_doc_type(
             str(primary_document.get("document_type") or primary_document.get("source_table") or "")
         )
+        if normalized_rule_id == "SC-146" and str(primary_document.get("source_table") or "") in {
+            "daily_course_record",
+            "senior_course_record",
+            "first_course_record",
+        }:
+            primary_doc_type = "日常病程记录"
         return RuleExecutionInput(
             rule_id=str(rule.get("rule_id") or ""),
             document_type=primary_doc_type,
@@ -1775,11 +1814,159 @@ class SichuanQCService:
         )
         return normalized
 
+    @staticmethod
+    def _parse_display_time(value: Any) -> Optional[datetime]:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        normalized = text.replace("T", " ").replace("Z", "+00:00")
+        if normalized.endswith("+08"):
+            normalized = f"{normalized}:00"
+        try:
+            return datetime.fromisoformat(normalized)
+        except ValueError:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(normalized, fmt)
+                except ValueError:
+                    continue
+        return None
+
+    @staticmethod
+    def _extract_sc146_surgery_order_events(source_documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        events: List[Dict[str, Any]] = []
+        for item in source_documents:
+            source_table = str(item.get("source_table") or "").strip()
+            if source_table not in {"inpat_drug_order", "inpat_nondrug_order"}:
+                continue
+            content = str(item.get("content") or "").strip()
+            title = str(item.get("document_title") or "").strip()
+            payload = f"{title}\n{content}"
+            if not any(keyword in payload for keyword in ("手术", "术后医嘱", "矫正术")):
+                continue
+            display_time = str(item.get("display_time") or item.get("record_time") or "").strip()
+            parsed_time = SichuanQCService._parse_display_time(display_time)
+            if parsed_time is None:
+                continue
+            events.append(
+                {
+                    "document_id": str(item.get("document_id") or ""),
+                    "document_title": title or source_table,
+                    "display_time": display_time,
+                    "parsed_time": parsed_time,
+                    "content": content,
+                    "source_table": source_table,
+                }
+            )
+        events.sort(key=lambda item: item["parsed_time"])
+        return events
+
+    @staticmethod
+    def _extract_sc146_preop_events(source_documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        events: List[Dict[str, Any]] = []
+        for item in source_documents:
+            source_table = str(item.get("source_table") or "").strip()
+            if source_table not in {"presurg_discussion", "presurg_summary"}:
+                continue
+            content = str(item.get("content") or "").strip()
+            if not content:
+                continue
+            display_time = str(item.get("display_time") or item.get("record_time") or "").strip()
+            parsed_time = SichuanQCService._parse_display_time(display_time)
+            if parsed_time is None:
+                continue
+            events.append(
+                {
+                    "document_id": str(item.get("document_id") or ""),
+                    "document_title": str(item.get("document_title") or source_table),
+                    "display_time": display_time,
+                    "parsed_time": parsed_time,
+                    "content": content,
+                    "source_table": source_table,
+                }
+            )
+        events.sort(key=lambda item: item["parsed_time"])
+        return events
+
+    def _apply_sc146_temporal_fallback(
+        self,
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+        surgery_bundle: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id != "SC-146":
+            return engine_result
+
+        status = str(engine_result.get("status") or "").strip().lower()
+        primary_text = str(rule_input.primary_medical_text or "").strip()
+        if status == "non_compliant":
+            return engine_result
+
+        order_events = self._extract_sc146_surgery_order_events(rule_input.source_documents)
+        preop_events = self._extract_sc146_preop_events(list((surgery_bundle or {}).get("source_documents") or []))
+        if not order_events or not preop_events:
+            return engine_result
+
+        earliest_order = order_events[0]
+        earliest_preop = preop_events[0]
+        metadata = dict(engine_result.get("metadata") or {})
+        normalized = dict(engine_result)
+
+        if earliest_order["parsed_time"] < earliest_preop["parsed_time"]:
+            metadata["llm_fallback"] = True
+            metadata["decision_fallback"] = "sc146_temporal_order_before_preop"
+            normalized.update(
+                {
+                    "is_compliant": False,
+                    "status": "non_compliant",
+                    "findings": (
+                        f"手术相关医嘱时间早于术前文书：{earliest_order['document_title']} "
+                        f"{earliest_order['display_time']}，早于 {earliest_preop['document_title']} "
+                        f"{earliest_preop['display_time']}。"
+                    ),
+                    "evidence": (
+                        f"医嘱：{earliest_order['document_title']} @ {earliest_order['display_time']}；"
+                        f"术前文书：{earliest_preop['document_title']} @ {earliest_preop['display_time']}。"
+                    ),
+                    "suggestion": "请核对手术医嘱下达时间与术前讨论/术前小结时间，补充或更正手术时序记录。",
+                    "confidence": max(float(engine_result.get("confidence") or 0.0), 0.9),
+                    "metadata": metadata,
+                }
+            )
+            return normalized
+
+        primary_is_discharge_note = "出院情况" in primary_text and "出院医嘱" in primary_text
+        if status in {"uncertain", "compliant"} and primary_is_discharge_note:
+            metadata["llm_fallback"] = True
+            metadata["decision_fallback"] = "sc146_temporal_order_after_preop"
+            normalized.update(
+                {
+                    "is_compliant": True,
+                    "status": "uncertain",
+                    "findings": (
+                        f"当前可见手术医嘱时间为 {earliest_order['display_time']}，晚于术前文书 "
+                        f"{earliest_preop['display_time']}；但医嘱缺少明确下达时间字段，"
+                        "仅凭 update_time 无法支持“术前小结及术前讨论之前已下达手术医嘱”这一问题。"
+                    ),
+                    "evidence": (
+                        f"医嘱：{earliest_order['document_title']} @ {earliest_order['display_time']}；"
+                        f"术前文书：{earliest_preop['document_title']} @ {earliest_preop['display_time']}。"
+                    ),
+                    "suggestion": "请人工复核源系统中的医嘱下达时间/签发时间，确认是否存在早于术前文书的手术医嘱。",
+                    "confidence": max(float(engine_result.get("confidence") or 0.0), 0.82),
+                    "metadata": metadata,
+                }
+            )
+        return normalized
+
     def _apply_rule_text_only_fallbacks(
         self,
         *,
         rule_input: RuleExecutionInput,
         engine_result: Dict[str, Any],
+        surgery_bundle: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         normalized = self._apply_sc039_text_only_fallback(
             rule_input=rule_input,
@@ -1788,6 +1975,11 @@ class SichuanQCService:
         normalized = self._apply_sc069_text_only_fallback(
             rule_input=rule_input,
             engine_result=normalized,
+        )
+        normalized = self._apply_sc146_temporal_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+            surgery_bundle=surgery_bundle,
         )
         return normalized
 
@@ -2107,6 +2299,17 @@ class SichuanQCService:
             bundle_schema=bundle_schema,
             force_refresh=force_refresh_bundle,
         )
+        surgery_bundle: Optional[Dict[str, Any]] = None
+        if str(rule.get("rule_id") or "").strip().upper() == "SC-146":
+            surgery_bundle = load_or_assemble_domain_bundle(
+                execution_domain="surgery",
+                institute_id=str(institute_id or "").strip(),
+                patient_id=str(patient_id or "").strip(),
+                visit_id=str(visit_id or "").strip(),
+                source_schema=source_schema,
+                bundle_schema=bundle_schema,
+                force_refresh=force_refresh_bundle,
+            )
 
         try:
             rule_input = self._build_rule_execution_input_from_bundle(
@@ -2138,6 +2341,7 @@ class SichuanQCService:
         engine_result = self._apply_rule_text_only_fallbacks(
             rule_input=rule_input,
             engine_result=orchestrated_results[0],
+            surgery_bundle=surgery_bundle,
         )
 
         evaluation_results = [

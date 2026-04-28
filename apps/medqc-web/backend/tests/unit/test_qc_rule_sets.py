@@ -231,6 +231,163 @@ def test_sc_069_should_fallback_to_non_compliant_when_signature_is_missing():
     assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc069_text_only"
 
 
+def test_sc_146_should_prefer_senior_course_note_over_discharge_daily_note():
+    service = SichuanQCService()
+    raw_rule = service.get_rule_by_id("SC-146")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    routing = route_rule_to_domain(rule)
+    rule_input = service._build_rule_execution_input_from_bundle(
+        rule=rule,
+        routing=routing,
+        domain_bundle={
+            "execution_domain": "course",
+            "timeline_facts": [],
+            "source_documents": [
+                {
+                    "document_type": "daily_course_record",
+                    "document_title": "日常病程记录",
+                    "display_time": "2026-02-07 08:27:00",
+                    "content": "出院情况：患者病情平稳。出院医嘱：门诊复查。",
+                    "source_table": "daily_course_record",
+                    "document_id": "daily-1",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "partial",
+                    "data_quality_flags": [],
+                },
+                {
+                    "document_type": "senior_course_record",
+                    "document_title": "上级查房记录",
+                    "display_time": "2026-02-05 08:20:35",
+                    "content": "诊疗计划：完善相关辅查，明日行左眼下睑睑内翻矫正术。",
+                    "source_table": "senior_course_record",
+                    "document_id": "senior-1",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "assembled",
+                    "data_quality_flags": [],
+                },
+                {
+                    "document_type": "inpat_nondrug_order",
+                    "document_title": "临时医嘱",
+                    "display_time": "2026-02-06 13:29:25",
+                    "content": "order_type: 手术\norder_name: 睑内翻矫正术",
+                    "source_table": "inpat_nondrug_order",
+                    "document_id": "order-1",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "assembled",
+                    "data_quality_flags": [],
+                },
+            ],
+        },
+    )
+
+    assert "明日行左眼下睑睑内翻矫正术" in rule_input.primary_medical_text
+    assert any(item.get("source_table") == "inpat_nondrug_order" for item in rule_input.supporting_evidence)
+
+
+def test_sc_146_should_fallback_to_uncertain_when_visible_order_time_is_after_preop_note():
+    service = SichuanQCService()
+    normalized = service._apply_sc146_temporal_fallback(
+        rule_input=RuleExecutionInput(
+            rule_id="SC-146",
+            document_type="上级查房记录",
+            execution_domain="course",
+            primary_medical_text="出院情况：患者病情平稳。出院医嘱：门诊复查。",
+            supporting_evidence=[],
+            timeline_facts=[],
+            source_documents=[
+                {
+                    "source_table": "inpat_nondrug_order",
+                    "document_title": "睑内翻矫正术",
+                    "display_time": "2026-02-06 13:29:25",
+                    "content": "order_type: 手术\norder_name: 睑内翻矫正术",
+                }
+            ],
+        ),
+        engine_result={
+            "rule_id": "SC-146",
+            "status": "uncertain",
+            "is_compliant": True,
+            "findings": "LLM 未返回任何内容。",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.7,
+            "metadata": {
+                "executor_type": "llm",
+                "llm_fallback": False,
+            },
+        },
+        surgery_bundle={
+            "source_documents": [
+                {
+                    "source_table": "presurg_discussion",
+                    "document_title": "术前讨论记录",
+                    "display_time": "2026-02-05 18:14:15",
+                    "content": "讨论时间: 2026-02-05 18:14:15",
+                }
+            ]
+        },
+    )
+
+    assert normalized["status"] == "uncertain"
+    assert "晚于术前文书" in str(normalized["findings"])
+    assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc146_temporal_order_after_preop"
+
+
+def test_sc_146_should_fallback_to_non_compliant_when_order_is_before_preop_note():
+    service = SichuanQCService()
+    normalized = service._apply_sc146_temporal_fallback(
+        rule_input=RuleExecutionInput(
+            rule_id="SC-146",
+            document_type="上级查房记录",
+            execution_domain="course",
+            primary_medical_text="诊疗计划：明日行手术。",
+            supporting_evidence=[],
+            timeline_facts=[],
+            source_documents=[
+                {
+                    "source_table": "inpat_nondrug_order",
+                    "document_title": "睑内翻矫正术",
+                    "display_time": "2026-02-05 08:00:00",
+                    "content": "order_type: 手术\norder_name: 睑内翻矫正术",
+                }
+            ],
+        ),
+        engine_result={
+            "rule_id": "SC-146",
+            "status": "uncertain",
+            "is_compliant": True,
+            "findings": "LLM 未返回任何内容。",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.7,
+            "metadata": {
+                "executor_type": "llm",
+                "llm_fallback": False,
+            },
+        },
+        surgery_bundle={
+            "source_documents": [
+                {
+                    "source_table": "presurg_summary",
+                    "document_title": "术前小结",
+                    "display_time": "2026-02-05 18:43:34",
+                    "content": "术前小结正文",
+                }
+            ]
+        },
+    )
+
+    assert normalized["status"] == "non_compliant"
+    assert normalized["is_compliant"] is False
+    assert "手术相关医嘱时间早于术前文书" in str(normalized["findings"])
+    assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc146_temporal_order_before_preop"
+
+
 def test_rule_set_list_should_expose_new_launch_rule_sets():
     items = list_sichuan_rule_sets()
     keys = {item["rule_set_key"] for item in items}
