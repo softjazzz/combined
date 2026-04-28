@@ -34,6 +34,14 @@ def _resolve_provider(provider_code: str) -> Dict[str, Any]:
             "base_endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "request_format": "openai",
         }
+    if code in ("deepseek",):
+        return {
+            "id": "deepseek",
+            "provider_code": "deepseek",
+            "provider_name": "DeepSeek 官方 API",
+            "base_endpoint": "https://api.deepseek.com",
+            "request_format": "openai",
+        }
     if code in ("siliconflow",):
         return {
             "id": "siliconflow",
@@ -103,6 +111,34 @@ def _resolve_model(model_code: str) -> Dict[str, Any]:
             "model_code": "Qwen/Qwen3.5-4B",
             "model_name": "Qwen/Qwen3.5-4B",
             "description": "Qwen3.5 4B 模型",
+        }
+    if code in ("deepseek-chat",):
+        return {
+            "id": "deepseek-chat",
+            "model_code": "deepseek-chat",
+            "model_name": "DeepSeek Chat",
+            "description": "DeepSeek 通用对话模型",
+        }
+    if code in ("deepseek-reasoner",):
+        return {
+            "id": "deepseek-reasoner",
+            "model_code": "deepseek-reasoner",
+            "model_name": "DeepSeek Reasoner",
+            "description": "DeepSeek 推理模型",
+        }
+    if code in ("deepseek-v4-flash",):
+        return {
+            "id": "deepseek-v4-flash",
+            "model_code": "deepseek-v4-flash",
+            "model_name": "DeepSeek V4 Flash",
+            "description": "DeepSeek V4 Flash 模型",
+        }
+    if code in ("deepseek-v4-pro",):
+        return {
+            "id": "deepseek-v4-pro",
+            "model_code": "deepseek-v4-pro",
+            "model_name": "DeepSeek V4 Pro",
+            "description": "DeepSeek V4 Pro 模型",
         }
     return {
         "id": code or "unknown",
@@ -395,7 +431,7 @@ async def test_config(request: Request, payload: Dict[str, Any]):
                 status_code=StatusCode.BAD_REQUEST,
                 detail=f"连接测试失败: provider={provider_code} 未配置 API_ENDPOINT（请检查 backend/.env）",
             )
-        if provider_code in ("alibaba", "siliconflow") and not client.api_key:
+        if provider_code in ("alibaba", "deepseek", "siliconflow") and not client.api_key:
             raise HTTPException(
                 status_code=StatusCode.BAD_REQUEST,
                 detail=f"连接测试失败: provider={provider_code} 未配置 API_KEY（请检查 backend/.env）",

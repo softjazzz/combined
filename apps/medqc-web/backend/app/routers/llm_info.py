@@ -13,12 +13,12 @@ from ..services.llm_config_loader import get_enabled_provider_codes
 
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-info"])
 
-SUPPORTED_PROVIDERS = ("alibaba", "siliconflow", "ollama")
+SUPPORTED_PROVIDERS = ("alibaba", "deepseek", "siliconflow", "ollama")
 CUSTOM_MODELS_FILE = Path(__file__).resolve().parents[2] / "data" / "llm_custom_models.json"
 
 
 class CustomModelPayload(BaseModel):
-    provider_code: str = Field(..., description="厂商编码：alibaba/siliconflow/ollama")
+    provider_code: str = Field(..., description="厂商编码：alibaba/deepseek/siliconflow/ollama")
     model_code: str = Field(..., description="模型编码（也是模型名称）")
     model_name: str | None = Field(default=None, description="模型展示名，默认同 model_code")
 
@@ -32,6 +32,10 @@ def _base_models() -> list[dict[str, Any]]:
         {"provider": "alibaba", "id": "qwen-plus", "model_code": "qwen-plus", "model_name": "Qwen-Plus", "is_custom": False},
         {"provider": "alibaba", "id": "qwen3.5-35b-a3b", "model_code": "qwen3.5-35b-a3b", "model_name": "Qwen3.5-35B-A3B", "is_custom": False},
         {"provider": "alibaba", "id": "qwen3.6-35b-a3b", "model_code": "qwen3.6-35b-a3b", "model_name": "Qwen3.6-35B-A3B", "is_custom": False},
+        {"provider": "deepseek", "id": "deepseek-chat", "model_code": "deepseek-chat", "model_name": "DeepSeek Chat", "is_custom": False},
+        {"provider": "deepseek", "id": "deepseek-reasoner", "model_code": "deepseek-reasoner", "model_name": "DeepSeek Reasoner", "is_custom": False},
+        {"provider": "deepseek", "id": "deepseek-v4-flash", "model_code": "deepseek-v4-flash", "model_name": "DeepSeek V4 Flash", "is_custom": False},
+        {"provider": "deepseek", "id": "deepseek-v4-pro", "model_code": "deepseek-v4-pro", "model_name": "DeepSeek V4 Pro", "is_custom": False},
         {"provider": "siliconflow", "id": "Qwen/Qwen3.5-27B", "model_code": "Qwen/Qwen3.5-27B", "model_name": "Qwen/Qwen3.5-27B", "is_custom": False},
         {"provider": "siliconflow", "id": "Qwen/Qwen3.5-9B", "model_code": "Qwen/Qwen3.5-9B", "model_name": "Qwen/Qwen3.5-9B", "is_custom": False},
         {"provider": "siliconflow", "id": "Qwen/Qwen3.5-4B", "model_code": "Qwen/Qwen3.5-4B", "model_name": "Qwen/Qwen3.5-4B", "is_custom": False},
@@ -88,6 +92,7 @@ async def providers(request: Request):
     enabled_provider_codes = set(get_enabled_provider_codes())
     provider_items = [
         {"id": "alibaba", "provider_name": "阿里云百炼", "provider_code": "alibaba"},
+        {"id": "deepseek", "provider_name": "DeepSeek 官方 API", "provider_code": "deepseek"},
         {"id": "siliconflow", "provider_name": "SiliconFlow", "provider_code": "siliconflow"},
         {"id": "ollama", "provider_name": "内部 Ollama", "provider_code": "ollama"},
     ]

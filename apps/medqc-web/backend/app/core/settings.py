@@ -102,6 +102,7 @@ class Settings(BaseSettings):
     # Outbound HTTP safety
     OUTBOUND_ALLOWLIST: List[str] = [
         "dashscope.aliyuncs.com",
+        "api.deepseek.com",
     ]
 
     # LLM API Configuration (unified naming; compatible with legacy SICHUAN_* env vars)
@@ -138,6 +139,8 @@ class Settings(BaseSettings):
     )
     LLM_DEFAULT_PROVIDER: Optional[str] = None
     LLM_VISIBLE_PROVIDERS: List[str] = Field(default_factory=list)
+    DEEPSEEK_API_ENDPOINT: str = "https://api.deepseek.com"
+    DEEPSEEK_API_KEY: Optional[str] = None
     SILICONFLOW_API_ENDPOINT: str = "https://api.siliconflow.cn/v1"
     SILICONFLOW_API_KEY: Optional[str] = None
     OLLAMA_API_ENDPOINT: str = "http://127.0.0.1:11434/v1"

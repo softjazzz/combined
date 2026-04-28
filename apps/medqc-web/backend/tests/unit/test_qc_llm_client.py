@@ -62,3 +62,35 @@ def test_detect_cot_observation_should_mark_implicit_when_reasoning_appears():
     assert observed["requested_enable_thinking"] is False
     assert observed["response_has_think_tags"] is True
     assert observed["response_has_reasoning_content"] is True
+
+
+def test_deepseek_chat_should_not_send_enable_thinking():
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-chat",
+            "provider_code": "deepseek",
+        }
+    )
+
+    payload = client._build_provider_specific_payload()
+
+    assert payload == {}
+
+
+def test_deepseek_reasoner_should_send_thinking_and_reasoning_effort():
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-reasoner",
+            "provider_code": "deepseek",
+            "custom_parameters": {"enable_thinking": True, "reasoning_effort": "high"},
+        }
+    )
+
+    payload = client._build_provider_specific_payload()
+
+    assert payload["thinking"] == {"type": "enabled"}
+    assert payload["reasoning_effort"] == "high"

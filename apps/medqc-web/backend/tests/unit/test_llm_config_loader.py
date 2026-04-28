@@ -36,3 +36,41 @@ async def test_load_config_should_prefer_memory_config_over_env(monkeypatch):
     finally:
         llm_config_loader.llm_configs.clear()
         llm_config_loader.llm_configs.update(original_configs)
+
+
+def test_build_provider_runtime_config_should_support_deepseek(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_ENDPOINT", "https://api.deepseek.com")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    monkeypatch.setenv("LLM_VISIBLE_PROVIDERS", "deepseek,alibaba")
+
+    config = llm_config_loader.build_provider_runtime_config(
+        provider_code="deepseek",
+        model_code="deepseek-chat",
+        custom_parameters={"reasoning_effort": "high"},
+    )
+
+    assert config["provider_code"] == "deepseek"
+    assert config["provider_name"] == "DeepSeek"
+    assert config["api_endpoint"] == "https://api.deepseek.com"
+    assert config["api_key"] == "sk-test"
+    assert config["model"] == "deepseek-chat"
+    assert config["custom_parameters"]["reasoning_effort"] == "high"
+
+
+def test_build_provider_runtime_config_should_use_env_model_for_siliconflow(monkeypatch):
+    monkeypatch.setenv("SILICONFLOW_API_ENDPOINT", "https://api.siliconflow.cn/v1")
+    monkeypatch.setenv("SILICONFLOW_API_KEY", "sk-siliconflow")
+    monkeypatch.setenv("LLM_VISIBLE_PROVIDERS", "siliconflow,deepseek,alibaba")
+    monkeypatch.setenv("LLM_MODEL", "Qwen/Qwen3.6-35B-A3B")
+
+    config = llm_config_loader.build_provider_runtime_config(
+        provider_code="siliconflow",
+        model_code=None,
+        custom_parameters={},
+    )
+
+    assert config["provider_code"] == "siliconflow"
+    assert config["provider_name"] == "SiliconFlow"
+    assert config["api_endpoint"] == "https://api.siliconflow.cn/v1"
+    assert config["api_key"] == "sk-siliconflow"
+    assert config["model"] == "Qwen/Qwen3.6-35B-A3B"

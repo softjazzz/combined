@@ -20,6 +20,7 @@ class SichuanQCLLMClient:
     THINKING_MIN_MAX_TOKENS = 16384
     THINKING_LARGE_RULES_MAX_TOKENS = 24576
     MAX_TOKENS_HARD_CAP = 32768
+    DEEPSEEK_BASE_URL_PREFIX = "https://api.deepseek.com"
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         if config:
@@ -29,11 +30,14 @@ class SichuanQCLLMClient:
             self.timeout_seconds: int = config.get("timeout_seconds", 120)
             self.allow_mock_when_unconfigured: bool = bool(config.get("allow_mock_when_unconfigured", False))
             self.config_source = config.get("source", "unknown")
+            self.provider_code: str = str(config.get("provider_code") or "").strip().lower()
 
             custom_params = config.get("custom_parameters", {})
             self.temperature: float = custom_params.get("temperature", 0.2)
             self.top_p: float = custom_params.get("top_p", 0.9)
             self.max_tokens: int = custom_params.get("max_tokens", self.DEFAULT_MAX_TOKENS)
+            self.enable_thinking: bool = bool(custom_params.get("enable_thinking", False))
+            self.reasoning_effort: str = str(custom_params.get("reasoning_effort") or "").strip().lower()
 
             logger.info(
                 "SichuanQCLLMClient custom init: model=%s source=%s temperature=%s top_p=%s max_tokens=%s",
@@ -51,10 +55,13 @@ class SichuanQCLLMClient:
             self.timeout_seconds = s.LLM_TIMEOUT_SECONDS
             self.allow_mock_when_unconfigured = s.LLM_ALLOW_MOCK_WHEN_UNCONFIGURED
             self.config_source = "env"
+            self.provider_code = ""
 
             self.temperature = 0.2
             self.top_p = 0.9
             self.max_tokens = self.DEFAULT_MAX_TOKENS
+            self.enable_thinking = False
+            self.reasoning_effort = ""
 
             logger.info(
                 "SichuanQCLLMClient env init: source=%s endpoint_set=%s api_key_set=%s model=%s allow_mock=%s",
@@ -102,8 +109,8 @@ class SichuanQCLLMClient:
             "top_p": self.top_p,
             "max_tokens": max_tokens,
             "stream": False,
-            "enable_thinking": False,
         }
+        payload.update(self._build_provider_specific_payload())
 
         try:
             result = await safe_post_json(
@@ -161,7 +168,23 @@ class SichuanQCLLMClient:
 
     def _is_thinking_model(self) -> bool:
         model = (self.model or "").lower()
-        return ("qwen3.5" in model) or ("thinking" in model)
+        return ("qwen3.5" in model) or ("thinking" in model) or (model == "deepseek-reasoner")
+
+    def _is_deepseek_provider(self) -> bool:
+        if self.provider_code == "deepseek":
+            return True
+        endpoint = str(self.api_endpoint or "").strip().lower().rstrip("/")
+        return endpoint.startswith(self.DEEPSEEK_BASE_URL_PREFIX)
+
+    def _build_provider_specific_payload(self) -> Dict[str, Any]:
+        if self._is_deepseek_provider():
+            extra: Dict[str, Any] = {}
+            if self.model == "deepseek-reasoner" or self.enable_thinking:
+                extra["thinking"] = {"type": "enabled"}
+                if self.reasoning_effort in {"low", "medium", "high"}:
+                    extra["reasoning_effort"] = self.reasoning_effort
+            return extra
+        return {"enable_thinking": False}
 
     @staticmethod
     def _extract_usage_breakdown(result: Dict[str, Any]) -> Dict[str, int]:

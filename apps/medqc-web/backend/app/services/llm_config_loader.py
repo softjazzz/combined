@@ -13,7 +13,7 @@ from ..storage.memory import llm_configs
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_PROVIDER_CODES = ("alibaba", "siliconflow", "ollama")
+SUPPORTED_PROVIDER_CODES = ("alibaba", "deepseek", "siliconflow", "ollama")
 
 
 def get_enabled_provider_codes() -> tuple[str, ...]:
@@ -41,6 +41,8 @@ def get_default_provider_code() -> str:
         return "ollama"
     if "alibaba" in enabled:
         return "alibaba"
+    if "deepseek" in enabled:
+        return "deepseek"
     return enabled[0]
 
 
@@ -60,10 +62,15 @@ def build_provider_runtime_config(
         logger.warning("provider_code=%s 当前环境未启用，回退 %s", code, fallback)
         code = fallback
 
-    if code == "siliconflow":
+    if code == "deepseek":
+        endpoint = str(settings.DEEPSEEK_API_ENDPOINT or "").strip()
+        api_key = str(settings.DEEPSEEK_API_KEY or "").strip() or None
+        model = str(model_code or "deepseek-chat").strip()
+        provider_name = "DeepSeek"
+    elif code == "siliconflow":
         endpoint = str(settings.SILICONFLOW_API_ENDPOINT or "").strip()
         api_key = str(settings.SILICONFLOW_API_KEY or "").strip() or None
-        model = str(model_code or "Qwen/Qwen3.5-27B").strip()
+        model = str(model_code or settings.LLM_MODEL or "Qwen/Qwen3.5-27B").strip()
         provider_name = "SiliconFlow"
     elif code == "ollama":
         endpoint = str(settings.OLLAMA_API_ENDPOINT or "").strip()
@@ -293,6 +300,8 @@ class LLMConfigLoader:
                     config.get("allow_mock_when_unconfigured", client.allow_mock_when_unconfigured)
                 )
                 client.config_source = str(config.get("source") or "unknown")
+                if hasattr(client, "provider_code"):
+                    client.provider_code = str(config.get("provider_code") or "").strip().lower()
 
                 custom_params = config.get("custom_parameters", {}) or {}
                 if hasattr(client, "temperature"):
@@ -301,6 +310,10 @@ class LLMConfigLoader:
                     client.top_p = float(custom_params.get("top_p", 0.9))
                 if hasattr(client, "max_tokens"):
                     client.max_tokens = int(custom_params.get("max_tokens", 16384))
+                if hasattr(client, "enable_thinking"):
+                    client.enable_thinking = bool(custom_params.get("enable_thinking", False))
+                if hasattr(client, "reasoning_effort"):
+                    client.reasoning_effort = str(custom_params.get("reasoning_effort") or "").strip().lower()
 
                 logger.info(
                     "✅ 成功为服务重新加载配置: provider=%s model=%s source=%s",
