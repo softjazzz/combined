@@ -61,7 +61,7 @@ MATRIX_CASES: tuple[MatrixCase, ...] = (
         expected_status="non_compliant",
         expected_hit_type="exact_hit",
         target_document_type="日常病程记录",
-        notes="当前工作区基线下样本池候选规则已收窄到 SC-070，但最近 bundle 修复后的真实 batch 仍未形成稳定命中，需作为重跑优先样本。",
+        notes="当前工作区基线下样本池候选规则已收窄到 SC-070，且已在最近硅基流动基线 batch 中形成稳定命中。",
     ),
     MatrixCase(
         case_id="semantic-core-002",
@@ -103,7 +103,7 @@ MATRIX_CASES: tuple[MatrixCase, ...] = (
         expected_hit_type="exact_hit",
         contrast_rule_ids=("SC-033", "SC-032"),
         target_document_type="日常病程记录",
-        notes="作为 SC-036 的 exact-hit 基线样本保留；最近 bundle 修复后的正式 batch 尚未覆盖到这条。",
+        notes="作为 SC-036 的 exact-hit 基线样本保留，且已在最近硅基流动基线 batch 中稳定命中。",
     ),
     MatrixCase(
         case_id="semantic-core-005",
