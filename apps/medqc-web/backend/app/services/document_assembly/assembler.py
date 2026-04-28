@@ -518,7 +518,7 @@ def _assemble_presurg_discussion_text(payload: dict[str, Any]) -> str:
 
 def _extract_direct_text(row: dict[str, Any]) -> tuple[str, str]:
     for field_name in _TEXT_CANDIDATES:
-        text_value = _extract_field_text(row, field_name)
+        text_value = _merge_field_text(row, field_name)
         if text_value:
             return field_name, text_value
     return "", ""
@@ -566,6 +566,8 @@ def build_document_select_columns(document_type: str, available_columns: set[str
     for field_name in _TEXT_CANDIDATES:
         if field_name in available_columns and field_name not in selected:
             selected.append(field_name)
+    if document_type in _MULTI_FIELD_RULES and "v2_schema" in available_columns and "v2_schema" not in selected:
+        selected.append("v2_schema")
     for field_name in _SPECIAL_SELECT_FIELDS.get(document_type, ()):
         if field_name in available_columns and field_name not in selected:
             selected.append(field_name)
@@ -606,7 +608,7 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
     elif document_type in _MULTI_FIELD_RULES:
         texts: list[str] = []
         for index, spec in enumerate(_MULTI_FIELD_RULES[document_type]):
-            text_value = _extract_field_text(payload, spec.key)
+            text_value = _merge_field_text(payload, spec.key)
             source_fields.append(
                 DocumentSourceField(
                     source_table=document_type,
