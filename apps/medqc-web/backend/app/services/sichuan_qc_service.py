@@ -62,6 +62,26 @@ _SC_036_STRICT_CUSTOM_PROMPT = """【检查要点】
 6. 【重点收紧】遇到“ESR/PCT/CRP异常后仅写炎症指标较前好转”“肾功异常后仅写继续观察”这类表述时，默认视为分析不足，除非同段或紧邻病程中还有明确的异常原因解释和处理计划。
 7. 【格式要求】你必须严格返回纯JSON格式，禁止输出任何分析过程、思考步骤或解释性文字。"""
 
+_SC_039_STRICT_CUSTOM_PROMPT = """【检查要点】
+1. 本规则只根据病历文本本身判断危急值记录是否完整合规，不依赖危急值数据表、阈值表、LIS 结构化标记。
+2. 只要病历文本已经明确把某事件当作危急值处理，即进入本规则判定。典型触发文本包括：出现“危急值”“接危急值”“危急值回报”“危急值处理”“接到电话通知”等表述，或同段直接记录危急值处置语境下的关键结果与处理，例如“K 2.76mmol/L，行静脉补钾”“K 1.68mmol/L”“K 2.05mmol/L”等。
+3. 合规的危急值病程记录，应尽量完整体现以下闭环要素中的大部分：
+   (a) 危急值报告/接收时间，至少应尽量具体到分钟；
+   (b) 具体项目和具体数值；
+   (c) 患者当时情况、症状、体征或床旁评估；
+   (d) 明确的处理措施，不能只写“已处理”“已补钾”“继续观察”；
+   (e) 处理后观察、复查结果或下一步计划；
+   (f) 责任医师记录归属清晰。
+4. 直接判定为不合规的典型情形：
+   (a) 只写危急值项目和数值，无其它内容；
+   (b) 只写“行静脉补钾”“已处理”“接电脑危急值”等简略表述；
+   (c) 未写危急值报告时间、处置时间、具体处置内容；
+   (d) 未写查看患者情况、处理后效果或复查计划。
+5. 若病历文本仅出现“危急值”字样，但当前提供的内容明显是截断片段，无法判断同一条记录后续是否已补全，才可判定为 uncertain；不要因为写得简单就放宽为 uncertain。
+6. 只要文本已经自认是危急值事件，就不要再额外追问它在客观上是否达到危急值阈值；本规则检查的是病历记录质量，不是危急值阈值识别。
+7. 【重点案例】对于“K 1.68mmol/L、K 2.05mmol/L 无其它内容”“K 2.76mmol/L，行静脉补钾，未描述危急值报告、处置时间及具体补钾情况”“接到危急值后未查看患者情况”“接电脑危急值”这类文本，默认应判定为 non_compliant。
+8. 【格式要求】你必须严格返回纯JSON格式，禁止输出任何分析过程、思考步骤或解释性文字。"""
+
 # SichuanQCLLMClient 已拆分至 qc_llm_client.py
 # 通过上方 import 重新导出，外部引用不受影响
 
@@ -127,6 +147,9 @@ class SichuanQCService:
         if rule_id == "SC-036":
             normalized["custom_prompt"] = _SC_036_STRICT_CUSTOM_PROMPT
             normalized["prompt_version"] = "runtime-override-sc036-v2"
+        elif rule_id == "SC-039":
+            normalized["custom_prompt"] = _SC_039_STRICT_CUSTOM_PROMPT
+            normalized["prompt_version"] = "runtime-override-sc039-v1"
 
         raw_executor_type = str(normalized.get("executor_type") or "").strip().lower()
         executor_type = raw_executor_type
