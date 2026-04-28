@@ -99,9 +99,10 @@ MATRIX_CASES: tuple[MatrixCase, ...] = (
         manual_issue_text="在术前小结及术前讨论之前，已经下达手术医嘱。",
         primary_rule_id="SC-146",
         expected_status="non_compliant",
-        expected_hit_type="exact_hit",
+        expected_hit_type="observe",
         target_document_type="日常病程记录",
-        notes="第二批 SC-146 当前已在最新硅基流动基线中稳定命中。",
+        current_status="observe",
+        notes="观察位：当前快照里手术医嘱时间晚于术前讨论/术前小结，人工问题文本与现有时序证据不一致，不再作为第二批核心验收锚点。",
     ),
     MatrixCase(
         case_id="semantic-b2-observe-001",
@@ -290,7 +291,6 @@ def _build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
             summary["skip_case_count"] += 1
         else:
             summary["core_case_count"] += 1
-        if case.current_status != "skip":
             if batch_hit:
                 summary["batch_hit_count"] += 1
             else:

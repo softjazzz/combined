@@ -20,12 +20,11 @@ from app.services.sample_validation_rule_sets import resolve_sample_validation_p
 
 
 DEFAULT_POOL_NAME = "0426"
-DEFAULT_RECORD_IDS: tuple[str, ...] = ("2327691", "2304958", "1962757", "2212522")
+DEFAULT_RECORD_IDS: tuple[str, ...] = ("2327691", "2304958", "1962757")
 DEFAULT_EXPECTATIONS: dict[str, dict[str, str]] = {
     "2327691": {"SC-069": "non_compliant"},
     "2304958": {"SC-039": "non_compliant"},
     "1962757": {"SC-039": "non_compliant"},
-    "2212522": {"SC-146": "non_compliant"},
 }
 
 
@@ -37,7 +36,7 @@ def _parse_args() -> argparse.Namespace:
         dest="record_ids",
         action="append",
         default=[],
-        help="指定病历 visit_id，可重复传入；默认使用固定 4 条第二批样本",
+        help="指定病历 visit_id，可重复传入；默认使用第二批核心样本",
     )
     parser.add_argument(
         "--created-by",
