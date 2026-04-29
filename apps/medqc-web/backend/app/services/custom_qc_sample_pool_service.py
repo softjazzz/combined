@@ -182,14 +182,14 @@ _BUNDLE_SOURCE_TABLE_CATEGORY_MAP: Dict[str, List[str]] = {
     "pathology_exam_report": ["exam_report_quality"],
     "handoff_record": ["handover_communication"],
     "handover_record": ["handover_communication"],
-    "presurg_summary": ["operation_record"],
+    "presurg_summary": ["operation_record", "presurg_summary_quality"],
     "presurg_discussion": ["operation_record"],
     "surgery_application": ["operation_record"],
     "surgery_record": ["operation_record"],
     "surgery_safecheck_record": ["operation_record"],
     "surgery_risk_assessment": ["operation_record"],
     "anesthesia_record": ["operation_record"],
-    "postsurg_firstcourse_record": ["operation_record"],
+    "postsurg_firstcourse_record": ["operation_record", "postsurg_firstcourse_quality"],
     "surgery_inform_consent": ["operation_record", "consent_quality"],
     "docpat_commu_record": ["consent_quality"],
 }
@@ -410,6 +410,42 @@ def _looks_like_operation_preop_conclusion_issue(text: str) -> bool:
     )
 
 
+def _looks_like_presurg_summary_quality_issue(text: str) -> bool:
+    if "术前小结" not in text:
+        return False
+    return _contains_any(
+        text,
+        (
+            "未按要求书写",
+            "手术要点",
+            "归纳把握不准确",
+            "记录不全",
+            "内容不全",
+            "缺项",
+            "未书写",
+        ),
+    )
+
+
+def _looks_like_postsurg_firstcourse_quality_issue(text: str) -> bool:
+    if not _contains_any(text, ("术后首次病程", "术后病程记录")):
+        return False
+    return _contains_any(
+        text,
+        (
+            "手术时间",
+            "实际手术时间",
+            "术后处理措施",
+            "术后注意事项",
+            "告知手术情况",
+            "书写不规范",
+            "缺少",
+            "漏项",
+            "不一致",
+        ),
+    )
+
+
 @lru_cache(maxsize=1)
 def _load_issue_category_rule_map() -> Dict[str, List[str]]:
     mapping_path = Path(__file__).resolve().parents[2] / "data" / "synthetic_qc" / "sheet2_intrinsic_issue_mapping.json"
@@ -523,6 +559,16 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "exclude_reason": "纯时效/缺文书/签名类问题，首批不纳入 LLM 内涵验证",
         }
 
+    if _looks_like_postsurg_firstcourse_quality_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "postsurg_firstcourse_quality",
+            "expected_scene": "final",
+            "candidate_rule_ids": ["SC-105"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
     if _contains_any(normalized, ("鉴别诊断", "诊断依据", "诊疗计划", "病例特点", "首次病程")):
         return {
             "coverage_type": "llm_intrinsic",
@@ -602,6 +648,16 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "issue_category": "operation_preop_mdt",
             "expected_scene": "final",
             "candidate_rule_ids": ["SC-083"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_presurg_summary_quality_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "presurg_summary_quality",
+            "expected_scene": "final",
+            "candidate_rule_ids": ["SC-081"],
             "include_in_batch_1": True,
             "exclude_reason": "",
         }
@@ -702,7 +758,9 @@ _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
     "progress_order_consistency": ["SC-146"],
     "senior_round_content": ["SC-049", "SC-050", "SC-052"],
     "operation_preop_mdt": ["SC-083"],
+    "presurg_summary_quality": ["SC-081"],
     "operation_preop_conclusion": ["SC-084", "SC-085"],
+    "postsurg_firstcourse_quality": ["SC-105"],
     "operation_record_quality": ["SC-097", "SC-098"],
 }
 
@@ -714,7 +772,9 @@ _SAMPLE_SC_PRIMARY_RULE_WHITELIST: Dict[str, List[str]] = {
     "daily_course_analysis": ["SC-036"],
     "progress_order_consistency": ["SC-146"],
     "operation_preop_mdt": ["SC-083"],
+    "presurg_summary_quality": ["SC-081"],
     "operation_preop_conclusion": ["SC-084"],
+    "postsurg_firstcourse_quality": ["SC-105"],
     "operation_record_quality": ["SC-097"],
 }
 
@@ -771,6 +831,21 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
         if _contains_any(
             normalized,
             (
+                "病情变化",
+                "目前症状",
+                "体征",
+                "过于简略",
+                "过于简单",
+                "无具体内容",
+                "未明确说明",
+                "未体现",
+                "未提及",
+            ),
+        ):
+            return ["SC-032"]
+        if _contains_any(
+            normalized,
+            (
                 "用药",
                 "抗菌药",
                 "补钾",
@@ -791,6 +866,9 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
     if issue_category == "operation_preop_mdt":
         return ["SC-083"]
 
+    if issue_category == "presurg_summary_quality":
+        return ["SC-081"]
+
     if issue_category == "operation_preop_conclusion":
         if _contains_any(
             normalized,
@@ -804,6 +882,9 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
         ):
             return ["SC-085"]
         return ["SC-084"]
+
+    if issue_category == "postsurg_firstcourse_quality":
+        return ["SC-105"]
 
     return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
 

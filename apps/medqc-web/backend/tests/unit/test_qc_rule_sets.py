@@ -107,6 +107,21 @@ def test_sc_036_should_use_stricter_abnormal_exam_analysis_prompt():
     assert "默认视为分析不足" in prompt
 
 
+def test_sc_032_should_use_stricter_daily_course_change_prompt():
+    service = SichuanQCService()
+
+    raw_rule = service.get_rule_by_id("SC-032")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    prompt = str(rule.get("custom_prompt") or "")
+    assert "病程记录无具体内容" in prompt
+    assert "病程过于简单/过于简略" in prompt
+    assert "症状、体征、病情演变" in prompt
+    assert "{medical_text}" in prompt
+    assert "只返回单个 JSON 对象" in prompt
+
+
 def test_sc_039_should_use_text_only_critical_value_prompt():
     service = SichuanQCService()
 
@@ -121,6 +136,34 @@ def test_sc_039_should_use_text_only_critical_value_prompt():
     assert "接电脑危急值" in prompt
     assert "接到危急值后未查看患者情况" in prompt
     assert "confidence_requirement" not in prompt
+
+
+def test_sc_081_should_use_stricter_presurg_summary_prompt():
+    service = SichuanQCService()
+
+    raw_rule = service.get_rule_by_id("SC-081")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    prompt = str(rule.get("custom_prompt") or "")
+    assert "术前小结记录不完整或内容不当" in prompt
+    assert "{medical_text}" in prompt
+    assert "手术要点" in prompt
+    assert "空泛表述" in prompt
+
+
+def test_sc_105_should_use_stricter_postsurg_firstcourse_prompt():
+    service = SichuanQCService()
+
+    raw_rule = service.get_rule_by_id("SC-105")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    prompt = str(rule.get("custom_prompt") or "")
+    assert "术后首次病程记录书写不完整或不规范" in prompt
+    assert "{medical_text}" in prompt
+    assert "术后处理措施" in prompt
+    assert "向家属告知手术情况" in prompt
 
 
 def test_sc_084_sc_085_should_align_with_presurg_discussion():

@@ -115,6 +115,29 @@ def test_classify_daily_course_analysis_issue():
     assert result["candidate_rule_ids"] == ["SC-032", "SC-033", "SC-036"]
 
 
+def test_daily_course_analysis_should_prefer_sc032_for_brief_change_text():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="daily_course_analysis",
+        manual_issue_text="病程记录过于简略，未描述患者病情变化、目前症状及体征。",
+    )
+
+    assert rule_ids == ["SC-032"]
+
+
+def test_classify_presurg_summary_quality_issue():
+    result = classify_manual_issue_text("未按要求书写术前小结记录，术前小结记录：手术要点归纳把握不准确。")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "presurg_summary_quality"
+    assert result["candidate_rule_ids"] == ["SC-081"]
+
+
+def test_classify_postsurg_firstcourse_quality_issue():
+    result = classify_manual_issue_text("术后首次病程记录书写不规范，缺少术后处理措施、术后注意事项及向家属告知手术情况等内容。")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "postsurg_firstcourse_quality"
+    assert result["candidate_rule_ids"] == ["SC-105"]
+
+
 def test_classify_critical_value_management_issue():
     result = classify_manual_issue_text("2026年3月11日危急值处理记录仅描写K 2.76mmol/L，行静脉补钾，未描述危急值报告、处置时间及具体补钾情况。")
     assert result["coverage_type"] == "llm_intrinsic"

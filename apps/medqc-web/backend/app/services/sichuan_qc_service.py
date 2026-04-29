@@ -50,6 +50,27 @@ from .sc_rule_family import (
 
 logger = logging.getLogger(__name__)
 
+_SC_032_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-032：病程记录重要病情变化(症状及体征)未记录或记录不全。
+
+【检查要点】
+1. 只检查日常病程记录中是否完整记录了当日重要病情变化，重点看症状、体征、病情演变和关键阴性情况是否写清。
+2. 下列情形通常判定为不合规：
+   (a) 记录仅有一句套话，如“病情同前”“继续治疗”“继续观察”，没有任何具体病情变化；
+   (b) 记录过于简略，未写患者当前症状、体征、查房结论或病情变化；
+   (c) 上下文能看出患者当日存在明确变化，但病程正文未体现。
+3. 若病情稳定，只要病程已明确写出“无特殊不适/症状缓解/生命体征平稳/切口情况/查体情况”等关键变化，也可判定为合规。
+4. 不要因为文字篇幅短就直接判问题；关键是有没有把当日重要变化写出来。
+5. 对“病程记录无具体内容”“病程过于简单/过于简略”“未描述病情变化、目前症状、体征”这类文本，若正文证据也支持，应优先判定为 non_compliant。
+
+【病历文本】
+{medical_text}
+
+【输出要求】
+1. 只返回单个 JSON 对象，不要输出 Markdown，不要输出解释性文字。
+2. JSON 结构固定为：
+{{"is_compliant": boolean, "issues": [string], "findings": string, "evidence": string, "suggestion": string, "confidence": number}}
+3. 若证据不足以判断，再返回 is_compliant=true，同时 findings 明确写“证据不足”，issues 为空。"""
+
 _SC_036_STRICT_CUSTOM_PROMPT = """【检查要点】
 1. 本规则专门检查病程记录中是否对重要辅助检查结果，尤其是异常检查结果，进行了充分分析并给出处理意见。
 2. 合规必须同时满足以下至少两层信息：
@@ -81,6 +102,40 @@ _SC_039_STRICT_CUSTOM_PROMPT = """【检查要点】
 6. 只要文本已经自认是危急值事件，就不要再额外追问它在客观上是否达到危急值阈值；本规则检查的是病历记录质量，不是危急值阈值识别。
 7. 【重点案例】对于“K 1.68mmol/L、K 2.05mmol/L 无其它内容”“K 2.76mmol/L，行静脉补钾，未描述危急值报告、处置时间及具体补钾情况”“接到危急值后未查看患者情况”“接电脑危急值”这类文本，默认应判定为 non_compliant。
 8. 【格式要求】你必须严格返回纯JSON格式，禁止输出任何分析过程、思考步骤或解释性文字。"""
+
+_SC_081_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-081：术前小结记录不完整或内容不当。
+
+【检查要点】
+1. 重点检查术前小结是否完整体现病情概况、拟行手术、主要风险、手术要点、术前准备及注意事项。
+2. 若术前小结仅有模板化套话，或“手术要点”写成“术中注意无菌操作”这类空泛表述，通常判定为 non_compliant。
+3. 若术前小结缺少关键结论、风险提示、术前准备、手术要点等任一重要内容，也应判定为 non_compliant。
+4. 若提供的文书并非术前小结，或正文明显残缺无法判断，可返回证据不足。
+
+【病历文本】
+{medical_text}
+
+【输出要求】
+1. 只返回单个 JSON 对象，不要输出 Markdown，不要输出解释性文字。
+2. JSON 结构固定为：
+{{"is_compliant": boolean, "issues": [string], "findings": string, "evidence": string, "suggestion": string, "confidence": number}}
+3. 若判定不合规，findings 要直接指出缺失项或空泛项；evidence 要引用原文中的关键短句。"""
+
+_SC_105_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-105：术后首次病程记录书写不完整或不规范。
+
+【检查要点】
+1. 重点检查术后首次病程记录是否写明手术时间、麻醉方式、术式、术中情况、术后处理措施、术后注意事项及向家属告知手术情况。
+2. 若手术时间与上下文不一致，或缺少术后处理措施、术后注意事项、向家属告知情况等关键要素，通常判定为 non_compliant。
+3. 若术后首次病程仅罗列手术名称，没有具体术后处理和注意事项，也应判定为 non_compliant。
+4. 若当前文本不是术后首次病程，或正文明显残缺无法判断，可返回证据不足。
+
+【病历文本】
+{medical_text}
+
+【输出要求】
+1. 只返回单个 JSON 对象，不要输出 Markdown，不要输出解释性文字。
+2. JSON 结构固定为：
+{{"is_compliant": boolean, "issues": [string], "findings": string, "evidence": string, "suggestion": string, "confidence": number}}
+3. 若判定不合规，findings 要写明具体缺项或时间不一致点；evidence 要引用原文中的关键字段。"""
 
 # SichuanQCLLMClient 已拆分至 qc_llm_client.py
 # 通过上方 import 重新导出，外部引用不受影响
@@ -144,12 +199,21 @@ class SichuanQCService:
         rule_id = str(normalized.get("rule_id") or "").strip().upper()
         rule_code = str(normalized.get("rule_code") or "").strip()
 
-        if rule_id == "SC-036":
+        if rule_id == "SC-032":
+            normalized["custom_prompt"] = _SC_032_STRICT_CUSTOM_PROMPT
+            normalized["prompt_version"] = "runtime-override-sc032-v1"
+        elif rule_id == "SC-036":
             normalized["custom_prompt"] = _SC_036_STRICT_CUSTOM_PROMPT
             normalized["prompt_version"] = "runtime-override-sc036-v2"
         elif rule_id == "SC-039":
             normalized["custom_prompt"] = _SC_039_STRICT_CUSTOM_PROMPT
             normalized["prompt_version"] = "runtime-override-sc039-v1"
+        elif rule_id == "SC-081":
+            normalized["custom_prompt"] = _SC_081_STRICT_CUSTOM_PROMPT
+            normalized["prompt_version"] = "runtime-override-sc081-v1"
+        elif rule_id == "SC-105":
+            normalized["custom_prompt"] = _SC_105_STRICT_CUSTOM_PROMPT
+            normalized["prompt_version"] = "runtime-override-sc105-v1"
 
         raw_executor_type = str(normalized.get("executor_type") or "").strip().lower()
         executor_type = raw_executor_type
