@@ -270,6 +270,48 @@ def _looks_like_consultation_execution_issue(text: str) -> bool:
     return not _contains_any(text, ("无会诊记录", "会诊记录无记录", "无麻醉科会诊记录"))
 
 
+def _looks_like_handover_communication_issue(text: str) -> bool:
+    if not _contains_any(text, ("交接班", "交班记录", "接班记录", "管床医生发生变更")):
+        return False
+    return _contains_any(
+        text,
+        (
+            "未书写交接班记录",
+            "无交接班记录",
+            "无交班记录",
+            "无接班记录",
+            "交接班记录缺项",
+            "交接班记录不完整",
+            "交接班记录内容不全",
+            "交接班记录描述不清",
+            "管床医生发生变更未书写交接班记录",
+        ),
+    )
+
+
+def _looks_like_consent_quality_issue(text: str) -> bool:
+    if not _contains_any(text, ("手术同意书", "知情同意书", "授权委托书", "术中更改术式", "受托人")):
+        return False
+    return _contains_any(
+        text,
+        (
+            "非授权受托人",
+            "非法定代理人",
+            "非本人",
+            "无患者签名",
+            "无医师签名",
+            "签字人员",
+            "缺项",
+            "描述不清",
+            "术中更改术式",
+            "改变手术方式",
+            "扩大手术范围",
+            "授权委托",
+            "监护人",
+        ),
+    )
+
+
 def _looks_like_consultation_record_quality_issue(text: str) -> bool:
     if "会诊" not in text:
         return False
@@ -528,6 +570,16 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "exclude_reason": "",
         }
 
+    if _looks_like_consent_quality_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "consent_quality",
+            "expected_scene": "final",
+            "candidate_rule_ids": ["SC-128", "SC-087", "SC-089", "LX-021"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
     # 纯程序/时效问题先挡掉，避免误入首批内涵样本。
     if _contains_any(
         normalized,
@@ -557,6 +609,16 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "candidate_rule_ids": [],
             "include_in_batch_1": False,
             "exclude_reason": "纯时效/缺文书/签名类问题，首批不纳入 LLM 内涵验证",
+        }
+
+    if _looks_like_handover_communication_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "handover_communication",
+            "expected_scene": "final",
+            "candidate_rule_ids": ["SC-062", "SC-063"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
         }
 
     if _looks_like_postsurg_firstcourse_quality_issue(normalized):
@@ -754,6 +816,8 @@ _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
     "daily_course_analysis": ["SC-032", "SC-033", "SC-036"],
     "consultation_execution": ["SC-070", "LX-016"],
     "consultation_record_quality": ["SC-069"],
+    "handover_communication": ["SC-062", "SC-063"],
+    "consent_quality": ["SC-128", "SC-087", "SC-089", "LX-021"],
     "critical_value_management": ["SC-039"],
     "progress_order_consistency": ["SC-146"],
     "senior_round_content": ["SC-049", "SC-050", "SC-052"],
@@ -767,6 +831,8 @@ _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
 _SAMPLE_SC_PRIMARY_RULE_WHITELIST: Dict[str, List[str]] = {
     "consultation_execution": ["SC-070"],
     "consultation_record_quality": ["SC-069"],
+    "handover_communication": ["SC-062"],
+    "consent_quality": ["SC-128"],
     "critical_value_management": ["SC-039"],
     "senior_round_content": ["SC-050"],
     "daily_course_analysis": ["SC-036"],
@@ -859,6 +925,48 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
         ):
             return ["SC-033"]
         return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
+
+    if issue_category == "handover_communication":
+        if _contains_any(
+            normalized,
+            (
+                "未书写交接班记录",
+                "无交接班记录",
+                "无交班记录",
+                "无接班记录",
+                "未完成交接班记录",
+                "未完成接班记录",
+            ),
+        ):
+            return ["SC-062"]
+        return ["SC-063"]
+
+    if issue_category == "consent_quality":
+        if _contains_any(
+            normalized,
+            (
+                "非授权受托人",
+                "非法定代理人",
+                "非本人",
+                "授权委托",
+                "委托人",
+                "监护人",
+                "签字人员",
+            ),
+        ):
+            return ["SC-128"]
+        if _contains_any(
+            normalized,
+            (
+                "术中更改术式",
+                "改变手术方式",
+                "扩大手术范围",
+            ),
+        ):
+            return ["LX-021"]
+        if _contains_any(normalized, ("缺项", "描述不清")):
+            return ["SC-089"]
+        return ["SC-087"]
 
     if issue_category == "operation_record_quality":
         return ["SC-097"]

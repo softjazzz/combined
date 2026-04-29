@@ -145,6 +145,20 @@ def test_classify_critical_value_management_issue():
     assert result["candidate_rule_ids"] == ["SC-039"]
 
 
+def test_classify_handover_communication_issue():
+    result = classify_manual_issue_text("管床医生发生变更未书写交接班记录")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "handover_communication"
+    assert result["candidate_rule_ids"] == ["SC-062", "SC-063"]
+
+
+def test_classify_consent_quality_issue_should_not_fall_back_to_programmatic():
+    result = classify_manual_issue_text("手术同意书签字人员非授权受托人")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "consent_quality"
+    assert result["candidate_rule_ids"] == ["SC-128", "SC-087", "SC-089", "LX-021"]
+
+
 def test_classify_progress_order_consistency_issue():
     result = classify_manual_issue_text("在术前小结及术前讨论之前，已经下达手术医嘱。")
     assert result["coverage_type"] == "llm_intrinsic"
@@ -217,6 +231,24 @@ def test_build_sample_pool_item_classification_update_should_support_operation_p
 
     assert patch["issue_category"] == "operation_preop_conclusion"
     assert patch["candidate_rule_ids_json"] == '["SC-084", "SC-085"]'
+
+
+def test_build_sample_pool_item_classification_update_should_support_handover_communication():
+    patch = sample_pool_module.build_sample_pool_item_classification_update(
+        {"manual_issue_text": "管床医生发生变更未书写交接班记录"}
+    )
+
+    assert patch["issue_category"] == "handover_communication"
+    assert patch["candidate_rule_ids_json"] == '["SC-062", "SC-063"]'
+
+
+def test_build_sample_pool_item_classification_update_should_support_consent_quality():
+    patch = sample_pool_module.build_sample_pool_item_classification_update(
+        {"manual_issue_text": "手术同意书签字人员非授权受托人"}
+    )
+
+    assert patch["issue_category"] == "consent_quality"
+    assert patch["candidate_rule_ids_json"] == '["SC-128", "SC-087", "SC-089", "LX-021"]'
 
 
 def test_refresh_pool_item_classifications_should_update_existing_items(monkeypatch):
