@@ -1585,6 +1585,116 @@ class SichuanQCService:
         }
 
     @staticmethod
+    def _merge_timeline_facts(
+        primary_facts: List[Dict[str, Any]],
+        extra_facts: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        merged: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in list(primary_facts or []) + list(extra_facts or []):
+            normalized = dict(item or {})
+            key = json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(normalized)
+        return merged
+
+    @staticmethod
+    def _merge_rule_input_with_bundle_documents(
+        *,
+        rule_input: RuleExecutionInput,
+        bundle: Dict[str, Any],
+        include_doc_types: Optional[tuple[str, ...]] = None,
+    ) -> RuleExecutionInput:
+        allowed = {
+            str(item or "").strip()
+            for item in (include_doc_types or ())
+            if str(item or "").strip()
+        }
+
+        source_documents = [dict(item) for item in list(rule_input.source_documents or [])]
+        supporting_evidence = [dict(item) for item in list(rule_input.supporting_evidence or [])]
+
+        existing_source_keys = {
+            (
+                str(item.get("source_table") or ""),
+                str(item.get("document_id") or ""),
+                str(item.get("display_time") or ""),
+            )
+            for item in source_documents
+        }
+        existing_support_keys = {
+            (
+                str(item.get("source_table") or ""),
+                str(item.get("document_id") or ""),
+                str(item.get("display_time") or ""),
+            )
+            for item in supporting_evidence
+        }
+
+        extra_source_documents = list(bundle.get("source_documents") or [])
+        for item in extra_source_documents:
+            source_table = str(item.get("source_table") or item.get("document_type") or "").strip()
+            if allowed and source_table not in allowed:
+                continue
+            key = (
+                source_table,
+                str(item.get("document_id") or ""),
+                str(item.get("display_time") or item.get("record_time") or ""),
+            )
+            if key not in existing_source_keys:
+                existing_source_keys.add(key)
+                source_documents.append(
+                    {
+                        "document_type": display_name_for_doc_type(str(item.get("document_type") or item.get("source_table") or "")),
+                        "source_table": source_table,
+                        "document_id": str(item.get("document_id") or ""),
+                        "document_title": str(item.get("document_title") or ""),
+                        "display_time": str(item.get("display_time") or item.get("record_time") or ""),
+                        "hit": bool(item.get("hit")),
+                        "sections": list(item.get("sections") or []),
+                        "source_fields": list(item.get("source_fields") or []),
+                        "assembly_status": str(item.get("assembly_status") or ""),
+                        "data_quality_flags": list(item.get("data_quality_flags") or []),
+                    }
+                )
+
+            evidence_text = str(item.get("content") or item.get("text_preview") or "").strip()
+            if not evidence_text:
+                continue
+            if key not in existing_support_keys:
+                existing_support_keys.add(key)
+                supporting_evidence.append(
+                    {
+                        "document_type": display_name_for_doc_type(str(item.get("document_type") or item.get("source_table") or "")),
+                        "source_table": source_table,
+                        "document_id": str(item.get("document_id") or ""),
+                        "document_title": str(item.get("document_title") or ""),
+                        "display_time": str(item.get("display_time") or item.get("record_time") or ""),
+                        "evidence_text": evidence_text[:800],
+                        "sections": list(item.get("sections") or []),
+                        "source_fields": list(item.get("source_fields") or []),
+                        "assembly_status": str(item.get("assembly_status") or ""),
+                        "data_quality_flags": list(item.get("data_quality_flags") or []),
+                    }
+                )
+
+        merged_timeline_facts = SichuanQCService._merge_timeline_facts(
+            list(rule_input.timeline_facts or []),
+            list(bundle.get("timeline_facts") or []),
+        )
+        return RuleExecutionInput(
+            rule_id=rule_input.rule_id,
+            document_type=rule_input.document_type,
+            execution_domain=rule_input.execution_domain,
+            primary_medical_text=rule_input.primary_medical_text,
+            supporting_evidence=supporting_evidence,
+            timeline_facts=merged_timeline_facts,
+            source_documents=source_documents,
+        )
+
+    @staticmethod
     def _sum_counter_dicts(values: List[Dict[str, Any]]) -> Dict[str, int]:
         merged: Dict[str, int] = {}
         for value in values:
@@ -1644,6 +1754,15 @@ class SichuanQCService:
                     source_documents,
                     list(routing.aux_doc_types),
                 )
+        elif normalized_rule_id == "SC-039":
+            primary_candidates = self._find_source_documents_for_types(
+                source_documents,
+                ["daily_course_record", "senior_course_record", "summary_record", "rescue_record"],
+            )
+            auxiliary_candidates = self._find_source_documents_for_types(
+                source_documents,
+                ["senior_course_record", "summary_record", "rescue_record", "daily_course_record"],
+            )
         else:
             primary_candidates = self._find_source_documents_for_types(
                 source_documents,
@@ -2581,6 +2700,29 @@ class SichuanQCService:
                 patient_id=patient_id,
                 visit_id=visit_id,
                 domain_bundle=domain_bundle,
+            )
+
+        normalized_rule_id = str(rule.get("rule_id") or "").strip().upper()
+        if normalized_rule_id == "SC-070":
+            consultation_bundle = load_or_assemble_domain_bundle(
+                execution_domain="consult_discussion",
+                institute_id=str(institute_id or "").strip(),
+                patient_id=str(patient_id or "").strip(),
+                visit_id=str(visit_id or "").strip(),
+                source_schema=source_schema,
+                bundle_schema=bundle_schema,
+                force_refresh=force_refresh_bundle,
+            )
+            rule_input = self._merge_rule_input_with_bundle_documents(
+                rule_input=rule_input,
+                bundle=consultation_bundle,
+                include_doc_types=("consultation_record",),
+            )
+        elif normalized_rule_id == "SC-146" and surgery_bundle is not None:
+            rule_input = self._merge_rule_input_with_bundle_documents(
+                rule_input=rule_input,
+                bundle=surgery_bundle,
+                include_doc_types=("presurg_discussion", "presurg_summary", "anesthesia_record", "postsurg_firstcourse_record"),
             )
 
         medical_text = render_rule_execution_medical_text(rule_input)

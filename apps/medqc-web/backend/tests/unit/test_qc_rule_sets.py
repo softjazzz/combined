@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 
+import pytest
+
+import app.services.sichuan_qc_service as sichuan_qc_service_module
 from app.services.qc_rule_sets import (
     SC_CONTENT_FULL_V1_RULE_IDS,
     SC_CONTENT_LAUNCH_A_V1_RULE_IDS,
@@ -132,7 +135,7 @@ def test_sc_084_sc_085_should_align_with_presurg_discussion():
         assert "适用文书: ['operation_record']" not in prompt
 
 
-def test_sc_039_should_prefer_daily_course_candidate_with_low_potassium_context():
+def test_sc_039_should_prefer_strongest_low_potassium_context_candidate():
     service = SichuanQCService()
     raw_rule = service.get_rule_by_id("SC-039")
 
@@ -171,8 +174,43 @@ def test_sc_039_should_prefer_daily_course_candidate_with_low_potassium_context(
         },
     )
 
-    assert "K 2.12mmol/l" in rule_input.primary_medical_text
-    assert "静脉补钾" in rule_input.primary_medical_text
+    assert "严重低钾血症" in rule_input.primary_medical_text
+    assert "加强静脉补钾" in rule_input.primary_medical_text
+    assert "患者病情平稳" not in rule_input.primary_medical_text
+
+
+def test_sc_039_should_fallback_to_senior_course_candidate_when_daily_note_lacks_crisis_context():
+    service = SichuanQCService()
+    raw_rule = service.get_rule_by_id("SC-039")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    routing = route_rule_to_domain(rule)
+    rule_input = service._build_rule_execution_input_from_bundle(
+        rule=rule,
+        routing=routing,
+        domain_bundle={
+            "execution_domain": "course",
+            "timeline_facts": [],
+            "source_documents": [
+                {
+                    "document_type": "daily_course_record",
+                    "document_title": "日常病程记录",
+                    "display_time": "2025-09-06 21:58:58",
+                    "content": "查房内容：患者病情平稳，继续观察病情变化。",
+                },
+                {
+                    "document_type": "senior_course_record",
+                    "document_title": "上级查房记录",
+                    "display_time": "2025-09-18 10:27:00",
+                    "content": "上级医师提示患者严重低钾血症，予以加强静脉补钾，动态复查电解质。",
+                },
+            ],
+        },
+    )
+
+    assert "严重低钾血症" in rule_input.primary_medical_text
+    assert "继续观察病情变化" not in rule_input.primary_medical_text
 
 
 def test_sc_039_should_fallback_to_non_compliant_when_llm_returns_empty_on_low_potassium_text():
@@ -654,6 +692,160 @@ def test_sc_146_should_fallback_to_non_compliant_when_order_is_before_preop_note
     assert normalized["is_compliant"] is False
     assert "手术相关医嘱时间早于术前文书" in str(normalized["findings"])
     assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc146_temporal_order_before_preop"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_rule_for_visit_sc070_should_include_consultation_supporting_evidence(monkeypatch):
+    service = SichuanQCService()
+
+    def _fake_load_bundle(*, execution_domain: str, **_: object) -> dict:
+        if execution_domain == "course":
+            return {
+                "execution_domain": "course",
+                "timeline_facts": [],
+                "document_hits": {"daily_course_record": True},
+                "data_quality_flags": [],
+                "source_documents": [
+                    {
+                        "document_type": "daily_course_record",
+                        "source_table": "daily_course_record",
+                        "document_id": "daily-001",
+                        "document_title": "日常病程记录",
+                        "display_time": "2026-03-09 09:00:00",
+                        "content": "今日病程记录仅记录患者病情变化，未明确写会诊意见执行情况。",
+                    }
+                ],
+            }
+        if execution_domain == "consult_discussion":
+            return {
+                "execution_domain": "consult_discussion",
+                "timeline_facts": [{"source_table": "consultation_record", "field": "request_at", "value": "2026-03-09 08:00:00"}],
+                "source_documents": [
+                    {
+                        "document_type": "consultation_record",
+                        "source_table": "consultation_record",
+                        "document_id": "consult-001",
+                        "document_title": "会诊记录",
+                        "display_time": "2026-03-09 10:00:00",
+                        "content": "会诊意见：建议加用利伐沙班，并动态复查血栓弹力图。",
+                    }
+                ],
+            }
+        raise AssertionError(f"unexpected domain: {execution_domain}")
+
+    async def _fake_orchestrated(**kwargs):
+        return {
+            "results": [
+                {
+                    "rule_id": "SC-070",
+                    "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+                    "status": "uncertain",
+                    "is_compliant": True,
+                    "findings": "待判断",
+                    "evidence": "",
+                    "suggestion": "",
+                    "confidence": 0.7,
+                    "metadata": {"tokens_used": 0, "api_time": 0.0},
+                }
+            ],
+            "executor_breakdown": {"llm": 1},
+        }
+
+    monkeypatch.setattr(sichuan_qc_service_module, "load_or_assemble_domain_bundle", _fake_load_bundle)
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _fake_orchestrated)
+
+    result = await service.evaluate_rule_for_visit(
+        rule_id="SC-070",
+        institute_id="HOSP-001",
+        patient_id="PAT-001",
+        visit_id="VISIT-001",
+    )
+
+    supporting = list((result.get("rule_execution_input") or {}).get("supporting_evidence") or [])
+    source_tables = {str(item.get("source_table") or "") for item in supporting}
+    assert "consultation_record" in source_tables
+    assert any("利伐沙班" in str(item.get("evidence_text") or "") for item in supporting)
+
+
+@pytest.mark.asyncio
+async def test_evaluate_rule_for_visit_sc146_should_include_surgery_bundle_supporting_evidence(monkeypatch):
+    service = SichuanQCService()
+
+    def _fake_load_bundle(*, execution_domain: str, **_: object) -> dict:
+        if execution_domain == "course":
+            return {
+                "execution_domain": "course",
+                "timeline_facts": [],
+                "document_hits": {"senior_course_record": True},
+                "data_quality_flags": [],
+                "source_documents": [
+                    {
+                        "document_type": "senior_course_record",
+                        "source_table": "senior_course_record",
+                        "document_id": "senior-001",
+                        "document_title": "上级查房记录",
+                        "display_time": "2026-02-05 08:20:35",
+                        "content": "诊疗计划：完善相关辅查，明日行左眼下睑睑内翻矫正术。",
+                    },
+                    {
+                        "document_type": "inpat_nondrug_order",
+                        "source_table": "inpat_nondrug_order",
+                        "document_id": "order-001",
+                        "document_title": "临时医嘱",
+                        "display_time": "2026-02-06 13:29:25",
+                        "content": "order_type: 手术\norder_name: 睑内翻矫正术",
+                    },
+                ],
+            }
+        if execution_domain == "surgery":
+            return {
+                "execution_domain": "surgery",
+                "timeline_facts": [{"source_table": "presurg_summary", "field": "record_time", "value": "2026-02-05 18:43:34"}],
+                "source_documents": [
+                    {
+                        "document_type": "presurg_summary",
+                        "source_table": "presurg_summary",
+                        "document_id": "preop-001",
+                        "document_title": "术前小结",
+                        "display_time": "2026-02-05 18:43:34",
+                        "content": "术前小结：拟行左眼下睑睑内翻矫正术。",
+                    }
+                ],
+            }
+        raise AssertionError(f"unexpected domain: {execution_domain}")
+
+    async def _fake_orchestrated(**kwargs):
+        return {
+            "results": [
+                {
+                    "rule_id": "SC-146",
+                    "rule_name": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+                    "status": "uncertain",
+                    "is_compliant": True,
+                    "findings": "待判断",
+                    "evidence": "",
+                    "suggestion": "",
+                    "confidence": 0.7,
+                    "metadata": {"tokens_used": 0, "api_time": 0.0},
+                }
+            ],
+            "executor_breakdown": {"llm": 1},
+        }
+
+    monkeypatch.setattr(sichuan_qc_service_module, "load_or_assemble_domain_bundle", _fake_load_bundle)
+    monkeypatch.setattr(service, "_evaluate_rules_orchestrated", _fake_orchestrated)
+
+    result = await service.evaluate_rule_for_visit(
+        rule_id="SC-146",
+        institute_id="HOSP-001",
+        patient_id="PAT-001",
+        visit_id="VISIT-001",
+    )
+
+    supporting = list((result.get("rule_execution_input") or {}).get("supporting_evidence") or [])
+    source_tables = {str(item.get("source_table") or "") for item in supporting}
+    assert "presurg_summary" in source_tables
+    assert any("术前小结" in str(item.get("document_title") or "") for item in supporting)
 
 
 def test_rule_set_list_should_expose_new_launch_rule_sets():
