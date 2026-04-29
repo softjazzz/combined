@@ -60,6 +60,20 @@ MATRIX_CASES: tuple[MatrixCase, ...] = (
         notes="当前术前讨论及术前小结正文齐全，可作为第五批核心锚点。",
     ),
     MatrixCase(
+        case_id="semantic-b5-skip-001",
+        stage="fifth_batch_skip",
+        record_id="2305896",
+        patient_name="古洪禄",
+        issue_family="术前讨论结论未入病历/缺项",
+        manual_issue_text="术前小结、术前讨论新建后未书写",
+        primary_rule_id="SC-084",
+        expected_status="skip",
+        expected_hit_type="skip",
+        target_document_type="术前讨论",
+        current_status="skip",
+        notes="skip：问题文本贴合 SC-084，但本地 PG 与 0426 快照均无手术域文书正文，当前无法形成可交付核心锚点。",
+    ),
+    MatrixCase(
         case_id="semantic-b5-observe-001",
         stage="fifth_batch_observe",
         record_id="2213898",
@@ -184,7 +198,10 @@ def _build_rows() -> tuple[list[dict[str, Any]], dict[str, Any]]:
                 break
 
         actual_status = _safe_text((actual_result or {}).get("status")).lower() or "missing"
-        if case.current_status == "observe" and actual_status == "missing":
+        if case.current_status == "skip":
+            actual_status = "skip"
+            hit_type = "skip"
+        elif case.current_status == "observe" and actual_status == "missing":
             actual_status = "not_stored"
             hit_type = "observe"
         else:

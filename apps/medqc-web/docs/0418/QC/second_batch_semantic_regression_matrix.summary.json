@@ -2,6 +2,7 @@
   "pool_id": "a627718c-bde9-4cd3-af9d-7856c072525e",
   "target_pool_name": "0426",
   "primary_batch_job_ids": [
+    "415d4dea-8784-4195-9d9a-d230f5fa3437",
     "fdb21fca-f49d-4092-a868-7ad13498df1e",
     "03d57139-3d1b-459c-a67d-962692a75c38",
     "b4d7b15c-80eb-4a30-891d-cfab09847311",
@@ -17,16 +18,14 @@
     "56cc5a6b-90ee-4449-88b2-c96d2fb754d4",
     "bbabe010-a73d-4863-817b-1e1c922a4e8b",
     "9c2d30eb-050c-46da-99ce-171569bb9fab",
-    "7c7d5daa-cbca-4813-b7a1-45e1a805bee4",
-    "b2fc8af9-6929-459f-b54f-d16afc293568",
-    "4b659587-c2e6-450c-85bb-72b8bed150d9"
+    "7c7d5daa-cbca-4813-b7a1-45e1a805bee4"
   ],
-  "case_count": 6,
-  "core_case_count": 2,
+  "case_count": 7,
+  "core_case_count": 3,
   "observe_case_count": 3,
   "skip_case_count": 1,
-  "batch_hit_count": 2,
+  "batch_hit_count": 3,
   "batch_miss_count": 0,
-  "cases_with_narrowed_primary_rule": 4,
+  "cases_with_narrowed_primary_rule": 5,
   "execution_strategy": "standard"
 }

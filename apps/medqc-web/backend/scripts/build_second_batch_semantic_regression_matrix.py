@@ -93,6 +93,19 @@ MATRIX_CASES: tuple[MatrixCase, ...] = (
     MatrixCase(
         case_id="semantic-b2-core-004",
         stage="second_batch",
+        record_id="2128953",
+        patient_name="毛贤书",
+        issue_family="诊疗医嘱与病程记录不一致",
+        manual_issue_text="术前主刀医生查房记录应在术前小结之前（术前小结内容包含回顾主刀医生查房情况）",
+        primary_rule_id="SC-146",
+        expected_status="non_compliant",
+        expected_hit_type="exact_hit",
+        target_document_type="日常病程记录",
+        notes="第二批 SC-146 新核心锚点。当前快照可见术前主刀查房记录晚于术前小结，适合用时序兜底稳定收口。",
+    ),
+    MatrixCase(
+        case_id="semantic-b2-observe-001",
+        stage="second_batch_observe",
         record_id="2212522",
         patient_name="熊良钦",
         issue_family="诊疗医嘱与病程记录不一致",
@@ -105,7 +118,7 @@ MATRIX_CASES: tuple[MatrixCase, ...] = (
         notes="观察位：当前快照里手术医嘱时间晚于术前讨论/术前小结，人工问题文本与现有时序证据不一致，不再作为第二批核心验收锚点。",
     ),
     MatrixCase(
-        case_id="semantic-b2-observe-001",
+        case_id="semantic-b2-observe-002",
         stage="second_batch_observe",
         record_id="2104927",
         patient_name="温远明",
@@ -119,7 +132,7 @@ MATRIX_CASES: tuple[MatrixCase, ...] = (
         notes="当前仍被分类到 daily_course_analysis/SC-036，需决定是否拆分成 SC-146 子口径。",
     ),
     MatrixCase(
-        case_id="semantic-b2-observe-002",
+        case_id="semantic-b2-observe-003",
         stage="second_batch_observe",
         record_id="2324802",
         patient_name="颜友芳",

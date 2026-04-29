@@ -405,6 +405,7 @@ def _looks_like_operation_preop_conclusion_issue(text: str) -> bool:
             "缺少参与人员发言",
             "未明确手术时间",
             "未明确手术医生",
+            "新建后未书写",
         ),
     )
 

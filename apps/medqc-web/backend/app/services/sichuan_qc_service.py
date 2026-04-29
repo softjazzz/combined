@@ -1652,6 +1652,7 @@ class SichuanQCService:
                         "document_id": str(item.get("document_id") or ""),
                         "document_title": str(item.get("document_title") or ""),
                         "display_time": str(item.get("display_time") or item.get("record_time") or ""),
+                        "content": str(item.get("content") or item.get("text_preview") or "")[:800],
                         "hit": bool(item.get("hit")),
                         "sections": list(item.get("sections") or []),
                         "source_fields": list(item.get("source_fields") or []),
@@ -1848,6 +1849,7 @@ class SichuanQCService:
                     "document_id": str(item.get("document_id") or ""),
                     "document_title": str(item.get("document_title") or ""),
                     "display_time": str(item.get("display_time") or item.get("record_time") or ""),
+                    "content": str(item.get("content") or item.get("text_preview") or "")[:800],
                     "hit": bool(item.get("hit")),
                     "sections": list(item.get("sections") or []),
                     "source_fields": list(item.get("source_fields") or []),
@@ -2251,6 +2253,43 @@ class SichuanQCService:
         events.sort(key=lambda item: item["parsed_time"])
         return events
 
+    @staticmethod
+    def _extract_sc146_preop_round_events(source_documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        events: List[Dict[str, Any]] = []
+        for item in source_documents:
+            source_table = str(item.get("source_table") or "").strip()
+            if source_table not in {"daily_course_record", "senior_course_record"}:
+                continue
+            title = str(item.get("document_title") or "").strip()
+            content = str(item.get("content") or "").strip()
+            payload = f"{title}\n{content}"
+            if not any(
+                keyword in payload
+                for keyword in (
+                    "术前主刀医师",
+                    "主刀医生查房",
+                    "术者术前查看患者",
+                    "术前查看患者",
+                )
+            ):
+                continue
+            display_time = str(item.get("display_time") or item.get("record_time") or "").strip()
+            parsed_time = SichuanQCService._parse_display_time(display_time)
+            if parsed_time is None:
+                continue
+            events.append(
+                {
+                    "document_id": str(item.get("document_id") or ""),
+                    "document_title": title or source_table,
+                    "display_time": display_time,
+                    "parsed_time": parsed_time,
+                    "content": content,
+                    "source_table": source_table,
+                }
+            )
+        events.sort(key=lambda item: item["parsed_time"])
+        return events
+
     def _apply_sc146_temporal_fallback(
         self,
         *,
@@ -2269,36 +2308,67 @@ class SichuanQCService:
 
         order_events = self._extract_sc146_surgery_order_events(rule_input.source_documents)
         preop_events = self._extract_sc146_preop_events(list((surgery_bundle or {}).get("source_documents") or []))
-        if not order_events or not preop_events:
-            return engine_result
-
-        earliest_order = order_events[0]
-        earliest_preop = preop_events[0]
+        preop_round_events = self._extract_sc146_preop_round_events(rule_input.source_documents)
+        preop_summary_events = [
+            item for item in preop_events if str(item.get("source_table") or "").strip() == "presurg_summary"
+        ]
         metadata = dict(engine_result.get("metadata") or {})
         normalized = dict(engine_result)
 
-        if earliest_order["parsed_time"] < earliest_preop["parsed_time"]:
-            metadata["llm_fallback"] = True
-            metadata["decision_fallback"] = "sc146_temporal_order_before_preop"
-            normalized.update(
-                {
-                    "is_compliant": False,
-                    "status": "non_compliant",
-                    "findings": (
-                        f"手术相关医嘱时间早于术前文书：{earliest_order['document_title']} "
-                        f"{earliest_order['display_time']}，早于 {earliest_preop['document_title']} "
-                        f"{earliest_preop['display_time']}。"
-                    ),
-                    "evidence": (
-                        f"医嘱：{earliest_order['document_title']} @ {earliest_order['display_time']}；"
-                        f"术前文书：{earliest_preop['document_title']} @ {earliest_preop['display_time']}。"
-                    ),
-                    "suggestion": "请核对手术医嘱下达时间与术前讨论/术前小结时间，补充或更正手术时序记录。",
-                    "confidence": max(float(engine_result.get("confidence") or 0.0), 0.9),
-                    "metadata": metadata,
-                }
-            )
-            return normalized
+        if order_events and preop_events:
+            earliest_order = order_events[0]
+            earliest_preop = preop_events[0]
+            if earliest_order["parsed_time"] < earliest_preop["parsed_time"]:
+                metadata["llm_fallback"] = True
+                metadata["decision_fallback"] = "sc146_temporal_order_before_preop"
+                normalized.update(
+                    {
+                        "is_compliant": False,
+                        "status": "non_compliant",
+                        "findings": (
+                            f"手术相关医嘱时间早于术前文书：{earliest_order['document_title']} "
+                            f"{earliest_order['display_time']}，早于 {earliest_preop['document_title']} "
+                            f"{earliest_preop['display_time']}。"
+                        ),
+                        "evidence": (
+                            f"医嘱：{earliest_order['document_title']} @ {earliest_order['display_time']}；"
+                            f"术前文书：{earliest_preop['document_title']} @ {earliest_preop['display_time']}。"
+                        ),
+                        "suggestion": "请核对手术医嘱下达时间与术前讨论/术前小结时间，补充或更正手术时序记录。",
+                        "confidence": max(float(engine_result.get("confidence") or 0.0), 0.9),
+                        "metadata": metadata,
+                    }
+                )
+                return normalized
+
+        if preop_round_events and preop_summary_events:
+            earliest_preop_round = preop_round_events[0]
+            earliest_preop_summary = preop_summary_events[0]
+            if earliest_preop_round["parsed_time"] > earliest_preop_summary["parsed_time"]:
+                metadata["llm_fallback"] = True
+                metadata["decision_fallback"] = "sc146_preop_round_after_summary"
+                normalized.update(
+                    {
+                        "is_compliant": False,
+                        "status": "non_compliant",
+                        "findings": (
+                            f"术前主刀医生查房记录时间晚于术前小结：{earliest_preop_round['document_title']} "
+                            f"{earliest_preop_round['display_time']}，晚于 {earliest_preop_summary['document_title']} "
+                            f"{earliest_preop_summary['display_time']}。"
+                        ),
+                        "evidence": (
+                            f"术前主刀查房：{earliest_preop_round['document_title']} @ {earliest_preop_round['display_time']}；"
+                            f"术前小结：{earliest_preop_summary['document_title']} @ {earliest_preop_summary['display_time']}。"
+                        ),
+                        "suggestion": "请核对术前主刀医生查房记录与术前小结的书写时序，确保术前小结不会早于所回顾的术前查房记录。",
+                        "confidence": max(float(engine_result.get("confidence") or 0.0), 0.88),
+                        "metadata": metadata,
+                    }
+                )
+                return normalized
+
+        if not order_events or not preop_events:
+            return engine_result
 
         primary_is_discharge_note = "出院情况" in primary_text and "出院医嘱" in primary_text
         if status in {"uncertain", "compliant"} and primary_is_discharge_note:

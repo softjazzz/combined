@@ -694,6 +694,61 @@ def test_sc_146_should_fallback_to_non_compliant_when_order_is_before_preop_note
     assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc146_temporal_order_before_preop"
 
 
+def test_sc_146_should_fallback_to_non_compliant_when_preop_round_is_after_presurg_summary():
+    service = SichuanQCService()
+    normalized = service._apply_sc146_temporal_fallback(
+        rule_input=RuleExecutionInput(
+            rule_id="SC-146",
+            document_type="日常病程记录",
+            execution_domain="course",
+            primary_medical_text="患者要求手术治疗，继续完善术前准备。",
+            supporting_evidence=[],
+            timeline_facts=[],
+            source_documents=[
+                {
+                    "source_table": "daily_course_record",
+                    "document_title": "日常病程记录",
+                    "display_time": "2025-12-17 17:35:00",
+                    "content": "现术者术前查看患者，向其交代术中及术后可能发生的意外、并发症及后遗症。",
+                },
+                {
+                    "source_table": "inpat_nondrug_order",
+                    "document_title": "手术申请",
+                    "display_time": "2025-12-17 15:30:00",
+                    "content": "order_type: 手术\norder_name: 腹腔镜经腹全子宫切除术",
+                },
+            ],
+        ),
+        engine_result={
+            "rule_id": "SC-146",
+            "status": "uncertain",
+            "is_compliant": True,
+            "findings": "LLM 未返回任何内容。",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.7,
+            "metadata": {
+                "executor_type": "llm",
+                "llm_fallback": False,
+            },
+        },
+        surgery_bundle={
+            "source_documents": [
+                {
+                    "source_table": "presurg_summary",
+                    "document_title": "术前小结",
+                    "display_time": "2025-12-17 15:21:59",
+                    "content": "术前小结正文",
+                }
+            ]
+        },
+    )
+
+    assert normalized["status"] == "non_compliant"
+    assert "术前主刀医生查房记录时间晚于术前小结" in str(normalized["findings"])
+    assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc146_preop_round_after_summary"
+
+
 @pytest.mark.asyncio
 async def test_evaluate_rule_for_visit_sc070_should_include_consultation_supporting_evidence(monkeypatch):
     service = SichuanQCService()

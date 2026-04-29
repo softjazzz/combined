@@ -20,11 +20,11 @@ from app.services.sample_validation_rule_sets import resolve_sample_validation_p
 
 
 DEFAULT_POOL_NAME = "0426"
-DEFAULT_RECORD_IDS: tuple[str, ...] = ("2327691", "2304958", "1962757")
+DEFAULT_RECORD_IDS: tuple[str, ...] = ("2327691", "1962757", "2128953")
 DEFAULT_EXPECTATIONS: dict[str, dict[str, str]] = {
     "2327691": {"SC-069": "non_compliant"},
-    "2304958": {"SC-039": "non_compliant"},
     "1962757": {"SC-039": "non_compliant"},
+    "2128953": {"SC-146": "non_compliant"},
 }
 
 

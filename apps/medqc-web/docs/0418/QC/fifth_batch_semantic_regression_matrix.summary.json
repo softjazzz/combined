@@ -5,11 +5,11 @@
     "fc473b23-f1c5-487c-a8e0-be7a0828b0db",
     "8ea69f73-7c85-4e7c-9a36-635bae3f4822"
   ],
-  "case_count": 3,
+  "case_count": 4,
   "core_case_count": 1,
   "observe_case_count": 2,
-  "skip_case_count": 0,
+  "skip_case_count": 1,
   "batch_hit_count": 1,
   "batch_miss_count": 0,
-  "cases_with_narrowed_primary_rule": 3
+  "cases_with_narrowed_primary_rule": 4
 }
