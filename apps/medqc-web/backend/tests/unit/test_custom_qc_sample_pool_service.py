@@ -66,6 +66,15 @@ def test_classify_first_course_intrinsic_issue():
     assert result["include_in_batch_1"] is True
 
 
+def test_resolve_first_course_reasoning_should_route_sc025():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="first_course_reasoning",
+        manual_issue_text="首次病程中只有主诊断有诊断依据及鉴别诊断，其余诊断均未书写诊断依据及鉴别诊断",
+    )
+
+    assert rule_ids == ["SC-025"]
+
+
 def test_classify_programmatic_issue():
     result = classify_manual_issue_text("未及时书写日常病程记录及上级医师查房记录")
     assert result["coverage_type"] == "programmatic"
@@ -164,6 +173,78 @@ def test_classify_progress_order_consistency_issue():
     assert result["coverage_type"] == "llm_intrinsic"
     assert result["issue_category"] == "progress_order_consistency"
     assert result["candidate_rule_ids"] == ["SC-146"]
+
+
+def test_resolve_admission_consistency_should_route_sc018():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="admission_consistency",
+        manual_issue_text="入院记录中无专科检查",
+    )
+
+    assert rule_ids == ["SC-018"]
+
+
+def test_resolve_admission_consistency_should_route_sc019():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="admission_consistency",
+        manual_issue_text="现病史中检查项目记录有错误，院外辅助检查记录不完善。",
+    )
+
+    assert rule_ids == ["SC-019"]
+
+
+def test_resolve_admission_consistency_should_route_sc020():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="admission_consistency",
+        manual_issue_text="患者既往有高血压病史，入院诊断未诊断高血压。",
+    )
+
+    assert rule_ids == ["SC-020"]
+
+
+def test_resolve_admission_consistency_should_prefer_sc020_over_sc018_in_mixed_text():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="admission_consistency",
+        manual_issue_text="患者既往有高血压病史，入院诊断未诊断高血压，体格检查无相关描述。",
+    )
+
+    assert rule_ids == ["SC-020"]
+
+
+def test_resolve_admission_consistency_should_route_sc011():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="admission_consistency",
+        manual_issue_text="现病史阴性症状采集不全面，不能支撑鉴别诊断。",
+    )
+
+    assert rule_ids == ["SC-011"]
+
+
+def test_resolve_admission_consistency_should_route_sc012():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="admission_consistency",
+        manual_issue_text="现病史治疗经过不详细，门诊检查项目及结果未记录。",
+    )
+
+    assert rule_ids == ["SC-012"]
+
+
+def test_resolve_admission_consistency_should_prefer_sc012_over_sc020_in_mixed_text():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="admission_consistency",
+        manual_issue_text="患者双膝疼痛10年，现病史治疗经过不详细，不能很好的指导本次住院治疗；患者既往有类风湿关节炎，入院诊断未体现。",
+    )
+
+    assert rule_ids == ["SC-012"]
+
+
+def test_resolve_admission_consistency_should_route_sc009():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="admission_consistency",
+        manual_issue_text="现病史未描述疼痛性质、持续时间、缓解方式等。",
+    )
+
+    assert rule_ids == ["SC-009"]
 
 
 def test_classify_operation_record_quality_issue():

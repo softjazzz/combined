@@ -103,6 +103,66 @@ _SC_039_STRICT_CUSTOM_PROMPT = """【检查要点】
 7. 【重点案例】对于“K 1.68mmol/L、K 2.05mmol/L 无其它内容”“K 2.76mmol/L，行静脉补钾，未描述危急值报告、处置时间及具体补钾情况”“接到危急值后未查看患者情况”“接电脑危急值”这类文本，默认应判定为 non_compliant。
 8. 【格式要求】你必须严格返回纯JSON格式，禁止输出任何分析过程、思考步骤或解释性文字。"""
 
+_SC_011_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-011：现病史中阴性/阳性症状、伴随症状记录缺失或不足。
+
+【检查要点】
+1. 仅检查入院记录中的现病史是否围绕主诉补充了必要的阳性症状、阴性症状、伴随症状。
+2. 出现下列情况通常判定为不合规：
+   (a) 只写主症状，没有交代关键阴性症状；
+   (b) 对鉴别诊断有帮助的重要伴随症状未记录；
+   (c) 现病史描述过于笼统，无法支撑后续诊断判断。
+3. 如果病历已经明确补充了主要阳性表现、关键阴性表现和必要伴随症状，可判合规。
+4. 不要因为文本短就直接判问题；关键看是否遗漏了影响诊断判断的重要症状信息。
+
+【病历文本】
+{medical_text}
+
+【输出要求】
+1. 只返回单个 JSON 对象，不要输出 Markdown，不要输出解释性文字。
+2. JSON 结构固定为：
+{{"is_compliant": boolean, "issues": [string], "findings": string, "evidence": string, "suggestion": string, "confidence": number}}
+3. 证据不足时可返回 is_compliant=true，但 findings 必须明确写“证据不足”，issues 为空。"""
+
+_SC_012_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-012：现病史中的诊治经过记录不全或不清。
+
+【检查要点】
+1. 仅检查入院记录现病史中是否清楚记录了发病后的诊治经过，包括门诊就诊、检查项目及结果、既往/院外治疗、用药及效果。
+2. 出现下列情况通常判定为不合规：
+   (a) 仅写“门诊就诊”或“已治疗”但未写检查/治疗内容；
+   (b) 既往重要治疗经过、院外处理、用药情况缺失；
+   (c) 现病史无法说明本次住院前已经接受过哪些检查与治疗。
+3. 如果已经写清检查结果、治疗措施、用药反应或疗效变化，可判合规。
+4. 对“治疗经过不详细”“无诊治经过”“门诊初步诊断未写”“接受检查与治疗未体现”这类问题，若原文也支持，应优先判定为 non_compliant。
+
+【病历文本】
+{medical_text}
+
+【输出要求】
+1. 只返回单个 JSON 对象，不要输出 Markdown，不要输出解释性文字。
+2. JSON 结构固定为：
+{{"is_compliant": boolean, "issues": [string], "findings": string, "evidence": string, "suggestion": string, "confidence": number}}
+3. 证据不足时可返回 is_compliant=true，但 findings 必须明确写“证据不足”，issues 为空。"""
+
+_SC_019_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-019：现病史中辅助检查记录不完善或记录不准确。
+
+【检查要点】
+1. 仅检查入院记录现病史中对院内外辅助检查的记录是否完整、准确。
+2. 出现下列情况通常判定为不合规：
+   (a) 检查项目名称、部位、结果抄写错误；
+   (b) 关键辅助检查结果缺失，只写“完善检查”但没有结果；
+   (c) 院外重要检查、院内已有关键检查未记录，影响病情判断。
+3. 若病历已清楚、准确写出主要检查项目及关键结果，可判合规。
+4. 对“检查项目记录有错误”“辅助检查未记录/抄写不准确”这类问题，若原文支持，应优先判定为 non_compliant。
+
+【病历文本】
+{medical_text}
+
+【输出要求】
+1. 只返回单个 JSON 对象，不要输出 Markdown，不要输出解释性文字。
+2. JSON 结构固定为：
+{{"is_compliant": boolean, "issues": [string], "findings": string, "evidence": string, "suggestion": string, "confidence": number}}
+3. 证据不足时可返回 is_compliant=true，但 findings 必须明确写“证据不足”，issues 为空。"""
+
 _SC_081_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-081：术前小结记录不完整或内容不当。
 
 【检查要点】
@@ -202,6 +262,15 @@ class SichuanQCService:
         if rule_id == "SC-032":
             normalized["custom_prompt"] = _SC_032_STRICT_CUSTOM_PROMPT
             normalized["prompt_version"] = "runtime-override-sc032-v1"
+        elif rule_id == "SC-011":
+            normalized["custom_prompt"] = _SC_011_STRICT_CUSTOM_PROMPT
+            normalized["prompt_version"] = "runtime-override-sc011-v1"
+        elif rule_id == "SC-012":
+            normalized["custom_prompt"] = _SC_012_STRICT_CUSTOM_PROMPT
+            normalized["prompt_version"] = "runtime-override-sc012-v1"
+        elif rule_id == "SC-019":
+            normalized["custom_prompt"] = _SC_019_STRICT_CUSTOM_PROMPT
+            normalized["prompt_version"] = "runtime-override-sc019-v1"
         elif rule_id == "SC-036":
             normalized["custom_prompt"] = _SC_036_STRICT_CUSTOM_PROMPT
             normalized["prompt_version"] = "runtime-override-sc036-v2"
@@ -1522,6 +1591,32 @@ class SichuanQCService:
             for keyword in discharge_like_patterns:
                 if keyword in content:
                     score -= 90
+        elif normalized_rule_id in {"SC-023", "SC-024", "SC-025", "SC-027"} and content:
+            weighted_patterns = (
+                ("病例特点", 120 if normalized_rule_id in {"SC-023", "SC-024"} else 20),
+                ("诊断依据", 120 if normalized_rule_id == "SC-025" else 35),
+                ("鉴别诊断", 120 if normalized_rule_id == "SC-025" else 30),
+                ("诊疗计划", 90 if normalized_rule_id in {"SC-025", "SC-027"} else 15),
+                ("目前诊断", 45),
+                ("主诉", 25),
+                ("现病史", 25),
+                ("辅助检查", 25),
+                ("查体", 20),
+            )
+            for keyword, weight in weighted_patterns:
+                if keyword in content:
+                    score += weight
+            discharge_like_patterns = (
+                "办理出院",
+                "出院医嘱",
+                "症状缓解",
+                "病情较前明显好转",
+                "今日予以办理出院",
+                "准许后今日办理出院",
+            )
+            for keyword in discharge_like_patterns:
+                if keyword in content:
+                    score -= 90
 
         return (score, has_content, display_time)
 
@@ -1833,7 +1928,7 @@ class SichuanQCService:
                 source_documents,
                 list(routing.primary_doc_types),
             )
-            if normalized_rule_id in {"SC-026", "SC-027"} and not any(
+            if normalized_rule_id in {"SC-023", "SC-024", "SC-025", "SC-026", "SC-027"} and not any(
                 str(item.get("content") or "").strip() for item in primary_candidates
             ):
                 primary_candidates = self._find_source_documents_for_types(
@@ -1893,7 +1988,7 @@ class SichuanQCService:
             "first_course_record",
         }:
             primary_doc_type = "日常病程记录"
-        elif normalized_rule_id in {"SC-026", "SC-027"} and str(primary_document.get("source_table") or "") in {
+        elif normalized_rule_id in {"SC-023", "SC-024", "SC-025", "SC-026", "SC-027"} and str(primary_document.get("source_table") or "") in {
             "daily_course_record",
             "senior_course_record",
             "first_course_record",

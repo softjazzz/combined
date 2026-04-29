@@ -854,6 +854,38 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
         if _contains_any(
             normalized,
             (
+                "无病例特点",
+                "病例特点缺失",
+            ),
+        ):
+            return ["SC-023"]
+        if _contains_any(
+            normalized,
+            (
+                "病例特点未归纳提炼",
+                "病例特点不全面",
+                "病例特点欠全面",
+            ),
+        ):
+            return ["SC-024"]
+        if _contains_any(
+            normalized,
+            (
+                "无诊断依据",
+                "无鉴别诊断",
+                "无诊疗计划",
+                "未书写诊断依据",
+                "未书写鉴别诊断",
+                "未书写诊疗计划",
+                "诊断依据书写不正确",
+                "只有主诊断有诊断依据及鉴别诊断",
+                "其余诊断均未书写诊断依据及鉴别诊断",
+            ),
+        ):
+            return ["SC-025"]
+        if _contains_any(
+            normalized,
+            (
                 "诊疗计划",
                 "未提出具体诊疗计划",
                 "未说明具体措施",
@@ -879,6 +911,83 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
         return ["SC-026"]
 
     if issue_category == "admission_consistency":
+        if _contains_any(
+            normalized,
+            (
+                "辅助检查",
+                "检查项目记录有错误",
+                "院外辅助检查",
+                "院内辅助检查",
+                "检查结果",
+                "抄写不准确",
+            ),
+        ):
+            return ["SC-019"]
+        if _contains_any(
+            normalized,
+            (
+                "诊治经过",
+                "治疗经过",
+                "门诊",
+                "检查项目及结果",
+                "治疗情况",
+                "用药情况",
+                "接受检查与治疗",
+            ),
+        ):
+            return ["SC-012"]
+        if _contains_any(
+            normalized,
+            (
+                "入院诊断",
+                "初步诊断不全",
+                "入院记录诊断不全",
+                "未做诊断",
+                "未诊断",
+                "诊断遗漏",
+            ),
+        ):
+            return ["SC-020"]
+        if _contains_any(
+            normalized,
+            (
+                "阴性症状",
+                "阳性症状",
+                "伴随症状",
+                "不能支撑鉴别诊断",
+            ),
+        ):
+            return ["SC-011"]
+        if _contains_any(
+            normalized,
+            (
+                "体格检查",
+                "专科检查",
+                "查体",
+                "阳性体征",
+                "腹部情况",
+                "右手情况",
+                "左下肢情况",
+                "未做相关描述",
+                "生命体征",
+            ),
+        ):
+            return ["SC-018"]
+        if _contains_any(
+            normalized,
+            (
+                "现病史",
+                "疼痛性质",
+                "持续时间",
+                "缓解方式",
+                "一般情况",
+                "小便情况",
+                "描述不细致",
+                "书写混乱",
+                "无条理",
+            ),
+        ):
+            return ["SC-009"]
         if _contains_any(
             normalized,
             (

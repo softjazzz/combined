@@ -122,6 +122,27 @@ def test_sc_032_should_use_stricter_daily_course_change_prompt():
     assert "只返回单个 JSON 对象" in prompt
 
 
+@pytest.mark.parametrize(
+    ("rule_id", "expected_phrase"),
+    [
+        ("SC-011", "阴性/阳性症状"),
+        ("SC-012", "诊治经过记录不全"),
+        ("SC-019", "辅助检查记录不完善"),
+    ],
+)
+def test_sc_011_sc_012_sc_019_should_use_runtime_override_prompts(rule_id: str, expected_phrase: str):
+    service = SichuanQCService()
+
+    raw_rule = service.get_rule_by_id(rule_id)
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    prompt = str(rule.get("custom_prompt") or "")
+    assert expected_phrase in prompt
+    assert "{medical_text}" in prompt
+    assert "只返回单个 JSON 对象" in prompt
+
+
 def test_sc_039_should_use_text_only_critical_value_prompt():
     service = SichuanQCService()
 
@@ -589,6 +610,52 @@ def test_sc_026_should_fallback_to_senior_note_when_first_course_is_empty():
     )
 
     assert "畸胎瘤不除外" in rule_input.primary_medical_text
+    assert rule_input.document_type == "首次病程记录"
+
+
+def test_sc_025_should_fallback_to_reasoning_note_when_first_course_is_empty():
+    service = SichuanQCService()
+    raw_rule = service.get_rule_by_id("SC-025")
+
+    assert raw_rule is not None
+    rule = service._ensure_rule_execution_meta(raw_rule)
+    routing = route_rule_to_domain(rule)
+    rule_input = service._build_rule_execution_input_from_bundle(
+        rule=rule,
+        routing=routing,
+        domain_bundle={
+            "execution_domain": "course",
+            "timeline_facts": [],
+            "source_documents": [
+                {
+                    "document_type": "first_course_record",
+                    "document_title": "首次病程记录",
+                    "display_time": "2025-10-16 21:40:00",
+                    "content": "",
+                    "source_table": "first_course_record",
+                    "document_id": "first-empty",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "empty_document",
+                    "data_quality_flags": [],
+                },
+                {
+                    "document_type": "senior_course_record",
+                    "document_title": "主治医师查房记录",
+                    "display_time": "2025-10-17 08:08:44",
+                    "content": "目前诊断：急性阑尾炎。诊断依据：右下腹压痛、反跳痛。鉴别诊断：附件区包块待排。诊疗计划：完善检查后评估手术。",
+                    "source_table": "senior_course_record",
+                    "document_id": "senior-fallback",
+                    "sections": [],
+                    "source_fields": [],
+                    "assembly_status": "assembled",
+                    "data_quality_flags": [],
+                },
+            ],
+        },
+    )
+
+    assert "诊疗计划" in rule_input.primary_medical_text
     assert rule_input.document_type == "首次病程记录"
 
 
