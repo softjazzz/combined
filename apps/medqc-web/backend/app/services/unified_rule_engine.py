@@ -1338,6 +1338,7 @@ class UnifiedRuleEngine:
                 applicable_documents=applicable_docs or "",
                 defect_level=rule.get("defect_level", ""),
                 complexity=rule.get("complexity", ""),
+                confidence_requirement=rule.get("confidence_requirement", "0.85"),
                 medical_text=prompt_input_text
             )
             prompt += common_guardrails

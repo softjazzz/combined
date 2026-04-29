@@ -37,6 +37,24 @@ def test_build_prompt_should_not_truncate_to_2000():
     assert "A" * 2200 in prompt
 
 
+def test_build_prompt_should_fill_legacy_confidence_requirement_placeholder():
+    capture = {}
+    engine = _make_engine(capture)
+    prompt = engine._build_prompt(
+        {
+            "rule_id": "SC-071",
+            "name": "会诊记录时效",
+            "description": "测试旧模板占位符",
+            "defect_level": "一般缺陷",
+            "custom_prompt": "规则 {rule_id} 缺陷 {defect_level} 置信度 {confidence_requirement} 文本 {medical_text}",
+        },
+        "病历正文",
+    )
+
+    assert "置信度 0.85" in prompt
+    assert "{confidence_requirement}" not in prompt
+
+
 @pytest.mark.asyncio
 async def test_evaluate_should_include_bundle_evidence_context_in_prompt():
     capture = {}
