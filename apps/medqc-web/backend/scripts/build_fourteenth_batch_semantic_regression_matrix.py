@@ -15,6 +15,7 @@ REPO_ROOT = BACKEND_ROOT.parents[2]
 DOC_ROOT = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "QC"
 DEFAULT_OUTPUT_CSV = DOC_ROOT / "fourteenth_batch_semantic_regression_matrix.csv"
 DEFAULT_OUTPUT_JSON = DOC_ROOT / "fourteenth_batch_semantic_regression_matrix.summary.json"
+DEFAULT_OUTPUT_XLSX = DOC_ROOT / "fourteenth_batch_semantic_regression_matrix.xlsx"
 
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
@@ -22,6 +23,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService, _batch_jobs_table, _session
+from matrix_xlsx_utils import write_matrix_xlsx
 
 
 SAMPLE_SC_DRAFT_ID = "sc-sample-rule-library"
@@ -270,7 +272,25 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def main() -> None:
     rows, summary = _build_rows()
+    fieldnames = [
+        "case_id",
+        "stage",
+        "record_id",
+        "patient_name",
+        "issue_family",
+        "manual_issue_text",
+        "primary_rule_id",
+        "expected_status",
+        "actual_status",
+        "expected_hit_type",
+        "actual_hit_type",
+        "target_document_type",
+        "current_status",
+        "notes",
+        "batch_job_id",
+    ]
     _write_csv(DEFAULT_OUTPUT_CSV, rows)
+    write_matrix_xlsx(DEFAULT_OUTPUT_XLSX, rows, fieldnames)
     DEFAULT_OUTPUT_JSON.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
