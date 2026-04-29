@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
@@ -1331,7 +1332,8 @@ class UnifiedRuleEngine:
             applicable_docs = rule.get("applicable_documents")
             if isinstance(applicable_docs, list):
                 applicable_docs = ", ".join(applicable_docs)
-            prompt = template.format(
+            prompt = self._safe_format_prompt_template(
+                str(template),
                 rule_id=rule.get("rule_id", ""),
                 name=rule.get("name", ""),
                 description=rule.get("description", ""),
@@ -1339,7 +1341,7 @@ class UnifiedRuleEngine:
                 defect_level=rule.get("defect_level", ""),
                 complexity=rule.get("complexity", ""),
                 confidence_requirement=rule.get("confidence_requirement", "0.85"),
-                medical_text=prompt_input_text
+                medical_text=prompt_input_text,
             )
             prompt += common_guardrails
             # 兜底：如果模板中没有 {medical_text} 占位符，强制追加病历文本
@@ -1362,6 +1364,33 @@ class UnifiedRuleEngine:
 {prompt_input_text}
 {common_guardrails}
 """
+
+    @staticmethod
+    def _safe_format_prompt_template(template: str, **values: Any) -> str:
+        """
+        安全格式化规则模板：
+        - 已知占位符按正常方式替换
+        - 模板内原始 JSON 示例中的花括号按普通文本保留
+        """
+        normalized_template = str(template or "")
+        if not normalized_template:
+            return normalized_template
+
+        sentinels: Dict[str, str] = {}
+        for key in values:
+            placeholder = f"{{{key}}}"
+            if placeholder not in normalized_template:
+                continue
+            sentinel = f"__PROMPT_SLOT_{key}_{uuid.uuid4().hex}__"
+            sentinels[key] = sentinel
+            normalized_template = normalized_template.replace(placeholder, sentinel)
+
+        escaped_template = normalized_template.replace("{", "{{").replace("}", "}}")
+
+        for key, sentinel in sentinels.items():
+            escaped_template = escaped_template.replace(sentinel, f"{{{key}}}")
+
+        return escaped_template.format(**values)
 
     @staticmethod
     def _parse_llm_response(raw_output: str) -> Dict[str, Any]:

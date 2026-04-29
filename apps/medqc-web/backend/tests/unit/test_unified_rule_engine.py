@@ -55,6 +55,33 @@ def test_build_prompt_should_fill_legacy_confidence_requirement_placeholder():
     assert "{confidence_requirement}" not in prompt
 
 
+def test_build_prompt_should_preserve_raw_json_braces_in_custom_prompt():
+    capture = {}
+    engine = _make_engine(capture)
+    prompt = engine._build_prompt(
+        {
+            "rule_id": "CL-001",
+            "name": "客户专项测试规则",
+            "description": "测试原始 JSON 花括号",
+            "custom_prompt": (
+                "规则 {rule_id}\n"
+                "输出格式示例：\n"
+                "{\n"
+                '  "is_compliant": true,\n'
+                '  "findings": "合规"\n'
+                "}\n"
+                "病历文本：{medical_text}"
+            ),
+        },
+        "病历正文",
+    )
+
+    assert '规则 CL-001' in prompt
+    assert '{\n  "is_compliant": true,' in prompt
+    assert '"findings": "合规"' in prompt
+    assert "病历正文" in prompt
+
+
 @pytest.mark.asyncio
 async def test_evaluate_should_include_bundle_evidence_context_in_prompt():
     capture = {}

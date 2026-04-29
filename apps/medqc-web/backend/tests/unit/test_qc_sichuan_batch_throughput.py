@@ -727,6 +727,118 @@ async def test_workspace_batch_final_fast_screen_should_use_fast_screen_path(mon
 
 
 @pytest.mark.asyncio
+async def test_workspace_batch_customer_final_fast_screen_should_bypass_sc_fixed_packs(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["filters"] = {
+        "rule_ids": ["CL-001", "CL-002"],
+        "rule_set_key": "customer_luxian_full_v1",
+        "validation_mode": "customer",
+        "execution_strategy": "fast_screen",
+        "quality_profile": "throughput_v1",
+        "bucket_strategy": "fixed_packs",
+        "batch_output_mode": "minimal",
+        "enable_selective_refine": False,
+        "max_refine_candidates": 0,
+        "date_field": "discharge",
+    }
+    service = _ServiceStub()
+
+    def _hydrate_with_bundle_keys(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return [
+            {
+                **item,
+                "institute_id": "HOSP-001",
+                "patient_id": f"PAT-{item.get('visit_id')}",
+                "medical_text": f"customer-text-{item.get('visit_id')}",
+            }
+            for item in records
+        ]
+
+    workspace.hydrate_records_with_medical_text = _hydrate_with_bundle_keys  # type: ignore[assignment]
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    fast_screen_calls: List[Dict[str, Any]] = []
+    bundle_calls: List[Dict[str, Any]] = []
+
+    async def _should_not_call_fast_screen(**kwargs: Any) -> Dict[str, Any]:
+        fast_screen_calls.append(dict(kwargs))
+        raise AssertionError("customer 全量规则不应走 SC fixed fast_screen 路径")
+
+    async def _fake_evaluate_running_final_bundle(**kwargs: Any) -> Dict[str, Any]:
+        bundle_calls.append(dict(kwargs))
+        return {
+            "evaluation_results": [
+                {
+                    "rule_id": "CL-001",
+                    "rule_name": "规则-CL-001",
+                    "status": "not_applicable",
+                    "is_compliant": True,
+                    "findings": "不适用",
+                    "evidence": "",
+                    "suggestion": "",
+                    "confidence": 0.9,
+                    "metadata": {
+                        "executor_type": "llm",
+                        "tokens_used": 0,
+                        "api_time": 0.0,
+                        "model_version": "test-model",
+                        "cache_hit": False,
+                    },
+                },
+                {
+                    "rule_id": "CL-002",
+                    "rule_name": "规则-CL-002",
+                    "status": "not_applicable",
+                    "is_compliant": True,
+                    "findings": "不适用",
+                    "evidence": "",
+                    "suggestion": "",
+                    "confidence": 0.9,
+                    "metadata": {
+                        "executor_type": "llm",
+                        "tokens_used": 0,
+                        "api_time": 0.0,
+                        "model_version": "test-model",
+                        "cache_hit": False,
+                    },
+                },
+            ],
+            "token_usage": {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0},
+            "api_time": 0.0,
+            "first_result_latency": 0.0,
+            "first_result_source": "final_bundle",
+            "pack_metrics": {
+                "total_packs": 1,
+                "avg_pack_size": 2.0,
+                "fallback_packs": 0,
+                "single_rule_retries": 0,
+                "pack_parse_retry_count": 0,
+                "context_tokens_estimate": 0,
+                "bucket_strategy": "domain_only",
+                "batch_output_mode": "minimal",
+            },
+            "cot_summary": {"disabled_calls": 0},
+            "refine_summary": {"enabled": False},
+        }
+
+    monkeypatch.setattr(qc_sichuan, "run_final_fast_screen", _should_not_call_fast_screen)
+    monkeypatch.setattr(qc_sichuan, "evaluate_running_final_bundle", _fake_evaluate_running_final_bundle)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert fast_screen_calls == []
+    assert len(bundle_calls) == 2
+    assert workspace.job["status"] == "completed"
+    assert workspace.summary is not None
+    assert int((workspace.summary.get("pack_metrics") or {}).get("total_packs") or 0) == 2
+
+
+@pytest.mark.asyncio
 async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkeypatch):
     workspace = _WorkspaceStub()
     service = _ServiceStub()

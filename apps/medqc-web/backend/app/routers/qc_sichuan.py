@@ -43,6 +43,7 @@ from ..services.effect_priority_qc import (
     normalize_batch_output_mode,
     normalize_max_refine_candidates,
 )
+from ..services.customer_rule_sets import CUSTOMER_LUXIAN_RULE_SET_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -1255,7 +1256,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 ):
                     used_bundle_path = True
                     try:
-                        if bundle_scene == "final" and execution_strategy == EXECUTION_STRATEGY_FAST_SCREEN:
+                        use_sc_fixed_fast_screen = (
+                            bundle_scene == "final"
+                            and execution_strategy == EXECUTION_STRATEGY_FAST_SCREEN
+                            and validation_mode != "customer"
+                            and rule_set_key != CUSTOMER_LUXIAN_RULE_SET_KEY
+                        )
+                        if use_sc_fixed_fast_screen:
                             single_result = await run_final_fast_screen(
                                 qc_service=qc_service,
                                 institute_id=institute_id,
