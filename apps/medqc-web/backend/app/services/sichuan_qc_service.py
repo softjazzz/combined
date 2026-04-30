@@ -56,6 +56,7 @@ _ROUND_SIMILARITY_SOURCE_TABLES = {"daily_course_record", "senior_course_record"
 _SC050_SIMILARITY_THRESHOLD = 0.5
 _ROUND_SENTENCE_MATCH_THRESHOLD = 0.85
 _ROUND_LATER_COVERAGE_THRESHOLD = 0.85
+_ROUND_LOOKBACK_COUNT = 3
 
 _SC_032_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-032：病程记录重要病情变化(症状及体征)未记录或记录不全。
 
@@ -1893,7 +1894,7 @@ class SichuanQCService:
         if not normalized_primary:
             return []
 
-        candidates: List[Dict[str, Any]] = []
+        prior_documents: List[tuple[Optional[datetime], Dict[str, Any]]] = []
         for item in list(source_documents or []):
             source_table = str(item.get("source_table") or item.get("document_type") or "").strip()
             if source_table not in _ROUND_SIMILARITY_SOURCE_TABLES:
@@ -1911,15 +1912,33 @@ class SichuanQCService:
                 and compare_time == primary_time
             ):
                 continue
+            compare_dt = cls._parse_document_datetime(compare_time)
+            if primary_dt is not None and compare_dt is not None:
+                delta_seconds = (primary_dt - compare_dt).total_seconds()
+                if delta_seconds <= 0 or delta_seconds > 72 * 3600:
+                    continue
+            prior_documents.append((compare_dt, dict(item)))
+
+        if not prior_documents:
+            return []
+
+        prior_documents.sort(
+            key=lambda pair: pair[0] or datetime.min,
+            reverse=True,
+        )
+        lookback_documents = [item for _dt, item in prior_documents[:_ROUND_LOOKBACK_COUNT]]
+
+        candidates: List[Dict[str, Any]] = []
+        for item in lookback_documents:
+            compare_content = str(item.get("content") or item.get("text_preview") or "").strip()
             normalized_compare = cls._normalize_round_similarity_text(compare_content)
             if not normalized_compare:
                 continue
+            compare_time = str(item.get("display_time") or item.get("record_time") or "").strip()
             compare_dt = cls._parse_document_datetime(compare_time)
             time_gap_hours = None
             if primary_dt is not None and compare_dt is not None:
                 delta_seconds = abs((primary_dt - compare_dt).total_seconds())
-                if delta_seconds > 72 * 3600:
-                    continue
                 time_gap_hours = round(delta_seconds / 3600.0, 2)
             similarity_ratio = SequenceMatcher(None, normalized_primary, normalized_compare).ratio()
             if similarity_ratio < 0.3:
@@ -1959,12 +1978,14 @@ class SichuanQCService:
                     "later_to_earlier_sentence_coverage": later_to_earlier_cover,
                     "later_is_primary": later_is_primary,
                     "coverage_threshold_hint": _ROUND_LATER_COVERAGE_THRESHOLD,
+                    "lookback_window": _ROUND_LOOKBACK_COUNT,
                     "time_gap_hours": time_gap_hours,
                 }
             )
 
         candidates.sort(
             key=lambda item: (
+                float(item.get("later_to_earlier_sentence_coverage") or 0.0),
                 float(item.get("similarity_ratio") or 0.0),
                 -float(item.get("time_gap_hours") or 9999.0),
             ),

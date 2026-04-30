@@ -513,6 +513,56 @@ def test_build_bundle_evidence_payload_should_include_adjacent_round_similarity_
     assert signal["compare_source_table"] == "daily_course_record"
     assert float(signal["similarity_ratio"]) >= 0.5
     assert float(signal["later_to_earlier_sentence_coverage"]) >= 0.85
+    assert signal["lookback_window"] == 3
+
+
+def test_build_bundle_evidence_payload_should_pick_best_match_within_lookback(service):
+    primary_document = {
+        "id": "senior-20260204",
+        "document_type": "senior_course_record",
+        "source_table": "senior_course_record",
+        "document_title": "副主任医师查房记录",
+        "display_time": "2026-02-04 08:10:00",
+        "content": "今日查房，患者神清，精神可，诉腰背部疼痛伴活动受限明显好转，纳眠可，二便调。查体：腰部压痛减轻。继续治疗。",
+    }
+    all_documents = [
+        primary_document,
+        {
+            "id": "daily-20260203",
+            "document_type": "daily_course_record",
+            "source_table": "daily_course_record",
+            "document_title": "主治医师查房记录",
+            "display_time": "2026-02-03 08:06:00",
+            "content": "患者一般情况可。继续观察。",
+        },
+        {
+            "id": "daily-20260202",
+            "document_type": "daily_course_record",
+            "source_table": "daily_course_record",
+            "document_title": "主治医师查房记录",
+            "display_time": "2026-02-02 08:06:00",
+            "content": "今日查房，患者神清，精神可，诉腰背部疼痛伴活动受限明显好转，纳眠可，二便调。查体：腰部压痛减轻。继续治疗。",
+        },
+        {
+            "id": "daily-20260201",
+            "document_type": "daily_course_record",
+            "source_table": "daily_course_record",
+            "document_title": "主治医师查房记录",
+            "display_time": "2026-02-01 08:06:00",
+            "content": "诉腰痛反复，纳眠一般。",
+        },
+    ]
+
+    payload = service._build_bundle_evidence_payload_for_document(
+        primary_document=primary_document,
+        all_documents=all_documents,
+        bundle={"timeline_facts": [], "document_hits": {"daily_course_record": True}, "data_quality_flags": []},
+        rules=[{"rule_id": "SC-050"}],
+    )
+
+    signal = list(payload.get("derived_signals") or [])[0]
+    assert signal["compare_display_time"] == "2026-02-02 08:06:00"
+    assert float(signal["later_to_earlier_sentence_coverage"]) >= 0.85
 
 
 def test_merge_rule_input_with_bundle_documents_should_preserve_full_source_content(service):
@@ -588,9 +638,9 @@ def test_apply_sc050_similarity_semantic_fallback_should_force_non_compliant(ser
                 "hit": True,
             },
             {
-                "document_type": "senior_course_record",
-                "source_table": "senior_course_record",
-                "document_title": "郑瑞清副主任医师代主治医师查房记录",
+                "document_type": "daily_course_record",
+                "source_table": "daily_course_record",
+                "document_title": "颜明秀主治医师查房记录",
                 "display_time": "2026-02-03 11:07:40",
                 "content": "今日查房，患者神清，精神可，诉腰背部疼痛伴活动受限明显好转，纳眠可，二便调。",
                 "hit": True,
