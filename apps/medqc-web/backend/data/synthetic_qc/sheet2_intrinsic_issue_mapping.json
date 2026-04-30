@@ -201,12 +201,12 @@
       "issue_type": "E2_senior_round_copy_paste",
       "display_name": "上级查房记录复制粘贴",
       "priority": "P1",
-      "source_category": "senior_round_content",
-      "template_name": "running_senior_round_copy_paste_v1",
-      "documents_required": ["senior_course_record"],
+      "source_category": "unreasonable_copy_content",
+      "template_name": "running_unreasonable_copy_round_note_v1",
+      "documents_required": ["senior_course_record", "daily_course_record"],
       "defect_injection": ["连续两日上级查房记录仅改日期", "查房内容高度重复"],
       "representative_examples": ["两天查房记录高度重复"],
-      "expected_rule_ids": ["SC-049", "SC-050", "SC-052"]
+      "expected_rule_ids": ["CL-275"]
     },
     {
       "issue_type": "A4_admission_external_exam_inaccurate",

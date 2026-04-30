@@ -907,11 +907,11 @@ class UnifiedRuleEngine:
             else "- evidence 尽量引用原文短句。\n"
         )
         semantic_output_rule = ""
-        if any(str(rule.get("rule_id") or "").strip().upper() in {"SC-050", "CL-037"} for rule in rules):
+        if any(str(rule.get("rule_id") or "").strip().upper() in {"CL-037", "CL-275"} for rule in rules):
             semantic_output_rule = (
-                "- 对 SC-050 / CL-037，必须额外输出 semantic_checks，格式为 "
+                "- 对 CL-037 / CL-275，必须额外输出 semantic_checks，格式为 "
                 "{\"has_new_analysis\": true/false, \"has_new_plan\": true/false}。\n"
-                "- 若派生信号已给出相邻查房文本相似度，请仅判断是否存在新增分析/新增计划，不要自行改写相似度数值。\n"
+                "- 若派生信号已给出相邻病程/查房文本相似度，请仅判断是否存在新增分析/新增计划，不要自行改写相似度数值。\n"
             )
 
         prompt = (
@@ -1209,8 +1209,8 @@ class UnifiedRuleEngine:
             "SC-033": "已有感染/检查/用药线索但无分析或具体处理意见时，直接判non_compliant；有疗效判断或后续计划则判compliant",
             "SC-036": "上下文有重要异常检查结果而病程未提及或无分析处理时，直接判non_compliant；无异常检查线索不要硬判",
             "SC-070": "病程记录若只是照抄会诊意见、未写是否采纳及具体执行动作/结果，直接判non_compliant；写明已落实的检查/用药/处理或未采纳理由则判compliant",
-            "SC-050": "若派生信号显示后一天被前一天句子覆盖率>=0.85或全文相似度>=0.5，需单独判断 semantic_checks.has_new_analysis 与 has_new_plan；二者都为false时直接判non_compliant，任一为true时优先判compliant或uncertain",
             "CL-037": "若派生信号显示后一天被前一天句子覆盖率>=0.85或全文相似度>=0.5，需单独判断 semantic_checks.has_new_analysis 与 has_new_plan；二者都为false时直接判non_compliant，任一为true时优先判compliant或uncertain",
+            "CL-275": "若派生信号显示后一天被前一天句子覆盖率>=0.85或全文相似度>=0.5，需单独判断 semantic_checks.has_new_analysis 与 has_new_plan；二者都为false时直接判non_compliant，任一为true时优先判compliant或uncertain",
             "SC-121": "只抓关键诊疗经过缺失，不做药理学或格式化发散点评",
             "SC-125": "优先判断出院诊断明显漏填/错填/顺序错误，不把既往史展开不足作为主依据",
         }
@@ -1308,6 +1308,18 @@ class UnifiedRuleEngine:
                         f"主文书=[{primary_type}] {primary_time}；对照文书=[{compare_type}] {compare_time}"
                     )
                     continue
+                if signal_type in {"copy_segment_similarity", "same_disease_reasoning_similarity"}:
+                    similarity_ratio = float(item.get("similarity_ratio") or 0.0)
+                    source_cover = float(item.get("source_to_target_sentence_coverage") or 0.0)
+                    target_cover = float(item.get("target_to_source_sentence_coverage") or 0.0)
+                    source_label = str(item.get("source_label") or item.get("primary_display_time") or "源文书")
+                    target_label = str(item.get("target_label") or item.get("compare_display_time") or "对照文书")
+                    lines.append(
+                        f"{idx}. 段落相似度={similarity_ratio:.2f}；"
+                        f"{source_label}→{target_label} 句子覆盖率={source_cover:.2f}；"
+                        f"{target_label}→{source_label} 句子覆盖率={target_cover:.2f}"
+                    )
+                    continue
                 lines.append(f"{idx}. {str(item)}")
 
         if isinstance(supporting_documents, list) and supporting_documents:
@@ -1363,12 +1375,12 @@ class UnifiedRuleEngine:
             "- 若核心内容已存在，只是提炼一般、表达一般或边界不清，优先判 uncertain。\n"
             "- findings / evidence / suggestion 必须一致，不得出现“不合规但无需修改”。\n"
         )
-        if rule_id in {"SC-050", "CL-037"}:
+        if rule_id in {"CL-037", "CL-275"}:
             common_guardrails += (
-                "【SC-050/CL-037 专项输出要求】\n"
+                "【CL-037/CL-275 专项输出要求】\n"
                 "- 请把“是否有明确新增分析”“是否有明确新增计划”单独输出到 semantic_checks。\n"
                 "- semantic_checks 固定结构：{\"has_new_analysis\": true/false, \"has_new_plan\": true/false}。\n"
-                "- 派生信号中的相邻查房文本相似度已由程序计算，请不要自行臆造新的相似度分数。\n"
+                "- 派生信号中的相邻病程/查房文本相似度已由程序计算，请不要自行臆造新的相似度分数。\n"
             )
         if guardrails:
             common_guardrails += f"【规则级收敛要求】\n- {guardrails}\n"

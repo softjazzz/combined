@@ -4,14 +4,29 @@ import hashlib
 import logging
 import time
 import re
+from difflib import SequenceMatcher
 from pathlib import Path
 from datetime import datetime, timezone
-from difflib import SequenceMatcher
 
 from app.constants.doc_types import DOC_TYPE_CN_TO_EN, DOC_TYPE_FULL_MAP
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
 from ..core.supabase_client import get_supabase
+from ..database.connection import SessionLocal
+from ..database.models.cdm import Diagnosis, FirstCourseRecord
+from .copy_content_similarity import (
+    ADMISSION_SOURCE_TABLES,
+    FIRST_COURSE_SOURCE_TABLES,
+    ROUND_SENTENCE_MATCH_THRESHOLD,
+    ROUND_SOURCE_TABLES,
+    compare_text_segments,
+    extract_admission_sections,
+    extract_first_course_sections,
+    normalize_for_sentence,
+    parse_document_datetime,
+    select_best_lookback_match,
+    split_sentences,
+)
 from .unified_rule_engine import UnifiedRuleEngine
 from .llm_config_loader import LLMConfigLoader
 from .qc_llm_client_runtime import SichuanQCLLMClient  # 拆分出的 LLM 客户端（runtime 源码版）
@@ -51,12 +66,16 @@ from .sc_rule_family import (
 
 logger = logging.getLogger(__name__)
 
-_ROUND_SIMILARITY_RULE_IDS = {"SC-050", "CL-037"}
-_ROUND_SIMILARITY_SOURCE_TABLES = {"daily_course_record", "senior_course_record"}
-_SC050_SIMILARITY_THRESHOLD = 0.5
-_ROUND_SENTENCE_MATCH_THRESHOLD = 0.85
+_COPY_ROUND_RULE_IDS = {"CL-037", "CL-275"}
+_COPY_FIRST_COURSE_RULE_IDS = {"CL-273", "CL-274", "CL-276"}
+_COPY_SIGNAL_RULE_IDS = _COPY_ROUND_RULE_IDS | _COPY_FIRST_COURSE_RULE_IDS
+_COPY_SIMILARITY_THRESHOLD = 0.5
 _ROUND_LATER_COVERAGE_THRESHOLD = 0.85
 _ROUND_LOOKBACK_COUNT = 3
+_ROUND_SENTENCE_MATCH_THRESHOLD = ROUND_SENTENCE_MATCH_THRESHOLD
+_ROUND_SIMILARITY_RULE_IDS = _COPY_ROUND_RULE_IDS
+_ROUND_SIMILARITY_SOURCE_TABLES = ROUND_SOURCE_TABLES
+_SC050_SIMILARITY_THRESHOLD = _COPY_SIMILARITY_THRESHOLD
 
 _SC_032_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-032：病程记录重要病情变化(症状及体征)未记录或记录不全。
 
@@ -1524,7 +1543,7 @@ class SichuanQCService:
                 score += 10
             if re.search(r"\bMg\s*\d+(?:\.\d+)?\s*mmol/?l\b", lowered):
                 score += 10
-        elif normalized_rule_id == "SC-050" and content:
+        elif normalized_rule_id in {"SC-050", "CL-037", "CL-275"} and content:
             weighted_patterns = (
                 ("副主任医师查房", 60),
                 ("代主治医师查房", 55),
@@ -1626,12 +1645,12 @@ class SichuanQCService:
             for keyword in discharge_like_patterns:
                 if keyword in content:
                     score -= 90
-        elif normalized_rule_id in {"SC-023", "SC-024", "SC-025", "SC-027"} and content:
+        elif normalized_rule_id in {"SC-023", "SC-024", "SC-025", "SC-027", "CL-273", "CL-274", "CL-276"} and content:
             weighted_patterns = (
-                ("病例特点", 120 if normalized_rule_id in {"SC-023", "SC-024"} else 20),
-                ("诊断依据", 120 if normalized_rule_id == "SC-025" else 35),
-                ("鉴别诊断", 120 if normalized_rule_id == "SC-025" else 30),
-                ("诊疗计划", 90 if normalized_rule_id in {"SC-025", "SC-027"} else 15),
+                ("病例特点", 120 if normalized_rule_id in {"SC-023", "SC-024", "CL-273", "CL-274"} else 20),
+                ("诊断依据", 120 if normalized_rule_id in {"SC-025", "CL-274", "CL-276"} else 35),
+                ("鉴别诊断", 120 if normalized_rule_id in {"SC-025", "CL-274", "CL-276"} else 30),
+                ("诊疗计划", 90 if normalized_rule_id in {"SC-025", "SC-027", "CL-276"} else 15),
                 ("目前诊断", 45),
                 ("主诉", 25),
                 ("现病史", 25),
@@ -1719,7 +1738,7 @@ class SichuanQCService:
                     "hit": bool(item.get("hit")),
                 }
             )
-        derived_signals = self._build_adjacent_round_similarity_signals(
+        derived_signals = self._build_copy_content_similarity_signals(
             primary_document=primary_document,
             source_documents=all_documents,
             rule_ids=[str(item.get("rule_id") or item.get("rule_code") or "") for item in list(rules or [])],
@@ -1803,51 +1822,15 @@ class SichuanQCService:
 
     @staticmethod
     def _parse_document_datetime(value: str) -> Optional[datetime]:
-        raw = str(value or "").strip()
-        if not raw:
-            return None
-        normalized = raw.replace("T", " ").replace("Z", "+00:00")
-        try:
-            return datetime.fromisoformat(normalized)
-        except ValueError:
-            pass
-        for fmt in (
-            "%Y-%m-%d %H:%M:%S",
-            "%Y-%m-%d %H:%M",
-            "%Y/%m/%d %H:%M:%S",
-            "%Y/%m/%d %H:%M",
-            "%Y-%m-%d",
-            "%Y/%m/%d",
-        ):
-            try:
-                return datetime.strptime(raw, fmt)
-            except ValueError:
-                continue
-        return None
+        return parse_document_datetime(value)
 
     @staticmethod
     def _normalize_round_similarity_text(value: str) -> str:
-        text = str(value or "")
-        text = re.sub(r"\s+", "", text)
-        text = re.sub(r"[，。；：、,.!?！？;:（）()【】\\[\\]<>《》\"'“”‘’·-]+", "", text)
-        return text.strip()
+        return normalize_for_sentence(value)
 
     @classmethod
     def _split_round_similarity_sentences(cls, value: str) -> List[str]:
-        text = str(value or "")
-        text = text.replace("\r", "\n")
-        text = re.sub(r"医生签名[:：].*$", "", text)
-        text = re.sub(r"[ \t]+", "", text)
-        text = re.sub(r"\n+", "\n", text)
-        text = re.sub(r"^\:+", "", text)
-        parts = re.split(r"[。；;\n]+", text)
-        sentences: List[str] = []
-        for part in parts:
-            sentence = part.strip("：:，, ")
-            if not sentence or len(sentence) < 8:
-                continue
-            sentences.append(sentence)
-        return sentences
+        return split_sentences(value)
 
     @classmethod
     def _round_sentence_coverage_ratio(
@@ -1857,18 +1840,374 @@ class SichuanQCService:
         *,
         threshold: float = _ROUND_SENTENCE_MATCH_THRESHOLD,
     ) -> float:
-        if not source_sentences or not target_sentences:
-            return 0.0
-        matched = 0
-        for source_sentence in source_sentences:
-            best_ratio = 0.0
-            for target_sentence in target_sentences:
-                ratio = SequenceMatcher(None, source_sentence, target_sentence).ratio()
-                if ratio > best_ratio:
-                    best_ratio = ratio
-            if best_ratio >= threshold:
-                matched += 1
-        return round(matched / len(source_sentences), 4)
+        return compare_text_segments(
+            "；".join(source_sentences),
+            "；".join(target_sentences),
+            threshold=threshold,
+        ).source_to_target_sentence_coverage
+
+    @classmethod
+    def _build_copy_content_similarity_signals(
+        cls,
+        *,
+        primary_document: Dict[str, Any],
+        source_documents: List[Dict[str, Any]],
+        rule_ids: List[str],
+    ) -> List[Dict[str, Any]]:
+        normalized_rule_ids = {
+            str(item or "").strip().upper()
+            for item in list(rule_ids or [])
+            if str(item or "").strip()
+        }
+        if not (normalized_rule_ids & _COPY_SIGNAL_RULE_IDS):
+            return []
+
+        signals: List[Dict[str, Any]] = []
+        if normalized_rule_ids & _COPY_ROUND_RULE_IDS:
+            round_signal = cls._build_round_note_copy_signal(
+                primary_document=primary_document,
+                source_documents=source_documents,
+            )
+            if round_signal:
+                signals.append(round_signal)
+
+        if "CL-273" in normalized_rule_ids:
+            segment_signal = cls._build_first_course_vs_admission_signal(
+                primary_document=primary_document,
+                source_documents=source_documents,
+            )
+            if segment_signal:
+                signals.append(segment_signal)
+
+        if "CL-274" in normalized_rule_ids:
+            segment_signal = cls._build_first_course_reasoning_self_signal(
+                primary_document=primary_document,
+            )
+            if segment_signal:
+                signals.append(segment_signal)
+
+        if "CL-276" in normalized_rule_ids:
+            peer_signal = cls._build_same_disease_reasoning_peer_signal(
+                primary_document=primary_document,
+                source_documents=source_documents,
+            )
+            if peer_signal:
+                signals.append(peer_signal)
+        return signals
+
+    @classmethod
+    def _build_round_note_copy_signal(
+        cls,
+        *,
+        primary_document: Dict[str, Any],
+        source_documents: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        primary_source_table = str(primary_document.get("source_table") or primary_document.get("document_type") or "").strip()
+        primary_content = str(primary_document.get("content") or primary_document.get("text_preview") or "").strip()
+        if primary_source_table not in ROUND_SOURCE_TABLES or not primary_content:
+            return None
+
+        match = select_best_lookback_match(
+            primary_document=primary_document,
+            candidate_documents=source_documents,
+            allowed_source_tables=ROUND_SOURCE_TABLES,
+            lookback_count=_ROUND_LOOKBACK_COUNT,
+            sentence_threshold=_ROUND_SENTENCE_MATCH_THRESHOLD,
+            min_full_similarity=0.3,
+        )
+        if not match:
+            return None
+
+        compare_document = dict(match.get("compare_document") or {})
+        compare_time = str(compare_document.get("display_time") or compare_document.get("record_time") or "").strip()
+        primary_time = str(primary_document.get("display_time") or primary_document.get("record_time") or "").strip()
+        primary_dt = cls._parse_document_datetime(primary_time)
+        compare_dt = cls._parse_document_datetime(compare_time)
+        later_is_primary = bool(primary_dt and compare_dt and primary_dt >= compare_dt)
+        later_to_earlier_cover = (
+            float(match.get("source_to_target_sentence_coverage") or 0.0)
+            if later_is_primary
+            else float(match.get("target_to_source_sentence_coverage") or 0.0)
+        )
+        return {
+            "signal_type": "adjacent_round_similarity",
+            "primary_source_table": primary_source_table,
+            "primary_document_title": str(primary_document.get("document_title") or primary_source_table),
+            "primary_display_time": primary_time,
+            "compare_source_table": str(compare_document.get("source_table") or compare_document.get("document_type") or ""),
+            "compare_document_title": str(compare_document.get("document_title") or compare_document.get("source_table") or ""),
+            "compare_display_time": compare_time,
+            "similarity_ratio": round(float(match.get("full_similarity_ratio") or 0.0), 4),
+            "threshold_hint": _COPY_SIMILARITY_THRESHOLD,
+            "sentence_match_threshold": _ROUND_SENTENCE_MATCH_THRESHOLD,
+            "primary_to_compare_sentence_coverage": round(float(match.get("source_to_target_sentence_coverage") or 0.0), 4),
+            "compare_to_primary_sentence_coverage": round(float(match.get("target_to_source_sentence_coverage") or 0.0), 4),
+            "later_to_earlier_sentence_coverage": round(later_to_earlier_cover, 4),
+            "later_is_primary": later_is_primary,
+            "coverage_threshold_hint": _ROUND_LATER_COVERAGE_THRESHOLD,
+            "lookback_window": _ROUND_LOOKBACK_COUNT,
+            "time_gap_hours": match.get("time_gap_hours"),
+        }
+
+    @classmethod
+    def _build_first_course_vs_admission_signal(
+        cls,
+        *,
+        primary_document: Dict[str, Any],
+        source_documents: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        primary_source_table = str(primary_document.get("source_table") or primary_document.get("document_type") or "").strip()
+        primary_content = str(primary_document.get("content") or primary_document.get("text_preview") or "").strip()
+        if primary_source_table not in FIRST_COURSE_SOURCE_TABLES or not primary_content:
+            return None
+
+        admission_document = next(
+            (
+                dict(item)
+                for item in list(source_documents or [])
+                if str(item.get("source_table") or item.get("document_type") or "").strip() in ADMISSION_SOURCE_TABLES
+                and str(item.get("content") or item.get("text_preview") or "").strip()
+            ),
+            None,
+        )
+        if not admission_document:
+            return None
+
+        first_sections = extract_first_course_sections(primary_content)
+        admission_sections = extract_admission_sections(
+            str(admission_document.get("content") or admission_document.get("text_preview") or "")
+        )
+        source_segment = str(first_sections.get("case_features_candidate") or "").strip()
+        target_segment = str(admission_sections.get("symptom_body_signs_candidate") or "").strip()
+        if not source_segment or not target_segment:
+            return None
+        metrics = compare_text_segments(source_segment, target_segment)
+        return {
+            "signal_type": "copy_segment_similarity",
+            "rule_hint": "CL-273",
+            "primary_source_table": primary_source_table,
+            "primary_document_title": str(primary_document.get("document_title") or primary_source_table),
+            "compare_source_table": str(admission_document.get("source_table") or admission_document.get("document_type") or ""),
+            "compare_document_title": str(admission_document.get("document_title") or admission_document.get("source_table") or ""),
+            "source_section_key": "case_features_candidate",
+            "target_section_key": "symptom_body_signs_candidate",
+            "full_similarity_ratio": metrics.full_similarity_ratio,
+            "source_to_target_sentence_coverage": metrics.source_to_target_sentence_coverage,
+            "target_to_source_sentence_coverage": metrics.target_to_source_sentence_coverage,
+            "core_section_coverage": metrics.source_to_target_sentence_coverage,
+            "threshold_hint": _COPY_SIMILARITY_THRESHOLD,
+            "sentence_match_threshold": _ROUND_SENTENCE_MATCH_THRESHOLD,
+        }
+
+    @classmethod
+    def _build_first_course_reasoning_self_signal(
+        cls,
+        *,
+        primary_document: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        primary_source_table = str(primary_document.get("source_table") or primary_document.get("document_type") or "").strip()
+        primary_content = str(primary_document.get("content") or primary_document.get("text_preview") or "").strip()
+        if primary_source_table not in FIRST_COURSE_SOURCE_TABLES or not primary_content:
+            return None
+        first_sections = extract_first_course_sections(primary_content)
+        source_segment = str(first_sections.get("reasoning_candidate") or "").strip()
+        target_segment = str(first_sections.get("case_features_candidate") or "").strip()
+        if not source_segment or not target_segment:
+            return None
+        metrics = compare_text_segments(source_segment, target_segment)
+        return {
+            "signal_type": "copy_segment_similarity",
+            "rule_hint": "CL-274",
+            "primary_source_table": primary_source_table,
+            "primary_document_title": str(primary_document.get("document_title") or primary_source_table),
+            "compare_source_table": primary_source_table,
+            "compare_document_title": str(primary_document.get("document_title") or primary_source_table),
+            "source_section_key": "reasoning_candidate",
+            "target_section_key": "case_features_candidate",
+            "full_similarity_ratio": metrics.full_similarity_ratio,
+            "source_to_target_sentence_coverage": metrics.source_to_target_sentence_coverage,
+            "target_to_source_sentence_coverage": metrics.target_to_source_sentence_coverage,
+            "core_section_coverage": metrics.source_to_target_sentence_coverage,
+            "threshold_hint": _COPY_SIMILARITY_THRESHOLD,
+            "sentence_match_threshold": _ROUND_SENTENCE_MATCH_THRESHOLD,
+        }
+
+    @classmethod
+    def _build_same_disease_reasoning_peer_signal(
+        cls,
+        *,
+        primary_document: Dict[str, Any],
+        source_documents: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        primary_source_table = str(primary_document.get("source_table") or primary_document.get("document_type") or "").strip()
+        primary_content = str(primary_document.get("content") or primary_document.get("text_preview") or "").strip()
+        if primary_source_table not in FIRST_COURSE_SOURCE_TABLES or not primary_content:
+            return None
+
+        first_sections = extract_first_course_sections(primary_content)
+        source_segment = str(first_sections.get("reasoning_candidate") or "").strip()
+        if not source_segment:
+            return None
+
+        institute_id = str(primary_document.get("institute_id") or "").strip()
+        patient_id = str(primary_document.get("patient_id") or "").strip()
+        visit_id = str(primary_document.get("visit_id") or "").strip()
+        dept_name = str(primary_document.get("dept_name") or "").strip()
+        if not (institute_id and patient_id and visit_id and dept_name):
+            return None
+
+        diagnosis_context = cls._resolve_primary_diagnosis_context(
+            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+        )
+        if not diagnosis_context:
+            return None
+
+        peer_documents = cls._load_same_disease_first_course_candidates(
+            institute_id=institute_id,
+            current_patient_id=patient_id,
+            current_visit_id=visit_id,
+            dept_name=dept_name,
+            diagnosis_code=str(diagnosis_context.get("diagnosis_code") or ""),
+            diagnosis_name=str(diagnosis_context.get("diagnosis_name") or ""),
+            limit=10,
+        )
+        best_signal: Optional[Dict[str, Any]] = None
+        for item in peer_documents:
+            peer_content = str(item.get("record_content") or "").strip()
+            if not peer_content:
+                continue
+            peer_sections = extract_first_course_sections(peer_content)
+            target_segment = str(peer_sections.get("reasoning_candidate") or "").strip()
+            if not target_segment:
+                continue
+            metrics = compare_text_segments(source_segment, target_segment)
+            candidate = {
+                "signal_type": "same_disease_reasoning_similarity",
+                "rule_hint": "CL-276",
+                "primary_source_table": primary_source_table,
+                "primary_document_title": str(primary_document.get("document_title") or primary_source_table),
+                "compare_source_table": "first_course_record",
+                "compare_document_title": "同科同病种首次病程",
+                "compare_visit_id": str(item.get("visit_id") or ""),
+                "compare_patient_name": str(item.get("name") or ""),
+                "compare_dept_name": str(item.get("dept_name") or ""),
+                "source_section_key": "reasoning_candidate",
+                "target_section_key": "reasoning_candidate",
+                "full_similarity_ratio": metrics.full_similarity_ratio,
+                "source_to_target_sentence_coverage": metrics.source_to_target_sentence_coverage,
+                "target_to_source_sentence_coverage": metrics.target_to_source_sentence_coverage,
+                "core_section_coverage": metrics.average_sentence_coverage,
+                "threshold_hint": _COPY_SIMILARITY_THRESHOLD,
+                "sentence_match_threshold": _ROUND_SENTENCE_MATCH_THRESHOLD,
+                "cohort_diagnosis_code": str(diagnosis_context.get("diagnosis_code") or ""),
+                "cohort_diagnosis_name": str(diagnosis_context.get("diagnosis_name") or ""),
+            }
+            if best_signal is None:
+                best_signal = candidate
+                continue
+            current_key = (
+                float(candidate.get("core_section_coverage") or 0.0),
+                float(candidate.get("full_similarity_ratio") or 0.0),
+            )
+            best_key = (
+                float(best_signal.get("core_section_coverage") or 0.0),
+                float(best_signal.get("full_similarity_ratio") or 0.0),
+            )
+            if current_key > best_key:
+                best_signal = candidate
+        return best_signal
+
+    @staticmethod
+    def _resolve_primary_diagnosis_context(
+        *,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        if SessionLocal is None:
+            return None
+        session = SessionLocal()
+        try:
+            rows = (
+                session.query(Diagnosis)
+                .filter(
+                    Diagnosis.institute_id == institute_id,
+                    Diagnosis.patient_id == patient_id,
+                    Diagnosis.visit_id == visit_id,
+                )
+                .order_by(Diagnosis.diagnosis_no.asc(), Diagnosis.diagnosis_type.asc())
+                .all()
+            )
+            for row in rows:
+                diagnosis_type = str(row.diagnosis_type or "")
+                if "出院主要" in diagnosis_type or "主要" in diagnosis_type or str(row.diagnosis_no or "").strip() == "1":
+                    return {
+                        "diagnosis_code": str(row.diagnosis_code or ""),
+                        "diagnosis_name": str(row.diagnosis_name or ""),
+                    }
+            if rows:
+                first = rows[0]
+                return {
+                    "diagnosis_code": str(first.diagnosis_code or ""),
+                    "diagnosis_name": str(first.diagnosis_name or ""),
+                }
+            return None
+        finally:
+            session.close()
+
+    @staticmethod
+    def _load_same_disease_first_course_candidates(
+        *,
+        institute_id: str,
+        current_patient_id: str,
+        current_visit_id: str,
+        dept_name: str,
+        diagnosis_code: str,
+        diagnosis_name: str,
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        if SessionLocal is None or not dept_name:
+            return []
+        session = SessionLocal()
+        try:
+            diagnosis_query = session.query(Diagnosis).filter(
+                Diagnosis.institute_id == institute_id,
+                Diagnosis.dept_name == dept_name,
+                Diagnosis.visit_id != current_visit_id,
+            )
+            if diagnosis_code:
+                diagnosis_query = diagnosis_query.filter(Diagnosis.diagnosis_code == diagnosis_code)
+            elif diagnosis_name:
+                diagnosis_query = diagnosis_query.filter(Diagnosis.diagnosis_name == diagnosis_name)
+            else:
+                return []
+            diagnosis_rows = diagnosis_query.order_by(Diagnosis.diagnosis_datetime.desc()).limit(max(1, int(limit))).all()
+            visit_ids = [str(item.visit_id or "").strip() for item in diagnosis_rows if str(item.visit_id or "").strip()]
+            if not visit_ids:
+                return []
+            first_course_rows = (
+                session.query(FirstCourseRecord)
+                .filter(
+                    FirstCourseRecord.institute_id == institute_id,
+                    FirstCourseRecord.visit_id.in_(visit_ids),
+                )
+                .all()
+            )
+            return [
+                {
+                    "patient_id": str(item.patient_id or ""),
+                    "visit_id": str(item.visit_id or ""),
+                    "name": str(getattr(item, "name", "") or ""),
+                    "dept_name": str(getattr(item, "dept_name", "") or dept_name),
+                    "record_content": str(item.record_content or ""),
+                }
+                for item in first_course_rows
+                if str(item.record_content or "").strip() and str(item.patient_id or "") != current_patient_id
+            ]
+        finally:
+            session.close()
 
     @classmethod
     def _build_adjacent_round_similarity_signals(
@@ -1878,6 +2217,12 @@ class SichuanQCService:
         source_documents: List[Dict[str, Any]],
         rule_ids: List[str],
     ) -> List[Dict[str, Any]]:
+        # 历史兼容入口：复制粘贴专项已统一迁到新的 copy-content 信号构造器。
+        return cls._build_copy_content_similarity_signals(
+            primary_document=primary_document,
+            source_documents=source_documents,
+            rule_ids=rule_ids,
+        )
         normalized_rule_ids = {str(item or "").strip().upper() for item in list(rule_ids or []) if str(item or "").strip()}
         if not (normalized_rule_ids & _ROUND_SIMILARITY_RULE_IDS):
             return []
@@ -2820,13 +3165,13 @@ class SichuanQCService:
             engine_result=normalized,
             surgery_bundle=surgery_bundle,
         )
-        normalized = self._apply_sc050_similarity_semantic_fallback(
+        normalized = self._apply_copy_content_semantic_fallback(
             rule_input=rule_input,
             engine_result=normalized,
         )
         return normalized
 
-    def _apply_sc050_similarity_semantic_fallback(
+    def _apply_copy_content_semantic_fallback(
         self,
         *,
         rule_input: RuleExecutionInput,
@@ -2834,7 +3179,7 @@ class SichuanQCService:
     ) -> Dict[str, Any]:
         normalized = dict(engine_result or {})
         rule_id = str(rule_input.rule_id or "").strip().upper()
-        if rule_id != "SC-050":
+        if rule_id not in {"CL-037", "CL-275"}:
             return normalized
 
         source_documents = [dict(item) for item in list(rule_input.source_documents or []) if isinstance(item, dict)]
@@ -2845,7 +3190,7 @@ class SichuanQCService:
             source_documents,
             key=lambda item: self._score_primary_candidate_for_rule(rule_id=rule_id, candidate=item),
         )
-        derived_signals = self._build_adjacent_round_similarity_signals(
+        derived_signals = self._build_copy_content_similarity_signals(
             primary_document=primary_source_document,
             source_documents=source_documents,
             rule_ids=[rule_id],
@@ -2866,7 +3211,7 @@ class SichuanQCService:
         similarity_ratio = float(similarity_signal.get("similarity_ratio") or 0.0)
         later_to_earlier_cover = float(similarity_signal.get("later_to_earlier_sentence_coverage") or 0.0)
         if (
-            similarity_ratio < _SC050_SIMILARITY_THRESHOLD
+            similarity_ratio < _COPY_SIMILARITY_THRESHOLD
             and later_to_earlier_cover < _ROUND_LATER_COVERAGE_THRESHOLD
         ):
             return normalized
@@ -2879,7 +3224,7 @@ class SichuanQCService:
 
         metadata = dict(normalized.get("metadata") or {})
         metadata["llm_fallback"] = True
-        metadata["decision_fallback"] = "sc050_similarity_plus_semantic_check"
+        metadata["decision_fallback"] = "copy_content_similarity_plus_semantic_check"
         metadata["final_decision_source"] = "rule_aggregate"
         metadata["semantic_checks"] = semantic_checks
         metadata["derived_signals"] = derived_signals
@@ -2891,21 +3236,30 @@ class SichuanQCService:
                 "status": "non_compliant",
                 "is_compliant": False,
                 "findings": (
-                    f"后一天查房被前一天覆盖率为 {later_to_earlier_cover:.2f}，全文相似度为 {similarity_ratio:.2f}，"
+                    f"后一天病程/查房被前一天覆盖率为 {later_to_earlier_cover:.2f}，全文相似度为 {similarity_ratio:.2f}，"
                     "且未见明确新增病情分析或后续计划，"
-                    "符合上级查房记录高度重复、内容质量不足的问题特征。"
+                    "符合不合理复制病历内容的高度重复特征。"
                 ),
                 "evidence": (
                     f"主文书时间：{primary_time}；对照文书时间：{compare_time}；"
                     f"后一天被前一天句子覆盖率={later_to_earlier_cover:.2f}，全文相似度={similarity_ratio:.2f}，semantic_checks 显示"
                     " has_new_analysis=false、has_new_plan=false。"
                 ),
-                "suggestion": "请补充上级查房记录中的新增病情分析、诊疗判断及具体后续计划，避免重复套写。",
+                "suggestion": "请避免直接复用既往病程/查房正文，补充本次记录的新增病情分析、诊疗判断及具体后续计划。",
                 "confidence": max(float(normalized.get("confidence") or 0.0), 0.86),
                 "metadata": metadata,
             }
         )
         return normalized
+
+    def _apply_sc050_similarity_semantic_fallback(
+        self,
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        # 历史兼容：SC-050 不再承担复制粘贴专项兜底，保留空操作包装器以兼容旧调用/测试。
+        return dict(engine_result or {})
 
     async def evaluate_document(
         self,
@@ -3321,7 +3675,7 @@ class SichuanQCService:
                     candidate=item,
                 ),
             )
-        derived_signals = self._build_adjacent_round_similarity_signals(
+        derived_signals = self._build_copy_content_similarity_signals(
             primary_document=primary_source_document,
             source_documents=[dict(item) for item in list(rule_input.source_documents or [])],
             rule_ids=[str(rule.get("rule_id") or rule.get("rule_code") or "")],

@@ -4,18 +4,19 @@
   "unique_issue_count": 271,
   "mapping_type_breakdown": {
     "direct_match": 96,
-    "extend_existing": 62,
-    "manual_review": 113
+    "extend_existing": 58,
+    "manual_review": 113,
+    "new_rule": 4
   },
   "execution_type_breakdown": {
     "programmatic": 39,
-    "hybrid": 54,
+    "hybrid": 58,
     "manual": 113,
-    "semantic": 65
+    "semantic": 61
   },
   "current_status_breakdown": {
-    "implemented": 26,
-    "ready_in_rule_library": 88,
+    "implemented": 30,
+    "ready_in_rule_library": 84,
     "manual_review": 113,
     "partial": 29,
     "todo_programmatic": 7,

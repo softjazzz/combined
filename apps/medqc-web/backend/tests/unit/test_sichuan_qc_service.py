@@ -120,12 +120,13 @@ class TestRuleLoading:
     async def test_filter_rules_for_admission_record(self, service):
         """测试筛选入院记录适用规则"""
         rules = await service._load_applicable_rules("入院记录")
-        assert len(rules) == 44  # SC + LX + LXE（按 rule_id 去重后）
+        assert len(rules) >= 44  # 省标规则基线仍应存在，customer 规则会额外并入
         rule_ids = {r.get("rule_id") or r.get("rule_code") for r in rules}
         assert "SC-001" in rule_ids
         assert "SC-020" in rule_ids
         assert "LX-001" in rule_ids
         assert "LX-009" in rule_ids
+        assert any(rule_id.startswith("CL-") for rule_id in rule_ids)
         # 不应包含非入院记录的规则
         assert "SC-021" not in rule_ids  # 首次病程
         assert "SC-095" not in rule_ids  # 手术记录
@@ -356,8 +357,8 @@ class TestEvaluation:
 
             assert result["document_id"] == "test-admission-001"
             assert result["document_type"] == "入院记录"
-            assert result["total_rules"] == 44  # 入院记录规则（SC + LX + LXE，去重后）
-            assert len(result["applicable_rules"]) == 44
+            assert result["total_rules"] >= 44  # 省标基线 + customer 扩展
+            assert len(result["applicable_rules"]) == result["total_rules"]
 
     @pytest.mark.asyncio
     async def test_evaluate_with_first_course_rules(self, service):
@@ -414,12 +415,16 @@ class TestEvaluation:
                 document_type="入院记录"
             )
 
-            assert result["total_rules"] == 44
-            # 20/44 合规
+            total_rules = result["total_rules"]
+            assert total_rules >= 44
+            # 前 20 条经 mock 合规；其余规则里可能还包含程序侧默认合规/不适用结果
             summary = result["evaluation_summary"]
-            assert summary["compliance_rate"] == pytest.approx(45.45, abs=1)
-            assert summary["compliant_rules"] == 20
-            assert summary["issues_found"] == 24
+            assert summary["compliant_rules"] >= 20
+            assert summary["issues_found"] == total_rules - summary["compliant_rules"]
+            assert summary["compliance_rate"] == pytest.approx(
+                summary["compliant_rules"] / total_rules * 100,
+                abs=1,
+            )
 
     @pytest.mark.asyncio
     async def test_evaluate_with_specific_rule_ids(self, service):
@@ -503,7 +508,7 @@ def test_build_bundle_evidence_payload_should_include_adjacent_round_similarity_
         primary_document=primary_document,
         all_documents=all_documents,
         bundle={"timeline_facts": [], "document_hits": {"daily_course_record": True}, "data_quality_flags": []},
-        rules=[{"rule_id": "SC-050"}],
+        rules=[{"rule_id": "CL-275"}],
     )
 
     derived_signals = list(payload.get("derived_signals") or [])
@@ -557,7 +562,7 @@ def test_build_bundle_evidence_payload_should_pick_best_match_within_lookback(se
         primary_document=primary_document,
         all_documents=all_documents,
         bundle={"timeline_facts": [], "document_hits": {"daily_course_record": True}, "data_quality_flags": []},
-        rules=[{"rule_id": "SC-050"}],
+        rules=[{"rule_id": "CL-275"}],
     )
 
     signal = list(payload.get("derived_signals") or [])[0]
@@ -620,10 +625,10 @@ def test_score_primary_candidate_for_sc050_should_penalize_discharge_round(servi
     assert adjacent_score > discharge_score
 
 
-def test_apply_sc050_similarity_semantic_fallback_should_force_non_compliant(service):
+def test_apply_copy_content_semantic_fallback_should_force_non_compliant(service):
     rule_input = RuleExecutionInput(
-        rule_id="SC-050",
-        document_type="上级医师查房记录",
+        rule_id="CL-275",
+        document_type="病程/查房记录",
         execution_domain="course",
         primary_medical_text="2026-02-04 查房记录正文",
         supporting_evidence=[],
@@ -648,7 +653,7 @@ def test_apply_sc050_similarity_semantic_fallback_should_force_non_compliant(ser
         ],
     )
     engine_result = {
-        "rule_id": "SC-050",
+        "rule_id": "CL-275",
         "status": "compliant",
         "is_compliant": True,
         "findings": "合规",
@@ -662,7 +667,7 @@ def test_apply_sc050_similarity_semantic_fallback_should_force_non_compliant(ser
         "metadata": {},
     }
 
-    normalized = service._apply_sc050_similarity_semantic_fallback(
+    normalized = service._apply_copy_content_semantic_fallback(
         rule_input=rule_input,
         engine_result=engine_result,
     )
@@ -671,7 +676,85 @@ def test_apply_sc050_similarity_semantic_fallback_should_force_non_compliant(ser
     assert normalized["is_compliant"] is False
     assert float(normalized["confidence"]) >= 0.86
     assert "后一天被前一天句子覆盖率" in normalized["evidence"]
-    assert (normalized.get("metadata") or {}).get("decision_fallback") == "sc050_similarity_plus_semantic_check"
+    assert (normalized.get("metadata") or {}).get("decision_fallback") == "copy_content_similarity_plus_semantic_check"
+
+
+def test_apply_sc050_similarity_semantic_fallback_should_be_noop(service):
+    rule_input = RuleExecutionInput(
+        rule_id="SC-050",
+        document_type="上级医师查房记录",
+        execution_domain="course",
+        primary_medical_text="查房记录正文",
+        supporting_evidence=[],
+        timeline_facts=[],
+        source_documents=[],
+    )
+    engine_result = {
+        "rule_id": "SC-050",
+        "status": "compliant",
+        "is_compliant": True,
+        "findings": "合规",
+        "evidence": "",
+        "suggestion": "",
+        "confidence": 0.72,
+        "metadata": {},
+    }
+
+    normalized = service._apply_sc050_similarity_semantic_fallback(
+        rule_input=rule_input,
+        engine_result=engine_result,
+    )
+
+    assert normalized["status"] == "compliant"
+    assert (normalized.get("metadata") or {}).get("decision_fallback") is None
+
+
+def test_build_first_course_vs_admission_signal_should_extract_case_feature_overlap(service):
+    primary_document = {
+        "document_type": "first_course_record",
+        "source_table": "first_course_record",
+        "document_title": "首次病程记录",
+        "display_time": "2026-03-01 10:00:00",
+        "content": "病例特点：反复上腹痛2月，进食后加重。拟诊讨论：考虑胃溃疡，需与胃癌鉴别。诊疗计划：完善胃镜。",
+    }
+    source_documents = [
+        primary_document,
+        {
+            "document_type": "admission_record",
+            "source_table": "admission_record",
+            "document_title": "入院记录",
+            "display_time": "2026-03-01 09:00:00",
+            "content": "现病史：反复上腹痛2月，进食后加重，伴反酸。症状体征：上腹压痛。",
+        },
+    ]
+
+    signal = service._build_first_course_vs_admission_signal(
+        primary_document=primary_document,
+        source_documents=source_documents,
+    )
+
+    assert signal is not None
+    assert signal["signal_type"] == "copy_segment_similarity"
+    assert signal["rule_hint"] == "CL-273"
+    assert float(signal["full_similarity_ratio"]) > 0
+    assert float(signal["source_to_target_sentence_coverage"]) >= 0.5
+
+
+def test_build_first_course_reasoning_self_signal_should_extract_reasoning_overlap(service):
+    primary_document = {
+        "document_type": "first_course_record",
+        "source_table": "first_course_record",
+        "document_title": "首次病程记录",
+        "display_time": "2026-03-01 10:00:00",
+        "content": "病例特点：反复上腹痛2月，进食后加重。拟诊讨论：反复上腹痛2月，进食后加重。诊疗计划：完善胃镜。",
+    }
+
+    signal = service._build_first_course_reasoning_self_signal(primary_document=primary_document)
+
+    assert signal is not None
+    assert signal["signal_type"] == "copy_segment_similarity"
+    assert signal["rule_hint"] == "CL-274"
+    assert float(signal["source_to_target_sentence_coverage"]) >= 0.5
 
 
 # ==================== RuleRouter 测试 ====================

@@ -12,16 +12,16 @@ def test_customer_luxian_rule_set_should_use_fixed_customer_pack():
 
     assert rule_set.key == CUSTOMER_LUXIAN_RULE_SET_KEY
     assert rule_set.name == "客户专项规则包 v1"
-    assert rule_set.version == "2026-04-26"
+    assert rule_set.version == "2026-04-30"
     assert rule_set.scope == "running"
     assert rule_set.execution_strategy == "fast_screen"
     assert rule_set.quality_profile == "throughput_v1"
     assert rule_set.bucket_strategy == "fixed_packs"
     assert rule_set.enable_selective_refine is False
     assert rule_set.max_refine_candidates == 0
-    assert len(rule_set.rule_ids) == 272
+    assert len(rule_set.rule_ids) == 276
     assert rule_set.rule_ids[0] == "CL-001"
-    assert rule_set.rule_ids[-1] == "CL-272"
+    assert rule_set.rule_ids[-1] == "CL-276"
 
 
 def test_customer_luxian_rules_should_have_required_fields_and_valid_documents():
@@ -31,7 +31,7 @@ def test_customer_luxian_rules_should_have_required_fields_and_valid_documents()
         "lab_attention_report",
     }
 
-    assert len(rules) == 272
+    assert len(rules) == 276
 
     seen_ids = set()
     for expected_index, rule in enumerate(rules, start=1):
@@ -86,4 +86,3 @@ def test_customer_rules_should_be_resolvable_from_sichuan_qc_service():
     assert rule is not None
     assert rule["rule_id"] == "CL-010"
     assert "危急值" in str(rule.get("description") or "")
-

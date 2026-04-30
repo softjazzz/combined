@@ -111,6 +111,35 @@ def test_classify_senior_round_content_issue():
     assert result["candidate_rule_ids"] == ["SC-049", "SC-050", "SC-052"]
 
 
+def test_classify_unreasonable_copy_content_issue_should_route_cl275():
+    result = classify_manual_issue_text("2月4日副主任医师查房记录与2月3日主治医师查房记录复制粘贴严重（相似度100%）。")
+
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "unreasonable_copy_content"
+    assert result["candidate_rule_ids"] == ["CL-273", "CL-274", "CL-275", "CL-276"]
+
+
+def test_classify_unreasonable_copy_content_issue_should_route_cl273():
+    result = classify_manual_issue_text("首次病程记录病例特点与入院记录、现病史完全相同。")
+
+    assert result["issue_category"] == "unreasonable_copy_content"
+    assert result["candidate_rule_ids"] == ["CL-273", "CL-274", "CL-275", "CL-276"]
+
+
+def test_classify_unreasonable_copy_content_issue_should_route_cl274():
+    result = classify_manual_issue_text("拟诊讨论部分重复病例特点，缺少新增诊断推理。")
+
+    assert result["issue_category"] == "unreasonable_copy_content"
+    assert result["candidate_rule_ids"] == ["CL-273", "CL-274", "CL-275", "CL-276"]
+
+
+def test_classify_unreasonable_copy_content_issue_should_route_cl276():
+    result = classify_manual_issue_text("同科同种疾病拟诊讨论内容完全相同，存在模板化照抄。")
+
+    assert result["issue_category"] == "unreasonable_copy_content"
+    assert result["candidate_rule_ids"] == ["CL-273", "CL-274", "CL-275", "CL-276"]
+
+
 def test_classify_senior_round_timeliness_issue_should_remain_programmatic():
     result = classify_manual_issue_text("48小时无主治医师查房记录、72小时无高级职称医师查房记录")
     assert result["coverage_type"] == "programmatic"
@@ -131,6 +160,38 @@ def test_daily_course_analysis_should_prefer_sc032_for_brief_change_text():
     )
 
     assert rule_ids == ["SC-032"]
+
+
+def test_resolve_unreasonable_copy_customer_rule_ids_should_pick_cl275_for_round_copy():
+    rule_ids = sample_pool_module._resolve_unreasonable_copy_customer_rule_ids(
+        "2月4日副主任医师查房记录与2月3日主治医师查房记录复制粘贴严重（相似度100%）。"
+    )
+
+    assert rule_ids == ["CL-275"]
+
+
+def test_resolve_unreasonable_copy_customer_rule_ids_should_pick_cl273():
+    rule_ids = sample_pool_module._resolve_unreasonable_copy_customer_rule_ids(
+        "首次病程记录病例特点与入院记录、现病史完全相同。"
+    )
+
+    assert rule_ids == ["CL-273"]
+
+
+def test_resolve_unreasonable_copy_customer_rule_ids_should_pick_cl274():
+    rule_ids = sample_pool_module._resolve_unreasonable_copy_customer_rule_ids(
+        "拟诊讨论部分重复病例特点，诊断依据和鉴别诊断没有新增内容。"
+    )
+
+    assert rule_ids == ["CL-274"]
+
+
+def test_resolve_unreasonable_copy_customer_rule_ids_should_pick_cl276():
+    rule_ids = sample_pool_module._resolve_unreasonable_copy_customer_rule_ids(
+        "同科同种疾病拟诊讨论内容完全相同，属于模板化照抄。"
+    )
+
+    assert rule_ids == ["CL-276"]
 
 
 def test_classify_presurg_summary_quality_issue():
@@ -312,6 +373,15 @@ def test_build_sample_pool_item_classification_update_should_support_operation_p
 
     assert patch["issue_category"] == "operation_preop_conclusion"
     assert patch["candidate_rule_ids_json"] == '["SC-084", "SC-085"]'
+
+
+def test_build_sample_pool_item_classification_update_should_support_unreasonable_copy_content():
+    patch = sample_pool_module.build_sample_pool_item_classification_update(
+        {"manual_issue_text": "2月4日副主任医师查房记录与2月3日主治医师查房记录复制粘贴严重（相似度100%）。"}
+    )
+
+    assert patch["issue_category"] == "unreasonable_copy_content"
+    assert patch["candidate_rule_ids_json"] == '["CL-273", "CL-274", "CL-275", "CL-276"]'
 
 
 def test_build_sample_pool_item_classification_update_should_support_handover_communication():

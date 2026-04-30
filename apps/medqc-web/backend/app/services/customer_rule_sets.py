@@ -34,7 +34,7 @@ def get_customer_luxian_rule_set() -> QCRuleSet:
     return QCRuleSet(
         key=CUSTOMER_LUXIAN_RULE_SET_KEY,
         name="客户专项规则包 v1",
-        version="2026-04-26",
+        version="2026-04-30",
         scope="running",
         rule_ids=rule_ids,
         execution_strategy="fast_screen",

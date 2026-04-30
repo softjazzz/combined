@@ -358,7 +358,6 @@ def _looks_like_senior_round_content_issue(text: str) -> bool:
         (
             "内容空洞",
             "无内容",
-            "复制粘贴",
             "内容却是",
             "涉嫌伪造病历",
             "病情分析较为简单",
@@ -369,6 +368,38 @@ def _looks_like_senior_round_content_issue(text: str) -> bool:
             "执行不到位",
             "落实不到位",
             "相关处理",
+        ),
+    )
+
+
+def _looks_like_unreasonable_copy_content_issue(text: str) -> bool:
+    if "会诊" in text and not _contains_any(text, ("查房", "病程", "病例特点", "拟诊讨论", "入院记录", "现病史")):
+        return False
+    if not _contains_any(
+        text,
+        (
+            "复制粘贴",
+            "完全相同",
+            "雷同",
+            "照抄",
+            "相似度100%",
+            "病历复制",
+            "重复病例特点",
+            "同科同种疾病",
+        ),
+    ):
+        return False
+    return _contains_any(
+        text,
+        (
+            "查房",
+            "病程",
+            "病例特点",
+            "拟诊讨论",
+            "入院记录",
+            "现病史",
+            "同科同种疾病",
+            "病历",
         ),
     )
 
@@ -631,6 +662,16 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "exclude_reason": "",
         }
 
+    if _looks_like_unreasonable_copy_content_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "unreasonable_copy_content",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["CL-273", "CL-274", "CL-275", "CL-276"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
     if _contains_any(normalized, ("鉴别诊断", "诊断依据", "诊疗计划", "病例特点", "首次病程")):
         return {
             "coverage_type": "llm_intrinsic",
@@ -811,6 +852,7 @@ def build_sample_pool_item_classification_update(row: Dict[str, Any]) -> Dict[st
 
 _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
     "record_list_intrinsic": list(_DEFAULT_INTRINSIC_RULE_IDS),
+    "unreasonable_copy_content": ["CL-273", "CL-274", "CL-275", "CL-276"],
     "first_course_reasoning": ["SC-023", "SC-024", "SC-025", "SC-026", "SC-027"],
     "admission_consistency": ["SC-008", "SC-009", "SC-010", "SC-011", "SC-012", "SC-018", "SC-019", "SC-020"],
     "daily_course_analysis": ["SC-032", "SC-033", "SC-036"],
@@ -843,6 +885,8 @@ _SAMPLE_SC_PRIMARY_RULE_WHITELIST: Dict[str, List[str]] = {
     "postsurg_firstcourse_quality": ["SC-105"],
     "operation_record_quality": ["SC-097"],
 }
+
+_UNREASONABLE_COPY_CUSTOMER_RULE_IDS = ["CL-273", "CL-274", "CL-275", "CL-276"]
 
 
 def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_text: Any) -> List[str]:
@@ -1106,6 +1150,25 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
     return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
 
 
+def _resolve_unreasonable_copy_customer_rule_ids(manual_issue_text: Any) -> List[str]:
+    normalized = _normalize_issue_text(manual_issue_text)
+    if not normalized:
+        return list(_UNREASONABLE_COPY_CUSTOMER_RULE_IDS)
+    if _contains_any(normalized, ("同科同种疾病", "同种疾病", "同科")) and _contains_any(
+        normalized,
+        ("拟诊讨论", "诊断依据", "鉴别诊断"),
+    ):
+        return ["CL-276"]
+    if _contains_any(normalized, ("拟诊讨论", "诊断依据", "鉴别诊断")) and _contains_any(
+        normalized,
+        ("病例特点", "重复病例特点"),
+    ):
+        return ["CL-274"]
+    if _contains_any(normalized, ("入院记录", "现病史")) and "病例特点" in normalized:
+        return ["CL-273"]
+    return ["CL-275"]
+
+
 def _looks_like_rule_id(value: str) -> bool:
     text = _safe_text(value)
     if not text:
@@ -1161,6 +1224,12 @@ def _apply_sample_sc_rule_whitelist(items: Sequence[Dict[str, Any]]) -> List[Dic
     for raw_item in items:
         item = dict(raw_item)
         issue_category = _safe_text(item.get("issue_category"), "unclassified")
+        if issue_category == "unreasonable_copy_content":
+            item["candidate_rule_ids"] = _resolve_unreasonable_copy_customer_rule_ids(
+                item.get("manual_issue_text")
+            )
+            filtered_items.append(item)
+            continue
         whitelist_rule_ids = _resolve_sample_sc_primary_rule_ids(
             issue_category=issue_category,
             manual_issue_text=item.get("manual_issue_text"),

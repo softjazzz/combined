@@ -82,13 +82,13 @@ def test_build_prompt_should_preserve_raw_json_braces_in_custom_prompt():
     assert "病历正文" in prompt
 
 
-def test_build_prompt_should_require_semantic_checks_for_sc050():
+def test_build_prompt_should_require_semantic_checks_for_cl275():
     capture = {}
     engine = _make_engine(capture)
     prompt = engine._build_prompt(
         {
-            "rule_id": "SC-050",
-            "name": "上级查房内容问题",
+            "rule_id": "CL-275",
+            "name": "病程/查房记录高度重复",
             "description": "测试专项输出字段",
         },
         "病历正文",
@@ -98,6 +98,21 @@ def test_build_prompt_should_require_semantic_checks_for_sc050():
     assert "semantic_checks" in prompt
     assert "has_new_analysis" in prompt
     assert "has_new_plan" in prompt
+
+
+def test_build_prompt_should_not_require_semantic_checks_for_sc050():
+    capture = {}
+    engine = _make_engine(capture)
+    prompt = engine._build_prompt(
+        {
+            "rule_id": "SC-050",
+            "name": "上级查房内容问题",
+            "description": "测试非复制粘贴口径",
+        },
+        "病历正文",
+    )
+
+    assert "semantic_checks" not in prompt
 
 
 @pytest.mark.asyncio
@@ -149,6 +164,40 @@ async def test_evaluate_should_include_bundle_evidence_context_in_prompt():
     assert "相邻查房全文相似度=0.82" in prompt
     assert "后一天被前一天句子覆盖率=0.93" in prompt
     assert "复制粘贴严重" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_evaluate_should_render_copy_segment_similarity_signal():
+    capture = {}
+    engine = _make_engine(capture)
+    rule = {
+        "rule_id": "CL-274",
+        "name": "拟诊讨论重复病例特点",
+        "description": "测试复制段落信号",
+    }
+    medical_record = {
+        "content": "主文书正文",
+        "document_type": "首次病程记录",
+        "evidence_payload": {
+            "derived_signals": [
+                {
+                    "signal_type": "copy_segment_similarity",
+                    "similarity_ratio": 0.88,
+                    "source_to_target_sentence_coverage": 0.92,
+                    "target_to_source_sentence_coverage": 0.81,
+                    "source_label": "病例特点",
+                    "target_label": "拟诊讨论",
+                }
+            ],
+        },
+    }
+
+    result = await engine.evaluate(rule, medical_record)
+
+    assert result["status"] == "compliant"
+    prompt = capture["prompt"]
+    assert "段落相似度=0.88" in prompt
+    assert "病例特点→拟诊讨论 句子覆盖率=0.92" in prompt
 
 
 def test_parse_llm_response_should_preserve_semantic_checks():
