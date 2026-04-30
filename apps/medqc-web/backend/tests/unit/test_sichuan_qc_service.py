@@ -515,6 +515,43 @@ def test_build_bundle_evidence_payload_should_include_adjacent_round_similarity_
     assert float(signal["later_to_earlier_sentence_coverage"]) >= 0.85
 
 
+def test_merge_rule_input_with_bundle_documents_should_preserve_full_source_content(service):
+    rule_input = RuleExecutionInput(
+        rule_id="SC-050",
+        document_type="上级查房记录",
+        execution_domain="course",
+        primary_medical_text="2026-02-04 查房正文",
+        supporting_evidence=[],
+        timeline_facts=[],
+        source_documents=[],
+    )
+    long_content = "查房内容：" + ("腰痛缓解，继续治疗。" * 120)
+    bundle = {
+        "source_documents": [
+            {
+                "document_type": "senior_course_record",
+                "source_table": "senior_course_record",
+                "document_id": "senior-20260203",
+                "document_title": "副主任医师查房记录",
+                "display_time": "2026-02-03 11:07:40",
+                "content": long_content,
+                "text_preview": long_content[:200],
+                "hit": True,
+            }
+        ]
+    }
+
+    merged = service._merge_rule_input_with_bundle_documents(
+        rule_input=rule_input,
+        bundle=bundle,
+        include_doc_types=("senior_course_record",),
+    )
+
+    assert merged.source_documents
+    assert merged.source_documents[0]["content"] == long_content
+    assert len(str(merged.supporting_evidence[0]["evidence_text"])) <= 800
+
+
 def test_score_primary_candidate_for_sc050_should_penalize_discharge_round(service):
     discharge_candidate = {
         "document_title": "郑瑞清副主任医师出院前查房记录",

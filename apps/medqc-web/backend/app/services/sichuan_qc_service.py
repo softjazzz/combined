@@ -2024,7 +2024,8 @@ class SichuanQCService:
                         "document_id": str(item.get("document_id") or ""),
                         "document_title": str(item.get("document_title") or ""),
                         "display_time": str(item.get("display_time") or item.get("record_time") or ""),
-                        "content": str(item.get("content") or item.get("text_preview") or "")[:800],
+                        # 程序信号（如相邻查房重叠率）需要基于完整正文计算，不能在此截断。
+                        "content": str(item.get("content") or item.get("text_preview") or ""),
                         "hit": bool(item.get("hit")),
                         "sections": list(item.get("sections") or []),
                         "source_fields": list(item.get("source_fields") or []),
