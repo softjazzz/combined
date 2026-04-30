@@ -469,6 +469,50 @@ class TestEvaluation:
             assert result["document_results"]["病程记录"]["total_rules"] > 0
 
 
+def test_build_bundle_evidence_payload_should_include_adjacent_round_similarity_signal(service):
+    primary_document = {
+        "id": "senior-20260204",
+        "document_type": "senior_course_record",
+        "source_table": "senior_course_record",
+        "document_title": "副主任医师查房记录",
+        "display_time": "2026-02-04 08:10:00",
+        "content": "今日查房，患者神清，精神可，诉腰背部疼痛伴活动受限明显好转，纳眠可，二便调。",
+    }
+    all_documents = [
+        primary_document,
+        {
+            "id": "daily-20260203",
+            "document_type": "daily_course_record",
+            "source_table": "daily_course_record",
+            "document_title": "主治医师查房记录",
+            "display_time": "2026-02-03 08:06:00",
+            "content": "今日查房，患者神清，精神可，诉腰背部疼痛伴活动受限明显好转，纳眠可，二便调。",
+        },
+        {
+            "id": "daily-20260120",
+            "document_type": "daily_course_record",
+            "source_table": "daily_course_record",
+            "document_title": "既往病程记录",
+            "display_time": "2026-01-20 08:00:00",
+            "content": "患者一般情况稳定。",
+        },
+    ]
+
+    payload = service._build_bundle_evidence_payload_for_document(
+        primary_document=primary_document,
+        all_documents=all_documents,
+        bundle={"timeline_facts": [], "document_hits": {"daily_course_record": True}, "data_quality_flags": []},
+        rules=[{"rule_id": "SC-050"}],
+    )
+
+    derived_signals = list(payload.get("derived_signals") or [])
+    assert len(derived_signals) == 1
+    signal = derived_signals[0]
+    assert signal["signal_type"] == "adjacent_round_similarity"
+    assert signal["compare_source_table"] == "daily_course_record"
+    assert float(signal["similarity_ratio"]) >= 0.5
+
+
 # ==================== RuleRouter 测试 ====================
 
 class TestRuleRouter:

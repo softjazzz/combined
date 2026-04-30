@@ -6,6 +6,7 @@ import time
 import re
 from pathlib import Path
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 
 from app.constants.doc_types import DOC_TYPE_CN_TO_EN, DOC_TYPE_FULL_MAP
 from ..core.settings import get_settings
@@ -49,6 +50,9 @@ from .sc_rule_family import (
 )
 
 logger = logging.getLogger(__name__)
+
+_ROUND_SIMILARITY_RULE_IDS = {"SC-050", "CL-037"}
+_ROUND_SIMILARITY_SOURCE_TABLES = {"daily_course_record", "senior_course_record"}
 
 _SC_032_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-032：病程记录重要病情变化(症状及体征)未记录或记录不全。
 
@@ -1664,6 +1668,7 @@ class SichuanQCService:
         primary_document: Dict[str, Any],
         all_documents: List[Dict[str, Any]],
         bundle: Dict[str, Any],
+        rules: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         supporting_documents = []
         primary_id = str(primary_document.get("id") or "")
@@ -1683,12 +1688,18 @@ class SichuanQCService:
                     "hit": bool(item.get("hit")),
                 }
             )
+        derived_signals = self._build_adjacent_round_similarity_signals(
+            primary_document=primary_document,
+            source_documents=all_documents,
+            rule_ids=[str(item.get("rule_id") or item.get("rule_code") or "") for item in list(rules or [])],
+        )
         return {
             "primary_document_text": str(primary_document.get("content") or "").strip(),
             "supporting_documents": supporting_documents,
             "timeline_facts": list(bundle.get("timeline_facts") or []),
             "document_hits": dict(bundle.get("document_hits") or {}),
             "data_quality_flags": list(bundle.get("data_quality_flags") or []),
+            "derived_signals": derived_signals,
         }
 
     def _build_bundle_missing_doc_result_item(
@@ -1758,6 +1769,116 @@ class SichuanQCService:
             seen.add(key)
             merged.append(normalized)
         return merged
+
+    @staticmethod
+    def _parse_document_datetime(value: str) -> Optional[datetime]:
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        normalized = raw.replace("T", " ").replace("Z", "+00:00")
+        try:
+            return datetime.fromisoformat(normalized)
+        except ValueError:
+            pass
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%Y/%m/%d %H:%M:%S",
+            "%Y/%m/%d %H:%M",
+            "%Y-%m-%d",
+            "%Y/%m/%d",
+        ):
+            try:
+                return datetime.strptime(raw, fmt)
+            except ValueError:
+                continue
+        return None
+
+    @staticmethod
+    def _normalize_round_similarity_text(value: str) -> str:
+        text = str(value or "")
+        text = re.sub(r"\s+", "", text)
+        text = re.sub(r"[，。；：、,.!?！？;:（）()【】\\[\\]<>《》\"'“”‘’·-]+", "", text)
+        return text.strip()
+
+    @classmethod
+    def _build_adjacent_round_similarity_signals(
+        cls,
+        *,
+        primary_document: Dict[str, Any],
+        source_documents: List[Dict[str, Any]],
+        rule_ids: List[str],
+    ) -> List[Dict[str, Any]]:
+        normalized_rule_ids = {str(item or "").strip().upper() for item in list(rule_ids or []) if str(item or "").strip()}
+        if not (normalized_rule_ids & _ROUND_SIMILARITY_RULE_IDS):
+            return []
+
+        primary_source_table = str(primary_document.get("source_table") or primary_document.get("document_type") or "").strip()
+        primary_content = str(primary_document.get("content") or primary_document.get("text_preview") or "").strip()
+        if primary_source_table not in _ROUND_SIMILARITY_SOURCE_TABLES or not primary_content:
+            return []
+
+        primary_time = str(primary_document.get("display_time") or primary_document.get("record_time") or "").strip()
+        primary_dt = cls._parse_document_datetime(primary_time)
+        primary_id = str(primary_document.get("document_id") or primary_document.get("id") or "").strip()
+        normalized_primary = cls._normalize_round_similarity_text(primary_content)
+        if not normalized_primary:
+            return []
+
+        candidates: List[Dict[str, Any]] = []
+        for item in list(source_documents or []):
+            source_table = str(item.get("source_table") or item.get("document_type") or "").strip()
+            if source_table not in _ROUND_SIMILARITY_SOURCE_TABLES:
+                continue
+            compare_content = str(item.get("content") or item.get("text_preview") or "").strip()
+            if not compare_content:
+                continue
+            compare_id = str(item.get("document_id") or item.get("id") or "").strip()
+            compare_time = str(item.get("display_time") or item.get("record_time") or "").strip()
+            if (
+                compare_id
+                and primary_id
+                and compare_id == primary_id
+                and source_table == primary_source_table
+                and compare_time == primary_time
+            ):
+                continue
+            normalized_compare = cls._normalize_round_similarity_text(compare_content)
+            if not normalized_compare:
+                continue
+            compare_dt = cls._parse_document_datetime(compare_time)
+            time_gap_hours = None
+            if primary_dt is not None and compare_dt is not None:
+                delta_seconds = abs((primary_dt - compare_dt).total_seconds())
+                if delta_seconds > 72 * 3600:
+                    continue
+                time_gap_hours = round(delta_seconds / 3600.0, 2)
+            similarity_ratio = SequenceMatcher(None, normalized_primary, normalized_compare).ratio()
+            if similarity_ratio < 0.3:
+                continue
+            candidates.append(
+                {
+                    "signal_type": "adjacent_round_similarity",
+                    "primary_source_table": primary_source_table,
+                    "primary_document_title": str(primary_document.get("document_title") or primary_source_table),
+                    "primary_display_time": primary_time,
+                    "compare_source_table": source_table,
+                    "compare_document_title": str(item.get("document_title") or source_table),
+                    "compare_display_time": compare_time,
+                    "similarity_ratio": round(similarity_ratio, 4),
+                    "threshold_hint": 0.5,
+                    "time_gap_hours": time_gap_hours,
+                }
+            )
+
+        candidates.sort(
+            key=lambda item: (
+                float(item.get("similarity_ratio") or 0.0),
+                -float(item.get("time_gap_hours") or 9999.0),
+            ),
+            reverse=True,
+        )
+        return candidates[:1]
 
     @staticmethod
     def _merge_rule_input_with_bundle_documents(
@@ -2802,6 +2923,7 @@ class SichuanQCService:
                     primary_document=primary_document,
                     all_documents=bundle_documents,
                     bundle=bundle,
+                    rules=list(slot.get("rules") or []),
                 )
                 per_doc_orchestrated = await self._evaluate_rules_orchestrated(
                     document_id=f"{document_id}:{primary_document.get('source_table') or primary_type}",
@@ -2991,6 +3113,19 @@ class SichuanQCService:
         compliant_rules = 1 if status in {"compliant", "not_applicable"} else 0
         issues_found = 1 if status == "non_compliant" else 0
         metadata = engine_result.get("metadata") or {}
+        primary_source_document = next(
+            (
+                dict(item)
+                for item in list(rule_input.source_documents or [])
+                if str(item.get("content") or "").strip() == str(rule_input.primary_medical_text or "").strip()
+            ),
+            dict((rule_input.source_documents or [None])[0] or {}),
+        )
+        derived_signals = self._build_adjacent_round_similarity_signals(
+            primary_document=primary_source_document,
+            source_documents=[dict(item) for item in list(rule_input.source_documents or [])],
+            rule_ids=[str(rule.get("rule_id") or rule.get("rule_code") or "")],
+        )
         return {
             "document_id": visit_id,
             "document_type": rule_input.document_type,
@@ -3015,6 +3150,7 @@ class SichuanQCService:
                 rule_input=rule_input,
                 document_hits=domain_bundle.get("document_hits") or {},
                 data_quality_flags=domain_bundle.get("data_quality_flags") or [],
+                derived_signals=derived_signals,
             ).to_dict(),
             "executor_breakdown": orchestrated.get("executor_breakdown") or {},
             "cache_breakdown": orchestrated.get("cache_breakdown") or {},

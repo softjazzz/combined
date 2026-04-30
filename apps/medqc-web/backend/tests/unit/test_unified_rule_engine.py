@@ -104,6 +104,17 @@ async def test_evaluate_should_include_bundle_evidence_context_in_prompt():
             "timeline_facts": ["2026-04-15 入院", "2026-04-16 查房"],
             "document_hits": {"admission_record": True, "daily_course_record": True},
             "data_quality_flags": ["missing:discharge_record"],
+            "derived_signals": [
+                {
+                    "signal_type": "adjacent_round_similarity",
+                    "similarity_ratio": 0.82,
+                    "threshold_hint": 0.5,
+                    "primary_source_table": "senior_course_record",
+                    "primary_display_time": "2026-02-04 08:10:00",
+                    "compare_source_table": "daily_course_record",
+                    "compare_display_time": "2026-02-03 08:06:00",
+                }
+            ],
         },
     }
 
@@ -114,6 +125,8 @@ async def test_evaluate_should_include_bundle_evidence_context_in_prompt():
     assert "结构化证据上下文（Bundle）" in prompt
     assert "辅助证据-病程记录片段" in prompt
     assert "2026-04-15 入院" in prompt
+    assert "相邻查房文本相似度=0.82" in prompt
+    assert "复制粘贴严重" not in prompt
 
 
 @pytest.mark.asyncio

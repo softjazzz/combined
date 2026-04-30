@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from app.constants.doc_types import DOC_TYPE_CN_TO_EN, DOC_TYPE_FULL_MAP, DOC_TYPE_MAP
@@ -104,6 +104,7 @@ class EvidencePayload:
     timeline_facts: list[dict[str, Any]]
     document_hits: dict[str, Any]
     data_quality_flags: list[str]
+    derived_signals: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -219,6 +220,7 @@ def build_evidence_payload_from_rule_input(
     rule_input: RuleExecutionInput,
     document_hits: dict[str, Any] | None = None,
     data_quality_flags: list[str] | None = None,
+    derived_signals: list[dict[str, Any]] | None = None,
 ) -> EvidencePayload:
     supporting_documents: list[dict[str, Any]] = []
     for item in rule_input.supporting_evidence:
@@ -240,4 +242,5 @@ def build_evidence_payload_from_rule_input(
         timeline_facts=list(rule_input.timeline_facts or []),
         document_hits=dict(document_hits or {}),
         data_quality_flags=[str(item) for item in (data_quality_flags or []) if str(item).strip()],
+        derived_signals=[dict(item) for item in list(derived_signals or []) if isinstance(item, dict)],
     )

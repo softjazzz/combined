@@ -1263,6 +1263,7 @@ class UnifiedRuleEngine:
         timeline_facts = evidence_payload.get("timeline_facts") or []
         document_hits = evidence_payload.get("document_hits") or {}
         data_quality_flags = evidence_payload.get("data_quality_flags") or []
+        derived_signals = evidence_payload.get("derived_signals") or []
 
         lines: List[str] = []
         if isinstance(document_hits, dict) and document_hits:
@@ -1271,6 +1272,26 @@ class UnifiedRuleEngine:
 
         if isinstance(data_quality_flags, list) and data_quality_flags:
             lines.append("数据质量标记：" + "，".join([str(item) for item in data_quality_flags if str(item).strip()]))
+
+        if isinstance(derived_signals, list) and derived_signals:
+            lines.append("派生信号：")
+            for idx, item in enumerate(derived_signals[:5], start=1):
+                if not isinstance(item, dict):
+                    continue
+                signal_type = str(item.get("signal_type") or "").strip()
+                if signal_type == "adjacent_round_similarity":
+                    similarity_ratio = float(item.get("similarity_ratio") or 0.0)
+                    threshold_hint = float(item.get("threshold_hint") or 0.5)
+                    primary_type = str(item.get("primary_source_table") or "")
+                    primary_time = str(item.get("primary_display_time") or "")
+                    compare_type = str(item.get("compare_source_table") or "")
+                    compare_time = str(item.get("compare_display_time") or "")
+                    lines.append(
+                        f"{idx}. 相邻查房文本相似度={similarity_ratio:.2f}（阈值参考 {threshold_hint:.2f}）；"
+                        f"主文书=[{primary_type}] {primary_time}；对照文书=[{compare_type}] {compare_time}"
+                    )
+                    continue
+                lines.append(f"{idx}. {str(item)}")
 
         if isinstance(supporting_documents, list) and supporting_documents:
             lines.append("辅助证据：")
