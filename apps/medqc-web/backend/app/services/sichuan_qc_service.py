@@ -1520,6 +1520,33 @@ class SichuanQCService:
                 score += 10
             if re.search(r"\bMg\s*\d+(?:\.\d+)?\s*mmol/?l\b", lowered):
                 score += 10
+        elif normalized_rule_id == "SC-050" and content:
+            weighted_patterns = (
+                ("副主任医师查房", 60),
+                ("代主治医师查房", 55),
+                ("主治医师查房", 45),
+                ("诊断依据", 35),
+                ("鉴别诊断", 35),
+                ("继续原方案", 10),
+                ("治疗有效", 10),
+            )
+            for keyword, weight in weighted_patterns:
+                if keyword in content or keyword in str(candidate.get("document_title") or ""):
+                    score += weight
+            discharge_like_patterns = (
+                "出院前查房",
+                "办理出院",
+                "同意出院",
+                "出院医嘱",
+                "门诊随访",
+                "随访周期",
+                "随访日期",
+                "明日办理",
+                "今日办理出院",
+            )
+            for keyword in discharge_like_patterns:
+                if keyword in content or keyword in str(candidate.get("document_title") or ""):
+                    score -= 120
         elif normalized_rule_id == "SC-146" and content:
             weighted_patterns = (
                 ("手术", 70),
@@ -3113,14 +3140,15 @@ class SichuanQCService:
         compliant_rules = 1 if status in {"compliant", "not_applicable"} else 0
         issues_found = 1 if status == "non_compliant" else 0
         metadata = engine_result.get("metadata") or {}
-        primary_source_document = next(
-            (
-                dict(item)
-                for item in list(rule_input.source_documents or [])
-                if str(item.get("content") or "").strip() == str(rule_input.primary_medical_text or "").strip()
-            ),
-            dict((rule_input.source_documents or [None])[0] or {}),
-        )
+        primary_source_document = {}
+        if list(rule_input.source_documents or []):
+            primary_source_document = max(
+                (dict(item) for item in list(rule_input.source_documents or [])),
+                key=lambda item: self._score_primary_candidate_for_rule(
+                    rule_id=str(rule.get("rule_id") or rule.get("rule_code") or ""),
+                    candidate=item,
+                ),
+            )
         derived_signals = self._build_adjacent_round_similarity_signals(
             primary_document=primary_source_document,
             source_documents=[dict(item) for item in list(rule_input.source_documents or [])],

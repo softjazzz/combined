@@ -513,6 +513,24 @@ def test_build_bundle_evidence_payload_should_include_adjacent_round_similarity_
     assert float(signal["similarity_ratio"]) >= 0.5
 
 
+def test_score_primary_candidate_for_sc050_should_penalize_discharge_round(service):
+    discharge_candidate = {
+        "document_title": "郑瑞清副主任医师出院前查房记录",
+        "display_time": "2026-02-09 09:34:44",
+        "content": "今日郑瑞清副主任医师查房。现患者症状基本缓解，要求办理出院，经上级医师查看后同意出院，拟于明日办理。出院医嘱：门诊随访。",
+    }
+    adjacent_round_candidate = {
+        "document_title": "郑瑞清副主任医师查房记录",
+        "display_time": "2026-02-04 11:08:49",
+        "content": "今日郑瑞清副主任医师代主治医师查房。目前诊断明确，治疗有效，继续原方案，密观。",
+    }
+
+    discharge_score = service._score_primary_candidate_for_rule(rule_id="SC-050", candidate=discharge_candidate)
+    adjacent_score = service._score_primary_candidate_for_rule(rule_id="SC-050", candidate=adjacent_round_candidate)
+
+    assert adjacent_score > discharge_score
+
+
 # ==================== RuleRouter 测试 ====================
 
 class TestRuleRouter:
