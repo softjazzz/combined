@@ -508,6 +508,7 @@ class UnifiedRuleEngine:
                 suggestion=parsed["suggestion"],
                 rule_name=str(rule_name or ""),
             ),
+            "semantic_checks": dict(parsed.get("semantic_checks") or {}),
             "rewrite_example": self._build_rewrite_example(
                 rule_id=str(rule_id or "").strip().upper(),
                 status=status,
@@ -747,6 +748,7 @@ class UnifiedRuleEngine:
                         suggestion=str(parsed_item.get("suggestion") or ""),
                         rule_name=str(rule_name or ""),
                     ),
+                    "semantic_checks": dict(parsed_item.get("semantic_checks") or {}),
                     "rewrite_example": self._build_rewrite_example(
                         rule_id=str(rule_id or "").strip().upper(),
                         status=status,
@@ -904,6 +906,13 @@ class UnifiedRuleEngine:
             if batch_output_mode_normalized == BATCH_OUTPUT_MODE_MINIMAL
             else "- evidence 尽量引用原文短句。\n"
         )
+        semantic_output_rule = ""
+        if any(str(rule.get("rule_id") or "").strip().upper() in {"SC-050", "CL-037"} for rule in rules):
+            semantic_output_rule = (
+                "- 对 SC-050 / CL-037，必须额外输出 semantic_checks，格式为 "
+                "{\"has_new_analysis\": true/false, \"has_new_plan\": true/false}。\n"
+                "- 若派生信号已给出相邻查房文本相似度，请仅判断是否存在新增分析/新增计划，不要自行改写相似度数值。\n"
+            )
 
         prompt = (
             "你是资深病历质控专家。请基于下方病历证据，对规则列表逐条判定。\n"
@@ -912,6 +921,7 @@ class UnifiedRuleEngine:
             "2. 必须覆盖全部 rule_id，每条只输出一次。\n"
             "3. 若证据不足，status=uncertain，is_compliant=false，并说明缺失证据。\n"
             f"{output_rules}"
+            f"{semantic_output_rule}"
             "- 不得因轻微格式问题、术语不够漂亮、标题顺序一般，就直接判 non_compliant。\n"
             "- 若核心内容已存在，只是提炼一般、表达一般或边界不清，优先 uncertain。\n"
             "- findings / evidence / suggestion 必须一致，不得出现“不合规但无需修改”。\n\n"
@@ -931,7 +941,8 @@ class UnifiedRuleEngine:
             "      \"evidence\": \"证据\",\n"
             "      \"suggestion\": \"建议\",\n"
             "      \"confidence\": 0.0,\n"
-            "      \"issues\": []\n"
+            "      \"issues\": [],\n"
+            "      \"semantic_checks\": {\"has_new_analysis\": false, \"has_new_plan\": false}\n"
             "    }\n"
             "  ]\n"
             "}"
@@ -1198,7 +1209,8 @@ class UnifiedRuleEngine:
             "SC-033": "已有感染/检查/用药线索但无分析或具体处理意见时，直接判non_compliant；有疗效判断或后续计划则判compliant",
             "SC-036": "上下文有重要异常检查结果而病程未提及或无分析处理时，直接判non_compliant；无异常检查线索不要硬判",
             "SC-070": "病程记录若只是照抄会诊意见、未写是否采纳及具体执行动作/结果，直接判non_compliant；写明已落实的检查/用药/处理或未采纳理由则判compliant",
-            "SC-050": "若主文书与辅助证据全文或核心句子基本相同且无新增分析/计划，直接判non_compliant；若有新增判断或计划则判compliant",
+            "SC-050": "若派生信号显示相邻查房文本相似度>=0.5，需单独判断 semantic_checks.has_new_analysis 与 has_new_plan；二者都为false时直接判non_compliant，任一为true时优先判compliant或uncertain",
+            "CL-037": "若派生信号显示相邻查房文本相似度>=0.5，需单独判断 semantic_checks.has_new_analysis 与 has_new_plan；二者都为false时直接判non_compliant，任一为true时优先判compliant或uncertain",
             "SC-121": "只抓关键诊疗经过缺失，不做药理学或格式化发散点评",
             "SC-125": "优先判断出院诊断明显漏填/错填/顺序错误，不把既往史展开不足作为主依据",
         }
@@ -1252,6 +1264,7 @@ class UnifiedRuleEngine:
                     "suggestion": str(item.get("suggestion") or ""),
                     "confidence": float(item.get("confidence") or 0.7),
                     "issues": item.get("issues") or [],
+                    "semantic_checks": UnifiedRuleEngine._parse_semantic_checks(item.get("semantic_checks")),
                 }
             )
 
@@ -1346,6 +1359,13 @@ class UnifiedRuleEngine:
             "- 若核心内容已存在，只是提炼一般、表达一般或边界不清，优先判 uncertain。\n"
             "- findings / evidence / suggestion 必须一致，不得出现“不合规但无需修改”。\n"
         )
+        if rule_id in {"SC-050", "CL-037"}:
+            common_guardrails += (
+                "【SC-050/CL-037 专项输出要求】\n"
+                "- 请把“是否有明确新增分析”“是否有明确新增计划”单独输出到 semantic_checks。\n"
+                "- semantic_checks 固定结构：{\"has_new_analysis\": true/false, \"has_new_plan\": true/false}。\n"
+                "- 派生信号中的相邻查房文本相似度已由程序计算，请不要自行臆造新的相似度分数。\n"
+            )
         if guardrails:
             common_guardrails += f"【规则级收敛要求】\n- {guardrails}\n"
 
@@ -1422,7 +1442,8 @@ class UnifiedRuleEngine:
             "evidence": "",
             "suggestion": "",
             "confidence": 0.7,
-            "uncertain": False
+            "uncertain": False,
+            "semantic_checks": {},
         }
 
         if not raw_output:
@@ -1449,12 +1470,31 @@ class UnifiedRuleEngine:
         default_result["findings"] = UnifiedRuleEngine._stringify_llm_text(parsed_json.get("findings", ""))
         default_result["evidence"] = UnifiedRuleEngine._stringify_llm_text(parsed_json.get("evidence", ""))
         default_result["suggestion"] = UnifiedRuleEngine._stringify_llm_text(parsed_json.get("suggestion", ""))
+        default_result["semantic_checks"] = UnifiedRuleEngine._parse_semantic_checks(parsed_json.get("semantic_checks"))
         try:
             default_result["confidence"] = float(parsed_json.get("confidence", 0.7))
         except Exception:
             default_result["confidence"] = 0.7
 
         return default_result
+
+    @staticmethod
+    def _parse_semantic_checks(value: Any) -> Dict[str, bool]:
+        if not isinstance(value, dict):
+            return {}
+        parsed: Dict[str, bool] = {}
+        for key in ("has_new_analysis", "has_new_plan"):
+            raw = value.get(key)
+            if isinstance(raw, bool):
+                parsed[key] = raw
+                continue
+            if isinstance(raw, str):
+                normalized = raw.strip().lower()
+                if normalized in {"true", "yes", "y", "1"}:
+                    parsed[key] = True
+                elif normalized in {"false", "no", "n", "0"}:
+                    parsed[key] = False
+        return parsed
 
     @staticmethod
     def _stringify_llm_text(value: Any) -> str:

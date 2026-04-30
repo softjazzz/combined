@@ -18,6 +18,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.services.sichuan_qc_service import SichuanQCService
+from app.services.rule_domain_router import RuleExecutionInput
 from app.database.connection import Base
 
 
@@ -529,6 +530,60 @@ def test_score_primary_candidate_for_sc050_should_penalize_discharge_round(servi
     adjacent_score = service._score_primary_candidate_for_rule(rule_id="SC-050", candidate=adjacent_round_candidate)
 
     assert adjacent_score > discharge_score
+
+
+def test_apply_sc050_similarity_semantic_fallback_should_force_non_compliant(service):
+    rule_input = RuleExecutionInput(
+        rule_id="SC-050",
+        document_type="上级医师查房记录",
+        execution_domain="course",
+        primary_medical_text="2026-02-04 查房记录正文",
+        supporting_evidence=[],
+        timeline_facts=[],
+        source_documents=[
+            {
+                "document_type": "senior_course_record",
+                "source_table": "senior_course_record",
+                "document_title": "郑瑞清副主任医师查房记录",
+                "display_time": "2026-02-04 11:08:49",
+                "content": "今日查房，患者神清，精神可，诉腰背部疼痛伴活动受限明显好转，纳眠可，二便调。",
+                "hit": True,
+            },
+            {
+                "document_type": "senior_course_record",
+                "source_table": "senior_course_record",
+                "document_title": "郑瑞清副主任医师代主治医师查房记录",
+                "display_time": "2026-02-03 11:07:40",
+                "content": "今日查房，患者神清，精神可，诉腰背部疼痛伴活动受限明显好转，纳眠可，二便调。",
+                "hit": True,
+            },
+        ],
+    )
+    engine_result = {
+        "rule_id": "SC-050",
+        "status": "compliant",
+        "is_compliant": True,
+        "findings": "合规",
+        "evidence": "原始证据",
+        "suggestion": "",
+        "confidence": 0.72,
+        "semantic_checks": {
+            "has_new_analysis": False,
+            "has_new_plan": False,
+        },
+        "metadata": {},
+    }
+
+    normalized = service._apply_sc050_similarity_semantic_fallback(
+        rule_input=rule_input,
+        engine_result=engine_result,
+    )
+
+    assert normalized["status"] == "non_compliant"
+    assert normalized["is_compliant"] is False
+    assert float(normalized["confidence"]) >= 0.86
+    assert "相邻查房文本相似度" in normalized["evidence"]
+    assert (normalized.get("metadata") or {}).get("decision_fallback") == "sc050_similarity_plus_semantic_check"
 
 
 # ==================== RuleRouter 测试 ====================

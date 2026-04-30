@@ -53,6 +53,7 @@ logger = logging.getLogger(__name__)
 
 _ROUND_SIMILARITY_RULE_IDS = {"SC-050", "CL-037"}
 _ROUND_SIMILARITY_SOURCE_TABLES = {"daily_course_record", "senior_course_record"}
+_SC050_SIMILARITY_THRESHOLD = 0.5
 
 _SC_032_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-032：病程记录重要病情变化(症状及体征)未记录或记录不全。
 
@@ -2732,6 +2733,86 @@ class SichuanQCService:
             rule_input=rule_input,
             engine_result=normalized,
             surgery_bundle=surgery_bundle,
+        )
+        normalized = self._apply_sc050_similarity_semantic_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
+        return normalized
+
+    def _apply_sc050_similarity_semantic_fallback(
+        self,
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized = dict(engine_result or {})
+        rule_id = str(rule_input.rule_id or "").strip().upper()
+        if rule_id != "SC-050":
+            return normalized
+
+        source_documents = [dict(item) for item in list(rule_input.source_documents or []) if isinstance(item, dict)]
+        if not source_documents:
+            return normalized
+
+        primary_source_document = max(
+            source_documents,
+            key=lambda item: self._score_primary_candidate_for_rule(rule_id=rule_id, candidate=item),
+        )
+        derived_signals = self._build_adjacent_round_similarity_signals(
+            primary_document=primary_source_document,
+            source_documents=source_documents,
+            rule_ids=[rule_id],
+        )
+        if not derived_signals:
+            return normalized
+
+        similarity_signal = next(
+            (
+                item for item in derived_signals
+                if str(item.get("signal_type") or "").strip() == "adjacent_round_similarity"
+            ),
+            None,
+        )
+        if not similarity_signal:
+            return normalized
+
+        similarity_ratio = float(similarity_signal.get("similarity_ratio") or 0.0)
+        if similarity_ratio < _SC050_SIMILARITY_THRESHOLD:
+            return normalized
+
+        semantic_checks = dict(normalized.get("semantic_checks") or {})
+        has_new_analysis = semantic_checks.get("has_new_analysis")
+        has_new_plan = semantic_checks.get("has_new_plan")
+        if has_new_analysis is not False or has_new_plan is not False:
+            return normalized
+
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc050_similarity_plus_semantic_check"
+        metadata["final_decision_source"] = "rule_aggregate"
+        metadata["semantic_checks"] = semantic_checks
+        metadata["derived_signals"] = derived_signals
+
+        primary_time = str(similarity_signal.get("primary_display_time") or "")
+        compare_time = str(similarity_signal.get("compare_display_time") or "")
+        normalized.update(
+            {
+                "status": "non_compliant",
+                "is_compliant": False,
+                "findings": (
+                    f"相邻查房记录文本相似度为 {similarity_ratio:.2f}，且未见明确新增病情分析或后续计划，"
+                    "符合上级查房记录高度重复、内容质量不足的问题特征。"
+                ),
+                "evidence": (
+                    f"主文书时间：{primary_time}；对照文书时间：{compare_time}；"
+                    f"相邻查房文本相似度={similarity_ratio:.2f}，semantic_checks 显示"
+                    " has_new_analysis=false、has_new_plan=false。"
+                ),
+                "suggestion": "请补充上级查房记录中的新增病情分析、诊疗判断及具体后续计划，避免重复套写。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.86),
+                "metadata": metadata,
+            }
         )
         return normalized
 

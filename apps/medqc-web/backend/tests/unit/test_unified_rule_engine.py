@@ -82,6 +82,24 @@ def test_build_prompt_should_preserve_raw_json_braces_in_custom_prompt():
     assert "病历正文" in prompt
 
 
+def test_build_prompt_should_require_semantic_checks_for_sc050():
+    capture = {}
+    engine = _make_engine(capture)
+    prompt = engine._build_prompt(
+        {
+            "rule_id": "SC-050",
+            "name": "上级查房内容问题",
+            "description": "测试专项输出字段",
+        },
+        "病历正文",
+        evidence_payload={"derived_signals": [{"signal_type": "adjacent_round_similarity", "similarity_ratio": 0.58}]},
+    )
+
+    assert "semantic_checks" in prompt
+    assert "has_new_analysis" in prompt
+    assert "has_new_plan" in prompt
+
+
 @pytest.mark.asyncio
 async def test_evaluate_should_include_bundle_evidence_context_in_prompt():
     capture = {}
@@ -129,6 +147,19 @@ async def test_evaluate_should_include_bundle_evidence_context_in_prompt():
     assert "复制粘贴严重" not in prompt
 
 
+def test_parse_llm_response_should_preserve_semantic_checks():
+    parsed = UnifiedRuleEngine._parse_llm_response(
+        '{"is_compliant": false, "issues": [], "findings": "不合规", '
+        '"evidence": "证据", "suggestion": "补充", "confidence": 0.88, '
+        '"semantic_checks": {"has_new_analysis": false, "has_new_plan": "false"}}'
+    )
+
+    assert parsed["semantic_checks"] == {
+        "has_new_analysis": False,
+        "has_new_plan": False,
+    }
+
+
 @pytest.mark.asyncio
 async def test_evaluate_batch_compact_should_return_all_rule_results():
     async def _fake_llm(prompt: str):
@@ -139,7 +170,8 @@ async def test_evaluate_batch_compact_should_return_all_rule_results():
                         "content": (
                             '{"results": ['
                             '{"rule_id":"SC-001","is_compliant":true,"status":"compliant","findings":"合规","evidence":"主文书正文","suggestion":"","confidence":0.9},'
-                            '{"rule_id":"SC-002","is_compliant":false,"status":"non_compliant","findings":"不合规","evidence":"主文书正文","suggestion":"补充","confidence":0.88}'
+                            '{"rule_id":"SC-002","is_compliant":false,"status":"non_compliant","findings":"不合规","evidence":"主文书正文","suggestion":"补充","confidence":0.88,'
+                            '"semantic_checks":{"has_new_analysis":false,"has_new_plan":false}}'
                             ']}'
                         )
                     }
@@ -187,6 +219,10 @@ async def test_evaluate_batch_compact_should_return_all_rule_results():
     assert result["cot_observation"]["cot_mode"] == "disabled"
     assert all((item.get("metadata") or {}).get("prompt_tokens") == 14 for item in result["results"])
     assert all((item.get("metadata") or {}).get("completion_tokens") == 6 for item in result["results"])
+    assert result["results"][1]["semantic_checks"] == {
+        "has_new_analysis": False,
+        "has_new_plan": False,
+    }
 
 
 @pytest.mark.asyncio
