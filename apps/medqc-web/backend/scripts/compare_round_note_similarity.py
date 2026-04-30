@@ -3,8 +3,9 @@ from __future__ import annotations
 import argparse
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from difflib import SequenceMatcher
-from typing import Iterable, List
+from typing import Dict, Iterable, List
 
 from app.services.bundles import load_or_assemble_domain_bundle
 
@@ -15,6 +16,30 @@ DEFAULT_VISIT_ID = "2207717"
 DEFAULT_TIME_A = "2026-02-03 11:07:40"
 DEFAULT_TIME_B = "2026-02-04 11:08:49"
 ROUND_SOURCE_TABLES = {"daily_course_record", "senior_course_record"}
+SECTION_PATTERNS: List[tuple[str, str]] = [
+    ("入院症见", r"入院症见[:：]"),
+    ("体格检查", r"体格检查[:：]"),
+    ("辅助检查", r"(?:院内)?辅助检查[:：]"),
+    ("诊断", r"(?:目前患者)?诊断[:：]|初步诊断[:：]"),
+    ("诊断依据", r"诊断依据[:：]"),
+    ("鉴别诊断", r"鉴别诊断[:：]"),
+    ("治疗经过", r"入院后给予|目前治疗上|治疗上给予|治疗上"),
+    ("病情变化", r"患者神清，精神可"),
+    ("查体", r"查体[:：]"),
+    ("会诊建议", r"请感染科会诊"),
+]
+SECTION_WEIGHTS: Dict[str, float] = {
+    "入院症见": 1.0,
+    "体格检查": 1.0,
+    "辅助检查": 1.0,
+    "诊断": 1.5,
+    "诊断依据": 1.5,
+    "鉴别诊断": 1.0,
+    "治疗经过": 1.5,
+    "病情变化": 2.0,
+    "查体": 2.0,
+    "会诊建议": 0.8,
+}
 
 
 @dataclass
@@ -22,6 +47,16 @@ class SentenceMatch:
     source_sentence: str
     matched_sentence: str
     similarity: float
+
+
+@dataclass
+class SectionCoverage:
+    name: str
+    weight: float
+    sentence_count: int
+    coverage_ratio: float
+    source_excerpt: str
+    target_excerpt: str
 
 
 def _normalize_for_full_ratio(text: str) -> str:
@@ -93,6 +128,71 @@ def _coverage_ratio(source_sentences: List[str], target_sentences: List[str], *,
     return len(matches) / len(source_sentences)
 
 
+def _parse_display_time(value: str) -> datetime:
+    return datetime.strptime(str(value or "").strip(), "%Y-%m-%d %H:%M:%S")
+
+
+def _extract_sections(text: str) -> Dict[str, str]:
+    normalized = _normalize_for_sentence(text)
+    located: List[tuple[int, int, str]] = []
+    used_starts: set[tuple[int, str]] = set()
+    for name, pattern in SECTION_PATTERNS:
+        match = re.search(pattern, normalized)
+        if not match:
+            continue
+        key = (match.start(), name)
+        if key in used_starts:
+            continue
+        used_starts.add(key)
+        located.append((match.start(), match.end(), name))
+
+    located.sort(key=lambda item: item[0])
+    sections: Dict[str, str] = {}
+    for index, (start, _end, name) in enumerate(located):
+        next_start = located[index + 1][0] if index + 1 < len(located) else len(normalized)
+        section_text = normalized[start:next_start].strip()
+        if section_text:
+            sections[name] = section_text
+    return sections
+
+
+def _weighted_section_coverages(
+    source_text: str,
+    target_text: str,
+    *,
+    threshold: float,
+) -> List[SectionCoverage]:
+    source_sections = _extract_sections(source_text)
+    target_sections = _extract_sections(target_text)
+    rows: List[SectionCoverage] = []
+    for name, source_section in source_sections.items():
+        target_section = target_sections.get(name, "")
+        source_sentences = _split_sentences(source_section)
+        target_sentences = _split_sentences(target_section)
+        coverage = _coverage_ratio(source_sentences, target_sentences, threshold=threshold)
+        rows.append(
+            SectionCoverage(
+                name=name,
+                weight=float(SECTION_WEIGHTS.get(name, 1.0)),
+                sentence_count=len(source_sentences),
+                coverage_ratio=coverage,
+                source_excerpt=source_section[:120],
+                target_excerpt=target_section[:120],
+            )
+        )
+    return rows
+
+
+def _weighted_average(rows: List[SectionCoverage]) -> float:
+    effective_rows = [row for row in rows if row.sentence_count > 0]
+    if not effective_rows:
+        return 0.0
+    total_weight = sum(row.weight for row in effective_rows)
+    if total_weight <= 0:
+        return 0.0
+    return sum(row.coverage_ratio * row.weight for row in effective_rows) / total_weight
+
+
 def _load_document_by_time(*, institute_id: str, patient_id: str, visit_id: str, display_time: str) -> dict:
     bundle = load_or_assemble_domain_bundle(
         execution_domain="course",
@@ -120,6 +220,7 @@ def main() -> None:
     parser.add_argument("--time-b", default=DEFAULT_TIME_B)
     parser.add_argument("--threshold", type=float, default=0.85, help="句子匹配阈值，默认 0.85")
     parser.add_argument("--show-matches", action="store_true", help="打印命中的句子对")
+    parser.add_argument("--show-sections", action="store_true", help="打印核心段落覆盖率明细")
     args = parser.parse_args()
 
     doc_a = _load_document_by_time(
@@ -149,6 +250,23 @@ def main() -> None:
     cover_a_to_b = _coverage_ratio(sentences_a, sentences_b, threshold=args.threshold)
     cover_b_to_a = _coverage_ratio(sentences_b, sentences_a, threshold=args.threshold)
     average_cover = (cover_a_to_b + cover_b_to_a) / 2 if sentences_a and sentences_b else 0.0
+    earlier_doc, later_doc = (doc_a, doc_b)
+    earlier_content, later_content = (content_a, content_b)
+    if _parse_display_time(str(doc_a.get("display_time") or "")) > _parse_display_time(str(doc_b.get("display_time") or "")):
+        earlier_doc, later_doc = (doc_b, doc_a)
+        earlier_content, later_content = (content_b, content_a)
+
+    later_to_earlier_cover = _coverage_ratio(
+        _split_sentences(later_content),
+        _split_sentences(earlier_content),
+        threshold=args.threshold,
+    )
+    weighted_rows = _weighted_section_coverages(
+        later_content,
+        earlier_content,
+        threshold=args.threshold,
+    )
+    weighted_cover = _weighted_average(weighted_rows)
 
     print(f"A: {doc_a.get('document_title')} @ {doc_a.get('display_time')}")
     print(f"B: {doc_b.get('document_title')} @ {doc_b.get('display_time')}")
@@ -158,6 +276,12 @@ def main() -> None:
     print(f"A→B 句子覆盖率(threshold={args.threshold:.2f}): {cover_a_to_b:.4f}")
     print(f"B→A 句子覆盖率(threshold={args.threshold:.2f}): {cover_b_to_a:.4f}")
     print(f"双向平均句子覆盖率: {average_cover:.4f}")
+    print(
+        "后一天被前一天覆盖率: "
+        f"{later_to_earlier_cover:.4f} "
+        f"(later={later_doc.get('display_time')} -> earlier={earlier_doc.get('display_time')})"
+    )
+    print(f"核心段落加权覆盖率(后一天→前一天): {weighted_cover:.4f}")
 
     if args.show_matches:
         print("\nA→B 命中句子：")
@@ -168,6 +292,14 @@ def main() -> None:
         for match in _coverage_matches(sentences_b, sentences_a, threshold=args.threshold):
             print(f"- {match.similarity:.3f} | B={match.source_sentence}")
             print(f"           A={match.matched_sentence}")
+
+    if args.show_sections:
+        print("\n核心段落覆盖率（后一天→前一天）：")
+        for row in weighted_rows:
+            print(
+                f"- {row.name}: coverage={row.coverage_ratio:.4f}, "
+                f"weight={row.weight:.1f}, sentences={row.sentence_count}"
+            )
 
 
 if __name__ == "__main__":
