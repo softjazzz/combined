@@ -512,6 +512,7 @@ def test_build_bundle_evidence_payload_should_include_adjacent_round_similarity_
     assert signal["signal_type"] == "adjacent_round_similarity"
     assert signal["compare_source_table"] == "daily_course_record"
     assert float(signal["similarity_ratio"]) >= 0.5
+    assert float(signal["later_to_earlier_sentence_coverage"]) >= 0.85
 
 
 def test_score_primary_candidate_for_sc050_should_penalize_discharge_round(service):
@@ -582,7 +583,7 @@ def test_apply_sc050_similarity_semantic_fallback_should_force_non_compliant(ser
     assert normalized["status"] == "non_compliant"
     assert normalized["is_compliant"] is False
     assert float(normalized["confidence"]) >= 0.86
-    assert "相邻查房文本相似度" in normalized["evidence"]
+    assert "后一天被前一天句子覆盖率" in normalized["evidence"]
     assert (normalized.get("metadata") or {}).get("decision_fallback") == "sc050_similarity_plus_semantic_check"
 
 

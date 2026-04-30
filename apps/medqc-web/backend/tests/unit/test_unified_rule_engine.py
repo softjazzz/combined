@@ -127,6 +127,9 @@ async def test_evaluate_should_include_bundle_evidence_context_in_prompt():
                     "signal_type": "adjacent_round_similarity",
                     "similarity_ratio": 0.82,
                     "threshold_hint": 0.5,
+                    "sentence_match_threshold": 0.85,
+                    "later_to_earlier_sentence_coverage": 0.93,
+                    "coverage_threshold_hint": 0.85,
                     "primary_source_table": "senior_course_record",
                     "primary_display_time": "2026-02-04 08:10:00",
                     "compare_source_table": "daily_course_record",
@@ -143,7 +146,8 @@ async def test_evaluate_should_include_bundle_evidence_context_in_prompt():
     assert "结构化证据上下文（Bundle）" in prompt
     assert "辅助证据-病程记录片段" in prompt
     assert "2026-04-15 入院" in prompt
-    assert "相邻查房文本相似度=0.82" in prompt
+    assert "相邻查房全文相似度=0.82" in prompt
+    assert "后一天被前一天句子覆盖率=0.93" in prompt
     assert "复制粘贴严重" not in prompt
 
 

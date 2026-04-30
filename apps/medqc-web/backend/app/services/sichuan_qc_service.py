@@ -54,6 +54,8 @@ logger = logging.getLogger(__name__)
 _ROUND_SIMILARITY_RULE_IDS = {"SC-050", "CL-037"}
 _ROUND_SIMILARITY_SOURCE_TABLES = {"daily_course_record", "senior_course_record"}
 _SC050_SIMILARITY_THRESHOLD = 0.5
+_ROUND_SENTENCE_MATCH_THRESHOLD = 0.85
+_ROUND_LATER_COVERAGE_THRESHOLD = 0.85
 
 _SC_032_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估规则 SC-032：病程记录重要病情变化(症状及体征)未记录或记录不全。
 
@@ -1830,6 +1832,44 @@ class SichuanQCService:
         return text.strip()
 
     @classmethod
+    def _split_round_similarity_sentences(cls, value: str) -> List[str]:
+        text = str(value or "")
+        text = text.replace("\r", "\n")
+        text = re.sub(r"医生签名[:：].*$", "", text)
+        text = re.sub(r"[ \t]+", "", text)
+        text = re.sub(r"\n+", "\n", text)
+        text = re.sub(r"^\:+", "", text)
+        parts = re.split(r"[。；;\n]+", text)
+        sentences: List[str] = []
+        for part in parts:
+            sentence = part.strip("：:，, ")
+            if not sentence or len(sentence) < 8:
+                continue
+            sentences.append(sentence)
+        return sentences
+
+    @classmethod
+    def _round_sentence_coverage_ratio(
+        cls,
+        source_sentences: List[str],
+        target_sentences: List[str],
+        *,
+        threshold: float = _ROUND_SENTENCE_MATCH_THRESHOLD,
+    ) -> float:
+        if not source_sentences or not target_sentences:
+            return 0.0
+        matched = 0
+        for source_sentence in source_sentences:
+            best_ratio = 0.0
+            for target_sentence in target_sentences:
+                ratio = SequenceMatcher(None, source_sentence, target_sentence).ratio()
+                if ratio > best_ratio:
+                    best_ratio = ratio
+            if best_ratio >= threshold:
+                matched += 1
+        return round(matched / len(source_sentences), 4)
+
+    @classmethod
     def _build_adjacent_round_similarity_signals(
         cls,
         *,
@@ -1884,6 +1924,24 @@ class SichuanQCService:
             similarity_ratio = SequenceMatcher(None, normalized_primary, normalized_compare).ratio()
             if similarity_ratio < 0.3:
                 continue
+            primary_sentences = cls._split_round_similarity_sentences(primary_content)
+            compare_sentences = cls._split_round_similarity_sentences(compare_content)
+            primary_to_compare_cover = cls._round_sentence_coverage_ratio(
+                primary_sentences,
+                compare_sentences,
+            )
+            compare_to_primary_cover = cls._round_sentence_coverage_ratio(
+                compare_sentences,
+                primary_sentences,
+            )
+            later_to_earlier_cover = 0.0
+            later_is_primary = False
+            if primary_dt is not None and compare_dt is not None:
+                if primary_dt >= compare_dt:
+                    later_to_earlier_cover = primary_to_compare_cover
+                    later_is_primary = True
+                else:
+                    later_to_earlier_cover = compare_to_primary_cover
             candidates.append(
                 {
                     "signal_type": "adjacent_round_similarity",
@@ -1895,6 +1953,12 @@ class SichuanQCService:
                     "compare_display_time": compare_time,
                     "similarity_ratio": round(similarity_ratio, 4),
                     "threshold_hint": 0.5,
+                    "sentence_match_threshold": _ROUND_SENTENCE_MATCH_THRESHOLD,
+                    "primary_to_compare_sentence_coverage": primary_to_compare_cover,
+                    "compare_to_primary_sentence_coverage": compare_to_primary_cover,
+                    "later_to_earlier_sentence_coverage": later_to_earlier_cover,
+                    "later_is_primary": later_is_primary,
+                    "coverage_threshold_hint": _ROUND_LATER_COVERAGE_THRESHOLD,
                     "time_gap_hours": time_gap_hours,
                 }
             )
@@ -2778,7 +2842,11 @@ class SichuanQCService:
             return normalized
 
         similarity_ratio = float(similarity_signal.get("similarity_ratio") or 0.0)
-        if similarity_ratio < _SC050_SIMILARITY_THRESHOLD:
+        later_to_earlier_cover = float(similarity_signal.get("later_to_earlier_sentence_coverage") or 0.0)
+        if (
+            similarity_ratio < _SC050_SIMILARITY_THRESHOLD
+            and later_to_earlier_cover < _ROUND_LATER_COVERAGE_THRESHOLD
+        ):
             return normalized
 
         semantic_checks = dict(normalized.get("semantic_checks") or {})
@@ -2801,12 +2869,13 @@ class SichuanQCService:
                 "status": "non_compliant",
                 "is_compliant": False,
                 "findings": (
-                    f"相邻查房记录文本相似度为 {similarity_ratio:.2f}，且未见明确新增病情分析或后续计划，"
+                    f"后一天查房被前一天覆盖率为 {later_to_earlier_cover:.2f}，全文相似度为 {similarity_ratio:.2f}，"
+                    "且未见明确新增病情分析或后续计划，"
                     "符合上级查房记录高度重复、内容质量不足的问题特征。"
                 ),
                 "evidence": (
                     f"主文书时间：{primary_time}；对照文书时间：{compare_time}；"
-                    f"相邻查房文本相似度={similarity_ratio:.2f}，semantic_checks 显示"
+                    f"后一天被前一天句子覆盖率={later_to_earlier_cover:.2f}，全文相似度={similarity_ratio:.2f}，semantic_checks 显示"
                     " has_new_analysis=false、has_new_plan=false。"
                 ),
                 "suggestion": "请补充上级查房记录中的新增病情分析、诊疗判断及具体后续计划，避免重复套写。",

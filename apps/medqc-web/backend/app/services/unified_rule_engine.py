@@ -1209,8 +1209,8 @@ class UnifiedRuleEngine:
             "SC-033": "已有感染/检查/用药线索但无分析或具体处理意见时，直接判non_compliant；有疗效判断或后续计划则判compliant",
             "SC-036": "上下文有重要异常检查结果而病程未提及或无分析处理时，直接判non_compliant；无异常检查线索不要硬判",
             "SC-070": "病程记录若只是照抄会诊意见、未写是否采纳及具体执行动作/结果，直接判non_compliant；写明已落实的检查/用药/处理或未采纳理由则判compliant",
-            "SC-050": "若派生信号显示相邻查房文本相似度>=0.5，需单独判断 semantic_checks.has_new_analysis 与 has_new_plan；二者都为false时直接判non_compliant，任一为true时优先判compliant或uncertain",
-            "CL-037": "若派生信号显示相邻查房文本相似度>=0.5，需单独判断 semantic_checks.has_new_analysis 与 has_new_plan；二者都为false时直接判non_compliant，任一为true时优先判compliant或uncertain",
+            "SC-050": "若派生信号显示后一天被前一天句子覆盖率>=0.85或全文相似度>=0.5，需单独判断 semantic_checks.has_new_analysis 与 has_new_plan；二者都为false时直接判non_compliant，任一为true时优先判compliant或uncertain",
+            "CL-037": "若派生信号显示后一天被前一天句子覆盖率>=0.85或全文相似度>=0.5，需单独判断 semantic_checks.has_new_analysis 与 has_new_plan；二者都为false时直接判non_compliant，任一为true时优先判compliant或uncertain",
             "SC-121": "只抓关键诊疗经过缺失，不做药理学或格式化发散点评",
             "SC-125": "优先判断出院诊断明显漏填/错填/顺序错误，不把既往史展开不足作为主依据",
         }
@@ -1295,12 +1295,16 @@ class UnifiedRuleEngine:
                 if signal_type == "adjacent_round_similarity":
                     similarity_ratio = float(item.get("similarity_ratio") or 0.0)
                     threshold_hint = float(item.get("threshold_hint") or 0.5)
+                    sentence_match_threshold = float(item.get("sentence_match_threshold") or 0.85)
+                    later_cover = float(item.get("later_to_earlier_sentence_coverage") or 0.0)
+                    coverage_threshold_hint = float(item.get("coverage_threshold_hint") or 0.85)
                     primary_type = str(item.get("primary_source_table") or "")
                     primary_time = str(item.get("primary_display_time") or "")
                     compare_type = str(item.get("compare_source_table") or "")
                     compare_time = str(item.get("compare_display_time") or "")
                     lines.append(
-                        f"{idx}. 相邻查房文本相似度={similarity_ratio:.2f}（阈值参考 {threshold_hint:.2f}）；"
+                        f"{idx}. 相邻查房全文相似度={similarity_ratio:.2f}（阈值参考 {threshold_hint:.2f}）；"
+                        f"后一天被前一天句子覆盖率={later_cover:.2f}（句子阈值 {sentence_match_threshold:.2f}，覆盖率参考 {coverage_threshold_hint:.2f}）；"
                         f"主文书=[{primary_type}] {primary_time}；对照文书=[{compare_type}] {compare_time}"
                     )
                     continue
