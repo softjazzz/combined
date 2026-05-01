@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -12,11 +13,21 @@ import pandas as pd
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+try:
+    from app.services.custom_qc_sample_pool_service import CustomQCSamplePoolService
+except Exception:  # pragma: no cover - 脚本允许在纯文档环境下运行
+    CustomQCSamplePoolService = None  # type: ignore[assignment]
+
 SOURCE_XLS = REPO_ROOT / "docs" / "运行病历质控记录.xls"
 MAPPING_CSV = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "QC" / "sheet2_rule_mapping_seed.csv"
 OUTPUT_DIR = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "QC"
 OUTPUT_CSV = OUTPUT_DIR / "sheet2_verification_ledger_seed.csv"
 OUTPUT_JSON = OUTPUT_DIR / "sheet2_verification_ledger_seed.summary.json"
+DEFAULT_SAMPLE_POOL_NAME = "0426"
 VISIT_TEMPLATE_CANDIDATES = (
     REPO_ROOT / "apps" / "medqc-web" / "visit_id_only_template_from_sheet2_运行病历质控记录.xlsx",
     REPO_ROOT / "apps" / "medqc-web" / "visit_id_only_template_from_sheet2.xlsx",
@@ -156,8 +167,105 @@ def _apply_visit_template(base_rows: list[dict[str, str]]) -> str:
     return "missing"
 
 
+def _apply_sample_pool_matches(base_rows: list[dict[str, str]], *, pool_name: str = DEFAULT_SAMPLE_POOL_NAME) -> str:
+    if CustomQCSamplePoolService is None:
+        return "sample_pool_unavailable"
+    try:
+        service = CustomQCSamplePoolService()
+        pool_id = ""
+        pools = service.list_pools(page=1, page_size=100, query=pool_name)
+        for item in list(pools.items or []):
+            if _safe_text(item.get("name")) == pool_name:
+                pool_id = _safe_text(item.get("id"))
+                break
+        if not pool_id:
+            return "sample_pool_missing"
+
+        page = 1
+        page_size = 400
+        items: list[dict[str, Any]] = []
+        while True:
+            result = service.list_pool_items(pool_id=pool_id, page=page, page_size=page_size)
+            items.extend(list(result.items or []))
+            if len(items) >= int(result.total or 0) or not result.items:
+                break
+            page += 1
+
+        row_no_to_visit: dict[int, str] = {}
+        for item in items:
+            row_no = int(item.get("row_no") or 0)
+            matched_visit_id = _safe_text(item.get("matched_visit_id"))
+            if row_no > 0 and matched_visit_id:
+                row_no_to_visit[row_no] = matched_visit_id
+
+        updated = 0
+        for row in base_rows:
+            row_no_text = _safe_text(row.get("sheet2_row_id")).replace("Sheet2-R", "")
+            try:
+                row_no = int(row_no_text)
+            except Exception:
+                continue
+            matched_visit_id = row_no_to_visit.get(row_no)
+            if matched_visit_id and row.get("visit_id") != matched_visit_id:
+                row["visit_id"] = matched_visit_id
+                updated += 1
+        return f"sample_pool:{pool_name}:updated={updated}"
+    except Exception as exc:
+        return f"sample_pool_error:{exc}"
+
+
 def _split_rule_ids(raw_rule_ids: str) -> list[str]:
     return [rule_id.strip() for rule_id in raw_rule_ids.split("|") if rule_id.strip()]
+
+
+def _canonical_primary_rule_id(
+    *,
+    issue_family: str,
+    candidate_rule_ids: list[str],
+    manual_issue_text: str,
+) -> tuple[str, list[str]]:
+    if not candidate_rule_ids:
+        return "", []
+
+    normalized_family = _safe_text(issue_family)
+    normalized_text = _normalize_issue_text(manual_issue_text)
+
+    preferred_rule_id = candidate_rule_ids[0]
+    if normalized_family in {"会诊执行记录缺失/未写执行情况", "会诊意见已写遵执但实际未落实"}:
+        preferred_rule_id = "SC-070"
+    elif normalized_family == "上级查房内容空洞/复制粘贴/身份异常":
+        preferred_rule_id = "SC-050"
+    elif normalized_family == "病程记录缺分析/缺处理意见":
+        preferred_rule_id = "SC-036"
+    elif normalized_family == "病程记录病情变化记录不全":
+        preferred_rule_id = "SC-032"
+    elif normalized_family == "首次病程记录存在/时效":
+        preferred_rule_id = "SC-021"
+    elif normalized_family == "病程时效/缺失":
+        preferred_rule_id = "LXE-18"
+    elif normalized_family == "主治首次查房48小时":
+        preferred_rule_id = "SC-048"
+    elif normalized_family == "高级医师首次查房72小时":
+        preferred_rule_id = "SC-049"
+    elif normalized_family == "会诊记录时效":
+        preferred_rule_id = "SC-071"
+    elif normalized_family == "手术记录时效异常":
+        preferred_rule_id = "SC-096"
+    elif normalized_family == "不合理复制病历内容":
+        if "同科同种疾病" in normalized_text or ("同科" in normalized_text and "拟诊讨论" in normalized_text):
+            preferred_rule_id = "CL-276"
+        elif "拟诊讨论" in normalized_text and "病例特点" in normalized_text:
+            preferred_rule_id = "CL-274"
+        elif ("入院记录" in normalized_text or "现病史" in normalized_text) and "病例特点" in normalized_text:
+            preferred_rule_id = "CL-273"
+        else:
+            preferred_rule_id = "CL-275"
+
+    if preferred_rule_id not in candidate_rule_ids:
+        return preferred_rule_id, [rule_id for rule_id in candidate_rule_ids if rule_id != preferred_rule_id]
+
+    secondary_rule_ids = [rule_id for rule_id in candidate_rule_ids if rule_id != preferred_rule_id]
+    return preferred_rule_id, secondary_rule_ids
 
 
 def _derive_next_action(
@@ -196,8 +304,12 @@ def _build_ledger_rows(
         mapping = issue_mapping.get(base_row["manual_issue_text"], {})
         issue_family = _safe_text(mapping.get("issue_family")) or "待人工归类"
         candidate_rule_ids = _split_rule_ids(_safe_text(mapping.get("candidate_rule_ids")))
-        primary_rule_id = candidate_rule_ids[0] if candidate_rule_ids else ""
-        secondary_rule_ids = "|".join(candidate_rule_ids[1:])
+        primary_rule_id, secondary_rule_id_list = _canonical_primary_rule_id(
+            issue_family=issue_family,
+            candidate_rule_ids=candidate_rule_ids,
+            manual_issue_text=base_row["manual_issue_text"],
+        )
+        secondary_rule_ids = "|".join(secondary_rule_id_list)
         current_status = _safe_text(mapping.get("current_status"))
         ledger_rows.append(
             {
@@ -209,6 +321,9 @@ def _build_ledger_rows(
                 "primary_rule_id": primary_rule_id,
                 "secondary_rule_ids": secondary_rule_ids,
                 "verification_status": "pending",
+                "job_id": "",
+                "evidence_status": "",
+                "evidence_summary": "",
                 "skip_reason": "",
                 "next_action": _derive_next_action(
                     visit_id=base_row["visit_id"],
@@ -233,6 +348,9 @@ def _write_csv(rows: list[dict[str, str]]) -> None:
         "primary_rule_id",
         "secondary_rule_ids",
         "verification_status",
+        "job_id",
+        "evidence_status",
+        "evidence_summary",
         "skip_reason",
         "next_action",
     ]
@@ -265,15 +383,20 @@ def main() -> int:
         raise SystemExit("未读取到有效 Sheet2 行")
 
     issue_mapping = _load_issue_mapping()
-    visit_id_source = _apply_visit_template(base_rows)
+    visit_id_template_source = _apply_visit_template(base_rows)
+    visit_id_pool_source = _apply_sample_pool_matches(base_rows)
     ledger_rows = _build_ledger_rows(base_rows, issue_mapping)
     _write_csv(ledger_rows)
-    _write_summary(ledger_rows, visit_id_source=visit_id_source)
+    _write_summary(
+        ledger_rows,
+        visit_id_source=f"template={visit_id_template_source};pool={visit_id_pool_source}",
+    )
 
     print(f"rows={len(ledger_rows)}")
     print(f"csv={OUTPUT_CSV}")
     print(f"summary={OUTPUT_JSON}")
-    print(f"visit_id_source={visit_id_source}")
+    print(f"visit_id_template_source={visit_id_template_source}")
+    print(f"visit_id_pool_source={visit_id_pool_source}")
     return 0
 
 

@@ -459,6 +459,106 @@ def _looks_like_operation_record_quality_issue(text: str) -> bool:
     return True
 
 
+def _looks_like_first_course_timeliness_issue(text: str) -> bool:
+    if not _contains_any(text, ("首次病程", "首程", "8小时", "24小时")):
+        return False
+    if _contains_any(
+        text,
+        (
+            "鉴别诊断",
+            "诊断依据",
+            "诊疗计划",
+            "病例特点",
+            "拟诊讨论",
+            "术后首次病程",
+            "术后病程记录",
+        ),
+    ):
+        return False
+    return _contains_any(
+        text,
+        (
+            "8小时内未完成",
+            "24小时内未完成",
+            "未完成首次病程记录",
+            "首次病程未及时",
+            "首程未及时",
+            "无首次病程记录",
+            "首次病程缺失",
+        ),
+    )
+
+
+def _looks_like_course_gap_timeliness_issue(text: str) -> bool:
+    if "病程" not in text:
+        return False
+    return _contains_any(
+        text,
+        (
+            "无病程记录",
+            "后无病程",
+            "三天未完成一次病程",
+            "三天无病程",
+            "病程记录未及时",
+            "书写不及时",
+            "每日未完成病程",
+            "长时间无病程",
+        ),
+    )
+
+
+def _looks_like_first_round_timeliness_issue(text: str) -> bool:
+    if not _contains_any(text, ("查房", "主治医师", "副主任医师", "主任医师", "高级职称医师", "上级医师")):
+        return False
+    return _contains_any(
+        text,
+        (
+            "48小时内，无主治医师查房记录",
+            "48小时无主治医师查房记录",
+            "入院48小时内",
+            "72小时以内未查见副主任医师查房记录",
+            "72小时无高级职称医师查房记录",
+            "72小时无副主任医师查房记录",
+            "72小时无上级医师查房记录",
+            "首次查房",
+        ),
+    )
+
+
+def _looks_like_consultation_timeliness_issue(text: str) -> bool:
+    if "会诊" not in text:
+        return False
+    if _looks_like_consultation_execution_issue(text):
+        return False
+    return _contains_any(
+        text,
+        (
+            "会诊记录未及时",
+            "会诊记录超时",
+            "会诊记录时效",
+            "会诊申请时间",
+            "会诊接收时间",
+            "早于呼吸科会诊接收时间",
+            "会诊记录时间节点",
+        ),
+    )
+
+
+def _looks_like_operation_record_timeliness_issue(text: str) -> bool:
+    if "手术记录" not in text:
+        return False
+    return _contains_any(
+        text,
+        (
+            "24小时内完成手术记录",
+            "未在24小时内完成手术记录",
+            "术后24小时内完成",
+            "手术记录时效",
+            "手术记录未及时",
+        ),
+    )
+
+
 def _looks_like_operation_preop_mdt_issue(text: str) -> bool:
     if not _contains_any(text, ("MDT", "多学科讨论", "多学科会诊")):
         return False
@@ -611,7 +711,57 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "exclude_reason": "",
         }
 
-    # 纯程序/时效问题先挡掉，避免误入首批内涵样本。
+    if _looks_like_first_course_timeliness_issue(normalized):
+        return {
+            "coverage_type": "programmatic",
+            "issue_category": "first_course_timeliness",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-021", "SC-022"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_first_round_timeliness_issue(normalized):
+        return {
+            "coverage_type": "programmatic",
+            "issue_category": "first_round_timeliness",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-048", "SC-049"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_consultation_timeliness_issue(normalized):
+        return {
+            "coverage_type": "programmatic",
+            "issue_category": "consultation_timeliness",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-071", "SC-072"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_operation_record_timeliness_issue(normalized):
+        return {
+            "coverage_type": "programmatic",
+            "issue_category": "operation_record_timeliness",
+            "expected_scene": "final",
+            "candidate_rule_ids": ["SC-096"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_course_gap_timeliness_issue(normalized):
+        return {
+            "coverage_type": "programmatic",
+            "issue_category": "course_gap_timeliness",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["LXE-18"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    # 纯程序/时效问题兜底，仍保留为非首批直连类别。
     if _contains_any(
         normalized,
         (
@@ -852,6 +1002,11 @@ def build_sample_pool_item_classification_update(row: Dict[str, Any]) -> Dict[st
 
 _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
     "record_list_intrinsic": list(_DEFAULT_INTRINSIC_RULE_IDS),
+    "first_course_timeliness": ["SC-021", "SC-022"],
+    "course_gap_timeliness": ["LXE-18"],
+    "first_round_timeliness": ["SC-048", "SC-049"],
+    "consultation_timeliness": ["SC-071", "SC-072"],
+    "operation_record_timeliness": ["SC-096"],
     "unreasonable_copy_content": ["CL-273", "CL-274", "CL-275", "CL-276"],
     "first_course_reasoning": ["SC-023", "SC-024", "SC-025", "SC-026", "SC-027"],
     "admission_consistency": ["SC-008", "SC-009", "SC-010", "SC-011", "SC-012", "SC-018", "SC-019", "SC-020"],
@@ -871,6 +1026,11 @@ _ISSUE_CATEGORY_RULE_MAP: Dict[str, List[str]] = {
 }
 
 _SAMPLE_SC_PRIMARY_RULE_WHITELIST: Dict[str, List[str]] = {
+    "first_course_timeliness": ["SC-021"],
+    "course_gap_timeliness": ["LXE-18"],
+    "first_round_timeliness": ["SC-048"],
+    "consultation_timeliness": ["SC-071"],
+    "operation_record_timeliness": ["SC-096"],
     "consultation_execution": ["SC-070"],
     "consultation_record_quality": ["SC-069"],
     "handover_communication": ["SC-062"],
@@ -893,6 +1053,36 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
     normalized = _normalize_issue_text(manual_issue_text)
     if not normalized:
         return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
+
+    if issue_category == "first_course_timeliness":
+        if _contains_any(normalized, ("首次病程记录", "首程记录", "8小时", "24小时")):
+            return ["SC-021"]
+        return ["SC-022"]
+
+    if issue_category == "course_gap_timeliness":
+        return ["LXE-18"]
+
+    if issue_category == "first_round_timeliness":
+        if _contains_any(
+            normalized,
+            (
+                "72小时",
+                "高级职称医师",
+                "副主任医师",
+                "主任医师",
+                "上级医师查房记录",
+            ),
+        ) and not _contains_any(normalized, ("48小时", "主治医师")):
+            return ["SC-049"]
+        return ["SC-048"]
+
+    if issue_category == "consultation_timeliness":
+        if _contains_any(normalized, ("申请时间", "接收时间", "时间节点", "会诊申请")):
+            return ["SC-071"]
+        return ["SC-072"]
+
+    if issue_category == "operation_record_timeliness":
+        return ["SC-096"]
 
     if issue_category == "first_course_reasoning":
         if _contains_any(

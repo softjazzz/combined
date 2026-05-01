@@ -1,12 +1,12 @@
 {
   "source_excel": "D:\\LLM\\LX888\\docs\\运行病历质控记录.xls",
   "mapping_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_rule_mapping_seed.csv",
-  "visit_id_source": "D:\\LLM\\LX888\\apps\\medqc-web\\visit_id_only_template_from_sheet2_运行病历质控记录.xlsx",
+  "visit_id_source": "template=D:\\LLM\\LX888\\apps\\medqc-web\\visit_id_only_template_from_sheet2_运行病历质控记录.xlsx;pool=sample_pool:0426:updated=270",
   "output_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
   "row_count": 283,
   "blank_manual_issue_text_count": 2,
-  "visit_id_filled_count": 282,
-  "visit_id_missing_count": 1,
+  "visit_id_filled_count": 283,
+  "visit_id_missing_count": 0,
   "primary_rule_missing_count": 116,
   "issue_family_breakdown": {
     "术前小结缺失；术前小结缺项/不清": 1,

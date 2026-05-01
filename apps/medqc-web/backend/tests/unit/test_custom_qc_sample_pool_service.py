@@ -143,7 +143,40 @@ def test_classify_unreasonable_copy_content_issue_should_route_cl276():
 def test_classify_senior_round_timeliness_issue_should_remain_programmatic():
     result = classify_manual_issue_text("48小时无主治医师查房记录、72小时无高级职称医师查房记录")
     assert result["coverage_type"] == "programmatic"
-    assert result["issue_category"] == "timeliness_or_presence"
+    assert result["issue_category"] == "first_round_timeliness"
+    assert result["candidate_rule_ids"] == ["SC-048", "SC-049"]
+
+
+def test_classify_first_course_timeliness_issue_should_route_sc021_sc022():
+    result = classify_manual_issue_text("入院8小时内未完成首次病程记录")
+    assert result["coverage_type"] == "programmatic"
+    assert result["issue_category"] == "first_course_timeliness"
+    assert result["candidate_rule_ids"] == ["SC-021", "SC-022"]
+    assert result["include_in_batch_1"] is True
+
+
+def test_classify_course_gap_timeliness_issue_should_route_lxe18():
+    result = classify_manual_issue_text("1月16日以后，无病程记录")
+    assert result["coverage_type"] == "programmatic"
+    assert result["issue_category"] == "course_gap_timeliness"
+    assert result["candidate_rule_ids"] == ["LXE-18"]
+    assert result["include_in_batch_1"] is True
+
+
+def test_classify_consultation_timeliness_issue_should_route_sc071_sc072():
+    result = classify_manual_issue_text("会诊记录时间节点早于呼吸科会诊接收时间")
+    assert result["coverage_type"] == "programmatic"
+    assert result["issue_category"] == "consultation_timeliness"
+    assert result["candidate_rule_ids"] == ["SC-071", "SC-072"]
+    assert result["include_in_batch_1"] is True
+
+
+def test_classify_operation_record_timeliness_issue_should_route_sc096():
+    result = classify_manual_issue_text("手术记录未在术后24小时内完成")
+    assert result["coverage_type"] == "programmatic"
+    assert result["issue_category"] == "operation_record_timeliness"
+    assert result["candidate_rule_ids"] == ["SC-096"]
+    assert result["include_in_batch_1"] is True
 
 
 def test_classify_daily_course_analysis_issue():
@@ -151,6 +184,46 @@ def test_classify_daily_course_analysis_issue():
     assert result["coverage_type"] == "llm_intrinsic"
     assert result["issue_category"] == "daily_course_analysis"
     assert result["candidate_rule_ids"] == ["SC-032", "SC-033", "SC-036"]
+
+
+def test_resolve_first_course_timeliness_should_prefer_sc021():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="first_course_timeliness",
+        manual_issue_text="入院8小时内未完成首次病程记录",
+    )
+    assert rule_ids == ["SC-021"]
+
+
+def test_resolve_course_gap_timeliness_should_route_lxe18():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="course_gap_timeliness",
+        manual_issue_text="1月16日以后，无病程记录",
+    )
+    assert rule_ids == ["LXE-18"]
+
+
+def test_resolve_first_round_timeliness_should_route_sc049_for_upper_round_only():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="first_round_timeliness",
+        manual_issue_text="入院72小时以内未查见副主任医师查房记录。",
+    )
+    assert rule_ids == ["SC-049"]
+
+
+def test_resolve_consultation_timeliness_should_route_sc071():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="consultation_timeliness",
+        manual_issue_text="会诊记录时间节点早于呼吸科会诊接收时间",
+    )
+    assert rule_ids == ["SC-071"]
+
+
+def test_resolve_operation_record_timeliness_should_route_sc096():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="operation_record_timeliness",
+        manual_issue_text="手术记录未在术后24小时内完成",
+    )
+    assert rule_ids == ["SC-096"]
 
 
 def test_daily_course_analysis_should_prefer_sc032_for_brief_change_text():

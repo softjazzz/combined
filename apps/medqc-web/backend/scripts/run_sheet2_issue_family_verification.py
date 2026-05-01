@@ -6,354 +6,185 @@ import asyncio
 import csv
 import json
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-WEB_ROOT = BACKEND_ROOT.parent
-DEFAULT_LEDGER_CSV = WEB_ROOT / "docs" / "0418" / "QC" / "sheet2_verification_ledger_seed.csv"
-
+REPO_ROOT = BACKEND_ROOT.parents[2]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
 
 from app.routers.qc_sample_pools import _resolve_sample_validation_execution_strategy
 from app.routers.qc_sichuan import _run_sichuan_workspace_batch_job
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
-from app.services.sample_validation_rule_sets import (
-    SAMPLE_PROGRAMMATIC_RULE_IDS,
-    get_sample_programmatic_rule_set,
-    resolve_sample_validation_pseudo_draft,
-)
+from app.services.sample_validation_rule_sets import resolve_sample_validation_pseudo_draft
 
-PROGRAMMATIC_RULE_ID_SET = {
-    str(rule_id).strip().upper()
-    for rule_id in SAMPLE_PROGRAMMATIC_RULE_IDS
-    if str(rule_id).strip()
+
+LEDGER_CSV = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "QC" / "sheet2_verification_ledger_seed.csv"
+DEFAULT_POOL_NAME = "0426"
+DEFAULT_CREATED_BY = "sheet2_issue_family_verification"
+PROGRAMMATIC_RULE_IDS = {
+    "SC-021",
+    "SC-022",
+    "SC-048",
+    "SC-049",
+    "SC-071",
+    "SC-072",
+    "SC-080",
+    "SC-082",
+    "SC-096",
+    "LXE-18",
 }
-LEDGER_RESULT_COLUMNS = (
-    "verification_status",
-    "job_id",
-    "evidence_status",
-    "evidence_summary",
-    "next_action",
+DEFAULT_FAMILIES: tuple[str, ...] = (
+    "病程记录缺分析/缺处理意见",
+    "上级查房内容空洞/复制粘贴/身份异常",
+    "会诊执行记录缺失/未写执行情况",
+    "首次病程记录存在/时效",
 )
-PENDING_STATUS_SET = {"", "pending", "queued"}
-
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="按 issue_family 逐条运行 Sheet2 主规则核验")
-    parser.add_argument(
-        "--ledger-csv",
-        default=str(DEFAULT_LEDGER_CSV),
-        help="ledger CSV 路径，默认使用 docs/0418/QC/sheet2_verification_ledger_seed.csv",
-    )
-    parser.add_argument(
-        "--issue-family",
-        dest="issue_families",
-        action="append",
-        default=[],
-        help="按问题族过滤，可重复传入；支持整列值或分号拆分后的单个 issue_family",
-    )
-    parser.add_argument(
-        "--created-by",
-        default="sheet2_issue_family_verification",
-        help="批量任务 created_by 标识",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=0,
-        help="最多处理多少条匹配记录，0 表示不限制",
-    )
-    parser.add_argument(
-        "--include-non-pending",
-        action="store_true",
-        help="默认仅处理 verification_status 为空/pending/queued 的记录；传入后允许重跑已处理记录",
-    )
-    parser.add_argument(
-        "--output-json",
-        default="",
-        help="可选，输出执行摘要 JSON",
-    )
-    return parser.parse_args()
 
 
 def _safe_text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _split_issue_families(value: str) -> list[str]:
-    parts = [value or ""]
-    for sep in ("；", ";"):
-        expanded: list[str] = []
-        for item in parts:
-            expanded.extend(item.split(sep))
-        parts = expanded
-    return [part.strip() for part in parts if part and part.strip()]
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="按问题族逐条执行 Sheet2 台账核验")
+    parser.add_argument("--ledger", default=str(LEDGER_CSV), help="台账 CSV 路径")
+    parser.add_argument("--pool", default=DEFAULT_POOL_NAME, help="样本池名称，仅用于任务元数据")
+    parser.add_argument("--created-by", default=DEFAULT_CREATED_BY, help="批量任务 created_by")
+    parser.add_argument("--issue-family", dest="issue_families", action="append", default=[], help="指定 issue_family，可重复传入")
+    parser.add_argument("--sheet2-row-id", dest="row_ids", action="append", default=[], help="指定台账 row id，可重复传入")
+    parser.add_argument("--limit-per-family", type=int, default=0, help="每个问题族最多执行多少条，0 表示不限制")
+    parser.add_argument("--output-json", default="", help="可选，输出本轮汇总 JSON")
+    parser.add_argument("--dry-run", action="store_true", help="只生成选择结果，不执行任务")
+    return parser.parse_args()
 
 
-def _normalize_issue_family_token(value: str) -> str:
-    return _safe_text(value).casefold()
-
-
-def _row_matches_issue_family(row_issue_family: str, selected_issue_families: list[str]) -> bool:
-    if not selected_issue_families:
-        return True
-    row_tokens = {
-        _normalize_issue_family_token(row_issue_family),
-        *(_normalize_issue_family_token(item) for item in _split_issue_families(row_issue_family)),
-    }
-    row_tokens.discard("")
-    selected_tokens = {_normalize_issue_family_token(item) for item in selected_issue_families if _safe_text(item)}
-    return bool(row_tokens & selected_tokens)
-
-
-def _normalize_fieldnames(fieldnames: list[str] | None) -> list[str]:
-    normalized = list(fieldnames or [])
-    for column in LEDGER_RESULT_COLUMNS:
-        if column not in normalized:
-            normalized.append(column)
-    return normalized
-
-
-def _read_ledger_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+def _load_ledger(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
-        fieldnames = _normalize_fieldnames(reader.fieldnames)
-        rows = []
-        for row in reader:
-            normalized = {name: _safe_text(row.get(name)) for name in fieldnames}
-            rows.append(normalized)
-        return fieldnames, rows
+        fieldnames = list(reader.fieldnames or [])
+        rows = [dict(row) for row in reader]
+    return fieldnames, rows
 
 
-def _write_ledger_rows(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
+def _write_ledger(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> None:
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
 
-def _truncate(text: Any, limit: int) -> str:
-    normalized = " ".join(str(text or "").split())
-    if len(normalized) <= limit:
-        return normalized
-    return normalized[: max(1, limit - 3)].rstrip("，,。；; ") + "..."
+def _select_rows(rows: list[dict[str, str]], args: argparse.Namespace) -> list[dict[str, str]]:
+    issue_families = {_safe_text(item) for item in (args.issue_families or []) if _safe_text(item)}
+    row_ids = {_safe_text(item) for item in (args.row_ids or []) if _safe_text(item)}
+    if not issue_families and not row_ids:
+        issue_families = set(DEFAULT_FAMILIES)
+
+    selected: list[dict[str, str]] = []
+    family_counts: Counter[str] = Counter()
+    for row in rows:
+        if _safe_text(row.get("verification_status")) != "pending":
+            continue
+        if _safe_text(row.get("next_action")) not in {"按主规则做真实核验", "先跑现有规则并记录缺口"}:
+            continue
+        if not _safe_text(row.get("visit_id")) or not _safe_text(row.get("primary_rule_id")):
+            continue
+        row_id = _safe_text(row.get("sheet2_row_id"))
+        family = _safe_text(row.get("issue_family"))
+        if row_ids and row_id not in row_ids:
+            continue
+        if issue_families and family not in issue_families and row_id not in row_ids:
+            continue
+        if args.limit_per_family and family_counts[family] >= int(args.limit_per_family):
+            continue
+        selected.append(row)
+        family_counts[family] += 1
+    return selected
 
 
-def _normalize_rule_id(rule_id: str) -> str:
-    return _safe_text(rule_id).upper()
+def _group_rows_by_family(rows: list[dict[str, str]]) -> dict[str, list[dict[str, str]]]:
+    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        grouped[_safe_text(row.get("issue_family"))].append(row)
+    return dict(grouped)
 
 
-def _status_for(job: dict[str, Any], *, record_id: str, rule_id: str) -> dict[str, Any] | None:
-    normalized_record_id = _safe_text(record_id)
-    normalized_rule_id = _normalize_rule_id(rule_id)
+def _normalize_executor_breakdown(value: Any) -> dict[str, int]:
+    if isinstance(value, dict):
+        return {
+            "program": int(value.get("program") or 0),
+            "llm": int(value.get("llm") or 0),
+        }
+    return {"program": 0, "llm": 0}
+
+
+def _find_item(job: dict[str, Any], *, record_id: str, rule_id: str) -> dict[str, Any] | None:
+    normalized_rule_id = _safe_text(rule_id).upper()
     for item in list(job.get("items") or []):
         item_record_id = _safe_text(item.get("record_id") or item.get("visit_id"))
-        item_rule_id = _normalize_rule_id(item.get("rule_id") or item.get("rule_code"))
-        if item_record_id == normalized_record_id and item_rule_id == normalized_rule_id:
+        item_rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+        if item_record_id == record_id and item_rule_id == normalized_rule_id:
             return dict(item)
     return None
 
 
-def _failed_record_for(job: dict[str, Any], *, record_id: str) -> dict[str, Any] | None:
-    normalized_record_id = _safe_text(record_id)
+def _find_failed_record(job: dict[str, Any], *, record_id: str, rule_id: str) -> dict[str, Any] | None:
+    normalized_rule_id = _safe_text(rule_id).upper()
     for item in list(job.get("failed_records") or []):
         item_record_id = _safe_text(item.get("record_id") or item.get("visit_id"))
-        if item_record_id == normalized_record_id:
+        item_rule_id = _safe_text(item.get("rule_id") or item.get("rule_code")).upper()
+        if item_record_id == record_id and item_rule_id == normalized_rule_id:
             return dict(item)
     return None
 
 
-def _resolve_validation_mode(rule_id: str) -> str:
-    return "programmatic" if _normalize_rule_id(rule_id) in PROGRAMMATIC_RULE_ID_SET else "sc"
+def _summarize_text(*values: Any, limit: int = 160) -> str:
+    for value in values:
+        text = _safe_text(value)
+        if text:
+            return text[:limit]
+    return ""
 
 
-def _build_job_filters(
-    *,
-    row: dict[str, str],
-    record_id: str,
-    primary_rule_id: str,
-) -> tuple[str, dict[str, Any]]:
-    validation_mode = _resolve_validation_mode(primary_rule_id)
-    if validation_mode == "programmatic":
-        rule_set = get_sample_programmatic_rule_set()
-        execution_strategy = rule_set.execution_strategy
-        return validation_mode, {
-            "rule_ids": [primary_rule_id],
-            "rule_set_key": rule_set.key,
-            "rule_set_name": rule_set.name,
-            "rule_set_version": rule_set.version,
-            "execution_strategy": execution_strategy,
-            "quality_profile": rule_set.quality_profile,
-            "bucket_strategy": rule_set.bucket_strategy,
-            "batch_output_mode": rule_set.batch_output_mode,
-            "enable_selective_refine": False,
-            "refine_confidence_threshold": 0.0,
-            "max_refine_candidates": 0,
-            "source": "sheet2_issue_family_verification",
-            "selected_record_ids": [record_id],
-            "selected_sample_count": 1,
-            "dedup_record_count": 1,
-            "record_rule_map": {record_id: [primary_rule_id]},
-            "effective_scope": "all",
-            "validation_mode": validation_mode,
-            "max_parallel_records": 1,
-            "sheet2_row_id": _safe_text(row.get("sheet2_row_id")),
-            "sheet2_issue_family": _safe_text(row.get("issue_family")),
-            "sheet2_manual_issue_text": _safe_text(row.get("manual_issue_text")),
-        }
-
-    execution_strategy = _resolve_sample_validation_execution_strategy(
-        validation_mode="sc",
-        rule_ids=[primary_rule_id],
-    )
-    return validation_mode, {
-        "rule_ids": [primary_rule_id],
-        "rule_set_key": "",
-        "rule_set_name": "SC样本规则模式",
-        "rule_set_version": "sheet2-primary-rule-v1",
-        "execution_strategy": execution_strategy,
-        "quality_profile": "throughput_v1",
-        "bucket_strategy": "fixed_packs",
-        "batch_output_mode": "minimal",
-        "enable_selective_refine": False,
-        "refine_confidence_threshold": 0.0,
-        "max_refine_candidates": 0,
-        "source": "sheet2_issue_family_verification",
-        "selected_record_ids": [record_id],
-        "selected_sample_count": 1,
-        "dedup_record_count": 1,
-        "record_rule_map": {record_id: [primary_rule_id]},
-        "effective_scope": "all",
-        "validation_mode": validation_mode,
-        "max_parallel_records": 1,
-        "sheet2_row_id": _safe_text(row.get("sheet2_row_id")),
-        "sheet2_issue_family": _safe_text(row.get("issue_family")),
-        "sheet2_manual_issue_text": _safe_text(row.get("manual_issue_text")),
-    }
-
-
-def _derive_evidence_status(item: dict[str, Any] | None, *, job_status: str) -> str:
-    if job_status != "completed":
-        return "job_failed"
-    if not item:
-        return "missing_result"
-
+def _derive_hit_status(row: dict[str, str], item: dict[str, Any]) -> str:
     status = _safe_text(item.get("status")).lower()
-    findings = _safe_text(item.get("findings"))
-    evidence = _safe_text(item.get("evidence"))
-    evidence_verified = item.get("evidence_verified")
-
-    if status in {"compliant", "not_applicable"} and not evidence and not findings:
-        return "no_issue_detected"
-    if status == "non_compliant":
-        if evidence and evidence_verified is True:
-            return "evidence_verified"
-        if evidence and evidence_verified is False:
-            return "evidence_unverified"
-        if evidence:
-            return "evidence_present"
-        if findings:
-            return "findings_only"
-        return "evidence_missing"
-    if status == "uncertain":
-        return "uncertain_with_evidence" if (evidence or findings) else "uncertain_no_evidence"
-    if evidence and evidence_verified is True:
-        return "evidence_verified"
-    if evidence:
-        return "evidence_present"
-    if findings:
-        return "findings_only"
-    return "evidence_missing"
+    if status != "non_compliant":
+        return "miss"
+    primary_rule_id = _safe_text(row.get("primary_rule_id")).upper()
+    if primary_rule_id in PROGRAMMATIC_RULE_IDS:
+        return "exact_hit"
+    return "same_family_hit"
 
 
-def _build_evidence_summary(
-    item: dict[str, Any] | None,
+def _derive_next_action_for_miss(row: dict[str, str]) -> str:
+    if _safe_text(row.get("secondary_rule_ids")):
+        return "补跑secondary_rule_ids"
+    return "转C线补规则"
+
+
+async def _run_family_batch(
     *,
-    job_status: str,
-    error_message: str,
-    failed_record: dict[str, Any] | None,
-) -> str:
-    if job_status != "completed":
-        return _truncate(error_message or f"batch_status={job_status}", 220)
-    if not item:
-        failed_reason = _safe_text((failed_record or {}).get("error_message") or (failed_record or {}).get("message"))
-        fallback = failed_reason or "批任务已完成，但未找到该病历该规则的明细结果。"
-        return _truncate(fallback, 220)
-
-    parts = [f"status={_safe_text(item.get('status')).lower() or 'unknown'}"]
-    findings = _safe_text(item.get("findings"))
-    evidence = _safe_text(item.get("evidence"))
-    if findings:
-        parts.append(f"findings={_truncate(findings, 80)}")
-    if evidence:
-        parts.append(f"evidence={_truncate(evidence, 120)}")
-    if item.get("evidence_verified") is not None:
-        parts.append(f"evidence_verified={bool(item.get('evidence_verified') is True)}")
-    return "；".join(parts)
-
-
-def _derive_verification_status(item: dict[str, Any] | None, *, job_status: str) -> str:
-    if job_status != "completed":
-        return "job_failed"
-    if not item:
-        return "missing_result"
-    status = _safe_text(item.get("status")).lower()
-    if status == "non_compliant":
-        return "verified_hit"
-    if status == "uncertain":
-        return "verified_uncertain"
-    if status in {"compliant", "not_applicable"}:
-        return "verified_miss"
-    return f"verified_{status or 'unknown'}"
-
-
-def _derive_next_action(verification_status: str, evidence_status: str) -> str:
-    if verification_status == "verified_hit":
-        if evidence_status in {"evidence_verified", "evidence_present"}:
-            return "主规则已命中，人工确认后可结案"
-        return "主规则已命中，但证据偏弱，需人工复核原文"
-    if verification_status == "verified_miss":
-        return "主规则未命中，后续补跑 secondary_rule_ids 或转人工复核"
-    if verification_status == "verified_uncertain":
-        return "主规则结果不确定，优先人工复核并评估是否补跑 secondary_rule_ids"
-    if verification_status == "missing_result":
-        return "批任务已完成但无规则结果，检查 record_rule_map 或规则适用范围"
-    if verification_status == "job_failed":
-        return "检查批任务错误后重跑主规则"
-    if verification_status.startswith("skipped_"):
-        return "补齐主规则或病历数据后再执行"
-    return "人工复核该条核验结果"
-
-
-def _build_skip_result(reason: str) -> dict[str, str]:
-    verification_status = f"skipped_{reason}"
-    return {
-        "verification_status": verification_status,
-        "job_id": "",
-        "evidence_status": "not_run",
-        "evidence_summary": reason,
-        "next_action": _derive_next_action(verification_status, "not_run"),
-    }
-
-
-async def _run_single_row(
-    *,
-    workspace: CustomQCWorkspaceService,
-    row: dict[str, str],
+    pool_name: str,
     created_by: str,
-) -> dict[str, str]:
-    row_id = _safe_text(row.get("sheet2_row_id"))
-    record_id = _safe_text(row.get("visit_id"))
-    primary_rule_id = _normalize_rule_id(row.get("primary_rule_id"))
-    issue_family = _safe_text(row.get("issue_family"))
-    if not record_id:
-        return _build_skip_result("missing_visit_id")
-    if not primary_rule_id:
-        return _build_skip_result("missing_primary_rule_id")
+    family: str,
+    rows: list[dict[str, str]],
+) -> dict[str, Any]:
+    workspace = CustomQCWorkspaceService()
+    record_ids = []
+    record_rule_map: dict[str, list[str]] = {}
+    rule_ids: list[str] = []
+    for row in rows:
+        record_id = _safe_text(row.get("visit_id"))
+        rule_id = _safe_text(row.get("primary_rule_id"))
+        if not record_id or not rule_id:
+            continue
+        if record_id not in record_ids:
+            record_ids.append(record_id)
+        record_rule_map[record_id] = [rule_id]
+        if rule_id not in rule_ids:
+            rule_ids.append(rule_id)
 
     records = workspace.collect_records(
         scope="all",
@@ -363,137 +194,190 @@ async def _run_single_row(
         start_date=None,
         end_date=None,
         keyword=None,
-        record_ids=[record_id],
+        record_ids=record_ids,
     )
     if not records:
-        return {
-            "verification_status": "job_failed",
-            "job_id": "",
-            "evidence_status": "job_failed",
-            "evidence_summary": f"未找到病历 {record_id}，无法创建批任务",
-            "next_action": "检查 visit_id 是否已同步到当前 PG 后重跑",
-        }
+        raise RuntimeError(f"{family} 未找到可执行病历")
 
-    validation_mode, filters = _build_job_filters(
-        row=row,
-        record_id=record_id,
-        primary_rule_id=primary_rule_id,
+    execution_strategy = _resolve_sample_validation_execution_strategy(
+        validation_mode="sc",
+        rule_ids=rule_ids,
     )
     draft = resolve_sample_validation_pseudo_draft(
-        validation_mode=validation_mode,
-        pool_name=f"Sheet2-{issue_family or row_id or primary_rule_id}",
-        rule_count=1,
+        validation_mode="sc",
+        pool_name=f"{pool_name}-{family}",
+        rule_count=len(rule_ids),
     )
-
-    job_id = ""
-    try:
-        job = workspace.create_batch_job(
-            draft=draft,
-            created_by=_safe_text(created_by) or "sheet2_issue_family_verification",
-            scope="all",
-            filters=filters,
-            record_ids=[record_id],
-            total_records=len(records),
-            draft_ids=[primary_rule_id],
-            execution_mode="multi",
-            run_mode="parallel",
-            rule_count=1,
-        )
-        job_id = _safe_text(job.get("id"))
-        await _run_sichuan_workspace_batch_job(job_id)
-        completed_job = workspace.get_batch_job_for_processing(job_id=job_id) or {}
-    except Exception as exc:
-        return {
-            "verification_status": "job_failed",
-            "job_id": job_id,
-            "evidence_status": "job_failed",
-            "evidence_summary": _truncate(str(exc), 220),
-            "next_action": "检查批任务错误后重跑主规则",
-        }
-
-    job_status = _safe_text(completed_job.get("status")).lower()
-    error_message = _safe_text(completed_job.get("error_message"))
-    item = _status_for(completed_job, record_id=record_id, rule_id=primary_rule_id)
-    failed_record = _failed_record_for(completed_job, record_id=record_id)
-    verification_status = _derive_verification_status(item, job_status=job_status)
-    evidence_status = _derive_evidence_status(item, job_status=job_status)
-    evidence_summary = _build_evidence_summary(
-        item,
-        job_status=job_status,
-        error_message=error_message,
-        failed_record=failed_record,
+    job = workspace.create_batch_job(
+        draft=draft,
+        created_by=created_by,
+        scope="all",
+        filters={
+            "rule_ids": rule_ids,
+            "rule_set_key": "",
+            "rule_set_name": "SC样本规则模式",
+            "rule_set_version": "sheet2-ledger-v1",
+            "execution_strategy": execution_strategy,
+            "quality_profile": "throughput_v1",
+            "bucket_strategy": "fixed_packs",
+            "batch_output_mode": "minimal",
+            "enable_selective_refine": False,
+            "refine_confidence_threshold": 0.0,
+            "max_refine_candidates": 0,
+            "source": "manual_problem_sample_pool_sheet2_verification",
+            "sample_pool_id": pool_name,
+            "selected_record_ids": record_ids,
+            "selected_sample_count": len(rows),
+            "dedup_record_count": len(record_ids),
+            "record_rule_map": record_rule_map,
+            "effective_scope": "all",
+            "validation_mode": "sc",
+            "max_parallel_records": 4,
+        },
+        record_ids=record_ids,
+        total_records=len(records),
+        draft_ids=rule_ids,
+        execution_mode="multi",
+        run_mode="parallel",
+        rule_count=len(rule_ids),
     )
-    next_action = _derive_next_action(verification_status, evidence_status)
+    await _run_sichuan_workspace_batch_job(job["id"])
+    completed_job = workspace.get_batch_job_for_processing(job_id=job["id"])
+    if not completed_job:
+        raise RuntimeError(f"{family} 批量任务未返回结果: {job['id']}")
+    return dict(completed_job)
+
+
+def _apply_job_results(
+    *,
+    family: str,
+    rows: list[dict[str, str]],
+    job: dict[str, Any],
+) -> dict[str, Any]:
+    job_id = _safe_text(job.get("id"))
+    result_counter: Counter[str] = Counter()
+    updated_rows: list[dict[str, str]] = []
+
+    for row in rows:
+        record_id = _safe_text(row.get("visit_id"))
+        rule_id = _safe_text(row.get("primary_rule_id"))
+        item = _find_item(job, record_id=record_id, rule_id=rule_id)
+        failed = _find_failed_record(job, record_id=record_id, rule_id=rule_id)
+        updated = dict(row)
+        updated["job_id"] = job_id
+        if item:
+            verification_status = _derive_hit_status(row, item)
+            updated["verification_status"] = verification_status
+            updated["evidence_status"] = _safe_text(item.get("status")).lower() or "non_compliant"
+            updated["evidence_summary"] = _summarize_text(item.get("findings"), item.get("evidence"))
+            updated["next_action"] = "已核验完成"
+            result_counter[verification_status] += 1
+        elif failed:
+            updated["verification_status"] = "miss"
+            updated["evidence_status"] = "failed"
+            updated["evidence_summary"] = _summarize_text(failed.get("error"), failed.get("reason"))
+            updated["next_action"] = _derive_next_action_for_miss(row)
+            result_counter["miss"] += 1
+        else:
+            updated["verification_status"] = "miss"
+            updated["evidence_status"] = "compliant_or_no_issue"
+            updated["evidence_summary"] = "主规则执行完成，未产生问题项。"
+            updated["next_action"] = _derive_next_action_for_miss(row)
+            result_counter["miss"] += 1
+        updated_rows.append(updated)
+
     return {
-        "verification_status": verification_status,
-        "job_id": _safe_text(completed_job.get("id")) or job_id,
-        "evidence_status": evidence_status,
-        "evidence_summary": evidence_summary,
-        "next_action": next_action,
+        "family": family,
+        "job_id": job_id,
+        "updated_rows": updated_rows,
+        "result_breakdown": dict(result_counter),
+        "executor_breakdown": _normalize_executor_breakdown((job.get("summary") or {}).get("executor_breakdown")),
+        "items_count": len(job.get("items") or []),
+        "failed_count": len(job.get("failed_records") or []),
     }
 
 
-async def _run_verification(args: argparse.Namespace) -> dict[str, Any]:
-    ledger_path = Path(_safe_text(args.ledger_csv) or str(DEFAULT_LEDGER_CSV)).resolve()
-    if not ledger_path.exists():
-        raise RuntimeError(f"ledger 不存在: {ledger_path}")
+async def _run(args: argparse.Namespace) -> dict[str, Any]:
+    ledger_path = Path(args.ledger).resolve()
+    fieldnames, ledger_rows = _load_ledger(ledger_path)
+    selected_rows = _select_rows(ledger_rows, args)
+    grouped_rows = _group_rows_by_family(selected_rows)
 
-    fieldnames, rows = _read_ledger_rows(ledger_path)
-    workspace = CustomQCWorkspaceService()
-    matched_indexes: list[int] = []
-    for index, row in enumerate(rows):
-        if not _row_matches_issue_family(_safe_text(row.get("issue_family")), list(args.issue_families or [])):
-            continue
-        if not args.include_non_pending:
-            current_status = _safe_text(row.get("verification_status")).lower()
-            if current_status not in PENDING_STATUS_SET:
-                continue
-        matched_indexes.append(index)
-
-    if not matched_indexes:
-        raise RuntimeError("未找到匹配的 ledger 行；请检查 --issue-family 或 verification_status 过滤条件")
-
-    if int(args.limit or 0) > 0:
-        matched_indexes = matched_indexes[: int(args.limit)]
-
-    results: list[dict[str, Any]] = []
-    for index in matched_indexes:
-        row = rows[index]
-        row_result = await _run_single_row(
-            workspace=workspace,
-            row=row,
-            created_by=_safe_text(args.created_by),
-        )
-        for column in LEDGER_RESULT_COLUMNS:
-            row[column] = _safe_text(row_result.get(column))
-        _write_ledger_rows(ledger_path, fieldnames, rows)
-        results.append(
+    report = {
+        "ledger": str(ledger_path),
+        "pool": _safe_text(args.pool) or DEFAULT_POOL_NAME,
+        "created_by": _safe_text(args.created_by) or DEFAULT_CREATED_BY,
+        "selected_row_count": len(selected_rows),
+        "families": [],
+    }
+    if args.dry_run:
+        report["families"] = [
             {
-                "sheet2_row_id": _safe_text(row.get("sheet2_row_id")),
-                "visit_id": _safe_text(row.get("visit_id")),
-                "issue_family": _safe_text(row.get("issue_family")),
-                "primary_rule_id": _safe_text(row.get("primary_rule_id")),
-                **row_result,
+                "issue_family": family,
+                "row_count": len(rows),
+                "record_ids": sorted({_safe_text(row.get("visit_id")) for row in rows if _safe_text(row.get("visit_id"))}),
+                "rule_ids": sorted({_safe_text(row.get("primary_rule_id")) for row in rows if _safe_text(row.get("primary_rule_id"))}),
+            }
+            for family, rows in grouped_rows.items()
+        ]
+        return report
+
+    by_row_id = {row["sheet2_row_id"]: row for row in ledger_rows}
+    for family, rows in grouped_rows.items():
+        try:
+            job = await _run_family_batch(
+                pool_name=_safe_text(args.pool) or DEFAULT_POOL_NAME,
+                created_by=_safe_text(args.created_by) or DEFAULT_CREATED_BY,
+                family=family,
+                rows=rows,
+            )
+        except RuntimeError as exc:
+            error_text = _safe_text(exc)
+            if "未找到可执行病历" in error_text:
+                for row in rows:
+                    updated = dict(row)
+                    updated["evidence_status"] = "workspace_record_missing"
+                    updated["evidence_summary"] = "workspace.collect_records 未命中本地病历。"
+                    updated["next_action"] = "先核原始文书是否缺失，再判定是否skip"
+                    by_row_id[updated["sheet2_row_id"]] = updated
+                report["families"].append(
+                    {
+                        "issue_family": family,
+                        "row_count": len(rows),
+                        "job_id": "",
+                        "result_breakdown": {},
+                        "executor_breakdown": {"program": 0, "llm": 0},
+                        "items_count": 0,
+                        "failed_count": 0,
+                        "blocked_reason": error_text,
+                    }
+                )
+                continue
+            raise
+        applied = _apply_job_results(family=family, rows=rows, job=job)
+        for updated in applied["updated_rows"]:
+            by_row_id[updated["sheet2_row_id"]] = updated
+        report["families"].append(
+            {
+                "issue_family": family,
+                "row_count": len(rows),
+                "job_id": applied["job_id"],
+                "result_breakdown": applied["result_breakdown"],
+                "executor_breakdown": applied["executor_breakdown"],
+                "items_count": applied["items_count"],
+                "failed_count": applied["failed_count"],
             }
         )
 
-    summary = {
-        "ledger_csv": str(ledger_path),
-        "issue_families": list(args.issue_families or []),
-        "processed_count": len(results),
-        "matched_count": len(matched_indexes),
-        "verification_status_breakdown": {},
-        "rows": results,
-    }
-    for item in results:
-        key = _safe_text(item.get("verification_status")) or "unknown"
-        summary["verification_status_breakdown"][key] = int(summary["verification_status_breakdown"].get(key) or 0) + 1
-    return summary
+    updated_rows = [by_row_id[row["sheet2_row_id"]] for row in ledger_rows]
+    _write_ledger(ledger_path, fieldnames, updated_rows)
+    report["verification_status_breakdown"] = dict(Counter(_safe_text(row.get("verification_status")) for row in updated_rows))
+    return report
 
 
 def main() -> None:
     args = _parse_args()
-    report = asyncio.run(_run_verification(args))
+    report = asyncio.run(_run(args))
     text = json.dumps(report, ensure_ascii=False, indent=2, default=str)
     print(text)
     output_path = _safe_text(args.output_json)
