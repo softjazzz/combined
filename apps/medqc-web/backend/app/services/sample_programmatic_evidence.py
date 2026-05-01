@@ -158,10 +158,25 @@ def _classify_course_round_role(title: str, content: str) -> tuple[str, str, str
 
 def _extract_risk_flags(*texts: str) -> list[str]:
     joined = "\n".join(text for text in texts if text).lower()
+    normalized = joined
+    # 先剔除明确的否定/解除语境，避免把科室名或“非重症/停病重”误判为风险标记。
+    for pattern in (
+        r"危重症医学科",
+        r"非重症",
+        r"非危重",
+        r"停病重",
+        r"解除病重",
+        r"取消病重",
+        r"撤销病重",
+        r"病重解除",
+        r"病危解除",
+        r"解除病危",
+    ):
+        normalized = re.sub(pattern, " ", normalized)
     flags: list[str] = []
-    if any(token in joined for token in ("病危", "危重", "critical", "重危")):
+    if any(token in normalized for token in ("病危", "危重", "critical", "重危")):
         flags.append("critical")
-    elif any(token in joined for token in ("病重", "重症", "serious")):
+    elif any(token in normalized for token in ("病重", "重症", "serious")):
         flags.append("serious")
     if not flags:
         flags.append("normal")

@@ -1,6 +1,6 @@
 {
-  "miss_total": 31,
-  "program_count": 9,
+  "miss_total": 28,
+  "program_count": 6,
   "prompt_or_mapping_count": 22,
   "other_count": 0,
   "program_items": [
@@ -27,17 +27,6 @@
       "next_action": "转C线补规则"
     },
     {
-      "sheet2_row_id": "Sheet2-R0127",
-      "visit_id": "2341278",
-      "patient_name": "王美金",
-      "issue_family": "术前小结缺失",
-      "primary_rule_id": "SC-080",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "手术患者无术前小结及术后连续三日查房记录",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0162",
       "visit_id": "2191214",
       "patient_name": "胡节",
@@ -45,17 +34,6 @@
       "primary_rule_id": "LXE-18",
       "secondary_rule_ids": "",
       "manual_issue_text": "1月27日后无病程记录，患者血压150/108mmHg,未做诊断及血压监测。",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0170",
-      "visit_id": "2218096",
-      "patient_name": "张厚易",
-      "issue_family": "术前小结缺失",
-      "primary_rule_id": "SC-080",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "患者在静脉麻醉下行前庭大腺囊肿造口术，无术前小结及手术记录。",
       "evidence_summary": "主规则执行完成，未产生问题项。",
       "next_action": "转C线补规则"
     },
@@ -90,17 +68,6 @@
       "secondary_rule_ids": "",
       "manual_issue_text": "截止2月13日，2月8日后无病程记录",
       "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0217",
-      "visit_id": "372274",
-      "patient_name": "谢全玉",
-      "issue_family": "出院记录缺失/提前书写/时效异常/签名缺失",
-      "primary_rule_id": "SC-116",
-      "secondary_rule_ids": "SC-117|SC-118|SC-126",
-      "manual_issue_text": "入院记录：心率与脉搏记录数据不一；首次病程：高血压，糖尿病无诊断依据。患者未出院，提前书写2026-03-06出院记录。",
-      "evidence_summary": "次规则 SC-117 执行完成，未产生问题项。",
       "next_action": "转C线补规则"
     }
   ],

@@ -111,3 +111,14 @@ def test_build_programmatic_evidence_payload_should_classify_course_round_roles_
     assert events[1]["author_role"] == "senior"
     assert events[1]["author_title"] == "副主任医师"
     assert events[2]["author_role"] == ""
+
+
+def test_build_programmatic_evidence_payload_should_not_misclassify_negated_or_department_risk_flags():
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "medical_text": "患者由呼吸与危重症医学科会诊。社区获得性肺炎，非重症。今日停病重处理。",
+            "structured_context": {},
+        }
+    )
+
+    assert payload["programmatic_timeline"]["risk_flags"] == ["normal"]
