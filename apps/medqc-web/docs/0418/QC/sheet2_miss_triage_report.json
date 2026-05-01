@@ -1,9 +1,9 @@
 {
   "miss_total": 26,
   "program_count": 1,
-  "mapping_count": 17,
-  "prompt_count": 5,
-  "evidence_count": 3,
+  "mapping_count": 20,
+  "prompt_count": 0,
+  "evidence_count": 5,
   "other_count": 0,
   "program_items": [
     {
@@ -50,6 +50,17 @@
       "secondary_rule_ids": "",
       "manual_issue_text": "现病史记录不全，缺一般情况的描述，专科检查未描述左下肢情况，初步诊断不全。",
       "evidence_summary": "主规则执行完成，未产生问题项。",
+      "next_action": "转C线改映射"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0073",
+      "visit_id": "2198524",
+      "patient_name": "候富明",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "SC-033",
+      "manual_issue_text": "入院查体无专科情况描述，患者入院时BP151/121mmHg，首次病程中未做分析、未提出诊疗计划。",
+      "evidence_summary": "次规则 SC-033 执行完成，未产生问题项。",
       "next_action": "转C线改映射"
     },
     {
@@ -174,6 +185,17 @@
       "next_action": "转C线改映射"
     },
     {
+      "sheet2_row_id": "Sheet2-R0206",
+      "visit_id": "2246915",
+      "patient_name": "黄金莲",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "SC-033",
+      "manual_issue_text": "患者行经阴道子宫切除术，术前无尿路感染，术后诊断尿路感染。未请泌尿外科会诊，未分析原因。",
+      "evidence_summary": "次规则 SC-033 执行完成，未产生问题项。",
+      "next_action": "转C线改映射"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0229",
       "visit_id": "2264271",
       "patient_name": "陈中德",
@@ -182,6 +204,17 @@
       "secondary_rule_ids": "",
       "manual_issue_text": "四级肿瘤手术，未行多学科讨论，",
       "evidence_summary": "主规则执行完成，未产生问题项。",
+      "next_action": "转C线改映射"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0245",
+      "visit_id": "2261527",
+      "patient_name": "杨德泉",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "SC-033",
+      "manual_issue_text": "心电图提示完全右束支传导阻滞，病程记录中未请相关科室会诊",
+      "evidence_summary": "次规则 SC-033 执行完成，未产生问题项。",
       "next_action": "转C线改映射"
     },
     {
@@ -207,63 +240,7 @@
       "next_action": "转C线改映射"
     }
   ],
-  "prompt_items": [
-    {
-      "sheet2_row_id": "Sheet2-R0073",
-      "visit_id": "2198524",
-      "patient_name": "候富明",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "secondary_rule_ids": "SC-033",
-      "manual_issue_text": "入院查体无专科情况描述，患者入院时BP151/121mmHg，首次病程中未做分析、未提出诊疗计划。",
-      "evidence_summary": "次规则 SC-033 执行完成，未产生问题项。",
-      "next_action": "转C线改prompt"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0206",
-      "visit_id": "2246915",
-      "patient_name": "黄金莲",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "secondary_rule_ids": "SC-033",
-      "manual_issue_text": "患者行经阴道子宫切除术，术前无尿路感染，术后诊断尿路感染。未请泌尿外科会诊，未分析原因。",
-      "evidence_summary": "次规则 SC-033 执行完成，未产生问题项。",
-      "next_action": "转C线改prompt"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0245",
-      "visit_id": "2261527",
-      "patient_name": "杨德泉",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "secondary_rule_ids": "SC-033",
-      "manual_issue_text": "心电图提示完全右束支传导阻滞，病程记录中未请相关科室会诊",
-      "evidence_summary": "次规则 SC-033 执行完成，未产生问题项。",
-      "next_action": "转C线改prompt"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0268",
-      "visit_id": "2286345",
-      "patient_name": "钟光田",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "secondary_rule_ids": "SC-033",
-      "manual_issue_text": "4.1异常检查检验结果病程记录未分析和记录",
-      "evidence_summary": "次规则 SC-033 执行完成，未产生问题项。",
-      "next_action": "转C线改prompt"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0283",
-      "visit_id": "2311318",
-      "patient_name": "范永勤",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "secondary_rule_ids": "SC-033",
-      "manual_issue_text": "4.7检验结果肾功异常，病程记录未分析，未请相应科室会诊",
-      "evidence_summary": "次规则 SC-033 执行完成，未产生问题项。",
-      "next_action": "转C线改prompt"
-    }
-  ],
+  "prompt_items": [],
   "evidence_items": [
     {
       "sheet2_row_id": "Sheet2-R0174",
@@ -288,6 +265,17 @@
       "next_action": "转C线补程序/证据组织"
     },
     {
+      "sheet2_row_id": "Sheet2-R0268",
+      "visit_id": "2286345",
+      "patient_name": "钟光田",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "SC-033",
+      "manual_issue_text": "4.1异常检查检验结果病程记录未分析和记录",
+      "evidence_summary": "主规则执行完成，未产生问题项。",
+      "next_action": "转C线补程序/证据组织"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0275",
       "visit_id": "2305433",
       "patient_name": "邓继超",
@@ -295,6 +283,17 @@
       "primary_rule_id": "SC-039",
       "secondary_rule_ids": "",
       "manual_issue_text": "病危病人3月27-3月28日期间无查房记录（病危病人每天至少书写一次病程记录），3月30日危急值处置记录中将患者由病危改为病重未写明原因，在危急值记录中进行病危到病重的修改不合理。",
+      "evidence_summary": "主规则执行完成，未产生问题项。",
+      "next_action": "转C线补程序/证据组织"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0283",
+      "visit_id": "2311318",
+      "patient_name": "范永勤",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "SC-033",
+      "manual_issue_text": "4.7检验结果肾功异常，病程记录未分析，未请相应科室会诊",
       "evidence_summary": "主规则执行完成，未产生问题项。",
       "next_action": "转C线补程序/证据组织"
     }

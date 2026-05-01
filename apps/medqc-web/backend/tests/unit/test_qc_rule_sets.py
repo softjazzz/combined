@@ -312,6 +312,60 @@ def test_sc_039_should_fallback_to_non_compliant_when_llm_returns_empty_on_low_p
     assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc039_text_only"
 
 
+def test_sc_036_should_use_stricter_runtime_prompt_with_supporting_evidence_guard():
+    service = SichuanQCService()
+    raw_rule = service.get_rule_by_id("SC-036")
+
+    assert raw_rule is not None
+    normalized = service._ensure_rule_execution_meta(raw_rule)
+
+    assert normalized["prompt_version"] == "runtime-override-sc036-v3"
+    prompt = str(normalized.get("custom_prompt") or "")
+    assert "同域辅助证据" in prompt
+    assert "默认判 non_compliant" in prompt
+
+
+def test_sc_036_should_fallback_to_non_compliant_when_supporting_evidence_is_abnormal_but_primary_only_has_generic_summary():
+    service = SichuanQCService()
+    normalized = service._apply_sc036_supporting_evidence_fallback(
+        rule_input=RuleExecutionInput(
+            rule_id="SC-036",
+            document_type="日常病程记录",
+            execution_domain="course",
+            primary_medical_text=(
+                "查房内容：今日查房，患者诉左脚疼痛，余未诉特殊不适。"
+                "处置：患者目前炎症指标较前明显好转，拟明日手术，完善术前准备。"
+            ),
+            supporting_evidence=[
+                {
+                    "document_type": "主治医师查房记录",
+                    "evidence_text": "2026-04-05 ESR 42mm/h, PCT 0.82ng/ml, CRP 22.4mg/L，提示感染指标仍异常。",
+                }
+            ],
+            timeline_facts=[],
+            source_documents=[],
+        ),
+        engine_result={
+            "rule_id": "SC-036",
+            "status": "uncertain",
+            "is_compliant": True,
+            "findings": "LLM 未返回任何内容。",
+            "evidence": "",
+            "suggestion": "",
+            "confidence": 0.7,
+            "metadata": {
+                "executor_type": "llm",
+                "llm_fallback": False,
+            },
+        },
+    )
+
+    assert normalized["status"] == "non_compliant"
+    assert normalized["is_compliant"] is False
+    assert "辅助证据已提示明确异常结果" in str(normalized["findings"])
+    assert str((normalized.get("metadata") or {}).get("decision_fallback")) == "sc036_supporting_abnormal_without_analysis"
+
+
 def test_sc_069_should_fallback_to_non_compliant_when_signature_is_missing():
     service = SichuanQCService()
     normalized = service._apply_sc069_text_only_fallback(

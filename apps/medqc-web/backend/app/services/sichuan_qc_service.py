@@ -100,15 +100,17 @@ _SC_032_STRICT_CUSTOM_PROMPT = """你是一名病历质控专家，请只评估�
 
 _SC_036_STRICT_CUSTOM_PROMPT = """【检查要点】
 1. 本规则专门检查病程记录中是否对重要辅助检查结果，尤其是异常检查结果，进行了充分分析并给出处理意见。
-2. 合规必须同时满足以下至少两层信息：
+2. 判断时必须同时检查【主文书正文】、【同域辅助证据】和【时间锚点】；若辅助证据已给出明确异常结果，而主病程未回应，也属于本规则问题。
+3. 合规必须同时满足以下至少两层信息：
    (a) 明确指出具体异常结果或异常趋势；
    (b) 结合当前诊断、病情变化或围术期风险说明其临床意义/可能原因；
    (c) 给出针对性的处置、复查、会诊、观察重点或方案调整。
-3. 仅罗列检查结果，或仅写“较前好转”“继续观察”“继续原方案”“炎症指标好转”等笼统总结，而未解释具体异常项的意义、原因或后续处理，不算充分分析，应判定为不合规。
-4. 若病程中已经明确写出：异常结果提示什么问题、为何如此判断、已采取什么处理或后续计划，例如“尿常规提示泌尿道感染，予左氧氟沙星抗感染，并请泌尿外科会诊”，可判定为合规。
-5. 如病历只有正常结果，或虽有轻微波动但无临床意义且记录中已说明病情稳定，可谨慎判定为合规；若证据不足，请在 findings 中说明不足原因，不要过度推断。
-6. 【重点收紧】遇到“ESR/PCT/CRP异常后仅写炎症指标较前好转”“肾功异常后仅写继续观察”这类表述时，默认视为分析不足，除非同段或紧邻病程中还有明确的异常原因解释和处理计划。
-7. 【格式要求】你必须严格返回纯JSON格式，禁止输出任何分析过程、思考步骤或解释性文字。"""
+4. 仅罗列检查结果，或仅写“较前好转”“继续观察”“继续原方案”“炎症指标好转”等笼统总结，而未解释具体异常项的意义、原因或后续处理，不算充分分析，应判定为不合规。
+5. 若病程中已经明确写出：异常结果提示什么问题、为何如此判断、已采取什么处理或后续计划，例如“尿常规提示泌尿道感染，予左氧氟沙星抗感染，并请泌尿外科会诊”，可判定为合规。
+6. 如病历只有正常结果，或虽有轻微波动但无临床意义且记录中已说明病情稳定，可谨慎判定为合规；若证据不足，请在 findings 中说明不足原因，不要过度推断。
+7. 【重点收紧】遇到“ESR/PCT/CRP异常后仅写炎症指标较前好转”“肾功异常后仅写继续观察”这类表述时，默认视为分析不足，除非同段或紧邻病程中还有明确的异常原因解释和处理计划。
+8. 【强约束】只要【同域辅助证据】或【时间锚点】出现明确异常结果/异常结论，而主病程仅写“较前好转/继续观察/继续原方案/病情稳定/余治疗同前”等泛化套话，且未说明该异常的临床意义、原因或针对性处理，默认判 non_compliant，不得判 compliant 或 uncertain。
+9. 【格式要求】你必须严格返回纯JSON格式，禁止输出任何分析过程、思考步骤或解释性文字。"""
 
 _SC_039_STRICT_CUSTOM_PROMPT = """【检查要点】
 1. 本规则只根据病历文本本身判断危急值记录是否完整合规，不依赖危急值数据表、阈值表、LIS 结构化标记。
@@ -300,7 +302,7 @@ class SichuanQCService:
             normalized["prompt_version"] = "runtime-override-sc019-v1"
         elif rule_id == "SC-036":
             normalized["custom_prompt"] = _SC_036_STRICT_CUSTOM_PROMPT
-            normalized["prompt_version"] = "runtime-override-sc036-v2"
+            normalized["prompt_version"] = "runtime-override-sc036-v3"
         elif rule_id == "SC-039":
             normalized["custom_prompt"] = _SC_039_STRICT_CUSTOM_PROMPT
             normalized["prompt_version"] = "runtime-override-sc039-v1"
@@ -2874,6 +2876,108 @@ class SichuanQCService:
         return normalized
 
     @staticmethod
+    def _apply_sc036_supporting_evidence_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id != "SC-036":
+            return engine_result
+
+        status = str(engine_result.get("status") or "").strip().lower()
+        primary_text = str(rule_input.primary_medical_text or "").strip()
+        if status == "non_compliant" or not primary_text:
+            return engine_result
+
+        supporting_lines = [
+            str(item.get("evidence_text") or "").strip()
+            for item in list(rule_input.supporting_evidence or [])
+            if isinstance(item, dict) and str(item.get("evidence_text") or "").strip()
+        ]
+        if not supporting_lines:
+            return engine_result
+
+        supporting_text = "\n".join(supporting_lines)
+        has_supporting_abnormal = any(
+            keyword in supporting_text
+            for keyword in (
+                "异常",
+                "升高",
+                "降低",
+                "感染",
+                "阳性",
+                "阻滞",
+                "肾功",
+                "尿常规",
+                "泌尿道感染",
+                "尿路感染",
+                "心电图",
+                "完全右束支传导阻滞",
+                "ESR",
+                "PCT",
+                "CRP",
+                "UA ",
+                "UA",
+                "血压",
+            )
+        )
+        if not has_supporting_abnormal:
+            return engine_result
+
+        generic_summary_patterns = (
+            "较前好转",
+            "明显好转",
+            "继续观察",
+            "继续原方案",
+            "继续当前治疗方案",
+            "病情稳定",
+            "余治疗同前",
+            "续观",
+            "密观",
+            "完善术前准备",
+        )
+        primary_has_generic_summary = any(keyword in primary_text for keyword in generic_summary_patterns)
+        if not primary_has_generic_summary:
+            return engine_result
+
+        reasoning_keywords = ("考虑", "提示", "原因", "所致", "由于", "支持", "诊断依据", "鉴别")
+        targeted_followup_keywords = (
+            "会诊",
+            "抗感染",
+            "降压",
+            "补液",
+            "补钾",
+            "调整",
+            "复查",
+            "监测",
+            "控制血压",
+            "处理",
+            "左氧氟沙星",
+        )
+        has_reasoning = any(keyword in primary_text for keyword in reasoning_keywords)
+        has_targeted_followup = any(keyword in primary_text for keyword in targeted_followup_keywords)
+        if has_reasoning or has_targeted_followup:
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc036_supporting_abnormal_without_analysis"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": "同域辅助证据已提示明确异常结果，但主病程仅作泛化总结，未说明异常意义、原因或针对性处理。",
+                "evidence": f"主病程：{primary_text[:120]}；辅助证据：{supporting_text[:160]}",
+                "suggestion": "请在病程中补充异常结果的临床意义、可能原因，以及针对性的处理、复查或会诊计划。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.84),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    @staticmethod
     def _apply_sc026_text_only_fallback(
         *,
         rule_input: RuleExecutionInput,
@@ -3158,6 +3262,10 @@ class SichuanQCService:
             engine_result=normalized,
         )
         normalized = self._apply_sc033_text_only_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
+        normalized = self._apply_sc036_supporting_evidence_fallback(
             rule_input=rule_input,
             engine_result=normalized,
         )
