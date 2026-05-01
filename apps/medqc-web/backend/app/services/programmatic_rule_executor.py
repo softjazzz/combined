@@ -13,6 +13,7 @@ class ProgrammaticRuleSpec:
     description: str
     keywords: tuple[str, ...] = ()
     keywords_all: tuple[str, ...] = ()
+    timeline_doc_keys: tuple[str, ...] = ()
     max_hours: Optional[int] = None
     anchor_labels: tuple[str, ...] = ()
     completion_labels: tuple[str, ...] = ()
@@ -113,6 +114,12 @@ PROGRAMMATIC_RULE_SPECS: dict[str, ProgrammaticRuleSpec] = {
         anchor_labels=("会诊申请时间", "申请时间"),
         completion_labels=("会诊时间", "记录时间", "完成时间"),
         rule_hint="会诊申请后24小时内完成",
+    ),
+    "SC-080": ProgrammaticRuleSpec(
+        rule_id="SC-080",
+        strategy="timeline_doc_exists_nonempty",
+        description="术前小结存在性",
+        timeline_doc_keys=("presurg_summary",),
     ),
     "SC-082": ProgrammaticRuleSpec(
         rule_id="SC-082",
@@ -273,7 +280,7 @@ class ProgrammaticRuleExecutor:
     _ADMISSION_TIME_LABELS = ("入院日期", "入院时间")
     _DISCHARGE_TIME_LABELS = ("出院日期", "出院时间", "死亡时间")
     _COMPLETION_TIME_LABELS = ("记录时间", "记录日期", "书写时间", "完成时间")
-    _SURGERY_CONTEXT_RULE_IDS = {"SC-082", "SC-095", "SC-096", "LXE-35", "SC-104"}
+    _SURGERY_CONTEXT_RULE_IDS = {"SC-080", "SC-082", "SC-095", "SC-096", "LXE-35", "SC-104"}
     _CONSULTATION_CONTEXT_RULE_IDS = {"SC-067", "SC-071"}
     _ATTENDING_ROLE_MARKERS = ("主治医师", "主治查房", "attending physician")
     _SENIOR_ROLE_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房")
@@ -421,6 +428,8 @@ class ProgrammaticRuleExecutor:
             return self._evaluate_exists_any(spec=spec, content=content)
         if spec.strategy == "exists_all":
             return self._evaluate_exists_all(spec=spec, content=content)
+        if spec.strategy == "timeline_doc_exists_nonempty":
+            return self._evaluate_timeline_doc_exists_nonempty(spec=spec, medical_record=medical_record)
         if spec.strategy == "doctor_signature_required":
             return self._evaluate_doctor_signature(content=content)
         if spec.strategy == "non_licensed_review_signature":
@@ -438,6 +447,7 @@ class ProgrammaticRuleExecutor:
                 anchor_labels=self._DISCHARGE_TIME_LABELS,
                 completion_labels=self._COMPLETION_TIME_LABELS,
                 rule_hint="出院(死亡)后24小时内完成",
+                early_completion_is_non_compliant=True,
             )
         if spec.strategy == "time_within_hours_between_labels":
             return self._evaluate_time_window(
@@ -519,6 +529,51 @@ class ProgrammaticRuleExecutor:
             0.9,
             {"is_applicable": True, "reason": "", "method": "program_exists_all"},
             "medical_text",
+        )
+
+    def _evaluate_timeline_doc_exists_nonempty(
+        self,
+        *,
+        spec: ProgrammaticRuleSpec,
+        medical_record: dict[str, Any],
+    ) -> tuple[str, bool, str, str, str, float, dict[str, Any], str]:
+        timeline = self._get_programmatic_timeline(medical_record)
+        if not timeline:
+            return self._build_uncertain_timeline_result("缺少结构化时间轴，无法判断目标文书是否存在。")
+        documents = dict(timeline.get("documents") or {})
+        target_keys = tuple(key for key in spec.timeline_doc_keys if key)
+        if not target_keys:
+            return self._build_uncertain_timeline_result("规则未配置目标文书类型，无法执行存在性判定。")
+        total_count = 0
+        non_empty_count = 0
+        for key in target_keys:
+            events = list(documents.get(key) or [])
+            total_count += len(events)
+            for event in events:
+                content = str(event.get("content") or event.get("raw_text") or "").strip()
+                if content:
+                    non_empty_count += 1
+        evidence = f"目标文书={','.join(target_keys)}；记录数={total_count}；非空正文数={non_empty_count}"
+        if non_empty_count > 0:
+            return (
+                "compliant",
+                True,
+                "已检测到目标文书且正文非空。",
+                evidence,
+                "",
+                0.95,
+                {"is_applicable": True, "reason": "", "method": "timeline_doc_exists_nonempty"},
+                "timeline",
+            )
+        return (
+            "non_compliant",
+            False,
+            "未检测到目标文书正文，视为缺失或空壳文书。",
+            evidence,
+            "请补充对应文书正文并完成规范书写。",
+            0.92,
+            {"is_applicable": True, "reason": "", "method": "timeline_doc_exists_nonempty"},
+            "timeline",
         )
 
     def _evaluate_doctor_signature(
@@ -607,6 +662,7 @@ class ProgrammaticRuleExecutor:
         completion_labels: tuple[str, ...],
         rule_hint: str,
         max_hours: int = 24,
+        early_completion_is_non_compliant: bool = False,
     ) -> tuple[str, bool, str, str, str, float, dict[str, Any], str]:
         anchor_dt, anchor_raw = self._extract_labeled_datetime(content, anchor_labels)
         completion_dt, completion_raw = self._extract_labeled_datetime(content, completion_labels)
@@ -622,6 +678,17 @@ class ProgrammaticRuleExecutor:
                 "medical_text",
             )
         delta_hours = (completion_dt - anchor_dt).total_seconds() / 3600
+        if early_completion_is_non_compliant and delta_hours < 0:
+            return (
+                "non_compliant",
+                False,
+                "文书完成时间早于出院/死亡时间，存在提前书写。",
+                f"锚点={anchor_raw}；完成={completion_raw}；间隔={delta_hours:.1f}h",
+                "请在患者出院或死亡后 24 小时内完成记录，避免提前书写。",
+                0.92,
+                {"is_applicable": True, "reason": "", "method": "program_time_window_early_completion"},
+                "medical_text",
+            )
         anomaly_reason = self._detect_time_window_anomaly(
             anchor_dt=anchor_dt,
             completion_dt=completion_dt,

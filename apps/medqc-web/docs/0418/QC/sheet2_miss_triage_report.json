@@ -1,20 +1,9 @@
 {
-  "miss_total": 48,
-  "program_count": 26,
+  "miss_total": 31,
+  "program_count": 9,
   "prompt_or_mapping_count": 22,
   "other_count": 0,
   "program_items": [
-    {
-      "sheet2_row_id": "Sheet2-R0004",
-      "visit_id": "1874568",
-      "patient_name": "许敬华",
-      "issue_family": "术前小结缺失",
-      "primary_rule_id": "SC-080",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "无术前小结",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
     {
       "sheet2_row_id": "Sheet2-R0006",
       "visit_id": "1876706",
@@ -38,105 +27,6 @@
       "next_action": "转C线补规则"
     },
     {
-      "sheet2_row_id": "Sheet2-R0014",
-      "visit_id": "1878110",
-      "patient_name": "何加强",
-      "issue_family": "首次病程记录存在/时效",
-      "primary_rule_id": "SC-021",
-      "secondary_rule_ids": "SC-022",
-      "manual_issue_text": "入院8小时内未完成首次病程记录",
-      "evidence_summary": "次规则 SC-022 执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0043",
-      "visit_id": "1966729",
-      "patient_name": "熊昌其",
-      "issue_family": "出院记录缺失/提前书写/时效异常/签名缺失",
-      "primary_rule_id": "SC-116",
-      "secondary_rule_ids": "SC-117|SC-118|SC-126",
-      "manual_issue_text": "患者手术前，就已经书写出院记录；术前确定的主刀医师为陈光怀，实际手术主刀医师为郑凤金。",
-      "evidence_summary": "次规则 SC-117 执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0048",
-      "visit_id": "1989759",
-      "patient_name": "林涛",
-      "issue_family": "首次病程记录存在/时效",
-      "primary_rule_id": "SC-021",
-      "secondary_rule_ids": "SC-022",
-      "manual_issue_text": "入院病历患者基本信息中，婚姻情况为未婚，婚育史中记录为已婚，育有2女。手术记录和术后首次病程记录未完成",
-      "evidence_summary": "次规则 SC-022 执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0055",
-      "visit_id": "1981425",
-      "patient_name": "卢方明",
-      "issue_family": "出院记录缺失/提前书写/时效异常/签名缺失",
-      "primary_rule_id": "SC-116",
-      "secondary_rule_ids": "SC-117|SC-118|SC-126",
-      "manual_issue_text": "提前书写出院记录（入院即新建出院记录）",
-      "evidence_summary": "次规则 SC-117 执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0064",
-      "visit_id": "2013648",
-      "patient_name": "鲁明山",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "现病史未严格按照病历书写规范书写，思维跳跃，入院诊断不全，10月10日至10月17日无病程记录。",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0084",
-      "visit_id": "2047953",
-      "patient_name": "郑国琼",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "患者10月25日入院，10月30日后无病程，书写不及时。",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0085",
-      "visit_id": "2050582",
-      "patient_name": "王国素",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "患者10月27日入院，10月27日后无病程，书写不及时。",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0113",
-      "visit_id": "2085821",
-      "patient_name": "姜子琼",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "患者于2025年11月18日入院，11月20日后无病程。",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0114",
-      "visit_id": "2081922",
-      "patient_name": "陈永",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "患者于2025年11月16日入院，11月19日后无病程。",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0127",
       "visit_id": "2341278",
       "patient_name": "王美金",
@@ -144,17 +34,6 @@
       "primary_rule_id": "SC-080",
       "secondary_rule_ids": "",
       "manual_issue_text": "手术患者无术前小结及术后连续三日查房记录",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0149",
-      "visit_id": "2161167",
-      "patient_name": "郭嘉欣",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "1月16日以后，无病程记录",
       "evidence_summary": "主规则执行完成，未产生问题项。",
       "next_action": "转C线补规则"
     },
@@ -167,17 +46,6 @@
       "secondary_rule_ids": "",
       "manual_issue_text": "1月27日后无病程记录，患者血压150/108mmHg,未做诊断及血压监测。",
       "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0163",
-      "visit_id": "2199041",
-      "patient_name": "陈锡芬",
-      "issue_family": "出院记录缺失/提前书写/时效异常/签名缺失",
-      "primary_rule_id": "SC-116",
-      "secondary_rule_ids": "SC-117|SC-118|SC-126",
-      "manual_issue_text": "患者2月2日出院，新建出院记录后未在24小时内完成出院记录",
-      "evidence_summary": "次规则 SC-117 执行完成，未产生问题项。",
       "next_action": "转C线补规则"
     },
     {
@@ -199,17 +67,6 @@
       "primary_rule_id": "LXE-18",
       "secondary_rule_ids": "",
       "manual_issue_text": "2月4日、2月5日连续两次病程记录新建后未书写",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0178",
-      "visit_id": "2207195",
-      "patient_name": "唐明亮",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "病历书写不及时（2月7日至2月12日期间无病程记录）",
       "evidence_summary": "主规则执行完成，未产生问题项。",
       "next_action": "转C线补规则"
     },
@@ -244,50 +101,6 @@
       "secondary_rule_ids": "SC-117|SC-118|SC-126",
       "manual_issue_text": "入院记录：心率与脉搏记录数据不一；首次病程：高血压，糖尿病无诊断依据。患者未出院，提前书写2026-03-06出院记录。",
       "evidence_summary": "次规则 SC-117 执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0244",
-      "visit_id": "2263802",
-      "patient_name": "唐登华",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "病程记录未在规定时间内完成",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0248",
-      "visit_id": "2288976",
-      "patient_name": "黄绍权",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "患者于2026年3月16日入院，病程记录至3月18日上级医师查房后无后续日常病程记录（截止3月24日）。",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0274",
-      "visit_id": "2305896",
-      "patient_name": "古洪禄",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "术前小结、术前讨论新建后未书写",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补规则"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0282",
-      "visit_id": "2312534",
-      "patient_name": "陈桂钦",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "4.1会诊记录未书写，病程记录未在规定时间内完成",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
       "next_action": "转C线补规则"
     }
   ],

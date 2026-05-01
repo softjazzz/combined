@@ -385,3 +385,54 @@ def test_sc067_should_be_not_applicable_without_consultation_context():
 
     assert result["status"] == "not_applicable"
     assert result["applicability"]["is_applicable"] is False
+
+
+def test_sc080_should_fail_when_presurg_summary_missing_under_surgery_context():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-080", "name": "无术前小结"},
+        medical_record={
+            "content": "手术记录\n术前讨论记录",
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "documents": {
+                        "surgery_record": [
+                            {
+                                "document_id": "S1",
+                                "authored_at": "2026-04-01 12:00:00",
+                                "content": "手术记录正文",
+                            }
+                        ],
+                        "presurg_discussion": [
+                            {
+                                "document_id": "P1",
+                                "authored_at": "2026-04-01 10:00:00",
+                                "content": "术前讨论正文",
+                            }
+                        ],
+                        "presurg_summary": [],
+                    }
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "non_compliant"
+    assert "非空正文数=0" in str(result.get("evidence") or "")
+
+
+def test_sc117_should_fail_when_discharge_record_written_before_discharge():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-117", "name": "出院/死亡记录24小时内完成"},
+        medical_record={
+            "content": (
+                "出院时间：2026-04-03 10:00\n"
+                "记录时间：2026-04-02 08:00\n"
+                "出院记录正文"
+            )
+        },
+    )
+
+    assert result["status"] == "non_compliant"
+    assert "提前书写" in str(result.get("findings") or "")

@@ -18,7 +18,10 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.routers.qc_sample_pools import _resolve_sample_validation_execution_strategy
 from app.routers.qc_sichuan import _run_sichuan_workspace_batch_job
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
-from app.services.sample_validation_rule_sets import resolve_sample_validation_pseudo_draft
+from app.services.sample_validation_rule_sets import (
+    get_sample_programmatic_rule_set,
+    resolve_sample_validation_pseudo_draft,
+)
 
 
 LEDGER_CSV = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "QC" / "sheet2_verification_ledger_seed.csv"
@@ -29,12 +32,19 @@ PROGRAMMATIC_RULE_IDS = {
     "SC-022",
     "SC-048",
     "SC-049",
+    "SC-067",
     "SC-071",
     "SC-072",
     "SC-080",
     "SC-082",
+    "SC-095",
     "SC-096",
+    "SC-116",
+    "SC-117",
+    "SC-118",
+    "SC-126",
     "LXE-18",
+    "LXE-35",
 }
 DEFAULT_FAMILIES: tuple[str, ...] = (
     "病程记录缺分析/缺处理意见",
@@ -58,7 +68,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--limit-per-family", type=int, default=0, help="每个问题族最多执行多少条，0 表示不限制")
     parser.add_argument(
         "--rule-slot",
-        choices=("primary", "secondary-first"),
+        choices=("primary", "primary-retry", "secondary-first"),
         default="primary",
         help="执行主规则或首个次规则",
     )
@@ -91,22 +101,25 @@ def _select_rows(rows: list[dict[str, str]], args: argparse.Namespace) -> list[d
     selected: list[dict[str, str]] = []
     family_counts: Counter[str] = Counter()
     for row in rows:
+        row_id = _safe_text(row.get("sheet2_row_id"))
         next_action = _safe_text(row.get("next_action"))
         if args.rule_slot == "primary":
             if _safe_text(row.get("verification_status")) != "pending":
                 continue
             if next_action not in {"按主规则做真实核验", "先跑现有规则并记录缺口"}:
                 continue
+        elif args.rule_slot == "primary-retry":
+            if _safe_text(row.get("verification_status")) != "miss":
+                continue
         else:
             if _safe_text(row.get("verification_status")) != "miss":
                 continue
-            if next_action != "补跑secondary_rule_ids":
+            if row_id not in row_ids and next_action != "补跑secondary_rule_ids":
                 continue
         if not _safe_text(row.get("visit_id")) or not _safe_text(row.get("primary_rule_id")):
             continue
         if args.rule_slot == "secondary-first" and not _first_secondary_rule_id(row):
             continue
-        row_id = _safe_text(row.get("sheet2_row_id"))
         family = _safe_text(row.get("issue_family"))
         if row_ids and row_id not in row_ids:
             continue
@@ -223,12 +236,26 @@ async def _run_family_batch(
     if not records:
         raise RuntimeError(f"{family} 未找到可执行病历")
 
+    validation_mode = (
+        "programmatic"
+        if rule_ids and all(rule_id in PROGRAMMATIC_RULE_IDS for rule_id in rule_ids)
+        else "sc"
+    )
+    programmatic_rule_set = get_sample_programmatic_rule_set()
+    if validation_mode == "programmatic":
+        rule_set_key = programmatic_rule_set.key
+        rule_set_name = programmatic_rule_set.name
+        rule_set_version = programmatic_rule_set.version
+    else:
+        rule_set_key = ""
+        rule_set_name = "SC样本规则模式"
+        rule_set_version = "sheet2-ledger-v1"
     execution_strategy = _resolve_sample_validation_execution_strategy(
-        validation_mode="sc",
+        validation_mode=validation_mode,
         rule_ids=rule_ids,
     )
     draft = resolve_sample_validation_pseudo_draft(
-        validation_mode="sc",
+        validation_mode=validation_mode,
         pool_name=f"{pool_name}-{family}",
         rule_count=len(rule_ids),
     )
@@ -238,9 +265,9 @@ async def _run_family_batch(
         scope="all",
         filters={
             "rule_ids": rule_ids,
-            "rule_set_key": "",
-            "rule_set_name": "SC样本规则模式",
-            "rule_set_version": "sheet2-ledger-v1",
+            "rule_set_key": rule_set_key,
+            "rule_set_name": rule_set_name,
+            "rule_set_version": rule_set_version,
             "execution_strategy": execution_strategy,
             "quality_profile": "throughput_v1",
             "bucket_strategy": "fixed_packs",
@@ -255,7 +282,7 @@ async def _run_family_batch(
             "dedup_record_count": len(record_ids),
             "record_rule_map": record_rule_map,
             "effective_scope": "all",
-            "validation_mode": "sc",
+            "validation_mode": validation_mode,
             "max_parallel_records": 4,
         },
         record_ids=record_ids,
