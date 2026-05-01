@@ -110,7 +110,11 @@ def _select_rows(rows: list[dict[str, str]], args: argparse.Namespace) -> list[d
         if args.rule_slot == "primary":
             if _safe_text(row.get("verification_status")) != "pending":
                 continue
-            if next_action not in {"按主规则做真实核验", "先跑现有规则并记录缺口"}:
+            if next_action not in {
+                "按主规则做真实核验",
+                "先跑现有规则并记录缺口",
+                "先核现有证据，再补语义规则",
+            }:
                 continue
         elif args.rule_slot == "primary-retry":
             if _safe_text(row.get("verification_status")) != "miss":

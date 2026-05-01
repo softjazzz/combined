@@ -1,0 +1,30 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 6,
+  "families": [
+    {
+      "issue_family": "会诊意见已写遵执但实际未落实",
+      "row_count": 6,
+      "job_id": "945dfd2d-220a-4729-87f4-8b0e24e075eb",
+      "result_breakdown": {
+        "miss": 3,
+        "same_family_hit": 3
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 5
+      },
+      "items_count": 3,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 197,
+    "exact_hit": 20,
+    "miss": 28,
+    "same_family_hit": 30,
+    "skip": 8
+  }
+}
