@@ -1,3 +1,4 @@
+from app.services import sample_programmatic_evidence as evidence_module
 from app.services.sample_programmatic_evidence import build_programmatic_evidence_payload
 
 
@@ -122,3 +123,75 @@ def test_build_programmatic_evidence_payload_should_not_misclassify_negated_or_d
     )
 
     assert payload["programmatic_timeline"]["risk_flags"] == ["normal"]
+
+
+def test_build_programmatic_evidence_payload_should_not_misclassify_acute_severe_risk_disclosure_as_serious():
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "medical_text": "术中突然出现心律失常、心梗、心脑血管意外等急重症发作，暂停手术，抢救病人，病人甚至死亡等。",
+            "structured_context": {},
+        }
+    )
+
+    assert payload["programmatic_timeline"]["risk_flags"] == ["normal"]
+
+
+def test_build_programmatic_evidence_payload_should_fallback_to_source_tables_when_bundle_documents_are_empty(monkeypatch):
+    def fake_fetch_source_table_fallback_items(bundle_payload):
+        return (
+            [
+                {
+                    "source_table": "daily_course_record",
+                    "document_type": "daily_course_record",
+                    "document_id": "D1",
+                    "document_title": "日常病程记录",
+                    "record_time": "2026-02-03 12:26:23",
+                    "display_time": "2026-02-03 12:26:23",
+                    "submit_datetime": "",
+                    "content": "患者病情稳定。",
+                    "text_preview": "患者病情稳定。",
+                },
+                {
+                    "source_table": "senior_course_record",
+                    "document_type": "senior_course_record",
+                    "document_id": "S1",
+                    "document_title": "主任医师查房记录",
+                    "record_time": "",
+                    "display_time": "2026-02-08 09:00:00",
+                    "submit_datetime": "",
+                    "content": "今日主任医师查房，继续观察。",
+                    "text_preview": "今日主任医师查房，继续观察。",
+                },
+            ],
+            {
+                "admission_datetime": "2026-01-22 10:00:00",
+                "discharge_datetime": "2026-02-14 09:00:00",
+            },
+        )
+
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        fake_fetch_source_table_fallback_items,
+    )
+
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "institute_id": "I1",
+            "patient_id": "P1",
+            "visit_id": "V1",
+            "structured_context": {
+                "documents": {
+                    "daily_course_record": [],
+                    "senior_course_record": [],
+                }
+            },
+        }
+    )
+
+    timeline = payload["programmatic_timeline"]
+    assert timeline["admission_time"] == "2026-01-22 10:00:00"
+    assert timeline["discharge_time"] == "2026-02-14 09:00:00"
+    assert len(timeline["documents"]["daily_course_record"]) == 1
+    assert len(timeline["documents"]["senior_course_record"]) == 1
+    assert timeline["documents"]["senior_course_record"][0]["authored_at"] == "2026-02-08 09:00:00"

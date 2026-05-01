@@ -1655,6 +1655,8 @@ def _load_scene_bundle(
     patient_id: str,
     visit_id: str,
     schema: str,
+    prefer_usable_content: bool = False,
+    limit: int = 1,
 ) -> dict[str, Any] | None:
     table_name = _SCENE_BUNDLE_TABLE.get(scene)
     if not table_name:
@@ -1689,32 +1691,42 @@ def _load_scene_bundle(
         WHERE institute_id = :institute_id
           AND patient_id = :patient_id
           AND visit_id = :visit_id
-        LIMIT 1
+        ORDER BY bundle_updated_at DESC
+        LIMIT :limit
         """
     )
     with engine.connect() as conn:
-        row = conn.execute(
+        rows = conn.execute(
             sql,
             {
                 "institute_id": institute_id,
                 "patient_id": patient_id,
                 "visit_id": visit_id,
+                "limit": max(int(limit or 1), 1),
             },
-        ).mappings().first()
-    if not row:
+        ).mappings().all()
+    if not rows:
         return None
 
-    payload = dict(row)
-    for field_name in ("structured_context", "document_hits", "data_quality_flags", "source_doc_priority"):
-        value = payload.get(field_name)
-        if isinstance(value, str):
-            try:
-                payload[field_name] = json.loads(value)
-            except Exception:
+    candidates: list[dict[str, Any]] = []
+    for row in rows:
+        payload = dict(row)
+        for field_name in ("structured_context", "document_hits", "data_quality_flags", "source_doc_priority"):
+            value = payload.get(field_name)
+            if isinstance(value, str):
+                try:
+                    payload[field_name] = json.loads(value)
+                except Exception:
+                    payload[field_name] = {} if field_name in {"structured_context", "document_hits"} else []
+            elif value is None:
                 payload[field_name] = {} if field_name in {"structured_context", "document_hits"} else []
-        elif value is None:
-            payload[field_name] = {} if field_name in {"structured_context", "document_hits"} else []
-    return payload
+        candidates.append(payload)
+
+    if prefer_usable_content:
+        for payload in candidates:
+            if _scene_bundle_has_usable_content(payload):
+                return payload
+    return candidates[0]
 
 
 def _scene_bundle_has_usable_content(bundle: dict[str, Any] | None) -> bool:
@@ -1764,6 +1776,22 @@ def load_or_assemble_scene_bundle(
             and (not force_refresh_if_empty or _scene_bundle_has_usable_content(existing))
         ):
             return existing
+        if (
+            existing
+            and force_refresh_if_empty
+            and str(existing.get("bundle_schema_version") or "") == BUNDLE_SCHEMA_VERSION_CURRENT
+        ):
+            usable_existing = _load_scene_bundle(
+                scene=scene,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                schema=bundle_schema,
+                prefer_usable_content=True,
+                limit=5,
+            )
+            if usable_existing and _scene_bundle_has_usable_content(usable_existing):
+                return usable_existing
 
     bundle = _assemble_scene_bundle(
         scene=scene,

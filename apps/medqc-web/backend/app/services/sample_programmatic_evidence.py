@@ -4,6 +4,10 @@ import re
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import text
+
+from ..database.connection import engine
+
 
 _DATETIME_PATTERNS = (
     "%Y-%m-%d %H:%M:%S",
@@ -24,6 +28,20 @@ _SOURCE_TABLES = (
     "anesthesia_record",
     "discharge_record",
 )
+
+_FALLBACK_DOC_FETCH_LIMITS = {
+    "admission_record": 2,
+    "first_course_record": 2,
+    "daily_course_record": 50,
+    "senior_course_record": 50,
+    "consultation_record": 20,
+    "presurg_discussion": 10,
+    "presurg_summary": 10,
+    "surgery_record": 10,
+    "surgery_safecheck_record": 10,
+    "anesthesia_record": 10,
+    "discharge_record": 5,
+}
 
 _ATTENDING_ROLE_MARKERS = ("主治医师", "主治查房", "attending physician")
 _SENIOR_ROLE_MARKERS = ("副主任医师", "主任医师", "副主任查房", "主任查房")
@@ -164,6 +182,8 @@ def _extract_risk_flags(*texts: str) -> list[str]:
         r"危重症医学科",
         r"非重症",
         r"非危重",
+        r"急重症发作",
+        r"重症发作",
         r"停病重",
         r"解除病重",
         r"取消病重",
@@ -248,7 +268,83 @@ def _flatten_inventory_items(structured: dict[str, Any], bundle_payload: dict[st
             item.setdefault("source_table", source_table)
             item.setdefault("document_type", source_table)
             flattened.append(item)
-    return flattened
+    if flattened:
+        return flattened
+    fallback_items, fallback_meta = _fetch_source_table_fallback_items(bundle_payload)
+    if fallback_meta:
+        bundle_payload["_source_table_fallback_meta"] = fallback_meta
+    return fallback_items
+
+
+def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    institute_id = _safe_text(bundle_payload.get("institute_id"))
+    visit_id = _safe_text(bundle_payload.get("visit_id"))
+    if not institute_id or not visit_id or engine is None:
+        return [], {}
+
+    fallback_items: list[dict[str, Any]] = []
+    fallback_meta: dict[str, str] = {}
+    with engine.connect() as conn:
+        for table_name in _SOURCE_TABLES:
+            limit = int(_FALLBACK_DOC_FETCH_LIMITS.get(table_name, 20))
+            try:
+                rows = conn.execute(
+                    text(
+                        f"""
+                        SELECT *
+                        FROM cdm.{table_name}
+                        WHERE institute_id = :institute_id
+                          AND visit_id = :visit_id
+                        ORDER BY COALESCE(record_time, submit_datetime, update_time) ASC NULLS LAST, document_id ASC
+                        LIMIT :limit
+                        """
+                    ),
+                    {
+                        "institute_id": institute_id,
+                        "visit_id": visit_id,
+                        "limit": limit,
+                    },
+                ).mappings().all()
+            except Exception:
+                continue
+            for row in rows:
+                item = dict(row)
+                display_time = _safe_text(item.get("record_time") or item.get("submit_datetime") or item.get("update_time"))
+                fallback_items.append(
+                    {
+                        "source_table": table_name,
+                        "document_type": table_name,
+                        "document_id": _safe_text(item.get("document_id")),
+                        "document_title": _safe_text(item.get("document_title") or table_name),
+                        "record_time": _safe_text(item.get("record_time")),
+                        "display_time": display_time,
+                        "submit_datetime": _safe_text(item.get("submit_datetime")),
+                        "content": _safe_text(item.get("record_content")),
+                        "text_preview": _safe_text(item.get("record_content"))[:400],
+                    }
+                )
+        try:
+            registration = conn.execute(
+                text(
+                    """
+                    SELECT admission_datetime, discharge_datetime
+                    FROM cdm.inpat_registration
+                    WHERE institute_id = :institute_id
+                      AND visit_id = :visit_id
+                    LIMIT 1
+                    """
+                ),
+                {
+                    "institute_id": institute_id,
+                    "visit_id": visit_id,
+                },
+            ).mappings().first()
+        except Exception:
+            registration = None
+        if registration:
+            fallback_meta["admission_datetime"] = _safe_text(registration.get("admission_datetime"))
+            fallback_meta["discharge_datetime"] = _safe_text(registration.get("discharge_datetime"))
+    return fallback_items, fallback_meta
 
 
 def _build_supplement_text(
@@ -286,6 +382,7 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
     bundle_payload = dict(bundle or {})
     structured = _safe_dict(bundle_payload.get("structured_context"))
     inventory_items = _flatten_inventory_items(structured, bundle_payload)
+    fallback_meta = _safe_dict(bundle_payload.get("_source_table_fallback_meta"))
 
     documents: dict[str, list[dict[str, Any]]] = {table_name: [] for table_name in _SOURCE_TABLES}
     for raw_item in inventory_items:
@@ -303,6 +400,7 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
     admission_time = (
         _parse_datetime(structured.get("admission_datetime"))
         or _parse_datetime(bundle_payload.get("admission_datetime"))
+        or _parse_datetime(fallback_meta.get("admission_datetime"))
         or _extract_timeline_fact_datetime(timeline_facts, ("admission_time", "admission_datetime"))
         or _extract_timeline_fact_datetime(
             timeline_facts,
@@ -318,6 +416,7 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
     discharge_time = (
         _parse_datetime(structured.get("discharge_datetime"))
         or _parse_datetime(bundle_payload.get("discharge_datetime"))
+        or _parse_datetime(fallback_meta.get("discharge_datetime"))
         or _extract_timeline_fact_datetime(timeline_facts, ("discharge_time", "discharge_datetime", "death_time"))
         or _extract_datetime_by_labels(
             "\n".join(_safe_text(item.get("content")) for item in documents.get("discharge_record") or []),

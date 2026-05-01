@@ -1,23 +1,11 @@
 {
-  "miss_total": 26,
-  "program_count": 1,
+  "miss_total": 25,
+  "program_count": 0,
   "mapping_count": 20,
   "prompt_count": 0,
   "evidence_count": 5,
   "other_count": 0,
-  "program_items": [
-    {
-      "sheet2_row_id": "Sheet2-R0182",
-      "visit_id": "2189612",
-      "patient_name": "何明富",
-      "issue_family": "病程时效/缺失",
-      "primary_rule_id": "LXE-18",
-      "secondary_rule_ids": "",
-      "manual_issue_text": "2月4日-2月12日未及时书写病程记录",
-      "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线补程序"
-    }
-  ],
+  "program_items": [],
   "mapping_items": [
     {
       "sheet2_row_id": "Sheet2-R0006",

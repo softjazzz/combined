@@ -18,10 +18,14 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.routers.qc_sample_pools import _resolve_sample_validation_execution_strategy
 from app.routers.qc_sichuan import _run_sichuan_workspace_batch_job
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+from app.services.qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
+from app.services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from app.services.sample_validation_rule_sets import (
+    apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
     resolve_sample_validation_pseudo_draft,
 )
+from app.services.sichuan_qc_service import SichuanQCService
 
 
 LEDGER_CSV = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "QC" / "sheet2_verification_ledger_seed.csv"
@@ -296,7 +300,114 @@ async def _run_family_batch(
     completed_job = workspace.get_batch_job_for_processing(job_id=job["id"])
     if not completed_job:
         raise RuntimeError(f"{family} 批量任务未返回结果: {job['id']}")
+    if validation_mode == "programmatic":
+        await _repair_programmatic_missing_items(
+            job=completed_job,
+            rows=rows,
+            records=records,
+            rule_slot=rule_slot,
+        )
     return dict(completed_job)
+
+
+async def _repair_programmatic_missing_items(
+    *,
+    job: dict[str, Any],
+    rows: list[dict[str, str]],
+    records: list[dict[str, Any]],
+    rule_slot: str,
+) -> None:
+    record_map = {_safe_text(item.get("record_id") or item.get("visit_id")): dict(item) for item in records}
+    qc_service = SichuanQCService()
+    items = list(job.get("items") or [])
+    repaired = 0
+
+    for row in rows:
+        record_id = _safe_text(row.get("visit_id"))
+        rule_id = _first_secondary_rule_id(row) if rule_slot == "secondary-first" else _safe_text(row.get("primary_rule_id"))
+        if not record_id or not rule_id:
+            continue
+        if _find_item(job, record_id=record_id, rule_id=rule_id) or _find_failed_record(job, record_id=record_id, rule_id=rule_id):
+            continue
+        record = record_map.get(record_id) or {}
+        institute_id = _safe_text(record.get("institute_id"))
+        patient_id = _safe_text(record.get("patient_id"))
+        visit_id = _safe_text(record.get("visit_id") or record_id)
+        if not institute_id or not patient_id or not visit_id:
+            continue
+        scene = "final" if _safe_text(record.get("scope")).lower() == "final" else "running"
+        try:
+            bundle = load_running_final_bundle(
+                scene=scene,
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                schema="public",
+            )
+        except Exception:
+            continue
+        evidence_payload = build_programmatic_evidence_payload(
+            bundle=bundle,
+            medical_text=_safe_text(record.get("medical_text")),
+        )
+        primary_document_text = _safe_text(
+            evidence_payload.get("primary_document_text")
+            or bundle.get("medical_text")
+            or record.get("medical_text")
+        )
+        raw_rule = qc_service.get_rule_by_id(rule_id)
+        if not raw_rule:
+            continue
+        rule = apply_programmatic_rule_runtime_overrides(raw_rule)
+        result = await qc_service.evaluate_document_with_rules(
+            document_id=record_id,
+            content=primary_document_text,
+            document_type="病历文书",
+            rules=[rule],
+            evidence_source="timeline",
+            evidence_payload=evidence_payload,
+            bucket_strategy="fixed_packs",
+            quality_profile="throughput_v1",
+            batch_output_mode="minimal",
+            enable_selective_refine=False,
+            refine_confidence_threshold=0.0,
+            max_refine_candidates=0,
+        )
+        eval_items = list(result.get("evaluation_results") or [])
+        if not eval_items:
+            continue
+        eval_item = dict(eval_items[0])
+        status = _safe_text(eval_item.get("status")).lower()
+        if status not in {"non_compliant", "uncertain"}:
+            continue
+        metadata = dict(eval_item.get("metadata") or {})
+        items.append(
+            {
+                "rule_job_id": "",
+                "rule_id": _safe_text(eval_item.get("rule_id") or rule_id),
+                "rule_code": rule_id,
+                "rule_name": _safe_text(eval_item.get("rule_name") or rule.get("name") or rule_id),
+                "record_id": record_id,
+                "visit_id": visit_id,
+                "patient_name": _safe_text(record.get("patient_name")),
+                "department": _safe_text(record.get("department")),
+                "status": status,
+                "is_compliant": bool(eval_item.get("is_compliant") is True),
+                "findings": _safe_text(eval_item.get("findings")),
+                "evidence": _safe_text(eval_item.get("evidence")),
+                "suggestion": _safe_text(eval_item.get("suggestion")),
+                "confidence": float(eval_item.get("confidence") or 0),
+                "executor_type": _safe_text(metadata.get("executor_type") or "program"),
+                "document_type": "病历文书",
+                "target_document_type": "病历文书",
+                "evidence_source": _safe_text(metadata.get("evidence_source") or "timeline"),
+                "model_version": _safe_text(metadata.get("model_version") or "programmatic-v1"),
+            }
+        )
+        repaired += 1
+
+    if repaired:
+        job["items"] = items
 
 
 def _apply_job_results(
