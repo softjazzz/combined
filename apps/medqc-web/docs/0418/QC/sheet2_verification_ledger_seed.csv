@@ -221,7 +221,7 @@ Sheet2-R0223,2229247,陈正权,入院诊断疼痛，诊断不准确，专科查�
 Sheet2-R0224,2268827,朱敦群,胸部CT提示双肺感染，未请呼吸内科会诊，病程记录及出院诊断均未提及,待人工归类,,,pending,,,,,先人工归类问题并补主规则,,,,,
 Sheet2-R0225,2262981,屈义田,胸部CT提示双肺结节，检验结果提示低钾，病程记录未提及,待人工归类,,,pending,,,,,先人工归类问题并补主规则,,,,,
 Sheet2-R0226,2255288,王树成,3月11日检查检验结果数据异常未进行分析和记录,待人工归类,,,pending,,,,,先人工归类问题并补主规则,,,,,
-Sheet2-R0227,372465,梅秀英,24小时内未完成转入记录,转科24小时内转入/转出记录,SC-064,,pending,,workspace_record_missing,workspace.collect_records 未命中本地病历。,,先核原始文书是否缺失，再判定是否skip,,,,,
+Sheet2-R0227,372465,梅秀英,24小时内未完成转入记录,转科24小时内转入/转出记录,SC-064,,skip,,document_missing,缺文书：转科记录,本地 PG、release/0426、release/0426_full_auto 均缺 转科记录，且无可回退文书，可判 skip,已确认skip,true,转科记录,local_pg@local_pg::transfer_in_record:no_row; release_0426@D:\LLM\LX888\release\0426\0426\transfer_in_record.csv:file_missing; release_0426_full_auto@D:\LLM\LX888\release\0426_full_auto\0426_full_auto\transfer_in_record.csv:no_row; local_pg@local_pg::transfer_out_record:no_row; release_0426@D:\LLM\LX888\release\0426\0426\transfer_out_record.csv:file_missing; release_0426_full_auto@D:\LLM\LX888\release\0426_full_auto\0426_full_auto\transfer_out_record.csv:no_row,false,本地 PG、release/0426、release/0426_full_auto 均缺 转科记录，且无可回退文书，可判 skip
 Sheet2-R0228,2262370,李昭云,入院监测血压165/98mmHg，无后续血压监测记录及处理措施。,待人工归类,,,pending,,,,,先人工归类问题并补主规则,,,,,
 Sheet2-R0229,2264271,陈中德,四级肿瘤手术，未行多学科讨论，,四级手术未 MDT,SC-083,,miss,93a92fcf-e86a-4f2a-8045-24d516759ad4,compliant_or_no_issue,主规则执行完成，未产生问题项。,,转C线改映射,,,,,
 Sheet2-R0230,2262090,杜贤彬,未落实三级医师查房。,待人工归类,,,pending,,,,,先人工归类问题并补主规则,,,,,
