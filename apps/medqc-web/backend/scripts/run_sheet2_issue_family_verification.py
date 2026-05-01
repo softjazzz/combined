@@ -56,6 +56,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--issue-family", dest="issue_families", action="append", default=[], help="指定 issue_family，可重复传入")
     parser.add_argument("--sheet2-row-id", dest="row_ids", action="append", default=[], help="指定台账 row id，可重复传入")
     parser.add_argument("--limit-per-family", type=int, default=0, help="每个问题族最多执行多少条，0 表示不限制")
+    parser.add_argument(
+        "--rule-slot",
+        choices=("primary", "secondary-first"),
+        default="primary",
+        help="执行主规则或首个次规则",
+    )
     parser.add_argument("--output-json", default="", help="可选，输出本轮汇总 JSON")
     parser.add_argument("--dry-run", action="store_true", help="只生成选择结果，不执行任务")
     return parser.parse_args()
@@ -85,11 +91,20 @@ def _select_rows(rows: list[dict[str, str]], args: argparse.Namespace) -> list[d
     selected: list[dict[str, str]] = []
     family_counts: Counter[str] = Counter()
     for row in rows:
-        if _safe_text(row.get("verification_status")) != "pending":
-            continue
-        if _safe_text(row.get("next_action")) not in {"按主规则做真实核验", "先跑现有规则并记录缺口"}:
-            continue
+        next_action = _safe_text(row.get("next_action"))
+        if args.rule_slot == "primary":
+            if _safe_text(row.get("verification_status")) != "pending":
+                continue
+            if next_action not in {"按主规则做真实核验", "先跑现有规则并记录缺口"}:
+                continue
+        else:
+            if _safe_text(row.get("verification_status")) != "miss":
+                continue
+            if next_action != "补跑secondary_rule_ids":
+                continue
         if not _safe_text(row.get("visit_id")) or not _safe_text(row.get("primary_rule_id")):
+            continue
+        if args.rule_slot == "secondary-first" and not _first_secondary_rule_id(row):
             continue
         row_id = _safe_text(row.get("sheet2_row_id"))
         family = _safe_text(row.get("issue_family"))
@@ -109,6 +124,14 @@ def _group_rows_by_family(rows: list[dict[str, str]]) -> dict[str, list[dict[str
     for row in rows:
         grouped[_safe_text(row.get("issue_family"))].append(row)
     return dict(grouped)
+
+
+def _first_secondary_rule_id(row: dict[str, str]) -> str:
+    for item in (_safe_text(row.get("secondary_rule_ids")) or "").split("|"):
+        rule_id = _safe_text(item).upper()
+        if rule_id:
+            return rule_id
+    return ""
 
 
 def _normalize_executor_breakdown(value: Any) -> dict[str, int]:
@@ -170,6 +193,7 @@ async def _run_family_batch(
     created_by: str,
     family: str,
     rows: list[dict[str, str]],
+    rule_slot: str,
 ) -> dict[str, Any]:
     workspace = CustomQCWorkspaceService()
     record_ids = []
@@ -177,7 +201,7 @@ async def _run_family_batch(
     rule_ids: list[str] = []
     for row in rows:
         record_id = _safe_text(row.get("visit_id"))
-        rule_id = _safe_text(row.get("primary_rule_id"))
+        rule_id = _first_secondary_rule_id(row) if rule_slot == "secondary-first" else _safe_text(row.get("primary_rule_id"))
         if not record_id or not rule_id:
             continue
         if record_id not in record_ids:
@@ -253,6 +277,7 @@ def _apply_job_results(
     family: str,
     rows: list[dict[str, str]],
     job: dict[str, Any],
+    rule_slot: str,
 ) -> dict[str, Any]:
     job_id = _safe_text(job.get("id"))
     result_counter: Counter[str] = Counter()
@@ -260,7 +285,7 @@ def _apply_job_results(
 
     for row in rows:
         record_id = _safe_text(row.get("visit_id"))
-        rule_id = _safe_text(row.get("primary_rule_id"))
+        rule_id = _first_secondary_rule_id(row) if rule_slot == "secondary-first" else _safe_text(row.get("primary_rule_id"))
         item = _find_item(job, record_id=record_id, rule_id=rule_id)
         failed = _find_failed_record(job, record_id=record_id, rule_id=rule_id)
         updated = dict(row)
@@ -276,13 +301,17 @@ def _apply_job_results(
             updated["verification_status"] = "miss"
             updated["evidence_status"] = "failed"
             updated["evidence_summary"] = _summarize_text(failed.get("error"), failed.get("reason"))
-            updated["next_action"] = _derive_next_action_for_miss(row)
+            updated["next_action"] = "转C线补规则" if rule_slot == "secondary-first" else _derive_next_action_for_miss(row)
             result_counter["miss"] += 1
         else:
             updated["verification_status"] = "miss"
             updated["evidence_status"] = "compliant_or_no_issue"
-            updated["evidence_summary"] = "主规则执行完成，未产生问题项。"
-            updated["next_action"] = _derive_next_action_for_miss(row)
+            if rule_slot == "secondary-first":
+                updated["evidence_summary"] = f"次规则 {rule_id} 执行完成，未产生问题项。"
+                updated["next_action"] = "转C线补规则"
+            else:
+                updated["evidence_summary"] = "主规则执行完成，未产生问题项。"
+                updated["next_action"] = _derive_next_action_for_miss(row)
             result_counter["miss"] += 1
         updated_rows.append(updated)
 
@@ -316,7 +345,13 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 "issue_family": family,
                 "row_count": len(rows),
                 "record_ids": sorted({_safe_text(row.get("visit_id")) for row in rows if _safe_text(row.get("visit_id"))}),
-                "rule_ids": sorted({_safe_text(row.get("primary_rule_id")) for row in rows if _safe_text(row.get("primary_rule_id"))}),
+                "rule_ids": sorted(
+                    {
+                        (_first_secondary_rule_id(row) if args.rule_slot == "secondary-first" else _safe_text(row.get("primary_rule_id")))
+                        for row in rows
+                        if (_first_secondary_rule_id(row) if args.rule_slot == "secondary-first" else _safe_text(row.get("primary_rule_id")))
+                    }
+                ),
             }
             for family, rows in grouped_rows.items()
         ]
@@ -330,6 +365,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 created_by=_safe_text(args.created_by) or DEFAULT_CREATED_BY,
                 family=family,
                 rows=rows,
+                rule_slot=args.rule_slot,
             )
         except RuntimeError as exc:
             error_text = _safe_text(exc)
@@ -354,7 +390,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 continue
             raise
-        applied = _apply_job_results(family=family, rows=rows, job=job)
+        applied = _apply_job_results(family=family, rows=rows, job=job, rule_slot=args.rule_slot)
         for updated in applied["updated_rows"]:
             by_row_id[updated["sheet2_row_id"]] = updated
         report["families"].append(
