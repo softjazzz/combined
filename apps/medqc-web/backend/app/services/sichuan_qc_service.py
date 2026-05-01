@@ -2562,6 +2562,7 @@ class SichuanQCService:
         primary_doc_type = display_name_for_doc_type(
             str(primary_document.get("document_type") or primary_document.get("source_table") or "")
         )
+        preserve_full_source_content = normalized_rule_id in _COPY_SIGNAL_RULE_IDS
         if normalized_rule_id == "SC-146" and str(primary_document.get("source_table") or "") in {
             "daily_course_record",
             "senior_course_record",
@@ -2588,7 +2589,11 @@ class SichuanQCService:
                     "document_id": str(item.get("document_id") or ""),
                     "document_title": str(item.get("document_title") or ""),
                     "display_time": str(item.get("display_time") or item.get("record_time") or ""),
-                    "content": str(item.get("content") or item.get("text_preview") or "")[:800],
+                    "content": (
+                        str(item.get("content") or item.get("text_preview") or "")
+                        if preserve_full_source_content
+                        else str(item.get("content") or item.get("text_preview") or "")[:800]
+                    ),
                     "hit": bool(item.get("hit")),
                     "sections": list(item.get("sections") or []),
                     "source_fields": list(item.get("source_fields") or []),
@@ -3219,32 +3224,59 @@ class SichuanQCService:
         semantic_checks = dict(normalized.get("semantic_checks") or {})
         has_new_analysis = semantic_checks.get("has_new_analysis")
         has_new_plan = semantic_checks.get("has_new_plan")
-        if has_new_analysis is not False or has_new_plan is not False:
+        llm_raw_output = str(normalized.get("llm_raw_output") or "").strip()
+        allow_program_only_fallback = (
+            rule_id == "CL-275"
+            and not llm_raw_output
+            and has_new_analysis is None
+            and has_new_plan is None
+            and later_to_earlier_cover >= 0.9
+            and similarity_ratio >= 0.55
+        )
+        if not allow_program_only_fallback and (
+            has_new_analysis is not False or has_new_plan is not False
+        ):
             return normalized
 
         metadata = dict(normalized.get("metadata") or {})
         metadata["llm_fallback"] = True
-        metadata["decision_fallback"] = "copy_content_similarity_plus_semantic_check"
+        metadata["decision_fallback"] = (
+            "copy_content_similarity_without_llm_output"
+            if allow_program_only_fallback
+            else "copy_content_similarity_plus_semantic_check"
+        )
         metadata["final_decision_source"] = "rule_aggregate"
         metadata["semantic_checks"] = semantic_checks
         metadata["derived_signals"] = derived_signals
 
         primary_time = str(similarity_signal.get("primary_display_time") or "")
         compare_time = str(similarity_signal.get("compare_display_time") or "")
+        if allow_program_only_fallback:
+            findings = (
+                f"后一天病程/查房被前一天覆盖率为 {later_to_earlier_cover:.2f}，全文相似度为 {similarity_ratio:.2f}，"
+                "程序比对已显示高度重复，符合不合理复制病历内容特征。"
+            )
+            evidence = (
+                f"主文书时间：{primary_time}；对照文书时间：{compare_time}；"
+                f"后一天被前一天句子覆盖率={later_to_earlier_cover:.2f}，全文相似度={similarity_ratio:.2f}。"
+            )
+        else:
+            findings = (
+                f"后一天病程/查房被前一天覆盖率为 {later_to_earlier_cover:.2f}，全文相似度为 {similarity_ratio:.2f}，"
+                "且未见明确新增病情分析或后续计划，"
+                "符合不合理复制病历内容的高度重复特征。"
+            )
+            evidence = (
+                f"主文书时间：{primary_time}；对照文书时间：{compare_time}；"
+                f"后一天被前一天句子覆盖率={later_to_earlier_cover:.2f}，全文相似度={similarity_ratio:.2f}，semantic_checks 显示"
+                " has_new_analysis=false、has_new_plan=false。"
+            )
         normalized.update(
             {
                 "status": "non_compliant",
                 "is_compliant": False,
-                "findings": (
-                    f"后一天病程/查房被前一天覆盖率为 {later_to_earlier_cover:.2f}，全文相似度为 {similarity_ratio:.2f}，"
-                    "且未见明确新增病情分析或后续计划，"
-                    "符合不合理复制病历内容的高度重复特征。"
-                ),
-                "evidence": (
-                    f"主文书时间：{primary_time}；对照文书时间：{compare_time}；"
-                    f"后一天被前一天句子覆盖率={later_to_earlier_cover:.2f}，全文相似度={similarity_ratio:.2f}，semantic_checks 显示"
-                    " has_new_analysis=false、has_new_plan=false。"
-                ),
+                "findings": findings,
+                "evidence": evidence,
                 "suggestion": "请避免直接复用既往病程/查房正文，补充本次记录的新增病情分析、诊疗判断及具体后续计划。",
                 "confidence": max(float(normalized.get("confidence") or 0.0), 0.86),
                 "metadata": metadata,

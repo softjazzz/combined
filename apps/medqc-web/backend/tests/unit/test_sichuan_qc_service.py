@@ -18,7 +18,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.services.sichuan_qc_service import SichuanQCService
-from app.services.rule_domain_router import RuleExecutionInput
+from app.services.rule_domain_router import RuleExecutionInput, route_rule_to_domain
 from app.database.connection import Base
 
 
@@ -677,6 +677,103 @@ def test_apply_copy_content_semantic_fallback_should_force_non_compliant(service
     assert float(normalized["confidence"]) >= 0.86
     assert "后一天被前一天句子覆盖率" in normalized["evidence"]
     assert (normalized.get("metadata") or {}).get("decision_fallback") == "copy_content_similarity_plus_semantic_check"
+
+
+def test_apply_copy_content_semantic_fallback_should_force_non_compliant_without_llm_output(service):
+    rule_input = RuleExecutionInput(
+        rule_id="CL-275",
+        document_type="病程/查房记录",
+        execution_domain="course",
+        primary_medical_text="2026-02-04 查房记录正文",
+        supporting_evidence=[],
+        timeline_facts=[],
+        source_documents=[
+            {
+                "document_type": "senior_course_record",
+                "source_table": "senior_course_record",
+                "document_title": "郑瑞清副主任医师查房记录",
+                "display_time": "2026-02-04 11:08:49",
+                "content": "今日查房，患者神清，精神可，诉腰背部疼痛伴活动受限明显好转，纳眠可，二便调。查体：生命体征平稳，治疗有效，继续原方案。",
+                "hit": True,
+            },
+            {
+                "document_type": "daily_course_record",
+                "source_table": "daily_course_record",
+                "document_title": "颜明秀主治医师查房记录",
+                "display_time": "2026-02-03 11:07:40",
+                "content": "今日查房，患者神清，精神可，诉腰背部疼痛伴活动受限明显好转，纳眠可，二便调。查体：生命体征平稳，治疗有效，继续原方案。今日查房，患者神清，精神可，诉腰背部疼痛伴活动受限明显好转，纳眠可，二便调。",
+                "hit": True,
+            },
+        ],
+    )
+    engine_result = {
+        "rule_id": "CL-275",
+        "status": "uncertain",
+        "is_compliant": True,
+        "findings": "LLM 未返回任何内容。",
+        "evidence": "原始证据",
+        "suggestion": "",
+        "confidence": 0.0,
+        "semantic_checks": {},
+        "llm_raw_output": "",
+        "metadata": {},
+    }
+
+    normalized = service._apply_copy_content_semantic_fallback(
+        rule_input=rule_input,
+        engine_result=engine_result,
+    )
+
+    assert normalized["status"] == "non_compliant"
+    assert normalized["is_compliant"] is False
+    assert "程序比对已显示高度重复" in normalized["findings"]
+    assert (normalized.get("metadata") or {}).get("decision_fallback") == "copy_content_similarity_without_llm_output"
+
+
+def test_build_rule_execution_input_from_bundle_should_preserve_full_source_content_for_cl275(service):
+    rule = {
+        "rule_id": "CL-275",
+        "applicable_documents": ["daily_course_record", "senior_course_record"],
+        "execution_domain": "course",
+    }
+    routing = route_rule_to_domain(rule)
+    long_content = "查房内容：" + ("腰痛缓解，继续治疗。" * 200)
+    domain_bundle = {
+        "execution_domain": "course",
+        "source_documents": [
+            {
+                "document_type": "daily_course_record",
+                "source_table": "daily_course_record",
+                "document_id": "daily-1",
+                "document_title": "主治医师查房记录",
+                "display_time": "2026-02-04 08:10:00",
+                "content": long_content,
+                "text_preview": long_content[:200],
+                "hit": True,
+            },
+            {
+                "document_type": "senior_course_record",
+                "source_table": "senior_course_record",
+                "document_id": "senior-1",
+                "document_title": "副主任医师查房记录",
+                "display_time": "2026-02-04 11:08:49",
+                "content": long_content,
+                "text_preview": long_content[:200],
+                "hit": True,
+            }
+        ],
+        "timeline_facts": [],
+    }
+
+    rule_input = service._build_rule_execution_input_from_bundle(
+        rule=rule,
+        routing=routing,
+        domain_bundle=domain_bundle,
+    )
+
+    assert rule_input.source_documents
+    assert rule_input.source_documents[0]["content"] == long_content
+    assert len(rule_input.primary_medical_text) == len(long_content)
 
 
 def test_apply_sc050_similarity_semantic_fallback_should_be_noop(service):
