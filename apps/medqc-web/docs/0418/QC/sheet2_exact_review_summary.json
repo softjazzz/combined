@@ -2,22 +2,11 @@
   "total_rows": 283,
   "status_breakdown": {
     "exact_confirmed": 139,
-    "blocked_with_reason": 116,
+    "blocked_with_reason": 117,
     "skip": 25,
-    "needs_exact_review": 3
+    "needs_exact_review": 2
   },
   "needs_exact_review_rows": [
-    {
-      "sheet2_row_id": "Sheet2-R0077",
-      "visit_id": "2052129",
-      "patient_name": "胡启凤",
-      "issue_family": "输血时间/量/前后记录不一致",
-      "primary_rule_id": "SC-074",
-      "manual_issue_text": "输血后评价记录时间记录错误，记录时间早于输血时间",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "记录时间早于输血时间|输血后评价|输血后评价记录时间记录错误"
-    },
     {
       "sheet2_row_id": "Sheet2-R0117",
       "visit_id": "2097628",
@@ -377,6 +366,18 @@
       "blocked_reason_type": "证据链不足",
       "review_subgroup": "SC-008-查体专科-第一轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0077",
+      "visit_id": "2052129",
+      "patient_name": "胡启凤",
+      "issue_family": "输血时间/量/前后记录不一致",
+      "primary_rule_id": "SC-074",
+      "manual_issue_text": "输血后评价记录时间记录错误，记录时间早于输血时间",
+      "reason": "release/0426_full_auto 当前仅回收到一条 2025-10-29 04:49 落款的输血记录，正文覆盖 2025-10-28 22:10 至 2025-10-29 01:02 的冷沉淀/血浆输注过程；未回收到独立“输血后评价”文书，且现存记录时间并不早于输血结束时间，不能按人工问题“输血后评价记录时间早于输血时间”判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-074-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto bloodtrans_record snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0078",
@@ -1615,7 +1616,7 @@
       "skip": 3
     },
     "输血时间/量/前后记录不一致": {
-      "needs_exact_review": 1,
+      "blocked_with_reason": 1,
       "exact_confirmed": 3
     },
     "输血记录链缺失/不全": {
