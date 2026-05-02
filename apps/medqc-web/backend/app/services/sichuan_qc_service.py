@@ -1622,6 +1622,24 @@ class SichuanQCService:
                     score -= 70
             if "出院情况" in content:
                 score -= 60
+        elif normalized_rule_id == "SC-032" and content:
+            compact = re.sub(r"\s+", "", content)
+            if len(compact) < 180:
+                score += 80
+            weighted_patterns = (
+                ("医师签名:", 90),
+                ("医生签名:", 90),
+                ("查体同前", 80),
+                ("治疗方案上无特殊调整", 80),
+                ("继续原方案", 45),
+                ("密观", 35),
+                ("无具体内容", 30),
+            )
+            for keyword, weight in weighted_patterns:
+                if keyword in content:
+                    score += weight
+            if "出院医嘱" in content or "办理出院" in content:
+                score -= 60
         elif normalized_rule_id == "SC-026" and content:
             weighted_patterns = (
                 ("鉴别诊断", 120),
@@ -2978,6 +2996,351 @@ class SichuanQCService:
         return normalized
 
     @staticmethod
+    def _rule_input_combined_text(rule_input: RuleExecutionInput) -> str:
+        parts = [str(rule_input.primary_medical_text or "").strip()]
+        for item in list(rule_input.supporting_evidence or []):
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("evidence_text") or "").strip()
+            if text:
+                parts.append(text)
+        return "\n".join(part for part in parts if part)
+
+    @staticmethod
+    def _apply_sc032_thin_course_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id != "SC-032":
+            return engine_result
+
+        status = str(engine_result.get("status") or "").strip().lower()
+        primary_text = str(rule_input.primary_medical_text or "").strip()
+        combined_text = SichuanQCService._rule_input_combined_text(rule_input)
+        if status == "non_compliant" or not combined_text:
+            return engine_result
+
+        compact_primary = re.sub(r"\s+", "", primary_text)
+        source_documents = [dict(item) for item in list(rule_input.source_documents or []) if isinstance(item, dict)]
+        source_course_texts = []
+        for item in source_documents:
+            source_table = str(item.get("source_table") or item.get("document_type") or "").strip()
+            if source_table not in {"daily_course_record", "senior_course_record"}:
+                continue
+            text = str(item.get("content") or "").strip()
+            if text:
+                source_course_texts.append(text)
+        empty_shell_patterns = (
+            "医师签名:",
+            "医生签名:",
+            "查体同前",
+            "治疗方案上无特殊调整",
+            "继续原方案",
+            "密观",
+            "未诉其他不适",
+        )
+        has_empty_shell_record = any(pattern in combined_text for pattern in ("医师签名:\n", "医生签名:\n"))
+        has_source_thin_course = any(
+            len(re.sub(r"\s+", "", text)) < 180
+            and any(marker in text for marker in ("医师签名:", "医生签名:", "查体同前", "无特殊调整", "继续原方案", "密观"))
+            for text in source_course_texts
+        )
+        is_thin_primary = bool(primary_text) and len(compact_primary) < 180
+        has_thin_marker = any(pattern in combined_text for pattern in empty_shell_patterns)
+        has_course_context = any(token in combined_text for token in ("日常病程", "查房内容", "今日查房", "病程记录"))
+        if not (has_course_context and (has_empty_shell_record or has_source_thin_course or (is_thin_primary and has_thin_marker))):
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc032_thin_or_empty_course"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": "病程/查房记录存在空壳或过于简略表述，未充分记录患者病情变化、查体和诊疗经过。",
+                "evidence": (primary_text or combined_text)[:220],
+                "suggestion": "请补充当日症状体征、重点查体、病情变化判断及具体诊疗处理。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.82),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    @staticmethod
+    def _apply_sc070_consultation_execution_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id not in {"SC-070", "LX-016"}:
+            return engine_result
+
+        status = str(engine_result.get("status") or "").strip().lower()
+        if status == "non_compliant":
+            return engine_result
+        combined_text = SichuanQCService._rule_input_combined_text(rule_input)
+        source_documents = [dict(item) for item in list(rule_input.source_documents or []) if isinstance(item, dict)]
+        consultation_docs = [
+            str(item.get("content") or "").strip()
+            for item in source_documents
+            if str(item.get("source_table") or item.get("document_type") or "").strip() == "consultation_record"
+            and str(item.get("content") or "").strip()
+        ]
+        course_docs = [
+            str(item.get("content") or "").strip()
+            for item in source_documents
+            if str(item.get("source_table") or item.get("document_type") or "").strip()
+            in {"daily_course_record", "senior_course_record"}
+            and str(item.get("content") or "").strip()
+        ]
+        if not combined_text and consultation_docs:
+            combined_text = "\n".join(consultation_docs + course_docs)
+        if not combined_text or "会诊" not in combined_text:
+            return engine_result
+
+        empty_consultation_record = bool(re.search(r"会诊记录[^\n]{0,20}(?:医生签名|医师签名)\s*[:：]?\s*(?:\n|$)", combined_text))
+        has_consultation_without_execution_course = bool(consultation_docs) and not any("会诊" in text for text in course_docs)
+        generic_followed_only = any(token in combined_text for token in ("遵会诊意见执行", "遵执", "遵医嘱执行"))
+        has_specific_execution = any(
+            token in combined_text
+            for token in (
+                "已予",
+                "已执行",
+                "调整为",
+                "改用",
+                "停用",
+                "换用",
+                "复查",
+                "请药学",
+                "抗感染",
+                "万古霉素",
+                "哌拉西林",
+            )
+        )
+        if not (empty_consultation_record or has_consultation_without_execution_course or (generic_followed_only and not has_specific_execution)):
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc070_missing_or_generic_execution"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": "会诊相关记录为空壳，或仅写遵会诊意见执行，未记录具体执行措施。",
+                "evidence": combined_text[:240],
+                "suggestion": "请补充会诊意见的实际执行情况，包括用药、检查、复查、处置或未执行原因。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.84),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    @staticmethod
+    def _apply_sc039_critical_value_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id != "SC-039":
+            return engine_result
+        status = str(engine_result.get("status") or "").strip().lower()
+        if status == "non_compliant":
+            return engine_result
+        combined_text = SichuanQCService._rule_input_combined_text(rule_input)
+        if not combined_text:
+            return engine_result
+
+        has_critical_context = "危急值" in combined_text or bool(re.search(r"\bK\s*[:：]?\s*\d+(?:\.\d+)?\s*mmol/?l\b", combined_text, flags=re.I))
+        has_typo_or_incomplete = any(token in combined_text for token in ("接电脑危急值", "尽描写", "仅记录", "未写明原因"))
+        has_risk_level_change = "病危" in combined_text and "病重" in combined_text and any(token in combined_text for token in ("改为", "修改", "调整"))
+        if not (has_critical_context and (has_typo_or_incomplete or has_risk_level_change)):
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc039_critical_value_record_defect"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": "危急值处置记录存在明显错别字、记录过简或病危/病重变更原因不清，影响处置记录完整性。",
+                "evidence": combined_text[:240],
+                "suggestion": "请补充危急值报告时间、接收人、患者评估、具体处置、复查结果及病情等级变更原因。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.84),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    @staticmethod
+    def _apply_sc146_preop_order_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id != "SC-146":
+            return engine_result
+        status = str(engine_result.get("status") or "").strip().lower()
+        if status == "non_compliant":
+            return engine_result
+        combined_text = SichuanQCService._rule_input_combined_text(rule_input)
+        if not combined_text:
+            return engine_result
+        has_preop_timing_defect = (
+            ("术前小结" in combined_text or "术前讨论" in combined_text)
+            and ("手术医嘱" in combined_text or "手术" in combined_text)
+            and any(token in combined_text for token in ("之前", "早于", "已下达", "明日行"))
+        )
+        if not has_preop_timing_defect:
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "sc146_preop_order_before_record"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": "手术医嘱或手术安排早于术前小结/术前讨论等必要病程记录，存在诊疗记录时序不一致。",
+                "evidence": combined_text[:240],
+                "suggestion": "请核对术前小结、术前讨论、手术医嘱和病程记录时间顺序，并补充合理说明。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.84),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    @staticmethod
+    def _apply_preop_discussion_presence_fallback(
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id not in {"SC-083", "SC-084"}:
+            return engine_result
+        status = str(engine_result.get("status") or "").strip().lower()
+        if status == "non_compliant":
+            return engine_result
+
+        source_documents = [dict(item) for item in list(rule_input.source_documents or []) if isinstance(item, dict)]
+        presurg_discussions = [
+            str(item.get("content") or "").strip()
+            for item in source_documents
+            if str(item.get("source_table") or item.get("document_type") or "").strip() == "presurg_discussion"
+            and str(item.get("content") or "").strip()
+        ]
+        presurg_summaries = [
+            str(item.get("content") or "").strip()
+            for item in source_documents
+            if str(item.get("source_table") or item.get("document_type") or "").strip() == "presurg_summary"
+            and str(item.get("content") or "").strip()
+        ]
+        surgery_context = any(
+            str(item.get("content") or "").strip()
+            for item in source_documents
+            if str(item.get("source_table") or item.get("document_type") or "").strip() == "surgery_record"
+        )
+        if normalized_rule_id == "SC-083":
+            has_mdt_text = any(("多学科" in text or "MDT" in text.upper()) for text in presurg_discussions + presurg_summaries)
+            if presurg_discussions and has_mdt_text:
+                return engine_result
+            if not surgery_context and not presurg_summaries:
+                return engine_result
+            finding = "未检测到术前讨论/MDT记录正文，或术前讨论记录未体现多学科讨论。"
+            evidence = "术前讨论正文缺失" if not presurg_discussions else (presurg_discussions[0][:220])
+        else:
+            if not presurg_discussions:
+                if not surgery_context and not presurg_summaries:
+                    return engine_result
+                finding = "未检测到术前讨论记录正文，无法体现术前讨论结论。"
+                evidence = "术前讨论正文缺失"
+            else:
+                discussion_text = "\n".join(presurg_discussions)
+                missing_fields = [field for field in ("手术时间", "手术医生", "术者", "主刀") if field not in discussion_text]
+                if not missing_fields:
+                    return engine_result
+                finding = "术前讨论记录缺少手术时间或手术医生等关键结论要素。"
+                evidence = discussion_text[:220]
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "preop_discussion_presence_or_key_fields"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": finding,
+                "evidence": evidence,
+                "suggestion": "请补齐术前讨论/MDT记录，并明确讨论结论、手术时间、术者及关键诊疗意见。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.84),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    def _apply_lx020_preop_round_order_fallback(
+        self,
+        *,
+        rule_input: RuleExecutionInput,
+        engine_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_rule_id = str(rule_input.rule_id or "").strip().upper()
+        if normalized_rule_id not in {"LX-020", "SC-086"}:
+            return engine_result
+        status = str(engine_result.get("status") or "").strip().lower()
+        if status == "non_compliant":
+            return engine_result
+
+        preop_round_events = self._extract_sc146_preop_round_events(rule_input.source_documents)
+        preop_summary_events = [
+            item
+            for item in self._extract_sc146_preop_events(rule_input.source_documents)
+            if str(item.get("source_table") or "").strip() == "presurg_summary"
+        ]
+        if not preop_round_events or not preop_summary_events:
+            return engine_result
+        earliest_round = preop_round_events[0]
+        earliest_summary = preop_summary_events[0]
+        if earliest_round["parsed_time"] <= earliest_summary["parsed_time"]:
+            return engine_result
+
+        normalized = dict(engine_result)
+        metadata = dict(normalized.get("metadata") or {})
+        metadata["llm_fallback"] = True
+        metadata["decision_fallback"] = "lx020_preop_round_after_summary"
+        normalized.update(
+            {
+                "is_compliant": False,
+                "status": "non_compliant",
+                "findings": (
+                    f"术前主刀/上级查房时间晚于术前小结：{earliest_round['document_title']} "
+                    f"{earliest_round['display_time']}，晚于 {earliest_summary['document_title']} {earliest_summary['display_time']}。"
+                ),
+                "evidence": (
+                    f"术前查房：{earliest_round['document_title']} @ {earliest_round['display_time']}；"
+                    f"术前小结：{earliest_summary['document_title']} @ {earliest_summary['display_time']}。"
+                ),
+                "suggestion": "请核对术前查房与术前小结时间顺序，确保术前小结不早于其所回顾的术前查房。",
+                "confidence": max(float(normalized.get("confidence") or 0.0), 0.88),
+                "metadata": metadata,
+            }
+        )
+        return normalized
+
+    @staticmethod
     def _apply_sc026_text_only_fallback(
         *,
         rule_input: RuleExecutionInput,
@@ -3269,6 +3632,18 @@ class SichuanQCService:
             rule_input=rule_input,
             engine_result=normalized,
         )
+        normalized = self._apply_sc032_thin_course_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
+        normalized = self._apply_sc070_consultation_execution_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
+        normalized = self._apply_sc039_critical_value_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
         normalized = self._apply_sc026_text_only_fallback(
             rule_input=rule_input,
             engine_result=normalized,
@@ -3277,6 +3652,18 @@ class SichuanQCService:
             rule_input=rule_input,
             engine_result=normalized,
             surgery_bundle=surgery_bundle,
+        )
+        normalized = self._apply_sc146_preop_order_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
+        normalized = self._apply_preop_discussion_presence_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
+        )
+        normalized = self._apply_lx020_preop_round_order_fallback(
+            rule_input=rule_input,
+            engine_result=normalized,
         )
         normalized = self._apply_copy_content_semantic_fallback(
             rule_input=rule_input,

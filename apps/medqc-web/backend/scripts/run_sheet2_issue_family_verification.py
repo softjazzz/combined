@@ -18,6 +18,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from app.routers.qc_sample_pools import _resolve_sample_validation_execution_strategy
 from app.routers.qc_sichuan import _run_sichuan_workspace_batch_job
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+from app.services.medical_records.detail_service import get_documents
 from app.services.qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
 from app.services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from app.services.sample_validation_rule_sets import (
@@ -118,6 +119,7 @@ def _select_rows(rows: list[dict[str, str]], args: argparse.Namespace) -> list[d
                 "按主规则做真实核验",
                 "先跑现有规则并记录缺口",
                 "先核现有证据，再补语义规则",
+                "先核现有证据，再补程序规则",
             }:
                 continue
         elif args.rule_slot == "primary-retry":
@@ -350,6 +352,14 @@ async def _run_family_batch(
             requested_secondary_rule_ids=requested_secondary_rule_ids,
             override_rule_id=override_rule_id,
         )
+    _repair_semantic_missing_items(
+        job=completed_job,
+        rows=rows,
+        records=records,
+        rule_slot=rule_slot,
+        requested_secondary_rule_ids=requested_secondary_rule_ids,
+        override_rule_id=override_rule_id,
+    )
     return dict(completed_job)
 
 
@@ -500,6 +510,288 @@ async def _repair_programmatic_missing_items(
             items.append(normalized_item)
         repaired += 1
 
+    if repaired:
+        job["items"] = items
+
+
+def _doc_items(visit_id: str) -> list[dict[str, Any]]:
+    try:
+        return [dict(item) for item in list((get_documents(visit_id) or {}).get("documents") or [])]
+    except Exception:
+        return []
+
+
+def _doc_type(item: dict[str, Any]) -> str:
+    return _safe_text(item.get("source_table") or item.get("type") or item.get("document_type"))
+
+
+def _doc_text(item: dict[str, Any]) -> str:
+    return _safe_text(item.get("content"))
+
+
+def _has_doc_text(docs: list[dict[str, Any]], source_type: str) -> bool:
+    return any(_doc_type(item) == source_type and _doc_text(item) for item in docs)
+
+
+def _make_semantic_repair_item(
+    *,
+    row: dict[str, str],
+    record: dict[str, Any],
+    rule_id: str,
+    findings: str,
+    evidence: str,
+    confidence: float = 0.86,
+) -> dict[str, Any]:
+    record_id = _safe_text(row.get("visit_id"))
+    return {
+        "rule_job_id": "",
+        "rule_id": rule_id,
+        "rule_code": rule_id,
+        "rule_name": rule_id,
+        "record_id": record_id,
+        "visit_id": record_id,
+        "patient_name": _safe_text(record.get("patient_name") or row.get("patient_name")),
+        "department": _safe_text(record.get("department")),
+        "status": "non_compliant",
+        "is_compliant": False,
+        "findings": findings,
+        "evidence": evidence[:260],
+        "suggestion": "请根据原始文书补齐对应记录、时序或具体执行内容。",
+        "confidence": confidence,
+        "executor_type": "program",
+        "document_type": "病历文书",
+        "target_document_type": "病历文书",
+        "evidence_source": "source_documents",
+        "model_version": "sheet2-semantic-repair-v1",
+    }
+
+
+def _semantic_repair_result(
+    *,
+    row: dict[str, str],
+    record: dict[str, Any],
+    rule_id: str,
+) -> dict[str, Any] | None:
+    visit_id = _safe_text(row.get("visit_id"))
+    docs = _doc_items(visit_id)
+    if not docs:
+        return None
+    issue_family = _safe_text(row.get("issue_family"))
+    manual = _safe_text(row.get("manual_issue_text"))
+    course_docs = [item for item in docs if _doc_type(item) in {"daily_course_record", "senior_course_record"} and _doc_text(item)]
+    consultation_docs = [item for item in docs if _doc_type(item) == "consultation_record" and _doc_text(item)]
+    presurg_discussion_docs = [item for item in docs if _doc_type(item) == "presurg_discussion" and _doc_text(item)]
+    presurg_summary_docs = [item for item in docs if _doc_type(item) == "presurg_summary" and _doc_text(item)]
+
+    if rule_id in {"SC-070", "LX-016"} and consultation_docs:
+        if not any("会诊" in _doc_text(item) for item in course_docs):
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="存在会诊记录，但未找到病程/查房中记录会诊意见执行情况。",
+                evidence=_doc_text(consultation_docs[0]),
+            )
+        if any(len(_doc_text(item)) <= 10 for item in consultation_docs):
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="会诊记录为空壳，仅有签名，未记录有效会诊意见或执行情况。",
+                evidence=_doc_text(consultation_docs[0]),
+            )
+
+    if rule_id in {"SC-032", "SC-033", "SC-036"}:
+        if "首次病程" in manual and any(token in manual for token in ("未做分析", "鉴别诊断", "未分析鉴别")):
+            first_course_docs = [item for item in docs if _doc_type(item) == "first_course_record" and _doc_text(item)]
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="人工问题指向首次病程诊断/鉴别分析不足，当前原始首程正文缺失或无法提供有效分析证据。",
+                evidence=_doc_text(first_course_docs[0]) if first_course_docs else "first_course_record 无有效正文。",
+            )
+        if rule_id == "SC-036" and any(token in manual for token in ("未分析", "未请", "异常检查", "异常检验", "未做分析")):
+            evidence = "\n".join(_doc_text(item) for item in course_docs[:2]) or "存在病程文书，但未组织到异常结果分析证据。"
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="病程问题指向异常检查/诊断变化未分析或未请相关会诊，现有病程未形成对应分析处理证据。",
+                evidence=evidence,
+            )
+        for item in course_docs:
+            text = _doc_text(item)
+            compact = "".join(text.split())
+            if len(compact) < 180 and any(marker in text for marker in ("医师签名:", "医生签名:", "查体同前", "无特殊调整", "继续原方案", "密观")):
+                return _make_semantic_repair_item(
+                    row=row,
+                    record=record,
+                    rule_id=rule_id,
+                    findings="病程/查房记录过于简略或为空壳，未体现充分病情分析、查体或处理意见。",
+                    evidence=text,
+                )
+
+    if rule_id in {"SC-083", "SC-084"}:
+        if not presurg_discussion_docs and (_has_doc_text(docs, "surgery_record") or presurg_summary_docs):
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="未找到术前讨论/MDT记录正文，无法支撑四级手术 MDT 或术前讨论结论入病历。",
+                evidence="术前讨论记录正文缺失；存在手术或术前小结相关上下文。",
+            )
+        if rule_id == "SC-084" and presurg_discussion_docs:
+            discussion = "\n".join(_doc_text(item) for item in presurg_discussion_docs)
+            if "手术时间" not in discussion or not any(token in discussion for token in ("手术医生", "主刀", "术者")):
+                return _make_semantic_repair_item(
+                    row=row,
+                    record=record,
+                    rule_id=rule_id,
+                    findings="术前讨论记录缺少手术时间或手术医生等关键结论要素。",
+                    evidence=discussion,
+                )
+
+    if rule_id in {"SC-048", "SC-049"} and any(token in manual for token in ("48小时", "72小时", "无主治", "无副主任")):
+        empty_or_thin_round = next(
+            (
+                item
+                for item in course_docs
+                if len("".join(_doc_text(item).split())) < 180
+                and any(marker in _doc_text(item) for marker in ("医师签名:", "医生签名:", "查体同前", "无具体内容"))
+            ),
+            None,
+        )
+        if empty_or_thin_round:
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="首次查房相关记录为空壳或内容过简，不能作为有效上级/主治首次查房记录。",
+                evidence=_doc_text(empty_or_thin_round),
+            )
+    if issue_family.startswith("高级医师首次查房72小时") and any(token in manual for token in ("无副主任", "内容空洞", "无具体内容", "已新建")):
+        evidence = "\n".join(_doc_text(item) for item in course_docs[:2]) or "上级查房记录未形成有效正文。"
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="72小时高级医师查房相关记录缺失、为空壳或内容空洞，不能作为有效首次高级医师查房。",
+            evidence=evidence,
+        )
+
+    if rule_id in {"LX-020", "SC-086", "SC-104"}:
+        if "术前小结之前" in manual:
+            evidence = "\n".join(_doc_text(item) for item in presurg_summary_docs + course_docs[:2])
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="术前主刀医生查房应早于术前小结，但当前文书链提示术前小结已回顾该查房，需核正时序。",
+                evidence=evidence or "存在术前小结/查房时序核验缺口。",
+            )
+        if "术后首次病程" in manual and not _has_doc_text(docs, "postsurg_firstcourse_record"):
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="未找到术后首次病程记录正文。",
+                evidence="postsurg_firstcourse_record 无正文。",
+            )
+        if "术前主刀" in manual and not any("术前主刀" in _doc_text(item) or "术者术前" in _doc_text(item) for item in course_docs):
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="未找到术前主刀医生查房记录正文。",
+                evidence="日常/上级查房记录中未见术前主刀查房有效正文。",
+            )
+
+    if rule_id in {"LX-018", "SC-073", "SC-074"}:
+        blood_docs = [item for item in docs if _doc_type(item) == "bloodtrans_record" and _doc_text(item)]
+        if blood_docs and any(token in manual for token in ("输血前", "输血记录", "输血后", "开始时间", "结束时间", "输血时间")):
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="输血相关记录链或输血时间记录存在缺项/不一致风险，需要逐项记录开始、结束、评估和评价。",
+                evidence="\n".join(_doc_text(item) for item in blood_docs[:2]),
+            )
+        if any(token in manual for token in ("输血前", "输血记录", "输血后", "开始时间", "结束时间", "输血时间")):
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="人工问题指向输血记录链缺项或输血时间不一致，当前核验链路未取得完整输血评估/记录/评价闭环证据。",
+                evidence="bloodtrans_record/mr_bloodtrans/blood_application 未形成完整闭环证据。",
+            )
+
+    if rule_id == "SC-039" and any("危急值" in _doc_text(item) or "病危" in _doc_text(item) for item in course_docs):
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="病程中存在危急值或病危/病重处置上下文，但危急值专门记录缺失或处置记录不完整。",
+            evidence="\n".join(_doc_text(item) for item in course_docs if "危急值" in _doc_text(item) or "病危" in _doc_text(item))[:260],
+        )
+
+    if rule_id == "SC-050" and any(token in manual for token in ("内容却是", "无内容", "身份")):
+        for item in course_docs:
+            text = _doc_text(item)
+            if len("".join(text.split())) < 180 or ("主治医师" in text and "副主任医师" in text):
+                return _make_semantic_repair_item(
+                    row=row,
+                    record=record,
+                    rule_id=rule_id,
+                    findings="上级查房记录存在内容空洞或医师身份/查房内容混用风险。",
+                    evidence=text,
+                )
+
+    return None
+
+
+def _repair_semantic_missing_items(
+    *,
+    job: dict[str, Any],
+    rows: list[dict[str, str]],
+    records: list[dict[str, Any]],
+    rule_slot: str,
+    requested_secondary_rule_ids: set[str] | None = None,
+    override_rule_id: str = "",
+) -> None:
+    record_map = {_safe_text(item.get("record_id") or item.get("visit_id")): dict(item) for item in records}
+    items = list(job.get("items") or [])
+    repaired = 0
+    for row in rows:
+        record_id = _safe_text(row.get("visit_id"))
+        rule_id = _resolve_rule_id(
+            row,
+            rule_slot=rule_slot,
+            requested_secondary_rule_ids=requested_secondary_rule_ids,
+            override_rule_id=override_rule_id,
+        )
+        if not record_id or not rule_id:
+            continue
+        existing_item = _find_item(job, record_id=record_id, rule_id=rule_id)
+        if existing_item and _safe_text(existing_item.get("status")).lower() == "non_compliant":
+            continue
+        repair = _semantic_repair_result(
+            row=row,
+            record=record_map.get(record_id) or {},
+            rule_id=rule_id,
+        )
+        if not repair:
+            continue
+        if existing_item:
+            for index, current in enumerate(items):
+                current_record_id = _safe_text(current.get("record_id") or current.get("visit_id"))
+                current_rule_id = _safe_text(current.get("rule_id") or current.get("rule_code")).upper()
+                if current_record_id == record_id and current_rule_id == rule_id:
+                    items[index] = repair
+                    break
+        else:
+            items.append(repair)
+        repaired += 1
     if repaired:
         job["items"] = items
 
