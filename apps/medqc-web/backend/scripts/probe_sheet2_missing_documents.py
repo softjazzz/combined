@@ -377,6 +377,12 @@ def _infer_document_groups(row: dict[str, Any]) -> list[DocumentGroup]:
     rule_ids = _split_rule_ids(row)
     groups: list[DocumentGroup] = []
 
+    if rule_ids & {"SC-008", "SC-009", "SC-010", "SC-011", "SC-012", "SC-013", "SC-018", "SC-019", "SC-020"}:
+        _append_group(
+            groups,
+            logical_type="入院记录",
+            primary_tables=("admission_record",),
+        )
     if rule_ids & {"SC-021", "SC-022", "SC-023", "SC-024", "SC-025", "SC-026", "SC-027"}:
         _append_group(
             groups,
@@ -500,101 +506,124 @@ def _infer_document_groups(row: dict[str, Any]) -> list[DocumentGroup]:
         )
 
     # 对 manual_review 或缺主规则条目，优先按原文关键词兜底。
-    if _contains_any(issue_text + issue_family, ("危急值",)):
+    combined_text = issue_text + issue_family
+    if _contains_any(
+        combined_text,
+        (
+            "入院记录",
+            "主诉",
+            "现病史",
+            "既往史",
+            "体格检查",
+            "专科检查",
+            "入院诊断",
+            "初步诊断",
+            "院外辅助检查",
+            "喂养史",
+            "月经史",
+            "婚育史",
+            "受伤地点",
+        ),
+    ) or issue_family == "入院记录内容不完整/前后矛盾":
+        _append_group(
+            groups,
+            logical_type="入院记录",
+            primary_tables=("admission_record",),
+        )
+    if _contains_any(combined_text, ("危急值",)):
         _append_group(
             groups,
             logical_type="危急值记录",
             primary_tables=("crisis_value_record",),
             fallback_tables=("daily_course_record", "senior_course_record"),
         )
-    if _contains_any(issue_text + issue_family, ("输血",)):
+    if _contains_any(combined_text, ("输血",)):
         _append_group(
             groups,
             logical_type="输血相关文书",
             primary_tables=("bloodtrans_record", "mr_bloodtrans", "blood_application"),
             fallback_tables=("daily_course_record",),
         )
-    if _contains_any(issue_text + issue_family, ("会诊执行", "遵会诊意见", "遵执")):
+    if _contains_any(combined_text, ("会诊执行", "遵会诊意见", "遵执")):
         _append_group(
             groups,
             logical_type="会诊执行证据",
             primary_tables=("consultation_record",),
             fallback_tables=("daily_course_record",),
         )
-    elif _contains_any(issue_text + issue_family, ("会诊",)):
+    elif _contains_any(combined_text, ("会诊",)):
         _append_group(
             groups,
             logical_type="会诊记录",
             primary_tables=("consultation_record",),
             fallback_tables=("daily_course_record",),
         )
-    if _contains_any(issue_text + issue_family, ("术前小结",)):
+    if _contains_any(combined_text, ("术前小结",)):
         _append_group(
             groups,
             logical_type="术前小结",
             primary_tables=("presurg_summary",),
             fallback_tables=("presurg_discussion", "surgery_record"),
         )
-    if _contains_any(issue_text + issue_family, ("术前讨论", "MDT", "多学科讨论")):
+    if _contains_any(combined_text, ("术前讨论", "MDT", "多学科讨论")):
         _append_group(
             groups,
             logical_type="术前讨论",
             primary_tables=("presurg_discussion",),
             fallback_tables=("presurg_summary", "surgery_record"),
         )
-    if _contains_any(issue_text + issue_family, ("手术同意书", "知情同意", "授权受托人", "知情沟通")):
+    if _contains_any(combined_text, ("手术同意书", "知情同意", "授权受托人", "知情沟通")):
         _append_group(
             groups,
             logical_type="知情同意书/知情沟通",
             primary_tables=("surgery_inform_consent", "docpat_commu_record"),
         )
-    if _contains_any(issue_text + issue_family, ("术后首次病程", "麻醉术后访视")):
+    if _contains_any(combined_text, ("术后首次病程", "麻醉术后访视")):
         _append_group(
             groups,
             logical_type="术后首次病程/麻醉术后访视",
             primary_tables=("postsurg_firstcourse_record", "postane_surveil_record"),
             fallback_tables=("surgery_record", "daily_course_record"),
         )
-    if _contains_any(issue_text + issue_family, ("手术记录", "有创操作", "清创", "穿刺", "胸腔闭式引流")):
+    if _contains_any(combined_text, ("手术记录", "有创操作", "清创", "穿刺", "胸腔闭式引流")):
         _append_group(
             groups,
             logical_type="手术/操作记录",
             primary_tables=("surgery_record",),
             fallback_tables=("presurg_summary", "postsurg_firstcourse_record"),
         )
-    if _contains_any(issue_text + issue_family, ("交接班", "交班记录", "接班记录")):
+    if _contains_any(combined_text, ("交接班", "交班记录", "接班记录")):
         _append_group(
             groups,
             logical_type="交接班记录",
             primary_tables=("handoff_record", "handover_record"),
         )
-    if _contains_any(issue_text + issue_family, ("转入记录", "转出记录", "转科")):
+    if _contains_any(combined_text, ("转入记录", "转出记录", "转科")):
         _append_group(
             groups,
             logical_type="转科记录",
             primary_tables=("transfer_in_record", "transfer_out_record"),
         )
-    if _contains_any(issue_text + issue_family, ("出院记录",)):
+    if _contains_any(combined_text, ("出院记录",)):
         _append_group(
             groups,
             logical_type="出院记录",
             primary_tables=("discharge_record",),
         )
-    if _contains_any(issue_text + issue_family, ("首次病程",)):
+    if _contains_any(combined_text, ("首次病程",)):
         _append_group(
             groups,
             logical_type="首次病程记录",
             primary_tables=("first_course_record",),
             fallback_tables=("senior_course_record", "daily_course_record"),
         )
-    if _contains_any(issue_text + issue_family, ("查房", "上级医师")) and "会诊" not in issue_text:
+    if _contains_any(combined_text, ("查房", "上级医师")) and "会诊" not in issue_text:
         _append_group(
             groups,
             logical_type="上级医师查房记录",
             primary_tables=("senior_course_record",),
             fallback_tables=("daily_course_record",),
         )
-    combined_text = issue_text + issue_family
     has_daily_course_keyword = _contains_any(combined_text, ("日常病程", "无病程", "后无病程", "病程查房记录"))
     if "病程记录" in combined_text and not _contains_any(combined_text, ("首次病程记录", "术后首次病程记录")):
         has_daily_course_keyword = True

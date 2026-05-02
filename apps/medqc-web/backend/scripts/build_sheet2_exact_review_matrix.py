@@ -15,6 +15,9 @@ LEDGER_CSV = QC_DIR / "sheet2_verification_ledger_seed.csv"
 OUTPUT_CSV = QC_DIR / "sheet2_exact_review_matrix.csv"
 OUTPUT_JSON = QC_DIR / "sheet2_exact_review_summary.json"
 OUTPUT_MD = QC_DIR / "2026-05-02-Sheet2全量精确复核矩阵.md"
+OVERRIDE_CSV = QC_DIR / "sheet2_exact_review_overrides.csv"
+
+ALLOWED_OVERRIDE_STATUSES = {"exact_confirmed", "skip", "blocked_with_reason"}
 
 GENERIC_EVIDENCE_MARKERS = (
     "人工问题指向",
@@ -179,6 +182,26 @@ def _load_rows() -> list[dict[str, str]]:
         return [dict(row) for row in csv.DictReader(handle)]
 
 
+def _load_overrides() -> dict[str, dict[str, str]]:
+    if not OVERRIDE_CSV.exists():
+        return {}
+    with OVERRIDE_CSV.open("r", encoding="utf-8-sig", newline="") as handle:
+        overrides: dict[str, dict[str, str]] = {}
+        for row in csv.DictReader(handle):
+            row_id = _safe_text(row.get("sheet2_row_id"))
+            status = _safe_text(row.get("exact_review_status"))
+            if not row_id or status not in ALLOWED_OVERRIDE_STATUSES:
+                continue
+            overrides[row_id] = {
+                "exact_review_status": status,
+                "exact_review_reason": _safe_text(row.get("exact_review_reason")),
+                "blocked_reason_type": _safe_text(row.get("blocked_reason_type")),
+                "review_subgroup": _safe_text(row.get("review_subgroup")),
+                "decision_source": _safe_text(row.get("decision_source")),
+            }
+        return overrides
+
+
 def _write_csv(rows: list[dict[str, str]]) -> None:
     fieldnames = [
         "sheet2_row_id",
@@ -190,6 +213,9 @@ def _write_csv(rows: list[dict[str, str]]) -> None:
         "verification_status",
         "exact_review_status",
         "exact_review_reason",
+        "blocked_reason_type",
+        "review_subgroup",
+        "decision_source",
         "anchor_hits",
         "anchor_misses",
         "evidence_summary",
@@ -225,6 +251,22 @@ def _write_json_and_md(rows: list[dict[str, str]]) -> None:
             for row in rows
             if row["exact_review_status"] == "needs_exact_review"
         ],
+        "blocked_with_reason_rows": [
+            {
+                "sheet2_row_id": row["sheet2_row_id"],
+                "visit_id": row["visit_id"],
+                "patient_name": row["patient_name"],
+                "issue_family": row["issue_family"],
+                "primary_rule_id": row["primary_rule_id"],
+                "manual_issue_text": row["manual_issue_text"],
+                "reason": row["exact_review_reason"],
+                "blocked_reason_type": row["blocked_reason_type"],
+                "review_subgroup": row["review_subgroup"],
+                "decision_source": row["decision_source"],
+            }
+            for row in rows
+            if row["exact_review_status"] == "blocked_with_reason"
+        ],
         "family_breakdown": {
             family: dict(counter)
             for family, counter in sorted(family_counter.items(), key=lambda item: item[0])
@@ -252,11 +294,12 @@ def _write_json_and_md(rows: list[dict[str, str]]) -> None:
             "- `exact_confirmed`：原本就是 `exact_hit`，或证据摘要覆盖人工问题核心锚点。",
             "- `needs_exact_review`：原命中同问题族，但证据摘要未覆盖人工问题核心锚点，需补 prompt/证据或人工复核。",
             "- `skip`：源文书缺失或人工问题原文为空。",
+            "- `blocked_with_reason`：已核到原始文书，但因规则不支持、证据链不足或人工问题原文不可判，暂不能判 exact。",
             "",
             "## 待精确复核问题族",
             "",
-            "| issue_family | needs_exact_review | exact_confirmed | skip |",
-            "| --- | ---: | ---: | ---: |",
+            "| issue_family | needs_exact_review | exact_confirmed | skip | blocked_with_reason |",
+            "| --- | ---: | ---: | ---: | ---: |",
         ]
     )
     for family, counter in sorted(
@@ -268,7 +311,8 @@ def _write_json_and_md(rows: list[dict[str, str]]) -> None:
             continue
         lines.append(
             f"| {family} | {int(counter.get('needs_exact_review') or 0)} | "
-            f"{int(counter.get('exact_confirmed') or 0)} | {int(counter.get('skip') or 0)} |"
+            f"{int(counter.get('exact_confirmed') or 0)} | {int(counter.get('skip') or 0)} | "
+            f"{int(counter.get('blocked_with_reason') or 0)} |"
         )
 
     lines.extend(["", "## 待精确复核明细", "", "| row_id | visit_id | patient | rule | issue_family | reason |", "| --- | --- | --- | --- | --- | --- |"])
@@ -280,14 +324,42 @@ def _write_json_and_md(rows: list[dict[str, str]]) -> None:
                 **row
             )
         )
+    blocked_rows = [row for row in rows if row["exact_review_status"] == "blocked_with_reason"]
+    if blocked_rows:
+        lines.extend(
+            [
+                "",
+                "## 已阻塞条目",
+                "",
+                "| row_id | visit_id | patient | blocked_reason_type | review_subgroup | reason |",
+                "| --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for row in blocked_rows:
+            lines.append(
+                "| {sheet2_row_id} | {visit_id} | {patient_name} | {blocked_reason_type} | {review_subgroup} | {exact_review_reason} |".format(
+                    **row
+                )
+            )
     OUTPUT_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main() -> int:
     rows = _load_rows()
+    overrides = _load_overrides()
     output_rows: list[dict[str, str]] = []
     for row in rows:
         status, reason, anchor_hits, anchor_misses = _review_status(row)
+        override = overrides.get(_safe_text(row.get("sheet2_row_id")))
+        blocked_reason_type = ""
+        review_subgroup = ""
+        decision_source = ""
+        if override:
+            status = override["exact_review_status"]
+            reason = override["exact_review_reason"] or reason
+            blocked_reason_type = override["blocked_reason_type"]
+            review_subgroup = override["review_subgroup"]
+            decision_source = override["decision_source"]
         output_rows.append(
             {
                 "sheet2_row_id": _safe_text(row.get("sheet2_row_id")),
@@ -299,6 +371,9 @@ def main() -> int:
                 "verification_status": _safe_text(row.get("verification_status")),
                 "exact_review_status": status,
                 "exact_review_reason": reason,
+                "blocked_reason_type": blocked_reason_type,
+                "review_subgroup": review_subgroup,
+                "decision_source": decision_source,
                 "anchor_hits": "|".join(anchor_hits),
                 "anchor_misses": "|".join(anchor_misses),
                 "evidence_summary": _safe_text(row.get("evidence_summary")),

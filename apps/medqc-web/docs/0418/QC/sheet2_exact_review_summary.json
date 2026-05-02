@@ -1,9 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 100,
-    "needs_exact_review": 168,
-    "skip": 15
+    "exact_confirmed": 101,
+    "needs_exact_review": 160,
+    "blocked_with_reason": 5,
+    "skip": 17
   },
   "needs_exact_review_rows": [
     {
@@ -18,17 +19,6 @@
       "anchor_misses": "使用抗菌药物治疗的患者|依普林|左氧氟沙星氯化钠注射液"
     },
     {
-      "sheet2_row_id": "Sheet2-R0010",
-      "visit_id": "1430048",
-      "patient_name": "任利",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
-      "manual_issue_text": "入院记录-体格检查缺体重",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "体格检查缺体重|体重"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0015",
       "visit_id": "1880060",
       "patient_name": "陈意明",
@@ -38,17 +28,6 @@
       "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "入院记录中未记录患儿喂养史|喂养史"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0016",
-      "visit_id": "1891128",
-      "patient_name": "徐朝华",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
-      "manual_issue_text": "入院记录中无专科检查",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "专科检查|入院记录中无专科检查"
     },
     {
       "sheet2_row_id": "Sheet2-R0017",
@@ -458,17 +437,6 @@
       "anchor_misses": "BP151/121mmHg|入院查体无专科情况描述|患者入院时|未提出诊疗计划|首次病程中未做分析"
     },
     {
-      "sheet2_row_id": "Sheet2-R0075",
-      "visit_id": "2049419",
-      "patient_name": "陈巧",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
-      "manual_issue_text": "入院记录中，既往口服易善复，未明确具体剂量，孕期体重增加1公斤，记录不准确。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "体重|入院记录中|剂量|孕期体重增加|既往口服易善复|未明确具体剂量|记录不准确"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0076",
       "visit_id": "2048454",
       "patient_name": "陈祖佑",
@@ -755,17 +723,6 @@
       "anchor_misses": "小时内|未做分析鉴别|血精的常见病因精囊结石及精囊结核|首次病程鉴别诊断中"
     },
     {
-      "sheet2_row_id": "Sheet2-R0118",
-      "visit_id": "2097761",
-      "patient_name": "张成燕",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
-      "manual_issue_text": "患者行剖宫产2次，体格检查中腹部情况未做相关描述。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "体格检查中腹部情况未做相关描述|患者行剖宫产"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0119",
       "visit_id": "2092076",
       "patient_name": "刘友琼",
@@ -909,17 +866,6 @@
       "anchor_misses": "专科检查|体格检查中对瞳孔的描述与专科检查中对瞳孔的描述不一致|婚育情况不详与患者神志清楚相矛盾|用药"
     },
     {
-      "sheet2_row_id": "Sheet2-R0143",
-      "visit_id": "2153245",
-      "patient_name": "杜心烨",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
-      "manual_issue_text": "体格检查中，双膝部外伤未详细记录，超过24小时未录入主诊断。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "体格检查中|小时未录入主诊断"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0144",
       "visit_id": "2150972",
       "patient_name": "刘曦",
@@ -1061,17 +1007,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "术后首次病程记录中手术时间与实际手术时间不一致"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0167",
-      "visit_id": "200245",
-      "patient_name": "徐玉彬",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
-      "manual_issue_text": "入院记录体格检查中生命体征处患者“轮椅入病房”，但在一般状况检查中描述为“步入病房”前后不一致",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "但在一般状况检查中描述为|入院记录体格检查中生命体征处患者|前后不一致|步入病房|轮椅入病房"
     },
     {
       "sheet2_row_id": "Sheet2-R0169",
@@ -1437,17 +1372,6 @@
       "anchor_misses": "10+|主诉书写内涵错误|既往史患者诊断慢性胃炎的时间及用药情况未明确|检查发现右侧真菌性鼻窦炎|用药|而患者主要症状为面部疼痛不适伴右侧头部疼痛不适"
     },
     {
-      "sheet2_row_id": "Sheet2-R0223",
-      "visit_id": "2229247",
-      "patient_name": "陈正权",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
-      "manual_issue_text": "入院诊断疼痛，诊断不准确，专科查体中显示主被动活动受限，但入院诊断未体现",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "专科查体中显示主被动活动受限|但入院诊断未体现|入院诊断疼痛|诊断不准确"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0224",
       "visit_id": "2268827",
       "patient_name": "朱敦群",
@@ -1657,17 +1581,6 @@
       "anchor_misses": "现病史中无患者一般情况描述"
     },
     {
-      "sheet2_row_id": "Sheet2-R0261",
-      "visit_id": "371729",
-      "patient_name": "朱恩富",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
-      "manual_issue_text": "体格检查中写四肢各关节活动自如，后面又记录肌力检查不配合，疼痛刺激可见四肢活动，前后不相符",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "体格检查中写四肢各关节活动自如|前后不相符|后面又记录肌力检查不配合|疼痛刺激可见四肢活动"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0262",
       "visit_id": "2300354",
       "patient_name": "刘德荣",
@@ -1855,6 +1768,68 @@
       "anchor_misses": "内容却是郑凤金主治医师查房的相关处理"
     }
   ],
+  "blocked_with_reason_rows": [
+    {
+      "sheet2_row_id": "Sheet2-R0010",
+      "visit_id": "1430048",
+      "patient_name": "任利",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院记录-体格检查缺体重",
+      "reason": "release/0426 admission_record.checkup 已明确记录“体重68.5kg 身高160cm”，人工问题与原始文书冲突，不能判定为 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-查体专科-第一轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0075",
+      "visit_id": "2049419",
+      "patient_name": "陈巧",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院记录中，既往口服易善复，未明确具体剂量，孕期体重增加1公斤，记录不准确。",
+      "reason": "release/0426 admission_record 只能证实“易善复 1粒 tid”未写毫克剂量；“孕期体重增加1公斤记录不准确”缺基线证据，整条不能判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-查体专科-第一轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0118",
+      "visit_id": "2097761",
+      "patient_name": "张成燕",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "患者行剖宫产2次，体格检查中腹部情况未做相关描述。",
+      "reason": "release/0426 admission_record 腹部查体已记录腹部膨隆及耻骨联合上剖宫产瘢痕，人工问题与原始文书冲突，不能判定为 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-查体专科-第一轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0143",
+      "visit_id": "2153245",
+      "patient_name": "杜心烨",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "体格检查中，双膝部外伤未详细记录，超过24小时未录入主诊断。",
+      "reason": "release/0426 admission_record 已记录双侧膝部擦伤及局部情况，但“超过24小时未录入主诊断”需额外诊断时序证据，当前快照链不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-查体专科-第一轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0223",
+      "visit_id": "2229247",
+      "patient_name": "陈正权",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院诊断疼痛，诊断不准确，专科查体中显示主被动活动受限，但入院诊断未体现",
+      "reason": "release/0426 admission_record 可见“活动受限”病史线索，但快照未提供可核对的入院诊断字段及专科查体正文，证据链不足，不能判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-查体专科-第一轮",
+      "decision_source": "release/0426 admission_record + probe"
+    }
+  ],
   "family_breakdown": {
     "上级医师查房缺失/未及时书写": {
       "needs_exact_review": 2
@@ -1934,8 +1909,10 @@
       "skip": 3
     },
     "入院记录内容不完整/前后矛盾": {
-      "exact_confirmed": 1,
-      "needs_exact_review": 52
+      "exact_confirmed": 2,
+      "blocked_with_reason": 5,
+      "needs_exact_review": 44,
+      "skip": 2
     },
     "出院记录缺失/提前书写/时效异常/签名缺失": {
       "exact_confirmed": 3,
