@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 112,
-    "blocked_with_reason": 50,
+    "exact_confirmed": 116,
+    "blocked_with_reason": 59,
     "skip": 20,
-    "needs_exact_review": 101
+    "needs_exact_review": 88
   },
   "needs_exact_review_rows": [
     {
@@ -105,17 +105,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "余同贵科|复制粘贴|我科愿随访|直接引用会诊意见未进行修改|记录中|请会诊执行记录中复制粘贴严重"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0032",
-      "visit_id": "1960014",
-      "patient_name": "罗怀群",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "患者入院时血压（162/97mmHg），由于患者既往无高血压病史考虑诊断“高血压？”，连续监测三日后上级医师查房未对诊断进行修正。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "162/97mmHg|患者入院时血压|由于患者既往无高血压病史考虑诊断|血压|连续监测三日后上级医师查房未对诊断进行修正|高血压"
     },
     {
       "sheet2_row_id": "Sheet2-R0036",
@@ -237,17 +226,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "入院记录初步诊断不全|止血未写明具体措施|首次病程诊疗计划止痛"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0073",
-      "visit_id": "2198524",
-      "patient_name": "候富明",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "入院查体无专科情况描述，患者入院时BP151/121mmHg，首次病程中未做分析、未提出诊疗计划。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "BP151/121mmHg|入院查体无专科情况描述|患者入院时|未提出诊疗计划|首次病程中未做分析"
     },
     {
       "sheet2_row_id": "Sheet2-R0076",
@@ -470,17 +448,6 @@
       "anchor_misses": "予以云南白药胶囊|多食新鲜蔬菜|多饮水|水果及抗血小板聚集的食物|酚磺乙胺止血|饮食指导|首次病程诊疗计划前后矛盾"
     },
     {
-      "sheet2_row_id": "Sheet2-R0135",
-      "visit_id": "2119620",
-      "patient_name": "杜沁妤",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "12月9日病程记录书写存在错误“请示上级医师后予以0.9g q12h ivgtt抗感染”",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "0.9g|ivgtt|q12h|抗感染|日病程记录书写存在错误|请示上级医师后予以"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0137",
       "visit_id": "2123539",
       "patient_name": "赵金书",
@@ -690,17 +657,6 @@
       "anchor_misses": "100%|复制粘贴|日主治医师查房记录复制粘贴严重|日副主任医师查房记录与|相识度"
     },
     {
-      "sheet2_row_id": "Sheet2-R0177",
-      "visit_id": "2209876",
-      "patient_name": "朱成明",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "2月4日、2月5日连续两次病程记录新建后未书写",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "日连续两次病程记录新建后未书写"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0183",
       "visit_id": "2213639",
       "patient_name": "杜卫红",
@@ -811,17 +767,6 @@
       "anchor_misses": "5-0|入院诊断右侧睾丸扭转|可吸收线欠妥|右侧睾丸附睾切除后|存在器官切除的可能|岁男性|急诊手术|手术中|文献建议使用丝线固定以确保永久固定|术前缺上级医师意见|行左侧睾丸固定时"
     },
     {
-      "sheet2_row_id": "Sheet2-R0206",
-      "visit_id": "2246915",
-      "patient_name": "黄金莲",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "患者行经阴道子宫切除术，术前无尿路感染，术后诊断尿路感染。未请泌尿外科会诊，未分析原因。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "患者行经阴道子宫切除术|未分析原因|未请泌尿外科会诊|术前无尿路感染|术后诊断尿路感染"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0207",
       "visit_id": "2265223",
       "patient_name": "赖敏",
@@ -866,17 +811,6 @@
       "anchor_misses": "2026.2.9|假体脱位不能复位|急诊手术术前准备不充分|拟急诊行髋关节脱位手法复位术|而实际术中情况是|需择期行髋关节翻修术|预案不清晰"
     },
     {
-      "sheet2_row_id": "Sheet2-R0214",
-      "visit_id": "2260053",
-      "patient_name": "敖富芬",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "2026-3-3主治医生查房，患者检查见低钾血症，无处理及诊断，疼痛科评估绝对手术禁忌症（病历书写误，应为无手术禁忌症），2026-3-5患者检查见低钾3.08mmol/l，较前进一步加重，无处理。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "2026-3-3|2026-3-5|3.08mmol/l|主治医生查房|低钾|应为无手术禁忌症|患者检查见低钾|患者检查见低钾血症|无处理|无处理及诊断|疼痛科评估绝对手术禁忌症|病历书写误|较前进一步加重"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0220",
       "visit_id": "2268187",
       "patient_name": "代云聪",
@@ -886,28 +820,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "BP163/90mmHg|与患者沟通后|中药溻渍等康复治疗项目|光照射|患者进行左侧膝关节清创术|日请康复科会诊记录里面|未复测及进一步处理|本患者仍然开具超声波|清创|电刺激|表示拒绝康复治疗"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0221",
-      "visit_id": "2276701",
-      "patient_name": "温光秀",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "患者拟行肠镜，请疼痛科会诊，会诊意见原封不动复制，未认真做好病情变化分析及病程书写。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "会诊意见原封不动复制|患者拟行肠镜|未认真做好病情变化分析及病程书写|请疼痛科会诊"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0228",
-      "visit_id": "2262370",
-      "patient_name": "李昭云",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "入院监测血压165/98mmHg，无后续血压监测记录及处理措施。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "165/98mmHg|入院监测血压|无后续血压监测记录及处理措施|血压"
     },
     {
       "sheet2_row_id": "Sheet2-R0229",
@@ -965,28 +877,6 @@
       "anchor_misses": "2026.3.14|5mmIs|下诊断时应规范标注序号|乙状结肠粘膜充血水肿|内镜下予以一次性使用圈套器切除|型息肉|操作记录书写逻辑混乱|直肠息肉内镜下息肉切除术乙状结肠炎|直肠见一大小约|过程顺利|送检标本"
     },
     {
-      "sheet2_row_id": "Sheet2-R0241",
-      "visit_id": "2275298",
-      "patient_name": "郑尚怀",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "颅脑平扫提示基底节区腔隙性脑梗塞，未请神经内科会诊及分析。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "未请神经内科会诊及分析|颅脑平扫提示基底节区腔隙性脑梗塞"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0245",
-      "visit_id": "2261527",
-      "patient_name": "杨德泉",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "心电图提示完全右束支传导阻滞，病程记录中未请相关科室会诊",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "心电图提示完全右束支传导阻滞|病程记录中未请相关科室会诊"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0246",
       "visit_id": "2330104",
       "patient_name": "林永平",
@@ -1009,28 +899,6 @@
       "anchor_misses": "15cm|以穿刺点为中心|体位|向外扩张|外敷无菌干纱布|外面垫放干纱布|应明确送检项目|建议统一为|操作者|有创操作|未描述操作时患者所取的体位|未明确记录操作者|此表述在专业文书中较少使用|消毒范围半径约|消毒范围直径约|留取脓液标本送检|细菌培养|药敏试验|通常表述为"
     },
     {
-      "sheet2_row_id": "Sheet2-R0251",
-      "visit_id": "2287309",
-      "patient_name": "陈光华",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "术中冰冻结果与手术决策： 术中冰冻回报“浸润性腺癌”后，未记录是否据此调整手术范围。若楔形切除即为最终术式，应说明原因（如：患者肺功能差、高龄、多发合并症等）；若需扩大切除，则后续步骤未体现。此部分为关键质控点，建议补充。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "则后续步骤未体现|多发合并症等|应说明原因|建议补充|患者肺功能差|未记录是否据此调整手术范围|术中冰冻回报|术中冰冻结果与手术决策|此部分为关键质控点|浸润性腺癌|若楔形切除即为最终术式|若需扩大切除"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0270",
-      "visit_id": "2310189",
-      "patient_name": "涂忠友",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "入院检查明确有双肾沙粒样结石，膀胱结石，但入院诊断未记录",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "入院检查明确有双肾沙粒样结石|膀胱结石"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0279",
       "visit_id": "2307974",
       "patient_name": "周大友",
@@ -1040,17 +908,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "中药塌渍等康复治疗|中药贴敷|但实际未予以耳穴治疗|实际未|悬空灸|日请会诊执行记录中描述给予针灸|电刺激治疗"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0281",
-      "visit_id": "2313364",
-      "patient_name": "孔祥斌",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "4.1病程记录过于简单",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "4.1|病程记录过于简单"
     },
     {
       "sheet2_row_id": "Sheet2-R0285",
@@ -1289,6 +1146,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0073",
+      "visit_id": "2198524",
+      "patient_name": "候富明",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "入院查体无专科情况描述，患者入院时BP151/121mmHg，首次病程中未做分析、未提出诊疗计划。",
+      "reason": "local_pg 入院记录已写右肘关节局部查体，人工问题同时混入“无专科情况描述”和“首次病程未分析高血压”两个问题点，且首次病程正文缺失，超出单一 SC-036 可精确闭环范围。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0075",
       "visit_id": "2049419",
       "patient_name": "陈巧",
@@ -1445,6 +1314,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0135",
+      "visit_id": "2119620",
+      "patient_name": "杜沁妤",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "12月9日病程记录书写存在错误“请示上级医师后予以0.9g q12h ivgtt抗感染”",
+      "reason": "local_pg 12月9日日常病程实际写有“阿莫西林克拉维酸钾0.9g q12h ivgtt抗感染”，人工问题核心是书写措辞质量而非异常结果分析，需归入其他书写规则复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0141",
       "visit_id": "2131765",
       "patient_name": "李元娟",
@@ -1493,6 +1374,30 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0177",
+      "visit_id": "2209876",
+      "patient_name": "朱成明",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "2月4日、2月5日连续两次病程记录新建后未书写",
+      "reason": "local_pg 现仅能看到2月4日和2月5日已有上级查房记录，无法从当前病历快照还原“新建后未书写”的元数据状态，证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0206",
+      "visit_id": "2246915",
+      "patient_name": "黄金莲",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "患者行经阴道子宫切除术，术前无尿路感染，术后诊断尿路感染。未请泌尿外科会诊，未分析原因。",
+      "reason": "local_pg 3月4日日常病程已写“考虑泌尿道感染可能”并开始头孢噻肟，3月6日又记录泌尿外科会诊协助诊治，人工问题所称“未请泌尿外科会诊 未分析原因”与原文冲突。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0209",
       "visit_id": "2263757",
       "patient_name": "杨光中",
@@ -1517,6 +1422,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0214",
+      "visit_id": "2260053",
+      "patient_name": "敖富芬",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "2026-3-3主治医生查房，患者检查见低钾血症，无处理及诊断，疼痛科评估绝对手术禁忌症（病历书写误，应为无手术禁忌症），2026-3-5患者检查见低钾3.08mmol/l，较前进一步加重，无处理。",
+      "reason": "local_pg 疼痛科会诊原文为“知情同意后可行全身麻醉下肠镜检查”并非绝对手术禁忌；后续查房亦已写“低钾，嘱患者进食香蕉等水果补充电解质”，人工问题与原文冲突。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0216",
       "visit_id": "2255882",
       "patient_name": "黄永秀",
@@ -1527,6 +1444,18 @@
       "blocked_reason_type": "证据链不足",
       "review_subgroup": "SC-008-现病史-第二轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0221",
+      "visit_id": "2276701",
+      "patient_name": "温光秀",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "患者拟行肠镜，请疼痛科会诊，会诊意见原封不动复制，未认真做好病情变化分析及病程书写。",
+      "reason": "local_pg 现有病程与会诊只能证实已请疼痛科和麻醉会诊并写有“遵会诊意见 术前胃肠道准备”，人工问题核心是“原封不动复制”这一复制病历问题，需按其他规则复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0223",
@@ -1577,6 +1506,18 @@
       "decision_source": "local_pg get_documents + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0241",
+      "visit_id": "2275298",
+      "patient_name": "郑尚怀",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "颅脑平扫提示基底节区腔隙性脑梗塞，未请神经内科会诊及分析。",
+      "reason": "local_pg 3月10日查房已将“双侧基底节区腔隙性脑梗塞”纳入诊断并写明“与患者及家属沟通暂无特殊处理”，人工问题中“未分析”与原文冲突，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0242",
       "visit_id": "2281076",
       "patient_name": "蒋光琼",
@@ -1599,6 +1540,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-036-异常结果-第二轮",
       "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0251",
+      "visit_id": "2287309",
+      "patient_name": "陈光华",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "术中冰冻结果与手术决策： 术中冰冻回报“浸润性腺癌”后，未记录是否据此调整手术范围。若楔形切除即为最终术式，应说明原因（如：患者肺功能差、高龄、多发合并症等）；若需扩大切除，则后续步骤未体现。此部分为关键质控点，建议补充。",
+      "reason": "local_pg 该条核心在术中冰冻回报后是否扩大切除及手术范围决策链说明，属于围手术期决策记录完整性问题，超出单一 SC-036 异常结果分析规则可精确闭环范围。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0254",
@@ -1695,6 +1648,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-036-异常结果-第二轮",
       "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0281",
+      "visit_id": "2313364",
+      "patient_name": "孔祥斌",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "4.1病程记录过于简单",
+      "reason": "local_pg 当前快照仅见3月31日已分析肾功异常并于4月1日肾内科会诊明确慢性肾脏病3期高尿酸血症，且4月3日日常病程内容详细；但缺少可直接核对“4月1日病程记录过于简单”的原始病程正文，证据不足。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0283",
@@ -1884,9 +1849,8 @@
       "exact_confirmed": 1
     },
     "病程记录缺分析/缺处理意见": {
-      "blocked_with_reason": 15,
-      "needs_exact_review": 13,
-      "exact_confirmed": 2
+      "blocked_with_reason": 24,
+      "exact_confirmed": 6
     },
     "诊疗医嘱与病程记录不一致": {
       "needs_exact_review": 4,

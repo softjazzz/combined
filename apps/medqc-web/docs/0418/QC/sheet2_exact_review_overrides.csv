@@ -66,3 +66,16 @@ Sheet2-R0265,blocked_with_reason,local_pg 首次查房已将“血尿：结石�
 Sheet2-R0268,blocked_with_reason,local_pg 4月2日查房已回顾 4月1日血常规与胸部 CT 结果，后续病程亦持续按感染指标和腹盆腔影像调整治疗；人工问题所称“4.1异常检查检验结果病程记录未分析和记录”与原文不完全一致，不能判 exact。,人工问题原文不可判,SC-036-异常结果-第二轮,local_pg get_documents + probe
 Sheet2-R0272,blocked_with_reason,local_pg 4月1日上级查房已更新 4月1日血气和血常规，并未停留在 3月22日旧结果；人工问题所称“4.1日病程记录中检查检验结果停留在3.22”与原文冲突，不能判 exact。,人工问题原文不可判,SC-036-异常结果-第二轮,local_pg get_documents + probe
 Sheet2-R0283,blocked_with_reason,local_pg 当前可证的是 4月1日尿路感染已记录并有泌尿血管外科会诊与左氧氟沙星处理，但无法在现有快照中精确回收到人工问题所指 4月7日肾功异常原始结果与对应病程闭环，不能整条判 exact。,证据链不足,SC-036-异常结果-第二轮,local_pg get_documents + probe
+Sheet2-R0032,exact_confirmed,local_pg 8月29日及8月30日上级查房已列“高血压？”，9月1日和9月4日日常病程仍仅写“监测血压偶有升高，暂未给予降压治疗”，至9月5日出院诊断仍保留“高血压？”，符合连续监测后未修正诊断。,,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0073,blocked_with_reason,local_pg 入院记录已写右肘关节局部查体，人工问题同时混入“无专科情况描述”和“首次病程未分析高血压”两个问题点，且首次病程正文缺失，超出单一 SC-036 可精确闭环范围。,规则不支持,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0135,blocked_with_reason,local_pg 12月9日日常病程实际写有“阿莫西林克拉维酸钾0.9g q12h ivgtt抗感染”，人工问题核心是书写措辞质量而非异常结果分析，需归入其他书写规则复核。,规则不支持,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0177,blocked_with_reason,local_pg 现仅能看到2月4日和2月5日已有上级查房记录，无法从当前病历快照还原“新建后未书写”的元数据状态，证据不足以整条判 exact。,证据链不足,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0206,blocked_with_reason,local_pg 3月4日日常病程已写“考虑泌尿道感染可能”并开始头孢噻肟，3月6日又记录泌尿外科会诊协助诊治，人工问题所称“未请泌尿外科会诊 未分析原因”与原文冲突。,人工问题原文不可判,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0214,blocked_with_reason,local_pg 疼痛科会诊原文为“知情同意后可行全身麻醉下肠镜检查”并非绝对手术禁忌；后续查房亦已写“低钾，嘱患者进食香蕉等水果补充电解质”，人工问题与原文冲突。,人工问题原文不可判,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0221,blocked_with_reason,local_pg 现有病程与会诊只能证实已请疼痛科和麻醉会诊并写有“遵会诊意见 术前胃肠道准备”，人工问题核心是“原封不动复制”这一复制病历问题，需按其他规则复核。,规则不支持,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0228,exact_confirmed,local_pg admission_record 明确记载入院血压165/98mmHg，现有后续病程及会诊快照均未再见血压监测或降压处理记录，符合人工问题核心锚点。,,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0241,blocked_with_reason,local_pg 3月10日查房已将“双侧基底节区腔隙性脑梗塞”纳入诊断并写明“与患者及家属沟通暂无特殊处理”，人工问题中“未分析”与原文冲突，整条不能判 exact。,人工问题原文不可判,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0245,exact_confirmed,local_pg admission_record 与后续查房均记录“完全性右束支传导阻滞”，现有会诊仅见神经外科 康复科 中医科，未见心内科或相关专科会诊，符合“未请相关科室会诊”。,,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0251,blocked_with_reason,local_pg 该条核心在术中冰冻回报后是否扩大切除及手术范围决策链说明，属于围手术期决策记录完整性问题，超出单一 SC-036 异常结果分析规则可精确闭环范围。,规则不支持,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0270,exact_confirmed,local_pg admission_record 院内辅助检查已写“双肾砂粒样结石 膀胱结石”，但3月28日首次上级查房当前诊断仅列前列腺增生 尿潴留 慢性阻塞性肺病，符合“入院检查明确但入院诊断未记录”。,,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0281,blocked_with_reason,local_pg 当前快照仅见3月31日已分析肾功异常并于4月1日肾内科会诊明确慢性肾脏病3期高尿酸血症，且4月3日日常病程内容详细；但缺少可直接核对“4月1日病程记录过于简单”的原始病程正文，证据不足。,证据链不足,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
