@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 135,
-    "blocked_with_reason": 109,
+    "exact_confirmed": 136,
+    "blocked_with_reason": 111,
     "skip": 24,
-    "needs_exact_review": 15
+    "needs_exact_review": 12
   },
   "needs_exact_review_rows": [
     {
@@ -74,17 +74,6 @@
       "anchor_misses": "患者基础疾病的用药情况记录不规范|用药"
     },
     {
-      "sheet2_row_id": "Sheet2-R0150",
-      "visit_id": "2313364",
-      "patient_name": "孔祥斌",
-      "issue_family": "会诊执行记录缺失/未写执行情况；危急值记录不完整/处理不充分；诊疗医嘱与病程记录不一致",
-      "primary_rule_id": "LX-016",
-      "manual_issue_text": "1月13日，危急值处理不及时，请内分泌科会诊后，无会诊执行记录。1月16日病程记录中，未描述患者血糖控制情况及内分泌科会诊指导用药情况。1月23日，开具医嘱为普通饮食欠妥，",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "危急值|危急值处理不及时|开具医嘱为普通饮食欠妥|日病程记录中|用药|请内分泌科会诊后"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0166",
       "visit_id": "2200224",
       "patient_name": "张乃军",
@@ -118,17 +107,6 @@
       "anchor_misses": "日手术"
     },
     {
-      "sheet2_row_id": "Sheet2-R0173",
-      "visit_id": "2200664",
-      "patient_name": "朱泰廷",
-      "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
-      "primary_rule_id": "LX-016",
-      "manual_issue_text": "1月30日后7天无病程记录，请心血管、肾内科、呼吸科、麻醉科、皮肤科等科室会诊后，无请会诊执行记录。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "呼吸科|皮肤科等科室会诊后|肾内科|请心血管|麻醉科"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0183",
       "visit_id": "2213639",
       "patient_name": "杜卫红",
@@ -160,17 +138,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "手术史|既往有肱骨手术史在既往手术史里未详细体现"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0290",
-      "visit_id": "2324802",
-      "patient_name": "颜友芳",
-      "issue_family": "会诊记录内容质量/复制粘贴/结论不足；会诊意见已写遵执但实际未落实",
-      "primary_rule_id": "LX-016",
-      "manual_issue_text": "会诊记录意见为定期复查血常规、血凝、DIC、大便隐血（未明确具体复查时间），请会诊执行记录中描述准会诊意见执行，但实际会诊7天后均未进行复查。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "DIC|会诊记录意见为定期复查血常规|但实际会诊|大便隐血|天后均未进行复查|未明确具体复查时间|请会诊执行记录中描述准会诊意见执行"
     }
   ],
   "blocked_with_reason_rows": [
@@ -871,6 +838,18 @@
       "decision_source": "release/0426 + release/0426_full_auto snapshot"
     },
     {
+      "sheet2_row_id": "Sheet2-R0150",
+      "visit_id": "2313364",
+      "patient_name": "孔祥斌",
+      "issue_family": "会诊执行记录缺失/未写执行情况；危急值记录不完整/处理不充分；诊疗医嘱与病程记录不一致",
+      "primary_rule_id": "LX-016",
+      "manual_issue_text": "1月13日，危急值处理不及时，请内分泌科会诊后，无会诊执行记录。1月16日病程记录中，未描述患者血糖控制情况及内分泌科会诊指导用药情况。1月23日，开具医嘱为普通饮食欠妥，",
+      "reason": "local_pg 与 release/0426_full_auto 当前回收到的是 2026-03-29 因“左侧外踝红肿、破溃、流脓3天”入院后的骨科感染病程，相关会诊仅见 2026-04-01 肾病内科与 2026-04-02 临床药学会诊，未回收到人工问题所称 1月13日危急值、内分泌科会诊、1月16日血糖控制及 1月23日普通饮食锚点，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "LX-016-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto consult/daily snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0153",
       "visit_id": "2188335",
       "patient_name": "黄显秀",
@@ -917,6 +896,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-083-精确复核-第一轮",
       "decision_source": "release/0426_full_auto consultation snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0173",
+      "visit_id": "2200664",
+      "patient_name": "朱泰廷",
+      "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
+      "primary_rule_id": "LX-016",
+      "manual_issue_text": "1月30日后7天无病程记录，请心血管、肾内科、呼吸科、麻醉科、皮肤科等科室会诊后，无请会诊执行记录。",
+      "reason": "release/0426_full_auto 当前可回收到 2026-02-01 皮肤科会诊“遵会诊意见予以抗过敏治疗”、2026-02-05 肾病内科会诊“遵会诊意见予以完善甲状旁腺激素、无机磷、贫血三项”，并有 2026-02-08、02-10、02-11、02-12 连续上级查房记录；现有原文与人工问题所称“1月30日后7天无病程记录…无请会诊执行记录”不一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "LX-016-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + PG consult/order snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0175",
@@ -1538,10 +1529,10 @@
       "blocked_with_reason": 1
     },
     "会诊执行记录缺失/未写执行情况；危急值记录不完整/处理不充分；诊疗医嘱与病程记录不一致": {
-      "needs_exact_review": 1
+      "blocked_with_reason": 1
     },
     "会诊执行记录缺失/未写执行情况；病程时效/缺失": {
-      "needs_exact_review": 1,
+      "blocked_with_reason": 1,
       "exact_confirmed": 1
     },
     "会诊记录内容质量/复制粘贴/结论不足": {
@@ -1549,7 +1540,7 @@
       "skip": 1
     },
     "会诊记录内容质量/复制粘贴/结论不足；会诊意见已写遵执但实际未落实": {
-      "needs_exact_review": 1
+      "exact_confirmed": 1
     },
     "会诊记录时效": {
       "exact_confirmed": 3
