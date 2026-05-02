@@ -2,9 +2,9 @@
   "total_rows": 283,
   "status_breakdown": {
     "exact_confirmed": 136,
-    "blocked_with_reason": 111,
-    "skip": 24,
-    "needs_exact_review": 12
+    "blocked_with_reason": 112,
+    "skip": 25,
+    "needs_exact_review": 10
   },
   "needs_exact_review_rows": [
     {
@@ -28,17 +28,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "记录时间早于输血时间|输血后评价|输血后评价记录时间记录错误"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0094",
-      "visit_id": "2062281",
-      "patient_name": "廖兴秀",
-      "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
-      "primary_rule_id": "SC-105",
-      "manual_issue_text": "术后首次病程记录书写不规范，缺少术后处理措施、术后注意事项及向家属告知手术情况等内容。建议按照医院术后首次病程模板书写避免漏项。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "建议按照医院术后首次病程模板书写避免漏项|术后首次病程记录书写不规范|缺少术后处理措施"
     },
     {
       "sheet2_row_id": "Sheet2-R0108",
@@ -72,17 +61,6 @@
       "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "患者基础疾病的用药情况记录不规范|用药"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0166",
-      "visit_id": "2200224",
-      "patient_name": "张乃军",
-      "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
-      "primary_rule_id": "SC-105",
-      "manual_issue_text": "术后首次病程记录中手术时间与实际手术时间不一致",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "术后首次病程记录中手术时间与实际手术时间不一致"
     },
     {
       "sheet2_row_id": "Sheet2-R0171",
@@ -886,6 +864,18 @@
       "decision_source": "release/0426_full_auto surgery_record snapshot"
     },
     {
+      "sheet2_row_id": "Sheet2-R0166",
+      "visit_id": "2200224",
+      "patient_name": "张乃军",
+      "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
+      "primary_rule_id": "SC-105",
+      "manual_issue_text": "术后首次病程记录中手术时间与实际手术时间不一致",
+      "reason": "release/0426_full_auto postsurg_firstcourse_record 明确写“手术时间:2026年02月02日 10:45”；PG surgery_record 同时记录 surgery_begin_time=2026-02-02 10:45:00+08，现有原文与人工问题所称“术后首次病程记录中手术时间与实际手术时间不一致”不一致，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-105-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto postsurg_firstcourse_record + PG surgery_record"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0169",
       "visit_id": "2198921",
       "patient_name": "王明德",
@@ -1680,7 +1670,8 @@
       "needs_exact_review": 1
     },
     "首次病程记录存在/时效；术后首次病程记录缺项/不清": {
-      "needs_exact_review": 2
+      "skip": 1,
+      "blocked_with_reason": 1
     },
     "首次病程记录存在/时效；病程时效/缺失": {
       "exact_confirmed": 1
