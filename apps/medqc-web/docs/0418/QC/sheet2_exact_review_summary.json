@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 123,
-    "blocked_with_reason": 88,
+    "exact_confirmed": 125,
+    "blocked_with_reason": 92,
     "skip": 20,
-    "needs_exact_review": 52
+    "needs_exact_review": 46
   },
   "needs_exact_review_rows": [
     {
@@ -184,28 +184,6 @@
       "anchor_misses": "小时内|未做分析鉴别|血精的常见病因精囊结石及精囊结核|首次病程鉴别诊断中"
     },
     {
-      "sheet2_row_id": "Sheet2-R0125",
-      "visit_id": "2104341",
-      "patient_name": "代亚军",
-      "issue_family": "四级手术未 MDT",
-      "primary_rule_id": "SC-083",
-      "manual_issue_text": "四级手术无多学科讨论记录",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": ""
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0126",
-      "visit_id": "2107085",
-      "patient_name": "游国明",
-      "issue_family": "四级手术未 MDT",
-      "primary_rule_id": "SC-083",
-      "manual_issue_text": "四级手术无多学科讨论记录",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": ""
-    },
-    {
       "sheet2_row_id": "Sheet2-R0137",
       "visit_id": "2123539",
       "patient_name": "赵金书",
@@ -292,17 +270,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "术后首次病程记录中手术时间与实际手术时间不一致"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0169",
-      "visit_id": "2198921",
-      "patient_name": "王明德",
-      "issue_family": "四级手术未 MDT",
-      "primary_rule_id": "SC-083",
-      "manual_issue_text": "患者行腹腔镜下直肠前切除术，国考四级手术术前无多学科会诊。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "国考四级手术术前无多学科会诊|患者行腹腔镜下直肠前切除术"
     },
     {
       "sheet2_row_id": "Sheet2-R0171",
@@ -404,17 +371,6 @@
       "anchor_misses": "手术记录非手术医生或第一助手书写且主刀医生未签名确认|签名"
     },
     {
-      "sheet2_row_id": "Sheet2-R0195",
-      "visit_id": "2213827",
-      "patient_name": "熊明英",
-      "issue_family": "四级手术未 MDT",
-      "primary_rule_id": "SC-083",
-      "manual_issue_text": "婚育史书写有误：适龄结婚，配偶体质一般，G2P2,平产1子健在。国考四级手术术前无多学科会诊。术前超声提示：左肾未显示。未请泌尿外科或者肾内科会诊，未进一步检查明确，即诊断“左肾缺失”不规范。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "G2P2|即诊断|国考四级手术术前无多学科会诊|婚育史书写有误|子健在|左肾未显示|左肾缺失|未请泌尿外科或者肾内科会诊|未进一步检查明确|术前超声提示|适龄结婚|配偶体质一般"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0199",
       "visit_id": "2239258",
       "patient_name": "黄修润",
@@ -459,17 +415,6 @@
       "anchor_misses": "BP163/90mmHg|与患者沟通后|中药溻渍等康复治疗项目|光照射|患者进行左侧膝关节清创术|日请康复科会诊记录里面|未复测及进一步处理|本患者仍然开具超声波|清创|电刺激|表示拒绝康复治疗"
     },
     {
-      "sheet2_row_id": "Sheet2-R0229",
-      "visit_id": "2264271",
-      "patient_name": "陈中德",
-      "issue_family": "四级手术未 MDT",
-      "primary_rule_id": "SC-083",
-      "manual_issue_text": "四级肿瘤手术，未行多学科讨论，",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "四级肿瘤手术|未行多学科讨论"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0230",
       "visit_id": "2262090",
       "patient_name": "杜贤彬",
@@ -501,17 +446,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "2026.3.14|5mmIs|下诊断时应规范标注序号|乙状结肠粘膜充血水肿|内镜下予以一次性使用圈套器切除|型息肉|操作记录书写逻辑混乱|直肠息肉内镜下息肉切除术乙状结肠炎|直肠见一大小约|过程顺利|送检标本"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0246",
-      "visit_id": "2330104",
-      "patient_name": "林永平",
-      "issue_family": "四级手术未 MDT",
-      "primary_rule_id": "SC-083",
-      "manual_issue_text": "多学科讨论记录中肿瘤科会诊意见与会诊记录单中会诊意见不一致",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "多学科讨论记录中肿瘤科会诊意见与会诊记录单中会诊意见不一致"
     },
     {
       "sheet2_row_id": "Sheet2-R0249",
@@ -1206,6 +1140,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0169",
+      "visit_id": "2198921",
+      "patient_name": "王明德",
+      "issue_family": "四级手术未 MDT",
+      "primary_rule_id": "SC-083",
+      "manual_issue_text": "患者行腹腔镜下直肠前切除术，国考四级手术术前无多学科会诊。",
+      "reason": "release/0426_full_auto 术前已回收到胸外科 心内科 麻醉科等多条会诊记录，人工问题所称“术前无多学科会诊”与原文不一致；是否构成规范 MDT 属同家族但非同锚点，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-083-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0175",
       "visit_id": "2210351",
       "patient_name": "吴佳宜",
@@ -1240,6 +1186,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-032-精确复核-第四轮",
       "decision_source": "release/0426 daily_course + senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0195",
+      "visit_id": "2213827",
+      "patient_name": "熊明英",
+      "issue_family": "四级手术未 MDT",
+      "primary_rule_id": "SC-083",
+      "manual_issue_text": "婚育史书写有误：适龄结婚，配偶体质一般，G2P2,平产1子健在。国考四级手术术前无多学科会诊。术前超声提示：左肾未显示。未请泌尿外科或者肾内科会诊，未进一步检查明确，即诊断“左肾缺失”不规范。",
+      "reason": "release/0426_full_auto 该条同时混有婚育史错误 左肾未显示后未进一步会诊/检查及四级手术 MDT 多个问题点，现有证据只能覆盖其中 MDT 一支，超出单一 SC-083 可精确闭环范围。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-083-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto senior_course + consultation snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0197",
@@ -1422,6 +1380,18 @@
       "decision_source": "local_pg get_documents + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0229",
+      "visit_id": "2264271",
+      "patient_name": "陈中德",
+      "issue_family": "四级手术未 MDT",
+      "primary_rule_id": "SC-083",
+      "manual_issue_text": "四级肿瘤手术，未行多学科讨论，",
+      "reason": "release/0426_full_auto 术前已回收到呼吸与危重症医学科 麻醉科 肿瘤科 消化内科等多条会诊记录，人工问题所称“未行多学科讨论”与现有原文并不直接对应；是否满足规范 MDT 需另一层制度口径，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-083-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0231",
       "visit_id": "2272872",
       "patient_name": "李才贵",
@@ -1468,6 +1438,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-036-异常结果-第二轮",
       "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0246",
+      "visit_id": "2330104",
+      "patient_name": "林永平",
+      "issue_family": "四级手术未 MDT",
+      "primary_rule_id": "SC-083",
+      "manual_issue_text": "多学科讨论记录中肿瘤科会诊意见与会诊记录单中会诊意见不一致",
+      "reason": "release/0426_full_auto 当前仅回收到安置输液港的普外科会诊，未回收到人工问题所称“MDT 记录中的肿瘤科意见”及其对照会诊单，证据链不足以核对“不一致”这一核心锚点。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-083-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation + senior_course snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0251",
@@ -1729,8 +1711,8 @@
       "exact_confirmed": 5
     },
     "四级手术未 MDT": {
-      "needs_exact_review": 6,
-      "exact_confirmed": 1
+      "exact_confirmed": 3,
+      "blocked_with_reason": 4
     },
     "四级手术未 MDT；术前讨论结论未入病历/缺项": {
       "exact_confirmed": 1
