@@ -1,0 +1,254 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 54,
+  "families": [
+    {
+      "issue_family": "术前小结缺失；术前小结缺项/不清",
+      "row_count": 1,
+      "job_id": "9fb17c35-258e-4d50-a968-066434e49474",
+      "result_breakdown": {
+        "exact_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "病程时效/缺失",
+      "row_count": 3,
+      "job_id": "f9c94b24-accd-4859-9f38-c9e5f1ff619d",
+      "result_breakdown": {
+        "exact_hit": 3
+      },
+      "executor_breakdown": {
+        "program": 3,
+        "llm": 0
+      },
+      "items_count": 3,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "row_count": 25,
+      "job_id": "2607687e-65bb-45d0-8910-770c18a68533",
+      "result_breakdown": {
+        "same_family_hit": 25
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 20
+      },
+      "items_count": 25,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "row_count": 2,
+      "job_id": "00919f49-4fda-466c-9d0a-ca0916bbea94",
+      "result_breakdown": {
+        "same_family_hit": 2
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 2
+      },
+      "items_count": 2,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "术前讨论缺失/术者未参加",
+      "row_count": 2,
+      "job_id": "d46003c2-6c16-47f2-b544-3f5cc4cbbda8",
+      "result_breakdown": {
+        "exact_hit": 2
+      },
+      "executor_breakdown": {
+        "program": 2,
+        "llm": 0
+      },
+      "items_count": 2,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "会诊记录时效",
+      "row_count": 3,
+      "job_id": "518166a4-61bb-46f4-aa00-0cd01ea76e49",
+      "result_breakdown": {
+        "exact_hit": 3
+      },
+      "executor_breakdown": {
+        "program": 3,
+        "llm": 0
+      },
+      "items_count": 3,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "首次病程记录存在/时效；主治首次查房48小时；高级医师首次查房72小时",
+      "row_count": 1,
+      "job_id": "89af3f7b-5870-4016-af76-64cc54a7e638",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "row_count": 7,
+      "job_id": "018ad803-ff5d-4b11-92e9-200f66218777",
+      "result_breakdown": {
+        "miss": 1,
+        "same_family_hit": 6
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 7
+      },
+      "items_count": 6,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "首次病程记录存在/时效",
+      "row_count": 1,
+      "job_id": "6dcec2cf-0a0d-4696-b937-c4a1d0c3782f",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
+      "row_count": 1,
+      "job_id": "694755dc-0b0c-4845-ad72-617224679291",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "主治首次查房48小时",
+      "row_count": 1,
+      "job_id": "9cf91d2c-5069-42c7-bbc3-63c806c30ab8",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；出院前一天/当天上级医师查房或病程缺失；出院记录缺失/提前书写/时效异常/签名缺失",
+      "row_count": 1,
+      "job_id": "09fd8b9d-970c-4bc5-82cf-20beb544745c",
+      "result_breakdown": {
+        "exact_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；出院记录缺失/提前书写/时效异常/签名缺失",
+      "row_count": 1,
+      "job_id": "80beb321-2aa5-4f9e-9c5e-8b6d161fff5e",
+      "result_breakdown": {
+        "exact_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；手术记录缺项/时间错误/逻辑不清/签名异常",
+      "row_count": 1,
+      "job_id": "9ef4bc9b-5a18-49a7-aac2-3ece548da87d",
+      "result_breakdown": {
+        "exact_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "会诊记录缺失/申请记录缺失",
+      "row_count": 2,
+      "job_id": "661aa26a-c9c0-4869-8efc-84cdf802f968",
+      "result_breakdown": {
+        "exact_hit": 2
+      },
+      "executor_breakdown": {
+        "program": 2,
+        "llm": 0
+      },
+      "items_count": 2,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "会诊执行记录缺失/未写执行情况",
+      "row_count": 1,
+      "job_id": "4583b3e4-c0e5-4fd4-9be0-0469eb5b9d18",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；上级医师查房缺失/未及时书写",
+      "row_count": 1,
+      "job_id": "3e8677db-2977-4d6e-896e-7908a5ca8511",
+      "result_breakdown": {
+        "exact_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 1,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "exact_hit": 60,
+    "same_family_hit": 170,
+    "pending": 36,
+    "skip": 11,
+    "miss": 6
+  }
+}

@@ -7,6 +7,7 @@ import CustomerSampleValidationView from '@/views/workstation-v4/CustomerSampleV
 const {
   message,
   listManualSamplePools,
+  getSheet2ExactReviewAcceptancePackage,
   getLatestManualSamplePoolSyncJob,
   getManualSamplePoolSyncJob,
   getManualSamplePoolRecords,
@@ -28,6 +29,7 @@ const {
     info: vi.fn(),
   },
   listManualSamplePools: vi.fn(),
+  getSheet2ExactReviewAcceptancePackage: vi.fn(),
   getLatestManualSamplePoolSyncJob: vi.fn(),
   getManualSamplePoolSyncJob: vi.fn(),
   getManualSamplePoolRecords: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock('ant-design-vue', () => ({
 
 vi.mock('@/services/manual-case-sample-service', () => ({
   listManualSamplePools,
+  getSheet2ExactReviewAcceptancePackage,
   getLatestManualSamplePoolSyncJob,
   getManualSamplePoolSyncJob,
   getManualSamplePoolRecords,
@@ -115,6 +118,13 @@ const ACardStub = defineComponent({
   name: 'ACardStub',
   setup(_, { slots }) {
     return () => h('div', { class: 'a-card-stub' }, slots.default?.())
+  },
+})
+
+const ASpinStub = defineComponent({
+  name: 'ASpinStub',
+  setup(_, { slots }) {
+    return () => h('div', { class: 'a-spin-stub' }, slots.default?.())
   },
 })
 
@@ -418,6 +428,48 @@ function buildRecord(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function buildExactReviewAcceptance() {
+  return {
+    generated_at: '2026-05-03',
+    total_rows: 283,
+    status_breakdown: {
+      exact_confirmed: 139,
+      blocked_with_reason: 119,
+      skip: 25,
+      needs_exact_review: 0,
+    },
+    explanations: {
+      exact_confirmed: '已找到与人工问题核心锚点一致的证据链，可在客户样本验证页稳定复现。',
+      blocked_with_reason: '不是未完成，而是“已复核，但当前规则/证据链不能精确复现人工问题原文”。',
+      skip: '当前缺原始文书或关键正文，按既定口径归入 skip，不再继续伪造证据链。',
+      acceptance_note:
+        'Sheet2 精确复核已完成清零；blocked_with_reason 是已复核待增强，不是遗留未处理。',
+    },
+    blocked_reason_breakdown: {
+      规则不支持: 23,
+      证据链不足: 37,
+      人工问题原文不可判: 59,
+    },
+    blocked_backlog_breakdown: [
+      {
+        category: '可补规则',
+        count: 23,
+        definition: '规则能力缺口',
+        next_action: '补主规则',
+        blocked_reason_types: { 规则不支持: 23 },
+        top_issue_families: [{ issue_family: '首次病程诊断依据/鉴别诊断/诊疗计划缺陷', count: 10 }],
+        top_primary_rules: [{ primary_rule_id: 'SC-023', count: 10 }],
+        sample_rows: [],
+      },
+    ],
+    blocked_rows: [],
+    archive_summary: {
+      archive_dir: 'apps/medqc-web/docs/0418/QC/archive/sheet2-exact-review-temp-2026-05-03',
+      archived_file_count: 137,
+    },
+  }
+}
+
 async function mountView() {
   const wrapper = mount(CustomerSampleValidationView, {
     global: {
@@ -425,6 +477,7 @@ async function mountView() {
         AButton: AButtonStub,
         ATag: ATagStub,
         ACard: ACardStub,
+        ASpin: ASpinStub,
         ASelect: ASelectStub,
         AInput: AInputStub,
         ATextarea: ATextareaStub,
@@ -453,6 +506,10 @@ describe('CustomerSampleValidationView', () => {
     listManualSamplePools.mockResolvedValue({
       success: true,
       data: { items: [buildPool()], total: 1, page: 1, page_size: 50 },
+    })
+    getSheet2ExactReviewAcceptancePackage.mockResolvedValue({
+      success: true,
+      data: buildExactReviewAcceptance(),
     })
     getLatestManualSamplePoolSyncJob.mockResolvedValue({ success: true, data: null })
     getManualSamplePoolSyncJob.mockResolvedValue({

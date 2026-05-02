@@ -152,6 +152,147 @@
         </section>
 
         <section
+          class="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
+        >
+          <div class="border-b border-slate-200/80 px-5 py-4">
+            <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                  <a-tag color="processing">
+                    Sheet2 精确复核验收包
+                  </a-tag>
+                  <a-tag color="success">
+                    needs_exact_review =
+                    {{ exactReviewAcceptance?.status_breakdown.needs_exact_review ?? 0 }}
+                  </a-tag>
+                </div>
+                <div class="mt-2 text-[17px] font-semibold text-slate-900">
+                  客户验收口径与下一轮规则增强 Backlog
+                </div>
+                <div class="mt-1 text-[13px] leading-6 text-slate-500">
+                  页面直接展示 `exact_confirmed / blocked_with_reason / skip` 的验收结论，并把
+                  blocked 拆成下一轮可执行 backlog。
+                </div>
+              </div>
+              <div class="text-[12px] leading-6 text-slate-400">
+                更新时间：{{ exactReviewAcceptance?.generated_at || '—' }}
+              </div>
+            </div>
+          </div>
+
+          <a-spin :spinning="exactReviewLoading">
+            <div
+              v-if="exactReviewAcceptance"
+              class="space-y-4 px-5 py-4"
+            >
+              <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div
+                  v-for="item in exactReviewStatusCards"
+                  :key="item.label"
+                  class="rounded-[20px] border px-4 py-4 shadow-[0_10px_24px_rgba(148,163,184,0.10)]"
+                  :class="item.cardClass"
+                >
+                  <div class="text-[12px] font-medium text-slate-500">
+                    {{ item.label }}
+                  </div>
+                  <div class="mt-3 text-[30px] font-semibold leading-none text-slate-900">
+                    {{ item.value }}
+                  </div>
+                  <div class="mt-3 text-[12px] leading-6 text-slate-500">
+                    {{ item.help }}
+                  </div>
+                </div>
+              </div>
+
+              <div
+                class="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4 text-[13px] leading-6 text-amber-900"
+              >
+                <div class="font-semibold text-amber-950">
+                  blocked_with_reason 口径
+                </div>
+                <div class="mt-1">
+                  {{ exactReviewAcceptance.explanations.blocked_with_reason }}
+                </div>
+                <div class="mt-2 text-amber-800">
+                  {{ exactReviewAcceptance.explanations.acceptance_note }}
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-2">
+                <span
+                  v-for="item in exactReviewReasonTags"
+                  :key="item.label"
+                  class="inline-flex rounded-full border px-3 py-1 text-[12px] font-medium"
+                  :class="item.className"
+                >
+                  {{ item.label }}：{{ item.value }}
+                </span>
+              </div>
+
+              <div class="grid gap-4 xl:grid-cols-2">
+                <article
+                  v-for="bucket in exactReviewBacklogBuckets"
+                  :key="bucket.category"
+                  class="rounded-[20px] border px-4 py-4"
+                  :class="backlogBucketCardClass(bucket.category)"
+                >
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div class="text-[16px] font-semibold text-slate-900">
+                        {{ bucket.category }}
+                      </div>
+                      <div class="mt-1 text-[13px] leading-6 text-slate-500">
+                        {{ bucket.definition }}
+                      </div>
+                    </div>
+                    <span
+                      class="inline-flex rounded-full border px-3 py-1 text-[12px] font-semibold"
+                      :class="backlogBucketTagClass(bucket.category)"
+                    >
+                      {{ bucket.count }} 条
+                    </span>
+                  </div>
+                  <div
+                    class="mt-3 rounded-2xl border border-white/70 bg-white/80 px-3 py-3 text-[13px] leading-6 text-slate-600"
+                  >
+                    下一轮动作：{{ bucket.next_action }}
+                  </div>
+                  <div
+                    v-if="bucket.top_issue_families.length"
+                    class="mt-3 flex flex-wrap gap-2"
+                  >
+                    <span
+                      v-for="family in bucket.top_issue_families"
+                      :key="`${bucket.category}-${family.issue_family}`"
+                      class="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12px] text-slate-600"
+                    >
+                      {{ family.issue_family }} × {{ family.count }}
+                    </span>
+                  </div>
+                </article>
+              </div>
+
+              <div
+                v-if="exactReviewAcceptance.archive_summary"
+                class="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4 text-[13px] leading-6 text-slate-600"
+              >
+                已归档临时 probe/report
+                {{ exactReviewAcceptance.archive_summary.archived_file_count }} 个； 归档目录：{{
+                  exactReviewAcceptance.archive_summary.archive_dir
+                }}
+              </div>
+            </div>
+
+            <div
+              v-else
+              class="px-5 py-6 text-[13px] leading-6 text-rose-600"
+            >
+              {{ exactReviewError || '暂未读取到 Sheet2 精确复核验收包。' }}
+            </div>
+          </a-spin>
+        </section>
+
+        <section
           v-if="syncJobDetail"
           class="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
         >
@@ -611,8 +752,10 @@ import type {
   ManualSamplePoolRecord,
   ManualSampleValidationMode,
   ManualSamplePoolSyncJob,
+  Sheet2ExactReviewAcceptancePackage,
 } from './customer-sample-validation/types'
 import {
+  getSheet2ExactReviewAcceptancePackage,
   getLatestManualSamplePoolSyncJob,
   getManualSamplePoolSyncJob,
   getManualSamplePoolRecords,
@@ -670,6 +813,9 @@ const batchResultFocusRecord = ref<{
 let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
 let syncJobPollTimer: ReturnType<typeof setInterval> | null = null
 const syncJobDetail = ref<ManualSamplePoolSyncJob>()
+const exactReviewAcceptance = ref<Sheet2ExactReviewAcceptancePackage | null>(null)
+const exactReviewLoading = ref(false)
+const exactReviewError = ref('')
 
 const pagination = ref({
   page: 1,
@@ -769,6 +915,60 @@ const summaryCards = computed(() => {
     },
   ]
 })
+
+const exactReviewStatusCards = computed(() => {
+  const acceptance = exactReviewAcceptance.value
+  const status = acceptance?.status_breakdown
+  const explanations = acceptance?.explanations
+  return [
+    {
+      label: '精确命中',
+      value: status?.exact_confirmed ?? 0,
+      help: explanations?.exact_confirmed || '已与人工问题精确对齐的条目。',
+      cardClass: 'border-emerald-200 bg-emerald-50/70',
+    },
+    {
+      label: '已复核阻塞',
+      value: status?.blocked_with_reason ?? 0,
+      help:
+        explanations?.blocked_with_reason || '已复核，但当前规则或证据链还不能精确复现人工问题。',
+      cardClass: 'border-amber-200 bg-amber-50/80',
+    },
+    {
+      label: '缺文书跳过',
+      value: status?.skip ?? 0,
+      help: explanations?.skip || '原始正文缺失，按既定口径归入 skip。',
+      cardClass: 'border-slate-200 bg-slate-50/90',
+    },
+    {
+      label: '复核总量',
+      value: acceptance?.total_rows ?? 0,
+      help: 'Sheet2 全量逐条精确复核样本规模。',
+      cardClass: 'border-sky-200 bg-sky-50/70',
+    },
+  ]
+})
+
+const exactReviewReasonTags = computed(() => {
+  const breakdown = exactReviewAcceptance.value?.blocked_reason_breakdown || {}
+  const order = ['规则不支持', '证据链不足', '人工问题原文不可判']
+  return order
+    .filter((label) => typeof breakdown[label] === 'number')
+    .map((label) => ({
+      label,
+      value: breakdown[label],
+      className:
+        label === '规则不支持'
+          ? 'border-sky-200 bg-sky-50 text-sky-700'
+          : label === '证据链不足'
+            ? 'border-orange-200 bg-orange-50 text-orange-700'
+            : 'border-rose-200 bg-rose-50 text-rose-700',
+    }))
+})
+
+const exactReviewBacklogBuckets = computed(
+  () => exactReviewAcceptance.value?.blocked_backlog_breakdown || [],
+)
 
 const syncProgress = computed(() => syncJobDetail.value?.summary?.progress || {})
 
@@ -1057,6 +1257,32 @@ function bundleStatusTagClass(value: string): string {
   return 'inline-flex rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600'
 }
 
+function backlogBucketCardClass(category: string): string {
+  if (category === '可补规则') {
+    return 'border-sky-200 bg-[linear-gradient(180deg,rgba(239,246,255,0.95),rgba(255,255,255,0.98))]'
+  }
+  if (category === '需补源文书') {
+    return 'border-orange-200 bg-[linear-gradient(180deg,rgba(255,247,237,0.95),rgba(255,255,255,0.98))]'
+  }
+  if (category === '需客户确认口径') {
+    return 'border-fuchsia-200 bg-[linear-gradient(180deg,rgba(253,244,255,0.95),rgba(255,255,255,0.98))]'
+  }
+  return 'border-rose-200 bg-[linear-gradient(180deg,rgba(255,241,242,0.95),rgba(255,255,255,0.98))]'
+}
+
+function backlogBucketTagClass(category: string): string {
+  if (category === '可补规则') {
+    return 'border-sky-200 bg-sky-50 text-sky-700'
+  }
+  if (category === '需补源文书') {
+    return 'border-orange-200 bg-orange-50 text-orange-700'
+  }
+  if (category === '需客户确认口径') {
+    return 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700'
+  }
+  return 'border-rose-200 bg-rose-50 text-rose-700'
+}
+
 function summarizeRuleScopes(ruleIds: string[]): string {
   const scopes: string[] = []
   const pushScope = (label: string) => {
@@ -1283,6 +1509,7 @@ async function loadPools() {
   poolLoading.value = true
   const result = await listManualSamplePools({ page: 1, page_size: 50 })
   poolLoading.value = false
+  await loadExactReviewAcceptance()
   if (!result.success || !result.data) {
     message.error(result.message || '获取样本池失败')
     return
@@ -1296,6 +1523,19 @@ async function loadPools() {
     await loadLatestSyncJob()
     await loadRecords()
   }
+}
+
+async function loadExactReviewAcceptance() {
+  exactReviewLoading.value = true
+  exactReviewError.value = ''
+  const result = await getSheet2ExactReviewAcceptancePackage()
+  exactReviewLoading.value = false
+  if (!result.success || !result.data) {
+    exactReviewAcceptance.value = null
+    exactReviewError.value = result.message || '获取 Sheet2 精确复核验收包失败'
+    return
+  }
+  exactReviewAcceptance.value = result.data
 }
 
 async function loadRecords() {

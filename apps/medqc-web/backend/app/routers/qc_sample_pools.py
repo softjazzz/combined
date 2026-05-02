@@ -37,6 +37,9 @@ _IMPORT_UPLOAD_DIR = (
     Path(__file__).resolve().parents[2] / "data" / "sample_pool_uploads"
 )
 _FAST_SCREEN_FULL_RULE_ID_SET = {str(item).strip().upper() for item in get_fast_screen_full_rule_ids() if str(item).strip()}
+_SHEET2_EXACT_REVIEW_ACCEPTANCE_JSON = (
+    Path(__file__).resolve().parents[2] / "docs" / "0418" / "QC" / "sheet2_exact_review_acceptance_package.json"
+)
 
 
 def _service() -> CustomQCSamplePoolService:
@@ -224,6 +227,21 @@ async def import_manual_sheet_upload(
     return success_response(
         data={**pool, "imported_rows": len(rows)},
         message="客户样本模板导入成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/sheet2-exact-review/acceptance-package")
+async def get_sheet2_exact_review_acceptance_package(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    if not _SHEET2_EXACT_REVIEW_ACCEPTANCE_JSON.exists():
+        raise HTTPException(status_code=404, detail="Sheet2 精确复核验收包尚未生成")
+    payload = json.loads(_SHEET2_EXACT_REVIEW_ACCEPTANCE_JSON.read_text(encoding="utf-8"))
+    return success_response(
+        data=payload,
+        message="获取 Sheet2 精确复核验收包成功",
         trace_id=get_trace_id(request),
     )
 

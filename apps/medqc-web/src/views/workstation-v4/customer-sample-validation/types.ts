@@ -146,3 +146,59 @@ export type ManualSamplePoolRunResult = {
   rule_set_name?: string
   rule_set_version?: string
 }
+
+export type Sheet2ExactReviewBlockedRow = {
+  sheet2_row_id: string
+  visit_id: string
+  patient_name: string
+  issue_family: string
+  primary_rule_id: string
+  manual_issue_text: string
+  blocked_reason_type: string
+  reason: string
+  backlog_category: string
+  backlog_reason: string
+  next_action: string
+}
+
+export type Sheet2ExactReviewBacklogBucket = {
+  category: string
+  count: number
+  definition: string
+  next_action: string
+  blocked_reason_types: Record<string, number>
+  top_issue_families: Array<{
+    issue_family: string
+    count: number
+  }>
+  top_primary_rules: Array<{
+    primary_rule_id: string
+    count: number
+  }>
+  sample_rows: Sheet2ExactReviewBlockedRow[]
+}
+
+export type Sheet2ExactReviewAcceptancePackage = {
+  generated_at: string
+  total_rows: number
+  status_breakdown: {
+    exact_confirmed: number
+    blocked_with_reason: number
+    skip: number
+    needs_exact_review: number
+  }
+  explanations: {
+    exact_confirmed: string
+    blocked_with_reason: string
+    skip: string
+    acceptance_note: string
+  }
+  blocked_reason_breakdown: Record<string, number>
+  blocked_backlog_breakdown: Sheet2ExactReviewBacklogBucket[]
+  blocked_rows: Sheet2ExactReviewBlockedRow[]
+  artifacts?: Record<string, string>
+  archive_summary?: {
+    archive_dir: string
+    archived_file_count: number
+  } | null
+}

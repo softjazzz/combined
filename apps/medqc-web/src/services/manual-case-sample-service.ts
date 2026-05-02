@@ -6,6 +6,7 @@ import type {
   ManualSamplePoolRecordsResult,
   ManualSamplePoolRunResult,
   ManualSamplePoolSyncJob,
+  Sheet2ExactReviewAcceptancePackage,
 } from '@/views/workstation-v4/customer-sample-validation/types'
 
 type ServiceResult<T> = {
@@ -202,5 +203,15 @@ export async function runManualSamplePool(
       data: payload || {},
     },
     '创建客户样本验证任务失败',
+  )
+}
+
+export async function getSheet2ExactReviewAcceptancePackage() {
+  return requestEnvelope<Sheet2ExactReviewAcceptancePackage>(
+    {
+      method: 'GET',
+      url: '/api/v1/qc/sample-pools/sheet2-exact-review/acceptance-package',
+    },
+    '获取 Sheet2 精确复核验收包失败',
   )
 }

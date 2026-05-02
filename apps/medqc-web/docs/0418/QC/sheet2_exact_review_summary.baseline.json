@@ -1,0 +1,1662 @@
+{
+  "total_rows": 283,
+  "status_breakdown": {
+    "exact_confirmed": 139,
+    "blocked_with_reason": 119,
+    "skip": 25
+  },
+  "needs_exact_review_rows": [],
+  "blocked_with_reason_rows": [
+    {
+      "sheet2_row_id": "Sheet2-R0009",
+      "visit_id": "1880557",
+      "patient_name": "万淇",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "使用抗菌药物治疗的患者，使用情况未在病程记录中记录（(依普林)左氧氟沙星氯化钠注射液）",
+      "reason": "local_pg 病程正文直接写明“输注左氧氟沙星过程中出现左前壁皮肤麻木、瘙痒、肿痛”，人工问题所称“使用情况未在病程记录中记录”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-用药记录-第一轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0010",
+      "visit_id": "1430048",
+      "patient_name": "任利",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院记录-体格检查缺体重",
+      "reason": "release/0426 admission_record.checkup 已明确记录“体重68.5kg 身高160cm”，人工问题与原始文书冲突，不能判定为 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-查体专科-第一轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0021",
+      "visit_id": "1915821",
+      "patient_name": "魏治伦",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史中主诉有咽痛，但未详细记录疼痛的性质、持续时间、是否有缓解方式等；诉有咳痰，未记录痰液的性状、咳痰的频率、是否有伴随症状等；未记录在当地卫生院具体的治疗情况；未记录在我院门诊的检查项目及结果；无体重变化情况的记录。",
+      "reason": "release/0426 admission_record 现病史已写持续性咽痛、白色黏痰、当地卫生院输液治疗、门诊喉镜检查及体重无明显变化，人工问题与原文大部冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0028",
+      "visit_id": "2168750",
+      "patient_name": "张乃宣",
+      "issue_family": "会诊意见已写遵执但实际未落实",
+      "primary_rule_id": "SC-070",
+      "manual_issue_text": "请会诊执行记录书写不规范仅描述“遵会诊意见执行”",
+      "reason": "release/0426_full_auto 该 visit 的会诊记录实际写有“已遵嘱执行”“已遵嘱继续煎药服用调理”“已将会诊意见告知患者并加用药物医嘱”等具体动作，并非仅写“遵会诊意见执行”；人工问题与原文不符，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-070-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0029",
+      "visit_id": "1915580",
+      "patient_name": "雷德超",
+      "issue_family": "有创诊疗操作记录缺失/书写不规范",
+      "primary_rule_id": "SC-045",
+      "manual_issue_text": "患者行了骨髓穿刺，无有创操作记录",
+      "reason": "release/0426_full_auto mr_surgery 已直接登记 2025-08-05 “骨髓穿刺术”，同 visit 还存在胸椎骨折相关手术登记；现有原文与人工问题所称“患者行了骨髓穿刺，无有创操作记录”冲突，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-045-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto mr_surgery snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0030",
+      "visit_id": "1915580",
+      "patient_name": "雷德超",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
+      "primary_rule_id": "SC-050",
+      "manual_issue_text": "三级医师查房执行不到位（主治医师查房写的是管床医生本人查房）",
+      "reason": "local_pg 与 release/0426_full_auto 可回收到“黄河副主任医师代主治医师查房”及后续邓腾孝主治医师 胡定祥主任医师查房记录，但未回收到人工问题所称“主治医师查房写的是管床医生本人查房”这一原句锚点，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-050-精确复核-第一轮",
+      "decision_source": "local_pg + release senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0031",
+      "visit_id": "2337741",
+      "patient_name": "余定远",
+      "issue_family": "不合理复制病历内容",
+      "primary_rule_id": "CL-275",
+      "manual_issue_text": "请会诊执行记录中复制粘贴严重，记录中“ 余同贵科！谢邀！我科愿随访”直接引用会诊意见未进行修改。",
+      "reason": "local_pg 当前可回收的是 2026-04-13/2026-04-14 两条会诊执行式记录及 2026-04-11/2026-04-13 上级查房间的高度复用，但未回收到人工问题所引“余同贵科！谢邀！我科愿随访”这一原句锚点；虽属同一复制粘贴问题族，仍不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "CL-275-精确复核-第一轮",
+      "decision_source": "local_pg get_documents copy-chain snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0035",
+      "visit_id": "1965433",
+      "patient_name": "马建友",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "外伤病人未描述受伤地点",
+      "reason": "release/0426 admission_record 现病史已写“在家里用电剪子剪花椒丫时”受伤，人工问题与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0042",
+      "visit_id": "1966656",
+      "patient_name": "周光容",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
+      "primary_rule_id": "SC-050",
+      "manual_issue_text": "9月2日上级查房医师为王标，但在分析病情时是孙治庆医师在查房，涉嫌伪造病历。",
+      "reason": "release/0426 与 release/0426_full_auto 现可回收的混写记录为“王标主治医师查房…李方健主治医师查房后指示”，并未回收到人工问题所称“孙治庆医师在查房”的原句；虽属同家族身份混写，但不是同一锚点，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-050-精确复核-第一轮",
+      "decision_source": "local_pg + release senior_course/daily snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0044",
+      "visit_id": "1966724",
+      "patient_name": "兰世群",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "患者入院时血压升高，未持续监测血压，未请相关科室会诊，未送检病原微生物，9月2日周凤霞主治医师查房及9月3日陈光怀副主任医师查房未书写相关内容。",
+      "reason": "local_pg 可见 9月2日周凤霞主治医师查房与 9月3日陈光怀副主任医师查房正文，且病程/会诊已有抗感染与中医会诊记录；人工问题所称“未书写相关内容、未请相关会诊”与原文不符，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0046",
+      "visit_id": "1972061",
+      "patient_name": "熊殿芳",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "转科记录书写不规范，未按照转入记录模板进行书写，缺少转入时间、目前患者情况总结及下一步诊疗计划等",
+      "reason": "local_pg 人工问题核心在“转入记录模板缺项/转入时间/下一步诊疗计划”，属于转科记录质量问题；当前主规则为 SC-023，不能按首次病程规则整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0052",
+      "visit_id": "1977580",
+      "patient_name": "夏云辉",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "现病史记录不全，缺一般情况的描述，专科检查未描述左下肢情况，初步诊断不全。",
+      "reason": "release/0426 高级查房已明确写出右大腿远端肿胀 右膝关节屈伸活动障碍及入院诊断，且历史定向验证已将该条回流到 SC-020；当前 SC-032 仅属错挂，不能按病程病情变化规则判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 + mapping history"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0053",
+      "visit_id": "1991072",
+      "patient_name": "徐光芬",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史中检查项目记录有错误，阴性症状应位于诊治经过前面，既往史记录双手麻木但无相关诊断。",
+      "reason": "release/0426 admission_record 仅能看到阴性症状顺序及“双手麻木”既往史片段，“检查项目记录有错误”与“无相关诊断”仍需额外诊断链，当前证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0056",
+      "visit_id": "2032392",
+      "patient_name": "李玲",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "手术记录及术后首次病程记录中，关于术中情况描述，“同法处理对侧”不恰当。因患者右侧卵巢无病变，也未做处理。",
+      "reason": "local_pg 人工问题核心在手术记录及术后首次病程对“同法处理对侧”的术中描述不当，属于手术/术后首次病程记录质量问题；当前以 SC-023 命中，不适合整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0058",
+      "visit_id": "2024757",
+      "patient_name": "游得利",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史未描述疼痛性质、持续时间、缓解方式等，既往史未询问出患者既往有肺结核病史。",
+      "reason": "release/0426 admission_record 已写疼痛持续半月及伴反酸，但未能同时证实“缓解方式缺失”与“既往肺结核病史漏问”，当前证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0060",
+      "visit_id": "2032008",
+      "patient_name": "何莲",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "患者月经史书写错误，现病史对疼痛的描述不详细，治疗经过未清楚描述，患者2025年10月14日14:10入住内四科，10月14日15:01分转入外二科，门诊收治入内四科欠妥。",
+      "reason": "release/0426 admission_record 可见脐周转右下腹疼痛及急诊抗感染解痉处理，但月经史、转科妥当性和诊断链需额外证据，当前不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0061",
+      "visit_id": "2273484",
+      "patient_name": "周永书",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "患者双膝疼痛10年，现病史治疗经过不详细，不能很好的指导本次住院治疗；患者既往有类风湿关节炎，入院诊断未体现。",
+      "reason": "release/0426 admission_record 主诉/现病史实际为腹痛与消化道穿孔收治，并非“双膝疼痛10年”场景，人工问题与原文主体不一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0062",
+      "visit_id": "2027741",
+      "patient_name": "朱永枝",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "患者10月15日行肾动脉栓塞术肾动脉造影术，术后手术记录有缺项。缺术后首次病程记录，缺术前小结。",
+      "reason": "local_pg 人工问题核心在“术后首次病程记录缺失、术前小结缺失、手术记录缺项”，属于手术链路文书缺项问题；当前主规则 SC-023 不能精确闭环该条。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0065",
+      "visit_id": "2023362",
+      "patient_name": "程天金",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "首次病程记录鉴别诊断不全面，患者既往有糖尿病史，入院诊断未诊断该疾病。现病史阴性症状采集不全面，不能支撑鉴别诊断。",
+      "reason": "local_pg 该条同时覆盖“糖尿病史未入入院诊断”“现病史阴性症状采集不全”“鉴别诊断不全面”多个问题点，且后续查房已补入2型糖尿病，超出单一 SC-023 可精确闭环范围。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0066",
+      "visit_id": "2144246",
+      "patient_name": "张世英",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "入院记录诊断不全，患者无房颤，但入院记录心率和脉搏不等，首次病程记录中鉴别诊断不全面。",
+      "reason": "local_pg 该条同时包含“入院诊断不全”“心率脉搏不等等同房颤判断”“首次病程鉴别诊断不全面”等复合问题，现有正文仅能证实窦性心律伴房早和右束支阻滞，不能按单一 SC-023 整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0067",
+      "visit_id": "2042774",
+      "patient_name": "张世坤",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院记录中现病史缺患者发病时间，初步诊断中腰椎病未诊断。",
+      "reason": "release/0426 admission_record 现病史出现“患者于，不明原因起病”，可证发病时间缺口，但“腰椎病未诊断”需额外诊断字段，当前证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0068",
+      "visit_id": "2040917",
+      "patient_name": "张高芬",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "入院记录初步诊断不全，首次病程诊疗计划止痛、止血未写明具体措施。",
+      "reason": "local_pg 该条同时包含“入院初步诊断不全”和“首次病程诊疗计划不具体”两类问题，超出单一 SC-023 可精确闭环范围，需拆规则复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0069",
+      "visit_id": "2030069",
+      "patient_name": "柯贤林",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院记录初步诊断不全：前列腺增生、泌尿道感染未诊断",
+      "reason": "release/0426 admission_record 可见前列腺稍大和尿白细胞异常线索，但“未诊断前列腺增生/泌尿道感染”仍需显式入院诊断字段，当前证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-尾项-第三轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0070",
+      "visit_id": "2045034",
+      "patient_name": "李再秀",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院记录初步诊断不全：高脂血症未诊断，患者活动后呼吸困难，病历记录为无诱因出现呼吸困难，入院查体中缺专科查体。",
+      "reason": "release/0426 admission_record 同时出现“活动后呼吸困难”与“无明显诱因”，可见病史表述不稳，但高脂血症未诊断与专科查体缺失仍需额外证据，当前不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0071",
+      "visit_id": "2236769",
+      "patient_name": "唐登森",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史中患者既往十年只有主要症状，无伴随症状及阴性症状。患者长期治疗慢性病的用药情况未记录。",
+      "reason": "release/0426 admission_record 现病史已写长期咳嗽咳痰、活动后呼吸困难及多项伴随/阴性症状，人工问题与原文大部冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0072",
+      "visit_id": "2038297",
+      "patient_name": "舒珍贤",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "病史采集时间未精确到分钟，入院记录脉搏记录错误，慢病用药情况未做记录。",
+      "reason": "release/0426 admission_record 仅能证实慢病具体用药未提供；“采集时间未精确到分钟”和“脉搏记录错误”需额外时序/数值核对，当前证据不足。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0073",
+      "visit_id": "2198524",
+      "patient_name": "候富明",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "入院查体无专科情况描述，患者入院时BP151/121mmHg，首次病程中未做分析、未提出诊疗计划。",
+      "reason": "local_pg 入院记录已写右肘关节局部查体，人工问题同时混入“无专科情况描述”和“首次病程未分析高血压”两个问题点，且首次病程正文缺失，超出单一 SC-036 可精确闭环范围。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0075",
+      "visit_id": "2049419",
+      "patient_name": "陈巧",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院记录中，既往口服易善复，未明确具体剂量，孕期体重增加1公斤，记录不准确。",
+      "reason": "release/0426 admission_record 只能证实“易善复 1粒 tid”未写毫克剂量；“孕期体重增加1公斤记录不准确”缺基线证据，整条不能判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-查体专科-第一轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0077",
+      "visit_id": "2052129",
+      "patient_name": "胡启凤",
+      "issue_family": "输血时间/量/前后记录不一致",
+      "primary_rule_id": "SC-074",
+      "manual_issue_text": "输血后评价记录时间记录错误，记录时间早于输血时间",
+      "reason": "release/0426_full_auto 当前仅回收到一条 2025-10-29 04:49 落款的输血记录，正文覆盖 2025-10-28 22:10 至 2025-10-29 01:02 的冷沉淀/血浆输注过程；未回收到独立“输血后评价”文书，且现存记录时间并不早于输血结束时间，不能按人工问题“输血后评价记录时间早于输血时间”判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-074-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto bloodtrans_record snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0078",
+      "visit_id": "2050775",
+      "patient_name": "朱德树",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史中发病情况描述不完整，未记录本次病情加重的情况",
+      "reason": "release/0426 admission_record 现病史已写“1天前腹痛较前加重”，人工问题所称未记录加重情况与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0079",
+      "visit_id": "2052653",
+      "patient_name": "孙景曦",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "既往史中手术史描述不清楚。上级医师查房记录对于诊断和治疗分析较为简单。",
+      "reason": "release/0426 admission_record 仅能证实既往手术史写为“腺样体切除术具体不详”；“上级医师查房分析简单”需结合查房文书，当前不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-尾项-第三轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0089",
+      "visit_id": "2041227",
+      "patient_name": "熊兴荣",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "11月3日病程过于简略，仅一句话，描述不详细（未描述切口情况、患者症状及具体用药情况）。",
+      "reason": "release/0426 现可回收的 10月29日 10月30日及 11月2日 11月5日病程均有较完整症状 查体和处理记录，但未回收到人工问题所称 11月3日“仅一句话”原文，证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 daily_course + senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0091",
+      "visit_id": "2254192",
+      "patient_name": "刘桂全",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "11月2日日常病程记录过于简略，仅一句话（未写明患者阴性症状、无生命体征描述，未描述可能诊断给予患者法莫替丁抑酸治疗）。",
+      "reason": "release/0426 当前仅回收到 2026-03-08 病程，正文已写腰背痛 呼吸困难好转 查体及出院处理，与人工问题所称 11月2日“仅一句话 未写阴性症状和生命体征”场景不一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 daily_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0093",
+      "visit_id": "2059847",
+      "patient_name": "李忠涛",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "患者入院时主诉为“进食鸡肉后咽痛、吞咽梗阻感4天”，术后首次病程记录描述为“可见一长约2cm鸭骨嵌顿”，病程前后描述存在错误，建议描述为“可见一长约2cm异物嵌顿”",
+      "reason": "local_pg 人工问题核心在术后首次病程/手术记录对异物性质的表述错误，属于围手术期文书内容一致性问题；当前主规则 SC-023 与人工锚点不一致，不能判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0096",
+      "visit_id": "2063648",
+      "patient_name": "舒泽奎",
+      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
+      "primary_rule_id": "SC-097",
+      "manual_issue_text": "手术记录中手术结束时间书写错误（9：40错误写为10:40）",
+      "reason": "release/0426_full_auto surgery_record 当前结构化手术结束时间为 2025-11-05 09:40，并非人工问题所称“10:40”；现有原始文书未回收到该错误时间原句，不能按“结束时间误写为10:40”判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-097-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto surgery_record snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0098",
+      "visit_id": "2068229",
+      "patient_name": "彭成艺",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "首次病程记录中鉴别诊断仅和霍乱鉴别，不全面；患者无传染病史，建议行两对半定性检查。",
+      "reason": "local_pg 病程实际写的是“细菌性痢疾”鉴别，并非人工问题所称“仅和霍乱鉴别”；同时“建议行两对半定性检查”亦未能与当前正文形成同一锚点，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0101",
+      "visit_id": "2033353",
+      "patient_name": "章继书",
+      "issue_family": "上级医师查房缺失/未及时书写；出院前一天/当天上级医师查房或病程缺失",
+      "primary_rule_id": "SC-051",
+      "manual_issue_text": "出院当天或前一天无上级医师查房记录，最后一次病程为出院4天前的病程记录",
+      "reason": "release/0426_full_auto 已回收到 2025-10-30 “马晨曦副主任医师出院前查房记录”，正文明确写“上级医师查看后予以出院”；同时 local_pg 还能回收到 2025-11-13 日常病程记录，现有原文链与人工问题所称“出院当天或前一天无上级医师查房记录，最后一次病程为出院4天前”不一致，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-051-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto senior/discharge snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0103",
+      "visit_id": "2073404",
+      "patient_name": "古正洪",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "主诉书写不完整，“右侧腰腹部1+天”，现病史诊治经过不详，既往史无诊断高血压的时间，既往史描述：2+月前右手因外伤截肢，而体格检查中未描述右手情况，并且记录四肢无畸形，入院诊断也无右手相关诊断。",
+      "reason": "release/0426 admission_record 已写右侧腰腹痛、门诊CT结果和高血压史，但右手截肢相关查体/诊断闭环需完整诊断字段支撑，当前证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0105",
+      "visit_id": "2073989",
+      "patient_name": "王良书",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史中阴性症状无针对性，体重87kg 身高135cm记录有误，体格检查中：皮肤和黏膜检查：胸部可见陈旧性手术瘢痕，胸部检查： 胸廓对称无畸形，无疤痕，前后矛盾。入院诊断未诊断慢性萎缩性胃炎。",
+      "reason": "release/0426 admission_record 实际记录为体重41kg身高144cm，且胸部检查同时写可见陈旧性手术疤痕，人工问题中的87kg/135cm与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0107",
+      "visit_id": "2208257",
+      "patient_name": "万先富",
+      "issue_family": "诊疗医嘱与病程记录不一致",
+      "primary_rule_id": "SC-146",
+      "manual_issue_text": "患者既往有高血压病史，入院诊断未诊断高血压，医嘱中未体现高血压用药情况，患者既往行“左侧腹股沟疝修补术”，体格检查无相关描述；2025.11.11行“超声引导下左肾穿刺活检术”，未书写有创操作记录。",
+      "reason": "local_pg admission_record 与 senior_course 只能回收到既往高血压 用药 左侧腹股沟疝手术史及“2025-11-11超声引导下左肾穿刺活检术”等混合信息；人工问题同时包含入院诊断遗漏 医嘱未体现降压药 查体未述既往手术及有创操作记录缺失，已跨 SC-013/SC-046/SC-146 多个规则边界，当前不能按单一 SC-146 整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-146-精确复核-第一轮",
+      "decision_source": "local_pg get_documents mixed-issue snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0108",
+      "visit_id": "2083787",
+      "patient_name": "付学云",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
+      "primary_rule_id": "LX-018",
+      "manual_issue_text": "2025.11.18田安琴主治医师查房记录无内容；11月17日及11月18日，无输血前评估、无输血记录、无输血后评估。",
+      "reason": "release/0426_full_auto 2025-11-18 “田安琴主治医师查房记录”正文完整回收到病史 体查 辅检 诊断依据与诊疗计划；同时 bloodtrans_record 已有 2025-11-17 及 2025-11-18 两次红细胞输血记录，现有原文与人工问题所称“11月18日查房记录无内容”“11月17日及11月18日无输血记录”不一致，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "LX-018-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto senior_course_record + bloodtrans_record snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0109",
+      "visit_id": "2110349",
+      "patient_name": "古洪忠",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "2025.11.20病程记录缺患者病情变化、目前症状、体征、阳性检查检验结果。仅记录抽取血常规、电解质的目的。",
+      "reason": "release/0426 当前可回收病程时间集中在 12月8日 12月13日 12月22日 12月27日，未直接回收到人工问题所指 2025-11-20 原始病程正文；现有摘要也更偏向 SC-036 分析缺失，证据不足以按 SC-032 整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 daily_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0110",
+      "visit_id": "2326610",
+      "patient_name": "张仕枝",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史对于头痛的描述不细致，阴性症状采集不全面，无诊治经过，无门诊初步诊断，既往史书写混乱，无条理。",
+      "reason": "release/0426 admission_record 主诉/现病史实际围绕白血病乏力纳差，并非“头痛描述不细致”场景，人工问题与原文主体不一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0111",
+      "visit_id": "2073320",
+      "patient_name": "徐娟",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史阴性症状采集不完整，门诊初步诊断“疼痛”不准确。既往史中记录有外伤史及手术史，但未做具体描述。患者有乙肝病史，未做诊断。辅助检查中，仅做两对半定性检查，而未做定量检查欠妥。",
+      "reason": "release/0426 admission_record 可见外伤史/手术史均未细化，但“乙肝未诊断”和“仅做定性检查欠妥”仍需额外诊断与检验链，当前不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0112",
+      "visit_id": "2081312",
+      "patient_name": "冷克蓉",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史患病部位描述不准确、阴性病史采集不完整，入院血压138/102mmHg，未做血压监测，未做高血压方面的筛查，既往史1月前重庆大坪医院行胰腺脓肿引流术，未做进一步描述，未做相关的检查。",
+      "reason": "release/0426 admission_record 现病史已明确“右侧腋区、肋部皮肤红斑丘疱疹伴疼痛”，人工问题中“患病部位描述不准确”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0115",
+      "visit_id": "2090513",
+      "patient_name": "郑文英",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "患者既往有脑梗死病史，入院诊断未诊断；患者右眼失明，入院体格检查中描述为头颅五官无畸形，专科情况未记录。",
+      "reason": "release/0426 admission_record 既往史已写脑梗死和右眼失明，但“入院诊断未诊断”及“专科情况未记录”需额外诊断/专科段证据，当前不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0117",
+      "visit_id": "2097628",
+      "patient_name": "徐前军",
+      "issue_family": "主治首次查房48小时；病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-033",
+      "manual_issue_text": "入院48小时内，无主治医师查房记录；首次病程鉴别诊断中：血精的常见病因精囊结石及精囊结核，未做分析鉴别。",
+      "reason": "release/0426_full_auto 已回收到 2025-11-27 09:52 的“徐应福主治医师查看病人”记录，距 2025-11-26 10:03 入院不足 24 小时；同时 first_course_record 仅存空壳条目，未回收到人工问题所称“首次病程中对精囊结石及精囊结核未做分析”的原始正文，整条不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-033-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto senior_course_record + first_course_record snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0118",
+      "visit_id": "2097761",
+      "patient_name": "张成燕",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "患者行剖宫产2次，体格检查中腹部情况未做相关描述。",
+      "reason": "release/0426 admission_record 腹部查体已记录腹部膨隆及耻骨联合上剖宫产瘢痕，人工问题与原始文书冲突，不能判定为 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-查体专科-第一轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0119",
+      "visit_id": "2092076",
+      "patient_name": "刘友琼",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史书写思路跳跃：未按照主要症状、伴随症状、阴性症状、整治经过、一般情况这个步骤书写，体格检查身高体重存在明显错误。",
+      "reason": "release/0426 admission_record 现病史已按异物起病、伴随症状、阴性症状、门诊CT和一般情况展开，人工问题关于书写思路跳跃与原文不符，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0122",
+      "visit_id": "2113971",
+      "patient_name": "李高华",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "鉴别诊断未写鉴别肺栓塞，但诊疗计划辅助检查进行肺栓塞鉴别诊断",
+      "reason": "local_pg 当前快照只可见肺结核鉴别和拟行纤维支气管镜检查，未回收到人工问题所称“诊疗计划辅助检查进行肺栓塞鉴别诊断”的对应原文，证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0124",
+      "visit_id": "2151657",
+      "patient_name": "何英芬",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "患者现病史“进食蔬菜时呛咳起病，主要表现为咳嗽、气促，伴少量咳痰，咳痰较费力，伴精神欠佳、饮食较差、浑身乏力”。诊断：社区获得性肺炎。诊断不合理。",
+      "reason": "release/0426 admission_record 实际主诉/现病史为摔倒后头痛并颅脑CT检查，与人工问题中的“进食蔬菜呛咳/社区获得性肺炎”场景不一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0128",
+      "visit_id": "2104525",
+      "patient_name": "汪明海",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "12月7日病程书写错误“嘱患者及家属注意伤口为甚，避免感染。 \"",
+      "reason": "release/0426 当前可回收的是 12月2日 12月3日 12月8日 12月12日病程，人工问题核心是“伤口为甚”这类措辞错误，属于书写质量问题而非 SC-032 病情变化记录不全，不能按当前规则判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 daily_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0131",
+      "visit_id": "2110297",
+      "patient_name": "刘琼荣",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "主诉不完整“车祸伤40+分钟”无法推导出主要诊断，主诉应包含主要症状或体征及持续时间",
+      "reason": "release/0426 admission_record 主诉实际写为“车祸致头面部、胸部等多处受伤40+分钟”，并非仅“车祸伤40+分钟”，人工问题与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-尾项-第三轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0132",
+      "visit_id": "2115142",
+      "patient_name": "黄飞",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "首次病程诊疗计划前后矛盾“予以云南白药胶囊+酚磺乙胺止血”、“饮食指导：多饮水，多食新鲜蔬菜、水果及抗血小板聚集的食物。”",
+      "reason": "local_pg 当前首程/上级查房正文仅见“加用氢氯噻嗪及螺内酯利尿减轻心脏负荷，请心内科会诊”，未回收到人工问题所引“云南白药胶囊+酚磺乙胺止血”“多饮水、多食抗血小板聚集食物”等关键原句，证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-023-诊断依据-第三轮",
+      "decision_source": "local_pg get_documents + final tail probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0135",
+      "visit_id": "2119620",
+      "patient_name": "杜沁妤",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "12月9日病程记录书写存在错误“请示上级医师后予以0.9g q12h ivgtt抗感染”",
+      "reason": "local_pg 12月9日日常病程实际写有“阿莫西林克拉维酸钾0.9g q12h ivgtt抗感染”，人工问题核心是书写措辞质量而非异常结果分析，需归入其他书写规则复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0137",
+      "visit_id": "2123539",
+      "patient_name": "赵金书",
+      "issue_family": "诊疗医嘱与病程记录不一致",
+      "primary_rule_id": "SC-146",
+      "manual_issue_text": "既往史中患者冠心病、高血压、慢性胃炎的患病时间未提及，口服阿托伐他丁及硝苯地平的剂量、用法未记录。医嘱中无治疗冠心病及高血压的药物。",
+      "reason": "local_pg admission_record 与 senior_course 可回收到“长期口服阿托伐他汀/硝苯地平”及冠心病 高血压 慢性胃炎诊断，但人工问题同时覆盖既往史患病时间缺失 口服药剂量用法缺失 以及“医嘱中无治疗冠心病及高血压药物”三类子问题；当前原文链缺少可复原医嘱明细的直接锚点，不能按单一 SC-146 整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-146-精确复核-第一轮",
+      "decision_source": "local_pg get_documents mixed-issue snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0139",
+      "visit_id": "2137061",
+      "patient_name": "钟朝树",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "患者入院时诊断胸腔积液诊断依据不足，诊断急性胃炎依据不足。现病史中，对主要症状胸痛的描述缺乏相应要素：如疼痛持续时间、具体部位、加重或者缓解方式等。",
+      "reason": "local_pg 该条同时覆盖“入院现病史胸痛要素缺失”和“胸腔积液/急性胃炎诊断依据不足”，属于入院记录完整性与诊断依据复合问题，超出单一 SC-023 可精确闭环范围。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0141",
+      "visit_id": "2131765",
+      "patient_name": "李元娟",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "现病史围绕主诉头晕的阴性症状采集不全面，患者有手术史，查体未体现，主治医师查房记录，未对疾病做出相应分析，无法体现上级医师诊疗水平。",
+      "reason": "release/0426 admission_record 可见主诉头晕的多项阴性症状和既往剖宫产史，但“查体未体现”及上级医师分析不足需结合查房文书，当前证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0143",
+      "visit_id": "2153245",
+      "patient_name": "杜心烨",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "体格检查中，双膝部外伤未详细记录，超过24小时未录入主诊断。",
+      "reason": "release/0426 admission_record 已记录双侧膝部擦伤及局部情况，但“超过24小时未录入主诊断”需额外诊断时序证据，当前快照链不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-查体专科-第一轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0144",
+      "visit_id": "2150972",
+      "patient_name": "刘曦",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "女性患者无月经婚育史、现病史患者发热的描述不详细，本次诊断急性化脓性扁桃体炎，既往史中患者既往扁桃体手术史未明确手术类型。患者有抑郁症病史，长期服药，入院诊断未诊断。",
+      "reason": "release/0426 admission_record 可见咽痛、轻度发热及扁桃体手术史，但月经婚育史、抑郁症入院诊断和手术类型仍缺对应字段，当前不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0147",
+      "visit_id": "2172686",
+      "patient_name": "胡启华",
+      "issue_family": "诊疗医嘱与病程记录不一致",
+      "primary_rule_id": "SC-146",
+      "manual_issue_text": "医嘱：急支糖浆10毫升，口服，每日三次。剂量不足。",
+      "reason": "local_pg 当前回收到的是眼科围术期病程与泪囊/白内障手术相关记录，未回收到人工问题所称“急支糖浆10毫升 口服 每日三次”这一医嘱原句；现有原文无法对应该剂量问题，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-146-精确复核-第一轮",
+      "decision_source": "local_pg get_documents mixed-issue snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0148",
+      "visit_id": "2174151",
+      "patient_name": "邓浩",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "1月17日，1月20日，病程记录无具体内容",
+      "reason": "release/0426 与 release/0426_full_auto 可回收到 1月20日上级查房正文，内容包含症状 查体和治疗方案，并非“无具体内容”；人工问题与现有原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 + release/0426_full_auto snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0150",
+      "visit_id": "2313364",
+      "patient_name": "孔祥斌",
+      "issue_family": "会诊执行记录缺失/未写执行情况；危急值记录不完整/处理不充分；诊疗医嘱与病程记录不一致",
+      "primary_rule_id": "LX-016",
+      "manual_issue_text": "1月13日，危急值处理不及时，请内分泌科会诊后，无会诊执行记录。1月16日病程记录中，未描述患者血糖控制情况及内分泌科会诊指导用药情况。1月23日，开具医嘱为普通饮食欠妥，",
+      "reason": "local_pg 与 release/0426_full_auto 当前回收到的是 2026-03-29 因“左侧外踝红肿、破溃、流脓3天”入院后的骨科感染病程，相关会诊仅见 2026-04-01 肾病内科与 2026-04-02 临床药学会诊，未回收到人工问题所称 1月13日危急值、内分泌科会诊、1月16日血糖控制及 1月23日普通饮食锚点，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "LX-016-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto consult/daily snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0153",
+      "visit_id": "2188335",
+      "patient_name": "黄显秀",
+      "issue_family": "会诊意见已写遵执但实际未落实",
+      "primary_rule_id": "SC-070",
+      "manual_issue_text": "1月23日康复科会诊建议给予针灸、低频、中药贴敷、关节松动术、偏瘫肢体综合训练、肌力训练等康复治疗以舒经通络、滑利关节。请会诊执行记录中书写遵会诊意见。但实际并未按照会诊意见执行。",
+      "reason": "release/0426_full_auto 当前可回收原文是泌尿外科关于下肢静脉血栓的会诊与后续抗凝执行，并非人工问题所述“1月23日康复科会诊建议针灸 低频 中药贴敷等但实际未执行”场景，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-070-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation + daily snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0157",
+      "visit_id": "2194387",
+      "patient_name": "钟志春",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "主诉及现病史无法推导出主要诊断",
+      "reason": "release/0426 admission_record 已写呼之不应、急诊血糖1.8mmol/L及高糖后清醒，是否“无法推导主要诊断”属诊断判断问题，当前证据不足以判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0159",
+      "visit_id": "2191940",
+      "patient_name": "李祥飞",
+      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
+      "primary_rule_id": "SC-097",
+      "manual_issue_text": "手术记录手术结束时间错误（1月26日10：00误写为1月27日10:00）",
+      "reason": "release/0426_full_auto surgery_record 当前结构化手术结束时间为 2026-01-26 10:00，并非人工问题所称“误写为1月27日10:00”；现有原始文书未回收到该错误时间原句，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-097-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto surgery_record snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0166",
+      "visit_id": "2200224",
+      "patient_name": "张乃军",
+      "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
+      "primary_rule_id": "SC-105",
+      "manual_issue_text": "术后首次病程记录中手术时间与实际手术时间不一致",
+      "reason": "release/0426_full_auto postsurg_firstcourse_record 明确写“手术时间:2026年02月02日 10:45”；PG surgery_record 同时记录 surgery_begin_time=2026-02-02 10:45:00+08，现有原文与人工问题所称“术后首次病程记录中手术时间与实际手术时间不一致”不一致，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-105-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto postsurg_firstcourse_record + PG surgery_record"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0169",
+      "visit_id": "2198921",
+      "patient_name": "王明德",
+      "issue_family": "四级手术未 MDT",
+      "primary_rule_id": "SC-083",
+      "manual_issue_text": "患者行腹腔镜下直肠前切除术，国考四级手术术前无多学科会诊。",
+      "reason": "release/0426_full_auto 术前已回收到胸外科 心内科 麻醉科等多条会诊记录，人工问题所称“术前无多学科会诊”与原文不一致；是否构成规范 MDT 属同家族但非同锚点，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-083-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0171",
+      "visit_id": "2327691",
+      "patient_name": "邹世科",
+      "issue_family": "会诊记录内容质量/复制粘贴/结论不足",
+      "primary_rule_id": "SC-069",
+      "manual_issue_text": "2026年2月4日会诊记录中存在大量复制其他科室会诊意见的情况，并无综合会诊结果提出建设性诊疗意见。",
+      "reason": "release/0426_full_auto 当前仅回收到 2026-04-06 肿瘤科会诊，内容为贫血原因待查并建议完善贫血三项/血清铁/网织红细胞/促红细胞生成素/甲功五项/自身免疫抗体及必要时骨髓穿刺；未回收到人工问题所称“2026年2月4日会诊记录”及其“复制其他科室意见、无建设性意见”原句锚点，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-069-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation_record snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0172",
+      "visit_id": "2199396",
+      "patient_name": "王生明",
+      "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
+      "primary_rule_id": "LX-020",
+      "manual_issue_text": "患者2月4日手术，无术前主刀医师查房记录，无术后首次病程记录及手术记录。",
+      "reason": "release/0426_full_auto 已回收到 2026-02-04 15:35 的术后首次病程记录，正文明确写“手术时间:2026年02月04日 12:45…手术方式:膀胱镜检查+尿道狭窄扩张术+经皮耻骨上膀胱造口导尿管插入术”；同时 surgery_record 与 mr_surgery 均登记了同日手术，现有原文与人工问题所称“无术后首次病程记录及手术记录”冲突，整条不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "LX-020-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto postsurg_firstcourse_record + surgery_record + mr_surgery snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0173",
+      "visit_id": "2200664",
+      "patient_name": "朱泰廷",
+      "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
+      "primary_rule_id": "LX-016",
+      "manual_issue_text": "1月30日后7天无病程记录，请心血管、肾内科、呼吸科、麻醉科、皮肤科等科室会诊后，无请会诊执行记录。",
+      "reason": "release/0426_full_auto 当前可回收到 2026-02-01 皮肤科会诊“遵会诊意见予以抗过敏治疗”、2026-02-05 肾病内科会诊“遵会诊意见予以完善甲状旁腺激素、无机磷、贫血三项”，并有 2026-02-08、02-10、02-11、02-12 连续上级查房记录；现有原文与人工问题所称“1月30日后7天无病程记录…无请会诊执行记录”不一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "LX-016-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + PG consult/order snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0175",
+      "visit_id": "2210351",
+      "patient_name": "吴佳宜",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "鉴别诊断不完整，未鉴别中耳炎。2月3日请会诊执行记录仅复制儿科会诊意见。",
+      "reason": "local_pg 病程当前诊断已明确写出“双耳分泌性中耳炎”，人工问题所称“未鉴别中耳炎”与原文冲突；同时还混有会诊执行记录复制问题，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0177",
+      "visit_id": "2209876",
+      "patient_name": "朱成明",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "2月4日、2月5日连续两次病程记录新建后未书写",
+      "reason": "local_pg 现仅能看到2月4日和2月5日已有上级查房记录，无法从当前病历快照还原“新建后未书写”的元数据状态，证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0191",
+      "visit_id": "2209066",
+      "patient_name": "武中彬",
+      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
+      "primary_rule_id": "SC-097",
+      "manual_issue_text": "手术记录非手术医生或第一助手书写且主刀医生未签名确认",
+      "reason": "local_pg get_documents 仅回收到签名字段为空的手术记录模板；release/0426_full_auto surgery_record 可见 last_modifier 为周雨、手术医师为段超，但助手字段为空，当前证据不足以稳定证明“周雨非手术医生或第一助手且主刀未签名确认”这整句身份链。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-097-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto surgery_record snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0194",
+      "visit_id": "2214679",
+      "patient_name": "田正群",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "现病史记录不全，未记录肿物性状、未记录诊疗经过。",
+      "reason": "release/0426 入院及上级查房已明确写出“外阴肿物脱出半年” 查体性状和术前准备经过，人工问题所称“未记录肿物性状 未记录诊疗经过”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 daily_course + senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0195",
+      "visit_id": "2213827",
+      "patient_name": "熊明英",
+      "issue_family": "四级手术未 MDT",
+      "primary_rule_id": "SC-083",
+      "manual_issue_text": "婚育史书写有误：适龄结婚，配偶体质一般，G2P2,平产1子健在。国考四级手术术前无多学科会诊。术前超声提示：左肾未显示。未请泌尿外科或者肾内科会诊，未进一步检查明确，即诊断“左肾缺失”不规范。",
+      "reason": "release/0426_full_auto 该条同时混有婚育史错误 左肾未显示后未进一步会诊/检查及四级手术 MDT 多个问题点，现有证据只能覆盖其中 MDT 一支，超出单一 SC-083 可精确闭环范围。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-083-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto senior_course + consultation snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0197",
+      "visit_id": "2245464",
+      "patient_name": "杨长菊",
+      "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "入院72小时以内无副主任医师以上的医师（已新建无具体内容）",
+      "reason": "release/0426_full_auto 可见 2026-02-25 已有陈建霞副主任医师查房，且条目核心属于 72小时高级医师查房问题而非 SC-032 病情变化记录不全；当前主规则错挂，不能按 SC-032 判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426_full_auto senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0200",
+      "visit_id": "2243538",
+      "patient_name": "刘宗碧",
+      "issue_family": "会诊意见已写遵执但实际未落实",
+      "primary_rule_id": "SC-070",
+      "manual_issue_text": "请会诊执行记录执行情况为“拟遵照执行”，实际为已遵会诊意见执行。",
+      "reason": "release/0426_full_auto consultation_record 仅回收到“医生签名:”空壳正文，无法核对人工问题所称“拟遵照执行”原句及其与实际执行的前后关系，证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-070-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0205",
+      "visit_id": "2259144",
+      "patient_name": "李欣桂",
+      "issue_family": "围手术期术前评估/讨论/小结缺陷",
+      "primary_rule_id": "SC-081",
+      "manual_issue_text": "患者17岁男性，入院诊断右侧睾丸扭转，急诊手术，存在器官切除的可能，术前缺上级医师意见。手术中，右侧睾丸附睾切除后，行左侧睾丸固定时，使用5-0可吸收线欠妥，文献建议使用丝线固定以确保永久固定。",
+      "reason": "release/0426_full_auto 已回收到 2026-03-01 李杰副主任医师查房和术前主刀医师查房，均已写明急诊手术指征及坏死后可能切除右侧睾丸附睾，不能支持“术前缺上级医师意见”；另 postsurg_firstcourse_record 虽可见左侧睾丸固定使用 5-0 可吸收缝线，但该子问题属于术中材料/技术合理性判断，已超出单一 SC-081 术前评估规则边界，不能按整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-081-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto senior/postsurg snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0206",
+      "visit_id": "2246915",
+      "patient_name": "黄金莲",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "患者行经阴道子宫切除术，术前无尿路感染，术后诊断尿路感染。未请泌尿外科会诊，未分析原因。",
+      "reason": "local_pg 3月4日日常病程已写“考虑泌尿道感染可能”并开始头孢噻肟，3月6日又记录泌尿外科会诊协助诊治，人工问题所称“未请泌尿外科会诊 未分析原因”与原文冲突。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0207",
+      "visit_id": "2265223",
+      "patient_name": "赖敏",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "患者病史中有长期尿不尽感，但未做膀胱残余尿等相关检查，首次病程记录鉴别诊断不全面",
+      "reason": "local_pg 当前病历主线为“盆腔包块待诊：卵巢肿瘤？”并非长期尿不尽场景，人工问题与该 visit 的原始文书主诉、查体及诊疗计划明显不符，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0208",
+      "visit_id": "2262370",
+      "patient_name": "李昭云",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "首次病程记录鉴别诊断不全面，入院记录患者手术史记录不详细，体格检查中，未记录手术相关痕迹，脊柱检查缺失。门诊未做检查就收治入院，仅诊断膝关节痛，有扩大住院指针嫌疑。",
+      "reason": "local_pg 该条同时包含“鉴别诊断不全面”“手术史不详细”“体格检查缺项”“扩大住院指征嫌疑”等多类问题，超出单一 SC-023 可精确闭环范围，需拆规则另行复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0209",
+      "visit_id": "2263757",
+      "patient_name": "杨光中",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院记录慢病史用药情况记录不全，心率和脉搏不一致，也无相关诊断，患者有腹部手术史，查体未做描述。",
+      "reason": "release/0426 admission_record 仅能证实高血压长期口服氨氯地平且既往腹股沟疝/肠息肉手术史已写；心率脉搏不一致、相关诊断和腹部手术查体缺项需额外闭环证据。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0210",
+      "visit_id": "2256518",
+      "patient_name": "赖世成",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院记录主诉“无明显诱因出现左膝疼痛3月”描述不规范；慢病史记录不全，心率和脉搏不一致，也无相关诊断，患者有腹部手术史，查体未做描述；四肢检查中记录为四肢关节活动正常，与专科情况中描述左膝屈膝活动受限，前后不一致。",
+      "reason": "release/0426 admission_record 可见左膝疼痛3月及高血压/手术史，但“无相关诊断”和专科查体前后不一致需完整专科段/诊断字段支撑，当前不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0212",
+      "visit_id": "2260677",
+      "patient_name": "秦祖全",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "首次病程记录鉴别诊断不全面，且使用“左踝关节骨折”这种非专业的诊断。",
+      "reason": "local_pg 正文将“左踝关节骨折”写在鉴别诊断而非最终诊断位，人工问题所称“使用这种非专业的诊断”与原文定位不一致，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0213",
+      "visit_id": "2295919",
+      "patient_name": "朱兆英",
+      "issue_family": "围手术期术前评估/讨论/小结缺陷",
+      "primary_rule_id": "SC-081",
+      "manual_issue_text": "2026.2.9急诊手术术前准备不充分，预案不清晰，拟急诊行髋关节脱位手法复位术，而实际术中情况是“假体脱位不能复位”，需择期行髋关节翻修术。",
+      "reason": "local_pg 与 release/0426_full_auto 当前回收到的是 2026-03-19 因“右髋关节翻修术后1月 伤口愈合不良5天”再次入院后的感染处理记录，未回收到人工问题所称 2026-02-09 “拟急诊行髋关节脱位手法复位术 而实际术中假体脱位不能复位 需择期翻修术”的原始术前/术中文书锚点，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-081-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto episode snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0214",
+      "visit_id": "2260053",
+      "patient_name": "敖富芬",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "2026-3-3主治医生查房，患者检查见低钾血症，无处理及诊断，疼痛科评估绝对手术禁忌症（病历书写误，应为无手术禁忌症），2026-3-5患者检查见低钾3.08mmol/l，较前进一步加重，无处理。",
+      "reason": "local_pg 疼痛科会诊原文为“知情同意后可行全身麻醉下肠镜检查”并非绝对手术禁忌；后续查房亦已写“低钾，嘱患者进食香蕉等水果补充电解质”，人工问题与原文冲突。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0216",
+      "visit_id": "2255882",
+      "patient_name": "黄永秀",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "患者主诉行走不稳1年入院，根据现病史患者3天前呕吐就诊，主诉内容不完整。首次病程，无高血压，肺结节等疾病诊断依据。诊疗计划中对于高血压疾病且入院血压偏高，无监测血压，无用药记录。2026-03-01术前主刀查房与手术记录 无主刀医生签名，均为主管医生签名",
+      "reason": "release/0426 admission_record 可见主诉行走不稳1年与3天前呕吐，但条目同时跨首次病程、血压管理和术前主刀签名多个规则，当前 admission_record 证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0220",
+      "visit_id": "2268187",
+      "patient_name": "代云聪",
+      "issue_family": "会诊记录质量缺陷",
+      "primary_rule_id": "SC-069",
+      "manual_issue_text": "患者BP163/90mmHg，未复测及进一步处理；3月7日请康复科会诊记录里面，明确记录“与患者沟通后，表示拒绝康复治疗”本患者仍然开具超声波、电刺激、光照射、中药溻渍等康复治疗项目；患者进行左侧膝关节清创术，无操作记录。",
+      "reason": "release/0426_full_auto 康复科会诊确有“与患者沟通后，表示拒绝康复治疗”，后续病程亦继续写“可继续当前输液及康复理疗/可继续康复治疗”；但同一就诊已在 2026-03-10 日常病程详细记录“左膝皮肤感染清创引流术”，mr_surgery 亦登记“皮肤和皮下组织非切除性清创”，现有原文与人工问题所称“左侧膝关节清创术，无操作记录”冲突，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-069-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation_record + daily_course_record + mr_surgery snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0221",
+      "visit_id": "2276701",
+      "patient_name": "温光秀",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "患者拟行肠镜，请疼痛科会诊，会诊意见原封不动复制，未认真做好病情变化分析及病程书写。",
+      "reason": "local_pg 现有病程与会诊只能证实已请疼痛科和麻醉会诊并写有“遵会诊意见 术前胃肠道准备”，人工问题核心是“原封不动复制”这一复制病历问题，需按其他规则复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0223",
+      "visit_id": "2229247",
+      "patient_name": "陈正权",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "入院诊断疼痛，诊断不准确，专科查体中显示主被动活动受限，但入院诊断未体现",
+      "reason": "release/0426 admission_record 可见“活动受限”病史线索，但快照未提供可核对的入院诊断字段及专科查体正文，证据链不足，不能判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-查体专科-第一轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0224",
+      "visit_id": "2268827",
+      "patient_name": "朱敦群",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "胸部CT提示双肺感染，未请呼吸内科会诊，病程记录及出院诊断均未提及",
+      "reason": "local_pg 上级查房已记录 3月5日 CT“ 双肺少许感染 ”及后续病程抗感染处理，人工问题中“病程记录及出院诊断均未提及”与原文至少在病程层面冲突，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0225",
+      "visit_id": "2262981",
+      "patient_name": "屈义田",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "胸部CT提示双肺结节，检验结果提示低钾，病程记录未提及",
+      "reason": "local_pg 主治/出院前查房已写胸部 CT“ 双肺多发结节 ”，3月7日查房又记录 3月6日 K 3.44mmol/L；人工问题所称“病程记录未提及”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0226",
+      "visit_id": "2255288",
+      "patient_name": "王树成",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "3月11日检查检验结果数据异常未进行分析和记录",
+      "reason": "local_pg 3月13日上级医师查房已完整列出 3月11日 proBNP、血常规、D-Dimer/FDP、白蛋白等异常检查，人工问题中“3月11日异常数据未进行记录”与原文冲突，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0229",
+      "visit_id": "2264271",
+      "patient_name": "陈中德",
+      "issue_family": "四级手术未 MDT",
+      "primary_rule_id": "SC-083",
+      "manual_issue_text": "四级肿瘤手术，未行多学科讨论，",
+      "reason": "release/0426_full_auto 术前已回收到呼吸与危重症医学科 麻醉科 肿瘤科 消化内科等多条会诊记录，人工问题所称“未行多学科讨论”与现有原文并不直接对应；是否满足规范 MDT 需另一层制度口径，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-083-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0230",
+      "visit_id": "2262090",
+      "patient_name": "杜贤彬",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
+      "primary_rule_id": "SC-050",
+      "manual_issue_text": "未落实三级医师查房。",
+      "reason": "local_pg 与 release/0426_full_auto 可回收住院医师日常病程、郑凤金主治医师查房及陈光怀副主任医师查房，现有文书已形成三级查房链；人工问题所称“未落实三级医师查房”与原始文书冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-050-精确复核-第一轮",
+      "decision_source": "local_pg + release daily/senior snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0231",
+      "visit_id": "2272872",
+      "patient_name": "李才贵",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "3月10日副主任医师查房记录内容空洞，无病情分析，无诊疗意见。",
+      "reason": "release/0426_full_auto 可见副主任医师查房正文核心为“同意目前诊断及处理 治疗同前 续观”，人工问题更接近上级查房内容空洞规则而非 SC-032；当前主规则错挂，不能按 SC-032 整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426_full_auto senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0239",
+      "visit_id": "2283295",
+      "patient_name": "李相书",
+      "issue_family": "有创诊疗操作记录缺失/书写不规范",
+      "primary_rule_id": "SC-046",
+      "manual_issue_text": "2026.3.14(有创）操作记录书写逻辑混乱，下诊断时应规范标注序号。（直肠见一大小约5mmIs型息肉，内镜下予以一次性使用圈套器切除，送检标本1.乙状结肠粘膜充血水肿。 直肠息肉内镜下息肉切除术乙状结肠炎，过程顺利。）",
+      "reason": "local_pg 与 release/0426_full_auto 仅回收到内镜切除的 mr_surgery 摘要和空壳有创操作模板，未回收到人工问题所引“5mmIs型息肉 一次性使用圈套器 送检标本1.乙状结肠粘膜充血水肿”等原始操作正文，证据不足以核对“书写逻辑混乱/诊断序号”这一精确锚点。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-046-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto mr_surgery snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0241",
+      "visit_id": "2275298",
+      "patient_name": "郑尚怀",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "颅脑平扫提示基底节区腔隙性脑梗塞，未请神经内科会诊及分析。",
+      "reason": "local_pg 3月10日查房已将“双侧基底节区腔隙性脑梗塞”纳入诊断并写明“与患者及家属沟通暂无特殊处理”，人工问题中“未分析”与原文冲突，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0242",
+      "visit_id": "2281076",
+      "patient_name": "蒋光琼",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "病程记录对检验结果未分析",
+      "reason": "local_pg 术后查房已写 3月13日 WBC 3.64、Cl 113.3 并据“无感染征象”停用头孢；人工问题未指明哪项检验结果仍缺分析，当前证据不足以精确判定整条成立。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0243",
+      "visit_id": "2273134",
+      "patient_name": "李宗良",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "异常检验结果在病程记录中未体现",
+      "reason": "local_pg 3月12日日常病程已列 WBC、D-Dimer、FDP、CRP、Alb、肾功等异常，3月13日又结合血气分析安排拔管和继续观察；“异常检验结果在病程记录中未体现”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0246",
+      "visit_id": "2330104",
+      "patient_name": "林永平",
+      "issue_family": "四级手术未 MDT",
+      "primary_rule_id": "SC-083",
+      "manual_issue_text": "多学科讨论记录中肿瘤科会诊意见与会诊记录单中会诊意见不一致",
+      "reason": "release/0426_full_auto 当前仅回收到安置输液港的普外科会诊，未回收到人工问题所称“MDT 记录中的肿瘤科意见”及其对照会诊单，证据链不足以核对“不一致”这一核心锚点。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-083-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation + senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0249",
+      "visit_id": "2297786",
+      "patient_name": "杜孝涛",
+      "issue_family": "有创诊疗操作记录缺失/书写不规范",
+      "primary_rule_id": "SC-046",
+      "manual_issue_text": "3月23日有创操作记录：未明确记录操作者、未描述操作时患者所取的体位、“留取脓液标本送检”应明确送检项目（如：细菌培养+药敏试验）、“向外扩张15cm”：此表述在专业文书中较少使用，通常表述为“消毒范围直径约15cm”或“以穿刺点为中心，消毒范围半径约15cm”、“外面垫放干纱布”：建议统一为“外敷无菌干纱布”。",
+      "reason": "local_pg 与 release/0426_full_auto 仅回收到“左侧颈部脓肿切开引流术”的 mr_surgery 摘要和空壳有创操作模板，未回收到人工问题所引“向外扩张15cm 外面垫放干纱布 留取脓液标本送检”等原始操作正文，无法精确核对该组措辞缺陷。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-046-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto mr_surgery snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0251",
+      "visit_id": "2287309",
+      "patient_name": "陈光华",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "术中冰冻结果与手术决策： 术中冰冻回报“浸润性腺癌”后，未记录是否据此调整手术范围。若楔形切除即为最终术式，应说明原因（如：患者肺功能差、高龄、多发合并症等）；若需扩大切除，则后续步骤未体现。此部分为关键质控点，建议补充。",
+      "reason": "local_pg 该条核心在术中冰冻回报后是否扩大切除及手术范围决策链说明，属于围手术期决策记录完整性问题，超出单一 SC-036 异常结果分析规则可精确闭环范围。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0254",
+      "visit_id": "2275999",
+      "patient_name": "王美锡",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "外伤病人未描述受伤地点",
+      "reason": "release/0426 admission_record 现病史已写“在泸县谭坝过路时被钢架砸伤腰部”，人工问题所称未描述受伤地点与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0255",
+      "visit_id": "2286259",
+      "patient_name": "曾昌荣",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "病程中未记录3月15日胃镜检查结果。患者拟于3月17日行TAPP术，术前3月17日3:50,患者自述胸痛，未做详细查体，辅助检查不全面，仅查心电图及心肌标志物未见异常。考虑范围局限。未及时暂停手术而仍按计划于当日在全麻下行TAPP术，术后一天，患者出现寒战、高热、腹痛、诊断化脓性胆管炎、感染性休克。病历书写不完整，围手术期管理不到位。",
+      "reason": "local_pg 该条同时覆盖 3月15日胃镜结果缺失、3月17日胸痛评估不足、TAPP 未暂停及术后化脓性胆管炎/感染性休克等多个围手术期管理点，超出单一 SC-036 规则可精确闭环的范围，需拆多规则另行复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0262",
+      "visit_id": "2300354",
+      "patient_name": "刘德荣",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "有血管彩超，且结果阳性 （动脉粥样硬化），无诊断，无相关处理。",
+      "reason": "local_pg 3月23日查房已写“血管彩超…双下肢动脉粥样硬化伴斑块”，后续心内科又因高脂血症建议阿托伐他汀；是否构成“无相关处理”仍缺更明确的诊疗闭环证据，不能整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0264",
+      "visit_id": "2270715",
+      "patient_name": "马建倡",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "manual_issue_text": "既往史中有直肠癌手术病史，但入院诊断无相关诊断",
+      "reason": "release/0426 admission_record 既往史已写6月前直肠Ca手术及术后化疗，但“入院诊断无相关诊断”需额外诊断字段验证，当前证据不足以判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-008-现病史-第二轮",
+      "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0265",
+      "visit_id": "2306811",
+      "patient_name": "罗亨金",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "尿常规阳性结果无诊断分析及处理。",
+      "reason": "local_pg 首次查房已将“血尿：结石？感染？其他？”纳入诊断并继续围手术期处理，但人工问题要求的是“尿常规阳性无诊断分析及处理”；当前缺少更明确的尿检结果到针对性处理闭环，不能整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0266",
+      "visit_id": "2305293",
+      "patient_name": "许志刚",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "胸部CT提示肋骨骨折，无胸外科会诊，病程记录未体现",
+      "reason": "local_pg 日常病程与上级医师查房均已记录 3月28日胸部CT 结果及“左侧部分肋骨骨折”，人工问题中“病程记录未体现”与原文冲突，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-用药记录-第一轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0268",
+      "visit_id": "2286345",
+      "patient_name": "钟光田",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "4.1异常检查检验结果病程记录未分析和记录",
+      "reason": "local_pg 4月2日查房已回顾 4月1日血常规与胸部 CT 结果，后续病程亦持续按感染指标和腹盆腔影像调整治疗；人工问题所称“4.1异常检查检验结果病程记录未分析和记录”与原文不完全一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0272",
+      "visit_id": "2301040",
+      "patient_name": "温怀兵",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "4.1日病程记录中检查检验结果停留在3.22，而最新的4.1检验结果在病程记录中未体现",
+      "reason": "local_pg 4月1日上级查房已更新 4月1日血气和血常规，并未停留在 3月22日旧结果；人工问题所称“4.1日病程记录中检查检验结果停留在3.22”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0279",
+      "visit_id": "2307974",
+      "patient_name": "周大友",
+      "issue_family": "会诊执行记录缺失/未写执行情况",
+      "primary_rule_id": "SC-070",
+      "manual_issue_text": "4月1日请会诊执行记录中描述给予针灸、电刺激治疗、中药贴敷、悬空灸、耳穴、中药塌渍等康复治疗，但实际未予以耳穴治疗。",
+      "reason": "release/0426_full_auto 现可见康复科会诊建议包含针灸 电刺激 中药贴敷 悬空灸 耳穴 中药塌渍，但后续病程仅写“予以康复治疗/请康复科行康复理疗”，没有可直接核对的治疗项目执行清单，无法证实“未予耳穴治疗”，证据不足。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-070-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation + daily snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0281",
+      "visit_id": "2313364",
+      "patient_name": "孔祥斌",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "4.1病程记录过于简单",
+      "reason": "local_pg 当前快照仅见3月31日已分析肾功异常并于4月1日肾内科会诊明确慢性肾脏病3期高尿酸血症，且4月3日日常病程内容详细；但缺少可直接核对“4月1日病程记录过于简单”的原始病程正文，证据不足。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-尾项-第三轮",
+      "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0283",
+      "visit_id": "2311318",
+      "patient_name": "范永勤",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "4.7检验结果肾功异常，病程记录未分析，未请相应科室会诊",
+      "reason": "local_pg 当前可证的是 4月1日尿路感染已记录并有泌尿血管外科会诊与左氧氟沙星处理，但无法在现有快照中精确回收到人工问题所指 4月7日肾功异常原始结果与对应病程闭环，不能整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0284",
+      "visit_id": "2298532",
+      "patient_name": "王德怀",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "3.27用药病程记录未体现",
+      "reason": "local_pg 3月27日 ICU 查房已写“头孢唑林钠防治感染”等用药，3月28日病程又补记吲哚布芬及氢氯吡格雷治疗，人工问题所称“3.27用药病程记录未体现”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-用药记录-第一轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0286",
+      "visit_id": "2319104",
+      "patient_name": "潘昌书",
+      "issue_family": "围手术期术前评估/讨论/小结缺陷",
+      "primary_rule_id": "SC-081",
+      "manual_issue_text": "平滑肌肉瘤二期手术，术前未复查胸部、腹部及盆腔CT或者磁共振，术前评估不充分，未充分认识到该病例的复杂性，而导致术中更改手术方式。",
+      "reason": "release/0426_full_auto admission_record presurg_summary 及多学科会诊已明确回收到 2026-03-09 胸部CT 下腹部CT增强及盆腔MRI 结果，不能支持“术前未复查胸部 腹部及盆腔CT或者磁共振”；postsurg_firstcourse_record 虽可见术中因广泛转移与肠管致密粘连改为开腹探查+病灶活检+小肠浆膜修补，但人工问题整句与现存原始文书并不一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-081-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto presurg/postsurg snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0288",
+      "visit_id": "2333807",
+      "patient_name": "叶超",
+      "issue_family": "有创诊疗操作记录缺失/书写不规范",
+      "primary_rule_id": "SC-046",
+      "manual_issue_text": "4月8日清创记录：标题为“头皮裂伤清创缝合术”，但操作部位实际是“右侧面部”。需明确“操作开始时间”，操作医师姓名、操作地点、局麻药浓度等关键信息。",
+      "reason": "release/0426_full_auto 现可回收的结构化手术摘要标题为“皮肤和皮下组织非切除性清创”，入院/查房/诊断均指向“右侧面部裂伤”；人工问题所称“头皮裂伤清创缝合术”原句未在现有原始文书中回收，且有创操作记录正文仍为空壳，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-046-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto mr_surgery + diagnosis snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0289",
+      "visit_id": "2328112",
+      "patient_name": "殷孝容",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "入院记录中：给予左氧氟沙星片 1片 qd、孟鲁司特钠片1片 qd、甘氨酸氨茶碱缓释片1片 bid等描述不专业、未具体药物剂量。主诉中有咳嗽症状、而未对此进行鉴别诊断。",
+      "reason": "local_pg 该条同时覆盖入院记录用药剂量表述不专业和咳嗽相关鉴别问题；当前正文已由呼吸会诊考虑“支气管扩张伴感染”，不适合按单一 SC-023 整条判 exact，需拆规则复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    }
+  ],
+  "family_breakdown": {
+    "上级医师查房缺失/未及时书写": {
+      "exact_confirmed": 2
+    },
+    "上级医师查房缺失/未及时书写；出院前一天/当天上级医师查房或病程缺失": {
+      "blocked_with_reason": 1
+    },
+    "上级查房内容空洞/复制粘贴/身份异常": {
+      "blocked_with_reason": 3,
+      "exact_confirmed": 1
+    },
+    "上级查房内容空洞/复制粘贴/身份异常；上级医师查房缺失/未及时书写": {
+      "exact_confirmed": 1
+    },
+    "上级查房内容空洞/复制粘贴/身份异常；出院前一天/当天上级医师查房或病程缺失；出院记录缺失/提前书写/时效异常/签名缺失": {
+      "exact_confirmed": 1
+    },
+    "上级查房内容空洞/复制粘贴/身份异常；出院记录缺失/提前书写/时效异常/签名缺失": {
+      "exact_confirmed": 6
+    },
+    "上级查房内容空洞/复制粘贴/身份异常；手术记录缺项/时间错误/逻辑不清/签名异常": {
+      "exact_confirmed": 1
+    },
+    "上级查房内容空洞/复制粘贴/身份异常；病程记录病情变化记录不全": {
+      "blocked_with_reason": 1
+    },
+    "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全": {
+      "blocked_with_reason": 1
+    },
+    "不合理复制病历内容": {
+      "exact_confirmed": 3,
+      "blocked_with_reason": 1
+    },
+    "主治首次查房48小时": {
+      "exact_confirmed": 1
+    },
+    "主治首次查房48小时；病程记录缺分析/缺处理意见": {
+      "blocked_with_reason": 1
+    },
+    "主治首次查房48小时；高级医师首次查房72小时": {
+      "exact_confirmed": 1
+    },
+    "交接班记录缺失/缺项": {
+      "skip": 1
+    },
+    "会诊意见已写遵执但实际未落实": {
+      "exact_confirmed": 2,
+      "blocked_with_reason": 3,
+      "skip": 1
+    },
+    "会诊执行记录缺失/未写执行情况": {
+      "exact_confirmed": 7,
+      "blocked_with_reason": 1
+    },
+    "会诊执行记录缺失/未写执行情况；危急值记录不完整/处理不充分；诊疗医嘱与病程记录不一致": {
+      "blocked_with_reason": 1
+    },
+    "会诊执行记录缺失/未写执行情况；病程时效/缺失": {
+      "blocked_with_reason": 1,
+      "exact_confirmed": 1
+    },
+    "会诊记录内容质量/复制粘贴/结论不足": {
+      "blocked_with_reason": 1,
+      "skip": 1
+    },
+    "会诊记录内容质量/复制粘贴/结论不足；会诊意见已写遵执但实际未落实": {
+      "exact_confirmed": 1
+    },
+    "会诊记录时效": {
+      "exact_confirmed": 3
+    },
+    "会诊记录缺失/申请记录缺失": {
+      "exact_confirmed": 2
+    },
+    "会诊记录质量缺陷": {
+      "blocked_with_reason": 1
+    },
+    "住院超30天阶段小结/讨论缺失": {
+      "skip": 3
+    },
+    "入院记录内容不完整/前后矛盾": {
+      "exact_confirmed": 13,
+      "blocked_with_reason": 35,
+      "skip": 5
+    },
+    "出院记录缺失/提前书写/时效异常/签名缺失": {
+      "exact_confirmed": 3,
+      "skip": 1
+    },
+    "危急值记录不完整/处理不充分": {
+      "exact_confirmed": 5
+    },
+    "四级手术未 MDT": {
+      "exact_confirmed": 3,
+      "blocked_with_reason": 4
+    },
+    "四级手术未 MDT；术前讨论结论未入病历/缺项": {
+      "exact_confirmed": 1
+    },
+    "围手术期术前评估/讨论/小结缺陷": {
+      "exact_confirmed": 1,
+      "blocked_with_reason": 3
+    },
+    "待人工归类": {
+      "skip": 2
+    },
+    "手术同意书/知情同意签署异常": {
+      "skip": 1
+    },
+    "手术记录时效异常": {
+      "exact_confirmed": 2
+    },
+    "手术记录缺项/时间错误/逻辑不清/签名异常": {
+      "exact_confirmed": 4,
+      "blocked_with_reason": 3
+    },
+    "既往史/用药史记录不全": {
+      "exact_confirmed": 2
+    },
+    "有创诊疗操作记录缺失/书写不规范": {
+      "blocked_with_reason": 4,
+      "exact_confirmed": 3
+    },
+    "术前主刀医生查房/麻醉术前访视缺失": {
+      "exact_confirmed": 1
+    },
+    "术前小结缺失": {
+      "exact_confirmed": 1,
+      "skip": 2
+    },
+    "术前小结缺失；术前小结缺项/不清": {
+      "exact_confirmed": 1
+    },
+    "术前小结缺项/不清；诊疗医嘱与病程记录不一致": {
+      "exact_confirmed": 1
+    },
+    "术前讨论结论/会诊意见未记入病历": {
+      "exact_confirmed": 1
+    },
+    "术前讨论结论未入病历/缺项": {
+      "exact_confirmed": 2
+    },
+    "术前讨论缺失/术者未参加": {
+      "exact_confirmed": 3
+    },
+    "术前讨论缺失/术者未参加；诊疗医嘱与病程记录不一致": {
+      "exact_confirmed": 4
+    },
+    "术后三天连续病程/查房缺失": {
+      "exact_confirmed": 3
+    },
+    "疑难病例讨论缺失/缺项": {
+      "exact_confirmed": 1
+    },
+    "病程时效/缺失": {
+      "exact_confirmed": 21
+    },
+    "病程记录病情变化记录不全": {
+      "blocked_with_reason": 7,
+      "exact_confirmed": 2
+    },
+    "病程记录病情变化记录不全；病程时效/缺失": {
+      "exact_confirmed": 1
+    },
+    "病程记录缺分析/缺处理意见": {
+      "blocked_with_reason": 24,
+      "exact_confirmed": 6
+    },
+    "诊疗医嘱与病程记录不一致": {
+      "blocked_with_reason": 3,
+      "exact_confirmed": 1,
+      "skip": 1
+    },
+    "转科24小时内转入/转出记录": {
+      "skip": 1
+    },
+    "转科记录缺失/书写不规范": {
+      "skip": 3
+    },
+    "输血时间/量/前后记录不一致": {
+      "blocked_with_reason": 1,
+      "exact_confirmed": 3
+    },
+    "输血记录链缺失/不全": {
+      "exact_confirmed": 1
+    },
+    "输血记录链缺失/不全；输血时间/量/前后记录不一致": {
+      "exact_confirmed": 1
+    },
+    "输血记录链缺项": {
+      "exact_confirmed": 1
+    },
+    "非危重三天无病程": {
+      "skip": 2
+    },
+    "首次病程记录存在/时效": {
+      "exact_confirmed": 6
+    },
+    "首次病程记录存在/时效；主治首次查房48小时；高级医师首次查房72小时": {
+      "exact_confirmed": 1
+    },
+    "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失": {
+      "blocked_with_reason": 1
+    },
+    "首次病程记录存在/时效；术后首次病程记录缺项/不清": {
+      "skip": 1,
+      "blocked_with_reason": 1
+    },
+    "首次病程记录存在/时效；病程时效/缺失": {
+      "exact_confirmed": 1
+    },
+    "首次病程诊断依据/鉴别诊断/诊疗计划缺陷": {
+      "exact_confirmed": 4,
+      "blocked_with_reason": 16
+    },
+    "高级医师首次查房72小时": {
+      "exact_confirmed": 1
+    },
+    "高级医师首次查房72小时；病程记录病情变化记录不全": {
+      "blocked_with_reason": 1,
+      "exact_confirmed": 1
+    }
+  }
+}
