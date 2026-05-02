@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 129,
-    "blocked_with_reason": 98,
+    "exact_confirmed": 130,
+    "blocked_with_reason": 101,
     "skip": 20,
-    "needs_exact_review": 36
+    "needs_exact_review": 32
   },
   "needs_exact_review_rows": [
     {
@@ -30,17 +30,6 @@
       "anchor_misses": "患者行了骨髓穿刺|有创操作|骨髓穿刺"
     },
     {
-      "sheet2_row_id": "Sheet2-R0030",
-      "visit_id": "1915580",
-      "patient_name": "雷德超",
-      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
-      "primary_rule_id": "SC-050",
-      "manual_issue_text": "三级医师查房执行不到位（主治医师查房写的是管床医生本人查房）",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "三级医师查房执行不到位|主治医师查房写的是管床医生本人查房"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0031",
       "visit_id": "2337741",
       "patient_name": "余定远",
@@ -61,17 +50,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "拟转入科室|转入时间|转入记录中未书写转入时间|转科记录中转出记录未书写拟转入科室"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0042",
-      "visit_id": "1966656",
-      "patient_name": "周光容",
-      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
-      "primary_rule_id": "SC-050",
-      "manual_issue_text": "9月2日上级查房医师为王标，但在分析病情时是孙治庆医师在查房，涉嫌伪造病历。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "但在分析病情时是孙治庆医师在查房|日上级查房医师为王标|涉嫌伪造病历"
     },
     {
       "sheet2_row_id": "Sheet2-R0077",
@@ -349,17 +327,6 @@
       "anchor_misses": "BP163/90mmHg|与患者沟通后|中药溻渍等康复治疗项目|光照射|患者进行左侧膝关节清创术|日请康复科会诊记录里面|未复测及进一步处理|本患者仍然开具超声波|清创|电刺激|表示拒绝康复治疗"
     },
     {
-      "sheet2_row_id": "Sheet2-R0230",
-      "visit_id": "2262090",
-      "patient_name": "杜贤彬",
-      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
-      "primary_rule_id": "SC-050",
-      "manual_issue_text": "未落实三级医师查房。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "未落实",
-      "anchor_misses": "未落实三级医师查房"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0285",
       "visit_id": "2314600",
       "patient_name": "曾祥蓉",
@@ -391,17 +358,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "DIC|会诊记录意见为定期复查血常规|但实际会诊|大便隐血|天后均未进行复查|未明确具体复查时间|请会诊执行记录中描述准会诊意见执行"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0292",
-      "visit_id": "2328493",
-      "patient_name": "陈梅琳",
-      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
-      "primary_rule_id": "SC-050",
-      "manual_issue_text": "4月8日，陈光怀副主任医师查房记录，内容却是郑凤金主治医师查房的相关处理。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "内容却是郑凤金主治医师查房的相关处理"
     }
   ],
   "blocked_with_reason_rows": [
@@ -454,6 +410,18 @@
       "decision_source": "release/0426_full_auto consultation snapshot"
     },
     {
+      "sheet2_row_id": "Sheet2-R0030",
+      "visit_id": "1915580",
+      "patient_name": "雷德超",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
+      "primary_rule_id": "SC-050",
+      "manual_issue_text": "三级医师查房执行不到位（主治医师查房写的是管床医生本人查房）",
+      "reason": "local_pg 与 release/0426_full_auto 可回收到“黄河副主任医师代主治医师查房”及后续邓腾孝主治医师 胡定祥主任医师查房记录，但未回收到人工问题所称“主治医师查房写的是管床医生本人查房”这一原句锚点，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-050-精确复核-第一轮",
+      "decision_source": "local_pg + release senior_course snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0035",
       "visit_id": "1965433",
       "patient_name": "马建友",
@@ -464,6 +432,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-008-现病史-第二轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0042",
+      "visit_id": "1966656",
+      "patient_name": "周光容",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
+      "primary_rule_id": "SC-050",
+      "manual_issue_text": "9月2日上级查房医师为王标，但在分析病情时是孙治庆医师在查房，涉嫌伪造病历。",
+      "reason": "release/0426 与 release/0426_full_auto 现可回收的混写记录为“王标主治医师查房…李方健主治医师查房后指示”，并未回收到人工问题所称“孙治庆医师在查房”的原句；虽属同家族身份混写，但不是同一锚点，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-050-精确复核-第一轮",
+      "decision_source": "local_pg + release senior_course/daily snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0044",
@@ -1318,6 +1298,18 @@
       "decision_source": "release/0426_full_auto consultation snapshot"
     },
     {
+      "sheet2_row_id": "Sheet2-R0230",
+      "visit_id": "2262090",
+      "patient_name": "杜贤彬",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
+      "primary_rule_id": "SC-050",
+      "manual_issue_text": "未落实三级医师查房。",
+      "reason": "local_pg 与 release/0426_full_auto 可回收住院医师日常病程、郑凤金主治医师查房及陈光怀副主任医师查房，现有文书已形成三级查房链；人工问题所称“未落实三级医师查房”与原始文书冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-050-精确复核-第一轮",
+      "decision_source": "local_pg + release daily/senior snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0231",
       "visit_id": "2272872",
       "patient_name": "李才贵",
@@ -1590,7 +1582,8 @@
       "needs_exact_review": 1
     },
     "上级查房内容空洞/复制粘贴/身份异常": {
-      "needs_exact_review": 4
+      "blocked_with_reason": 3,
+      "exact_confirmed": 1
     },
     "上级查房内容空洞/复制粘贴/身份异常；上级医师查房缺失/未及时书写": {
       "exact_confirmed": 1
