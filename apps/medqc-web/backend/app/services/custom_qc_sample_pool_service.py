@@ -619,6 +619,58 @@ def _looks_like_postsurg_firstcourse_quality_issue(text: str) -> bool:
     )
 
 
+def _looks_like_invasive_operation_record_issue(text: str) -> bool:
+    return _contains_any(text, ("有创操作", "有创诊疗", "骨髓穿刺", "胸腔闭式引流", "清创记录", "穿刺记录"))
+
+
+def _looks_like_transfer_record_quality_issue(text: str) -> bool:
+    return _contains_any(text, ("转科记录", "转出记录", "转入记录", "转科目的", "拟转入科室", "转入时间"))
+
+
+def _looks_like_difficult_case_discussion_issue(text: str) -> bool:
+    return _contains_any(text, ("疑难病历讨论", "疑难病例讨论", "超过3天未明确诊断", "确诊困难", "疗效不佳"))
+
+
+def _looks_like_transfusion_record_quality_issue(text: str) -> bool:
+    return _contains_any(text, ("输血后评价", "输血记录", "输血反应", "输血前评估"))
+
+
+def _looks_like_diagnosis_or_treatment_followup_issue(text: str) -> bool:
+    return _contains_any(
+        text,
+        (
+            "无后续血压监测",
+            "无相关处理",
+            "无处理",
+            "无诊断",
+            "未对诊断进行修正",
+            "未录入主诊断",
+            "诊断不准确",
+            "入院诊断未体现",
+            "检查结果",
+            "辅助检查不全面",
+            "病历书写不完整",
+            "用药情况记录不规范",
+            "用药记录不规范",
+            "药物剂量",
+        ),
+    )
+
+
+def _looks_like_preop_risk_assessment_issue(text: str) -> bool:
+    return _contains_any(
+        text,
+        (
+            "术前准备不充分",
+            "预案不清晰",
+            "术前评估不充分",
+            "围手术期管理不到位",
+            "术前缺上级医师意见",
+            "术前会诊科室讨论意见",
+        ),
+    )
+
+
 @lru_cache(maxsize=1)
 def _load_issue_category_rule_map() -> Dict[str, List[str]]:
     mapping_path = Path(__file__).resolve().parents[2] / "data" / "synthetic_qc" / "sheet2_intrinsic_issue_mapping.json"
@@ -757,6 +809,70 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "issue_category": "course_gap_timeliness",
             "expected_scene": "running",
             "candidate_rule_ids": ["LXE-18"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_invasive_operation_record_issue(normalized):
+        if _contains_any(normalized, ("无有创操作记录", "无有创诊疗", "无有创", "无记录")):
+            rule_ids = ["SC-045", "SC-046"]
+        else:
+            rule_ids = ["SC-046", "SC-045"]
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "invasive_operation_record_quality",
+            "expected_scene": "final",
+            "candidate_rule_ids": rule_ids,
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_transfer_record_quality_issue(normalized):
+        return {
+            "coverage_type": "programmatic",
+            "issue_category": "transfer_record_quality",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-064"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_difficult_case_discussion_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "difficult_case_discussion",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-056", "SC-057", "SC-058"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_transfusion_record_quality_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "transfusion_record_quality",
+            "expected_scene": "final",
+            "candidate_rule_ids": ["SC-074", "LX-018", "SC-073"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_preop_risk_assessment_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "operation_preop_risk_assessment",
+            "expected_scene": "final",
+            "candidate_rule_ids": ["SC-081", "SC-082", "SC-097"],
+            "include_in_batch_1": True,
+            "exclude_reason": "",
+        }
+
+    if _looks_like_diagnosis_or_treatment_followup_issue(normalized):
+        return {
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "daily_course_analysis",
+            "expected_scene": "running",
+            "candidate_rule_ids": ["SC-036", "SC-032", "SC-033"],
             "include_in_batch_1": True,
             "exclude_reason": "",
         }

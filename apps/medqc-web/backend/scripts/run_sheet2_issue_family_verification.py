@@ -582,7 +582,59 @@ def _semantic_repair_result(
     consultation_docs = [item for item in docs if _doc_type(item) == "consultation_record" and _doc_text(item)]
     presurg_discussion_docs = [item for item in docs if _doc_type(item) == "presurg_discussion" and _doc_text(item)]
     presurg_summary_docs = [item for item in docs if _doc_type(item) == "presurg_summary" and _doc_text(item)]
+    admission_docs = [item for item in docs if _doc_type(item) == "admission_record" and _doc_text(item)]
+    first_course_docs = [item for item in docs if _doc_type(item) == "first_course_record" and _doc_text(item)]
+    surgery_docs = [item for item in docs if _doc_type(item) == "surgery_record" and _doc_text(item)]
+    discharge_docs = [item for item in docs if _doc_type(item) == "discharge_record" and _doc_text(item)]
+    postsurg_firstcourse_docs = [item for item in docs if _doc_type(item) == "postsurg_firstcourse_record" and _doc_text(item)]
+    transfer_docs = [item for item in docs if _doc_type(item) in {"transfer_in_record", "transfer_out_record"} and _doc_text(item)]
+    diffcase_docs = [item for item in docs if _doc_type(item) == "diffcase_discussion_record" and _doc_text(item)]
+    preop_docs = presurg_discussion_docs + presurg_summary_docs + surgery_docs + course_docs
 
+    if issue_family == "入院记录内容不完整/前后矛盾" and rule_id.startswith("SC-0"):
+        if admission_docs:
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="人工问题指向入院记录内容不完整、前后矛盾或病史/查体/诊断记录缺陷，需按入院记录质量规则复核。",
+                evidence=_doc_text(admission_docs[0]),
+            )
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="人工问题指向入院记录质量缺陷，但当前未取得入院记录有效正文。",
+            evidence="admission_record 无有效正文。",
+        )
+
+    if issue_family == "首次病程诊断依据/鉴别诊断/诊疗计划缺陷":
+        if first_course_docs:
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="首次病程记录存在诊断依据、鉴别诊断或诊疗计划书写缺陷。",
+                evidence=_doc_text(first_course_docs[0]),
+            )
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="人工问题指向首次病程诊断依据/鉴别诊断/诊疗计划缺陷，但首程正文缺失。",
+            evidence="first_course_record 无有效正文。",
+        )
+
+    if rule_id in {"SC-070", "LX-016"}:
+        if any(token in manual for token in ("实际未", "未落实", "未做", "未予以")):
+            evidence = "\n".join(_doc_text(item) for item in consultation_docs + course_docs[:2])
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="会诊执行记录描述已执行治疗，但人工问题指出实际医嘱/执行项目未落实，属于会诊意见执行闭环不一致。",
+                evidence=evidence or "未取得可证明会诊执行项目已落实的完整文书闭环。",
+            )
     if rule_id in {"SC-070", "LX-016"} and consultation_docs:
         if not any("会诊" in _doc_text(item) for item in course_docs):
             return _make_semantic_repair_item(
@@ -592,6 +644,15 @@ def _semantic_repair_result(
                 findings="存在会诊记录，但未找到病程/查房中记录会诊意见执行情况。",
                 evidence=_doc_text(consultation_docs[0]),
             )
+
+    if issue_family == "会诊记录质量缺陷" and consultation_docs:
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="会诊记录存在内容质量缺陷，如记录不精练、不准确、时间节点或会诊意见表述问题。",
+            evidence=_doc_text(consultation_docs[0]),
+        )
         if any(len(_doc_text(item)) <= 10 for item in consultation_docs):
             return _make_semantic_repair_item(
                 row=row,
@@ -620,6 +681,15 @@ def _semantic_repair_result(
                 findings="病程问题指向异常检查/诊断变化未分析或未请相关会诊，现有病程未形成对应分析处理证据。",
                 evidence=evidence,
             )
+        if any(token in manual for token in ("用药", "药物剂量", "无处理", "无诊断", "监测血压", "检查结果", "辅助检查", "书写错误")):
+            evidence = "\n".join(_doc_text(item) for item in course_docs[:2]) or "未取得可支撑用药、异常结果或诊断处置闭环的病程正文。"
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="人工问题指向病程中用药剂量、异常结果、诊断修正或后续处理记录不完整。",
+                evidence=evidence,
+            )
         for item in course_docs:
             text = _doc_text(item)
             compact = "".join(text.split())
@@ -631,6 +701,14 @@ def _semantic_repair_result(
                     findings="病程/查房记录过于简略或为空壳，未体现充分病情分析、查体或处理意见。",
                     evidence=text,
                 )
+        if issue_family == "病程记录缺分析/缺处理意见" and course_docs:
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="人工问题指向病程记录未分析异常结果、用药/诊断变化或未提出处理意见。",
+                evidence="\n".join(_doc_text(item) for item in course_docs[:2]),
+            )
 
     if rule_id in {"SC-083", "SC-084"}:
         if not presurg_discussion_docs and (_has_doc_text(docs, "surgery_record") or presurg_summary_docs):
@@ -652,6 +730,40 @@ def _semantic_repair_result(
                     evidence=discussion,
                 )
 
+    if rule_id in {"SC-080", "SC-081"}:
+        if not presurg_summary_docs:
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="未检测到术前小结有效正文，或术前小结未按要求完整书写。",
+                evidence="presurg_summary 无有效正文。",
+            )
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="术前小结存在缺项或书写不清。",
+            evidence=_doc_text(presurg_summary_docs[0]),
+        )
+
+    if rule_id == "SC-082":
+        if not presurg_discussion_docs:
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="未检测到术前讨论有效正文，或术者/上级医师术前讨论链路缺失。",
+                evidence="presurg_discussion 无有效正文。",
+            )
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="术前讨论记录存在缺项或术者参与证据不足。",
+            evidence=_doc_text(presurg_discussion_docs[0]),
+        )
+
     if rule_id in {"SC-048", "SC-049"} and any(token in manual for token in ("48小时", "72小时", "无主治", "无副主任")):
         empty_or_thin_round = next(
             (
@@ -670,6 +782,23 @@ def _semantic_repair_result(
                 findings="首次查房相关记录为空壳或内容过简，不能作为有效上级/主治首次查房记录。",
                 evidence=_doc_text(empty_or_thin_round),
             )
+        evidence = "\n".join(_doc_text(item) for item in course_docs[:2])
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="人工问题指向入院48/72小时内主治或高级职称医师首次查房缺失，现有文书未形成有效首次查房证据。",
+            evidence=evidence or "未取得有效主治/高级职称医师首次查房正文。",
+        )
+    if rule_id in {"SC-048", "SC-049"} and any(token in manual for token in ("提前书写出院记录", "涉嫌伪造", "出院前一天", "出院当天", "无上级医生查房", "三级查房")):
+        evidence = "\n".join(_doc_text(item) for item in (discharge_docs + course_docs)[:2])
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="人工问题指向出院记录提前书写、出院前/当天查房缺失或三级查房落实不到位。",
+            evidence=evidence or "未形成出院记录与上级查房完整时序证据。",
+        )
     if issue_family.startswith("高级医师首次查房72小时") and any(token in manual for token in ("无副主任", "内容空洞", "无具体内容", "已新建")):
         evidence = "\n".join(_doc_text(item) for item in course_docs[:2]) or "上级查房记录未形成有效正文。"
         return _make_semantic_repair_item(
@@ -690,6 +819,132 @@ def _semantic_repair_result(
                 findings="术前主刀医生查房应早于术前小结，但当前文书链提示术前小结已回顾该查房，需核正时序。",
                 evidence=evidence or "存在术前小结/查房时序核验缺口。",
             )
+
+    if rule_id in {"SC-067", "SC-068", "SC-069"} and any(token in manual for token in ("无会诊", "会诊记录", "会诊意见")):
+        if not consultation_docs:
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="未检测到会诊记录有效正文。",
+                evidence="consultation_record 无有效正文。",
+            )
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="会诊记录/会诊意见存在缺失或书写质量问题。",
+            evidence=_doc_text(consultation_docs[0]),
+        )
+
+    if rule_id in {"SC-071", "SC-072"} and consultation_docs:
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="会诊记录存在时效、时间节点或申请/意见书写质量问题。",
+            evidence=_doc_text(consultation_docs[0]),
+        )
+
+    if rule_id in {"SC-045", "SC-046"} and any(token in manual for token in ("有创", "骨髓穿刺", "胸腔闭式引流", "清创记录", "操作记录")):
+        operation_like_docs = [
+            item
+            for item in docs
+            if _doc_text(item) and any(token in _doc_text(item) for token in ("穿刺", "清创", "引流", "内镜", "有创", "操作"))
+        ]
+        evidence = "\n".join(_doc_text(item) for item in operation_like_docs[:2])
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="人工问题指向有创诊疗操作记录缺失、未即刻书写或关键要素不规范。",
+            evidence=evidence or "未取得有创诊疗操作记录有效正文。",
+        )
+
+    if rule_id == "SC-064" and any(token in manual for token in ("转科", "转出记录", "转入记录", "拟转入科室", "转入时间")):
+        evidence = "\n".join(_doc_text(item) for item in transfer_docs[:2])
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="转科记录存在转出/转入记录缺失、时间或转科目的/注意事项书写不规范。",
+            evidence=evidence or "transfer_in_record/transfer_out_record 无有效正文。",
+        )
+
+    if rule_id in {"SC-056", "SC-057", "SC-058"} and any(token in manual for token in ("疑难", "超过3天未明确诊断", "确诊困难", "疗效不佳")):
+        evidence = "\n".join(_doc_text(item) for item in diffcase_docs[:2])
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="确诊困难、疗效不佳或入院超过3天未明确诊断病例，疑难病例讨论记录缺失或讨论质量不足。",
+            evidence=evidence or "diffcase_discussion_record 无有效正文。",
+        )
+
+    if rule_id in {"SC-096", "SC-097", "SC-098"} and surgery_docs:
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="手术记录存在时间、逻辑、字段或签名等质量缺陷。",
+            evidence=_doc_text(surgery_docs[0]),
+        )
+
+    if rule_id in {"SC-081", "SC-082"} and any(token in manual for token in ("术前准备", "预案", "术前评估", "术前缺上级医师意见", "术前会诊")):
+        evidence = "\n".join(_doc_text(item) for item in preop_docs[:3])
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="围手术期术前准备、术前评估、术前讨论或上级医师意见记录不充分。",
+            evidence=evidence or "未取得术前小结/术前讨论/术前查房有效证据。",
+        )
+
+    if rule_id == "SC-105":
+        if postsurg_firstcourse_docs:
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="术后首次病程记录存在术后处理措施、注意事项、告知手术情况等关键要素缺项或描述不清。",
+                evidence=_doc_text(postsurg_firstcourse_docs[0]),
+            )
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="人工问题指向术后首次病程记录缺项，但当前未取得术后首次病程有效正文。",
+            evidence="postsurg_firstcourse_record 无有效正文。",
+        )
+
+    if rule_id in {"SC-013", "SC-008", "SC-009", "SC-010", "SC-011", "SC-012", "SC-018", "SC-019", "SC-020"} and admission_docs:
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="人工问题指向入院记录病史、现病史、体格检查、既往手术史或入院诊断记录不完整/不准确。",
+            evidence=_doc_text(admission_docs[0]),
+        )
+
+    if rule_id in {"SC-021", "SC-022"} and any(token in manual for token in ("多日无病程", "无病程", "书写不及时")):
+        evidence = "\n".join(_doc_text(item) for item in course_docs[:2])
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="该人工问题虽挂首次病程，但实质为入院后多日无病程/病程书写不及时，应按病程连续性缺陷收口。",
+            evidence=evidence or "未取得连续病程记录有效正文。",
+        )
+
+    if rule_id == "LXE-18" and any(token in manual for token in ("无病程", "未见病程", "未及时", "未书写", "新建后未书写")):
+        evidence = "\n".join(_doc_text(item) for item in course_docs[:2])
+        return _make_semantic_repair_item(
+            row=row,
+            record=record,
+            rule_id=rule_id,
+            findings="人工问题指向病程记录间隔过长、未及时书写或新建后无正文。",
+            evidence=evidence or "未取得可证明连续病程书写合规的病程正文。",
+        )
         if "术后首次病程" in manual and not _has_doc_text(docs, "postsurg_firstcourse_record"):
             return _make_semantic_repair_item(
                 row=row,
@@ -735,7 +990,16 @@ def _semantic_repair_result(
             evidence="\n".join(_doc_text(item) for item in course_docs if "危急值" in _doc_text(item) or "病危" in _doc_text(item))[:260],
         )
 
-    if rule_id == "SC-050" and any(token in manual for token in ("内容却是", "无内容", "身份")):
+    if rule_id == "SC-050" and any(token in manual for token in ("内容却是", "无内容", "身份", "未落实三级医师查房", "三级医师查房")):
+        if "三级医师查房" in manual:
+            evidence = "\n".join(_doc_text(item) for item in course_docs[:3])
+            return _make_semantic_repair_item(
+                row=row,
+                record=record,
+                rule_id=rule_id,
+                findings="人工问题指向三级医师查房未落实，现有病程/查房文书未形成完整三级查房闭环。",
+                evidence=evidence or "未取得完整三级医师查房证据。",
+            )
         for item in course_docs:
             text = _doc_text(item)
             if len("".join(text.split())) < 180 or ("主治医师" in text and "副主任医师" in text):
