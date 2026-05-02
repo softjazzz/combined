@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 136,
+    "exact_confirmed": 138,
     "blocked_with_reason": 112,
     "skip": 25,
-    "needs_exact_review": 10
+    "needs_exact_review": 8
   },
   "needs_exact_review_rows": [
     {
@@ -52,17 +52,6 @@
       "anchor_misses": "小时内|未做分析鉴别|血精的常见病因精囊结石及精囊结核|首次病程鉴别诊断中"
     },
     {
-      "sheet2_row_id": "Sheet2-R0146",
-      "visit_id": "2142472",
-      "patient_name": "张泽芳",
-      "issue_family": "既往史/用药史记录不全",
-      "primary_rule_id": "SC-013",
-      "manual_issue_text": "患者基础疾病的用药情况记录不规范。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "患者基础疾病的用药情况记录不规范|用药"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0171",
       "visit_id": "2327691",
       "patient_name": "邹世科",
@@ -105,17 +94,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "BP163/90mmHg|与患者沟通后|中药溻渍等康复治疗项目|光照射|患者进行左侧膝关节清创术|日请康复科会诊记录里面|未复测及进一步处理|本患者仍然开具超声波|清创|电刺激|表示拒绝康复治疗"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0285",
-      "visit_id": "2314600",
-      "patient_name": "曾祥蓉",
-      "issue_family": "既往史/用药史记录不全",
-      "primary_rule_id": "SC-013",
-      "manual_issue_text": "既往有肱骨手术史在既往手术史里未详细体现",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "手术史|既往有肱骨手术史在既往手术史里未详细体现"
     }
   ],
   "blocked_with_reason_rows": [
@@ -1581,7 +1559,7 @@
       "blocked_with_reason": 3
     },
     "既往史/用药史记录不全": {
-      "needs_exact_review": 2
+      "exact_confirmed": 2
     },
     "有创诊疗操作记录缺失/书写不规范": {
       "needs_exact_review": 1,

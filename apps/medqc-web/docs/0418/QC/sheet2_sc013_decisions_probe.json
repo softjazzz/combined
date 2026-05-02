@@ -1,0 +1,18 @@
+[
+  {
+    "sheet2_row_id": "Sheet2-R0146",
+    "visit_id": "2142472",
+    "review_status": "exact_confirmed",
+    "review_subgroup": "SC-013-精确复核-第一轮",
+    "decision_source": "release/0426_full_auto admission_record snapshot",
+    "reason": "admission_record 既往/慢病段直接出现“糖尿病3年，服用药物不详”，且脑梗死相关用药未写剂量频次，已覆盖“基础疾病用药情况记录不规范”的核心锚点。"
+  },
+  {
+    "sheet2_row_id": "Sheet2-R0285",
+    "visit_id": "2314600",
+    "review_status": "exact_confirmed",
+    "review_subgroup": "SC-013-精确复核-第一轮",
+    "decision_source": "release/0426_full_auto admission_record snapshot",
+    "reason": "现病史明确回收到“右侧肱骨手术后”，但既往史仅泛写“有手术史”而未具体落到肱骨手术，已覆盖人工问题核心锚点。"
+  }
+]
