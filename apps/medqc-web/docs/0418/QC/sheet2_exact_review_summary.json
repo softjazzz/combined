@@ -2,9 +2,9 @@
   "total_rows": 283,
   "status_breakdown": {
     "exact_confirmed": 133,
-    "blocked_with_reason": 105,
+    "blocked_with_reason": 108,
     "skip": 24,
-    "needs_exact_review": 21
+    "needs_exact_review": 18
   },
   "needs_exact_review_rows": [
     {
@@ -173,28 +173,6 @@
       "anchor_misses": ""
     },
     {
-      "sheet2_row_id": "Sheet2-R0205",
-      "visit_id": "2259144",
-      "patient_name": "李欣桂",
-      "issue_family": "围手术期术前评估/讨论/小结缺陷",
-      "primary_rule_id": "SC-081",
-      "manual_issue_text": "患者17岁男性，入院诊断右侧睾丸扭转，急诊手术，存在器官切除的可能，术前缺上级医师意见。手术中，右侧睾丸附睾切除后，行左侧睾丸固定时，使用5-0可吸收线欠妥，文献建议使用丝线固定以确保永久固定。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "5-0|入院诊断右侧睾丸扭转|可吸收线欠妥|右侧睾丸附睾切除后|存在器官切除的可能|岁男性|急诊手术|手术中|文献建议使用丝线固定以确保永久固定|术前缺上级医师意见|行左侧睾丸固定时"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0213",
-      "visit_id": "2295919",
-      "patient_name": "朱兆英",
-      "issue_family": "围手术期术前评估/讨论/小结缺陷",
-      "primary_rule_id": "SC-081",
-      "manual_issue_text": "2026.2.9急诊手术术前准备不充分，预案不清晰，拟急诊行髋关节脱位手法复位术，而实际术中情况是“假体脱位不能复位”，需择期行髋关节翻修术。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "2026.2.9|假体脱位不能复位|急诊手术术前准备不充分|拟急诊行髋关节脱位手法复位术|而实际术中情况是|需择期行髋关节翻修术|预案不清晰"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0220",
       "visit_id": "2268187",
       "patient_name": "代云聪",
@@ -215,17 +193,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "手术史|既往有肱骨手术史在既往手术史里未详细体现"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0286",
-      "visit_id": "2319104",
-      "patient_name": "潘昌书",
-      "issue_family": "围手术期术前评估/讨论/小结缺陷",
-      "primary_rule_id": "SC-081",
-      "manual_issue_text": "平滑肌肉瘤二期手术，术前未复查胸部、腹部及盆腔CT或者磁共振，术前评估不充分，未充分认识到该病例的复杂性，而导致术中更改手术方式。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "平滑肌肉瘤二期手术|或者磁共振|未充分认识到该病例的复杂性|术前未复查胸部|术前评估不充分|而导致术中更改手术方式|腹部及盆腔"
     },
     {
       "sheet2_row_id": "Sheet2-R0290",
@@ -1057,6 +1024,18 @@
       "decision_source": "release/0426_full_auto consultation snapshot"
     },
     {
+      "sheet2_row_id": "Sheet2-R0205",
+      "visit_id": "2259144",
+      "patient_name": "李欣桂",
+      "issue_family": "围手术期术前评估/讨论/小结缺陷",
+      "primary_rule_id": "SC-081",
+      "manual_issue_text": "患者17岁男性，入院诊断右侧睾丸扭转，急诊手术，存在器官切除的可能，术前缺上级医师意见。手术中，右侧睾丸附睾切除后，行左侧睾丸固定时，使用5-0可吸收线欠妥，文献建议使用丝线固定以确保永久固定。",
+      "reason": "release/0426_full_auto 已回收到 2026-03-01 李杰副主任医师查房和术前主刀医师查房，均已写明急诊手术指征及坏死后可能切除右侧睾丸附睾，不能支持“术前缺上级医师意见”；另 postsurg_firstcourse_record 虽可见左侧睾丸固定使用 5-0 可吸收缝线，但该子问题属于术中材料/技术合理性判断，已超出单一 SC-081 术前评估规则边界，不能按整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-081-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto senior/postsurg snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0206",
       "visit_id": "2246915",
       "patient_name": "黄金莲",
@@ -1127,6 +1106,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-023-鉴别诊断-第一轮",
       "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0213",
+      "visit_id": "2295919",
+      "patient_name": "朱兆英",
+      "issue_family": "围手术期术前评估/讨论/小结缺陷",
+      "primary_rule_id": "SC-081",
+      "manual_issue_text": "2026.2.9急诊手术术前准备不充分，预案不清晰，拟急诊行髋关节脱位手法复位术，而实际术中情况是“假体脱位不能复位”，需择期行髋关节翻修术。",
+      "reason": "local_pg 与 release/0426_full_auto 当前回收到的是 2026-03-19 因“右髋关节翻修术后1月 伤口愈合不良5天”再次入院后的感染处理记录，未回收到人工问题所称 2026-02-09 “拟急诊行髋关节脱位手法复位术 而实际术中假体脱位不能复位 需择期翻修术”的原始术前/术中文书锚点，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-081-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto episode snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0214",
@@ -1477,6 +1468,18 @@
       "decision_source": "local_pg get_documents + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0286",
+      "visit_id": "2319104",
+      "patient_name": "潘昌书",
+      "issue_family": "围手术期术前评估/讨论/小结缺陷",
+      "primary_rule_id": "SC-081",
+      "manual_issue_text": "平滑肌肉瘤二期手术，术前未复查胸部、腹部及盆腔CT或者磁共振，术前评估不充分，未充分认识到该病例的复杂性，而导致术中更改手术方式。",
+      "reason": "release/0426_full_auto admission_record presurg_summary 及多学科会诊已明确回收到 2026-03-09 胸部CT 下腹部CT增强及盆腔MRI 结果，不能支持“术前未复查胸部 腹部及盆腔CT或者磁共振”；postsurg_firstcourse_record 虽可见术中因广泛转移与肠管致密粘连改为开腹探查+病灶活检+小肠浆膜修补，但人工问题整句与现存原始文书并不一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-081-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto presurg/postsurg snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0288",
       "visit_id": "2333807",
       "patient_name": "叶超",
@@ -1602,7 +1605,7 @@
     },
     "围手术期术前评估/讨论/小结缺陷": {
       "exact_confirmed": 1,
-      "needs_exact_review": 3
+      "blocked_with_reason": 3
     },
     "待人工归类": {
       "skip": 2
