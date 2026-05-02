@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 118,
-    "blocked_with_reason": 68,
+    "exact_confirmed": 119,
+    "blocked_with_reason": 75,
     "skip": 20,
-    "needs_exact_review": 77
+    "needs_exact_review": 69
   },
   "needs_exact_review_rows": [
     {
@@ -118,17 +118,6 @@
       "anchor_misses": "但在分析病情时是孙治庆医师在查房|日上级查房医师为王标|涉嫌伪造病历"
     },
     {
-      "sheet2_row_id": "Sheet2-R0046",
-      "visit_id": "1972061",
-      "patient_name": "熊殿芳",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "转科记录书写不规范，未按照转入记录模板进行书写，缺少转入时间、目前患者情况总结及下一步诊疗计划等",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "未按照转入记录模板进行书写|目前患者情况总结及下一步诊疗计划等|缺少转入时间|转入时间|转科记录书写不规范"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0052",
       "visit_id": "1977580",
       "patient_name": "夏云辉",
@@ -138,50 +127,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "专科检查|初步诊断不全|现病史记录不全|缺一般情况的描述"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0054",
-      "visit_id": "1984345",
-      "patient_name": "郭德玉",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "首次病程中诊断依据书写不正确，未按照逐个诊断依次书写诊断依据的要求进行书写。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "未按照逐个诊断依次书写诊断依据的要求进行书写|首次病程中诊断依据书写不正确"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0056",
-      "visit_id": "2032392",
-      "patient_name": "李玲",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "手术记录及术后首次病程记录中，关于术中情况描述，“同法处理对侧”不恰当。因患者右侧卵巢无病变，也未做处理。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "不恰当|也未做处理|关于术中情况描述|同法处理对侧|因患者右侧卵巢无病变|手术记录及术后首次病程记录中"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0062",
-      "visit_id": "2027741",
-      "patient_name": "朱永枝",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "患者10月15日行肾动脉栓塞术肾动脉造影术，术后手术记录有缺项。缺术后首次病程记录，缺术前小结。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "日行肾动脉栓塞术肾动脉造影术|术前小结|术后手术记录有缺项|缺术前小结"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0068",
-      "visit_id": "2040917",
-      "patient_name": "张高芬",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "入院记录初步诊断不全，首次病程诊疗计划止痛、止血未写明具体措施。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "入院记录初步诊断不全|止血未写明具体措施|首次病程诊疗计划止痛"
     },
     {
       "sheet2_row_id": "Sheet2-R0076",
@@ -248,17 +193,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "仅一句话|无生命体征描述|日日常病程记录过于简略|未写明患者阴性症状|未描述可能诊断给予患者法莫替丁抑酸治疗"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0093",
-      "visit_id": "2059847",
-      "patient_name": "李忠涛",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "患者入院时主诉为“进食鸡肉后咽痛、吞咽梗阻感4天”，术后首次病程记录描述为“可见一长约2cm鸭骨嵌顿”，病程前后描述存在错误，建议描述为“可见一长约2cm异物嵌顿”",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "2cm|可见一长约|吞咽梗阻感|建议描述为|异物嵌顿|患者入院时主诉为|术后首次病程记录描述为|病程前后描述存在错误|进食鸡肉后咽痛|鸭骨嵌顿"
     },
     {
       "sheet2_row_id": "Sheet2-R0094",
@@ -371,17 +305,6 @@
       "anchor_misses": "嘱患者及家属注意伤口为甚|日病程书写错误|避免感染"
     },
     {
-      "sheet2_row_id": "Sheet2-R0132",
-      "visit_id": "2115142",
-      "patient_name": "黄飞",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "首次病程诊疗计划前后矛盾“予以云南白药胶囊+酚磺乙胺止血”、“饮食指导：多饮水，多食新鲜蔬菜、水果及抗血小板聚集的食物。”",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "予以云南白药胶囊|多食新鲜蔬菜|多饮水|水果及抗血小板聚集的食物|酚磺乙胺止血|饮食指导|首次病程诊疗计划前后矛盾"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0137",
       "visit_id": "2123539",
       "patient_name": "赵金书",
@@ -391,17 +314,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "剂量|医嘱中无治疗冠心病及高血压的药物|口服阿托伐他丁及硝苯地平的剂量|慢性胃炎的患病时间未提及|既往史中患者冠心病|血压|高血压"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0139",
-      "visit_id": "2137061",
-      "patient_name": "钟朝树",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "患者入院时诊断胸腔积液诊断依据不足，诊断急性胃炎依据不足。现病史中，对主要症状胸痛的描述缺乏相应要素：如疼痛持续时间、具体部位、加重或者缓解方式等。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "具体部位|加重或者缓解方式等|如疼痛持续时间|对主要症状胸痛的描述缺乏相应要素|患者入院时诊断胸腔积液诊断依据不足|现病史中|胸痛|诊断急性胃炎依据不足"
     },
     {
       "sheet2_row_id": "Sheet2-R0146",
@@ -917,6 +829,18 @@
       "decision_source": "local_pg get_documents + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0046",
+      "visit_id": "1972061",
+      "patient_name": "熊殿芳",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "转科记录书写不规范，未按照转入记录模板进行书写，缺少转入时间、目前患者情况总结及下一步诊疗计划等",
+      "reason": "local_pg 人工问题核心在“转入记录模板缺项/转入时间/下一步诊疗计划”，属于转科记录质量问题；当前主规则为 SC-023，不能按首次病程规则整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0053",
       "visit_id": "1991072",
       "patient_name": "徐光芬",
@@ -927,6 +851,18 @@
       "blocked_reason_type": "证据链不足",
       "review_subgroup": "SC-008-现病史-第二轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0056",
+      "visit_id": "2032392",
+      "patient_name": "李玲",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "手术记录及术后首次病程记录中，关于术中情况描述，“同法处理对侧”不恰当。因患者右侧卵巢无病变，也未做处理。",
+      "reason": "local_pg 人工问题核心在手术记录及术后首次病程对“同法处理对侧”的术中描述不当，属于手术/术后首次病程记录质量问题；当前以 SC-023 命中，不适合整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
     },
     {
       "sheet2_row_id": "Sheet2-R0058",
@@ -965,6 +901,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0062",
+      "visit_id": "2027741",
+      "patient_name": "朱永枝",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "患者10月15日行肾动脉栓塞术肾动脉造影术，术后手术记录有缺项。缺术后首次病程记录，缺术前小结。",
+      "reason": "local_pg 人工问题核心在“术后首次病程记录缺失、术前小结缺失、手术记录缺项”，属于手术链路文书缺项问题；当前主规则 SC-023 不能精确闭环该条。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0065",
       "visit_id": "2023362",
       "patient_name": "程天金",
@@ -999,6 +947,18 @@
       "blocked_reason_type": "证据链不足",
       "review_subgroup": "SC-008-现病史-第二轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0068",
+      "visit_id": "2040917",
+      "patient_name": "张高芬",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "入院记录初步诊断不全，首次病程诊疗计划止痛、止血未写明具体措施。",
+      "reason": "local_pg 该条同时包含“入院初步诊断不全”和“首次病程诊疗计划不具体”两类问题，超出单一 SC-023 可精确闭环范围，需拆规则复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
     },
     {
       "sheet2_row_id": "Sheet2-R0069",
@@ -1095,6 +1055,18 @@
       "blocked_reason_type": "证据链不足",
       "review_subgroup": "SC-008-尾项-第三轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0093",
+      "visit_id": "2059847",
+      "patient_name": "李忠涛",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "患者入院时主诉为“进食鸡肉后咽痛、吞咽梗阻感4天”，术后首次病程记录描述为“可见一长约2cm鸭骨嵌顿”，病程前后描述存在错误，建议描述为“可见一长约2cm异物嵌顿”",
+      "reason": "local_pg 人工问题核心在术后首次病程/手术记录对异物性质的表述错误，属于围手术期文书内容一致性问题；当前主规则 SC-023 与人工锚点不一致，不能判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
     },
     {
       "sheet2_row_id": "Sheet2-R0098",
@@ -1241,6 +1213,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0132",
+      "visit_id": "2115142",
+      "patient_name": "黄飞",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "首次病程诊疗计划前后矛盾“予以云南白药胶囊+酚磺乙胺止血”、“饮食指导：多饮水，多食新鲜蔬菜、水果及抗血小板聚集的食物。”",
+      "reason": "local_pg 当前首程/上级查房正文仅见“加用氢氯噻嗪及螺内酯利尿减轻心脏负荷，请心内科会诊”，未回收到人工问题所引“云南白药胶囊+酚磺乙胺止血”“多饮水、多食抗血小板聚集食物”等关键原句，证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-023-诊断依据-第三轮",
+      "decision_source": "local_pg get_documents + final tail probe"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0135",
       "visit_id": "2119620",
       "patient_name": "杜沁妤",
@@ -1251,6 +1235,18 @@
       "blocked_reason_type": "规则不支持",
       "review_subgroup": "SC-036-尾项-第三轮",
       "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0139",
+      "visit_id": "2137061",
+      "patient_name": "钟朝树",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "患者入院时诊断胸腔积液诊断依据不足，诊断急性胃炎依据不足。现病史中，对主要症状胸痛的描述缺乏相应要素：如疼痛持续时间、具体部位、加重或者缓解方式等。",
+      "reason": "local_pg 该条同时覆盖“入院现病史胸痛要素缺失”和“胸腔积液/急性胃炎诊断依据不足”，属于入院记录完整性与诊断依据复合问题，超出单一 SC-023 可精确闭环范围。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-跨文书混合-第二轮",
+      "decision_source": "local_pg get_documents + cross-doc probe"
     },
     {
       "sheet2_row_id": "Sheet2-R0141",
@@ -1881,9 +1877,8 @@
       "exact_confirmed": 1
     },
     "首次病程诊断依据/鉴别诊断/诊疗计划缺陷": {
-      "exact_confirmed": 3,
-      "needs_exact_review": 8,
-      "blocked_with_reason": 9
+      "exact_confirmed": 4,
+      "blocked_with_reason": 16
     },
     "高级医师首次查房72小时": {
       "exact_confirmed": 1

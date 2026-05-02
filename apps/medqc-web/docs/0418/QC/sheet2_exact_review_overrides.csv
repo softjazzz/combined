@@ -90,3 +90,11 @@ Sheet2-R0207,blocked_with_reason,local_pg 当前病历主线为“盆腔包块�
 Sheet2-R0208,blocked_with_reason,local_pg 该条同时包含“鉴别诊断不全面”“手术史不详细”“体格检查缺项”“扩大住院指征嫌疑”等多类问题，超出单一 SC-023 可精确闭环范围，需拆规则另行复核。,规则不支持,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
 Sheet2-R0212,blocked_with_reason,local_pg 正文将“左踝关节骨折”写在鉴别诊断而非最终诊断位，人工问题所称“使用这种非专业的诊断”与原文定位不一致，整条不能判 exact。,人工问题原文不可判,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
 Sheet2-R0289,blocked_with_reason,local_pg 该条同时覆盖入院记录用药剂量表述不专业和咳嗽相关鉴别问题；当前正文已由呼吸会诊考虑“支气管扩张伴感染”，不适合按单一 SC-023 整条判 exact，需拆规则复核。,规则不支持,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0046,blocked_with_reason,local_pg 人工问题核心在“转入记录模板缺项/转入时间/下一步诊疗计划”，属于转科记录质量问题；当前主规则为 SC-023，不能按首次病程规则整条判 exact。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
+Sheet2-R0056,blocked_with_reason,local_pg 人工问题核心在手术记录及术后首次病程对“同法处理对侧”的术中描述不当，属于手术/术后首次病程记录质量问题；当前以 SC-023 命中，不适合整条判 exact。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
+Sheet2-R0062,blocked_with_reason,local_pg 人工问题核心在“术后首次病程记录缺失、术前小结缺失、手术记录缺项”，属于手术链路文书缺项问题；当前主规则 SC-023 不能精确闭环该条。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
+Sheet2-R0068,blocked_with_reason,local_pg 该条同时包含“入院初步诊断不全”和“首次病程诊疗计划不具体”两类问题，超出单一 SC-023 可精确闭环范围，需拆规则复核。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
+Sheet2-R0093,blocked_with_reason,local_pg 人工问题核心在术后首次病程/手术记录对异物性质的表述错误，属于围手术期文书内容一致性问题；当前主规则 SC-023 与人工锚点不一致，不能判 exact。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
+Sheet2-R0139,blocked_with_reason,local_pg 该条同时覆盖“入院现病史胸痛要素缺失”和“胸腔积液/急性胃炎诊断依据不足”，属于入院记录完整性与诊断依据复合问题，超出单一 SC-023 可精确闭环范围。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
+Sheet2-R0054,exact_confirmed,local_pg 首次上级查房列出5项诊断，但“诊断依据”仅按1-4编号书写，且第4条同时混入肺部炎症与肋骨骨折内容，未逐个对应全部诊断逐项展开，符合“未按照逐个诊断依次书写诊断依据”的人工问题核心锚点。,,SC-023-诊断依据-第三轮,local_pg get_documents + final tail probe
+Sheet2-R0132,blocked_with_reason,local_pg 当前首程/上级查房正文仅见“加用氢氯噻嗪及螺内酯利尿减轻心脏负荷，请心内科会诊”，未回收到人工问题所引“云南白药胶囊+酚磺乙胺止血”“多饮水、多食抗血小板聚集食物”等关键原句，证据不足以整条判 exact。,证据链不足,SC-023-诊断依据-第三轮,local_pg get_documents + final tail probe
