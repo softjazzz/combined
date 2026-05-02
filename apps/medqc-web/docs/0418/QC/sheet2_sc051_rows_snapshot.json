@@ -1,0 +1,133 @@
+[
+  {
+    "row_id": "Sheet2-R0101",
+    "visit_id": "2033353",
+    "patient_name": "章继书",
+    "manual_issue_text": "出院当天或前一天无上级医师查房记录，最后一次病程为出院4天前的病程记录",
+    "issue_family": "上级医师查房缺失/未及时书写；出院前一天/当天上级医师查房或病程缺失",
+    "primary_rule_id": "SC-051",
+    "review_round": "SC-051-精确复核-第一轮",
+    "local_pg_key_excerpts": [
+      {
+        "title": "马晨曦副主任医师出院前查房记录",
+        "record_time": null,
+        "sort_time": "2025-10-30 09:37:42",
+        "excerpt": "新建S章节:今日马晨曦副主任医师查房……病情好转平稳，复查X线见假体位置良好，炎性指标正常，上级医师查看后予以出院。"
+      },
+      {
+        "title": "日常病程记录",
+        "record_time": "2025-11-13 05:25:52",
+        "sort_time": "2025-11-13 05:25:52",
+        "excerpt": "今日查房：患者一般情况好……患者病情好转，治疗继续当前治疗。"
+      }
+    ],
+    "release_key_excerpts": [
+      {
+        "source": "release/0426_full_auto",
+        "file": "senior_course_record.csv",
+        "title": "马晨曦副主任医师出院前查房记录",
+        "record_time": "",
+        "update_time": "2025-10-30 09:37:42",
+        "excerpt": "新建S章节:今日马晨曦副主任医师查房……上级医师查看后予以出院。"
+      },
+      {
+        "source": "release/0426_full_auto",
+        "file": "discharge_record.csv",
+        "title": "出院记录",
+        "record_time": "",
+        "update_time": "2025-10-30 09:37:42",
+        "excerpt": "患者于2025年10月17日在神经阻滞+静吸复合全麻下行左侧全部膝关节置换术……建议院外休息3月。"
+      }
+    ]
+  },
+  {
+    "row_id": "Sheet2-R0165",
+    "visit_id": "2199041",
+    "patient_name": "陈锡芬",
+    "manual_issue_text": "2月2日出院前上级医师查房记录新建后未及时书写",
+    "issue_family": "上级医师查房缺失/未及时书写",
+    "primary_rule_id": "SC-051",
+    "review_round": "SC-051-精确复核-第一轮",
+    "release_key_excerpts": [
+      {
+        "source": "release/0426_full_auto",
+        "file": "senior_course_record.csv",
+        "title": "陈光怀副主任医师出院前查房记录",
+        "record_time": "",
+        "update_time": "2026-02-02 07:50:00",
+        "excerpt": "新建S章节:今日陈光怀副主任医师查房……患者病情好转，今日可出院。"
+      },
+      {
+        "source": "release/0426_full_auto",
+        "file": "senior_course_record.csv",
+        "title": "郑凤金主治医师查房记录",
+        "record_time": "2026-01-31 08:34:12",
+        "update_time": "2026-02-02 07:50:00",
+        "excerpt": "患者左耳疼痛减轻，治疗无特殊，嘱患者注意耳部卫生。"
+      },
+      {
+        "source": "release/0426_full_auto",
+        "file": "discharge_record.csv",
+        "title": "出院记录",
+        "record_time": "",
+        "update_time": "2026-02-02 07:50:00",
+        "excerpt": "随访日期：2026年02月02日。"
+      }
+    ]
+  },
+  {
+    "row_id": "Sheet2-R0189",
+    "visit_id": "2212117",
+    "patient_name": "朱正良",
+    "manual_issue_text": "2月7日-2月13日期间无上级医生查房记录",
+    "issue_family": "上级医师查房缺失/未及时书写",
+    "primary_rule_id": "SC-051",
+    "review_round": "SC-051-精确复核-第一轮",
+    "local_pg_key_excerpts": [
+      {
+        "title": "李军主治医师查房记录",
+        "record_time": "2026-02-05 11:44:39",
+        "sort_time": "2026-02-05 11:44:39",
+        "excerpt": "患者神志清楚，感腰部疼痛……治疗上给予利伐沙班抗凝、头孢曲松抗感染等处理。"
+      },
+      {
+        "title": "代凌主任医师查房记录",
+        "record_time": "2026-02-06 11:33:00",
+        "sort_time": "2026-02-06 11:33:00",
+        "excerpt": "患者感腰骶部疼痛，昨日感头昏，轻度发热……继续给予抗感染等处理。"
+      },
+      {
+        "title": "李其玲主治医师查房记录",
+        "record_time": "2026-02-15 10:56:40",
+        "sort_time": "2026-02-15 10:56:40",
+        "excerpt": "患者目前一般情况可，腰痛好转，无发热、呕吐、腹泻……继续抗感染、止痛、控制血压。"
+      }
+    ],
+    "release_key_excerpts": [
+      {
+        "source": "release/0426_full_auto",
+        "file": "senior_course_record.csv",
+        "title": "李军主治医师查房记录",
+        "record_time": "2026-02-05 11:44:39",
+        "update_time": "2026-02-28 08:30:46",
+        "excerpt": "患者神志清楚，感腰部疼痛……头孢曲松抗感染等处理。"
+      },
+      {
+        "source": "release/0426_full_auto",
+        "file": "senior_course_record.csv",
+        "title": "代凌主任医师查房记录",
+        "record_time": "2026-02-06 11:33:00",
+        "update_time": "2026-02-28 08:30:46",
+        "excerpt": "患者感腰骶部疼痛……继续给予利伐沙班抗凝、头孢曲松抗感染等处理。"
+      },
+      {
+        "source": "release/0426_full_auto",
+        "file": "senior_course_record.csv",
+        "title": "李其玲主治医师查房记录",
+        "record_time": "2026-02-15 10:56:40",
+        "update_time": "2026-02-28 08:30:46",
+        "excerpt": "患者目前一般情况可，腰痛好转……继续抗感染、止痛、控制血压。"
+      }
+    ]
+  }
+]
