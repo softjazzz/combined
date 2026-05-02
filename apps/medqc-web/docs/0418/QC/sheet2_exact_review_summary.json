@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 120,
-    "blocked_with_reason": 84,
+    "exact_confirmed": 123,
+    "blocked_with_reason": 88,
     "skip": 20,
-    "needs_exact_review": 59
+    "needs_exact_review": 52
   },
   "needs_exact_review_rows": [
     {
@@ -19,28 +19,6 @@
       "anchor_misses": "手术名称|手术记录中手术名称与术前讨论及术前小结中手术名称不一致|术前小结|术前讨论"
     },
     {
-      "sheet2_row_id": "Sheet2-R0024",
-      "visit_id": "1912027",
-      "patient_name": "雷良贵",
-      "issue_family": "会诊执行记录缺失/未写执行情况",
-      "primary_rule_id": "SC-070",
-      "manual_issue_text": "无会诊意见执行记录",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": ""
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0026",
-      "visit_id": "1996981",
-      "patient_name": "余基群",
-      "issue_family": "会诊意见已写遵执但实际未落实",
-      "primary_rule_id": "SC-070",
-      "manual_issue_text": "请会诊执行记录书写不规范仅描述“遵会诊意见执行”",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "请会诊执行记录书写不规范仅描述|遵会诊意见|遵会诊意见执行"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0027",
       "visit_id": "2205630",
       "patient_name": "余正忠",
@@ -50,17 +28,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "复制粘贴|病历复制粘贴严重"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0028",
-      "visit_id": "2168750",
-      "patient_name": "张乃宣",
-      "issue_family": "会诊意见已写遵执但实际未落实",
-      "primary_rule_id": "SC-070",
-      "manual_issue_text": "请会诊执行记录书写不规范仅描述“遵会诊意见执行”",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "请会诊执行记录书写不规范仅描述|遵会诊意见|遵会诊意见执行"
     },
     {
       "sheet2_row_id": "Sheet2-R0029",
@@ -283,28 +250,6 @@
       "anchor_misses": "危急值|危急值处理不及时|开具医嘱为普通饮食欠妥|日病程记录中|用药|请内分泌科会诊后"
     },
     {
-      "sheet2_row_id": "Sheet2-R0151",
-      "visit_id": "2190050",
-      "patient_name": "颜泽全",
-      "issue_family": "会诊执行记录缺失/未写执行情况",
-      "primary_rule_id": "SC-070",
-      "manual_issue_text": "1月23日请会诊执行记录为书写具体执行情况",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "执行情况"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0153",
-      "visit_id": "2188335",
-      "patient_name": "黄显秀",
-      "issue_family": "会诊意见已写遵执但实际未落实",
-      "primary_rule_id": "SC-070",
-      "manual_issue_text": "1月23日康复科会诊建议给予针灸、低频、中药贴敷、关节松动术、偏瘫肢体综合训练、肌力训练等康复治疗以舒经通络、滑利关节。请会诊执行记录中书写遵会诊意见。但实际并未按照会诊意见执行。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "中药贴敷|但实际并未按照会诊意见执行|偏瘫肢体综合训练|关节松动术|日康复科会诊建议给予针灸|滑利关节|肌力训练等康复治疗以舒经通络|请会诊执行记录中书写遵会诊意见|遵会诊意见"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0155",
       "visit_id": "2199027",
       "patient_name": "柯尊利",
@@ -481,17 +426,6 @@
       "anchor_misses": "有创操作|有创操作记录书写不规范|未按模板书写具体操作时间|术后注意事项及向患者交待情况等"
     },
     {
-      "sheet2_row_id": "Sheet2-R0200",
-      "visit_id": "2243538",
-      "patient_name": "刘宗碧",
-      "issue_family": "会诊意见已写遵执但实际未落实",
-      "primary_rule_id": "SC-070",
-      "manual_issue_text": "请会诊执行记录执行情况为“拟遵照执行”，实际为已遵会诊意见执行。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "实际为已遵会诊意见执行|执行情况|拟遵照执行|请会诊执行记录执行情况为|遵会诊意见"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0205",
       "visit_id": "2259144",
       "patient_name": "李欣桂",
@@ -591,17 +525,6 @@
       "anchor_misses": "15cm|以穿刺点为中心|体位|向外扩张|外敷无菌干纱布|外面垫放干纱布|应明确送检项目|建议统一为|操作者|有创操作|未描述操作时患者所取的体位|未明确记录操作者|此表述在专业文书中较少使用|消毒范围半径约|消毒范围直径约|留取脓液标本送检|细菌培养|药敏试验|通常表述为"
     },
     {
-      "sheet2_row_id": "Sheet2-R0279",
-      "visit_id": "2307974",
-      "patient_name": "周大友",
-      "issue_family": "会诊执行记录缺失/未写执行情况",
-      "primary_rule_id": "SC-070",
-      "manual_issue_text": "4月1日请会诊执行记录中描述给予针灸、电刺激治疗、中药贴敷、悬空灸、耳穴、中药塌渍等康复治疗，但实际未予以耳穴治疗。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "中药塌渍等康复治疗|中药贴敷|但实际未予以耳穴治疗|实际未|悬空灸|日请会诊执行记录中描述给予针灸|电刺激治疗"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0285",
       "visit_id": "2314600",
       "patient_name": "曾祥蓉",
@@ -693,6 +616,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-008-现病史-第二轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0028",
+      "visit_id": "2168750",
+      "patient_name": "张乃宣",
+      "issue_family": "会诊意见已写遵执但实际未落实",
+      "primary_rule_id": "SC-070",
+      "manual_issue_text": "请会诊执行记录书写不规范仅描述“遵会诊意见执行”",
+      "reason": "release/0426_full_auto 该 visit 的会诊记录实际写有“已遵嘱执行”“已遵嘱继续煎药服用调理”“已将会诊意见告知患者并加用药物医嘱”等具体动作，并非仅写“遵会诊意见执行”；人工问题与原文不符，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-070-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0035",
@@ -1247,6 +1182,18 @@
       "decision_source": "release/0426 + release/0426_full_auto snapshot"
     },
     {
+      "sheet2_row_id": "Sheet2-R0153",
+      "visit_id": "2188335",
+      "patient_name": "黄显秀",
+      "issue_family": "会诊意见已写遵执但实际未落实",
+      "primary_rule_id": "SC-070",
+      "manual_issue_text": "1月23日康复科会诊建议给予针灸、低频、中药贴敷、关节松动术、偏瘫肢体综合训练、肌力训练等康复治疗以舒经通络、滑利关节。请会诊执行记录中书写遵会诊意见。但实际并未按照会诊意见执行。",
+      "reason": "release/0426_full_auto 当前可回收原文是泌尿外科关于下肢静脉血栓的会诊与后续抗凝执行，并非人工问题所述“1月23日康复科会诊建议针灸 低频 中药贴敷等但实际未执行”场景，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-070-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation + daily snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0157",
       "visit_id": "2194387",
       "patient_name": "钟志春",
@@ -1305,6 +1252,18 @@
       "blocked_reason_type": "规则不支持",
       "review_subgroup": "SC-032-精确复核-第四轮",
       "decision_source": "release/0426_full_auto senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0200",
+      "visit_id": "2243538",
+      "patient_name": "刘宗碧",
+      "issue_family": "会诊意见已写遵执但实际未落实",
+      "primary_rule_id": "SC-070",
+      "manual_issue_text": "请会诊执行记录执行情况为“拟遵照执行”，实际为已遵会诊意见执行。",
+      "reason": "release/0426_full_auto consultation_record 仅回收到“医生签名:”空壳正文，无法核对人工问题所称“拟遵照执行”原句及其与实际执行的前后关系，证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-070-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0206",
@@ -1619,6 +1578,18 @@
       "decision_source": "local_pg get_documents + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0279",
+      "visit_id": "2307974",
+      "patient_name": "周大友",
+      "issue_family": "会诊执行记录缺失/未写执行情况",
+      "primary_rule_id": "SC-070",
+      "manual_issue_text": "4月1日请会诊执行记录中描述给予针灸、电刺激治疗、中药贴敷、悬空灸、耳穴、中药塌渍等康复治疗，但实际未予以耳穴治疗。",
+      "reason": "release/0426_full_auto 现可见康复科会诊建议包含针灸 电刺激 中药贴敷 悬空灸 耳穴 中药塌渍，但后续病程仅写“予以康复治疗/请康复科行康复理疗”，没有可直接核对的治疗项目执行清单，无法证实“未予耳穴治疗”，证据不足。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-070-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto consultation + daily snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0281",
       "visit_id": "2313364",
       "patient_name": "孔祥斌",
@@ -1711,13 +1682,13 @@
       "skip": 1
     },
     "会诊意见已写遵执但实际未落实": {
-      "needs_exact_review": 4,
-      "skip": 1,
-      "exact_confirmed": 1
+      "exact_confirmed": 2,
+      "blocked_with_reason": 3,
+      "skip": 1
     },
     "会诊执行记录缺失/未写执行情况": {
-      "needs_exact_review": 3,
-      "exact_confirmed": 5
+      "exact_confirmed": 7,
+      "blocked_with_reason": 1
     },
     "会诊执行记录缺失/未写执行情况；危急值记录不完整/处理不充分；诊疗医嘱与病程记录不一致": {
       "needs_exact_review": 1
