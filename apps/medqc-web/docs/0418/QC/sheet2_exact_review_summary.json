@@ -1,23 +1,12 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 130,
-    "blocked_with_reason": 101,
+    "exact_confirmed": 133,
+    "blocked_with_reason": 102,
     "skip": 20,
-    "needs_exact_review": 32
+    "needs_exact_review": 28
   },
   "needs_exact_review_rows": [
-    {
-      "sheet2_row_id": "Sheet2-R0027",
-      "visit_id": "2205630",
-      "patient_name": "余正忠",
-      "issue_family": "不合理复制病历内容",
-      "primary_rule_id": "CL-275",
-      "manual_issue_text": "病历复制粘贴严重",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "复制粘贴|病历复制粘贴严重"
-    },
     {
       "sheet2_row_id": "Sheet2-R0029",
       "visit_id": "1915580",
@@ -28,17 +17,6 @@
       "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "患者行了骨髓穿刺|有创操作|骨髓穿刺"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0031",
-      "visit_id": "2337741",
-      "patient_name": "余定远",
-      "issue_family": "不合理复制病历内容",
-      "primary_rule_id": "CL-275",
-      "manual_issue_text": "请会诊执行记录中复制粘贴严重，记录中“ 余同贵科！谢邀！我科愿随访”直接引用会诊意见未进行修改。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "余同贵科|复制粘贴|我科愿随访|直接引用会诊意见未进行修改|记录中|请会诊执行记录中复制粘贴严重"
     },
     {
       "sheet2_row_id": "Sheet2-R0036",
@@ -184,17 +162,6 @@
       "anchor_misses": "危急值|危急值处理不及时|开具医嘱为普通饮食欠妥|日病程记录中|用药|请内分泌科会诊后"
     },
     {
-      "sheet2_row_id": "Sheet2-R0155",
-      "visit_id": "2199027",
-      "patient_name": "柯尊利",
-      "issue_family": "不合理复制病历内容",
-      "primary_rule_id": "CL-275",
-      "manual_issue_text": "1月29日上级医师查房记录不完整，存在复制粘贴首次病程情况。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "复制粘贴|日上级医师查房记录不完整"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0165",
       "visit_id": "2199041",
       "patient_name": "陈锡芬",
@@ -259,17 +226,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "在术前小结及术前讨论之前|已经下达手术医嘱|术前小结|术前讨论"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0176",
-      "visit_id": "2207717",
-      "patient_name": "邹才林",
-      "issue_family": "不合理复制病历内容",
-      "primary_rule_id": "CL-275",
-      "manual_issue_text": "2月4日副主任医师查房记录与2月3日主治医师查房记录复制粘贴严重（相识度100%）",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "100%|复制粘贴|日主治医师查房记录复制粘贴严重|日副主任医师查房记录与|相识度"
     },
     {
       "sheet2_row_id": "Sheet2-R0183",
@@ -420,6 +376,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-050-精确复核-第一轮",
       "decision_source": "local_pg + release senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0031",
+      "visit_id": "2337741",
+      "patient_name": "余定远",
+      "issue_family": "不合理复制病历内容",
+      "primary_rule_id": "CL-275",
+      "manual_issue_text": "请会诊执行记录中复制粘贴严重，记录中“ 余同贵科！谢邀！我科愿随访”直接引用会诊意见未进行修改。",
+      "reason": "local_pg 当前可回收的是 2026-04-13/2026-04-14 两条会诊执行式记录及 2026-04-11/2026-04-13 上级查房间的高度复用，但未回收到人工问题所引“余同贵科！谢邀！我科愿随访”这一原句锚点；虽属同一复制粘贴问题族，仍不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "CL-275-精确复核-第一轮",
+      "decision_source": "local_pg get_documents copy-chain snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0035",
@@ -1604,7 +1572,8 @@
       "needs_exact_review": 1
     },
     "不合理复制病历内容": {
-      "needs_exact_review": 4
+      "exact_confirmed": 3,
+      "blocked_with_reason": 1
     },
     "主治首次查房48小时": {
       "exact_confirmed": 1
