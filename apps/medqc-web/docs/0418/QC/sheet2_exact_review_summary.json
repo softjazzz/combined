@@ -2,9 +2,9 @@
   "total_rows": 283,
   "status_breakdown": {
     "exact_confirmed": 112,
-    "blocked_with_reason": 38,
+    "blocked_with_reason": 50,
     "skip": 20,
-    "needs_exact_review": 113
+    "needs_exact_review": 101
   },
   "needs_exact_review_rows": [
     {
@@ -138,17 +138,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "但在分析病情时是孙治庆医师在查房|日上级查房医师为王标|涉嫌伪造病历"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0044",
-      "visit_id": "1966724",
-      "patient_name": "兰世群",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "患者入院时血压升高，未持续监测血压，未请相关科室会诊，未送检病原微生物，9月2日周凤霞主治医师查房及9月3日陈光怀副主任医师查房未书写相关内容。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "患者入院时血压升高|日周凤霞主治医师查房及|未持续监测血压|未请相关科室会诊|未送检病原微生物|血压"
     },
     {
       "sheet2_row_id": "Sheet2-R0046",
@@ -910,39 +899,6 @@
       "anchor_misses": "会诊意见原封不动复制|患者拟行肠镜|未认真做好病情变化分析及病程书写|请疼痛科会诊"
     },
     {
-      "sheet2_row_id": "Sheet2-R0224",
-      "visit_id": "2268827",
-      "patient_name": "朱敦群",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "胸部CT提示双肺感染，未请呼吸内科会诊，病程记录及出院诊断均未提及",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "提示双肺感染|未请呼吸内科会诊|病程记录及出院诊断均未提及"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0225",
-      "visit_id": "2262981",
-      "patient_name": "屈义田",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "胸部CT提示双肺结节，检验结果提示低钾，病程记录未提及",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "低钾|提示双肺结节|检验结果提示低钾|病程记录未提及"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0226",
-      "visit_id": "2255288",
-      "patient_name": "王树成",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "3月11日检查检验结果数据异常未进行分析和记录",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": ""
-    },
-    {
       "sheet2_row_id": "Sheet2-R0228",
       "visit_id": "2262370",
       "patient_name": "李昭云",
@@ -1020,28 +976,6 @@
       "anchor_misses": "未请神经内科会诊及分析|颅脑平扫提示基底节区腔隙性脑梗塞"
     },
     {
-      "sheet2_row_id": "Sheet2-R0242",
-      "visit_id": "2281076",
-      "patient_name": "蒋光琼",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "病程记录对检验结果未分析",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "病程记录对检验结果未分析"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0243",
-      "visit_id": "2273134",
-      "patient_name": "李宗良",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "异常检验结果在病程记录中未体现",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "异常检验结果在病程记录中未体现"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0245",
       "visit_id": "2261527",
       "patient_name": "杨德泉",
@@ -1086,50 +1020,6 @@
       "anchor_misses": "则后续步骤未体现|多发合并症等|应说明原因|建议补充|患者肺功能差|未记录是否据此调整手术范围|术中冰冻回报|术中冰冻结果与手术决策|此部分为关键质控点|浸润性腺癌|若楔形切除即为最终术式|若需扩大切除"
     },
     {
-      "sheet2_row_id": "Sheet2-R0255",
-      "visit_id": "2286259",
-      "patient_name": "曾昌荣",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "病程中未记录3月15日胃镜检查结果。患者拟于3月17日行TAPP术，术前3月17日3:50,患者自述胸痛，未做详细查体，辅助检查不全面，仅查心电图及心肌标志物未见异常。考虑范围局限。未及时暂停手术而仍按计划于当日在全麻下行TAPP术，术后一天，患者出现寒战、高热、腹痛、诊断化脓性胆管炎、感染性休克。病历书写不完整，围手术期管理不到位。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "TAPP|仅查心电图及心肌标志物未见异常|围手术期管理不到位|患者出现寒战|患者拟于|患者自述胸痛|感染性休克|日胃镜检查结果|未做详细查体|未及时暂停手术而仍按计划于当日在全麻下行|术后一天|病历书写不完整|考虑范围局限|胃镜|胸痛|诊断化脓性胆管炎|辅助检查不全面"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0262",
-      "visit_id": "2300354",
-      "patient_name": "刘德荣",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "有血管彩超，且结果阳性 （动脉粥样硬化），无诊断，无相关处理。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "且结果阳性|动脉粥样硬化|无相关处理|无诊断|有血管彩超"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0265",
-      "visit_id": "2306811",
-      "patient_name": "罗亨金",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "尿常规阳性结果无诊断分析及处理。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "尿常规阳性结果无诊断分析及处理"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0268",
-      "visit_id": "2286345",
-      "patient_name": "钟光田",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "4.1异常检查检验结果病程记录未分析和记录",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "4.1"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0270",
       "visit_id": "2310189",
       "patient_name": "涂忠友",
@@ -1139,17 +1029,6 @@
       "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "入院检查明确有双肾沙粒样结石|膀胱结石"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0272",
-      "visit_id": "2301040",
-      "patient_name": "温怀兵",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "4.1日病程记录中检查检验结果停留在3.22，而最新的4.1检验结果在病程记录中未体现",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "3.22|4.1|日病程记录中检查检验结果停留在|检验结果在病程记录中未体现|而最新的"
     },
     {
       "sheet2_row_id": "Sheet2-R0279",
@@ -1172,17 +1051,6 @@
       "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "4.1|病程记录过于简单"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0283",
-      "visit_id": "2311318",
-      "patient_name": "范永勤",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "4.7检验结果肾功异常，病程记录未分析，未请相应科室会诊",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "4.7|未请相应科室会诊|检验结果肾功异常|病程记录未分析"
     },
     {
       "sheet2_row_id": "Sheet2-R0285",
@@ -1299,6 +1167,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-008-现病史-第二轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0044",
+      "visit_id": "1966724",
+      "patient_name": "兰世群",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "患者入院时血压升高，未持续监测血压，未请相关科室会诊，未送检病原微生物，9月2日周凤霞主治医师查房及9月3日陈光怀副主任医师查房未书写相关内容。",
+      "reason": "local_pg 可见 9月2日周凤霞主治医师查房与 9月3日陈光怀副主任医师查房正文，且病程/会诊已有抗感染与中医会诊记录；人工问题所称“未书写相关内容、未请相关会诊”与原文不符，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
     },
     {
       "sheet2_row_id": "Sheet2-R0053",
@@ -1661,6 +1541,66 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0224",
+      "visit_id": "2268827",
+      "patient_name": "朱敦群",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "胸部CT提示双肺感染，未请呼吸内科会诊，病程记录及出院诊断均未提及",
+      "reason": "local_pg 上级查房已记录 3月5日 CT“ 双肺少许感染 ”及后续病程抗感染处理，人工问题中“病程记录及出院诊断均未提及”与原文至少在病程层面冲突，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0225",
+      "visit_id": "2262981",
+      "patient_name": "屈义田",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "胸部CT提示双肺结节，检验结果提示低钾，病程记录未提及",
+      "reason": "local_pg 主治/出院前查房已写胸部 CT“ 双肺多发结节 ”，3月7日查房又记录 3月6日 K 3.44mmol/L；人工问题所称“病程记录未提及”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0226",
+      "visit_id": "2255288",
+      "patient_name": "王树成",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "3月11日检查检验结果数据异常未进行分析和记录",
+      "reason": "local_pg 3月13日上级医师查房已完整列出 3月11日 proBNP、血常规、D-Dimer/FDP、白蛋白等异常检查，人工问题中“3月11日异常数据未进行记录”与原文冲突，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0242",
+      "visit_id": "2281076",
+      "patient_name": "蒋光琼",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "病程记录对检验结果未分析",
+      "reason": "local_pg 术后查房已写 3月13日 WBC 3.64、Cl 113.3 并据“无感染征象”停用头孢；人工问题未指明哪项检验结果仍缺分析，当前证据不足以精确判定整条成立。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0243",
+      "visit_id": "2273134",
+      "patient_name": "李宗良",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "异常检验结果在病程记录中未体现",
+      "reason": "local_pg 3月12日日常病程已列 WBC、D-Dimer、FDP、CRP、Alb、肾功等异常，3月13日又结合血气分析安排拔管和继续观察；“异常检验结果在病程记录中未体现”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0254",
       "visit_id": "2275999",
       "patient_name": "王美锡",
@@ -1671,6 +1611,30 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-008-现病史-第二轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0255",
+      "visit_id": "2286259",
+      "patient_name": "曾昌荣",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "病程中未记录3月15日胃镜检查结果。患者拟于3月17日行TAPP术，术前3月17日3:50,患者自述胸痛，未做详细查体，辅助检查不全面，仅查心电图及心肌标志物未见异常。考虑范围局限。未及时暂停手术而仍按计划于当日在全麻下行TAPP术，术后一天，患者出现寒战、高热、腹痛、诊断化脓性胆管炎、感染性休克。病历书写不完整，围手术期管理不到位。",
+      "reason": "local_pg 该条同时覆盖 3月15日胃镜结果缺失、3月17日胸痛评估不足、TAPP 未暂停及术后化脓性胆管炎/感染性休克等多个围手术期管理点，超出单一 SC-036 规则可精确闭环的范围，需拆多规则另行复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0262",
+      "visit_id": "2300354",
+      "patient_name": "刘德荣",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "有血管彩超，且结果阳性 （动脉粥样硬化），无诊断，无相关处理。",
+      "reason": "local_pg 3月23日查房已写“血管彩超…双下肢动脉粥样硬化伴斑块”，后续心内科又因高脂血症建议阿托伐他汀；是否构成“无相关处理”仍缺更明确的诊疗闭环证据，不能整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
     },
     {
       "sheet2_row_id": "Sheet2-R0264",
@@ -1685,6 +1649,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0265",
+      "visit_id": "2306811",
+      "patient_name": "罗亨金",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "尿常规阳性结果无诊断分析及处理。",
+      "reason": "local_pg 首次查房已将“血尿：结石？感染？其他？”纳入诊断并继续围手术期处理，但人工问题要求的是“尿常规阳性无诊断分析及处理”；当前缺少更明确的尿检结果到针对性处理闭环，不能整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0266",
       "visit_id": "2305293",
       "patient_name": "许志刚",
@@ -1694,6 +1670,42 @@
       "reason": "local_pg 日常病程与上级医师查房均已记录 3月28日胸部CT 结果及“左侧部分肋骨骨折”，人工问题中“病程记录未体现”与原文冲突，整条不能判 exact。",
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-036-用药记录-第一轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0268",
+      "visit_id": "2286345",
+      "patient_name": "钟光田",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "4.1异常检查检验结果病程记录未分析和记录",
+      "reason": "local_pg 4月2日查房已回顾 4月1日血常规与胸部 CT 结果，后续病程亦持续按感染指标和腹盆腔影像调整治疗；人工问题所称“4.1异常检查检验结果病程记录未分析和记录”与原文不完全一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0272",
+      "visit_id": "2301040",
+      "patient_name": "温怀兵",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "4.1日病程记录中检查检验结果停留在3.22，而最新的4.1检验结果在病程记录中未体现",
+      "reason": "local_pg 4月1日上级查房已更新 4月1日血气和血常规，并未停留在 3月22日旧结果；人工问题所称“4.1日病程记录中检查检验结果停留在3.22”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-036-异常结果-第二轮",
+      "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0283",
+      "visit_id": "2311318",
+      "patient_name": "范永勤",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "manual_issue_text": "4.7检验结果肾功异常，病程记录未分析，未请相应科室会诊",
+      "reason": "local_pg 当前可证的是 4月1日尿路感染已记录并有泌尿血管外科会诊与左氧氟沙星处理，但无法在现有快照中精确回收到人工问题所指 4月7日肾功异常原始结果与对应病程闭环，不能整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-036-异常结果-第二轮",
       "decision_source": "local_pg get_documents + probe"
     },
     {
@@ -1872,8 +1884,8 @@
       "exact_confirmed": 1
     },
     "病程记录缺分析/缺处理意见": {
-      "blocked_with_reason": 3,
-      "needs_exact_review": 25,
+      "blocked_with_reason": 15,
+      "needs_exact_review": 13,
       "exact_confirmed": 2
     },
     "诊疗医嘱与病程记录不一致": {
