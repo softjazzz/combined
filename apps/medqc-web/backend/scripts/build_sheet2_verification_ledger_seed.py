@@ -251,6 +251,20 @@ def _canonical_primary_rule_id(
         preferred_rule_id = "SC-071"
     elif normalized_family == "手术记录时效异常":
         preferred_rule_id = "SC-096"
+    elif normalized_family == "有创诊疗操作记录缺失/书写不规范":
+        preferred_rule_id = "SC-045" if "无有创" in normalized_text or "无有创操作记录" in normalized_text else "SC-046"
+    elif normalized_family == "转科记录缺失/书写不规范":
+        preferred_rule_id = "SC-064"
+    elif normalized_family == "疑难病例讨论缺失/缺项":
+        preferred_rule_id = "SC-056"
+    elif normalized_family == "输血记录链缺项":
+        preferred_rule_id = "SC-074"
+    elif normalized_family == "围手术期术前评估/讨论/小结缺陷":
+        preferred_rule_id = "SC-081"
+    elif normalized_family == "既往史/用药史记录不全":
+        preferred_rule_id = "SC-013"
+    elif normalized_family == "术前讨论结论/会诊意见未记入病历":
+        preferred_rule_id = "SC-084"
     elif normalized_family == "不合理复制病历内容":
         if "同科同种疾病" in normalized_text or ("同科" in normalized_text and "拟诊讨论" in normalized_text):
             preferred_rule_id = "CL-276"

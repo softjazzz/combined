@@ -186,6 +186,54 @@ def test_classify_daily_course_analysis_issue():
     assert result["candidate_rule_ids"] == ["SC-032", "SC-033", "SC-036"]
 
 
+def test_classify_invasive_operation_record_issue():
+    result = classify_manual_issue_text("患者行了骨髓穿刺，无有创操作记录")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "invasive_operation_record_quality"
+    assert result["candidate_rule_ids"] == ["SC-045", "SC-046"]
+
+
+def test_classify_invasive_operation_record_quality_issue():
+    result = classify_manual_issue_text("有创操作记录书写不规范，未明确记录操作者、操作时间及术后注意事项。")
+    assert result["issue_category"] == "invasive_operation_record_quality"
+    assert result["candidate_rule_ids"] == ["SC-046", "SC-045"]
+
+
+def test_classify_transfer_record_quality_issue():
+    result = classify_manual_issue_text("转科记录中转出记录未书写拟转入科室，转入记录中未书写转入时间。")
+    assert result["coverage_type"] == "programmatic"
+    assert result["issue_category"] == "transfer_record_quality"
+    assert result["candidate_rule_ids"] == ["SC-064"]
+
+
+def test_classify_difficult_case_discussion_issue():
+    result = classify_manual_issue_text("患者入院超过3天未明确诊断未进行疑难病历讨论")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "difficult_case_discussion"
+    assert result["candidate_rule_ids"] == ["SC-056", "SC-057", "SC-058"]
+
+
+def test_classify_transfusion_record_quality_issue():
+    result = classify_manual_issue_text("输血后评价时间未书写")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "transfusion_record_quality"
+    assert result["candidate_rule_ids"] == ["SC-074", "LX-018", "SC-073"]
+
+
+def test_classify_operation_preop_risk_assessment_issue():
+    result = classify_manual_issue_text("急诊手术术前准备不充分，预案不清晰。")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "operation_preop_risk_assessment"
+    assert result["candidate_rule_ids"] == ["SC-081", "SC-082", "SC-097"]
+
+
+def test_classify_diagnosis_or_treatment_followup_issue():
+    result = classify_manual_issue_text("有血管彩超，且结果阳性，入院后无诊断，无相关处理。")
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "daily_course_analysis"
+    assert result["candidate_rule_ids"] == ["SC-036", "SC-032", "SC-033"]
+
+
 def test_resolve_first_course_timeliness_should_prefer_sc021():
     rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
         issue_category="first_course_timeliness",
