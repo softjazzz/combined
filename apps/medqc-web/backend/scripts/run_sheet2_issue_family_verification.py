@@ -76,6 +76,13 @@ def _parse_args() -> argparse.Namespace:
         default="primary",
         help="执行主规则或首个次规则",
     )
+    parser.add_argument(
+        "--secondary-rule-id",
+        dest="secondary_rule_ids",
+        action="append",
+        default=[],
+        help="当 --rule-slot=secondary-first 时，指定要执行的次规则，可重复传入",
+    )
     parser.add_argument("--output-json", default="", help="可选，输出本轮汇总 JSON")
     parser.add_argument("--dry-run", action="store_true", help="只生成选择结果，不执行任务")
     return parser.parse_args()
@@ -99,6 +106,11 @@ def _write_ledger(path: Path, fieldnames: list[str], rows: list[dict[str, str]])
 def _select_rows(rows: list[dict[str, str]], args: argparse.Namespace) -> list[dict[str, str]]:
     issue_families = {_safe_text(item) for item in (args.issue_families or []) if _safe_text(item)}
     row_ids = {_safe_text(item) for item in (args.row_ids or []) if _safe_text(item)}
+    requested_secondary_rule_ids = {
+        _safe_text(item).upper()
+        for item in (args.secondary_rule_ids or [])
+        if _safe_text(item)
+    }
     if not issue_families and not row_ids:
         issue_families = set(DEFAULT_FAMILIES)
 
@@ -126,7 +138,7 @@ def _select_rows(rows: list[dict[str, str]], args: argparse.Namespace) -> list[d
                 continue
         if not _safe_text(row.get("visit_id")) or not _safe_text(row.get("primary_rule_id")):
             continue
-        if args.rule_slot == "secondary-first" and not _first_secondary_rule_id(row):
+        if args.rule_slot == "secondary-first" and not _resolve_rule_id(row, rule_slot=args.rule_slot, requested_secondary_rule_ids=requested_secondary_rule_ids):
             continue
         family = _safe_text(row.get("issue_family"))
         if row_ids and row_id not in row_ids:
@@ -153,6 +165,28 @@ def _first_secondary_rule_id(row: dict[str, str]) -> str:
         if rule_id:
             return rule_id
     return ""
+
+
+def _resolve_rule_id(
+    row: dict[str, str],
+    *,
+    rule_slot: str,
+    requested_secondary_rule_ids: set[str] | None = None,
+) -> str:
+    if rule_slot != "secondary-first":
+        return _safe_text(row.get("primary_rule_id")).upper()
+    normalized_requested = {item.upper() for item in (requested_secondary_rule_ids or set()) if item}
+    secondary_rule_ids = [
+        _safe_text(item).upper()
+        for item in (_safe_text(row.get("secondary_rule_ids")) or "").split("|")
+        if _safe_text(item)
+    ]
+    if normalized_requested:
+        for rule_id in secondary_rule_ids:
+            if rule_id in normalized_requested:
+                return rule_id
+        return ""
+    return secondary_rule_ids[0] if secondary_rule_ids else ""
 
 
 def _normalize_executor_breakdown(value: Any) -> dict[str, int]:
@@ -215,6 +249,7 @@ async def _run_family_batch(
     family: str,
     rows: list[dict[str, str]],
     rule_slot: str,
+    requested_secondary_rule_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     workspace = CustomQCWorkspaceService()
     record_ids = []
@@ -222,7 +257,11 @@ async def _run_family_batch(
     rule_ids: list[str] = []
     for row in rows:
         record_id = _safe_text(row.get("visit_id"))
-        rule_id = _first_secondary_rule_id(row) if rule_slot == "secondary-first" else _safe_text(row.get("primary_rule_id"))
+        rule_id = _resolve_rule_id(
+            row,
+            rule_slot=rule_slot,
+            requested_secondary_rule_ids=requested_secondary_rule_ids,
+        )
         if not record_id or not rule_id:
             continue
         if record_id not in record_ids:
@@ -310,6 +349,7 @@ async def _run_family_batch(
             rows=rows,
             records=records,
             rule_slot=rule_slot,
+            requested_secondary_rule_ids=requested_secondary_rule_ids,
         )
     return dict(completed_job)
 
@@ -320,6 +360,7 @@ async def _repair_programmatic_missing_items(
     rows: list[dict[str, str]],
     records: list[dict[str, Any]],
     rule_slot: str,
+    requested_secondary_rule_ids: set[str] | None = None,
 ) -> None:
     record_map = {_safe_text(item.get("record_id") or item.get("visit_id")): dict(item) for item in records}
     qc_service = SichuanQCService()
@@ -328,7 +369,11 @@ async def _repair_programmatic_missing_items(
 
     for row in rows:
         record_id = _safe_text(row.get("visit_id"))
-        rule_id = _first_secondary_rule_id(row) if rule_slot == "secondary-first" else _safe_text(row.get("primary_rule_id"))
+        rule_id = _resolve_rule_id(
+            row,
+            rule_slot=rule_slot,
+            requested_secondary_rule_ids=requested_secondary_rule_ids,
+        )
         if not record_id or not rule_id:
             continue
         if _find_item(job, record_id=record_id, rule_id=rule_id) or _find_failed_record(job, record_id=record_id, rule_id=rule_id):
@@ -420,6 +465,7 @@ def _apply_job_results(
     rows: list[dict[str, str]],
     job: dict[str, Any],
     rule_slot: str,
+    requested_secondary_rule_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     job_id = _safe_text(job.get("id"))
     result_counter: Counter[str] = Counter()
@@ -427,7 +473,11 @@ def _apply_job_results(
 
     for row in rows:
         record_id = _safe_text(row.get("visit_id"))
-        rule_id = _first_secondary_rule_id(row) if rule_slot == "secondary-first" else _safe_text(row.get("primary_rule_id"))
+        rule_id = _resolve_rule_id(
+            row,
+            rule_slot=rule_slot,
+            requested_secondary_rule_ids=requested_secondary_rule_ids,
+        )
         item = _find_item(job, record_id=record_id, rule_id=rule_id)
         failed = _find_failed_record(job, record_id=record_id, rule_id=rule_id)
         updated = dict(row)
@@ -473,6 +523,11 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
     fieldnames, ledger_rows = _load_ledger(ledger_path)
     selected_rows = _select_rows(ledger_rows, args)
     grouped_rows = _group_rows_by_family(selected_rows)
+    requested_secondary_rule_ids = {
+        _safe_text(item).upper()
+        for item in (args.secondary_rule_ids or [])
+        if _safe_text(item)
+    }
 
     report = {
         "ledger": str(ledger_path),
@@ -489,9 +544,25 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 "record_ids": sorted({_safe_text(row.get("visit_id")) for row in rows if _safe_text(row.get("visit_id"))}),
                 "rule_ids": sorted(
                     {
-                        (_first_secondary_rule_id(row) if args.rule_slot == "secondary-first" else _safe_text(row.get("primary_rule_id")))
+                        _resolve_rule_id(
+                            row,
+                            rule_slot=args.rule_slot,
+                            requested_secondary_rule_ids={
+                                _safe_text(item).upper()
+                                for item in (args.secondary_rule_ids or [])
+                                if _safe_text(item)
+                            },
+                        )
                         for row in rows
-                        if (_first_secondary_rule_id(row) if args.rule_slot == "secondary-first" else _safe_text(row.get("primary_rule_id")))
+                        if _resolve_rule_id(
+                            row,
+                            rule_slot=args.rule_slot,
+                            requested_secondary_rule_ids={
+                                _safe_text(item).upper()
+                                for item in (args.secondary_rule_ids or [])
+                                if _safe_text(item)
+                            },
+                        )
                     }
                 ),
             }
@@ -508,6 +579,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 family=family,
                 rows=rows,
                 rule_slot=args.rule_slot,
+                requested_secondary_rule_ids=requested_secondary_rule_ids,
             )
         except RuntimeError as exc:
             error_text = _safe_text(exc)
@@ -532,7 +604,13 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 )
                 continue
             raise
-        applied = _apply_job_results(family=family, rows=rows, job=job, rule_slot=args.rule_slot)
+        applied = _apply_job_results(
+            family=family,
+            rows=rows,
+            job=job,
+            rule_slot=args.rule_slot,
+            requested_secondary_rule_ids=requested_secondary_rule_ids,
+        )
         for updated in applied["updated_rows"]:
             by_row_id[updated["sheet2_row_id"]] = updated
         report["families"].append(
