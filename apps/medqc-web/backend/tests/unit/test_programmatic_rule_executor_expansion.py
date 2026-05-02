@@ -258,6 +258,54 @@ def test_sc049_should_not_accept_medical_group_leader_as_senior_round():
     assert "副主任/主任医师" in result["findings"]
 
 
+def test_sc098_should_fail_when_surgeon_signature_label_is_blank():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-098", "name": "无主刀医师签名"},
+        medical_record={
+            "content": (
+                "记录时间：2026-04-07 15:51:28\n"
+                "手术医生签名: \n"
+                "手术项目：超声引导下经右侧颈内静脉输液港植入术\n"
+            ),
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "documents": {
+                        "surgery_record": [{"document_id": "S1", "authored_at": "2026-04-07 15:51:28"}],
+                    }
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "non_compliant"
+    assert "字段为空" in result["findings"]
+
+
+def test_sc098_should_pass_when_surgeon_signature_has_value():
+    executor = ProgrammaticRuleExecutor()
+    result = executor.evaluate(
+        rule={"rule_id": "SC-098", "name": "无主刀医师签名"},
+        medical_record={
+            "content": (
+                "记录时间：2026-04-07 15:51:28\n"
+                "手术医生签名: 王标\n"
+                "手术项目：超声引导下经右侧颈内静脉输液港植入术\n"
+            ),
+            "evidence_payload": {
+                "programmatic_timeline": {
+                    "documents": {
+                        "surgery_record": [{"document_id": "S1", "authored_at": "2026-04-07 15:51:28"}],
+                    }
+                }
+            },
+        },
+    )
+
+    assert result["status"] == "compliant"
+    assert "王标" in str(result.get("evidence") or "")
+
+
 def test_sc049_should_not_accept_generic_senior_title_without_deputy_or_chief():
     executor = ProgrammaticRuleExecutor()
     result = executor.evaluate(

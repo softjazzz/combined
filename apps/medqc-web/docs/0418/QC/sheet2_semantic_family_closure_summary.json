@@ -6,15 +6,15 @@
       "semantic": 32
     },
     "closure_status_breakdown": {
-      "A_closed": 9,
-      "B_observe": 19,
+      "A_closed": 10,
+      "B_observe": 18,
       "C_blocked_or_skip": 4
     },
     "rows_total": 88,
     "rows_breakdown": {
       "exact_hit": 0,
-      "same_family_hit": 45,
-      "miss": 29,
+      "same_family_hit": 47,
+      "miss": 27,
       "skip": 7,
       "pending": 7
     }
@@ -148,20 +148,7 @@
       "miss": 2,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成 | 转C线改映射"
-    },
-    {
-      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
-      "family_type": "semantic",
-      "closure_status": "B_observe",
-      "primary_rule_ids": "SC-097",
-      "row_count": 6,
-      "exact_hit": 0,
-      "same_family_hit": 4,
-      "miss": 2,
-      "skip": 0,
-      "pending": 0,
-      "top_next_actions": "已核验完成 | 转C线补规则"
+      "top_next_actions": "已核验完成 | 转C线核源文书与人工问题不一致 | 转C线改映射（会诊/MDT一致性专项）"
     },
     {
       "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
@@ -353,6 +340,19 @@
       "row_count": 1,
       "exact_hit": 0,
       "same_family_hit": 1,
+      "miss": 0,
+      "skip": 0,
+      "pending": 0,
+      "top_next_actions": "已核验完成"
+    },
+    {
+      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
+      "family_type": "semantic",
+      "closure_status": "A_closed",
+      "primary_rule_ids": "SC-097",
+      "row_count": 6,
+      "exact_hit": 0,
+      "same_family_hit": 6,
       "miss": 0,
       "skip": 0,
       "pending": 0,

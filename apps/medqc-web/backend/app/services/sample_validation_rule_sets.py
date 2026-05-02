@@ -20,6 +20,7 @@ SAMPLE_PROGRAMMATIC_RULE_IDS: tuple[str, ...] = (
     "SC-082",
     "SC-095",
     "SC-096",
+    "SC-098",
     "SC-116",
     "SC-117",
     "SC-118",

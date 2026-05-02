@@ -195,3 +195,47 @@ def test_build_programmatic_evidence_payload_should_fallback_to_source_tables_wh
     assert len(timeline["documents"]["daily_course_record"]) == 1
     assert len(timeline["documents"]["senior_course_record"]) == 1
     assert timeline["documents"]["senior_course_record"][0]["authored_at"] == "2026-02-08 09:00:00"
+
+
+def test_build_programmatic_evidence_payload_should_fallback_to_detail_service_when_source_tables_are_empty(monkeypatch):
+    monkeypatch.setattr(
+        evidence_module,
+        "_fetch_source_table_fallback_items",
+        lambda bundle_payload: ([], {}),
+    )
+    monkeypatch.setattr(
+        evidence_module,
+        "get_documents",
+        lambda visit_id: {
+            "documents": [
+                {
+                    "type": "surgery_record",
+                    "source_table": "surgery_record",
+                    "label": "手术记录",
+                    "has_content": True,
+                    "content": "记录时间: \\n手术医生签名: \\n手术项目: 阑尾切除术",
+                    "document_id": None,
+                    "document_title": "手术记录",
+                    "sort_time": "",
+                    "record_time": "",
+                    "submit_time": "",
+                    "last_modified_time": "",
+                }
+            ]
+        },
+    )
+
+    payload = build_programmatic_evidence_payload(
+        bundle={
+            "visit_id": "V100",
+            "structured_context": {
+                "documents": {
+                    "surgery_record": [],
+                }
+            },
+        }
+    )
+
+    timeline = payload["programmatic_timeline"]
+    assert len(timeline["documents"]["surgery_record"]) == 1
+    assert "手术医生签名" in payload["primary_document_text"]

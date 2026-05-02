@@ -7,6 +7,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from app.services.sample_validation_rule_sets import SAMPLE_PROGRAMMATIC_RULE_IDS
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 LEDGER_CSV = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "QC" / "sheet2_verification_ledger_seed.csv"
@@ -15,25 +16,7 @@ OUTPUT_CSV = OUTPUT_DIR / "sheet2_semantic_family_closure_summary.csv"
 OUTPUT_JSON = OUTPUT_DIR / "sheet2_semantic_family_closure_summary.json"
 OUTPUT_MD = OUTPUT_DIR / "2026-05-02-Sheet2语义规则家族收口总表.md"
 
-PROGRAMMATIC_RULE_IDS = {
-    "SC-021",
-    "SC-022",
-    "SC-048",
-    "SC-049",
-    "SC-067",
-    "SC-071",
-    "SC-072",
-    "SC-080",
-    "SC-082",
-    "SC-095",
-    "SC-096",
-    "SC-116",
-    "SC-117",
-    "SC-118",
-    "SC-126",
-    "LXE-18",
-    "LXE-35",
-}
+PROGRAMMATIC_RULE_IDS = set(SAMPLE_PROGRAMMATIC_RULE_IDS) | {"SC-072", "LXE-35"}
 
 
 def _safe_text(value: Any) -> str:

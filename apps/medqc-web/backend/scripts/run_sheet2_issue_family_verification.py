@@ -21,6 +21,7 @@ from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.qc_input_adapters.running_final_bundle_runtime import load_running_final_bundle
 from app.services.sample_programmatic_evidence import build_programmatic_evidence_payload
 from app.services.sample_validation_rule_sets import (
+    SAMPLE_PROGRAMMATIC_RULE_IDS,
     apply_programmatic_rule_runtime_overrides,
     get_sample_programmatic_rule_set,
     resolve_sample_validation_pseudo_draft,
@@ -31,25 +32,7 @@ from app.services.sichuan_qc_service import SichuanQCService
 LEDGER_CSV = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "QC" / "sheet2_verification_ledger_seed.csv"
 DEFAULT_POOL_NAME = "0426"
 DEFAULT_CREATED_BY = "sheet2_issue_family_verification"
-PROGRAMMATIC_RULE_IDS = {
-    "SC-021",
-    "SC-022",
-    "SC-048",
-    "SC-049",
-    "SC-067",
-    "SC-071",
-    "SC-072",
-    "SC-080",
-    "SC-082",
-    "SC-095",
-    "SC-096",
-    "SC-116",
-    "SC-117",
-    "SC-118",
-    "SC-126",
-    "LXE-18",
-    "LXE-35",
-}
+PROGRAMMATIC_RULE_IDS = set(SAMPLE_PROGRAMMATIC_RULE_IDS) | {"SC-072", "LXE-35"}
 DEFAULT_FAMILIES: tuple[str, ...] = (
     "病程记录缺分析/缺处理意见",
     "上级查房内容空洞/复制粘贴/身份异常",
@@ -60,6 +43,10 @@ DEFAULT_FAMILIES: tuple[str, ...] = (
 
 def _safe_text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def _parse_args() -> argparse.Namespace:
@@ -390,29 +377,64 @@ async def _repair_programmatic_missing_items(
         )
         if not record_id or not rule_id:
             continue
-        if _find_item(job, record_id=record_id, rule_id=rule_id) or _find_failed_record(job, record_id=record_id, rule_id=rule_id):
+        existing_item = _find_item(job, record_id=record_id, rule_id=rule_id)
+        existing_status = _safe_text((existing_item or {}).get("status")).lower()
+        if existing_item and existing_status != "uncertain":
+            continue
+        if _find_failed_record(job, record_id=record_id, rule_id=rule_id):
             continue
         record = record_map.get(record_id) or {}
         institute_id = _safe_text(record.get("institute_id"))
         patient_id = _safe_text(record.get("patient_id"))
         visit_id = _safe_text(record.get("visit_id") or record_id)
-        if not institute_id or not patient_id or not visit_id:
+        if not visit_id:
             continue
-        scene = "final" if _safe_text(record.get("scope")).lower() == "final" else "running"
-        try:
-            bundle = load_running_final_bundle(
-                scene=scene,
-                institute_id=institute_id,
-                patient_id=patient_id,
-                visit_id=visit_id,
-                schema="public",
-            )
-        except Exception:
-            continue
+        bundle: dict[str, Any] | None = None
+        if institute_id and patient_id:
+            scene = "final" if _safe_text(record.get("scope")).lower() == "final" else "running"
+            try:
+                bundle = load_running_final_bundle(
+                    scene=scene,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    schema="public",
+                )
+            except Exception:
+                bundle = None
+        elif record:
+            bundle = {
+                "visit_id": visit_id,
+                "medical_text": _safe_text(record.get("medical_text")),
+                "structured_context": {"documents": {}},
+            }
+        else:
+            bundle = {
+                "visit_id": visit_id,
+                "medical_text": "",
+                "structured_context": {"documents": {}},
+            }
         evidence_payload = build_programmatic_evidence_payload(
             bundle=bundle,
             medical_text=_safe_text(record.get("medical_text")),
         )
+        if rule_id == "SC-098":
+            surgery_events = list(
+                (
+                    _safe_dict(evidence_payload.get("programmatic_timeline")).get("documents")
+                    or {}
+                ).get("surgery_record")
+                or []
+            )
+            if not surgery_events:
+                evidence_payload = build_programmatic_evidence_payload(
+                    bundle={
+                        "visit_id": visit_id,
+                        "medical_text": _safe_text(record.get("medical_text")),
+                        "structured_context": {"documents": {}},
+                    },
+                    medical_text=_safe_text(record.get("medical_text")),
+                )
         primary_document_text = _safe_text(
             evidence_payload.get("primary_document_text")
             or bundle.get("medical_text")
@@ -444,29 +466,38 @@ async def _repair_programmatic_missing_items(
         if status not in {"non_compliant", "uncertain"}:
             continue
         metadata = dict(eval_item.get("metadata") or {})
-        items.append(
-            {
-                "rule_job_id": "",
-                "rule_id": _safe_text(eval_item.get("rule_id") or rule_id),
-                "rule_code": rule_id,
-                "rule_name": _safe_text(eval_item.get("rule_name") or rule.get("name") or rule_id),
-                "record_id": record_id,
-                "visit_id": visit_id,
-                "patient_name": _safe_text(record.get("patient_name")),
-                "department": _safe_text(record.get("department")),
-                "status": status,
-                "is_compliant": bool(eval_item.get("is_compliant") is True),
-                "findings": _safe_text(eval_item.get("findings")),
-                "evidence": _safe_text(eval_item.get("evidence")),
-                "suggestion": _safe_text(eval_item.get("suggestion")),
-                "confidence": float(eval_item.get("confidence") or 0),
-                "executor_type": _safe_text(metadata.get("executor_type") or "program"),
-                "document_type": "病历文书",
-                "target_document_type": "病历文书",
-                "evidence_source": _safe_text(metadata.get("evidence_source") or "timeline"),
-                "model_version": _safe_text(metadata.get("model_version") or "programmatic-v1"),
-            }
-        )
+        normalized_item = {
+            "rule_job_id": "",
+            "rule_id": _safe_text(eval_item.get("rule_id") or rule_id),
+            "rule_code": rule_id,
+            "rule_name": _safe_text(eval_item.get("rule_name") or rule.get("name") or rule_id),
+            "record_id": record_id,
+            "visit_id": visit_id,
+            "patient_name": _safe_text(record.get("patient_name")),
+            "department": _safe_text(record.get("department")),
+            "status": status,
+            "is_compliant": bool(eval_item.get("is_compliant") is True),
+            "findings": _safe_text(eval_item.get("findings")),
+            "evidence": _safe_text(eval_item.get("evidence")),
+            "suggestion": _safe_text(eval_item.get("suggestion")),
+            "confidence": float(eval_item.get("confidence") or 0),
+            "executor_type": _safe_text(metadata.get("executor_type") or "program"),
+            "document_type": "病历文书",
+            "target_document_type": "病历文书",
+            "evidence_source": _safe_text(metadata.get("evidence_source") or "timeline"),
+            "model_version": _safe_text(metadata.get("model_version") or "programmatic-v1"),
+        }
+        replaced = False
+        if existing_item:
+            for index, current in enumerate(items):
+                current_record_id = _safe_text(current.get("record_id") or current.get("visit_id"))
+                current_rule_id = _safe_text(current.get("rule_id") or current.get("rule_code")).upper()
+                if current_record_id == record_id and current_rule_id == rule_id:
+                    items[index] = normalized_item
+                    replaced = True
+                    break
+        if not replaced:
+            items.append(normalized_item)
         repaired += 1
 
     if repaired:

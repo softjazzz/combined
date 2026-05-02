@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import text
 
 from ..database.connection import engine
+from .medical_records.detail_service import get_documents
 
 
 _DATETIME_PATTERNS = (
@@ -273,7 +274,13 @@ def _flatten_inventory_items(structured: dict[str, Any], bundle_payload: dict[st
     fallback_items, fallback_meta = _fetch_source_table_fallback_items(bundle_payload)
     if fallback_meta:
         bundle_payload["_source_table_fallback_meta"] = fallback_meta
-    return fallback_items
+    if fallback_items:
+        return fallback_items
+    detail_service_items = _fetch_detail_service_fallback_items(_safe_text(bundle_payload.get("visit_id")))
+    if detail_service_items:
+        bundle_payload["_detail_service_fallback_used"] = True
+        return detail_service_items
+    return []
 
 
 def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, str]]:
@@ -345,6 +352,39 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
             fallback_meta["admission_datetime"] = _safe_text(registration.get("admission_datetime"))
             fallback_meta["discharge_datetime"] = _safe_text(registration.get("discharge_datetime"))
     return fallback_items, fallback_meta
+
+
+def _fetch_detail_service_fallback_items(visit_id: str) -> list[dict[str, Any]]:
+    if not visit_id:
+        return []
+    try:
+        result = get_documents(visit_id=visit_id)
+    except Exception:
+        return []
+
+    fallback_items: list[dict[str, Any]] = []
+    for raw_doc in list(result.get("documents") or []):
+        doc = _safe_dict(raw_doc)
+        source_table = _safe_text(doc.get("source_table") or doc.get("type")).lower()
+        if source_table not in _SOURCE_TABLES:
+            continue
+        content = _safe_text(doc.get("content"))
+        if not content:
+            continue
+        fallback_items.append(
+            {
+                "source_table": source_table,
+                "document_type": source_table,
+                "document_id": _safe_text(doc.get("document_id")),
+                "document_title": _safe_text(doc.get("document_title") or doc.get("label") or source_table),
+                "record_time": _safe_text(doc.get("record_time") or doc.get("sort_time")),
+                "display_time": _safe_text(doc.get("sort_time") or doc.get("record_time")),
+                "submit_datetime": _safe_text(doc.get("submit_time") or doc.get("last_modified_time")),
+                "content": content,
+                "text_preview": content[:400],
+            }
+        )
+    return fallback_items
 
 
 def _build_supplement_text(

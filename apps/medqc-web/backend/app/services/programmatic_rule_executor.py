@@ -156,7 +156,7 @@ PROGRAMMATIC_RULE_SPECS: dict[str, ProgrammaticRuleSpec] = {
     ),
     "SC-098": ProgrammaticRuleSpec(
         rule_id="SC-098",
-        strategy="doctor_signature_required",
+        strategy="surgeon_signature_required",
         description="主刀医师签名",
     ),
     "SC-104": ProgrammaticRuleSpec(
@@ -432,6 +432,8 @@ class ProgrammaticRuleExecutor:
             return self._evaluate_timeline_doc_exists_nonempty(spec=spec, medical_record=medical_record)
         if spec.strategy == "doctor_signature_required":
             return self._evaluate_doctor_signature(content=content)
+        if spec.strategy == "surgeon_signature_required":
+            return self._evaluate_surgeon_signature(medical_record=medical_record, content=content)
         if spec.strategy == "non_licensed_review_signature":
             return self._evaluate_non_licensed_review_signature(content=content)
         if spec.strategy == "time_within_24h_after_admission":
@@ -612,6 +614,97 @@ class ProgrammaticRuleExecutor:
             0.82,
             {"is_applicable": True, "reason": "", "method": "program_signature"},
             "medical_text",
+        )
+
+    def _evaluate_surgeon_signature(
+        self,
+        *,
+        medical_record: dict[str, Any],
+        content: str,
+    ) -> tuple[str, bool, str, str, str, float, dict[str, Any], str]:
+        timeline = self._get_programmatic_timeline(medical_record)
+        surgery_events = list((timeline.get("documents") or {}).get("surgery_record") or [])
+
+        if any(hint in content for hint in self._NEGATIVE_SIGNATURE_HINTS):
+            return (
+                "non_compliant",
+                False,
+                "检测到主刀医师签名缺失描述。",
+                "命中缺签关键词",
+                "请补充主刀医师签名，若由第一助手书写需补充术者签名确认。",
+                0.92,
+                {"is_applicable": True, "reason": "", "method": "program_surgeon_signature"},
+                "medical_text",
+            )
+
+        content_label_value = self._extract_labeled_value(
+            content,
+            ("手术医生签名", "手术医师签名", "主刀医生签名", "主刀医师签名"),
+        )
+        if content_label_value is not None:
+            if content_label_value:
+                return (
+                    "compliant",
+                    True,
+                    "检测到主刀医师签名信息。",
+                    f"签名字段={content_label_value}",
+                    "",
+                    0.92,
+                    {"is_applicable": True, "reason": "", "method": "program_surgeon_signature"},
+                    "medical_text",
+                )
+            return (
+                "non_compliant",
+                False,
+                "手术记录存在主刀医师签名字段，但字段为空。",
+                "手术医生签名字段为空",
+                "请补充主刀医师签名，若由第一助手书写需补充术者签名确认。",
+                0.92,
+                {"is_applicable": True, "reason": "", "method": "program_surgeon_signature"},
+                "medical_text",
+            )
+
+        for event in surgery_events:
+            if not isinstance(event, dict):
+                continue
+            raw_value = self._first_nonempty_text(
+                event.get("surgeon_sign"),
+                event.get("surgery_doctor_sign"),
+                event.get("surgeon_signature"),
+            )
+            if raw_value:
+                return (
+                    "compliant",
+                    True,
+                    "检测到主刀医师签名信息。",
+                    f"结构化签名字段={raw_value}",
+                    "",
+                    0.92,
+                    {"is_applicable": True, "reason": "", "method": "program_surgeon_signature"},
+                    "timeline",
+                )
+
+        if surgery_events:
+            return (
+                "non_compliant",
+                False,
+                "已找到手术记录正文，但未检测到主刀医师签名信息。",
+                "手术记录存在，主刀签名字段缺失或为空",
+                "请补充主刀医师签名，若由第一助手书写需补充术者签名确认。",
+                0.9,
+                {"is_applicable": True, "reason": "", "method": "program_surgeon_signature"},
+                "timeline",
+            )
+
+        return (
+            "uncertain",
+            False,
+            "未找到可复核的手术记录结构化事件，无法判断主刀医师签名。",
+            "缺少手术记录时间轴事件",
+            "请补齐手术记录结构化文书后重试。",
+            0.55,
+            {"is_applicable": True, "reason": "missing_surgery_timeline", "method": "program_surgeon_signature"},
+            "timeline_missing",
         )
 
     def _evaluate_non_licensed_review_signature(
@@ -1040,6 +1133,29 @@ class ProgrammaticRuleExecutor:
                 return timeline
         timeline = medical_record.get("programmatic_timeline")
         return dict(timeline) if isinstance(timeline, dict) else {}
+
+    def _extract_labeled_value(self, content: str, labels: tuple[str, ...]) -> Optional[str]:
+        for raw_line in content.splitlines():
+            line = raw_line.strip()
+            for label in labels:
+                if line.startswith(f"{label}:") or line.startswith(f"{label}："):
+                    value = line.split(":", 1)[1] if ":" in line else line.split("：", 1)[1]
+                    normalized = self._normalize_signature_value(value)
+                    return normalized
+        return None
+
+    def _normalize_signature_value(self, value: Any) -> str:
+        text = str(value or "").strip()
+        if text in {"", "无", "暂无", "未记录", "未填写", "N/A", "-", "null", "None"}:
+            return ""
+        return text
+
+    def _first_nonempty_text(self, *values: Any) -> str:
+        for value in values:
+            normalized = self._normalize_signature_value(value)
+            if normalized:
+                return normalized
+        return ""
 
     def _has_surgery_context(self, medical_record: dict[str, Any], content: str) -> bool:
         timeline = self._get_programmatic_timeline(medical_record)
