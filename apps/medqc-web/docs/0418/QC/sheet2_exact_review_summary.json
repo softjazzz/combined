@@ -2,23 +2,10 @@
   "total_rows": 283,
   "status_breakdown": {
     "exact_confirmed": 139,
-    "blocked_with_reason": 118,
-    "skip": 25,
-    "needs_exact_review": 1
+    "blocked_with_reason": 119,
+    "skip": 25
   },
-  "needs_exact_review_rows": [
-    {
-      "sheet2_row_id": "Sheet2-R0172",
-      "visit_id": "2199396",
-      "patient_name": "王生明",
-      "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
-      "primary_rule_id": "LX-020",
-      "manual_issue_text": "患者2月4日手术，无术前主刀医师查房记录，无术后首次病程记录及手术记录。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "日手术"
-    }
-  ],
+  "needs_exact_review_rows": [],
   "blocked_with_reason_rows": [
     {
       "sheet2_row_id": "Sheet2-R0009",
@@ -849,6 +836,18 @@
       "decision_source": "release/0426_full_auto consultation_record snapshot"
     },
     {
+      "sheet2_row_id": "Sheet2-R0172",
+      "visit_id": "2199396",
+      "patient_name": "王生明",
+      "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
+      "primary_rule_id": "LX-020",
+      "manual_issue_text": "患者2月4日手术，无术前主刀医师查房记录，无术后首次病程记录及手术记录。",
+      "reason": "release/0426_full_auto 已回收到 2026-02-04 15:35 的术后首次病程记录，正文明确写“手术时间:2026年02月04日 12:45…手术方式:膀胱镜检查+尿道狭窄扩张术+经皮耻骨上膀胱造口导尿管插入术”；同时 surgery_record 与 mr_surgery 均登记了同日手术，现有原文与人工问题所称“无术后首次病程记录及手术记录”冲突，整条不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "LX-020-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto postsurg_firstcourse_record + surgery_record + mr_surgery snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0173",
       "visit_id": "2200664",
       "patient_name": "朱泰廷",
@@ -1639,7 +1638,7 @@
       "exact_confirmed": 1
     },
     "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失": {
-      "needs_exact_review": 1
+      "blocked_with_reason": 1
     },
     "首次病程记录存在/时效；术后首次病程记录缺项/不清": {
       "skip": 1,

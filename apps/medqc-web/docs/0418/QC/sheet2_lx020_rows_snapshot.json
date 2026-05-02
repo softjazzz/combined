@@ -1,0 +1,16 @@
+[
+  {
+    "sheet2_row_id": "Sheet2-R0172",
+    "visit_id": "2199396",
+    "patient_name": "王生明",
+    "primary_rule_id": "LX-020",
+    "manual_issue_text": "患者2月4日手术，无术前主刀医师查房记录，无术后首次病程记录及手术记录。",
+    "source": "release/0426_full_auto",
+    "evidence": {
+      "postsurg_firstcourse_record": "2026-02-04 15:35 术后首次病程：手术时间 2026年02月04日 12:45；手术方式 膀胱镜检查+尿道狭窄扩张术+经皮耻骨上膀胱造口导尿管插入术；含术后处理措施与注意事项。",
+      "surgery_record": "surgery_record 记录同台手术，surgery_begin_time=2026-02-04 12:45:00+08，surgery_end_time=2026-02-04 13:50:00+08。",
+      "mr_surgery": "mr_surgery 同步登记“尿道狭窄松解术”“膀胱镜检查”“超声引导下耻骨上膀胱造口导尿管插入术”。",
+      "observation": "现有原始文书已能直接回收术后首次病程和手术记录。"
+    }
+  }
+]
