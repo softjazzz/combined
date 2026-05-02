@@ -7,3 +7,50 @@ Sheet2-R0143,blocked_with_reason,release/0426 admission_record 已记录双侧�
 Sheet2-R0167,skip,release/0426 与 release/0426_full_auto 均未找到该 visit_id 的 admission_record，有原始入院记录缺失证据链，按现口径转 skip。,,SC-008-查体专科-第一轮,probe_sheet2_missing_documents.py
 Sheet2-R0223,blocked_with_reason,release/0426 admission_record 可见“活动受限”病史线索，但快照未提供可核对的入院诊断字段及专科查体正文，证据链不足，不能判 exact。,证据链不足,SC-008-查体专科-第一轮,release/0426 admission_record + probe
 Sheet2-R0261,skip,release/0426 与 release/0426_full_auto 均未找到该 visit_id 的 admission_record，有原始入院记录缺失证据链，按现口径转 skip。,,SC-008-查体专科-第一轮,probe_sheet2_missing_documents.py
+Sheet2-R0021,blocked_with_reason,release/0426 admission_record 现病史已写持续性咽痛、白色黏痰、当地卫生院输液治疗、门诊喉镜检查及体重无明显变化，人工问题与原文大部冲突，不能判 exact。,人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0022,exact_confirmed,release/0426 admission_record 仅写口服“小儿肺热咳喘颗粒”及雾化药名，未记录门诊口服药具体用法和剂量，符合人工问题。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0035,blocked_with_reason,release/0426 admission_record 现病史已写“在家里用电剪子剪花椒丫时”受伤，人工问题与原文冲突，不能判 exact。,人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0053,blocked_with_reason,release/0426 admission_record 仅能看到阴性症状顺序及“双手麻木”既往史片段，“检查项目记录有错误”与“无相关诊断”仍需额外诊断链，当前证据不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0057,exact_confirmed,release/0426 admission_record 现病史写透析和近期一般情况，但未记录小便情况，符合人工问题。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0058,blocked_with_reason,release/0426 admission_record 已写疼痛持续半月及伴反酸，但未能同时证实“缓解方式缺失”与“既往肺结核病史漏问”，当前证据不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0060,blocked_with_reason,release/0426 admission_record 可见脐周转右下腹疼痛及急诊抗感染解痉处理，但月经史、转科妥当性和诊断链需额外证据，当前不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0061,blocked_with_reason,release/0426 admission_record 主诉/现病史实际为腹痛与消化道穿孔收治，并非“双膝疼痛10年”场景，人工问题与原文主体不一致，不能判 exact。,人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0067,blocked_with_reason,"release/0426 admission_record 现病史出现“患者于，不明原因起病”，可证发病时间缺口，但“腰椎病未诊断”需额外诊断字段，当前证据不足以整条判 exact。",证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0070,blocked_with_reason,"release/0426 admission_record 同时出现“活动后呼吸困难”与“无明显诱因”，可见病史表述不稳，但高脂血症未诊断与专科查体缺失仍需额外证据，当前不足以整条判 exact。",证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0071,blocked_with_reason,release/0426 admission_record 现病史已写长期咳嗽咳痰、活动后呼吸困难及多项伴随/阴性症状，人工问题与原文大部冲突，不能判 exact。,人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0072,blocked_with_reason,release/0426 admission_record 仅能证实慢病具体用药未提供；“采集时间未精确到分钟”和“脉搏记录错误”需额外时序/数值核对，当前证据不足。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0078,blocked_with_reason,"release/0426 admission_record 现病史已写“1天前腹痛较前加重”，人工问题所称未记录加重情况与原文冲突，不能判 exact。",人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0081,exact_confirmed,release/0426 admission_record 主诉写“加重10天”，但现病史未展开近10天变化，且既往仅写“氨氯地平1片qd”无具体剂量，符合人工问题。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0103,blocked_with_reason,release/0426 admission_record 已写右侧腰腹痛、门诊CT结果和高血压史，但右手截肢相关查体/诊断闭环需完整诊断字段支撑，当前证据不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0104,exact_confirmed,release/0426 admission_record 主诉未区分右侧1月与左侧3天，既往史未写高血压/甲减起始时间，且查体脉搏80次/分而心率68次/分不一致，符合人工问题核心锚点。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0105,blocked_with_reason,release/0426 admission_record 实际记录为体重41kg身高144cm，且胸部检查同时写可见陈旧性手术疤痕，人工问题中的87kg/135cm与原文冲突，不能判 exact。,人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0110,blocked_with_reason,release/0426 admission_record 主诉/现病史实际围绕白血病乏力纳差，并非“头痛描述不细致”场景，人工问题与原文主体不一致，不能判 exact。,人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0111,blocked_with_reason,release/0426 admission_record 可见外伤史/手术史均未细化，但“乙肝未诊断”和“仅做定性检查欠妥”仍需额外诊断与检验链，当前不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0112,blocked_with_reason,release/0426 admission_record 现病史已明确“右侧腋区、肋部皮肤红斑丘疱疹伴疼痛”，人工问题中“患病部位描述不准确”与原文冲突，不能判 exact。,人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0115,blocked_with_reason,release/0426 admission_record 既往史已写脑梗死和右眼失明，但“入院诊断未诊断”及“专科情况未记录”需额外诊断/专科段证据，当前不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0119,blocked_with_reason,release/0426 admission_record 现病史已按异物起病、伴随症状、阴性症状、门诊CT和一般情况展开，人工问题关于书写思路跳跃与原文不符，不能判 exact。,人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0124,blocked_with_reason,release/0426 admission_record 实际主诉/现病史为摔倒后头痛并颅脑CT检查，与人工问题中的“进食蔬菜呛咳/社区获得性肺炎”场景不一致，不能判 exact。,人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0141,blocked_with_reason,release/0426 admission_record 可见主诉头晕的多项阴性症状和既往剖宫产史，但“查体未体现”及上级医师分析不足需结合查房文书，当前证据不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0144,blocked_with_reason,release/0426 admission_record 可见咽痛、轻度发热及扁桃体手术史，但月经婚育史、抑郁症入院诊断和手术类型仍缺对应字段，当前不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0157,blocked_with_reason,release/0426 admission_record 已写呼之不应、急诊血糖1.8mmol/L及高糖后清醒，是否“无法推导主要诊断”属诊断判断问题，当前证据不足以判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0209,blocked_with_reason,release/0426 admission_record 仅能证实高血压长期口服氨氯地平且既往腹股沟疝/肠息肉手术史已写；心率脉搏不一致、相关诊断和腹部手术查体缺项需额外闭环证据。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0210,blocked_with_reason,release/0426 admission_record 可见左膝疼痛3月及高血压/手术史，但“无相关诊断”和专科查体前后不一致需完整专科段/诊断字段支撑，当前不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0211,skip,release/0426 与 release/0426_full_auto 均未找到该 visit_id 的 admission_record，有原始入院记录缺失证据链，按现口径转 skip。,,SC-008-现病史-第二轮,probe_sheet2_missing_documents.py
+Sheet2-R0216,blocked_with_reason,release/0426 admission_record 可见主诉行走不稳1年与3天前呕吐，但条目同时跨首次病程、血压管理和术前主刀签名多个规则，当前 admission_record 证据不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0219,exact_confirmed,release/0426 admission_record 现病史未记录包块一年内大小变化，查体又写浅表淋巴结未触及肿大，与乳腺癌/腋窝淋巴结背景不符，符合人工问题核心锚点。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0222,exact_confirmed,release/0426 admission_record 主诉写“检查发现右侧真菌性鼻窦炎10+天”，现病史实际以面部疼痛和头痛起病，且既往仅写慢性胃炎“多年、间断服药具体不详”，符合人工问题。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0254,blocked_with_reason,release/0426 admission_record 现病史已写“在泸县谭坝过路时被钢架砸伤腰部”，人工问题所称未描述受伤地点与原文冲突，不能判 exact。,人工问题原文不可判,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0260,exact_confirmed,release/0426 admission_record 现病史写症状演变和门诊CT收治，但未写“发病以来精神/睡眠/饮食/二便”等一般情况，符合人工问题。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0264,blocked_with_reason,release/0426 admission_record 既往史已写6月前直肠Ca手术及术后化疗，但“入院诊断无相关诊断”需额外诊断字段验证，当前证据不足以判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
+Sheet2-R0015,exact_confirmed,release/0426 admission_record 为2岁患儿外伤入院，既往/个人史未见喂养史或生长发育史记录，符合人工问题。,,SC-008-尾项-第三轮,release/0426 admission_record + probe
+Sheet2-R0020,exact_confirmed,release/0426 admission_record 既往史虽列右佐匹克隆和坦度螺酮等药名，但未写剂量和频次细节，符合“用药情况未详细记录”。,,SC-008-尾项-第三轮,release/0426 admission_record + probe
+Sheet2-R0069,blocked_with_reason,release/0426 admission_record 可见前列腺稍大和尿白细胞异常线索，但“未诊断前列腺增生/泌尿道感染”仍需显式入院诊断字段，当前证据不足以整条判 exact。,证据链不足,SC-008-尾项-第三轮,release/0426 admission_record + probe
+Sheet2-R0079,blocked_with_reason,release/0426 admission_record 仅能证实既往手术史写为“腺样体切除术具体不详”；“上级医师查房分析简单”需结合查房文书，当前不足以整条判 exact。,证据链不足,SC-008-尾项-第三轮,release/0426 admission_record + probe
+Sheet2-R0083,exact_confirmed,release/0426 admission_record 既往史仅写“3片 qd/3粒 biw/1片 qd”等片粒数，未写具体毫克剂量，符合人工问题核心锚点。,,SC-008-尾项-第三轮,release/0426 admission_record + probe
+Sheet2-R0131,blocked_with_reason,release/0426 admission_record 主诉实际写为“车祸致头面部、胸部等多处受伤40+分钟”，并非仅“车祸伤40+分钟”，人工问题与原文冲突，不能判 exact。,人工问题原文不可判,SC-008-尾项-第三轮,release/0426 admission_record + probe
+Sheet2-R0142,skip,release/0426 与 release/0426_full_auto 均未找到该 visit_id 的 admission_record，有原始入院记录缺失证据链，按现口径转 skip。,,SC-008-尾项-第三轮,probe_sheet2_missing_documents.py
+Sheet2-R0164,exact_confirmed,"release/0426 admission_record 的 assist_exam 字段直接写成“院内辅助检查：院外辅助检查：西南医科大学附属中医医院ABR…”，符合院外辅查误标为院内。",,SC-008-尾项-第三轮,release/0426 admission_record + probe
+Sheet2-R0204,skip,release/0426 与 release/0426_full_auto 均未找到该 visit_id 的 admission_record，有原始入院记录缺失证据链，按现口径转 skip。,,SC-008-尾项-第三轮,probe_sheet2_missing_documents.py
+Sheet2-R0009,blocked_with_reason,local_pg 病程正文直接写明“输注左氧氟沙星过程中出现左前壁皮肤麻木、瘙痒、肿痛”，人工问题所称“使用情况未在病程记录中记录”与原文冲突，不能判 exact。,人工问题原文不可判,SC-036-用药记录-第一轮,local_pg get_documents + probe
+Sheet2-R0266,blocked_with_reason,local_pg 日常病程与上级医师查房均已记录 3月28日胸部CT 结果及“左侧部分肋骨骨折”，人工问题中“病程记录未体现”与原文冲突，整条不能判 exact。,人工问题原文不可判,SC-036-用药记录-第一轮,local_pg get_documents + probe
+Sheet2-R0284,blocked_with_reason,local_pg 3月27日 ICU 查房已写“头孢唑林钠防治感染”等用药，3月28日病程又补记吲哚布芬及氢氯吡格雷治疗，人工问题所称“3.27用药病程记录未体现”与原文冲突，不能判 exact。,人工问题原文不可判,SC-036-用药记录-第一轮,local_pg get_documents + probe
