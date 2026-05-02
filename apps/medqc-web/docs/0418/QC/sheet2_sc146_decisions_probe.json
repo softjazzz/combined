@@ -1,0 +1,98 @@
+[
+  {
+    "row_id": "Sheet2-R0107",
+    "visit_id": "2208257",
+    "manual_issue_text": "患者既往有高血压病史，入院诊断未诊断高血压，医嘱中未体现高血压用药情况，患者既往行“左侧腹股沟疝修补术”，体格检查无相关描述；2025.11.11行“超声引导下左肾穿刺活检术”，未书写有创操作记录。",
+    "primary_rule_id": "SC-146",
+    "decision": "blocked_with_reason",
+    "blocked_reason": "规则不支持",
+    "decision_reason": "local_pg admission_record 与 senior_course 只能回收到既往高血压、用药、左侧腹股沟疝手术史及“2025-11-11超声引导下左肾穿刺活检术”等混合信息；人工问题同时包含入院诊断遗漏、医嘱未体现降压药、查体未述既往手术及有创操作记录缺失，已跨 SC-013/SC-046/SC-146 多个规则边界，当前不能按单一 SC-146 整条判 exact。",
+    "review_round": "SC-146-精确复核-第一轮",
+    "doc_types": [
+      "admission_record",
+      "consultation_record",
+      "daily_course_record",
+      "discharge_record",
+      "first_course_record",
+      "nursing_record",
+      "postsurg_firstcourse_record",
+      "rescue_record",
+      "senior_course_record",
+      "surgery_record",
+      "transfer_in_record",
+      "transfer_out_record"
+    ]
+  },
+  {
+    "row_id": "Sheet2-R0137",
+    "visit_id": "2123539",
+    "manual_issue_text": "既往史中患者冠心病、高血压、慢性胃炎的患病时间未提及，口服阿托伐他丁及硝苯地平的剂量、用法未记录。医嘱中无治疗冠心病及高血压的药物。",
+    "primary_rule_id": "SC-146",
+    "decision": "blocked_with_reason",
+    "blocked_reason": "规则不支持",
+    "decision_reason": "local_pg admission_record 与 senior_course 可回收到“长期口服阿托伐他汀/硝苯地平”及冠心病、高血压、慢性胃炎诊断，但人工问题同时覆盖既往史患病时间缺失、口服药剂量用法缺失以及“医嘱中无治疗冠心病及高血压药物”三类子问题；当前原文链缺少可复原医嘱明细的直接锚点，不能按单一 SC-146 整条判 exact。",
+    "review_round": "SC-146-精确复核-第一轮",
+    "doc_types": [
+      "admission_record",
+      "consultation_record",
+      "daily_course_record",
+      "discharge_record",
+      "first_course_record",
+      "nursing_record",
+      "postsurg_firstcourse_record",
+      "rescue_record",
+      "senior_course_record",
+      "surgery_record",
+      "transfer_in_record",
+      "transfer_out_record"
+    ]
+  },
+  {
+    "row_id": "Sheet2-R0147",
+    "visit_id": "2172686",
+    "manual_issue_text": "医嘱：急支糖浆10毫升，口服，每日三次。剂量不足。",
+    "primary_rule_id": "SC-146",
+    "decision": "blocked_with_reason",
+    "blocked_reason": "人工问题原文不可判",
+    "decision_reason": "local_pg 当前回收到的是眼科围术期病程与泪囊/白内障手术相关记录，未回收到人工问题所称“急支糖浆10毫升 口服 每日三次”这一医嘱原句；现有原文无法对应该剂量问题，不能判 exact。",
+    "review_round": "SC-146-精确复核-第一轮",
+    "doc_types": [
+      "admission_record",
+      "consultation_record",
+      "daily_course_record",
+      "discharge_record",
+      "first_course_record",
+      "nursing_record",
+      "postsurg_firstcourse_record",
+      "rescue_record",
+      "senior_course_record",
+      "surgery_record",
+      "transfer_in_record",
+      "transfer_out_record"
+    ]
+  },
+  {
+    "row_id": "Sheet2-R0174",
+    "visit_id": "2212522",
+    "manual_issue_text": "在术前小结及术前讨论之前，已经下达手术医嘱。",
+    "primary_rule_id": "SC-146",
+    "decision": "skip",
+    "blocked_reason": "",
+    "decision_reason": "local_pg 当前 source inventory 未回收到术前小结、术前讨论及可比对时间戳的手术医嘱明细，无法复原“在术前小结及术前讨论之前已经下达手术医嘱”的时间链，可按缺文书口径 skip。",
+    "review_round": "SC-146-精确复核-第一轮",
+    "doc_types": [
+      "admission_record",
+      "consultation_record",
+      "daily_course_record",
+      "discharge_record",
+      "first_course_record",
+      "nursing_record",
+      "postsurg_firstcourse_record",
+      "rescue_record",
+      "senior_course_record",
+      "surgery_record",
+      "transfer_in_record",
+      "transfer_out_record"
+    ]
+  }
+]
