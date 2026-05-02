@@ -1055,6 +1055,33 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
         return list(_SAMPLE_SC_PRIMARY_RULE_WHITELIST.get(issue_category) or [])
 
     if issue_category == "first_course_timeliness":
+        if _contains_any(normalized, ("术后首次病程", "术后病程记录")):
+            return ["SC-105"]
+        if _contains_any(
+            normalized,
+            (
+                "72小时",
+                "副主任医师",
+                "主任医师",
+                "高级职称医师",
+                "上级医师查房",
+            ),
+        ) and not _contains_any(normalized, ("48小时", "主治医师")):
+            return ["SC-049"]
+        if _contains_any(
+            normalized,
+            (
+                "病例特点",
+                "诊断依据",
+                "鉴别诊断",
+                "诊疗计划",
+                "拟诊讨论",
+            ),
+        ):
+            return _resolve_sample_sc_primary_rule_ids(
+                issue_category="first_course_reasoning",
+                manual_issue_text=manual_issue_text,
+            )
         if _contains_any(normalized, ("首次病程记录", "首程记录", "8小时", "24小时")):
             return ["SC-021"]
         return ["SC-022"]
@@ -1237,6 +1264,39 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
         return ["SC-008"]
 
     if issue_category == "daily_course_analysis":
+        if _contains_any(
+            normalized,
+            (
+                "72小时",
+                "副主任医师",
+                "主任医师",
+                "高级职称医师",
+                "上级医师查房",
+            ),
+        ):
+            return ["SC-049"]
+        if _contains_any(
+            normalized,
+            (
+                "现病史",
+                "主诉",
+                "入院记录",
+                "体格检查",
+                "专科检查",
+                "既往史",
+                "外院诊治",
+                "诊治经过",
+                "治疗经过",
+                "阴性症状",
+                "阳性症状",
+                "体重变化",
+                "生命体征",
+            ),
+        ):
+            return _resolve_sample_sc_primary_rule_ids(
+                issue_category="admission_consistency",
+                manual_issue_text=manual_issue_text,
+            )
         if _contains_any(
             normalized,
             (

@@ -194,6 +194,30 @@ def test_resolve_first_course_timeliness_should_prefer_sc021():
     assert rule_ids == ["SC-021"]
 
 
+def test_resolve_first_course_timeliness_should_remap_reasoning_issue_to_sc026():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="first_course_timeliness",
+        manual_issue_text="首次病程鉴别诊断不全面，诊断依据不充分。",
+    )
+    assert rule_ids == ["SC-026"]
+
+
+def test_resolve_first_course_timeliness_should_remap_postsurg_quality_to_sc105():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="first_course_timeliness",
+        manual_issue_text="术后首次病程记录书写不规范，缺少术后处理措施。",
+    )
+    assert rule_ids == ["SC-105"]
+
+
+def test_resolve_first_course_timeliness_should_remap_upper_round_issue_to_sc049():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="first_course_timeliness",
+        manual_issue_text="入院72小时以内无副主任医师以上首次查房记录。",
+    )
+    assert rule_ids == ["SC-049"]
+
+
 def test_resolve_course_gap_timeliness_should_route_lxe18():
     rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
         issue_category="course_gap_timeliness",
@@ -233,6 +257,24 @@ def test_daily_course_analysis_should_prefer_sc032_for_brief_change_text():
     )
 
     assert rule_ids == ["SC-032"]
+
+
+def test_daily_course_analysis_should_remap_admission_consistency_text():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="daily_course_analysis",
+        manual_issue_text="现病史记录不全，未记录肿物性状，专科检查未描述左下肢情况。",
+    )
+
+    assert rule_ids == ["SC-018"]
+
+
+def test_daily_course_analysis_should_remap_upper_round_timeliness_text_to_sc049():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="daily_course_analysis",
+        manual_issue_text="72小时以内无副主任医师以上查房，已新建病程但无具体内容。",
+    )
+
+    assert rule_ids == ["SC-049"]
 
 
 def test_resolve_unreasonable_copy_customer_rule_ids_should_pick_cl275_for_round_copy():
