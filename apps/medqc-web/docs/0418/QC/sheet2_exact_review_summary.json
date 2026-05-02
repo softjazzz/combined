@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 138,
-    "blocked_with_reason": 112,
+    "exact_confirmed": 139,
+    "blocked_with_reason": 113,
     "skip": 25,
-    "needs_exact_review": 8
+    "needs_exact_review": 6
   },
   "needs_exact_review_rows": [
     {
@@ -28,17 +28,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "记录时间早于输血时间|输血后评价|输血后评价记录时间记录错误"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0108",
-      "visit_id": "2083787",
-      "patient_name": "付学云",
-      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
-      "primary_rule_id": "LX-018",
-      "manual_issue_text": "2025.11.18田安琴主治医师查房记录无内容；11月17日及11月18日，无输血前评估、无输血记录、无输血后评估。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "2025.11.18|无输血前评估|无输血后评估"
     },
     {
       "sheet2_row_id": "Sheet2-R0117",
@@ -72,17 +61,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "日手术"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0183",
-      "visit_id": "2213639",
-      "patient_name": "杜卫红",
-      "issue_family": "输血记录链缺失/不全；输血时间/量/前后记录不一致",
-      "primary_rule_id": "LX-018",
-      "manual_issue_text": "患者2月6日共输注两袋血浆，但输血记录未分别记录输血开始时间及结束时间",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "但输血记录未分别记录输血开始时间及结束时间|日共输注两袋血浆"
     },
     {
       "sheet2_row_id": "Sheet2-R0220",
@@ -552,6 +530,18 @@
       "blocked_reason_type": "规则不支持",
       "review_subgroup": "SC-146-精确复核-第一轮",
       "decision_source": "local_pg get_documents mixed-issue snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0108",
+      "visit_id": "2083787",
+      "patient_name": "付学云",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
+      "primary_rule_id": "LX-018",
+      "manual_issue_text": "2025.11.18田安琴主治医师查房记录无内容；11月17日及11月18日，无输血前评估、无输血记录、无输血后评估。",
+      "reason": "release/0426_full_auto 2025-11-18 “田安琴主治医师查房记录”正文完整回收到病史 体查 辅检 诊断依据与诊疗计划；同时 bloodtrans_record 已有 2025-11-17 及 2025-11-18 两次红细胞输血记录，现有原文与人工问题所称“11月18日查房记录无内容”“11月17日及11月18日无输血记录”不一致，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "LX-018-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto senior_course_record + bloodtrans_record snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0109",
@@ -1469,7 +1459,7 @@
       "blocked_with_reason": 1
     },
     "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全": {
-      "needs_exact_review": 1
+      "blocked_with_reason": 1
     },
     "不合理复制病历内容": {
       "exact_confirmed": 3,
@@ -1630,7 +1620,7 @@
       "exact_confirmed": 1
     },
     "输血记录链缺失/不全；输血时间/量/前后记录不一致": {
-      "needs_exact_review": 1
+      "exact_confirmed": 1
     },
     "输血记录链缺项": {
       "exact_confirmed": 1
