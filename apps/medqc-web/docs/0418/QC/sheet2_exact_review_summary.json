@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 119,
-    "blocked_with_reason": 75,
+    "exact_confirmed": 120,
+    "blocked_with_reason": 84,
     "skip": 20,
-    "needs_exact_review": 69
+    "needs_exact_review": 59
   },
   "needs_exact_review_rows": [
     {
@@ -118,28 +118,6 @@
       "anchor_misses": "但在分析病情时是孙治庆医师在查房|日上级查房医师为王标|涉嫌伪造病历"
     },
     {
-      "sheet2_row_id": "Sheet2-R0052",
-      "visit_id": "1977580",
-      "patient_name": "夏云辉",
-      "issue_family": "病程记录病情变化记录不全",
-      "primary_rule_id": "SC-032",
-      "manual_issue_text": "现病史记录不全，缺一般情况的描述，专科检查未描述左下肢情况，初步诊断不全。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "专科检查|初步诊断不全|现病史记录不全|缺一般情况的描述"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0076",
-      "visit_id": "2048454",
-      "patient_name": "陈祖佑",
-      "issue_family": "病程记录病情变化记录不全",
-      "primary_rule_id": "SC-032",
-      "manual_issue_text": "日常病程记录过于简略，仅记录患者C13呼气试验，未阐述其他用药方案及治疗措施。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "C13|仅记录患者|呼气试验|日常病程记录过于简略|未阐述其他用药方案及治疗措施|用药"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0077",
       "visit_id": "2052129",
       "patient_name": "胡启凤",
@@ -171,28 +149,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "转出记录中转科目的及注意事项书写不规范仅描述为"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0089",
-      "visit_id": "2041227",
-      "patient_name": "熊兴荣",
-      "issue_family": "病程记录病情变化记录不全",
-      "primary_rule_id": "SC-032",
-      "manual_issue_text": "11月3日病程过于简略，仅一句话，描述不详细（未描述切口情况、患者症状及具体用药情况）。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "仅一句话|描述不详细|日病程过于简略|用药"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0091",
-      "visit_id": "2254192",
-      "patient_name": "刘桂全",
-      "issue_family": "病程记录病情变化记录不全",
-      "primary_rule_id": "SC-032",
-      "manual_issue_text": "11月2日日常病程记录过于简略，仅一句话（未写明患者阴性症状、无生命体征描述，未描述可能诊断给予患者法莫替丁抑酸治疗）。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "仅一句话|无生命体征描述|日日常病程记录过于简略|未写明患者阴性症状|未描述可能诊断给予患者法莫替丁抑酸治疗"
     },
     {
       "sheet2_row_id": "Sheet2-R0094",
@@ -250,17 +206,6 @@
       "anchor_misses": "2025.11.18|无输血前评估|无输血后评估"
     },
     {
-      "sheet2_row_id": "Sheet2-R0109",
-      "visit_id": "2110349",
-      "patient_name": "古洪忠",
-      "issue_family": "病程记录病情变化记录不全",
-      "primary_rule_id": "SC-032",
-      "manual_issue_text": "2025.11.20病程记录缺患者病情变化、目前症状、体征、阳性检查检验结果。仅记录抽取血常规、电解质的目的。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "2025.11.20|仅记录抽取血常规|电解质的目的|病程记录缺患者病情变化|目前症状|阳性检查检验结果"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0117",
       "visit_id": "2097628",
       "patient_name": "徐前军",
@@ -294,17 +239,6 @@
       "anchor_misses": ""
     },
     {
-      "sheet2_row_id": "Sheet2-R0128",
-      "visit_id": "2104525",
-      "patient_name": "汪明海",
-      "issue_family": "病程记录病情变化记录不全",
-      "primary_rule_id": "SC-032",
-      "manual_issue_text": "12月7日病程书写错误“嘱患者及家属注意伤口为甚，避免感染。 \"",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "嘱患者及家属注意伤口为甚|日病程书写错误|避免感染"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0137",
       "visit_id": "2123539",
       "patient_name": "赵金书",
@@ -336,17 +270,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "剂量|剂量不足|急支糖浆|每日三次"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0148",
-      "visit_id": "2174151",
-      "patient_name": "邓浩",
-      "issue_family": "病程记录病情变化记录不全",
-      "primary_rule_id": "SC-032",
-      "manual_issue_text": "1月17日，1月20日，病程记录无具体内容",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": ""
     },
     {
       "sheet2_row_id": "Sheet2-R0150",
@@ -536,17 +459,6 @@
       "anchor_misses": "手术记录非手术医生或第一助手书写且主刀医生未签名确认|签名"
     },
     {
-      "sheet2_row_id": "Sheet2-R0194",
-      "visit_id": "2214679",
-      "patient_name": "田正群",
-      "issue_family": "病程记录病情变化记录不全",
-      "primary_rule_id": "SC-032",
-      "manual_issue_text": "现病史记录不全，未记录肿物性状、未记录诊疗经过。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "未记录肿物性状|未记录诊疗经过|现病史记录不全"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0195",
       "visit_id": "2213827",
       "patient_name": "熊明英",
@@ -556,17 +468,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "G2P2|即诊断|国考四级手术术前无多学科会诊|婚育史书写有误|子健在|左肾未显示|左肾缺失|未请泌尿外科或者肾内科会诊|未进一步检查明确|术前超声提示|适龄结婚|配偶体质一般"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0197",
-      "visit_id": "2245464",
-      "patient_name": "杨长菊",
-      "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
-      "primary_rule_id": "SC-032",
-      "manual_issue_text": "入院72小时以内无副主任医师以上的医师（已新建无具体内容）",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "小时以内无副主任医师以上的医师"
     },
     {
       "sheet2_row_id": "Sheet2-R0199",
@@ -644,17 +545,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "未落实",
       "anchor_misses": "未落实三级医师查房"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0231",
-      "visit_id": "2272872",
-      "patient_name": "李才贵",
-      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；病程记录病情变化记录不全",
-      "primary_rule_id": "SC-032",
-      "manual_issue_text": "3月10日副主任医师查房记录内容空洞，无病情分析，无诊疗意见。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "无病情分析|无诊疗意见|日副主任医师查房记录内容空洞"
     },
     {
       "sheet2_row_id": "Sheet2-R0236",
@@ -839,6 +729,18 @@
       "blocked_reason_type": "规则不支持",
       "review_subgroup": "SC-023-跨文书混合-第二轮",
       "decision_source": "local_pg get_documents + cross-doc probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0052",
+      "visit_id": "1977580",
+      "patient_name": "夏云辉",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "现病史记录不全，缺一般情况的描述，专科检查未描述左下肢情况，初步诊断不全。",
+      "reason": "release/0426 高级查房已明确写出右大腿远端肿胀 右膝关节屈伸活动障碍及入院诊断，且历史定向验证已将该条回流到 SC-020；当前 SC-032 仅属错挂，不能按病程病情变化规则判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 + mapping history"
     },
     {
       "sheet2_row_id": "Sheet2-R0053",
@@ -1057,6 +959,30 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0089",
+      "visit_id": "2041227",
+      "patient_name": "熊兴荣",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "11月3日病程过于简略，仅一句话，描述不详细（未描述切口情况、患者症状及具体用药情况）。",
+      "reason": "release/0426 现可回收的 10月29日 10月30日及 11月2日 11月5日病程均有较完整症状 查体和处理记录，但未回收到人工问题所称 11月3日“仅一句话”原文，证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 daily_course + senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0091",
+      "visit_id": "2254192",
+      "patient_name": "刘桂全",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "11月2日日常病程记录过于简略，仅一句话（未写明患者阴性症状、无生命体征描述，未描述可能诊断给予患者法莫替丁抑酸治疗）。",
+      "reason": "release/0426 当前仅回收到 2026-03-08 病程，正文已写腰背痛 呼吸困难好转 查体及出院处理，与人工问题所称 11月2日“仅一句话 未写阴性症状和生命体征”场景不一致，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 daily_course snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0093",
       "visit_id": "2059847",
       "patient_name": "李忠涛",
@@ -1103,6 +1029,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-008-现病史-第二轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0109",
+      "visit_id": "2110349",
+      "patient_name": "古洪忠",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "2025.11.20病程记录缺患者病情变化、目前症状、体征、阳性检查检验结果。仅记录抽取血常规、电解质的目的。",
+      "reason": "release/0426 当前可回收病程时间集中在 12月8日 12月13日 12月22日 12月27日，未直接回收到人工问题所指 2025-11-20 原始病程正文；现有摘要也更偏向 SC-036 分析缺失，证据不足以按 SC-032 整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 daily_course snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0110",
@@ -1201,6 +1139,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0128",
+      "visit_id": "2104525",
+      "patient_name": "汪明海",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "12月7日病程书写错误“嘱患者及家属注意伤口为甚，避免感染。 \"",
+      "reason": "release/0426 当前可回收的是 12月2日 12月3日 12月8日 12月12日病程，人工问题核心是“伤口为甚”这类措辞错误，属于书写质量问题而非 SC-032 病情变化记录不全，不能按当前规则判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 daily_course snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0131",
       "visit_id": "2110297",
       "patient_name": "刘琼荣",
@@ -1285,6 +1235,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0148",
+      "visit_id": "2174151",
+      "patient_name": "邓浩",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "1月17日，1月20日，病程记录无具体内容",
+      "reason": "release/0426 与 release/0426_full_auto 可回收到 1月20日上级查房正文，内容包含症状 查体和治疗方案，并非“无具体内容”；人工问题与现有原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 + release/0426_full_auto snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0157",
       "visit_id": "2194387",
       "patient_name": "钟志春",
@@ -1319,6 +1281,30 @@
       "blocked_reason_type": "证据链不足",
       "review_subgroup": "SC-036-尾项-第三轮",
       "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0194",
+      "visit_id": "2214679",
+      "patient_name": "田正群",
+      "issue_family": "病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "现病史记录不全，未记录肿物性状、未记录诊疗经过。",
+      "reason": "release/0426 入院及上级查房已明确写出“外阴肿物脱出半年” 查体性状和术前准备经过，人工问题所称“未记录肿物性状 未记录诊疗经过”与原文冲突，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426 daily_course + senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0197",
+      "visit_id": "2245464",
+      "patient_name": "杨长菊",
+      "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "入院72小时以内无副主任医师以上的医师（已新建无具体内容）",
+      "reason": "release/0426_full_auto 可见 2026-02-25 已有陈建霞副主任医师查房，且条目核心属于 72小时高级医师查房问题而非 SC-032 病情变化记录不全；当前主规则错挂，不能按 SC-032 判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426_full_auto senior_course snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0206",
@@ -1475,6 +1461,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-036-异常结果-第二轮",
       "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0231",
+      "visit_id": "2272872",
+      "patient_name": "李才贵",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；病程记录病情变化记录不全",
+      "primary_rule_id": "SC-032",
+      "manual_issue_text": "3月10日副主任医师查房记录内容空洞，无病情分析，无诊疗意见。",
+      "reason": "release/0426_full_auto 可见副主任医师查房正文核心为“同意目前诊断及处理 治疗同前 续观”，人工问题更接近上级查房内容空洞规则而非 SC-032；当前主规则错挂，不能按 SC-032 整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-032-精确复核-第四轮",
+      "decision_source": "release/0426_full_auto senior_course snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0241",
@@ -1692,7 +1690,7 @@
       "exact_confirmed": 1
     },
     "上级查房内容空洞/复制粘贴/身份异常；病程记录病情变化记录不全": {
-      "needs_exact_review": 1
+      "blocked_with_reason": 1
     },
     "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全": {
       "needs_exact_review": 1
@@ -1825,8 +1823,8 @@
       "exact_confirmed": 21
     },
     "病程记录病情变化记录不全": {
-      "needs_exact_review": 8,
-      "exact_confirmed": 1
+      "blocked_with_reason": 7,
+      "exact_confirmed": 2
     },
     "病程记录病情变化记录不全；病程时效/缺失": {
       "exact_confirmed": 1
@@ -1884,7 +1882,7 @@
       "exact_confirmed": 1
     },
     "高级医师首次查房72小时；病程记录病情变化记录不全": {
-      "needs_exact_review": 1,
+      "blocked_with_reason": 1,
       "exact_confirmed": 1
     }
   }

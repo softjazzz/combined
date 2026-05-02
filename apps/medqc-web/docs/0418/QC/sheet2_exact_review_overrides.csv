@@ -98,3 +98,13 @@ Sheet2-R0093,blocked_with_reason,local_pg 人工问题核心在术后首次病�
 Sheet2-R0139,blocked_with_reason,local_pg 该条同时覆盖“入院现病史胸痛要素缺失”和“胸腔积液/急性胃炎诊断依据不足”，属于入院记录完整性与诊断依据复合问题，超出单一 SC-023 可精确闭环范围。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
 Sheet2-R0054,exact_confirmed,local_pg 首次上级查房列出5项诊断，但“诊断依据”仅按1-4编号书写，且第4条同时混入肺部炎症与肋骨骨折内容，未逐个对应全部诊断逐项展开，符合“未按照逐个诊断依次书写诊断依据”的人工问题核心锚点。,,SC-023-诊断依据-第三轮,local_pg get_documents + final tail probe
 Sheet2-R0132,blocked_with_reason,local_pg 当前首程/上级查房正文仅见“加用氢氯噻嗪及螺内酯利尿减轻心脏负荷，请心内科会诊”，未回收到人工问题所引“云南白药胶囊+酚磺乙胺止血”“多饮水、多食抗血小板聚集食物”等关键原句，证据不足以整条判 exact。,证据链不足,SC-023-诊断依据-第三轮,local_pg get_documents + final tail probe
+Sheet2-R0052,blocked_with_reason,release/0426 高级查房已明确写出右大腿远端肿胀 右膝关节屈伸活动障碍及入院诊断，且历史定向验证已将该条回流到 SC-020；当前 SC-032 仅属错挂，不能按病程病情变化规则判 exact。,规则不支持,SC-032-精确复核-第四轮,release/0426 + mapping history
+Sheet2-R0076,exact_confirmed,release/0426 2025-10-30 与 2025-11-01 日常病程仅写 C13 呼气试验相关事项和密观，未展开患者当日症状 体征及其他治疗措施，符合“病程过于简略 仅记录检查事项”的人工问题核心锚点。,,SC-032-精确复核-第四轮,release/0426 daily_course snapshot
+Sheet2-R0089,blocked_with_reason,release/0426 现可回收的 10月29日 10月30日及 11月2日 11月5日病程均有较完整症状 查体和处理记录，但未回收到人工问题所称 11月3日“仅一句话”原文，证据不足以整条判 exact。,证据链不足,SC-032-精确复核-第四轮,release/0426 daily_course + senior_course snapshot
+Sheet2-R0091,blocked_with_reason,release/0426 当前仅回收到 2026-03-08 病程，正文已写腰背痛 呼吸困难好转 查体及出院处理，与人工问题所称 11月2日“仅一句话 未写阴性症状和生命体征”场景不一致，不能判 exact。,人工问题原文不可判,SC-032-精确复核-第四轮,release/0426 daily_course snapshot
+Sheet2-R0109,blocked_with_reason,release/0426 当前可回收病程时间集中在 12月8日 12月13日 12月22日 12月27日，未直接回收到人工问题所指 2025-11-20 原始病程正文；现有摘要也更偏向 SC-036 分析缺失，证据不足以按 SC-032 整条判 exact。,证据链不足,SC-032-精确复核-第四轮,release/0426 daily_course snapshot
+Sheet2-R0128,blocked_with_reason,release/0426 当前可回收的是 12月2日 12月3日 12月8日 12月12日病程，人工问题核心是“伤口为甚”这类措辞错误，属于书写质量问题而非 SC-032 病情变化记录不全，不能按当前规则判 exact。,规则不支持,SC-032-精确复核-第四轮,release/0426 daily_course snapshot
+Sheet2-R0148,blocked_with_reason,release/0426 与 release/0426_full_auto 可回收到 1月20日上级查房正文，内容包含症状 查体和治疗方案，并非“无具体内容”；人工问题与现有原文冲突，不能判 exact。,人工问题原文不可判,SC-032-精确复核-第四轮,release/0426 + release/0426_full_auto snapshot
+Sheet2-R0194,blocked_with_reason,release/0426 入院及上级查房已明确写出“外阴肿物脱出半年” 查体性状和术前准备经过，人工问题所称“未记录肿物性状 未记录诊疗经过”与原文冲突，不能判 exact。,人工问题原文不可判,SC-032-精确复核-第四轮,release/0426 daily_course + senior_course snapshot
+Sheet2-R0197,blocked_with_reason,release/0426_full_auto 可见 2026-02-25 已有陈建霞副主任医师查房，且条目核心属于 72小时高级医师查房问题而非 SC-032 病情变化记录不全；当前主规则错挂，不能按 SC-032 判 exact。,规则不支持,SC-032-精确复核-第四轮,release/0426_full_auto senior_course snapshot
+Sheet2-R0231,blocked_with_reason,release/0426_full_auto 可见副主任医师查房正文核心为“同意目前诊断及处理 治疗同前 续观”，人工问题更接近上级查房内容空洞规则而非 SC-032；当前主规则错挂，不能按 SC-032 整条判 exact。,规则不支持,SC-032-精确复核-第四轮,release/0426_full_auto senior_course snapshot
