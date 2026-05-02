@@ -1,0 +1,15 @@
+[
+  {
+    "sheet2_row_id": "Sheet2-R0029",
+    "visit_id": "1915580",
+    "patient_name": "雷德超",
+    "primary_rule_id": "SC-045",
+    "manual_issue_text": "患者行了骨髓穿刺，无有创操作记录",
+    "source": "release/0426_full_auto/mr_surgery.csv",
+    "evidence": {
+      "mr_surgery_1": "2025-08-05 骨髓穿刺术（code: 41.3800x001）",
+      "mr_surgery_2": "2025-08-13 胸椎骨折切开复位内固定术（同 visit 另有手术登记）",
+      "observation": "现有原始文书已回收到骨髓穿刺对应的有创操作登记。"
+    }
+  }
+]

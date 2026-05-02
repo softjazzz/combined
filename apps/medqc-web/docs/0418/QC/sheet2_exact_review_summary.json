@@ -2,22 +2,11 @@
   "total_rows": 283,
   "status_breakdown": {
     "exact_confirmed": 139,
-    "blocked_with_reason": 115,
+    "blocked_with_reason": 116,
     "skip": 25,
-    "needs_exact_review": 4
+    "needs_exact_review": 3
   },
   "needs_exact_review_rows": [
-    {
-      "sheet2_row_id": "Sheet2-R0029",
-      "visit_id": "1915580",
-      "patient_name": "雷德超",
-      "issue_family": "有创诊疗操作记录缺失/书写不规范",
-      "primary_rule_id": "SC-045",
-      "manual_issue_text": "患者行了骨髓穿刺，无有创操作记录",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "患者行了骨髓穿刺|有创操作|骨髓穿刺"
-    },
     {
       "sheet2_row_id": "Sheet2-R0077",
       "visit_id": "2052129",
@@ -100,6 +89,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-070-精确复核-第一轮",
       "decision_source": "release/0426_full_auto consultation snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0029",
+      "visit_id": "1915580",
+      "patient_name": "雷德超",
+      "issue_family": "有创诊疗操作记录缺失/书写不规范",
+      "primary_rule_id": "SC-045",
+      "manual_issue_text": "患者行了骨髓穿刺，无有创操作记录",
+      "reason": "release/0426_full_auto mr_surgery 已直接登记 2025-08-05 “骨髓穿刺术”，同 visit 还存在胸椎骨折相关手术登记；现有原文与人工问题所称“患者行了骨髓穿刺，无有创操作记录”冲突，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-045-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto mr_surgery snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0030",
@@ -1554,9 +1555,8 @@
       "exact_confirmed": 2
     },
     "有创诊疗操作记录缺失/书写不规范": {
-      "needs_exact_review": 1,
-      "exact_confirmed": 3,
-      "blocked_with_reason": 3
+      "blocked_with_reason": 4,
+      "exact_confirmed": 3
     },
     "术前主刀医生查房/麻醉术前访视缺失": {
       "exact_confirmed": 1
