@@ -1,23 +1,12 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 127,
-    "blocked_with_reason": 95,
+    "exact_confirmed": 129,
+    "blocked_with_reason": 98,
     "skip": 20,
-    "needs_exact_review": 41
+    "needs_exact_review": 36
   },
   "needs_exact_review_rows": [
-    {
-      "sheet2_row_id": "Sheet2-R0017",
-      "visit_id": "1888334",
-      "patient_name": "蒋齐芬",
-      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
-      "primary_rule_id": "SC-097",
-      "manual_issue_text": "手术记录中手术名称与术前讨论及术前小结中手术名称不一致",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "手术名称|手术记录中手术名称与术前讨论及术前小结中手术名称不一致|术前小结|术前讨论"
-    },
     {
       "sheet2_row_id": "Sheet2-R0027",
       "visit_id": "2205630",
@@ -129,17 +118,6 @@
       "anchor_misses": "建议按照医院术后首次病程模板书写避免漏项|术后首次病程记录书写不规范|缺少术后处理措施"
     },
     {
-      "sheet2_row_id": "Sheet2-R0096",
-      "visit_id": "2063648",
-      "patient_name": "舒泽奎",
-      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
-      "primary_rule_id": "SC-097",
-      "manual_issue_text": "手术记录中手术结束时间书写错误（9：40错误写为10:40）",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "手术记录中手术结束时间书写错误|错误写为"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0101",
       "visit_id": "2033353",
       "patient_name": "章继书",
@@ -237,17 +215,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "复制粘贴|日上级医师查房记录不完整"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0159",
-      "visit_id": "2191940",
-      "patient_name": "李祥飞",
-      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
-      "primary_rule_id": "SC-097",
-      "manual_issue_text": "手术记录手术结束时间错误（1月26日10：00误写为1月27日10:00）",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "手术记录手术结束时间错误|误写为"
     },
     {
       "sheet2_row_id": "Sheet2-R0165",
@@ -349,17 +316,6 @@
       "anchor_misses": ""
     },
     {
-      "sheet2_row_id": "Sheet2-R0191",
-      "visit_id": "2209066",
-      "patient_name": "武中彬",
-      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
-      "primary_rule_id": "SC-097",
-      "manual_issue_text": "手术记录非手术医生或第一助手书写且主刀医生未签名确认",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "手术记录非手术医生或第一助手书写且主刀医生未签名确认|签名"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0205",
       "visit_id": "2259144",
       "patient_name": "李欣桂",
@@ -402,17 +358,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "未落实",
       "anchor_misses": "未落实三级医师查房"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0236",
-      "visit_id": "2260499",
-      "patient_name": "王孝芳",
-      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
-      "primary_rule_id": "SC-097",
-      "manual_issue_text": "手术记录手术结束时间错误（3月10日19:55误写为3月11日19:55）",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "手术记录手术结束时间错误|误写为"
     },
     {
       "sheet2_row_id": "Sheet2-R0285",
@@ -809,6 +754,18 @@
       "decision_source": "local_pg get_documents + cross-doc probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0096",
+      "visit_id": "2063648",
+      "patient_name": "舒泽奎",
+      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
+      "primary_rule_id": "SC-097",
+      "manual_issue_text": "手术记录中手术结束时间书写错误（9：40错误写为10:40）",
+      "reason": "release/0426_full_auto surgery_record 当前结构化手术结束时间为 2025-11-05 09:40，并非人工问题所称“10:40”；现有原始文书未回收到该错误时间原句，不能按“结束时间误写为10:40”判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-097-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto surgery_record snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0098",
       "visit_id": "2068229",
       "patient_name": "彭成艺",
@@ -1085,6 +1042,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0159",
+      "visit_id": "2191940",
+      "patient_name": "李祥飞",
+      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
+      "primary_rule_id": "SC-097",
+      "manual_issue_text": "手术记录手术结束时间错误（1月26日10：00误写为1月27日10:00）",
+      "reason": "release/0426_full_auto surgery_record 当前结构化手术结束时间为 2026-01-26 10:00，并非人工问题所称“误写为1月27日10:00”；现有原始文书未回收到该错误时间原句，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-097-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto surgery_record snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0169",
       "visit_id": "2198921",
       "patient_name": "王明德",
@@ -1119,6 +1088,18 @@
       "blocked_reason_type": "证据链不足",
       "review_subgroup": "SC-036-尾项-第三轮",
       "decision_source": "local_pg get_documents + tail snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0191",
+      "visit_id": "2209066",
+      "patient_name": "武中彬",
+      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
+      "primary_rule_id": "SC-097",
+      "manual_issue_text": "手术记录非手术医生或第一助手书写且主刀医生未签名确认",
+      "reason": "local_pg get_documents 仅回收到签名字段为空的手术记录模板；release/0426_full_auto surgery_record 可见 last_modifier 为周雨、手术医师为段超，但助手字段为空，当前证据不足以稳定证明“周雨非手术医生或第一助手且主刀未签名确认”这整句身份链。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-097-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto surgery_record snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0194",
@@ -1712,8 +1693,8 @@
       "exact_confirmed": 2
     },
     "手术记录缺项/时间错误/逻辑不清/签名异常": {
-      "needs_exact_review": 5,
-      "exact_confirmed": 2
+      "exact_confirmed": 4,
+      "blocked_with_reason": 3
     },
     "既往史/用药史记录不全": {
       "needs_exact_review": 2
