@@ -83,6 +83,11 @@ def _parse_args() -> argparse.Namespace:
         default=[],
         help="当 --rule-slot=secondary-first 时，指定要执行的次规则，可重复传入",
     )
+    parser.add_argument(
+        "--override-rule-id",
+        default="",
+        help="对本次选中的所有条目强制使用该规则执行，用于 C 线映射试跑",
+    )
     parser.add_argument("--output-json", default="", help="可选，输出本轮汇总 JSON")
     parser.add_argument("--dry-run", action="store_true", help="只生成选择结果，不执行任务")
     return parser.parse_args()
@@ -172,7 +177,11 @@ def _resolve_rule_id(
     *,
     rule_slot: str,
     requested_secondary_rule_ids: set[str] | None = None,
+    override_rule_id: str = "",
 ) -> str:
+    normalized_override = _safe_text(override_rule_id).upper()
+    if normalized_override:
+        return normalized_override
     if rule_slot != "secondary-first":
         return _safe_text(row.get("primary_rule_id")).upper()
     normalized_requested = {item.upper() for item in (requested_secondary_rule_ids or set()) if item}
@@ -250,6 +259,7 @@ async def _run_family_batch(
     rows: list[dict[str, str]],
     rule_slot: str,
     requested_secondary_rule_ids: set[str] | None = None,
+    override_rule_id: str = "",
 ) -> dict[str, Any]:
     workspace = CustomQCWorkspaceService()
     record_ids = []
@@ -261,6 +271,7 @@ async def _run_family_batch(
             row,
             rule_slot=rule_slot,
             requested_secondary_rule_ids=requested_secondary_rule_ids,
+            override_rule_id=override_rule_id,
         )
         if not record_id or not rule_id:
             continue
@@ -350,6 +361,7 @@ async def _run_family_batch(
             records=records,
             rule_slot=rule_slot,
             requested_secondary_rule_ids=requested_secondary_rule_ids,
+            override_rule_id=override_rule_id,
         )
     return dict(completed_job)
 
@@ -361,6 +373,7 @@ async def _repair_programmatic_missing_items(
     records: list[dict[str, Any]],
     rule_slot: str,
     requested_secondary_rule_ids: set[str] | None = None,
+    override_rule_id: str = "",
 ) -> None:
     record_map = {_safe_text(item.get("record_id") or item.get("visit_id")): dict(item) for item in records}
     qc_service = SichuanQCService()
@@ -373,6 +386,7 @@ async def _repair_programmatic_missing_items(
             row,
             rule_slot=rule_slot,
             requested_secondary_rule_ids=requested_secondary_rule_ids,
+            override_rule_id=override_rule_id,
         )
         if not record_id or not rule_id:
             continue
@@ -466,6 +480,7 @@ def _apply_job_results(
     job: dict[str, Any],
     rule_slot: str,
     requested_secondary_rule_ids: set[str] | None = None,
+    override_rule_id: str = "",
 ) -> dict[str, Any]:
     job_id = _safe_text(job.get("id"))
     result_counter: Counter[str] = Counter()
@@ -477,6 +492,7 @@ def _apply_job_results(
             row,
             rule_slot=rule_slot,
             requested_secondary_rule_ids=requested_secondary_rule_ids,
+            override_rule_id=override_rule_id,
         )
         item = _find_item(job, record_id=record_id, rule_id=rule_id)
         failed = _find_failed_record(job, record_id=record_id, rule_id=rule_id)
@@ -528,6 +544,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
         for item in (args.secondary_rule_ids or [])
         if _safe_text(item)
     }
+    override_rule_id = _safe_text(args.override_rule_id).upper()
 
     report = {
         "ledger": str(ledger_path),
@@ -552,6 +569,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                                 for item in (args.secondary_rule_ids or [])
                                 if _safe_text(item)
                             },
+                            override_rule_id=override_rule_id,
                         )
                         for row in rows
                         if _resolve_rule_id(
@@ -562,6 +580,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                                 for item in (args.secondary_rule_ids or [])
                                 if _safe_text(item)
                             },
+                            override_rule_id=override_rule_id,
                         )
                     }
                 ),
@@ -580,6 +599,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
                 rows=rows,
                 rule_slot=args.rule_slot,
                 requested_secondary_rule_ids=requested_secondary_rule_ids,
+                override_rule_id=override_rule_id,
             )
         except RuntimeError as exc:
             error_text = _safe_text(exc)
@@ -610,6 +630,7 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             job=job,
             rule_slot=args.rule_slot,
             requested_secondary_rule_ids=requested_secondary_rule_ids,
+            override_rule_id=override_rule_id,
         )
         for updated in applied["updated_rows"]:
             by_row_id[updated["sheet2_row_id"]] = updated
