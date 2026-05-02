@@ -1,0 +1,35 @@
+{
+  "input_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "summary": {
+    "record_count": 1,
+    "skip_allowed_count": 1,
+    "fallback_available_count": 0,
+    "missing_document_type_breakdown": {
+      "会诊记录": 1
+    }
+  },
+  "results": [
+    {
+      "sheet2_row_id": "Sheet2-R0203",
+      "visit_id": "000087300",
+      "patient_name": "屈义祥",
+      "manual_issue_text": "会诊意见：患者未在病房，明日在疼痛科门诊2楼会诊",
+      "issue_family": "会诊记录内容质量/复制粘贴/结论不足",
+      "primary_rule_id": "SC-069",
+      "secondary_rule_ids": "",
+      "skip_allowed": true,
+      "missing_document_types": ["会诊记录"],
+      "checked_sources": [
+        "local_pg@local_pg::consultation_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\consultation_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\consultation_record.csv:no_row",
+        "local_pg@local_pg::daily_course_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:no_row"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 会诊记录，且无可回退文书，可判 skip",
+      "target_document_types": ["会诊记录"]
+    }
+  ]
+}

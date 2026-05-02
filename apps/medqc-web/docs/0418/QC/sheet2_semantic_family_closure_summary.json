@@ -6,16 +6,16 @@
       "semantic": 32
     },
     "closure_status_breakdown": {
-      "A_closed": 8,
-      "B_observe": 20,
+      "A_closed": 9,
+      "B_observe": 19,
       "C_blocked_or_skip": 4
     },
     "rows_total": 88,
     "rows_breakdown": {
       "exact_hit": 0,
       "same_family_hit": 45,
-      "miss": 30,
-      "skip": 6,
+      "miss": 29,
+      "skip": 7,
       "pending": 7
     }
   },
@@ -161,7 +161,7 @@
       "miss": 2,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成 | 转C线改映射"
+      "top_next_actions": "已核验完成 | 转C线补规则"
     },
     {
       "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
@@ -223,19 +223,6 @@
       "row_count": 6,
       "exact_hit": 0,
       "same_family_hit": 5,
-      "miss": 1,
-      "skip": 0,
-      "pending": 0,
-      "top_next_actions": "已核验完成 | 转C线补规则"
-    },
-    {
-      "issue_family": "会诊记录内容质量/复制粘贴/结论不足",
-      "family_type": "semantic",
-      "closure_status": "B_observe",
-      "primary_rule_ids": "SC-069",
-      "row_count": 2,
-      "exact_hit": 0,
-      "same_family_hit": 1,
       "miss": 1,
       "skip": 0,
       "pending": 0,
@@ -344,6 +331,19 @@
       "skip": 0,
       "pending": 0,
       "top_next_actions": "已核验完成"
+    },
+    {
+      "issue_family": "会诊记录内容质量/复制粘贴/结论不足",
+      "family_type": "semantic",
+      "closure_status": "A_closed",
+      "primary_rule_ids": "SC-069",
+      "row_count": 2,
+      "exact_hit": 0,
+      "same_family_hit": 1,
+      "miss": 0,
+      "skip": 1,
+      "pending": 0,
+      "top_next_actions": "已核验完成 | 已确认skip"
     },
     {
       "issue_family": "会诊记录内容质量/复制粘贴/结论不足；会诊意见已写遵执但实际未落实",
