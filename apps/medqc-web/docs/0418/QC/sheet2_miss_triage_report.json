@@ -137,7 +137,7 @@
       "secondary_rule_ids": "SC-098",
       "manual_issue_text": "手术记录无主刀医生签名",
       "evidence_summary": "次规则 SC-098 执行完成，未产生问题项。",
-      "next_action": "转C线改映射"
+      "next_action": "转C线补程序/证据组织"
     },
     {
       "sheet2_row_id": "Sheet2-R0177",
@@ -159,7 +159,7 @@
       "secondary_rule_ids": "SC-098",
       "manual_issue_text": "手术记录无主刀医生签名",
       "evidence_summary": "次规则 SC-098 执行完成，未产生问题项。",
-      "next_action": "转C线改映射"
+      "next_action": "转C线补程序/证据组织"
     },
     {
       "sheet2_row_id": "Sheet2-R0194",
@@ -192,7 +192,7 @@
       "secondary_rule_ids": "",
       "manual_issue_text": "四级肿瘤手术，未行多学科讨论，",
       "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线改映射"
+      "next_action": "转C线核源文书与人工问题不一致"
     },
     {
       "sheet2_row_id": "Sheet2-R0245",
@@ -214,7 +214,7 @@
       "secondary_rule_ids": "",
       "manual_issue_text": "多学科讨论记录中肿瘤科会诊意见与会诊记录单中会诊意见不一致",
       "evidence_summary": "主规则执行完成，未产生问题项。",
-      "next_action": "转C线改映射"
+      "next_action": "转C线改映射（会诊/MDT一致性专项）"
     },
     {
       "sheet2_row_id": "Sheet2-R0257",
