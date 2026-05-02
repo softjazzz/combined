@@ -2,22 +2,11 @@
   "total_rows": 283,
   "status_breakdown": {
     "exact_confirmed": 139,
-    "blocked_with_reason": 117,
+    "blocked_with_reason": 118,
     "skip": 25,
-    "needs_exact_review": 2
+    "needs_exact_review": 1
   },
   "needs_exact_review_rows": [
-    {
-      "sheet2_row_id": "Sheet2-R0117",
-      "visit_id": "2097628",
-      "patient_name": "徐前军",
-      "issue_family": "主治首次查房48小时；病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-033",
-      "manual_issue_text": "入院48小时内，无主治医师查房记录；首次病程鉴别诊断中：血精的常见病因精囊结石及精囊结核，未做分析鉴别。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "小时内|未做分析鉴别|血精的常见病因精囊结石及精囊结核|首次病程鉴别诊断中"
-    },
     {
       "sheet2_row_id": "Sheet2-R0172",
       "visit_id": "2199396",
@@ -582,6 +571,18 @@
       "blocked_reason_type": "证据链不足",
       "review_subgroup": "SC-008-现病史-第二轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0117",
+      "visit_id": "2097628",
+      "patient_name": "徐前军",
+      "issue_family": "主治首次查房48小时；病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-033",
+      "manual_issue_text": "入院48小时内，无主治医师查房记录；首次病程鉴别诊断中：血精的常见病因精囊结石及精囊结核，未做分析鉴别。",
+      "reason": "release/0426_full_auto 已回收到 2025-11-27 09:52 的“徐应福主治医师查看病人”记录，距 2025-11-26 10:03 入院不足 24 小时；同时 first_course_record 仅存空壳条目，未回收到人工问题所称“首次病程中对精囊结石及精囊结核未做分析”的原始正文，整条不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-033-精确复核-第一轮",
+      "decision_source": "release/0426_full_auto senior_course_record + first_course_record snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0118",
@@ -1473,7 +1474,7 @@
       "exact_confirmed": 1
     },
     "主治首次查房48小时；病程记录缺分析/缺处理意见": {
-      "needs_exact_review": 1
+      "blocked_with_reason": 1
     },
     "主治首次查房48小时；高级医师首次查房72小时": {
       "exact_confirmed": 1
