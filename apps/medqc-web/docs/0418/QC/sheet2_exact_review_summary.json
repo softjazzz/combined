@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 125,
-    "blocked_with_reason": 92,
+    "exact_confirmed": 127,
+    "blocked_with_reason": 95,
     "skip": 20,
-    "needs_exact_review": 46
+    "needs_exact_review": 41
   },
   "needs_exact_review_rows": [
     {
@@ -338,17 +338,6 @@
       "anchor_misses": "但输血记录未分别记录输血开始时间及结束时间|日共输注两袋血浆"
     },
     {
-      "sheet2_row_id": "Sheet2-R0187",
-      "visit_id": "2216850",
-      "patient_name": "雷德均",
-      "issue_family": "有创诊疗操作记录缺失/书写不规范",
-      "primary_rule_id": "SC-046",
-      "manual_issue_text": "有创操作记录书写不规范（未按模板书写具体操作时间、有无不良反应、术后注意事项及向患者交待情况等）",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "有创操作|有创操作记录书写不规范|有无不良反应|未按模板书写具体操作时间|术后注意事项及向患者交待情况等"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0189",
       "visit_id": "2212117",
       "patient_name": "朱正良",
@@ -369,17 +358,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "手术记录非手术医生或第一助手书写且主刀医生未签名确认|签名"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0199",
-      "visit_id": "2239258",
-      "patient_name": "黄修润",
-      "issue_family": "有创诊疗操作记录缺失/书写不规范",
-      "primary_rule_id": "SC-046",
-      "manual_issue_text": "有创操作记录书写不规范（未按模板书写具体操作时间、术后注意事项及向患者交待情况等）",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "有创操作|有创操作记录书写不规范|未按模板书写具体操作时间|术后注意事项及向患者交待情况等"
     },
     {
       "sheet2_row_id": "Sheet2-R0205",
@@ -437,28 +415,6 @@
       "anchor_misses": "手术记录手术结束时间错误|误写为"
     },
     {
-      "sheet2_row_id": "Sheet2-R0239",
-      "visit_id": "2283295",
-      "patient_name": "李相书",
-      "issue_family": "有创诊疗操作记录缺失/书写不规范",
-      "primary_rule_id": "SC-046",
-      "manual_issue_text": "2026.3.14(有创）操作记录书写逻辑混乱，下诊断时应规范标注序号。（直肠见一大小约5mmIs型息肉，内镜下予以一次性使用圈套器切除，送检标本1.乙状结肠粘膜充血水肿。 直肠息肉内镜下息肉切除术乙状结肠炎，过程顺利。）",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "2026.3.14|5mmIs|下诊断时应规范标注序号|乙状结肠粘膜充血水肿|内镜下予以一次性使用圈套器切除|型息肉|操作记录书写逻辑混乱|直肠息肉内镜下息肉切除术乙状结肠炎|直肠见一大小约|过程顺利|送检标本"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0249",
-      "visit_id": "2297786",
-      "patient_name": "杜孝涛",
-      "issue_family": "有创诊疗操作记录缺失/书写不规范",
-      "primary_rule_id": "SC-046",
-      "manual_issue_text": "3月23日有创操作记录：未明确记录操作者、未描述操作时患者所取的体位、“留取脓液标本送检”应明确送检项目（如：细菌培养+药敏试验）、“向外扩张15cm”：此表述在专业文书中较少使用，通常表述为“消毒范围直径约15cm”或“以穿刺点为中心，消毒范围半径约15cm”、“外面垫放干纱布”：建议统一为“外敷无菌干纱布”。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "15cm|以穿刺点为中心|体位|向外扩张|外敷无菌干纱布|外面垫放干纱布|应明确送检项目|建议统一为|操作者|有创操作|未描述操作时患者所取的体位|未明确记录操作者|此表述在专业文书中较少使用|消毒范围半径约|消毒范围直径约|留取脓液标本送检|细菌培养|药敏试验|通常表述为"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0285",
       "visit_id": "2314600",
       "patient_name": "曾祥蓉",
@@ -479,17 +435,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "平滑肌肉瘤二期手术|或者磁共振|未充分认识到该病例的复杂性|术前未复查胸部|术前评估不充分|而导致术中更改手术方式|腹部及盆腔"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0288",
-      "visit_id": "2333807",
-      "patient_name": "叶超",
-      "issue_family": "有创诊疗操作记录缺失/书写不规范",
-      "primary_rule_id": "SC-046",
-      "manual_issue_text": "4月8日清创记录：标题为“头皮裂伤清创缝合术”，但操作部位实际是“右侧面部”。需明确“操作开始时间”，操作医师姓名、操作地点、局麻药浓度等关键信息。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "但操作部位实际是|右侧面部|头皮裂伤清创缝合术|局麻药浓度等关键信息|操作医师姓名|操作地点|操作开始时间|标题为|清创|需明确"
     },
     {
       "sheet2_row_id": "Sheet2-R0290",
@@ -1404,6 +1349,18 @@
       "decision_source": "release/0426_full_auto senior_course snapshot"
     },
     {
+      "sheet2_row_id": "Sheet2-R0239",
+      "visit_id": "2283295",
+      "patient_name": "李相书",
+      "issue_family": "有创诊疗操作记录缺失/书写不规范",
+      "primary_rule_id": "SC-046",
+      "manual_issue_text": "2026.3.14(有创）操作记录书写逻辑混乱，下诊断时应规范标注序号。（直肠见一大小约5mmIs型息肉，内镜下予以一次性使用圈套器切除，送检标本1.乙状结肠粘膜充血水肿。 直肠息肉内镜下息肉切除术乙状结肠炎，过程顺利。）",
+      "reason": "local_pg 与 release/0426_full_auto 仅回收到内镜切除的 mr_surgery 摘要和空壳有创操作模板，未回收到人工问题所引“5mmIs型息肉 一次性使用圈套器 送检标本1.乙状结肠粘膜充血水肿”等原始操作正文，证据不足以核对“书写逻辑混乱/诊断序号”这一精确锚点。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-046-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto mr_surgery snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0241",
       "visit_id": "2275298",
       "patient_name": "郑尚怀",
@@ -1450,6 +1407,18 @@
       "blocked_reason_type": "证据链不足",
       "review_subgroup": "SC-083-精确复核-第一轮",
       "decision_source": "release/0426_full_auto consultation + senior_course snapshot"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0249",
+      "visit_id": "2297786",
+      "patient_name": "杜孝涛",
+      "issue_family": "有创诊疗操作记录缺失/书写不规范",
+      "primary_rule_id": "SC-046",
+      "manual_issue_text": "3月23日有创操作记录：未明确记录操作者、未描述操作时患者所取的体位、“留取脓液标本送检”应明确送检项目（如：细菌培养+药敏试验）、“向外扩张15cm”：此表述在专业文书中较少使用，通常表述为“消毒范围直径约15cm”或“以穿刺点为中心，消毒范围半径约15cm”、“外面垫放干纱布”：建议统一为“外敷无菌干纱布”。",
+      "reason": "local_pg 与 release/0426_full_auto 仅回收到“左侧颈部脓肿切开引流术”的 mr_surgery 摘要和空壳有创操作模板，未回收到人工问题所引“向外扩张15cm 外面垫放干纱布 留取脓液标本送检”等原始操作正文，无法精确核对该组措辞缺陷。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-046-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto mr_surgery snapshot"
     },
     {
       "sheet2_row_id": "Sheet2-R0251",
@@ -1608,6 +1577,18 @@
       "decision_source": "local_pg get_documents + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0288",
+      "visit_id": "2333807",
+      "patient_name": "叶超",
+      "issue_family": "有创诊疗操作记录缺失/书写不规范",
+      "primary_rule_id": "SC-046",
+      "manual_issue_text": "4月8日清创记录：标题为“头皮裂伤清创缝合术”，但操作部位实际是“右侧面部”。需明确“操作开始时间”，操作医师姓名、操作地点、局麻药浓度等关键信息。",
+      "reason": "release/0426_full_auto 现可回收的结构化手术摘要标题为“皮肤和皮下组织非切除性清创”，入院/查房/诊断均指向“右侧面部裂伤”；人工问题所称“头皮裂伤清创缝合术”原句未在现有原始文书中回收，且有创操作记录正文仍为空壳，不能按该原句判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-046-精确复核-第一轮",
+      "decision_source": "local_pg get_documents + release/0426_full_auto mr_surgery + diagnosis snapshot"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0289",
       "visit_id": "2328112",
       "patient_name": "殷孝容",
@@ -1738,8 +1719,9 @@
       "needs_exact_review": 2
     },
     "有创诊疗操作记录缺失/书写不规范": {
-      "needs_exact_review": 6,
-      "exact_confirmed": 1
+      "needs_exact_review": 1,
+      "exact_confirmed": 3,
+      "blocked_with_reason": 3
     },
     "术前主刀医生查房/麻醉术前访视缺失": {
       "exact_confirmed": 1
