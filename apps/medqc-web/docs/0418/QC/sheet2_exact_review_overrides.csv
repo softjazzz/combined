@@ -79,3 +79,14 @@ Sheet2-R0245,exact_confirmed,local_pg admission_record 与后续查房均记录�
 Sheet2-R0251,blocked_with_reason,local_pg 该条核心在术中冰冻回报后是否扩大切除及手术范围决策链说明，属于围手术期决策记录完整性问题，超出单一 SC-036 异常结果分析规则可精确闭环范围。,规则不支持,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
 Sheet2-R0270,exact_confirmed,local_pg admission_record 院内辅助检查已写“双肾砂粒样结石 膀胱结石”，但3月28日首次上级查房当前诊断仅列前列腺增生 尿潴留 慢性阻塞性肺病，符合“入院检查明确但入院诊断未记录”。,,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
 Sheet2-R0281,blocked_with_reason,local_pg 当前快照仅见3月31日已分析肾功异常并于4月1日肾内科会诊明确慢性肾脏病3期高尿酸血症，且4月3日日常病程内容详细；但缺少可直接核对“4月1日病程记录过于简单”的原始病程正文，证据不足。,证据链不足,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0023,exact_confirmed,local_pg 首次上级查房一次性列出“急性肾盂肾炎、前列腺增生、慢阻肺伴下呼吸道感染、阑尾术后、低钠血症、低氯血症”6项诊断，但正文仅给出“泌尿系结核”单一鉴别诊断，未见其余诊断逐项诊断依据及鉴别诊断，符合人工问题核心锚点。,,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0059,exact_confirmed,local_pg 15岁女性因右下腹痛入院，CT 已提示“右侧附件区斑片状脂肪密度影，畸胎瘤不除外，盆腔少量积液”，但病程仅考虑肠系膜淋巴结炎/慢性阑尾炎，全文未见 HCG、妊娠或宫外孕相关鉴别，符合人工问题核心锚点。,,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0065,blocked_with_reason,local_pg 该条同时覆盖“糖尿病史未入入院诊断”“现病史阴性症状采集不全”“鉴别诊断不全面”多个问题点，且后续查房已补入2型糖尿病，超出单一 SC-023 可精确闭环范围。,规则不支持,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0066,blocked_with_reason,local_pg 该条同时包含“入院诊断不全”“心率脉搏不等等同房颤判断”“首次病程鉴别诊断不全面”等复合问题，现有正文仅能证实窦性心律伴房早和右束支阻滞，不能按单一 SC-023 整条判 exact。,规则不支持,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0098,blocked_with_reason,local_pg 病程实际写的是“细菌性痢疾”鉴别，并非人工问题所称“仅和霍乱鉴别”；同时“建议行两对半定性检查”亦未能与当前正文形成同一锚点，整条不能判 exact。,人工问题原文不可判,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0122,blocked_with_reason,local_pg 当前快照只可见肺结核鉴别和拟行纤维支气管镜检查，未回收到人工问题所称“诊疗计划辅助检查进行肺栓塞鉴别诊断”的对应原文，证据不足以整条判 exact。,证据链不足,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0175,blocked_with_reason,local_pg 病程当前诊断已明确写出“双耳分泌性中耳炎”，人工问题所称“未鉴别中耳炎”与原文冲突；同时还混有会诊执行记录复制问题，整条不能判 exact。,人工问题原文不可判,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0207,blocked_with_reason,local_pg 当前病历主线为“盆腔包块待诊：卵巢肿瘤？”并非长期尿不尽场景，人工问题与该 visit 的原始文书主诉、查体及诊疗计划明显不符，不能判 exact。,人工问题原文不可判,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0208,blocked_with_reason,local_pg 该条同时包含“鉴别诊断不全面”“手术史不详细”“体格检查缺项”“扩大住院指征嫌疑”等多类问题，超出单一 SC-023 可精确闭环范围，需拆规则另行复核。,规则不支持,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0212,blocked_with_reason,local_pg 正文将“左踝关节骨折”写在鉴别诊断而非最终诊断位，人工问题所称“使用这种非专业的诊断”与原文定位不一致，整条不能判 exact。,人工问题原文不可判,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0289,blocked_with_reason,local_pg 该条同时覆盖入院记录用药剂量表述不专业和咳嗽相关鉴别问题；当前正文已由呼吸会诊考虑“支气管扩张伴感染”，不适合按单一 SC-023 整条判 exact，需拆规则复核。,规则不支持,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe

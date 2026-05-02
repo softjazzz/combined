@@ -1,10 +1,10 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 116,
-    "blocked_with_reason": 59,
+    "exact_confirmed": 118,
+    "blocked_with_reason": 68,
     "skip": 20,
-    "needs_exact_review": 88
+    "needs_exact_review": 77
   },
   "needs_exact_review_rows": [
     {
@@ -17,17 +17,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "手术名称|手术记录中手术名称与术前讨论及术前小结中手术名称不一致|术前小结|术前讨论"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0023",
-      "visit_id": "1919190",
-      "patient_name": "潘泗澄",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "首次病程中只有主诊断有诊断依据及鉴别诊断，其余诊断均未书写诊断依据及鉴别诊断",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "其余诊断均未书写诊断依据及鉴别诊断|首次病程中只有主诊断有诊断依据及鉴别诊断"
     },
     {
       "sheet2_row_id": "Sheet2-R0024",
@@ -173,17 +162,6 @@
       "anchor_misses": "不恰当|也未做处理|关于术中情况描述|同法处理对侧|因患者右侧卵巢无病变|手术记录及术后首次病程记录中"
     },
     {
-      "sheet2_row_id": "Sheet2-R0059",
-      "visit_id": "2035546",
-      "patient_name": "邱湘溢",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "鉴别诊断考虑欠妥，患者为育龄期女性，右下腹痛入院，未查HCG，未考虑宫外孕的可能。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "HCG|右下腹痛入院|患者为育龄期女性|未考虑宫外孕的可能|鉴别诊断考虑欠妥"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0062",
       "visit_id": "2027741",
       "patient_name": "朱永枝",
@@ -193,28 +171,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "日行肾动脉栓塞术肾动脉造影术|术前小结|术后手术记录有缺项|缺术前小结"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0065",
-      "visit_id": "2023362",
-      "patient_name": "程天金",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "首次病程记录鉴别诊断不全面，患者既往有糖尿病史，入院诊断未诊断该疾病。现病史阴性症状采集不全面，不能支撑鉴别诊断。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "不能支撑鉴别诊断|入院诊断未诊断该疾病|患者既往有糖尿病史|现病史阴性症状采集不全面|首次病程记录鉴别诊断不全面"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0066",
-      "visit_id": "2144246",
-      "patient_name": "张世英",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "入院记录诊断不全，患者无房颤，但入院记录心率和脉搏不等，首次病程记录中鉴别诊断不全面。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "但入院记录心率和脉搏不等|入院记录诊断不全|患者无房颤|首次病程记录中鉴别诊断不全面"
     },
     {
       "sheet2_row_id": "Sheet2-R0068",
@@ -327,17 +283,6 @@
       "anchor_misses": "手术记录中手术结束时间书写错误|错误写为"
     },
     {
-      "sheet2_row_id": "Sheet2-R0098",
-      "visit_id": "2068229",
-      "patient_name": "彭成艺",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "首次病程记录中鉴别诊断仅和霍乱鉴别，不全面；患者无传染病史，建议行两对半定性检查。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "不全面|建议行两对半定性检查|患者无传染病史|首次病程记录中鉴别诊断仅和霍乱鉴别"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0101",
       "visit_id": "2033353",
       "patient_name": "章继书",
@@ -391,17 +336,6 @@
       "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "小时内|未做分析鉴别|血精的常见病因精囊结石及精囊结核|首次病程鉴别诊断中"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0122",
-      "visit_id": "2113971",
-      "patient_name": "李高华",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "鉴别诊断未写鉴别肺栓塞，但诊疗计划辅助检查进行肺栓塞鉴别诊断",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "但诊疗计划辅助检查进行肺栓塞鉴别诊断|鉴别诊断未写鉴别肺栓塞"
     },
     {
       "sheet2_row_id": "Sheet2-R0125",
@@ -635,17 +569,6 @@
       "anchor_misses": "在术前小结及术前讨论之前|已经下达手术医嘱|术前小结|术前讨论"
     },
     {
-      "sheet2_row_id": "Sheet2-R0175",
-      "visit_id": "2210351",
-      "patient_name": "吴佳宜",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "鉴别诊断不完整，未鉴别中耳炎。2月3日请会诊执行记录仅复制儿科会诊意见。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "日请会诊执行记录仅复制儿科会诊意见|未鉴别中耳炎|鉴别诊断不完整"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0176",
       "visit_id": "2207717",
       "patient_name": "邹才林",
@@ -765,39 +688,6 @@
       "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
       "anchor_hits": "",
       "anchor_misses": "5-0|入院诊断右侧睾丸扭转|可吸收线欠妥|右侧睾丸附睾切除后|存在器官切除的可能|岁男性|急诊手术|手术中|文献建议使用丝线固定以确保永久固定|术前缺上级医师意见|行左侧睾丸固定时"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0207",
-      "visit_id": "2265223",
-      "patient_name": "赖敏",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "患者病史中有长期尿不尽感，但未做膀胱残余尿等相关检查，首次病程记录鉴别诊断不全面",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "但未做膀胱残余尿等相关检查|患者病史中有长期尿不尽感|首次病程记录鉴别诊断不全面"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0208",
-      "visit_id": "2262370",
-      "patient_name": "李昭云",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "首次病程记录鉴别诊断不全面，入院记录患者手术史记录不详细，体格检查中，未记录手术相关痕迹，脊柱检查缺失。门诊未做检查就收治入院，仅诊断膝关节痛，有扩大住院指针嫌疑。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "仅诊断膝关节痛|体格检查中|入院记录患者手术史记录不详细|手术史|有扩大住院指针嫌疑|未记录手术相关痕迹|脊柱检查缺失|门诊未做检查就收治入院|首次病程记录鉴别诊断不全面"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0212",
-      "visit_id": "2260677",
-      "patient_name": "秦祖全",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "首次病程记录鉴别诊断不全面，且使用“左踝关节骨折”这种非专业的诊断。",
-      "reason": "当前证据摘要为问题族兜底表述，未覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "且使用|左踝关节骨折|这种非专业的诊断|首次病程记录鉴别诊断不全面"
     },
     {
       "sheet2_row_id": "Sheet2-R0213",
@@ -943,17 +833,6 @@
       "anchor_misses": "但操作部位实际是|右侧面部|头皮裂伤清创缝合术|局麻药浓度等关键信息|操作医师姓名|操作地点|操作开始时间|标题为|清创|需明确"
     },
     {
-      "sheet2_row_id": "Sheet2-R0289",
-      "visit_id": "2328112",
-      "patient_name": "殷孝容",
-      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "primary_rule_id": "SC-023",
-      "manual_issue_text": "入院记录中：给予左氧氟沙星片 1片 qd、孟鲁司特钠片1片 qd、甘氨酸氨茶碱缓释片1片 bid等描述不专业、未具体药物剂量。主诉中有咳嗽症状、而未对此进行鉴别诊断。",
-      "reason": "已命中同问题族，但证据摘要未充分覆盖人工问题核心锚点。",
-      "anchor_hits": "",
-      "anchor_misses": "bid|主诉中有咳嗽症状|入院记录中|剂量|孟鲁司特钠片|未具体药物剂量|甘氨酸氨茶碱缓释片|等描述不专业|给予左氧氟沙星片|而未对此进行鉴别诊断"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0290",
       "visit_id": "2324802",
       "patient_name": "颜友芳",
@@ -1086,6 +965,30 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0065",
+      "visit_id": "2023362",
+      "patient_name": "程天金",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "首次病程记录鉴别诊断不全面，患者既往有糖尿病史，入院诊断未诊断该疾病。现病史阴性症状采集不全面，不能支撑鉴别诊断。",
+      "reason": "local_pg 该条同时覆盖“糖尿病史未入入院诊断”“现病史阴性症状采集不全”“鉴别诊断不全面”多个问题点，且后续查房已补入2型糖尿病，超出单一 SC-023 可精确闭环范围。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0066",
+      "visit_id": "2144246",
+      "patient_name": "张世英",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "入院记录诊断不全，患者无房颤，但入院记录心率和脉搏不等，首次病程记录中鉴别诊断不全面。",
+      "reason": "local_pg 该条同时包含“入院诊断不全”“心率脉搏不等等同房颤判断”“首次病程鉴别诊断不全面”等复合问题，现有正文仅能证实窦性心律伴房早和右束支阻滞，不能按单一 SC-023 整条判 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0067",
       "visit_id": "2042774",
       "patient_name": "张世坤",
@@ -1194,6 +1097,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0098",
+      "visit_id": "2068229",
+      "patient_name": "彭成艺",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "首次病程记录中鉴别诊断仅和霍乱鉴别，不全面；患者无传染病史，建议行两对半定性检查。",
+      "reason": "local_pg 病程实际写的是“细菌性痢疾”鉴别，并非人工问题所称“仅和霍乱鉴别”；同时“建议行两对半定性检查”亦未能与当前正文形成同一锚点，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0103",
       "visit_id": "2073404",
       "patient_name": "古正洪",
@@ -1290,6 +1205,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0122",
+      "visit_id": "2113971",
+      "patient_name": "李高华",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "鉴别诊断未写鉴别肺栓塞，但诊疗计划辅助检查进行肺栓塞鉴别诊断",
+      "reason": "local_pg 当前快照只可见肺结核鉴别和拟行纤维支气管镜检查，未回收到人工问题所称“诊疗计划辅助检查进行肺栓塞鉴别诊断”的对应原文，证据不足以整条判 exact。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0124",
       "visit_id": "2151657",
       "patient_name": "何英芬",
@@ -1374,6 +1301,18 @@
       "decision_source": "release/0426 admission_record + probe"
     },
     {
+      "sheet2_row_id": "Sheet2-R0175",
+      "visit_id": "2210351",
+      "patient_name": "吴佳宜",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "鉴别诊断不完整，未鉴别中耳炎。2月3日请会诊执行记录仅复制儿科会诊意见。",
+      "reason": "local_pg 病程当前诊断已明确写出“双耳分泌性中耳炎”，人工问题所称“未鉴别中耳炎”与原文冲突；同时还混有会诊执行记录复制问题，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0177",
       "visit_id": "2209876",
       "patient_name": "朱成明",
@@ -1398,6 +1337,30 @@
       "decision_source": "local_pg get_documents + tail snapshot"
     },
     {
+      "sheet2_row_id": "Sheet2-R0207",
+      "visit_id": "2265223",
+      "patient_name": "赖敏",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "患者病史中有长期尿不尽感，但未做膀胱残余尿等相关检查，首次病程记录鉴别诊断不全面",
+      "reason": "local_pg 当前病历主线为“盆腔包块待诊：卵巢肿瘤？”并非长期尿不尽场景，人工问题与该 visit 的原始文书主诉、查体及诊疗计划明显不符，不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0208",
+      "visit_id": "2262370",
+      "patient_name": "李昭云",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "首次病程记录鉴别诊断不全面，入院记录患者手术史记录不详细，体格检查中，未记录手术相关痕迹，脊柱检查缺失。门诊未做检查就收治入院，仅诊断膝关节痛，有扩大住院指针嫌疑。",
+      "reason": "local_pg 该条同时包含“鉴别诊断不全面”“手术史不详细”“体格检查缺项”“扩大住院指征嫌疑”等多类问题，超出单一 SC-023 可精确闭环范围，需拆规则另行复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
+    },
+    {
       "sheet2_row_id": "Sheet2-R0209",
       "visit_id": "2263757",
       "patient_name": "杨光中",
@@ -1420,6 +1383,18 @@
       "blocked_reason_type": "证据链不足",
       "review_subgroup": "SC-008-现病史-第二轮",
       "decision_source": "release/0426 admission_record + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0212",
+      "visit_id": "2260677",
+      "patient_name": "秦祖全",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "首次病程记录鉴别诊断不全面，且使用“左踝关节骨折”这种非专业的诊断。",
+      "reason": "local_pg 正文将“左踝关节骨折”写在鉴别诊断而非最终诊断位，人工问题所称“使用这种非专业的诊断”与原文定位不一致，整条不能判 exact。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
     },
     {
       "sheet2_row_id": "Sheet2-R0214",
@@ -1684,6 +1659,18 @@
       "blocked_reason_type": "人工问题原文不可判",
       "review_subgroup": "SC-036-用药记录-第一轮",
       "decision_source": "local_pg get_documents + probe"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0289",
+      "visit_id": "2328112",
+      "patient_name": "殷孝容",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "primary_rule_id": "SC-023",
+      "manual_issue_text": "入院记录中：给予左氧氟沙星片 1片 qd、孟鲁司特钠片1片 qd、甘氨酸氨茶碱缓释片1片 bid等描述不专业、未具体药物剂量。主诉中有咳嗽症状、而未对此进行鉴别诊断。",
+      "reason": "local_pg 该条同时覆盖入院记录用药剂量表述不专业和咳嗽相关鉴别问题；当前正文已由呼吸会诊考虑“支气管扩张伴感染”，不适合按单一 SC-023 整条判 exact，需拆规则复核。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "SC-023-鉴别诊断-第一轮",
+      "decision_source": "local_pg get_documents + diffdx probe"
     }
   ],
   "family_breakdown": {
@@ -1894,8 +1881,9 @@
       "exact_confirmed": 1
     },
     "首次病程诊断依据/鉴别诊断/诊疗计划缺陷": {
-      "needs_exact_review": 19,
-      "exact_confirmed": 1
+      "exact_confirmed": 3,
+      "needs_exact_review": 8,
+      "blocked_with_reason": 9
     },
     "高级医师首次查房72小时": {
       "exact_confirmed": 1
