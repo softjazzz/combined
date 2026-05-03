@@ -671,6 +671,232 @@ def _looks_like_preop_risk_assessment_issue(text: str) -> bool:
     )
 
 
+ADMISSION_ISSUE_FAMILY_RULE_IDS: tuple[str, ...] = (
+    "SC-008",
+    "SC-009",
+    "SC-010",
+    "SC-011",
+    "SC-012",
+    "SC-018",
+    "SC-019",
+    "SC-020",
+)
+
+ADMISSION_ISSUE_FAMILY_RULE_DEFINITIONS: Dict[str, str] = {
+    "SC-008": "主诉书写不规范或不能导出第一诊断",
+    "SC-009": "现病史记录不全或描述不清",
+    "SC-010": "既往史/个人史/婚育史/月经史/家族史缺项或不规范",
+    "SC-011": "现病史阳性/阴性症状采集不全或缺乏诊断支撑",
+    "SC-012": "诊治经过、院外/门诊治疗经过、用药经过记录不全",
+    "SC-018": "体格检查/专科检查缺项、不完整或前后矛盾",
+    "SC-019": "辅助检查记录缺失、不完整、院内/院外属性错误",
+    "SC-020": "初步诊断/入院诊断不完整、不准确、与病史查体检查不一致",
+}
+
+ADMISSION_ISSUE_FAMILY_ALLOWED_RESULTS = {"hit", "partial_hit", "no_hit", "uncertain"}
+ADMISSION_ISSUE_FAMILY_ALLOWED_STATUSES = {"compliant", "non_compliant", "uncertain"}
+
+
+def _unique_rule_ids(rule_ids: Iterable[Any]) -> List[str]:
+    result: List[str] = []
+    for item in rule_ids:
+        rule_id = _safe_text(item).upper()
+        if rule_id and rule_id not in result:
+            result.append(rule_id)
+    return result
+
+
+def _extract_json_object_from_text(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    text = _safe_text(value)
+    if not text:
+        return {}
+    fenced = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text, flags=re.IGNORECASE)
+    if fenced:
+        text = fenced.group(1)
+    else:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            text = text[start : end + 1]
+    parsed = _safe_json_loads(text, {})
+    return dict(parsed) if isinstance(parsed, dict) else {}
+
+
+def _coerce_confidence(value: Any) -> float:
+    try:
+        confidence = float(value)
+    except Exception:
+        return 0.0
+    return max(0.0, min(1.0, confidence))
+
+
+def normalize_admission_consistency_llm_output(
+    llm_output: Any,
+    *,
+    fallback_primary_rule_id: str = "SC-008",
+) -> Dict[str, Any]:
+    payload = _extract_json_object_from_text(llm_output)
+    allowed = set(ADMISSION_ISSUE_FAMILY_RULE_IDS)
+    fallback_primary = _safe_text(fallback_primary_rule_id).upper()
+    if fallback_primary not in allowed:
+        fallback_primary = "SC-008"
+
+    invalid_rule_ids: List[str] = []
+    raw_primary = _safe_text(payload.get("primary_rule_id")).upper()
+    primary_rule_id = raw_primary if raw_primary in allowed else fallback_primary
+    if raw_primary and raw_primary not in allowed:
+        invalid_rule_ids.append(raw_primary)
+
+    raw_recommended = _unique_rule_ids(payload.get("recommended_rule_ids") or [])
+    if raw_primary and raw_primary not in raw_recommended:
+        raw_recommended.insert(0, raw_primary)
+    recommended_rule_ids: List[str] = []
+    for rule_id in raw_recommended:
+        if rule_id in allowed:
+            recommended_rule_ids.append(rule_id)
+        elif rule_id:
+            invalid_rule_ids.append(rule_id)
+    if primary_rule_id not in recommended_rule_ids:
+        recommended_rule_ids.insert(0, primary_rule_id)
+    recommended_rule_ids = _unique_rule_ids(recommended_rule_ids)
+
+    sub_items: List[Dict[str, Any]] = []
+    for raw_item in list(payload.get("sub_items") or []):
+        if not isinstance(raw_item, dict):
+            continue
+        rule_id = _safe_text(raw_item.get("rule_id")).upper()
+        if rule_id not in allowed:
+            if rule_id:
+                invalid_rule_ids.append(rule_id)
+            continue
+        status = _safe_text(raw_item.get("status"), "uncertain").lower()
+        if status not in ADMISSION_ISSUE_FAMILY_ALLOWED_STATUSES:
+            status = "uncertain"
+        sub_items.append(
+            {
+                "rule_id": rule_id,
+                "item": _safe_text(raw_item.get("item")),
+                "status": status,
+                "matched_manual_issue_part": _safe_text(raw_item.get("matched_manual_issue_part")),
+                "evidence": _safe_text(raw_item.get("evidence")),
+                "reason": _safe_text(raw_item.get("reason")),
+            }
+        )
+
+    overall_result = _safe_text(payload.get("overall_result"), "uncertain").lower()
+    if overall_result not in ADMISSION_ISSUE_FAMILY_ALLOWED_RESULTS:
+        overall_result = "uncertain"
+
+    review_required = False
+    if invalid_rule_ids or not payload:
+        overall_result = "uncertain"
+        review_required = True
+
+    secondary_rule_ids = [rule_id for rule_id in recommended_rule_ids if rule_id != primary_rule_id]
+    return {
+        "primary_rule_id": primary_rule_id,
+        "secondary_rule_ids": secondary_rule_ids,
+        "recommended_rule_ids": recommended_rule_ids,
+        "sub_items": sub_items,
+        "matched_manual_issue_parts": [
+            _safe_text(item) for item in list(payload.get("matched_manual_issue_parts") or []) if _safe_text(item)
+        ],
+        "unmatched_manual_issue_parts": [
+            _safe_text(item) for item in list(payload.get("unmatched_manual_issue_parts") or []) if _safe_text(item)
+        ],
+        "overall_result": overall_result,
+        "qc_conclusion": _safe_text(payload.get("qc_conclusion")),
+        "confidence": _coerce_confidence(payload.get("confidence")),
+        "evidence_summary": _safe_text(payload.get("evidence_summary") or payload.get("qc_conclusion")),
+        "invalid_rule_ids": _unique_rule_ids(invalid_rule_ids),
+        "review_required": review_required,
+        "raw_output": payload,
+    }
+
+
+def build_admission_issue_family_prompt(
+    *,
+    manual_issue_text: Any,
+    admission_bundle: Dict[str, Any],
+) -> str:
+    rule_lines = "\n".join(
+        f"- {rule_id}: {title}"
+        for rule_id, title in ADMISSION_ISSUE_FAMILY_RULE_DEFINITIONS.items()
+    )
+    bundle_json = _safe_json_dumps(admission_bundle)
+    return f"""你是一名病历质控专家。请对 Sheet2 中“入院记录内容不完整/前后矛盾”人工问题做一次语义分流和证据核验。
+
+【可选子规则白名单】
+{rule_lines}
+
+【判定要求】
+1. 一条人工问题只执行一次语义分流，不要按子项重复调用。
+2. 只允许输出白名单中的 rule_id；无法判断时保留最接近的主规则并标记 uncertain。
+3. primary_rule_id 选择人工问题最核心或最先需要整改的锚点；其他锚点放入 recommended_rule_ids 和 sub_items。
+4. 不要把病案首页诊断或出院诊断作为主证据；它们只能作为参考。入院记录诊断、首次病程病例特点/诊断依据/初步诊断/诊疗计划优先。
+5. 如果人工问题和病历原文冲突，应输出 no_hit 或 uncertain，并在 reason 中说明冲突，不要强行 exact。
+
+【人工问题】
+{_safe_text(manual_issue_text)}
+
+【证据 bundle】
+{bundle_json}
+
+请严格输出 JSON 对象，不要输出额外解释：
+{{
+  "primary_rule_id": "SC-008|SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+  "recommended_rule_ids": ["..."],
+  "sub_items": [
+    {{
+      "rule_id": "...",
+      "item": "主诉规范性/现病史完整性/既往史完整性/诊治经过/查体专科/辅助检查/初步诊断/前后矛盾",
+      "status": "compliant|non_compliant|uncertain",
+      "matched_manual_issue_part": "...",
+      "evidence": "...",
+      "reason": "..."
+    }}
+  ],
+  "matched_manual_issue_parts": [],
+  "unmatched_manual_issue_parts": [],
+  "overall_result": "hit|partial_hit|no_hit|uncertain",
+  "qc_conclusion": "...",
+  "confidence": 0.0
+}}"""
+
+
+def resolve_admission_consistency_rule_recommendations(
+    text: Any,
+    *,
+    llm_output: Any = None,
+    fallback_primary_rule_id: str = "SC-008",
+) -> Dict[str, Any]:
+    if llm_output is None:
+        fallback_primary = _safe_text(fallback_primary_rule_id).upper()
+        if fallback_primary not in ADMISSION_ISSUE_FAMILY_RULE_IDS:
+            fallback_primary = "SC-008"
+        return {
+            "primary_rule_id": fallback_primary,
+            "secondary_rule_ids": [],
+            "recommended_rule_ids": [fallback_primary],
+            "sub_items": [],
+            "matched_manual_issue_parts": [],
+            "unmatched_manual_issue_parts": [_normalize_issue_text(text)] if _normalize_issue_text(text) else [],
+            "overall_result": "uncertain",
+            "qc_conclusion": "未提供 LLM 语义分流结果，需进入 reclassification dry-run。",
+            "confidence": 0.0,
+            "evidence_summary": "",
+            "invalid_rule_ids": [],
+            "review_required": True,
+            "raw_output": {},
+        }
+    return normalize_admission_consistency_llm_output(
+        llm_output,
+        fallback_primary_rule_id=fallback_primary_rule_id,
+    )
+
+
 @lru_cache(maxsize=1)
 def _load_issue_category_rule_map() -> Dict[str, List[str]]:
     mapping_path = Path(__file__).resolve().parents[2] / "data" / "synthetic_qc" / "sheet2_intrinsic_issue_mapping.json"
@@ -1288,96 +1514,7 @@ def _resolve_sample_sc_primary_rule_ids(*, issue_category: str, manual_issue_tex
         return ["SC-026"]
 
     if issue_category == "admission_consistency":
-        if _contains_any(
-            normalized,
-            (
-                "辅助检查",
-                "检查项目记录有错误",
-                "院外辅助检查",
-                "院内辅助检查",
-                "检查结果",
-                "抄写不准确",
-            ),
-        ):
-            return ["SC-019"]
-        if _contains_any(
-            normalized,
-            (
-                "诊治经过",
-                "治疗经过",
-                "门诊",
-                "检查项目及结果",
-                "治疗情况",
-                "用药情况",
-                "接受检查与治疗",
-            ),
-        ):
-            return ["SC-012"]
-        if _contains_any(
-            normalized,
-            (
-                "入院诊断",
-                "初步诊断不全",
-                "入院记录诊断不全",
-                "未做诊断",
-                "未诊断",
-                "诊断遗漏",
-            ),
-        ):
-            return ["SC-020"]
-        if _contains_any(
-            normalized,
-            (
-                "阴性症状",
-                "阳性症状",
-                "伴随症状",
-                "不能支撑鉴别诊断",
-            ),
-        ):
-            return ["SC-011"]
-        if _contains_any(
-            normalized,
-            (
-                "体格检查",
-                "专科检查",
-                "查体",
-                "阳性体征",
-                "腹部情况",
-                "右手情况",
-                "左下肢情况",
-                "未做相关描述",
-                "生命体征",
-            ),
-        ):
-            return ["SC-018"]
-        if _contains_any(
-            normalized,
-            (
-                "现病史",
-                "疼痛性质",
-                "持续时间",
-                "缓解方式",
-                "一般情况",
-                "小便情况",
-                "描述不细致",
-                "书写混乱",
-                "无条理",
-            ),
-        ):
-            return ["SC-009"]
-        if _contains_any(
-            normalized,
-            (
-                "主诉",
-                "现病史",
-                "不能导出第一诊断",
-                "无法推导出主要诊断",
-                "不足以支撑诊断",
-                "诊治经过不详",
-            ),
-        ):
-            return ["SC-008"]
-        return ["SC-008"]
+        return list(ADMISSION_ISSUE_FAMILY_RULE_IDS)
 
     if issue_category == "daily_course_analysis":
         if _contains_any(
@@ -1594,6 +1731,13 @@ def _apply_sample_sc_rule_whitelist(items: Sequence[Dict[str, Any]]) -> List[Dic
             item["candidate_rule_ids"] = _resolve_unreasonable_copy_customer_rule_ids(
                 item.get("manual_issue_text")
             )
+            filtered_items.append(item)
+            continue
+        if issue_category == "admission_consistency":
+            existing_rule_ids = _normalize_candidate_rule_ids(item.get("candidate_rule_ids"))
+            allowed = set(ADMISSION_ISSUE_FAMILY_RULE_IDS)
+            filtered_rule_ids = [rule_id for rule_id in existing_rule_ids if rule_id in allowed]
+            item["candidate_rule_ids"] = filtered_rule_ids or list(ADMISSION_ISSUE_FAMILY_RULE_IDS)
             filtered_items.append(item)
             continue
         whitelist_rule_ids = _resolve_sample_sc_primary_rule_ids(

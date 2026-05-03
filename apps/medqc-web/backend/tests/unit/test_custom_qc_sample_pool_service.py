@@ -313,7 +313,7 @@ def test_daily_course_analysis_should_remap_admission_consistency_text():
         manual_issue_text="现病史记录不全，未记录肿物性状，专科检查未描述左下肢情况。",
     )
 
-    assert rule_ids == ["SC-018"]
+    assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
 
 
 def test_daily_course_analysis_should_remap_upper_round_timeliness_text_to_sc049():
@@ -405,7 +405,7 @@ def test_resolve_admission_consistency_should_route_sc018():
         manual_issue_text="入院记录中无专科检查",
     )
 
-    assert rule_ids == ["SC-018"]
+    assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
 
 
 def test_resolve_admission_consistency_should_route_sc019():
@@ -414,7 +414,7 @@ def test_resolve_admission_consistency_should_route_sc019():
         manual_issue_text="现病史中检查项目记录有错误，院外辅助检查记录不完善。",
     )
 
-    assert rule_ids == ["SC-019"]
+    assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
 
 
 def test_resolve_admission_consistency_should_route_sc020():
@@ -423,7 +423,7 @@ def test_resolve_admission_consistency_should_route_sc020():
         manual_issue_text="患者既往有高血压病史，入院诊断未诊断高血压。",
     )
 
-    assert rule_ids == ["SC-020"]
+    assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
 
 
 def test_resolve_admission_consistency_should_prefer_sc020_over_sc018_in_mixed_text():
@@ -432,7 +432,7 @@ def test_resolve_admission_consistency_should_prefer_sc020_over_sc018_in_mixed_t
         manual_issue_text="患者既往有高血压病史，入院诊断未诊断高血压，体格检查无相关描述。",
     )
 
-    assert rule_ids == ["SC-020"]
+    assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
 
 
 def test_resolve_admission_consistency_should_route_sc011():
@@ -441,7 +441,7 @@ def test_resolve_admission_consistency_should_route_sc011():
         manual_issue_text="现病史阴性症状采集不全面，不能支撑鉴别诊断。",
     )
 
-    assert rule_ids == ["SC-011"]
+    assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
 
 
 def test_resolve_admission_consistency_should_route_sc012():
@@ -450,7 +450,16 @@ def test_resolve_admission_consistency_should_route_sc012():
         manual_issue_text="现病史治疗经过不详细，门诊检查项目及结果未记录。",
     )
 
-    assert rule_ids == ["SC-012"]
+    assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
+
+
+def test_resolve_admission_consistency_should_route_sc010():
+    rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
+        issue_category="admission_consistency",
+        manual_issue_text="既往史患者用药情况未详细记录，婚育情况不详。",
+    )
+
+    assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
 
 
 def test_resolve_admission_consistency_should_prefer_sc012_over_sc020_in_mixed_text():
@@ -459,7 +468,7 @@ def test_resolve_admission_consistency_should_prefer_sc012_over_sc020_in_mixed_t
         manual_issue_text="患者双膝疼痛10年，现病史治疗经过不详细，不能很好的指导本次住院治疗；患者既往有类风湿关节炎，入院诊断未体现。",
     )
 
-    assert rule_ids == ["SC-012"]
+    assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
 
 
 def test_resolve_admission_consistency_should_route_sc009():
@@ -468,7 +477,93 @@ def test_resolve_admission_consistency_should_route_sc009():
         manual_issue_text="现病史未描述疼痛性质、持续时间、缓解方式等。",
     )
 
-    assert rule_ids == ["SC-009"]
+    assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
+
+
+def test_resolve_admission_consistency_recommendations_should_return_multi_rule_items():
+    recommendation = sample_pool_module.resolve_admission_consistency_rule_recommendations(
+        "主诉书写不完整，既往史患者用药情况未详细记录，体格检查中无专科检查，入院诊断未体现高血压。",
+        llm_output={
+            "primary_rule_id": "SC-008",
+            "recommended_rule_ids": ["SC-008", "SC-010", "SC-018", "SC-020"],
+            "sub_items": [
+                {
+                    "rule_id": "SC-008",
+                    "item": "主诉规范性",
+                    "status": "non_compliant",
+                    "matched_manual_issue_part": "主诉书写不完整",
+                    "evidence": "主诉无法导出第一诊断",
+                    "reason": "主诉锚点明确",
+                },
+                {
+                    "rule_id": "SC-010",
+                    "item": "既往史完整性",
+                    "status": "non_compliant",
+                    "matched_manual_issue_part": "既往史患者用药情况未详细记录",
+                    "evidence": "既往用药缺剂量",
+                    "reason": "既往史缺项",
+                },
+                {
+                    "rule_id": "SC-018",
+                    "item": "查体专科",
+                    "status": "non_compliant",
+                    "matched_manual_issue_part": "体格检查中无专科检查",
+                    "evidence": "未见专科检查",
+                    "reason": "查体缺项",
+                },
+                {
+                    "rule_id": "SC-020",
+                    "item": "初步诊断",
+                    "status": "uncertain",
+                    "matched_manual_issue_part": "入院诊断未体现高血压",
+                    "evidence": "需结合入院诊断核对",
+                    "reason": "诊断锚点明确",
+                },
+            ],
+            "overall_result": "partial_hit",
+            "qc_conclusion": "多锚点问题",
+            "confidence": 0.82,
+        },
+    )
+
+    assert recommendation["primary_rule_id"] == "SC-008"
+    assert recommendation["secondary_rule_ids"] == ["SC-010", "SC-018", "SC-020"]
+    assert recommendation["recommended_rule_ids"] == ["SC-008", "SC-010", "SC-018", "SC-020"]
+    assert [item["rule_id"] for item in recommendation["sub_items"]] == ["SC-008", "SC-010", "SC-018", "SC-020"]
+    assert recommendation["overall_result"] == "partial_hit"
+    assert recommendation["review_required"] is False
+
+
+def test_resolve_admission_consistency_should_mark_invalid_rule_id_uncertain():
+    recommendation = sample_pool_module.resolve_admission_consistency_rule_recommendations(
+        "入院记录问题",
+        llm_output={
+            "primary_rule_id": "SC-999",
+            "recommended_rule_ids": ["SC-999", "SC-018"],
+            "sub_items": [{"rule_id": "SC-999", "status": "non_compliant"}],
+            "overall_result": "hit",
+            "confidence": 0.7,
+        },
+        fallback_primary_rule_id="SC-008",
+    )
+
+    assert recommendation["primary_rule_id"] == "SC-008"
+    assert recommendation["recommended_rule_ids"] == ["SC-008", "SC-018"]
+    assert recommendation["overall_result"] == "uncertain"
+    assert recommendation["review_required"] is True
+    assert recommendation["invalid_rule_ids"] == ["SC-999"]
+
+
+def test_resolve_admission_consistency_without_llm_should_require_review():
+    recommendation = sample_pool_module.resolve_admission_consistency_rule_recommendations(
+        "现病史未描述发病时间",
+        fallback_primary_rule_id="SC-009",
+    )
+
+    assert recommendation["primary_rule_id"] == "SC-009"
+    assert recommendation["recommended_rule_ids"] == ["SC-009"]
+    assert recommendation["overall_result"] == "uncertain"
+    assert recommendation["review_required"] is True
 
 
 def test_classify_operation_record_quality_issue():
@@ -1321,7 +1416,48 @@ def test_get_runnable_items_sc_should_narrow_sc008_for_admission_consistency(mon
     runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
 
     assert len(runnable) == 1
-    assert runnable[0]["candidate_rule_ids"] == ["SC-008"]
+    assert runnable[0]["candidate_rule_ids"] == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
+    assert "recommended_rule_ids" not in runnable[0]
+    assert "sub_items" not in runnable[0]
+
+
+def test_get_runnable_items_sc_should_attach_admission_recommended_rule_ids(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "患者丁",
+            "mr_no": "ZY009",
+            "department": "普外科",
+            "manual_issue_text": "主诉书写不完整，既往史患者用药情况未详细记录，体格检查中无专科检查，入院诊断未体现高血压。",
+            "coverage_type": "llm_intrinsic",
+            "issue_category": "admission_consistency",
+            "candidate_rule_ids_json": '["SC-008","SC-009","SC-010","SC-011","SC-012","SC-018","SC-019","SC-020"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "V009",
+            "matched_patient_id": "P009",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(
+        service,
+        "_load_bundle_source_table_map",
+        lambda **kwargs: {"V009": {"admission_record"}},
+    )
+
+    runnable = service.get_runnable_items(pool_id="pool-1", validation_mode="sc")
+
+    assert len(runnable) == 1
+    assert runnable[0]["candidate_rule_ids"] == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
+    assert "primary_rule_id" not in runnable[0]
+    assert "recommended_rule_ids" not in runnable[0]
 
 
 def test_get_runnable_items_sc_should_narrow_sc033_for_daily_course_analysis(monkeypatch):
