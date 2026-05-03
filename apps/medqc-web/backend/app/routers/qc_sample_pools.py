@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import uuid
 from pathlib import Path
@@ -38,7 +39,7 @@ _IMPORT_UPLOAD_DIR = (
 )
 _FAST_SCREEN_FULL_RULE_ID_SET = {str(item).strip().upper() for item in get_fast_screen_full_rule_ids() if str(item).strip()}
 _SHEET2_EXACT_REVIEW_ACCEPTANCE_JSON = (
-    Path(__file__).resolve().parents[2] / "docs" / "0418" / "QC" / "sheet2_exact_review_acceptance_package.json"
+    Path(__file__).resolve().parents[3] / "docs" / "0418" / "QC" / "sheet2_exact_review_acceptance_package.json"
 )
 
 

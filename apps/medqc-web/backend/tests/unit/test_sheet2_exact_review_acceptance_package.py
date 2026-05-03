@@ -39,3 +39,17 @@ def test_sheet2_exact_review_regression_guard_should_pass_current_baseline():
 
     assert result["passed"] is True
     assert result["failures"] == []
+
+
+def test_sheet2_exact_review_acceptance_api_should_point_to_generated_package():
+    from app.routers import qc_sample_pools
+
+    package_path = qc_sample_pools._SHEET2_EXACT_REVIEW_ACCEPTANCE_JSON
+
+    assert package_path.exists()
+    assert package_path.parts[-4:] == (
+        "docs",
+        "0418",
+        "QC",
+        "sheet2_exact_review_acceptance_package.json",
+    )
