@@ -274,12 +274,24 @@ def _family_stats() -> dict[str, Any]:
     for row in family_rows:
         ledger_row = ledger_by_row_id.get(_safe_text(row.get("sheet2_row_id")), {})
         bucket = _safe_text(ledger_row.get("admission_manual_review_bucket"))
-        if bucket:
-            bucket_counter[bucket] += 1
+        if not bucket:
+            status = _safe_text(row.get("exact_review_status"))
+            if status == "blocked_with_reason":
+                bucket = "legacy_or_other_blocked"
+            elif status == "exact_confirmed":
+                bucket = "legacy_or_other_exact"
+            elif status == "skip":
+                bucket = "skip"
+            else:
+                bucket = "legacy_or_other_unknown"
+        bucket_counter[bucket] += 1
+    bucket_total = sum(bucket_counter.values())
     return {
         "total": len(family_rows),
         "status_breakdown": dict(status_counter),
         "writeback_bucket_breakdown": dict(bucket_counter),
+        "writeback_bucket_total": bucket_total,
+        "writeback_bucket_unclassified_count": max(0, len(family_rows) - bucket_total),
     }
 
 

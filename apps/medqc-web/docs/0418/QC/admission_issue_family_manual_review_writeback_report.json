@@ -119,7 +119,7 @@
         "secondary_rule_ids": "",
         "verification_status": "same_family_hit",
         "evidence_summary": "入院记录问题族人工复核写回；writeback_bucket=keep_blocked_no_hit；review_result=no_hit；复核结论：人工列出的咽痛、咳痰、院外治疗、门诊检查、体重变化等缺项，原文均有对应记录，LLM 驳回正确。；下一步：保持 blocked/no_hit。",
-        "skip_reason": "非skip；blocked_reason_type=证据链不足；人工列出的咽痛、咳痰、院外治疗、门诊检查、体重变化等缺项，原文均有对应记录，LLM 驳回正确。",
+        "skip_reason": "非skip；blocked_reason_type=人工问题原文不可判；人工列出的咽痛、咳痰、院外治疗、门诊检查、体重变化等缺项，原文均有对应记录，LLM 驳回正确。",
         "next_action": "保持 blocked/no_hit。"
       },
       "after": {
@@ -146,7 +146,7 @@
         "secondary_rule_ids": "",
         "verification_status": "same_family_hit",
         "evidence_summary": "入院记录问题族人工复核写回；writeback_bucket=keep_blocked_no_hit；review_result=no_hit；复核结论：人工问题称外伤未写地点，原文明确写在家里，LLM 驳回正确。；下一步：保持 blocked/no_hit。",
-        "skip_reason": "非skip；blocked_reason_type=需客户确认口径；人工问题称外伤未写地点，原文明确写在家里，LLM 驳回正确。",
+        "skip_reason": "非skip；blocked_reason_type=人工问题原文不可判；人工问题称外伤未写地点，原文明确写在家里，LLM 驳回正确。",
         "next_action": "保持 blocked/no_hit。"
       },
       "after": {
@@ -308,7 +308,7 @@
         "secondary_rule_ids": "SC-010",
         "verification_status": "same_family_hit",
         "evidence_summary": "入院记录问题族人工复核写回；writeback_bucket=admission_part_only_keep_blocked；review_result=no_hit；复核结论：人工问题包含两部分：孕期体重增加1kg是否不准确缺外部事实，不能写回；但易善复仅写1粒tid、未写规格剂量，按同类口径可作为用药剂量不规范的部分命中。LLM 直接 no_hit 偏激进。；下一步：从纯 no_hit 改为部分写回候选：SC-012/SC-010 用药剂量规范；孕期体重项继续 blocked。",
-        "skip_reason": "非skip；blocked_reason_type=证据链不足；人工问题包含两部分：孕期体重增加1kg是否不准确缺外部事实，不能写回；但易善复仅写1粒tid、未写规格剂量，按同类口径可作为用药剂量不规范的部分命中。LLM 直接 no_hit 偏激进。",
+        "skip_reason": "非skip；blocked_reason_type=人工问题原文不可判；人工问题包含两部分：孕期体重增加1kg是否不准确缺外部事实，不能写回；但易善复仅写1粒tid、未写规格剂量，按同类口径可作为用药剂量不规范的部分命中。LLM 直接 no_hit 偏激进。",
         "next_action": "从纯 no_hit 改为部分写回候选：SC-012/SC-010 用药剂量规范；孕期体重项继续 blocked。"
       },
       "after": {
@@ -335,7 +335,7 @@
         "secondary_rule_ids": "",
         "verification_status": "same_family_hit",
         "evidence_summary": "入院记录问题族人工复核写回；writeback_bucket=keep_blocked_no_hit；review_result=no_hit；复核结论：人工称未记录病情加重，原文已写腹痛加重1天及症状变化，LLM 驳回正确；但子项 status 错写为 non_compliant。；下一步：保持 blocked/no_hit；已修 normalize。",
-        "skip_reason": "非skip；blocked_reason_type=需客户确认口径；人工称未记录病情加重，原文已写腹痛加重1天及症状变化，LLM 驳回正确；但子项 status 错写为 non_compliant。",
+        "skip_reason": "非skip；blocked_reason_type=人工问题原文不可判；人工称未记录病情加重，原文已写腹痛加重1天及症状变化，LLM 驳回正确；但子项 status 错写为 non_compliant。",
         "next_action": "保持 blocked/no_hit；已修 normalize。"
       },
       "after": {
@@ -767,7 +767,7 @@
         "secondary_rule_ids": "",
         "verification_status": "same_family_hit",
         "evidence_summary": "入院记录问题族人工复核写回；writeback_bucket=keep_blocked_no_hit；review_result=no_hit；复核结论：人工问题称外伤未写地点，原文明确写泸县谭坝过路，LLM 驳回正确。；下一步：保持 blocked/no_hit。",
-        "skip_reason": "非skip；blocked_reason_type=需客户确认口径；人工问题称外伤未写地点，原文明确写泸县谭坝过路，LLM 驳回正确。",
+        "skip_reason": "非skip；blocked_reason_type=人工问题原文不可判；人工问题称外伤未写地点，原文明确写泸县谭坝过路，LLM 驳回正确。",
         "next_action": "保持 blocked/no_hit。"
       },
       "after": {
@@ -788,12 +788,17 @@
       "skip": 5
     },
     "writeback_bucket_breakdown": {
+      "legacy_or_other_exact": 9,
       "keep_blocked_no_hit": 9,
+      "legacy_or_other_blocked": 11,
       "admission_part_only_keep_blocked": 10,
       "full_or_near_full_admission_family_keep_blocked": 5,
       "mapping_only_keep_exact": 1,
       "full_or_near_full_exact": 1,
-      "keep_blocked_uncertain": 2
-    }
+      "keep_blocked_uncertain": 2,
+      "skip": 5
+    },
+    "writeback_bucket_total": 53,
+    "writeback_bucket_unclassified_count": 0
   }
 }

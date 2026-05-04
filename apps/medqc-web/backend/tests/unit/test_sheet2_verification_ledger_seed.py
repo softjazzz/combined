@@ -246,3 +246,37 @@ def test_apply_admission_manual_reviews_writeback_keeps_partial_blocked(tmp_path
     assert "SC-008,SC-009" in ledger_text
     assert "blocked_with_reason" in override_text
     assert "exact_confirmed" not in override_text
+
+
+def test_admission_family_stats_should_bucket_non_writeback_rows(tmp_path, monkeypatch):
+    module = _load_script_module("apply_admission_issue_family_manual_reviews.py")
+    ledger = tmp_path / "ledger.csv"
+    ledger.write_text(
+        "sheet2_row_id,issue_family,admission_manual_review_bucket\n"
+        "Sheet2-R0001,入院记录内容不完整/前后矛盾,admission_part_only_keep_blocked\n"
+        "Sheet2-R0002,入院记录内容不完整/前后矛盾,\n"
+        "Sheet2-R0003,入院记录内容不完整/前后矛盾,\n"
+        "Sheet2-R0004,入院记录内容不完整/前后矛盾,\n",
+        encoding="utf-8",
+    )
+    matrix = tmp_path / "sheet2_exact_review_matrix.csv"
+    matrix.write_text(
+        "sheet2_row_id,issue_family,exact_review_status\n"
+        "Sheet2-R0001,入院记录内容不完整/前后矛盾,blocked_with_reason\n"
+        "Sheet2-R0002,入院记录内容不完整/前后矛盾,blocked_with_reason\n"
+        "Sheet2-R0003,入院记录内容不完整/前后矛盾,exact_confirmed\n"
+        "Sheet2-R0004,入院记录内容不完整/前后矛盾,skip\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "LEDGER_CSV", ledger)
+    monkeypatch.setattr(module, "QC_DIR", tmp_path)
+
+    stats = module._family_stats()
+
+    assert stats["total"] == 4
+    assert stats["writeback_bucket_total"] == 4
+    assert stats["writeback_bucket_unclassified_count"] == 0
+    assert stats["writeback_bucket_breakdown"]["admission_part_only_keep_blocked"] == 1
+    assert stats["writeback_bucket_breakdown"]["legacy_or_other_blocked"] == 1
+    assert stats["writeback_bucket_breakdown"]["legacy_or_other_exact"] == 1
+    assert stats["writeback_bucket_breakdown"]["skip"] == 1
