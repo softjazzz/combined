@@ -2,8 +2,8 @@
   "generated_at": "2026-05-03",
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 139,
-    "blocked_with_reason": 119,
+    "exact_confirmed": 137,
+    "blocked_with_reason": 121,
     "skip": 25,
     "needs_exact_review": 0
   },
@@ -14,18 +14,19 @@
     "acceptance_note": "Sheet2 精确复核已完成清零；`blocked_with_reason` 表示当前可解释、可追踪、可进入下一轮增强 backlog，而不是遗留未处理。"
   },
   "blocked_reason_breakdown": {
-    "人工问题原文不可判": 59,
-    "规则不支持": 23,
-    "证据链不足": 37
+    "人工问题原文不可判": 64,
+    "规则不支持": 26,
+    "证据链不足": 29,
+    "需客户确认口径": 2
   },
   "blocked_backlog_breakdown": [
     {
       "category": "可补规则",
-      "count": 23,
+      "count": 24,
       "definition": "原始文书可回收，但现有主规则或跨文书链路无法精确覆盖人工锚点，属于规则能力缺口。",
       "next_action": "优先补主规则、次规则重试与跨文书证据拼接，再回归样本验证页。",
       "blocked_reason_types": {
-        "规则不支持": 23
+        "规则不支持": 24
       },
       "top_issue_families": [
         {
@@ -131,16 +132,16 @@
     },
     {
       "category": "需补源文书",
-      "count": 30,
+      "count": 26,
       "definition": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
       "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。",
       "blocked_reason_types": {
-        "证据链不足": 30
+        "证据链不足": 26
       },
       "top_issue_families": [
         {
           "issue_family": "入院记录内容不完整/前后矛盾",
-          "count": 16
+          "count": 12
         },
         {
           "issue_family": "病程记录缺分析/缺处理意见",
@@ -162,11 +163,15 @@
       "top_primary_rules": [
         {
           "primary_rule_id": "SC-008",
-          "count": 16
+          "count": 7
         },
         {
           "primary_rule_id": "SC-036",
           "count": 4
+        },
+        {
+          "primary_rule_id": "SC-020",
+          "count": 2
         },
         {
           "primary_rule_id": "SC-032",
@@ -174,10 +179,6 @@
         },
         {
           "primary_rule_id": "SC-023",
-          "count": 2
-        },
-        {
-          "primary_rule_id": "SC-070",
           "count": 2
         }
       ],
@@ -208,11 +209,11 @@
           "sheet2_row_id": "Sheet2-R0067",
           "visit_id": "2042774",
           "patient_name": "张世坤",
-          "primary_rule_id": "SC-008",
+          "primary_rule_id": "SC-009",
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "入院记录中现病史缺患者发病时间，初步诊断中腰椎病未诊断。",
           "blocked_reason_type": "证据链不足",
-          "reason": "release/0426 admission_record 现病史出现“患者于，不明原因起病”，可证发病时间缺口，但“腰椎病未诊断”需额外诊断字段，当前证据不足以整条判 exact。",
+          "reason": "现病史缺发病时间成立；腰椎病未诊断需使用 admission_record_diagnosis 诊断表证据闭环，当前 bundle 内诊断证据不足。",
           "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
         },
         {
@@ -230,27 +231,27 @@
           "sheet2_row_id": "Sheet2-R0070",
           "visit_id": "2045034",
           "patient_name": "李再秀",
-          "primary_rule_id": "SC-008",
+          "primary_rule_id": "SC-020",
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "入院记录初步诊断不全：高脂血症未诊断，患者活动后呼吸困难，病历记录为无诱因出现呼吸困难，入院查体中缺专科查体。",
           "blocked_reason_type": "证据链不足",
-          "reason": "release/0426 admission_record 同时出现“活动后呼吸困难”与“无明显诱因”，可见病史表述不稳，但高脂血症未诊断与专科查体缺失仍需额外证据，当前不足以整条判 exact。",
+          "reason": "高脂血症未诊断、活动后呼吸困难表述矛盾、专科查体缺失三项均有可用证据，属于入院记录问题族内多子项命中。",
           "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
         }
       ]
     },
     {
       "category": "人工问题过宽/不可判",
-      "count": 59,
+      "count": 62,
       "definition": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。",
       "blocked_reason_types": {
-        "人工问题原文不可判": 59
+        "人工问题原文不可判": 62
       },
       "top_issue_families": [
         {
           "issue_family": "入院记录内容不完整/前后矛盾",
-          "count": 14
+          "count": 17
         },
         {
           "issue_family": "病程记录缺分析/缺处理意见",
@@ -271,12 +272,16 @@
       ],
       "top_primary_rules": [
         {
-          "primary_rule_id": "SC-008",
-          "count": 14
-        },
-        {
           "primary_rule_id": "SC-036",
           "count": 13
+        },
+        {
+          "primary_rule_id": "SC-009",
+          "count": 5
+        },
+        {
+          "primary_rule_id": "SC-008",
+          "count": 5
         },
         {
           "primary_rule_id": "SC-023",
@@ -284,10 +289,6 @@
         },
         {
           "primary_rule_id": "SC-050",
-          "count": 3
-        },
-        {
-          "primary_rule_id": "SC-032",
           "count": 3
         }
       ],
@@ -307,60 +308,63 @@
           "sheet2_row_id": "Sheet2-R0010",
           "visit_id": "1430048",
           "patient_name": "任利",
-          "primary_rule_id": "SC-008",
+          "primary_rule_id": "SC-018",
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "入院记录-体格检查缺体重",
           "blocked_reason_type": "人工问题原文不可判",
-          "reason": "release/0426 admission_record.checkup 已明确记录“体重68.5kg 身高160cm”，人工问题与原始文书冲突，不能判定为 exact。",
+          "reason": "人工问题称缺体重，但原文生命体征明确记录体重68.5kg，LLM 驳回正确。",
+          "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+        },
+        {
+          "sheet2_row_id": "Sheet2-R0015",
+          "visit_id": "1880060",
+          "patient_name": "陈意明",
+          "primary_rule_id": "SC-010",
+          "issue_family": "入院记录内容不完整/前后矛盾",
+          "manual_issue_text": "入院记录中未记录患儿喂养史（患儿2岁1月）",
+          "blocked_reason_type": "人工问题原文不可判",
+          "reason": "人工问题称未记录患儿喂养史，但原文已记录母乳喂养、辅食添加和当前人工喂养，LLM 驳回正确；但子项 status 错写为 non_compliant。",
+          "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+        },
+        {
+          "sheet2_row_id": "Sheet2-R0020",
+          "visit_id": "2100450",
+          "patient_name": "郑国金",
+          "primary_rule_id": "SC-010",
+          "issue_family": "入院记录内容不完整/前后矛盾",
+          "manual_issue_text": "既往史患者用药情况未详细记录",
+          "blocked_reason_type": "人工问题原文不可判",
+          "reason": "人工问题称既往用药未详细记录，但原文已记录右佐匹克隆、坦度螺酮、利伐沙班等用药，LLM 驳回正确。",
           "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
         },
         {
           "sheet2_row_id": "Sheet2-R0021",
           "visit_id": "1915821",
           "patient_name": "魏治伦",
-          "primary_rule_id": "SC-008",
+          "primary_rule_id": "SC-009",
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "现病史中主诉有咽痛，但未详细记录疼痛的性质、持续时间、是否有缓解方式等；诉有咳痰，未记录痰液的性状、咳痰的频率、是否有伴随症状等；未记录在当地卫生院具体的治疗情况；未记录在我院门诊的检查项目及结果；无体重变化情况的记录。",
           "blocked_reason_type": "人工问题原文不可判",
-          "reason": "release/0426 admission_record 现病史已写持续性咽痛、白色黏痰、当地卫生院输液治疗、门诊喉镜检查及体重无明显变化，人工问题与原文大部冲突，不能判 exact。",
-          "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
-        },
-        {
-          "sheet2_row_id": "Sheet2-R0028",
-          "visit_id": "2168750",
-          "patient_name": "张乃宣",
-          "primary_rule_id": "SC-070",
-          "issue_family": "会诊意见已写遵执但实际未落实",
-          "manual_issue_text": "请会诊执行记录书写不规范仅描述“遵会诊意见执行”",
-          "blocked_reason_type": "人工问题原文不可判",
-          "reason": "release/0426_full_auto 该 visit 的会诊记录实际写有“已遵嘱执行”“已遵嘱继续煎药服用调理”“已将会诊意见告知患者并加用药物医嘱”等具体动作，并非仅写“遵会诊意见执行”；人工问题与原文不符，不能判 exact。",
-          "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
-        },
-        {
-          "sheet2_row_id": "Sheet2-R0029",
-          "visit_id": "1915580",
-          "patient_name": "雷德超",
-          "primary_rule_id": "SC-045",
-          "issue_family": "有创诊疗操作记录缺失/书写不规范",
-          "manual_issue_text": "患者行了骨髓穿刺，无有创操作记录",
-          "blocked_reason_type": "人工问题原文不可判",
-          "reason": "release/0426_full_auto mr_surgery 已直接登记 2025-08-05 “骨髓穿刺术”，同 visit 还存在胸椎骨折相关手术登记；现有原文与人工问题所称“患者行了骨髓穿刺，无有创操作记录”冲突，不能按该原句判 exact。",
+          "reason": "人工列出的咽痛、咳痰、院外治疗、门诊检查、体重变化等缺项，原文均有对应记录，LLM 驳回正确。",
           "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
         }
       ]
     },
     {
       "category": "需客户确认口径",
-      "count": 7,
+      "count": 9,
       "definition": "争议点更多落在评价口径或业务阈值，而不是单纯的规则遗漏。",
       "next_action": "需先与客户确认“欠妥/不详细/无法体现水平/诊断是否充分”等判定阈值，再决定是否规则化。",
       "blocked_reason_types": {
-        "证据链不足": 7
+        "人工问题原文不可判": 2,
+        "规则不支持": 2,
+        "需客户确认口径": 2,
+        "证据链不足": 3
       },
       "top_issue_families": [
         {
           "issue_family": "入院记录内容不完整/前后矛盾",
-          "count": 5
+          "count": 7
         },
         {
           "issue_family": "病程记录缺分析/缺处理意见",
@@ -369,12 +373,24 @@
       ],
       "top_primary_rules": [
         {
-          "primary_rule_id": "SC-008",
-          "count": 5
+          "primary_rule_id": "SC-010",
+          "count": 2
+        },
+        {
+          "primary_rule_id": "SC-009",
+          "count": 2
         },
         {
           "primary_rule_id": "SC-036",
           "count": 2
+        },
+        {
+          "primary_rule_id": "SC-012",
+          "count": 1
+        },
+        {
+          "primary_rule_id": "SC-011",
+          "count": 1
         }
       ],
       "sample_rows": [
@@ -382,56 +398,56 @@
           "sheet2_row_id": "Sheet2-R0060",
           "visit_id": "2032008",
           "patient_name": "何莲",
-          "primary_rule_id": "SC-008",
+          "primary_rule_id": "SC-010",
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "患者月经史书写错误，现病史对疼痛的描述不详细，治疗经过未清楚描述，患者2025年10月14日14:10入住内四科，10月14日15:01分转入外二科，门诊收治入内四科欠妥。",
-          "blocked_reason_type": "证据链不足",
-          "reason": "release/0426 admission_record 可见脐周转右下腹疼痛及急诊抗感染解痉处理，但月经史、转科妥当性和诊断链需额外证据，当前不足以整条判 exact。",
+          "blocked_reason_type": "人工问题原文不可判",
+          "reason": "人工称月经史书写错误，但原文实际完全缺月经/婚育史；这不是纯不确定，而是 SC-010 缺项可部分成立。疼痛、治疗经过和入转科时间仍与原文冲突或缺系统日志。",
           "next_action": "先与客户确认“欠妥/错误/不详细”是否需要规则化为硬指标，再拆成可执行子问题。"
         },
         {
           "sheet2_row_id": "Sheet2-R0075",
           "visit_id": "2049419",
           "patient_name": "陈巧",
-          "primary_rule_id": "SC-008",
+          "primary_rule_id": "SC-012",
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "入院记录中，既往口服易善复，未明确具体剂量，孕期体重增加1公斤，记录不准确。",
-          "blocked_reason_type": "证据链不足",
-          "reason": "release/0426 admission_record 只能证实“易善复 1粒 tid”未写毫克剂量；“孕期体重增加1公斤记录不准确”缺基线证据，整条不能判 exact。",
+          "blocked_reason_type": "人工问题原文不可判",
+          "reason": "人工问题包含两部分：孕期体重增加1kg是否不准确缺外部事实，不能写回；但易善复仅写1粒tid、未写规格剂量，按同类口径可作为用药剂量不规范的部分命中。LLM 直接 no_hit 偏激进。",
           "next_action": "先确认体重记录准确性的判定基线和证据来源，再决定是否纳入规则。"
         },
         {
           "sheet2_row_id": "Sheet2-R0079",
           "visit_id": "2052653",
           "patient_name": "孙景曦",
-          "primary_rule_id": "SC-008",
+          "primary_rule_id": "SC-010",
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "既往史中手术史描述不清楚。上级医师查房记录对于诊断和治疗分析较为简单。",
-          "blocked_reason_type": "证据链不足",
-          "reason": "release/0426 admission_record 仅能证实既往手术史写为“腺样体切除术具体不详”；“上级医师查房分析简单”需结合查房文书，当前不足以整条判 exact。",
+          "blocked_reason_type": "规则不支持",
+          "reason": "既往手术史描述不清成立；上级医师查房分析简单不属于入院记录问题族，且当前入院 reclass bundle 不能验证。",
           "next_action": "先与客户确认“分析较为简单”的判定阈值，并将查房评价与既往史缺项拆开处理。"
         },
         {
-          "sheet2_row_id": "Sheet2-R0141",
-          "visit_id": "2131765",
-          "patient_name": "李元娟",
-          "primary_rule_id": "SC-008",
+          "sheet2_row_id": "Sheet2-R0110",
+          "visit_id": "2326610",
+          "patient_name": "张仕枝",
+          "primary_rule_id": "SC-009",
           "issue_family": "入院记录内容不完整/前后矛盾",
-          "manual_issue_text": "现病史围绕主诉头晕的阴性症状采集不全面，患者有手术史，查体未体现，主治医师查房记录，未对疾病做出相应分析，无法体现上级医师诊疗水平。",
-          "blocked_reason_type": "证据链不足",
-          "reason": "release/0426 admission_record 可见主诉头晕的多项阴性症状和既往剖宫产史，但“查体未体现”及上级医师分析不足需结合查房文书，当前证据不足以整条判 exact。",
-          "next_action": "先确认上级查房质量的可量化口径，再决定是否转为规则项。"
+          "manual_issue_text": "现病史对于头痛的描述不细致，阴性症状采集不全面，无诊治经过，无门诊初步诊断，既往史书写混乱，无条理。",
+          "blocked_reason_type": "需客户确认口径",
+          "reason": "头痛现病史描述不细、阴性症状采集不全、既往史混乱成立；诊治经过和门诊初步诊断属于边界项，不直接作为 exact 主证据。",
+          "next_action": "需先与客户确认“欠妥/不详细/无法体现水平/诊断是否充分”等判定阈值，再决定是否规则化。"
         },
         {
-          "sheet2_row_id": "Sheet2-R0157",
-          "visit_id": "2194387",
-          "patient_name": "钟志春",
-          "primary_rule_id": "SC-008",
+          "sheet2_row_id": "Sheet2-R0119",
+          "visit_id": "2092076",
+          "patient_name": "刘友琼",
+          "primary_rule_id": "SC-009",
           "issue_family": "入院记录内容不完整/前后矛盾",
-          "manual_issue_text": "主诉及现病史无法推导出主要诊断",
-          "blocked_reason_type": "证据链不足",
-          "reason": "release/0426 admission_record 已写呼之不应、急诊血糖1.8mmol/L及高糖后清醒，是否“无法推导主要诊断”属诊断判断问题，当前证据不足以判 exact。",
-          "next_action": "先确认“可推导主要诊断”的客户判定标准，再设计诊断推理规则。"
+          "manual_issue_text": "现病史书写思路跳跃：未按照主要症状、伴随症状、阴性症状、整治经过、一般情况这个步骤书写，体格检查身高体重存在明显错误。",
+          "blocked_reason_type": "需客户确认口径",
+          "reason": "现病史结构原文基本符合顺序，身高体重仅单次记录且 BMI 正常，无外部比对证据；LLM 保留 uncertain 正确。",
+          "next_action": "需先与客户确认“欠妥/不详细/无法体现水平/诊断是否充分”等判定阈值，再决定是否规则化。"
         }
       ]
     }
@@ -457,12 +473,42 @@
       "visit_id": "1430048",
       "patient_name": "任利",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-018",
       "manual_issue_text": "入院记录-体格检查缺体重",
-      "reason": "release/0426 admission_record.checkup 已明确记录“体重68.5kg 身高160cm”，人工问题与原始文书冲突，不能判定为 exact。",
+      "reason": "人工问题称缺体重，但原文生命体征明确记录体重68.5kg，LLM 驳回正确。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-查体专科-第一轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
+      "decision_source": "blocked_review_17",
+      "backlog_category": "人工问题过宽/不可判",
+      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
+      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0015",
+      "visit_id": "1880060",
+      "patient_name": "陈意明",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-010",
+      "manual_issue_text": "入院记录中未记录患儿喂养史（患儿2岁1月）",
+      "reason": "人工问题称未记录患儿喂养史，但原文已记录母乳喂养、辅食添加和当前人工喂养，LLM 驳回正确；但子项 status 错写为 non_compliant。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
+      "decision_source": "blocked_review_17",
+      "backlog_category": "人工问题过宽/不可判",
+      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
+      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0020",
+      "visit_id": "2100450",
+      "patient_name": "郑国金",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-010",
+      "manual_issue_text": "既往史患者用药情况未详细记录",
+      "reason": "人工问题称既往用药未详细记录，但原文已记录右佐匹克隆、坦度螺酮、利伐沙班等用药，LLM 驳回正确。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
+      "decision_source": "blocked_review_17",
       "backlog_category": "人工问题过宽/不可判",
       "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
@@ -472,12 +518,12 @@
       "visit_id": "1915821",
       "patient_name": "魏治伦",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-009",
       "manual_issue_text": "现病史中主诉有咽痛，但未详细记录疼痛的性质、持续时间、是否有缓解方式等；诉有咳痰，未记录痰液的性状、咳痰的频率、是否有伴随症状等；未记录在当地卫生院具体的治疗情况；未记录在我院门诊的检查项目及结果；无体重变化情况的记录。",
-      "reason": "release/0426 admission_record 现病史已写持续性咽痛、白色黏痰、当地卫生院输液治疗、门诊喉镜检查及体重无明显变化，人工问题与原文大部冲突，不能判 exact。",
+      "reason": "人工列出的咽痛、咳痰、院外治疗、门诊检查、体重变化等缺项，原文均有对应记录，LLM 驳回正确。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
+      "decision_source": "blocked_review_17",
       "backlog_category": "人工问题过宽/不可判",
       "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
@@ -547,12 +593,12 @@
       "visit_id": "1965433",
       "patient_name": "马建友",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-009",
       "manual_issue_text": "外伤病人未描述受伤地点",
-      "reason": "release/0426 admission_record 现病史已写“在家里用电剪子剪花椒丫时”受伤，人工问题与原文冲突，不能判 exact。",
+      "reason": "人工问题称外伤未写地点，原文明确写在家里，LLM 驳回正确。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
+      "decision_source": "blocked_review_17",
       "backlog_category": "人工问题过宽/不可判",
       "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
@@ -667,12 +713,12 @@
       "visit_id": "2032008",
       "patient_name": "何莲",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-010",
       "manual_issue_text": "患者月经史书写错误，现病史对疼痛的描述不详细，治疗经过未清楚描述，患者2025年10月14日14:10入住内四科，10月14日15:01分转入外二科，门诊收治入内四科欠妥。",
-      "reason": "release/0426 admission_record 可见脐周转右下腹疼痛及急诊抗感染解痉处理，但月经史、转科妥当性和诊断链需额外证据，当前不足以整条判 exact。",
-      "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "reason": "人工称月经史书写错误，但原文实际完全缺月经/婚育史；这不是纯不确定，而是 SC-010 缺项可部分成立。疼痛、治疗经过和入转科时间仍与原文冲突或缺系统日志。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "入院记录人工复核写回-admission_part_only_keep_blocked",
+      "decision_source": "blocked_review_17",
       "backlog_category": "需客户确认口径",
       "backlog_reason": "人工问题同时混合“月经史错误”“转科欠妥”“疼痛描述不详细”等评价性表述，核心争议在判定口径而非单点缺文书。",
       "next_action": "先与客户确认“欠妥/错误/不详细”是否需要规则化为硬指标，再拆成可执行子问题。"
@@ -682,12 +728,12 @@
       "visit_id": "2273484",
       "patient_name": "周永书",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-020",
       "manual_issue_text": "患者双膝疼痛10年，现病史治疗经过不详细，不能很好的指导本次住院治疗；患者既往有类风湿关节炎，入院诊断未体现。",
-      "reason": "release/0426 admission_record 主诉/现病史实际为腹痛与消化道穿孔收治，并非“双膝疼痛10年”场景，人工问题与原文主体不一致，不能判 exact。",
+      "reason": "人工主诉双膝疼痛与原文腹部胀痛冲突，但原文既往史有类风湿关节炎且入院诊断为空，诊治经过也不充分，至少 SC-020/SC-012 可部分成立。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-admission_part_only_keep_blocked",
+      "decision_source": "blocked_review_17",
       "backlog_category": "人工问题过宽/不可判",
       "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
@@ -742,12 +788,12 @@
       "visit_id": "2042774",
       "patient_name": "张世坤",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-009",
       "manual_issue_text": "入院记录中现病史缺患者发病时间，初步诊断中腰椎病未诊断。",
-      "reason": "release/0426 admission_record 现病史出现“患者于，不明原因起病”，可证发病时间缺口，但“腰椎病未诊断”需额外诊断字段，当前证据不足以整条判 exact。",
+      "reason": "现病史缺发病时间成立；腰椎病未诊断需使用 admission_record_diagnosis 诊断表证据闭环，当前 bundle 内诊断证据不足。",
       "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-full_or_near_full_admission_family_keep_blocked",
+      "decision_source": "manual_review_11",
       "backlog_category": "需补源文书",
       "backlog_reason": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
       "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
@@ -787,12 +833,12 @@
       "visit_id": "2045034",
       "patient_name": "李再秀",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-020",
       "manual_issue_text": "入院记录初步诊断不全：高脂血症未诊断，患者活动后呼吸困难，病历记录为无诱因出现呼吸困难，入院查体中缺专科查体。",
-      "reason": "release/0426 admission_record 同时出现“活动后呼吸困难”与“无明显诱因”，可见病史表述不稳，但高脂血症未诊断与专科查体缺失仍需额外证据，当前不足以整条判 exact。",
+      "reason": "高脂血症未诊断、活动后呼吸困难表述矛盾、专科查体缺失三项均有可用证据，属于入院记录问题族内多子项命中。",
       "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-full_or_near_full_admission_family_keep_blocked",
+      "decision_source": "manual_review_11",
       "backlog_category": "需补源文书",
       "backlog_reason": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
       "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
@@ -802,12 +848,12 @@
       "visit_id": "2236769",
       "patient_name": "唐登森",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-009",
       "manual_issue_text": "现病史中患者既往十年只有主要症状，无伴随症状及阴性症状。患者长期治疗慢性病的用药情况未记录。",
-      "reason": "release/0426 admission_record 现病史已写长期咳嗽咳痰、活动后呼吸困难及多项伴随/阴性症状，人工问题与原文大部冲突，不能判 exact。",
+      "reason": "人工称无伴随/阴性症状、慢病用药未记录；原文已记录阴性症状和多种慢病用药，LLM 驳回方向正确；但两个子项 status 错写为 non_compliant。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
+      "decision_source": "blocked_review_17",
       "backlog_category": "人工问题过宽/不可判",
       "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
@@ -847,12 +893,12 @@
       "visit_id": "2049419",
       "patient_name": "陈巧",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-012",
       "manual_issue_text": "入院记录中，既往口服易善复，未明确具体剂量，孕期体重增加1公斤，记录不准确。",
-      "reason": "release/0426 admission_record 只能证实“易善复 1粒 tid”未写毫克剂量；“孕期体重增加1公斤记录不准确”缺基线证据，整条不能判 exact。",
-      "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-查体专科-第一轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "reason": "人工问题包含两部分：孕期体重增加1kg是否不准确缺外部事实，不能写回；但易善复仅写1粒tid、未写规格剂量，按同类口径可作为用药剂量不规范的部分命中。LLM 直接 no_hit 偏激进。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "入院记录人工复核写回-admission_part_only_keep_blocked",
+      "decision_source": "blocked_review_17",
       "backlog_category": "需客户确认口径",
       "backlog_reason": "人工问题中的“孕期体重增加1公斤记录不准确”依赖外部基线与人工口径，不能仅靠当前文书判断。",
       "next_action": "先确认体重记录准确性的判定基线和证据来源，再决定是否纳入规则。"
@@ -877,12 +923,12 @@
       "visit_id": "2050775",
       "patient_name": "朱德树",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-009",
       "manual_issue_text": "现病史中发病情况描述不完整，未记录本次病情加重的情况",
-      "reason": "release/0426 admission_record 现病史已写“1天前腹痛较前加重”，人工问题所称未记录加重情况与原文冲突，不能判 exact。",
+      "reason": "人工称未记录病情加重，原文已写腹痛加重1天及症状变化，LLM 驳回正确；但子项 status 错写为 non_compliant。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
+      "decision_source": "blocked_review_17",
       "backlog_category": "人工问题过宽/不可判",
       "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
@@ -892,12 +938,12 @@
       "visit_id": "2052653",
       "patient_name": "孙景曦",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-010",
       "manual_issue_text": "既往史中手术史描述不清楚。上级医师查房记录对于诊断和治疗分析较为简单。",
-      "reason": "release/0426 admission_record 仅能证实既往手术史写为“腺样体切除术具体不详”；“上级医师查房分析简单”需结合查房文书，当前不足以整条判 exact。",
-      "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-尾项-第三轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "reason": "既往手术史描述不清成立；上级医师查房分析简单不属于入院记录问题族，且当前入院 reclass bundle 不能验证。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "入院记录人工复核写回-admission_part_only_keep_blocked",
+      "decision_source": "manual_review_11",
       "backlog_category": "需客户确认口径",
       "backlog_reason": "人工问题同时包含“手术史描述不清”和“查房分析较为简单”，后者属于评价阈值问题。",
       "next_action": "先与客户确认“分析较为简单”的判定阈值，并将查房评价与既往史缺项拆开处理。"
@@ -999,25 +1045,25 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-008",
       "manual_issue_text": "主诉书写不完整，“右侧腰腹部1+天”，现病史诊治经过不详，既往史无诊断高血压的时间，既往史描述：2+月前右手因外伤截肢，而体格检查中未描述右手情况，并且记录四肢无畸形，入院诊断也无右手相关诊断。",
-      "reason": "release/0426 admission_record 已写右侧腰腹痛、门诊CT结果和高血压史，但右手截肢相关查体/诊断闭环需完整诊断字段支撑，当前证据不足以整条判 exact。",
-      "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
-      "backlog_category": "需补源文书",
-      "backlog_reason": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
-      "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
+      "reason": "主诉缺症状、现病史诊治经过简略、高血压确诊时间缺失、入院诊断缺右手截肢相关诊断均成立；仅右手查体未描述这一点与原文冲突。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "入院记录人工复核写回-admission_part_only_keep_blocked",
+      "decision_source": "blocked_review_17",
+      "backlog_category": "人工问题过宽/不可判",
+      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
+      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
     },
     {
       "sheet2_row_id": "Sheet2-R0105",
       "visit_id": "2073989",
       "patient_name": "王良书",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-011",
       "manual_issue_text": "现病史中阴性症状无针对性，体重87kg 身高135cm记录有误，体格检查中：皮肤和黏膜检查：胸部可见陈旧性手术瘢痕，胸部检查： 胸廓对称无畸形，无疤痕，前后矛盾。入院诊断未诊断慢性萎缩性胃炎。",
-      "reason": "release/0426 admission_record 实际记录为体重41kg身高144cm，且胸部检查同时写可见陈旧性手术疤痕，人工问题中的87kg/135cm与原文冲突，不能判 exact。",
+      "reason": "阴性症状无针对性成立；身高体重、瘢痕矛盾与当前原文冲突；慢性萎缩性胃炎未诊断缺入院诊断证据。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-admission_part_only_keep_blocked",
+      "decision_source": "manual_review_11",
       "backlog_category": "人工问题过宽/不可判",
       "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
@@ -1072,27 +1118,27 @@
       "visit_id": "2326610",
       "patient_name": "张仕枝",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-009",
       "manual_issue_text": "现病史对于头痛的描述不细致，阴性症状采集不全面，无诊治经过，无门诊初步诊断，既往史书写混乱，无条理。",
-      "reason": "release/0426 admission_record 主诉/现病史实际围绕白血病乏力纳差，并非“头痛描述不细致”场景，人工问题与原文主体不一致，不能判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "头痛现病史描述不细、阴性症状采集不全、既往史混乱成立；诊治经过和门诊初步诊断属于边界项，不直接作为 exact 主证据。",
+      "blocked_reason_type": "需客户确认口径",
+      "review_subgroup": "入院记录人工复核写回-full_or_near_full_admission_family_keep_blocked",
+      "decision_source": "manual_review_11",
+      "backlog_category": "需客户确认口径",
+      "backlog_reason": "争议点更多落在评价口径或业务阈值，而不是单纯的规则遗漏。",
+      "next_action": "需先与客户确认“欠妥/不详细/无法体现水平/诊断是否充分”等判定阈值，再决定是否规则化。"
     },
     {
       "sheet2_row_id": "Sheet2-R0111",
       "visit_id": "2073320",
       "patient_name": "徐娟",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-011",
       "manual_issue_text": "现病史阴性症状采集不完整，门诊初步诊断“疼痛”不准确。既往史中记录有外伤史及手术史，但未做具体描述。患者有乙肝病史，未做诊断。辅助检查中，仅做两对半定性检查，而未做定量检查欠妥。",
-      "reason": "release/0426 admission_record 可见外伤史/手术史均未细化，但“乙肝未诊断”和“仅做定性检查欠妥”仍需额外诊断与检验链，当前不足以整条判 exact。",
+      "reason": "阴性症状不完整、门诊诊断不准确、外伤史/手术史未具体描述、乙肝未诊断均成立；两对半定量检查问题缺实验室证据。",
       "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-full_or_near_full_admission_family_keep_blocked",
+      "decision_source": "manual_review_11",
       "backlog_category": "需补源文书",
       "backlog_reason": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
       "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
@@ -1162,15 +1208,15 @@
       "visit_id": "2092076",
       "patient_name": "刘友琼",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-009",
       "manual_issue_text": "现病史书写思路跳跃：未按照主要症状、伴随症状、阴性症状、整治经过、一般情况这个步骤书写，体格检查身高体重存在明显错误。",
-      "reason": "release/0426 admission_record 现病史已按异物起病、伴随症状、阴性症状、门诊CT和一般情况展开，人工问题关于书写思路跳跃与原文不符，不能判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "现病史结构原文基本符合顺序，身高体重仅单次记录且 BMI 正常，无外部比对证据；LLM 保留 uncertain 正确。",
+      "blocked_reason_type": "需客户确认口径",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_uncertain",
+      "decision_source": "blocked_review_17",
+      "backlog_category": "需客户确认口径",
+      "backlog_reason": "争议点更多落在评价口径或业务阈值，而不是单纯的规则遗漏。",
+      "next_action": "需先与客户确认“欠妥/不详细/无法体现水平/诊断是否充分”等判定阈值，再决定是否规则化。"
     },
     {
       "sheet2_row_id": "Sheet2-R0122",
@@ -1192,12 +1238,12 @@
       "visit_id": "2151657",
       "patient_name": "何英芬",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-020",
       "manual_issue_text": "患者现病史“进食蔬菜时呛咳起病，主要表现为咳嗽、气促，伴少量咳痰，咳痰较费力，伴精神欠佳、饮食较差、浑身乏力”。诊断：社区获得性肺炎。诊断不合理。",
-      "reason": "release/0426 admission_record 实际主诉/现病史为摔倒后头痛并颅脑CT检查，与人工问题中的“进食蔬菜呛咳/社区获得性肺炎”场景不一致，不能判 exact。",
+      "reason": "人工问题描述的呛咳/肺炎与当前病历原文外伤/神经系统症状不匹配，属于问题来源或病历版本冲突，LLM 不转 exact 正确。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
+      "decision_source": "blocked_review_17",
       "backlog_category": "人工问题过宽/不可判",
       "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
@@ -1297,12 +1343,12 @@
       "visit_id": "2131765",
       "patient_name": "李元娟",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-011",
       "manual_issue_text": "现病史围绕主诉头晕的阴性症状采集不全面，患者有手术史，查体未体现，主治医师查房记录，未对疾病做出相应分析，无法体现上级医师诊疗水平。",
-      "reason": "release/0426 admission_record 可见主诉头晕的多项阴性症状和既往剖宫产史，但“查体未体现”及上级医师分析不足需结合查房文书，当前证据不足以整条判 exact。",
-      "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "reason": "头晕相关阴性症状采集不全成立；手术史但查体未体现成立；主治医师查房分析问题不属于入院记录问题族。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "入院记录人工复核写回-admission_part_only_keep_blocked",
+      "decision_source": "manual_review_11",
       "backlog_category": "需客户确认口径",
       "backlog_reason": "人工问题中的“无法体现上级医师诊疗水平”属于主观评价，并非单一文书缺项。",
       "next_action": "先确认上级查房质量的可量化口径，再决定是否转为规则项。"
@@ -1312,12 +1358,12 @@
       "visit_id": "2153245",
       "patient_name": "杜心烨",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-018",
       "manual_issue_text": "体格检查中，双膝部外伤未详细记录，超过24小时未录入主诊断。",
-      "reason": "release/0426 admission_record 已记录双侧膝部擦伤及局部情况，但“超过24小时未录入主诊断”需额外诊断时序证据，当前快照链不足以整条判 exact。",
+      "reason": "双膝部擦伤虽有基础记录，但既往史否认外伤史与现病史/查体冲突，查体也偏简略；超过24小时未录主诊断缺时间戳。",
       "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-查体专科-第一轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-admission_part_only_keep_blocked",
+      "decision_source": "blocked_review_17",
       "backlog_category": "需补源文书",
       "backlog_reason": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
       "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
@@ -1672,15 +1718,15 @@
       "visit_id": "2263757",
       "patient_name": "杨光中",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-018",
       "manual_issue_text": "入院记录慢病史用药情况记录不全，心率和脉搏不一致，也无相关诊断，患者有腹部手术史，查体未做描述。",
-      "reason": "release/0426 admission_record 仅能证实高血压长期口服氨氯地平且既往腹股沟疝/肠息肉手术史已写；心率脉搏不一致、相关诊断和腹部手术查体缺项需额外闭环证据。",
-      "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
-      "backlog_category": "需补源文书",
-      "backlog_reason": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
-      "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
+      "reason": "慢病用药不全、心率脉搏不一致、相关诊断缺失成立；腹部手术史查体未描述与原文冲突。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "入院记录人工复核写回-full_or_near_full_admission_family_keep_blocked",
+      "decision_source": "manual_review_11",
+      "backlog_category": "人工问题过宽/不可判",
+      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
+      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
     },
     {
       "sheet2_row_id": "Sheet2-R0210",
@@ -1689,13 +1735,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-008",
       "manual_issue_text": "入院记录主诉“无明显诱因出现左膝疼痛3月”描述不规范；慢病史记录不全，心率和脉搏不一致，也无相关诊断，患者有腹部手术史，查体未做描述；四肢检查中记录为四肢关节活动正常，与专科情况中描述左膝屈膝活动受限，前后不一致。",
-      "reason": "release/0426 admission_record 可见左膝疼痛3月及高血压/手术史，但“无相关诊断”和专科查体前后不一致需完整专科段/诊断字段支撑，当前不足以整条判 exact。",
-      "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
-      "backlog_category": "需补源文书",
-      "backlog_reason": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
-      "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
+      "reason": "主诉描述不规范、慢病史记录不全成立；心率脉搏、腹部手术查体、四肢/专科矛盾项与原文冲突或需完整专科查体证据。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "入院记录人工复核写回-admission_part_only_keep_blocked",
+      "decision_source": "manual_review_11",
+      "backlog_category": "人工问题过宽/不可判",
+      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
+      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
     },
     {
       "sheet2_row_id": "Sheet2-R0212",
@@ -1749,13 +1795,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-008",
       "manual_issue_text": "患者主诉行走不稳1年入院，根据现病史患者3天前呕吐就诊，主诉内容不完整。首次病程，无高血压，肺结节等疾病诊断依据。诊疗计划中对于高血压疾病且入院血压偏高，无监测血压，无用药记录。2026-03-01术前主刀查房与手术记录 无主刀医生签名，均为主管医生签名",
-      "reason": "release/0426 admission_record 可见主诉行走不稳1年与3天前呕吐，但条目同时跨首次病程、血压管理和术前主刀签名多个规则，当前 admission_record 证据不足以整条判 exact。",
-      "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
-      "backlog_category": "需补源文书",
-      "backlog_reason": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
-      "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
+      "reason": "主诉缺近期呕吐/本次入院原因成立；首次病程诊断依据、诊疗计划、术前签名问题不属于入院记录问题族或缺对应文书证据。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "入院记录人工复核写回-admission_part_only_keep_blocked",
+      "decision_source": "manual_review_11",
+      "backlog_category": "可补规则",
+      "backlog_reason": "原始文书可回收，但现有主规则或跨文书链路无法精确覆盖人工锚点，属于规则能力缺口。",
+      "next_action": "优先补主规则、次规则重试与跨文书证据拼接，再回归样本验证页。"
     },
     {
       "sheet2_row_id": "Sheet2-R0220",
@@ -1792,12 +1838,12 @@
       "visit_id": "2229247",
       "patient_name": "陈正权",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-020",
       "manual_issue_text": "入院诊断疼痛，诊断不准确，专科查体中显示主被动活动受限，但入院诊断未体现",
-      "reason": "release/0426 admission_record 可见“活动受限”病史线索，但快照未提供可核对的入院诊断字段及专科查体正文，证据链不足，不能判 exact。",
+      "reason": "人工称入院诊断为疼痛，但当前原文写右侧肩袖损伤；右肩主被动活动度证据也不足，LLM 不写回正确。",
       "blocked_reason_type": "证据链不足",
-      "review_subgroup": "SC-008-查体专科-第一轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_uncertain",
+      "decision_source": "blocked_review_17",
       "backlog_category": "需补源文书",
       "backlog_reason": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
       "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
@@ -2002,12 +2048,12 @@
       "visit_id": "2275999",
       "patient_name": "王美锡",
       "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-008",
+      "primary_rule_id": "SC-009",
       "manual_issue_text": "外伤病人未描述受伤地点",
-      "reason": "release/0426 admission_record 现病史已写“在泸县谭坝过路时被钢架砸伤腰部”，人工问题所称未描述受伤地点与原文冲突，不能判 exact。",
+      "reason": "人工问题称外伤未写地点，原文明确写泸县谭坝过路，LLM 驳回正确。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
+      "decision_source": "blocked_review_17",
       "backlog_category": "人工问题过宽/不可判",
       "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"

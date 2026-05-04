@@ -151,3 +151,98 @@ def test_legacy_realign_admission_rule_ids_should_default_to_dry_run(tmp_path, m
     assert ledger.read_text(encoding="utf-8") == original
     report = json.loads(report_json.read_text(encoding="utf-8"))
     assert report["mode"] == "dry-run"
+
+
+def test_apply_admission_manual_reviews_should_default_to_dry_run(tmp_path, monkeypatch):
+    module = _load_script_module("apply_admission_issue_family_manual_reviews.py")
+    ledger = tmp_path / "ledger.csv"
+    ledger.write_text(
+        "sheet2_row_id,visit_id,patient_name,manual_issue_text,issue_family,primary_rule_id,secondary_rule_ids,"
+        "verification_status,job_id,evidence_status,evidence_summary,skip_reason,next_action\n"
+        "Sheet2-R0103,V001,患者甲,主诉书写不完整,入院记录内容不完整/前后矛盾,SC-008,,same_family_hit,,,"
+        "旧摘要,,旧动作\n",
+        encoding="utf-8",
+    )
+    overrides = tmp_path / "overrides.csv"
+    overrides.write_text(
+        "sheet2_row_id,exact_review_status,exact_review_reason,blocked_reason_type,review_subgroup,decision_source\n"
+        "Sheet2-R0103,blocked_with_reason,旧原因,证据链不足,旧分组,旧来源\n",
+        encoding="utf-8",
+    )
+    review = tmp_path / "review.csv"
+    review.write_text(
+        "row_key,visit_id,patient_name,current_status,current_primary_rule,recommended_rules,manual_review_decision,"
+        "final_primary_rule,final_secondary_rules,can_writeback,keep_exact_status,review_conclusion,next_action\n"
+        "Sheet2-R0103,V001,患者甲,blocked_with_reason,SC-008,SC-008|SC-009,partial_writeback_keep_blocked,"
+        "SC-008,SC-009,partial,blocked_with_reason,入院记录部分成立但查体冲突,保留 blocked\n",
+        encoding="utf-8",
+    )
+    empty_review = tmp_path / "empty.csv"
+    empty_review.write_text(
+        "row_key,visit_id,patient_name,source_bucket,llm_overall_result,llm_primary_rule,manual_review_decision,"
+        "final_primary_rule,final_secondary_rules,can_writeback,keep_exact_status,review_conclusion,next_action\n",
+        encoding="utf-8",
+    )
+    report_json = tmp_path / "report.json"
+    report_csv = tmp_path / "report.csv"
+    monkeypatch.setattr(module, "LEDGER_CSV", ledger)
+    monkeypatch.setattr(module, "OVERRIDE_CSV", overrides)
+    monkeypatch.setattr(module, "MANUAL_REVIEW_CSV", review)
+    monkeypatch.setattr(module, "BLOCKED_REVIEW_CSV", empty_review)
+    monkeypatch.setattr(module, "REPORT_JSON", report_json)
+    monkeypatch.setattr(module, "REPORT_CSV", report_csv)
+
+    assert module.main([]) == 0
+
+    assert "旧摘要" in ledger.read_text(encoding="utf-8")
+    report = json.loads(report_json.read_text(encoding="utf-8"))
+    assert report["mode"] == "dry-run"
+    assert report["changed_row_count"] == 1
+    assert report["changes"][0]["after"]["secondary_rule_ids"] == "SC-009"
+
+
+def test_apply_admission_manual_reviews_writeback_keeps_partial_blocked(tmp_path, monkeypatch):
+    module = _load_script_module("apply_admission_issue_family_manual_reviews.py")
+    ledger = tmp_path / "ledger.csv"
+    ledger.write_text(
+        "sheet2_row_id,visit_id,patient_name,manual_issue_text,issue_family,primary_rule_id,secondary_rule_ids,"
+        "verification_status,job_id,evidence_status,evidence_summary,skip_reason,next_action\n"
+        "Sheet2-R0103,V001,患者甲,主诉书写不完整,入院记录内容不完整/前后矛盾,SC-008,,same_family_hit,,,"
+        "旧摘要,,旧动作\n",
+        encoding="utf-8",
+    )
+    overrides = tmp_path / "overrides.csv"
+    overrides.write_text(
+        "sheet2_row_id,exact_review_status,exact_review_reason,blocked_reason_type,review_subgroup,decision_source\n",
+        encoding="utf-8",
+    )
+    review = tmp_path / "review.csv"
+    review.write_text(
+        "row_key,visit_id,patient_name,current_status,current_primary_rule,recommended_rules,manual_review_decision,"
+        "final_primary_rule,final_secondary_rules,can_writeback,keep_exact_status,review_conclusion,next_action\n"
+        "Sheet2-R0103,V001,患者甲,blocked_with_reason,SC-008,SC-008|SC-009,partial_writeback_keep_blocked,"
+        "SC-008,SC-009,partial,blocked_with_reason,主诉成立但右手查体与原文冲突,保留 blocked\n",
+        encoding="utf-8",
+    )
+    empty_review = tmp_path / "empty.csv"
+    empty_review.write_text(
+        "row_key,visit_id,patient_name,source_bucket,llm_overall_result,llm_primary_rule,manual_review_decision,"
+        "final_primary_rule,final_secondary_rules,can_writeback,keep_exact_status,review_conclusion,next_action\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "LEDGER_CSV", ledger)
+    monkeypatch.setattr(module, "OVERRIDE_CSV", overrides)
+    monkeypatch.setattr(module, "MANUAL_REVIEW_CSV", review)
+    monkeypatch.setattr(module, "BLOCKED_REVIEW_CSV", empty_review)
+    monkeypatch.setattr(module, "REPORT_JSON", tmp_path / "report.json")
+    monkeypatch.setattr(module, "REPORT_CSV", tmp_path / "report.csv")
+    monkeypatch.setattr(module, "_refresh_outputs", lambda update_baseline: None)
+
+    assert module.main(["--writeback"]) == 0
+
+    ledger_text = ledger.read_text(encoding="utf-8")
+    override_text = overrides.read_text(encoding="utf-8")
+    assert "admission_part_only_keep_blocked" in ledger_text
+    assert "SC-008,SC-009" in ledger_text
+    assert "blocked_with_reason" in override_text
+    assert "exact_confirmed" not in override_text
