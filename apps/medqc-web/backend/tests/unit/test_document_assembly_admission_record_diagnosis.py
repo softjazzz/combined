@@ -15,6 +15,7 @@ def test_admission_record_diagnosis_should_render_initial_diagnosis() -> None:
     )
 
     assert document.document_title == "入院记录诊断-初步诊断-2"
+    assert document.document_id == "4415760||1::diagnosis::2"
     assert document.assembly_status == "assembled"
     assert "诊断类型: 初步诊断" in document.assembled_text
     assert "诊断名称: 1、右侧肩袖损伤；2、疼痛" in document.assembled_text

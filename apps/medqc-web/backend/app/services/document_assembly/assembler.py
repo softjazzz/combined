@@ -623,6 +623,16 @@ def _resolve_display_times(row: dict[str, Any]) -> tuple[str | None, str | None,
     return record_time, submit_time, last_modified_time, display_time
 
 
+def _resolve_document_id(document_type: str, payload: dict[str, Any]) -> str:
+    document_id = _normalize_text(payload.get("document_id"))
+    if document_type == "admission_record_diagnosis":
+        diagnosis_id = _merge_field_text(payload, "diagnosis_id", "diagnosis_no")
+        if document_id and diagnosis_id:
+            return f"{document_id}::diagnosis::{diagnosis_id}"
+        return diagnosis_id or document_id
+    return document_id
+
+
 def build_document_select_columns(document_type: str, available_columns: set[str]) -> list[str]:
     selected: list[str] = []
     for column_name in COMMON_META_FIELDS:
@@ -779,7 +789,7 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
 
     return AssembledDocument(
         document_type=document_type,
-        document_id=_normalize_text(payload.get("document_id")),
+        document_id=_resolve_document_id(document_type, payload),
         document_title=title,
         record_time=record_time,
         submit_time=submit_time,

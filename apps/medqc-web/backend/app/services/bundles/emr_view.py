@@ -4,7 +4,7 @@ from datetime import datetime
 import re
 from typing import Any
 
-from .assembly import load_domain_bundle
+from .assembly import assemble_domain_bundle, load_domain_bundle
 
 _DOMAIN_LOAD_ORDER: tuple[str, ...] = (
     "admission",
@@ -30,6 +30,7 @@ _GROUP_DEFS: tuple[dict[str, str], ...] = (
 
 _DOC_TYPE_LABELS: dict[str, str] = {
     "admission_record": "入院记录",
+    "admission_record_diagnosis": "入院记录诊断",
     "first_course_record": "首次病程记录",
     "daily_course_record": "日常病程记录",
     "senior_course_record": "上级医师查房记录",
@@ -66,6 +67,7 @@ _GROUP_BY_DOC_TYPE: dict[str, str] = {
     "medical_insurance_settlement": "frontpage",
     "medical_insurance_settlement_cost": "frontpage",
     "admission_record": "admission",
+    "admission_record_diagnosis": "admission",
     "first_course_record": "course",
     "daily_course_record": "course",
     "senior_course_record": "course",
@@ -332,6 +334,11 @@ def build_documents_from_domain_bundles(
     return documents
 
 
+def _documents_include_doc_type(documents: list[dict[str, Any]], doc_type: str) -> bool:
+    wanted = _safe_text(doc_type)
+    return any(_safe_text(item.get("doc_type") or item.get("source_table")) == wanted for item in documents)
+
+
 def build_documents_tree(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_group: dict[str, list[dict[str, Any]]] = {group["key"]: [] for group in _GROUP_DEFS}
 
@@ -390,6 +397,23 @@ def load_bundle_documents(
             domain_bundles[domain] = payload
 
     documents = build_documents_from_domain_bundles(domain_bundles)
+    if not _documents_include_doc_type(documents, "admission_record_diagnosis"):
+        try:
+            admission_bundle = assemble_domain_bundle(
+                execution_domain="admission",
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+            )
+        except Exception:
+            admission_bundle = None
+        if admission_bundle and any(
+            _safe_text(item.get("document_type") or item.get("source_table")) == "admission_record_diagnosis"
+            for item in admission_bundle.get("source_documents") or []
+        ):
+            domain_bundles["admission"] = admission_bundle
+            domain_hits["admission_runtime_overlay"] = True
+            documents = build_documents_from_domain_bundles(domain_bundles)
     tree = build_documents_tree(documents)
     return {
         "layout_version": "bundle_struct_v1",
