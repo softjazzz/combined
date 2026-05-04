@@ -554,6 +554,31 @@ def test_resolve_admission_consistency_should_mark_invalid_rule_id_uncertain():
     assert recommendation["invalid_rule_ids"] == ["SC-999"]
 
 
+def test_resolve_admission_consistency_should_not_keep_non_compliant_items_for_no_hit():
+    recommendation = sample_pool_module.resolve_admission_consistency_rule_recommendations(
+        "入院记录中未记录患儿喂养史",
+        llm_output={
+            "primary_rule_id": "SC-010",
+            "recommended_rule_ids": ["SC-010"],
+            "sub_items": [
+                {
+                    "rule_id": "SC-010",
+                    "item": "既往史完整性",
+                    "status": "non_compliant",
+                    "matched_manual_issue_part": "未记录患儿喂养史",
+                    "evidence": "原文已记录母乳喂养、辅食添加及当前人工喂养。",
+                    "reason": "人工问题与原文冲突，判定为无命中。",
+                }
+            ],
+            "overall_result": "no_hit",
+            "confidence": 0.95,
+        },
+    )
+
+    assert recommendation["overall_result"] == "no_hit"
+    assert recommendation["sub_items"][0]["status"] == "compliant"
+
+
 def test_resolve_admission_consistency_without_llm_should_require_review():
     recommendation = sample_pool_module.resolve_admission_consistency_rule_recommendations(
         "现病史未描述发病时间",

@@ -789,6 +789,11 @@ def normalize_admission_consistency_llm_output(
     if overall_result not in ADMISSION_ISSUE_FAMILY_ALLOWED_RESULTS:
         overall_result = "uncertain"
 
+    if overall_result == "no_hit":
+        for item in sub_items:
+            if item.get("status") == "non_compliant":
+                item["status"] = "compliant"
+
     review_required = False
     if invalid_rule_ids or not payload:
         overall_result = "uncertain"
@@ -837,6 +842,8 @@ def build_admission_issue_family_prompt(
 3. primary_rule_id 选择人工问题最核心或最先需要整改的锚点；其他锚点放入 recommended_rule_ids 和 sub_items。
 4. 不要把病案首页诊断或出院诊断作为主证据；它们只能作为参考。入院记录诊断、首次病程病例特点/诊断依据/初步诊断/诊疗计划优先。
 5. 如果人工问题和病历原文冲突，应输出 no_hit 或 uncertain，并在 reason 中说明冲突，不要强行 exact。
+6. 如果 overall_result 是 no_hit，sub_items 中不得出现 non_compliant；冲突项应标记 compliant，证据不足项才标记 uncertain。
+7. 如果人工问题包含多个锚点，且至少一个锚点能被原文明确证实为缺陷，应输出 partial_hit，不要输出 uncertain；仅把未核实或冲突的锚点标记 uncertain/compliant。
 
 【人工问题】
 {_safe_text(manual_issue_text)}
