@@ -645,8 +645,6 @@ def _looks_like_diagnosis_or_treatment_followup_issue(text: str) -> bool:
             "无诊断",
             "未对诊断进行修正",
             "未录入主诊断",
-            "诊断不准确",
-            "入院诊断未体现",
             "检查结果",
             "辅助检查不全面",
             "病历书写不完整",
@@ -1190,9 +1188,11 @@ def classify_manual_issue_text(text: Any) -> Dict[str, Any]:
             "前后矛盾",
             "体格检查",
             "专科检查",
+            "专科查体",
             "院外检查",
             "阴性症状",
             "入院记录",
+            "入院诊断",
         ),
     ):
         return {
@@ -2788,6 +2788,7 @@ class CustomQCSamplePoolService:
                     or_(
                         self._item_table.c.patient_name.ilike(keyword),
                         self._item_table.c.mr_no.ilike(keyword),
+                        self._item_table.c.matched_visit_id.ilike(keyword),
                         self._item_table.c.manual_issue_text.ilike(keyword),
                     )
                 )

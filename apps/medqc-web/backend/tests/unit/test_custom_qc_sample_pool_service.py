@@ -426,6 +426,17 @@ def test_resolve_admission_consistency_should_route_sc020():
     assert rule_ids == list(sample_pool_module.ADMISSION_ISSUE_FAMILY_RULE_IDS)
 
 
+def test_classify_admission_diagnosis_with_special_exam_should_route_admission_consistency():
+    result = sample_pool_module.classify_manual_issue_text(
+        "入院诊断疼痛，诊断不准确，专科查体中显示主被动活动受限，但入院诊断未体现"
+    )
+
+    assert result["coverage_type"] == "llm_intrinsic"
+    assert result["issue_category"] == "admission_consistency"
+    assert result["include_in_batch_1"] is True
+    assert "SC-020" in result["candidate_rule_ids"]
+
+
 def test_resolve_admission_consistency_should_prefer_sc020_over_sc018_in_mixed_text():
     rule_ids = sample_pool_module._resolve_sample_sc_primary_rule_ids(
         issue_category="admission_consistency",
