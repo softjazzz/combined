@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 DOC_TYPES: list[tuple[str, str]] = [
     ("admission_record", "入院记录"),
+    ("admission_record_diagnosis", "入院记录诊断"),
     ("first_course_record", "首次病程记录"),
     ("daily_course_record", "日常病程记录"),
     ("senior_course_record", "上级医师查房记录"),
@@ -96,4 +97,3 @@ def build_concat_text(documents: list[dict]) -> str:
             sep = "=" * 40
             sections.append(f"{sep}\n📋 {doc['label']}\n{sep}\n\n{doc['content']}")
     return "\n\n\n".join(sections)
-

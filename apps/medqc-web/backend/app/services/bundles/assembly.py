@@ -197,6 +197,7 @@ _SCENE_GROUP_BY_DOC_TYPE: dict[str, str] = {
     "mr_surgery": "frontpage",
     "mr_cost": "frontpage",
     "admission_record": "admission",
+    "admission_record_diagnosis": "admission",
     "first_course_record": "course",
     "daily_course_record": "course",
     "senior_course_record": "course",
@@ -224,6 +225,7 @@ _SCENE_GROUP_BY_DOC_TYPE: dict[str, str] = {
 _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
     "admission": (
         "admission_record",
+        "admission_record_diagnosis",
     ),
     "course": (
         "first_course_record",
@@ -272,6 +274,7 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
 }
 _DOMAIN_FETCH_LIMITS: dict[str, int] = {
     "admission_record": 20,
+    "admission_record_diagnosis": 50,
     "first_course_record": 50,
     "daily_course_record": 200,
     "senior_course_record": 200,

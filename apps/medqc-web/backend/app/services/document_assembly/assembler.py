@@ -31,6 +31,18 @@ _TEXT_CANDIDATES: tuple[str, ...] = (
 )
 
 _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
+    "admission_record_diagnosis": (
+        "diagnosis_id",
+        "diagnosis_type",
+        "diagnosis_no",
+        "diagnosis_name",
+        "diagnosis_code",
+        "diagnosis_main",
+        "diagnosis_time",
+        "diagnosis_datetime",
+        "diagnosis_uptime",
+        "v2_schema",
+    ),
     "surgery_record": (
         "dept_name",
         "ward_name",
@@ -206,6 +218,7 @@ _SECTION_LABELS: dict[str, str] = {
 
 _DOC_TYPE_LABELS: dict[str, str] = {
     "admission_record": "入院记录",
+    "admission_record_diagnosis": "入院记录诊断",
     "first_course_record": "首次病程记录",
     "daily_course_record": "日常病程记录",
     "senior_course_record": "上级医师查房记录",
@@ -497,6 +510,56 @@ def _build_surgery_source_fields(payload: dict[str, Any]) -> list[DocumentSource
     return fields
 
 
+def _assemble_admission_record_diagnosis_text(payload: dict[str, Any]) -> str:
+    diagnosis_type = _merge_field_text(payload, "diagnosis_type")
+    diagnosis_name = _merge_field_text(payload, "diagnosis_name")
+    diagnosis_code = _merge_field_text(payload, "diagnosis_code")
+    diagnosis_no = _merge_field_text(payload, "diagnosis_no", "diagnosis_id")
+    diagnosis_main = _merge_field_text(payload, "diagnosis_main")
+    diagnosis_time = _merge_field_text(payload, "diagnosis_time", "diagnosis_datetime", "record_time", "update_time")
+
+    lines: list[str] = []
+    if diagnosis_type:
+        lines.append(f"诊断类型: {diagnosis_type}")
+    if diagnosis_no:
+        lines.append(f"诊断序号: {diagnosis_no}")
+    if diagnosis_name:
+        lines.append(f"诊断名称: {diagnosis_name}")
+    if diagnosis_code:
+        lines.append(f"诊断编码: {diagnosis_code}")
+    if diagnosis_main:
+        lines.append(f"是否主诊断: {diagnosis_main}")
+    if diagnosis_time:
+        lines.append(f"诊断时间: {diagnosis_time}")
+    return "\n".join(lines).strip()
+
+
+def _build_admission_diagnosis_source_fields(payload: dict[str, Any]) -> list[DocumentSourceField]:
+    fields: list[DocumentSourceField] = []
+    for field_name in (
+        "diagnosis_type",
+        "diagnosis_no",
+        "diagnosis_id",
+        "diagnosis_name",
+        "diagnosis_code",
+        "diagnosis_main",
+        "diagnosis_time",
+        "diagnosis_datetime",
+        "update_time",
+    ):
+        field_value = _merge_field_text(payload, field_name)
+        fields.append(
+            DocumentSourceField(
+                source_table="admission_record_diagnosis",
+                source_field=field_name,
+                source_path=None,
+                used=bool(field_value),
+                raw_value_preview=field_value[:120],
+            )
+        )
+    return fields
+
+
 def _assemble_presurg_discussion_text(payload: dict[str, Any]) -> str:
     record_content = _merge_field_text(payload, "record_content")
     if record_content:
@@ -526,6 +589,12 @@ def _extract_direct_text(row: dict[str, Any]) -> tuple[str, str]:
 
 def _resolve_title(document_type: str, row: dict[str, Any], assembled_text: str) -> tuple[str, list[str]]:
     flags: list[str] = []
+    if document_type == "admission_record_diagnosis":
+        diagnosis_type = _merge_field_text(row, "diagnosis_type") or "诊断"
+        diagnosis_no = _merge_field_text(row, "diagnosis_no", "diagnosis_id")
+        suffix = f"-{diagnosis_no}" if diagnosis_no else ""
+        return f"入院记录诊断-{diagnosis_type}{suffix}", flags
+
     raw_title = _normalize_text(row.get("document_title"))
     if raw_title:
         return raw_title, flags
@@ -580,7 +649,20 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
     sections: list[AssembledSection] = []
     flags: list[str] = []
 
-    if document_type == "surgery_record":
+    if document_type == "admission_record_diagnosis":
+        assembled_text = _assemble_admission_record_diagnosis_text(payload)
+        source_fields.extend(_build_admission_diagnosis_source_fields(payload))
+        if assembled_text:
+            sections.append(
+                AssembledSection(
+                    section_key="admission_record_diagnosis",
+                    section_label="入院记录诊断",
+                    text=assembled_text,
+                    source_field="admission_record_diagnosis",
+                    order_index=0,
+                )
+            )
+    elif document_type == "surgery_record":
         assembled_text = _assemble_surgery_record_text(payload)
         source_fields.extend(_build_surgery_source_fields(payload))
         if _is_non_content_placeholder(_merge_field_text(payload, "record_content")):
