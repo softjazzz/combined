@@ -121,15 +121,18 @@ def test_build_documents_should_merge_only_named_admission_diagnoses():
 
     documents = build_documents_from_domain_bundles(domain_bundles)
 
-    diagnosis_doc = next(doc for doc in documents if doc["doc_type"] == "admission_record_diagnosis")
-    assert len(documents) == 2
-    assert diagnosis_doc["doc_name"] == "入院记录诊断"
-    assert diagnosis_doc["sort_time"] == "2026-03-01 08:00:00"
-    assert "初步诊断" in diagnosis_doc["content"]
-    assert "右侧肩袖损伤" in diagnosis_doc["content"]
-    assert "诊断序号" not in diagnosis_doc["content"]
-    assert "诊断类型: 入院诊断" not in diagnosis_doc["content"]
-    assert "出院诊断污染" not in diagnosis_doc["content"]
+    admission_doc = next(doc for doc in documents if doc["doc_type"] == "admission_record")
+    assert len(documents) == 1
+    assert not any(doc["doc_type"] == "admission_record_diagnosis" for doc in documents)
+    assert admission_doc["doc_name"] == "入院记录"
+    assert admission_doc["sort_time"] == "2026-03-01 08:00:00"
+    assert "主诉：腹痛3天" in admission_doc["content"]
+    assert "初步诊断" in admission_doc["content"]
+    assert "右侧肩袖损伤" in admission_doc["content"]
+    assert "诊断序号" not in admission_doc["content"]
+    assert "诊断类型: 入院诊断" not in admission_doc["content"]
+    assert "出院诊断污染" not in admission_doc["content"]
+    assert admission_doc["sections"][-1]["section_label"] == "入院记录诊断"
 
 
 def test_pick_document_priority():

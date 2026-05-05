@@ -383,51 +383,37 @@ def _merge_admission_diagnosis_documents(documents: list[dict[str, Any]]) -> lis
     content = "\n\n".join(_safe_text(doc.get("content")) for doc in valid_docs if _safe_text(doc.get("content")))
     document_id = _safe_text(valid_docs[0].get("document_id") or valid_docs[0].get("doc_id") or "admission_record_diagnosis")
     parent_document_id = document_id.split("::diagnosis::", 1)[0]
-    parent_admission_doc = next(
-        (
-            doc
-            for doc in other_docs
-            if _safe_text(doc.get("doc_type")) == "admission_record"
-            and _safe_text(doc.get("document_id") or doc.get("doc_id")) == parent_document_id
-        ),
-        None,
-    )
-    sort_time = (
-        _safe_text((parent_admission_doc or {}).get("sort_time") or (parent_admission_doc or {}).get("record_time"))
-        or next((_safe_text(doc.get("sort_time")) for doc in valid_docs if _safe_text(doc.get("sort_time"))), "")
-    )
-    merged_doc = {
-        "id": "admission_record_diagnosis::summary",
-        "doc_id": "admission_record_diagnosis::summary",
-        "doc_key": "admission_record_diagnosis::summary",
-        "doc_type": "admission_record_diagnosis",
-        "doc_name": "入院记录诊断",
-        "type": "admission_record_diagnosis",
-        "label": "入院记录诊断",
-        "document_id": document_id,
-        "document_title": "入院记录诊断",
-        "sort_time": sort_time,
-        "record_time": sort_time,
-        "has_content": bool(content),
-        "content": content or None,
-        "length": len(content),
-        "group_key": "admission",
-        "execution_domain": _safe_text(valid_docs[0].get("execution_domain")) or "admission",
-        "sections": [
+    if not content:
+        return other_docs
+
+    for doc in other_docs:
+        if _safe_text(doc.get("doc_type")) != "admission_record":
+            continue
+        if _safe_text(doc.get("document_id") or doc.get("doc_id")) != parent_document_id:
+            continue
+        existing_content = _safe_text(doc.get("content"))
+        merged_content = f"{existing_content}\n\n{content}".strip() if existing_content else content
+        sections = list(doc.get("sections") or [])
+        sections.append(
             {
                 "section_key": "admission_record_diagnosis",
                 "section_label": "入院记录诊断",
                 "text": content,
                 "source_field": "admission_record_diagnosis",
-                "order_index": 0,
+                "order_index": len(sections),
             }
-        ],
-        "source_fields": [],
-        "assembly_status": "assembled",
-        "data_quality_flags": [],
-        "source": "bundle",
-    }
-    return [*other_docs, merged_doc]
+        )
+        doc["content"] = merged_content
+        doc["length"] = len(merged_content)
+        doc["sections"] = sections
+        doc["has_content"] = bool(merged_content)
+        flags = list(doc.get("data_quality_flags") or [])
+        if "merged:admission_record_diagnosis" not in flags:
+            flags.append("merged:admission_record_diagnosis")
+        doc["data_quality_flags"] = flags
+        return other_docs
+
+    return other_docs
 
 
 def _documents_include_doc_type(documents: list[dict[str, Any]], doc_type: str) -> bool:
