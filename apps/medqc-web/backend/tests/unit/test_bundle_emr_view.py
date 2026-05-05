@@ -96,6 +96,17 @@ def test_build_documents_should_merge_only_named_admission_diagnoses():
                         {"source_field": "diagnosis_name", "used": True, "raw_value_preview": "1、右侧肩袖损伤；2、疼痛"},
                     ],
                 },
+                {
+                    "document_type": "admission_record_diagnosis",
+                    "document_id": "adm-1::diagnosis::3",
+                    "document_title": "入院记录诊断-出院诊断-3",
+                    "display_time": "2026-03-01 09:00:00",
+                    "content": "诊断类型: 出院诊断\n诊断序号: 3\n诊断名称: 出院诊断污染了入院记录正文",
+                    "source_fields": [
+                        {"source_field": "diagnosis_type", "used": True, "raw_value_preview": "出院诊断"},
+                        {"source_field": "diagnosis_name", "used": True, "raw_value_preview": "出院诊断污染了入院记录正文"},
+                    ],
+                },
             ]
         }
     }
@@ -108,6 +119,7 @@ def test_build_documents_should_merge_only_named_admission_diagnoses():
     assert "初步诊断" in documents[0]["content"]
     assert "右侧肩袖损伤" in documents[0]["content"]
     assert "诊断类型: 入院诊断\n诊断序号: 1" not in documents[0]["content"]
+    assert "出院诊断污染" not in documents[0]["content"]
 
 
 def test_pick_document_priority():

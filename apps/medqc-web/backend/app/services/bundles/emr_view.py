@@ -182,6 +182,8 @@ _SURGERY_TEMPLATE_FIELDS: tuple[tuple[str, str], ...] = (
     ("preoperative_diagnosis", "术前诊断"),
 )
 
+_ADMISSION_DIAGNOSIS_ALLOWED_TYPES: set[str] = {"初步诊断", "入院诊断"}
+
 
 def _should_skip_template_source_field(source_field: str) -> bool:
     field = _safe_text(source_field).lower()
@@ -342,6 +344,17 @@ def build_documents_from_domain_bundles(
 
 
 def _has_named_diagnosis(doc: dict[str, Any]) -> bool:
+    diagnosis_type = ""
+    for field in doc.get("source_fields") or []:
+        if not isinstance(field, dict):
+            continue
+        source_field = _safe_text(field.get("source_field")).lower()
+        preview = _safe_text(field.get("raw_value_preview"))
+        if source_field == "diagnosis_type":
+            diagnosis_type = preview
+    if diagnosis_type and diagnosis_type not in _ADMISSION_DIAGNOSIS_ALLOWED_TYPES:
+        return False
+
     for field in doc.get("source_fields") or []:
         if not isinstance(field, dict):
             continue
@@ -350,6 +363,10 @@ def _has_named_diagnosis(doc: dict[str, Any]) -> bool:
         if source_field in {"diagnosis_name", "diagnosis_code"} and preview:
             return True
     content = _safe_text(doc.get("content"))
+    if not diagnosis_type and not any(token in content for token in _ADMISSION_DIAGNOSIS_ALLOWED_TYPES):
+        return False
+    if any(f"诊断类型: {excluded}" in content for excluded in ("出院诊断", "修正诊断", "补充诊断")):
+        return False
     return "诊断名称:" in content or "诊断编码:" in content
 
 
