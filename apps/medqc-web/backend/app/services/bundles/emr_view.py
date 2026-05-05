@@ -381,8 +381,21 @@ def _merge_admission_diagnosis_documents(documents: list[dict[str, Any]]) -> lis
         return other_docs
 
     content = "\n\n".join(_safe_text(doc.get("content")) for doc in valid_docs if _safe_text(doc.get("content")))
-    sort_time = next((_safe_text(doc.get("sort_time")) for doc in valid_docs if _safe_text(doc.get("sort_time"))), "")
     document_id = _safe_text(valid_docs[0].get("document_id") or valid_docs[0].get("doc_id") or "admission_record_diagnosis")
+    parent_document_id = document_id.split("::diagnosis::", 1)[0]
+    parent_admission_doc = next(
+        (
+            doc
+            for doc in other_docs
+            if _safe_text(doc.get("doc_type")) == "admission_record"
+            and _safe_text(doc.get("document_id") or doc.get("doc_id")) == parent_document_id
+        ),
+        None,
+    )
+    sort_time = (
+        _safe_text((parent_admission_doc or {}).get("sort_time") or (parent_admission_doc or {}).get("record_time"))
+        or next((_safe_text(doc.get("sort_time")) for doc in valid_docs if _safe_text(doc.get("sort_time"))), "")
+    )
     merged_doc = {
         "id": "admission_record_diagnosis::summary",
         "doc_id": "admission_record_diagnosis::summary",

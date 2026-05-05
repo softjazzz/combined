@@ -75,6 +75,14 @@ def test_build_documents_should_merge_only_named_admission_diagnoses():
         "admission": {
             "source_documents": [
                 {
+                    "document_type": "admission_record",
+                    "document_id": "adm-1",
+                    "document_title": "入院记录",
+                    "display_time": "2026-03-01 08:00:00",
+                    "content": "主诉：腹痛3天",
+                    "source_fields": [],
+                },
+                {
                     "document_type": "admission_record_diagnosis",
                     "document_id": "adm-1::diagnosis::1",
                     "document_title": "入院记录诊断-入院诊断-1",
@@ -113,14 +121,15 @@ def test_build_documents_should_merge_only_named_admission_diagnoses():
 
     documents = build_documents_from_domain_bundles(domain_bundles)
 
-    assert len(documents) == 1
-    assert documents[0]["doc_type"] == "admission_record_diagnosis"
-    assert documents[0]["doc_name"] == "入院记录诊断"
-    assert "初步诊断" in documents[0]["content"]
-    assert "右侧肩袖损伤" in documents[0]["content"]
-    assert "诊断序号" not in documents[0]["content"]
-    assert "诊断类型: 入院诊断" not in documents[0]["content"]
-    assert "出院诊断污染" not in documents[0]["content"]
+    diagnosis_doc = next(doc for doc in documents if doc["doc_type"] == "admission_record_diagnosis")
+    assert len(documents) == 2
+    assert diagnosis_doc["doc_name"] == "入院记录诊断"
+    assert diagnosis_doc["sort_time"] == "2026-03-01 08:00:00"
+    assert "初步诊断" in diagnosis_doc["content"]
+    assert "右侧肩袖损伤" in diagnosis_doc["content"]
+    assert "诊断序号" not in diagnosis_doc["content"]
+    assert "诊断类型: 入院诊断" not in diagnosis_doc["content"]
+    assert "出院诊断污染" not in diagnosis_doc["content"]
 
 
 def test_pick_document_priority():
