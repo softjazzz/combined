@@ -271,7 +271,7 @@
                   v-if="
                     currentDocFieldList.length > 0 ||
                       currentDocSectionBlocks.length > 0 ||
-                      currentDocContent
+                      shouldShowCurrentDocPlainContent
                   "
                   class="review-card review-card--structured"
                 >
@@ -323,7 +323,7 @@
                     </template>
 
                     <div
-                      v-else-if="currentDocContent"
+                      v-else-if="shouldShowCurrentDocPlainContent"
                       class="review-structured-row"
                     >
                       <div class="review-structured-row__label">
@@ -696,6 +696,15 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   inpat_nondrug_order: '临时医嘱',
 }
 
+const STRUCTURED_FIELD_ONLY_DOC_TYPES = new Set([
+  'surgery_record',
+  'anesthesia_record',
+  'presurg_summary',
+  'presurg_discussion',
+  'surgery_safecheck_record',
+  'postsurg_firstcourse_record',
+])
+
 const props = defineProps<{
   visible: boolean
   record: RecordData | null
@@ -1032,6 +1041,16 @@ function buildDocFieldList(doc?: ReviewDocItem | null) {
     }))
 }
 
+function shouldSuppressPlainContentFallback(doc?: ReviewDocItem | null): boolean {
+  if (!doc) return false
+  const docType = safeText(doc.doc_type || doc.source_table).toLowerCase()
+  return (
+    STRUCTURED_FIELD_ONLY_DOC_TYPES.has(docType) &&
+    buildDocFieldList(doc).length > 0 &&
+    (doc.sections || []).length === 0
+  )
+}
+
 function buildCourseTitleProbeText(doc: ReviewDocItem): string {
   return [
     safeText(doc.document_title),
@@ -1348,6 +1367,9 @@ const currentDoc = computed<ReviewDocItem | null>(() => {
 })
 
 const currentDocContent = computed(() => currentDoc.value?.content || '')
+const shouldShowCurrentDocPlainContent = computed(
+  () => Boolean(currentDocContent.value) && !shouldSuppressPlainContentFallback(currentDoc.value),
+)
 const currentDocTitle = computed(
   () => currentDoc.value?.document_title || currentDoc.value?.doc_name || '病历文书',
 )
@@ -1434,17 +1456,18 @@ const currentDocFieldBlocks = computed<DocParagraphBlock[]>(() =>
 )
 
 const currentDocAllBlocks = computed<DocParagraphBlock[]>(() => {
+  const plainBlocks = shouldShowCurrentDocPlainContent.value ? currentDocPlainBlocks.value : []
   if (currentDocFieldBlocks.value.length > 0) {
     const contentBlocks =
       currentDocSectionBlocks.value.length > 0
         ? currentDocSectionBlocks.value.flatMap((section) => section.blocks)
-        : currentDocPlainBlocks.value
+        : plainBlocks
     return [...currentDocFieldBlocks.value, ...contentBlocks]
   }
   if (currentDocSectionBlocks.value.length > 0) {
     return currentDocSectionBlocks.value.flatMap((section) => section.blocks)
   }
-  return currentDocPlainBlocks.value
+  return plainBlocks
 })
 
 const activeHighlightBlockKey = computed(() => activeHighlightTarget.value?.blockKey || '')
@@ -1579,6 +1602,7 @@ function findHighlightTargetInDoc(
             })
             .flat()
           if (sections.length > 0) return [...fieldBlocks, ...sections]
+          if (shouldSuppressPlainContentFallback(doc)) return fieldBlocks
           const plainBlocks = splitReadableParagraphs(doc.content).map((text, index) => ({
             key: `plain-block-${index}`,
             text,
