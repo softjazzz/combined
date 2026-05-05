@@ -590,6 +590,71 @@ def test_resolve_admission_consistency_should_not_keep_non_compliant_items_for_n
     assert recommendation["sub_items"][0]["status"] == "compliant"
 
 
+def test_resolve_admission_consistency_should_keep_sc020_structured_diagnosis_fields():
+    recommendation = sample_pool_module.resolve_admission_consistency_rule_recommendations(
+        "入院诊断疼痛，诊断不准确，专科查体显示活动受限。",
+        llm_output={
+            "primary_rule_id": "SC-020",
+            "recommended_rule_ids": ["SC-020"],
+            "sub_items": [
+                {
+                    "rule_id": "SC-020",
+                    "item": "初步诊断",
+                    "status": "non_compliant",
+                    "matched_manual_issue_part": "诊断不准确",
+                    "evidence": "诊断仅写疼痛，现病史/专科查体已有明确损伤部位和活动受限。",
+                    "reason": "症状性诊断未覆盖核心阳性证据。",
+                }
+            ],
+            "admission_diagnoses": ["疼痛"],
+            "symptom_or_sign_only_diagnoses": ["疼痛"],
+            "core_abnormal_evidence": ["明确损伤部位", "主被动活动受限"],
+            "diagnosis_coverage": "not_covered",
+            "qc_result": "non_compliant",
+            "overall_result": "hit",
+            "confidence": 0.92,
+        },
+    )
+
+    assert recommendation["primary_rule_id"] == "SC-020"
+    assert recommendation["admission_diagnoses"] == ["疼痛"]
+    assert recommendation["symptom_or_sign_only_diagnoses"] == ["疼痛"]
+    assert recommendation["core_abnormal_evidence"] == ["明确损伤部位", "主被动活动受限"]
+    assert recommendation["diagnosis_coverage"] == "not_covered"
+    assert recommendation["qc_result"] == "non_compliant"
+
+
+def test_resolve_admission_consistency_should_not_force_uncertain_diagnosis_to_non_compliant():
+    recommendation = sample_pool_module.resolve_admission_consistency_rule_recommendations(
+        "入院诊断待查，需结合现病史。",
+        llm_output={
+            "primary_rule_id": "SC-020",
+            "recommended_rule_ids": ["SC-020"],
+            "sub_items": [
+                {
+                    "rule_id": "SC-020",
+                    "item": "初步诊断",
+                    "status": "uncertain",
+                    "matched_manual_issue_part": "入院诊断待查",
+                    "evidence": "证据不足，诊断带待查表达。",
+                    "reason": "不能强打。",
+                }
+            ],
+            "admission_diagnoses": ["腹痛原因待查？"],
+            "symptom_or_sign_only_diagnoses": ["腹痛原因待查？"],
+            "core_abnormal_evidence": [],
+            "diagnosis_coverage": "uncertain",
+            "qc_result": "uncertain",
+            "overall_result": "uncertain",
+            "confidence": 0.7,
+        },
+    )
+
+    assert recommendation["diagnosis_coverage"] == "uncertain"
+    assert recommendation["qc_result"] == "uncertain"
+    assert recommendation["sub_items"][0]["status"] == "uncertain"
+
+
 def test_resolve_admission_consistency_without_llm_should_require_review():
     recommendation = sample_pool_module.resolve_admission_consistency_rule_recommendations(
         "现病史未描述发病时间",

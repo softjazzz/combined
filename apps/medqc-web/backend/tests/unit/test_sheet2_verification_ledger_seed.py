@@ -280,3 +280,105 @@ def test_admission_family_stats_should_bucket_non_writeback_rows(tmp_path, monke
     assert stats["writeback_bucket_breakdown"]["legacy_or_other_blocked"] == 1
     assert stats["writeback_bucket_breakdown"]["legacy_or_other_exact"] == 1
     assert stats["writeback_bucket_breakdown"]["skip"] == 1
+
+
+def test_admission_reclassification_bundle_should_include_frontend_admission_diagnosis(monkeypatch):
+    module = _load_script_module("run_admission_issue_family_reclassification.py")
+    monkeypatch.setattr(
+        module,
+        "_load_admission_bundle_documents",
+        lambda visit_id: (
+            [
+                {
+                    "doc_type": "admission_record",
+                    "document_id": "adm-1",
+                    "document_title": "入院记录",
+                    "content": "现病史：右肩疼痛伴活动受限。\n初步诊断：疼痛。",
+                    "sections": [{"section_label": "初步诊断", "content": "疼痛"}],
+                },
+                {
+                    "doc_type": "admission_record_diagnosis",
+                    "document_id": "diag-1",
+                    "document_title": "入院记录诊断",
+                    "content": "诊断类型: 初步诊断\n诊断名称: 疼痛",
+                },
+            ],
+            "frontend_bundle",
+        ),
+    )
+
+    bundle = module.build_admission_issue_family_bundle("V001")
+
+    assert bundle["document_source"] == "frontend_bundle"
+    assert bundle["admission_record_diagnosis"]["初步诊断"] == "疼痛"
+    assert "初步诊断：疼痛" in bundle["admission_record"]["content"]
+
+
+def test_sc020_diagnosis_review_should_select_diagnosis_related_rows():
+    module = _load_script_module("run_sc020_admission_diagnosis_review.py")
+    rows = [
+        {"sheet2_row_id": "Sheet2-R1", "primary_rule_id": "SC-020", "issue_family": "其他", "manual_issue_text": "无"},
+        {
+            "sheet2_row_id": "Sheet2-R2",
+            "primary_rule_id": "SC-008",
+            "issue_family": "入院记录内容不完整/前后矛盾",
+            "manual_issue_text": "入院诊断未体现关键证据",
+        },
+        {
+            "sheet2_row_id": "Sheet2-R3",
+            "primary_rule_id": "SC-008",
+            "issue_family": "入院记录内容不完整/前后矛盾",
+            "manual_issue_text": "体格检查缺体重",
+        },
+    ]
+
+    selected = module._select_rows(rows, sheet2_row_ids=set(), limit=0)
+
+    assert [row["sheet2_row_id"] for row in selected] == ["Sheet2-R1", "Sheet2-R2"]
+
+
+def test_sc020_diagnosis_review_should_promote_symptom_only_diagnosis():
+    module = _load_script_module("run_sc020_admission_diagnosis_review.py")
+    recommendation = {
+        "primary_rule_id": "SC-020",
+        "qc_result": "non_compliant",
+        "diagnosis_coverage": "covered",
+        "overall_result": "hit",
+        "symptom_or_sign_only_diagnoses": ["疼痛"],
+    }
+
+    status, reason = module._status_from_recommendation(recommendation, "blocked_with_reason")
+
+    assert status == "exact_confirmed"
+    assert "症状性诊断" in reason
+
+
+def test_sc020_diagnosis_review_should_keep_existing_exact_when_not_overturned():
+    module = _load_script_module("run_sc020_admission_diagnosis_review.py")
+    recommendation = {
+        "primary_rule_id": "SC-008",
+        "qc_result": "uncertain",
+        "diagnosis_coverage": "covered",
+        "overall_result": "partial_hit",
+    }
+
+    status, reason = module._status_from_recommendation(recommendation, "exact_confirmed")
+
+    assert status == "exact_confirmed"
+    assert "未推翻" in reason
+
+
+def test_sc020_diagnosis_review_should_not_force_uncertain_pending_diagnosis():
+    module = _load_script_module("run_sc020_admission_diagnosis_review.py")
+    recommendation = {
+        "primary_rule_id": "SC-020",
+        "qc_result": "uncertain",
+        "diagnosis_coverage": "uncertain",
+        "overall_result": "uncertain",
+        "review_required": False,
+    }
+
+    status, reason = module._status_from_recommendation(recommendation, "blocked_with_reason")
+
+    assert status == "blocked_with_reason"
+    assert "证据链不足" in reason

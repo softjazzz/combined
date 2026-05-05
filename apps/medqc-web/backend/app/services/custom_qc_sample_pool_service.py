@@ -693,6 +693,7 @@ ADMISSION_ISSUE_FAMILY_RULE_DEFINITIONS: Dict[str, str] = {
 
 ADMISSION_ISSUE_FAMILY_ALLOWED_RESULTS = {"hit", "partial_hit", "no_hit", "uncertain"}
 ADMISSION_ISSUE_FAMILY_ALLOWED_STATUSES = {"compliant", "non_compliant", "uncertain"}
+ADMISSION_DIAGNOSIS_COVERAGE_STATUSES = {"covered", "partially_covered", "not_covered", "uncertain"}
 
 
 def _unique_rule_ids(rule_ids: Iterable[Any]) -> List[str]:
@@ -792,6 +793,13 @@ def normalize_admission_consistency_llm_output(
             if item.get("status") == "non_compliant":
                 item["status"] = "compliant"
 
+    diagnosis_coverage = _safe_text(payload.get("diagnosis_coverage"), "uncertain").lower()
+    if diagnosis_coverage not in ADMISSION_DIAGNOSIS_COVERAGE_STATUSES:
+        diagnosis_coverage = "uncertain"
+    qc_result = _safe_text(payload.get("qc_result"), "uncertain").lower()
+    if qc_result not in ADMISSION_ISSUE_FAMILY_ALLOWED_STATUSES:
+        qc_result = "uncertain"
+
     review_required = False
     if invalid_rule_ids or not payload:
         overall_result = "uncertain"
@@ -810,6 +818,19 @@ def normalize_admission_consistency_llm_output(
             _safe_text(item) for item in list(payload.get("unmatched_manual_issue_parts") or []) if _safe_text(item)
         ],
         "overall_result": overall_result,
+        "admission_diagnoses": [
+            _safe_text(item) for item in list(payload.get("admission_diagnoses") or []) if _safe_text(item)
+        ],
+        "symptom_or_sign_only_diagnoses": [
+            _safe_text(item)
+            for item in list(payload.get("symptom_or_sign_only_diagnoses") or [])
+            if _safe_text(item)
+        ],
+        "core_abnormal_evidence": [
+            _safe_text(item) for item in list(payload.get("core_abnormal_evidence") or []) if _safe_text(item)
+        ],
+        "diagnosis_coverage": diagnosis_coverage,
+        "qc_result": qc_result,
         "qc_conclusion": _safe_text(payload.get("qc_conclusion")),
         "confidence": _coerce_confidence(payload.get("confidence")),
         "evidence_summary": _safe_text(payload.get("evidence_summary") or payload.get("qc_conclusion")),
@@ -842,6 +863,9 @@ def build_admission_issue_family_prompt(
 5. 如果人工问题和病历原文冲突，应输出 no_hit 或 uncertain，并在 reason 中说明冲突，不要强行 exact。
 6. 如果 overall_result 是 no_hit，sub_items 中不得出现 non_compliant；冲突项应标记 compliant，证据不足项才标记 uncertain。
 7. 如果人工问题包含多个锚点，且至少一个锚点能被原文明确证实为缺陷，应输出 partial_hit，不要输出 uncertain；仅把未核实或冲突的锚点标记 uncertain/compliant。
+8. 当问题涉及 SC-020 入院诊断时，必须按通用诊断准确性口径判断：入院诊断是否覆盖现病史、专科查体、辅助检查、既往检查中的核心异常证据；若诊断只是症状/体征/笼统描述，而病历已有较明确病因、损伤部位、器官疾病、并发症或疾病性质，应判为诊断不准确或不完整。
+9. 如证据不足以形成明确疾病诊断，且诊断中有“待查/原因待查/待排/？”等不确定表达，可判 compliant 或 uncertain，不要强打 non_compliant。
+10. SC-020 不得依赖患者姓名、特定样本编号或单个疾病词；必须基于诊断文本与核心阳性证据的覆盖关系。
 
 【人工问题】
 {_safe_text(manual_issue_text)}
@@ -866,6 +890,11 @@ def build_admission_issue_family_prompt(
   "matched_manual_issue_parts": [],
   "unmatched_manual_issue_parts": [],
   "overall_result": "hit|partial_hit|no_hit|uncertain",
+  "admission_diagnoses": ["入院/初步诊断原文条目"],
+  "symptom_or_sign_only_diagnoses": ["仅为症状、体征或笼统描述的诊断条目"],
+  "core_abnormal_evidence": ["现病史/专科查体/辅助检查/既往检查中的核心异常证据"],
+  "diagnosis_coverage": "covered|partially_covered|not_covered|uncertain",
+  "qc_result": "non_compliant|compliant|uncertain",
   "qc_conclusion": "...",
   "confidence": 0.0
 }}"""
@@ -889,6 +918,11 @@ def resolve_admission_consistency_rule_recommendations(
             "matched_manual_issue_parts": [],
             "unmatched_manual_issue_parts": [_normalize_issue_text(text)] if _normalize_issue_text(text) else [],
             "overall_result": "uncertain",
+            "admission_diagnoses": [],
+            "symptom_or_sign_only_diagnoses": [],
+            "core_abnormal_evidence": [],
+            "diagnosis_coverage": "uncertain",
+            "qc_result": "uncertain",
             "qc_conclusion": "未提供 LLM 语义分流结果，需进入 reclassification dry-run。",
             "confidence": 0.0,
             "evidence_summary": "",

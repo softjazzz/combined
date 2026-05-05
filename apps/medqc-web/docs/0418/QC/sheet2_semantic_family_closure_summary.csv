@@ -1,31 +1,42 @@
 issue_family,family_type,closure_status,primary_rule_ids,row_count,exact_hit,same_family_hit,miss,skip,pending,top_next_actions
 上级医师查房缺失/未及时书写,semantic,A_closed,SC-051,2,0,2,0,0,0,已核验完成
 上级医师查房缺失/未及时书写；出院前一天/当天上级医师查房或病程缺失,semantic,A_closed,SC-051,1,0,1,0,0,0,已核验完成
-上级查房内容空洞/复制粘贴/身份异常,semantic,A_closed,SC-050,3,0,3,0,0,0,已核验完成
+上级查房内容空洞/复制粘贴/身份异常,semantic,A_closed,SC-050,4,0,4,0,0,0,已核验完成
 上级查房内容空洞/复制粘贴/身份异常；病程记录病情变化记录不全,semantic,A_closed,SC-032,1,0,1,0,0,0,已核验完成
 上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全,semantic,A_closed,LX-018,1,0,1,0,0,0,已核验完成
 不合理复制病历内容,semantic,A_closed,CL-275,4,0,4,0,0,0,已核验完成
 主治首次查房48小时；病程记录缺分析/缺处理意见,semantic,A_closed,SC-033,1,0,1,0,0,0,已核验完成
 会诊意见已写遵执但实际未落实,semantic,A_closed,SC-070,6,0,5,0,1,0,已核验完成 | 已确认skip
-会诊执行记录缺失/未写执行情况,semantic,A_closed,SC-070,6,0,6,0,0,0,已核验完成
+会诊执行记录缺失/未写执行情况,semantic,A_closed,SC-070,8,0,8,0,0,0,已核验完成
 会诊执行记录缺失/未写执行情况；危急值记录不完整/处理不充分；诊疗医嘱与病程记录不一致,semantic,A_closed,LX-016,1,0,1,0,0,0,已核验完成
 会诊执行记录缺失/未写执行情况；病程时效/缺失,semantic,A_closed,LX-016,2,0,2,0,0,0,已核验完成
 会诊记录内容质量/复制粘贴/结论不足,semantic,A_closed,SC-069,2,0,1,0,1,0,已核验完成 | 已确认skip
 会诊记录内容质量/复制粘贴/结论不足；会诊意见已写遵执但实际未落实,semantic,A_closed,LX-016,1,0,1,0,0,0,已核验完成
+会诊记录质量缺陷,semantic,A_closed,SC-069,1,0,1,0,0,0,已核验完成
+入院记录内容不完整/前后矛盾,semantic,A_closed,SC-008|SC-009|SC-010|SC-012|SC-018|SC-020,53,7,45,0,1,0,已核验完成 | 诊断证据链不足或只命中部分锚点，保留 blocked。 | 人工问题与当前原文或诊断证据冲突，保留 blocked。
 危急值记录不完整/处理不充分,semantic,A_closed,SC-039,5,0,5,0,0,0,已核验完成
-四级手术未 MDT,semantic,A_closed,SC-083,5,0,5,0,0,0,已核验完成
+四级手术未 MDT,semantic,A_closed,SC-083,7,0,7,0,0,0,已核验完成
 四级手术未 MDT；术前讨论结论未入病历/缺项,semantic,A_closed,SC-083,1,0,1,0,0,0,已核验完成
-手术记录缺项/时间错误/逻辑不清/签名异常,semantic,A_closed,SC-097,6,0,6,0,0,0,已核验完成
+围手术期术前评估/讨论/小结缺陷,semantic,A_closed,SC-081,4,0,4,0,0,0,已核验完成
+手术记录缺项/时间错误/逻辑不清/签名异常,semantic,A_closed,SC-097,7,0,7,0,0,0,已核验完成
+既往史/用药史记录不全,semantic,A_closed,SC-013,2,0,2,0,0,0,已核验完成
+有创诊疗操作记录缺失/书写不规范,semantic,A_closed,SC-045|SC-046,7,0,7,0,0,0,已核验完成
 术前主刀医生查房/麻醉术前访视缺失,semantic,A_closed,LX-020,1,0,1,0,0,0,已核验完成
 术前小结缺项/不清；诊疗医嘱与病程记录不一致,semantic,A_closed,SC-081,1,0,1,0,0,0,已核验完成
+术前讨论结论/会诊意见未记入病历,semantic,A_closed,SC-084,1,0,1,0,0,0,已核验完成
 术前讨论结论未入病历/缺项,semantic,A_closed,SC-084,2,0,2,0,0,0,已核验完成
-病程记录病情变化记录不全,semantic,A_closed,SC-032,8,0,8,0,0,0,已核验完成
-病程记录缺分析/缺处理意见,semantic,A_closed,SC-036,8,0,8,0,0,0,已核验完成
+疑难病例讨论缺失/缺项,semantic,A_closed,SC-056,1,0,1,0,0,0,已核验完成
+病程记录病情变化记录不全,semantic,A_closed,SC-032,9,0,9,0,0,0,已核验完成
+病程记录缺分析/缺处理意见,semantic,A_closed,SC-036,30,0,30,0,0,0,已核验完成
 诊疗医嘱与病程记录不一致,semantic,A_closed,SC-146,5,0,5,0,0,0,已核验完成
+转科记录缺失/书写不规范,semantic,A_closed,SC-064,3,0,3,0,0,0,已核验完成
 输血时间/量/前后记录不一致,semantic,A_closed,SC-074,4,0,4,0,0,0,已核验完成
 输血记录链缺失/不全,semantic,A_closed,LX-018,1,0,1,0,0,0,已核验完成
 输血记录链缺失/不全；输血时间/量/前后记录不一致,semantic,A_closed,LX-018,1,0,1,0,0,0,已核验完成
+输血记录链缺项,semantic,A_closed,SC-074,1,0,1,0,0,0,已核验完成
 首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失,semantic,A_closed,LX-020,1,0,1,0,0,0,已核验完成
+首次病程记录存在/时效；术后首次病程记录缺项/不清,semantic,A_closed,SC-105,2,0,2,0,0,0,已核验完成
+首次病程诊断依据/鉴别诊断/诊疗计划缺陷,semantic,A_closed,SC-023,20,0,20,0,0,0,已核验完成
 高级医师首次查房72小时；病程记录病情变化记录不全,semantic,A_closed,SC-032,2,0,2,0,0,0,已核验完成
 交接班记录缺失/缺项,semantic,C_blocked_or_skip,SC-062,1,0,0,0,1,0,已确认skip
 住院超30天阶段小结/讨论缺失,semantic,C_blocked_or_skip,SC-065,3,0,0,0,3,0,已确认skip
