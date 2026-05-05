@@ -120,6 +120,12 @@ _FIELD_LABELS: dict[str, str] = {
     "past_history": "既往史",
     "checkup": "体格检查",
     "assist_exam": "辅助检查",
+    "diagnosis_type": "诊断类型",
+    "diagnosis_id": "诊断序号",
+    "diagnosis_no": "诊断序号",
+    "diagnosis_name": "诊断名称",
+    "diagnosis_code": "诊断编码",
+    "diagnosis_main": "是否主诊断",
     "dept_name": "科室",
     "submitter": "记录者",
     "surgeon_sign": "手术医生签名",
@@ -324,6 +330,7 @@ def build_documents_from_domain_bundles(
                 seen_keys.add(key)
             documents.append(normalized)
 
+    documents = _merge_admission_diagnosis_documents(documents)
     documents.sort(
         key=lambda item: (
             _parse_sort_time(_safe_text(item.get("sort_time"))),
@@ -332,6 +339,65 @@ def build_documents_from_domain_bundles(
         )
     )
     return documents
+
+
+def _has_named_diagnosis(doc: dict[str, Any]) -> bool:
+    for field in doc.get("source_fields") or []:
+        if not isinstance(field, dict):
+            continue
+        source_field = _safe_text(field.get("source_field")).lower()
+        preview = _safe_text(field.get("raw_value_preview"))
+        if source_field in {"diagnosis_name", "diagnosis_code"} and preview:
+            return True
+    content = _safe_text(doc.get("content"))
+    return "诊断名称:" in content or "诊断编码:" in content
+
+
+def _merge_admission_diagnosis_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    diagnosis_docs = [doc for doc in documents if _safe_text(doc.get("doc_type")) == "admission_record_diagnosis"]
+    if not diagnosis_docs:
+        return documents
+
+    valid_docs = [doc for doc in diagnosis_docs if _has_named_diagnosis(doc)]
+    other_docs = [doc for doc in documents if _safe_text(doc.get("doc_type")) != "admission_record_diagnosis"]
+    if not valid_docs:
+        return other_docs
+
+    content = "\n\n".join(_safe_text(doc.get("content")) for doc in valid_docs if _safe_text(doc.get("content")))
+    sort_time = next((_safe_text(doc.get("sort_time")) for doc in valid_docs if _safe_text(doc.get("sort_time"))), "")
+    document_id = _safe_text(valid_docs[0].get("document_id") or valid_docs[0].get("doc_id") or "admission_record_diagnosis")
+    merged_doc = {
+        "id": "admission_record_diagnosis::summary",
+        "doc_id": "admission_record_diagnosis::summary",
+        "doc_key": "admission_record_diagnosis::summary",
+        "doc_type": "admission_record_diagnosis",
+        "doc_name": "入院记录诊断",
+        "type": "admission_record_diagnosis",
+        "label": "入院记录诊断",
+        "document_id": document_id,
+        "document_title": "入院记录诊断",
+        "sort_time": sort_time,
+        "record_time": sort_time,
+        "has_content": bool(content),
+        "content": content or None,
+        "length": len(content),
+        "group_key": "admission",
+        "execution_domain": _safe_text(valid_docs[0].get("execution_domain")) or "admission",
+        "sections": [
+            {
+                "section_key": "admission_record_diagnosis",
+                "section_label": "入院记录诊断",
+                "text": content,
+                "source_field": "admission_record_diagnosis",
+                "order_index": 0,
+            }
+        ],
+        "source_fields": [],
+        "assembly_status": "assembled",
+        "data_quality_flags": [],
+        "source": "bundle",
+    }
+    return [*other_docs, merged_doc]
 
 
 def _documents_include_doc_type(documents: list[dict[str, Any]], doc_type: str) -> bool:

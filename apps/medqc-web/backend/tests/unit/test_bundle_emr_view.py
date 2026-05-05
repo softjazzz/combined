@@ -70,6 +70,46 @@ def test_build_documents_tree_from_domain_bundles():
     assert by_key["surgery"]["count"] == 1
 
 
+def test_build_documents_should_merge_only_named_admission_diagnoses():
+    domain_bundles = {
+        "admission": {
+            "source_documents": [
+                {
+                    "document_type": "admission_record_diagnosis",
+                    "document_id": "adm-1::diagnosis::1",
+                    "document_title": "入院记录诊断-入院诊断-1",
+                    "display_time": "2026-03-01 09:00:00",
+                    "content": "诊断类型: 入院诊断\n诊断序号: 1",
+                    "source_fields": [
+                        {"source_field": "diagnosis_type", "used": True, "raw_value_preview": "入院诊断"},
+                        {"source_field": "diagnosis_id", "used": True, "raw_value_preview": "1"},
+                    ],
+                },
+                {
+                    "document_type": "admission_record_diagnosis",
+                    "document_id": "adm-1::diagnosis::2",
+                    "document_title": "入院记录诊断-初步诊断-2",
+                    "display_time": "2026-03-01 09:00:00",
+                    "content": "诊断类型: 初步诊断\n诊断序号: 2\n诊断名称: 1、右侧肩袖损伤；2、疼痛",
+                    "source_fields": [
+                        {"source_field": "diagnosis_type", "used": True, "raw_value_preview": "初步诊断"},
+                        {"source_field": "diagnosis_name", "used": True, "raw_value_preview": "1、右侧肩袖损伤；2、疼痛"},
+                    ],
+                },
+            ]
+        }
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+
+    assert len(documents) == 1
+    assert documents[0]["doc_type"] == "admission_record_diagnosis"
+    assert documents[0]["doc_name"] == "入院记录诊断"
+    assert "初步诊断" in documents[0]["content"]
+    assert "右侧肩袖损伤" in documents[0]["content"]
+    assert "诊断类型: 入院诊断\n诊断序号: 1" not in documents[0]["content"]
+
+
 def test_pick_document_priority():
     docs = [
         {

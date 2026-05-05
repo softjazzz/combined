@@ -514,6 +514,9 @@ def _assemble_admission_record_diagnosis_text(payload: dict[str, Any]) -> str:
     diagnosis_type = _merge_field_text(payload, "diagnosis_type")
     diagnosis_name = _merge_field_text(payload, "diagnosis_name")
     diagnosis_code = _merge_field_text(payload, "diagnosis_code")
+    if not (diagnosis_name or diagnosis_code):
+        return ""
+
     diagnosis_no = _merge_field_text(payload, "diagnosis_no", "diagnosis_id")
     diagnosis_main = _merge_field_text(payload, "diagnosis_main")
     diagnosis_time = _merge_field_text(payload, "diagnosis_time", "diagnosis_datetime", "record_time", "update_time")
