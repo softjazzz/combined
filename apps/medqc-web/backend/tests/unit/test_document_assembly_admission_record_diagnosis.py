@@ -30,3 +30,35 @@ def test_build_document_select_columns_should_include_admission_diagnosis_fields
     )
 
     assert columns == ["document_id", "diagnosis_type", "diagnosis_name", "diagnosis_code", "v2_schema"]
+
+
+def test_discharge_record_diagnosis_should_render_discharge_diagnosis() -> None:
+    document = assemble_document(
+        "discharge_record_diagnosis",
+        {
+            "document_id": "4500001||8",
+            "diagnosis_id": "3",
+            "diagnosis_type": "出院诊断",
+            "diagnosis_name": "急性阑尾炎",
+            "diagnosis_code": "K35.900",
+            "diagnosis_main": "是",
+            "update_time": "2026-03-20 09:30:00",
+        },
+    )
+
+    assert document.document_title == "出院记录诊断-出院诊断-3"
+    assert document.document_id == "4500001||8::diagnosis::3"
+    assert document.assembly_status == "assembled"
+    assert "诊断类型: 出院诊断" in document.assembled_text
+    assert "诊断序号" not in document.assembled_text
+    assert "诊断名称: 急性阑尾炎" in document.assembled_text
+    assert document.sections[0].section_label == "出院记录诊断"
+
+
+def test_build_document_select_columns_should_include_discharge_diagnosis_fields() -> None:
+    columns = build_document_select_columns(
+        "discharge_record_diagnosis",
+        {"document_id", "diagnosis_type", "diagnosis_name", "diagnosis_code", "v2_schema"},
+    )
+
+    assert columns == ["document_id", "diagnosis_type", "diagnosis_name", "diagnosis_code", "v2_schema"]

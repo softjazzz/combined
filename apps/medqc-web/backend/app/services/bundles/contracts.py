@@ -218,6 +218,7 @@ _BUNDLE_DOC_PRIORITY: dict[BundleName, tuple[str, ...]] = {
     ),
     "FinalRecordBundle": (
         "discharge_record",
+        "discharge_record_diagnosis",
         "death_record",
         "death_discussion",
         "admission_record",

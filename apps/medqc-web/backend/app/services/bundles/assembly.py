@@ -84,6 +84,7 @@ _RUNNING_DOC_PRIORITY: tuple[str, ...] = (
 )
 _FINAL_DOC_PRIORITY: tuple[str, ...] = (
     "discharge_record",
+    "discharge_record_diagnosis",
     "death_record",
     "death_discussion",
     "admission_record",
@@ -217,6 +218,7 @@ _SCENE_GROUP_BY_DOC_TYPE: dict[str, str] = {
     "postsurg_firstcourse_record": "surgery",
     "surgery_safecheck_record": "surgery",
     "discharge_record": "terminal",
+    "discharge_record_diagnosis": "terminal",
     "death_record": "terminal",
     "death_discussion": "terminal",
     "inpat_drug_order": "orders",
@@ -261,6 +263,7 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
     ),
     "terminal": (
         "discharge_record",
+        "discharge_record_diagnosis",
         "death_record",
     ),
     "index_coding_settlement": (
@@ -302,6 +305,7 @@ _DOMAIN_FETCH_LIMITS: dict[str, int] = {
     "handoff_record": 100,
     "handover_record": 100,
     "discharge_record": 20,
+    "discharge_record_diagnosis": 100,
     "death_record": 20,
 }
 _DOMAIN_BUNDLE_TABLE: dict[str, str] = {

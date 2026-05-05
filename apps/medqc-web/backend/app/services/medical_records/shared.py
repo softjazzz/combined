@@ -19,6 +19,7 @@ DOC_TYPES: list[tuple[str, str]] = [
     ("transfer_out_record", "转出记录"),
     ("nursing_record", "护理记录"),
     ("discharge_record", "出院记录"),
+    ("discharge_record_diagnosis", "出院记录诊断"),
 ]
 
 

@@ -31,6 +31,7 @@ _GROUP_DEFS: tuple[dict[str, str], ...] = (
 _DOC_TYPE_LABELS: dict[str, str] = {
     "admission_record": "入院记录",
     "admission_record_diagnosis": "入院记录诊断",
+    "discharge_record_diagnosis": "出院记录诊断",
     "first_course_record": "首次病程记录",
     "daily_course_record": "日常病程记录",
     "senior_course_record": "上级医师查房记录",
@@ -87,6 +88,7 @@ _GROUP_BY_DOC_TYPE: dict[str, str] = {
     "surgery_safecheck_record": "surgery",
     "consent_form": "surgery",
     "discharge_record": "terminal",
+    "discharge_record_diagnosis": "terminal",
     "death_record": "terminal",
     "death_discussion": "terminal",
     "inpat_drug_order": "orders",
@@ -183,6 +185,7 @@ _SURGERY_TEMPLATE_FIELDS: tuple[tuple[str, str], ...] = (
 )
 
 _ADMISSION_DIAGNOSIS_ALLOWED_TYPES: set[str] = {"初步诊断", "入院诊断"}
+_DISCHARGE_DIAGNOSIS_ALLOWED_TYPES: set[str] = {"出院诊断", "出院主要诊断", "出院其他诊断"}
 
 
 def _should_skip_template_source_field(source_field: str) -> bool:
@@ -333,6 +336,7 @@ def build_documents_from_domain_bundles(
             documents.append(normalized)
 
     documents = _merge_admission_diagnosis_documents(documents)
+    documents = _merge_discharge_diagnosis_documents(documents)
     documents.sort(
         key=lambda item: (
             _parse_sort_time(_safe_text(item.get("sort_time"))),
@@ -343,7 +347,7 @@ def build_documents_from_domain_bundles(
     return documents
 
 
-def _has_named_diagnosis(doc: dict[str, Any]) -> bool:
+def _has_named_diagnosis(doc: dict[str, Any], *, allowed_types: set[str]) -> bool:
     diagnosis_type = ""
     for field in doc.get("source_fields") or []:
         if not isinstance(field, dict):
@@ -352,7 +356,7 @@ def _has_named_diagnosis(doc: dict[str, Any]) -> bool:
         preview = _safe_text(field.get("raw_value_preview"))
         if source_field == "diagnosis_type":
             diagnosis_type = preview
-    if diagnosis_type and diagnosis_type not in _ADMISSION_DIAGNOSIS_ALLOWED_TYPES:
+    if diagnosis_type and diagnosis_type not in allowed_types:
         return False
 
     for field in doc.get("source_fields") or []:
@@ -363,31 +367,40 @@ def _has_named_diagnosis(doc: dict[str, Any]) -> bool:
         if source_field in {"diagnosis_name", "diagnosis_code"} and preview:
             return True
     content = _safe_text(doc.get("content"))
-    if not diagnosis_type and not any(token in content for token in _ADMISSION_DIAGNOSIS_ALLOWED_TYPES):
+    if not diagnosis_type and not any(token in content for token in allowed_types):
         return False
-    if any(f"诊断类型: {excluded}" in content for excluded in ("出院诊断", "修正诊断", "补充诊断")):
+    excluded_types = {"入院诊断", "初步诊断", "出院诊断", "出院主要诊断", "出院其他诊断", "修正诊断", "补充诊断"} - allowed_types
+    if any(f"诊断类型: {excluded}" in content for excluded in excluded_types):
         return False
     return "诊断名称:" in content or "诊断编码:" in content
 
 
-def _merge_admission_diagnosis_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    diagnosis_docs = [doc for doc in documents if _safe_text(doc.get("doc_type")) == "admission_record_diagnosis"]
+def _merge_record_diagnosis_documents(
+    documents: list[dict[str, Any]],
+    *,
+    diagnosis_doc_type: str,
+    parent_doc_type: str,
+    section_label: str,
+    allowed_types: set[str],
+    allow_single_parent_fallback: bool = False,
+) -> list[dict[str, Any]]:
+    diagnosis_docs = [doc for doc in documents if _safe_text(doc.get("doc_type")) == diagnosis_doc_type]
     if not diagnosis_docs:
         return documents
 
-    valid_docs = [doc for doc in diagnosis_docs if _has_named_diagnosis(doc)]
-    other_docs = [doc for doc in documents if _safe_text(doc.get("doc_type")) != "admission_record_diagnosis"]
+    valid_docs = [doc for doc in diagnosis_docs if _has_named_diagnosis(doc, allowed_types=allowed_types)]
+    other_docs = [doc for doc in documents if _safe_text(doc.get("doc_type")) != diagnosis_doc_type]
     if not valid_docs:
         return other_docs
 
     content = "\n\n".join(_safe_text(doc.get("content")) for doc in valid_docs if _safe_text(doc.get("content")))
-    document_id = _safe_text(valid_docs[0].get("document_id") or valid_docs[0].get("doc_id") or "admission_record_diagnosis")
+    document_id = _safe_text(valid_docs[0].get("document_id") or valid_docs[0].get("doc_id") or diagnosis_doc_type)
     parent_document_id = document_id.split("::diagnosis::", 1)[0]
     if not content:
         return other_docs
 
     for doc in other_docs:
-        if _safe_text(doc.get("doc_type")) != "admission_record":
+        if _safe_text(doc.get("doc_type")) != parent_doc_type:
             continue
         if _safe_text(doc.get("document_id") or doc.get("doc_id")) != parent_document_id:
             continue
@@ -396,10 +409,10 @@ def _merge_admission_diagnosis_documents(documents: list[dict[str, Any]]) -> lis
         sections = list(doc.get("sections") or [])
         sections.append(
             {
-                "section_key": "admission_record_diagnosis",
-                "section_label": "入院记录诊断",
+                "section_key": diagnosis_doc_type,
+                "section_label": section_label,
                 "text": content,
-                "source_field": "admission_record_diagnosis",
+                "source_field": diagnosis_doc_type,
                 "order_index": len(sections),
             }
         )
@@ -408,12 +421,62 @@ def _merge_admission_diagnosis_documents(documents: list[dict[str, Any]]) -> lis
         doc["sections"] = sections
         doc["has_content"] = bool(merged_content)
         flags = list(doc.get("data_quality_flags") or [])
-        if "merged:admission_record_diagnosis" not in flags:
-            flags.append("merged:admission_record_diagnosis")
+        merge_flag = f"merged:{diagnosis_doc_type}"
+        if merge_flag not in flags:
+            flags.append(merge_flag)
+        doc["data_quality_flags"] = flags
+        return other_docs
+
+    parent_docs = [doc for doc in other_docs if _safe_text(doc.get("doc_type")) == parent_doc_type]
+    if allow_single_parent_fallback and len(parent_docs) == 1:
+        doc = parent_docs[0]
+        existing_content = _safe_text(doc.get("content"))
+        merged_content = f"{existing_content}\n\n{content}".strip() if existing_content else content
+        sections = list(doc.get("sections") or [])
+        sections.append(
+            {
+                "section_key": diagnosis_doc_type,
+                "section_label": section_label,
+                "text": content,
+                "source_field": diagnosis_doc_type,
+                "order_index": len(sections),
+            }
+        )
+        doc["content"] = merged_content
+        doc["length"] = len(merged_content)
+        doc["sections"] = sections
+        doc["has_content"] = bool(merged_content)
+        flags = list(doc.get("data_quality_flags") or [])
+        merge_flag = f"merged:{diagnosis_doc_type}"
+        fallback_flag = f"merged:{diagnosis_doc_type}:single_parent_fallback"
+        for flag in (merge_flag, fallback_flag):
+            if flag not in flags:
+                flags.append(flag)
         doc["data_quality_flags"] = flags
         return other_docs
 
     return other_docs
+
+
+def _merge_admission_diagnosis_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _merge_record_diagnosis_documents(
+        documents,
+        diagnosis_doc_type="admission_record_diagnosis",
+        parent_doc_type="admission_record",
+        section_label="入院记录诊断",
+        allowed_types=_ADMISSION_DIAGNOSIS_ALLOWED_TYPES,
+    )
+
+
+def _merge_discharge_diagnosis_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _merge_record_diagnosis_documents(
+        documents,
+        diagnosis_doc_type="discharge_record_diagnosis",
+        parent_doc_type="discharge_record",
+        section_label="出院记录诊断",
+        allowed_types=_DISCHARGE_DIAGNOSIS_ALLOWED_TYPES,
+        allow_single_parent_fallback=True,
+    )
 
 
 def _documents_include_doc_type(documents: list[dict[str, Any]], doc_type: str) -> bool:
@@ -495,6 +558,23 @@ def load_bundle_documents(
         ):
             domain_bundles["admission"] = admission_bundle
             domain_hits["admission_runtime_overlay"] = True
+            documents = build_documents_from_domain_bundles(domain_bundles)
+    if not _documents_include_doc_type(documents, "discharge_record_diagnosis"):
+        try:
+            terminal_bundle = assemble_domain_bundle(
+                execution_domain="terminal",
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+            )
+        except Exception:
+            terminal_bundle = None
+        if terminal_bundle and any(
+            _safe_text(item.get("document_type") or item.get("source_table")) == "discharge_record_diagnosis"
+            for item in terminal_bundle.get("source_documents") or []
+        ):
+            domain_bundles["terminal"] = terminal_bundle
+            domain_hits["terminal_runtime_overlay"] = True
             documents = build_documents_from_domain_bundles(domain_bundles)
     tree = build_documents_tree(documents)
     return {
