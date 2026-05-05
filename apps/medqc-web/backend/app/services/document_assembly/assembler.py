@@ -517,15 +517,12 @@ def _assemble_admission_record_diagnosis_text(payload: dict[str, Any]) -> str:
     if not (diagnosis_name or diagnosis_code):
         return ""
 
-    diagnosis_no = _merge_field_text(payload, "diagnosis_no", "diagnosis_id")
     diagnosis_main = _merge_field_text(payload, "diagnosis_main")
     diagnosis_time = _merge_field_text(payload, "diagnosis_time", "diagnosis_datetime", "record_time", "update_time")
 
     lines: list[str] = []
     if diagnosis_type:
         lines.append(f"诊断类型: {diagnosis_type}")
-    if diagnosis_no:
-        lines.append(f"诊断序号: {diagnosis_no}")
     if diagnosis_name:
         lines.append(f"诊断名称: {diagnosis_name}")
     if diagnosis_code:
