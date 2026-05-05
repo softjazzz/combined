@@ -25,6 +25,8 @@ from app.services.custom_qc_sample_pool_service import (
     build_admission_issue_family_prompt,
     normalize_admission_consistency_llm_output,
 )
+from app.database.connection import engine
+from app.services.bundles.emr_view import load_bundle_documents
 from app.services.medical_records.detail_service import get_documents
 
 
@@ -62,7 +64,12 @@ def _truncate(text: Any, limit: int = CONTENT_LIMIT) -> str:
 
 
 def _doc_type(item: dict[str, Any]) -> str:
-    return _safe_text(item.get("source_table") or item.get("type") or item.get("document_type"))
+    return _safe_text(
+        item.get("source_table")
+        or item.get("doc_type")
+        or item.get("type")
+        or item.get("document_type")
+    )
 
 
 def _doc_text(item: dict[str, Any]) -> str:
@@ -70,7 +77,12 @@ def _doc_text(item: dict[str, Any]) -> str:
 
 
 def _section_title(section: dict[str, Any]) -> str:
-    return _safe_text(section.get("title") or section.get("name") or section.get("heading"))
+    return _safe_text(
+        section.get("section_label")
+        or section.get("title")
+        or section.get("name")
+        or section.get("heading")
+    )
 
 
 def _section_text(section: dict[str, Any]) -> str:
@@ -91,8 +103,56 @@ def _pick_sections(document: dict[str, Any], title_tokens: tuple[str, ...]) -> d
     return picked
 
 
+def _resolve_visit_identity(visit_id: str) -> dict[str, str]:
+    if engine is None:
+        return {}
+    from sqlalchemy import text
+
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(
+                """
+                SELECT institute_id, patient_id, visit_id
+                FROM cdm.admission_record
+                WHERE visit_id = :visit_id
+                LIMIT 1
+                """
+            ),
+            {"visit_id": visit_id},
+        ).mappings().first()
+    if not row:
+        return {}
+    return {
+        "institute_id": _safe_text(row.get("institute_id")),
+        "patient_id": _safe_text(row.get("patient_id")),
+        "visit_id": _safe_text(row.get("visit_id")),
+    }
+
+
+def _load_frontend_bundle_documents(visit_id: str) -> list[dict[str, Any]]:
+    identity = _resolve_visit_identity(visit_id)
+    if not identity:
+        return []
+    payload = load_bundle_documents(
+        institute_id=identity["institute_id"],
+        patient_id=identity["patient_id"],
+        visit_id=identity["visit_id"],
+    )
+    return [dict(item) for item in list(payload.get("documents") or [])]
+
+
+def _load_admission_bundle_documents(visit_id: str) -> tuple[list[dict[str, Any]], str]:
+    try:
+        documents = _load_frontend_bundle_documents(visit_id)
+        if documents:
+            return documents, "frontend_bundle"
+    except Exception:
+        pass
+    return [dict(item) for item in list((get_documents(visit_id) or {}).get("documents") or [])], "detail_service"
+
+
 def build_admission_issue_family_bundle(visit_id: str) -> dict[str, Any]:
-    documents = [dict(item) for item in list((get_documents(visit_id) or {}).get("documents") or [])]
+    documents, document_source = _load_admission_bundle_documents(visit_id)
     admission_docs = [item for item in documents if _doc_type(item) == "admission_record" and _doc_text(item)]
     first_course_docs = [item for item in documents if _doc_type(item) == "first_course_record" and _doc_text(item)]
     exam_lab_docs = [
@@ -108,6 +168,7 @@ def build_admission_issue_family_bundle(visit_id: str) -> dict[str, Any]:
 
     return {
         "visit_id": _safe_text(visit_id),
+        "document_source": document_source,
         "admission_record": {
             "document_id": _safe_text(admission_doc.get("document_id")),
             "document_title": _safe_text(admission_doc.get("document_title") or admission_doc.get("label")),
