@@ -695,6 +695,24 @@ ADMISSION_ISSUE_FAMILY_ALLOWED_RESULTS = {"hit", "partial_hit", "no_hit", "uncer
 ADMISSION_ISSUE_FAMILY_ALLOWED_STATUSES = {"compliant", "non_compliant", "uncertain"}
 ADMISSION_DIAGNOSIS_COVERAGE_STATUSES = {"covered", "partially_covered", "not_covered", "uncertain"}
 
+CONSULTATION_FAMILY_RULE_IDS: tuple[str, ...] = (
+    "SC-069",
+    "SC-070",
+    "LX-016",
+    "SC-146",
+    "SC-036",
+    "SC-046",
+)
+
+CONSULTATION_FAMILY_RULE_DEFINITIONS: Dict[str, str] = {
+    "SC-069": "会诊记录内容质量、复制粘贴、结论或建议不充分",
+    "SC-070": "会诊执行记录缺失或仅笼统写遵会诊意见",
+    "LX-016": "会诊意见已写遵执但实际未落实或执行闭环不足",
+    "SC-146": "会诊意见、医嘱与病程记录不一致",
+    "SC-036": "病程记录对异常结果、会诊意见或处理方案缺分析/缺处理意见",
+    "SC-046": "有创诊疗操作记录缺失或书写不规范",
+}
+
 
 def _unique_rule_ids(rule_ids: Iterable[Any]) -> List[str]:
     result: List[str] = []
@@ -951,6 +969,193 @@ def resolve_admission_consistency_rule_recommendations(
             "raw_output": {},
         }
     return normalize_admission_consistency_llm_output(
+        llm_output,
+        fallback_primary_rule_id=fallback_primary_rule_id,
+    )
+
+
+def normalize_consultation_family_llm_output(
+    llm_output: Any,
+    *,
+    fallback_primary_rule_id: str = "SC-069",
+) -> Dict[str, Any]:
+    payload = _extract_json_object_from_text(llm_output)
+    allowed = set(CONSULTATION_FAMILY_RULE_IDS)
+    fallback_primary = _safe_text(fallback_primary_rule_id).upper()
+    if fallback_primary not in allowed:
+        fallback_primary = "SC-069"
+
+    invalid_rule_ids: List[str] = []
+    raw_primary = _safe_text(payload.get("primary_rule_id")).upper()
+    primary_rule_id = raw_primary if raw_primary in allowed else fallback_primary
+    if raw_primary and raw_primary not in allowed:
+        invalid_rule_ids.append(raw_primary)
+
+    raw_recommended = _unique_rule_ids(payload.get("recommended_rule_ids") or payload.get("matched_rule_ids") or [])
+    if raw_primary and raw_primary not in raw_recommended:
+        raw_recommended.insert(0, raw_primary)
+    recommended_rule_ids: List[str] = []
+    for rule_id in raw_recommended:
+        if rule_id in allowed:
+            recommended_rule_ids.append(rule_id)
+        elif rule_id:
+            invalid_rule_ids.append(rule_id)
+    if primary_rule_id not in recommended_rule_ids:
+        recommended_rule_ids.insert(0, primary_rule_id)
+    recommended_rule_ids = _unique_rule_ids(recommended_rule_ids)
+
+    sub_items: List[Dict[str, Any]] = []
+    for raw_item in list(payload.get("sub_items") or []):
+        if not isinstance(raw_item, dict):
+            continue
+        rule_id = _safe_text(raw_item.get("rule_id")).upper()
+        if rule_id not in allowed:
+            if rule_id:
+                invalid_rule_ids.append(rule_id)
+            continue
+        status = _safe_text(raw_item.get("status"), "uncertain").lower()
+        if status not in ADMISSION_ISSUE_FAMILY_ALLOWED_STATUSES:
+            status = "uncertain"
+        sub_items.append(
+            {
+                "rule_id": rule_id,
+                "status": status,
+                "item": _safe_text(raw_item.get("item") or raw_item.get("sub_item")),
+                "evidence": _safe_text(raw_item.get("evidence")),
+                "reason": _safe_text(raw_item.get("reason")),
+            }
+        )
+
+    overall_result = _safe_text(payload.get("overall_result"), "uncertain").lower()
+    if overall_result not in ADMISSION_ISSUE_FAMILY_ALLOWED_RESULTS:
+        overall_result = "uncertain"
+    if overall_result == "no_hit":
+        for item in sub_items:
+            if item.get("status") == "non_compliant":
+                item["status"] = "compliant"
+
+    qc_result = _safe_text(payload.get("qc_result"), "uncertain").lower()
+    if qc_result not in ADMISSION_ISSUE_FAMILY_ALLOWED_STATUSES:
+        qc_result = "uncertain"
+    overall_status = _safe_text(payload.get("overall_status") or qc_result, "uncertain").lower()
+    if overall_status not in ADMISSION_ISSUE_FAMILY_ALLOWED_STATUSES:
+        overall_status = "uncertain"
+
+    review_required = False
+    if invalid_rule_ids or not payload:
+        overall_result = "uncertain"
+        overall_status = "uncertain"
+        review_required = True
+
+    secondary_rule_ids = [rule_id for rule_id in recommended_rule_ids if rule_id != primary_rule_id]
+    return {
+        "primary_rule_id": primary_rule_id,
+        "secondary_rule_ids": secondary_rule_ids,
+        "recommended_rule_ids": recommended_rule_ids,
+        "matched_rule_ids": recommended_rule_ids,
+        "sub_items": sub_items,
+        "overall_result": overall_result,
+        "overall_status": overall_status,
+        "qc_result": qc_result,
+        "conflicts": [
+            _safe_text(item) for item in list(payload.get("conflicts") or []) if _safe_text(item)
+        ],
+        "missing_evidence": [
+            _safe_text(item) for item in list(payload.get("missing_evidence") or []) if _safe_text(item)
+        ],
+        "qc_conclusion": _safe_text(payload.get("qc_conclusion")),
+        "confidence": _coerce_confidence(payload.get("confidence")),
+        "evidence_summary": _safe_text(payload.get("evidence_summary") or payload.get("qc_conclusion")),
+        "invalid_rule_ids": _unique_rule_ids(invalid_rule_ids),
+        "review_required": review_required,
+        "raw_output": payload,
+    }
+
+
+def build_consultation_family_prompt(
+    *,
+    manual_issue_text: Any,
+    consultation_bundle: Dict[str, Any],
+) -> str:
+    rule_lines = "\n".join(
+        f"- {rule_id}: {title}" for rule_id, title in CONSULTATION_FAMILY_RULE_DEFINITIONS.items()
+    )
+    bundle_json = _safe_json_dumps(consultation_bundle)
+    return f"""你是一名病历质控专家。请对 Sheet2 中“会诊记录质量/会诊执行/会诊意见一致性”相关人工问题做一次 family-level 语义拆解和证据核验。
+
+【可选规则白名单】
+{rule_lines}
+
+【判定要求】
+1. 一条人工问题只执行一次 LLM 调用；如果包含多个锚点，必须在 sub_items 中拆开，不要按子项重复调用。
+2. 只允许输出白名单中的 rule_id；无法判断时选择最接近主规则并将相关 sub_item 标记 uncertain。
+3. primary_rule_id 选择人工问题中最核心或最先需要整改的会诊相关锚点；其他锚点放入 recommended_rule_ids 和 sub_items。
+4. 不要把人工问题文本当作事实。只能依据 bundle 中的原始会诊记录、病程记录、医嘱摘要、有创/手术记录摘要作证据。
+5. 不能因为人工问题里出现“复制粘贴严重、无建设性意见、未落实、无操作记录”等评价性表述就直接判 non_compliant；必须引用原文证据或说明缺证据。
+6. 如果人工问题跨多个质控点，例如会诊执行 + 医嘱一致性 + 有创操作记录，overall_result 只能是 partial_hit 或 uncertain，不得把整条人工问题判为 hit。
+7. 如果某个子项与原文冲突，应将该 sub_item 标记 compliant，并在 conflicts 中说明。
+8. 如果缺医嘱明细、执行清单、会诊原文或操作记录正文，应将该 sub_item 标记 uncertain，并在 missing_evidence 中说明。
+9. 有创/操作记录证据可能来自手术记录表，也可能来自病程中的原始操作经过；如果 bundle 的 procedure_anchor_snippets 已给出操作时间、名称和经过，不能简单按“缺手术记录表”判无操作记录。
+
+【人工问题】
+{_safe_text(manual_issue_text)}
+
+【证据 bundle】
+{bundle_json}
+
+请严格输出 JSON 对象，不要输出额外解释：
+{{
+  "primary_rule_id": "SC-069|SC-070|LX-016|SC-146|SC-036|SC-046",
+  "recommended_rule_ids": ["..."],
+  "matched_rule_ids": ["同 recommended_rule_ids"],
+  "overall_result": "hit|partial_hit|no_hit|uncertain",
+  "overall_status": "non_compliant|compliant|uncertain",
+  "qc_result": "non_compliant|compliant|uncertain",
+  "sub_items": [
+    {{
+      "rule_id": "...",
+      "status": "non_compliant|compliant|uncertain",
+      "item": "会诊记录内容质量/会诊意见落实/医嘱一致性/病程分析/有创操作记录",
+      "evidence": "只引用 bundle 中存在的原文或结构化证据",
+      "reason": "说明为什么成立、冲突或证据不足"
+    }}
+  ],
+  "conflicts": ["与原文冲突的子项"],
+  "missing_evidence": ["缺会诊原文/缺医嘱明细/缺执行清单/缺操作记录正文"],
+  "qc_conclusion": "...",
+  "confidence": 0.0
+}}"""
+
+
+def resolve_consultation_family_rule_recommendations(
+    text: Any,
+    *,
+    llm_output: Any = None,
+    fallback_primary_rule_id: str = "SC-069",
+) -> Dict[str, Any]:
+    if llm_output is None:
+        fallback_primary = _safe_text(fallback_primary_rule_id).upper()
+        if fallback_primary not in CONSULTATION_FAMILY_RULE_IDS:
+            fallback_primary = "SC-069"
+        return {
+            "primary_rule_id": fallback_primary,
+            "secondary_rule_ids": [],
+            "recommended_rule_ids": [fallback_primary],
+            "matched_rule_ids": [fallback_primary],
+            "sub_items": [],
+            "overall_result": "uncertain",
+            "overall_status": "uncertain",
+            "qc_result": "uncertain",
+            "conflicts": [],
+            "missing_evidence": [],
+            "qc_conclusion": "未提供 LLM 会诊 family-level 语义拆解结果，需进入定向 dry-run。",
+            "confidence": 0.0,
+            "evidence_summary": "",
+            "invalid_rule_ids": [],
+            "review_required": True,
+            "raw_output": {},
+        }
+    return normalize_consultation_family_llm_output(
         llm_output,
         fallback_primary_rule_id=fallback_primary_rule_id,
     )

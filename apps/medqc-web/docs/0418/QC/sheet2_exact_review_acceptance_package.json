@@ -81,8 +81,8 @@
           "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
           "manual_issue_text": "2025.11.18田安琴主治医师查房记录无内容；11月17日及11月18日，无输血前评估、无输血记录、无输血后评估。",
           "blocked_reason_type": "规则不支持",
-          "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
-          "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+          "reason": "人工问题同时包含主治医师查房内容空洞和输血前评估/输血记录/输血后评估链路缺失，需上级查房内容质量规则与输血闭环规则聚合；本轮未将跨家族复合问题包装为 exact。",
+          "next_action": "补查房内容质量与输血闭环组合规则，按日期聚合 2025-11-17 至 2025-11-18 文书后再回归。"
         },
         {
           "sheet2_row_id": "Sheet2-R0172",
@@ -92,8 +92,8 @@
           "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
           "manual_issue_text": "患者2月4日手术，无术前主刀医师查房记录，无术后首次病程记录及手术记录。",
           "blocked_reason_type": "规则不支持",
-          "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
-          "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+          "reason": "人工问题混合术前主刀医师查房、术后首次病程和手术记录缺失，需围手术期多文书时效/存在性聚合；单条 LX-020 不能精确复现整条人工问题。",
+          "next_action": "补围手术期 family 聚合规则，串联手术时间、术前查房、手术记录和术后首次病程后再回归。"
         },
         {
           "sheet2_row_id": "Sheet2-R0173",
@@ -103,8 +103,8 @@
           "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
           "manual_issue_text": "1月30日后7天无病程记录，请心血管、肾内科、呼吸科、麻醉科、皮肤科等科室会诊后，无请会诊执行记录。",
           "blocked_reason_type": "规则不支持",
-          "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
-          "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+          "reason": "会诊执行记录缺失可进入 SC-069/SC-070/LX-016 family prompt，但人工问题还包含 1月30日后 7 天无病程记录，属于病程时效程序核查；只能部分有效，不能整条 exact。",
+          "next_action": "补会诊执行 family 与病程时效 LXE-18 聚合，输出部分命中和未覆盖锚点。"
         },
         {
           "sheet2_row_id": "Sheet2-R0206",
@@ -114,8 +114,8 @@
           "issue_family": "病程记录缺分析/缺处理意见",
           "manual_issue_text": "患者行经阴道子宫切除术，术前无尿路感染，术后诊断尿路感染。未请泌尿外科会诊，未分析原因。",
           "blocked_reason_type": "规则不支持",
-          "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
-          "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+          "reason": "术后新增尿路感染诊断未分析可由病程分析规则覆盖，无泌尿外科会诊属于会诊/诊疗计划锚点，需术前术后诊断、病程分析和会诊链路聚合；不能按单规则 pure exact。",
+          "next_action": "补术前术后诊断变化、病程分析和会诊必要性组合判断后再回归。"
         },
         {
           "sheet2_row_id": "Sheet2-R0220",
@@ -125,8 +125,8 @@
           "issue_family": "会诊记录质量缺陷",
           "manual_issue_text": "患者BP163/90mmHg，未复测及进一步处理；3月7日请康复科会诊记录里面，明确记录“与患者沟通后，表示拒绝康复治疗”本患者仍然开具超声波、电刺激、光照射、中药溻渍等康复治疗项目；患者进行左侧膝关节清创术，无操作记录。",
           "blocked_reason_type": "规则不支持",
-          "reason": "跨问题族/跨质控点，需要拆规则后聚合。；第三方纠偏：人工问题混合 BP163/90mmHg 未复测/处理、康复科会诊拒绝后仍开康复治疗、左膝清创术无操作记录，跨病程/会诊执行/有创操作多个质控点。康复会诊执行问题可能成立，但“无操作记录”与现有清创记录/mr_surgery 证据冲突，不能整条 exact。",
-          "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+          "reason": "SC-069 family prompt 可拆出康复会诊拒绝后仍记录/开具康复治疗的会诊执行或医嘱一致性锚点；但“左膝清创术无操作记录”与现有清创记录冲突，整条人工问题不能 exact。",
+          "next_action": "补 SC-069 family 与医嘱明细/执行清单拼接；有创操作记录子项按原文冲突保留 blocked。"
         }
       ]
     },
@@ -1000,13 +1000,13 @@
       "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
       "primary_rule_id": "LX-018",
       "manual_issue_text": "2025.11.18田安琴主治医师查房记录无内容；11月17日及11月18日，无输血前评估、无输血记录、无输血后评估。",
-      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "reason": "人工问题同时包含主治医师查房内容空洞和输血前评估/输血记录/输血后评估链路缺失，需上级查房内容质量规则与输血闭环规则聚合；本轮未将跨家族复合问题包装为 exact。",
       "blocked_reason_type": "规则不支持",
-      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
-      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "review_subgroup": "可补规则5条与SC069-still_blocked_with_specific_gap",
+      "decision_source": "sheet2_fixable_5_and_sc069_family_prompt_report",
       "backlog_category": "可补规则",
-      "backlog_reason": "人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
-      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+      "backlog_reason": "人工问题同时包含主治医师查房内容空洞和输血前评估/输血记录/输血后评估链路缺失，需上级查房内容质量规则与输血闭环规则聚合；本轮未将跨家族复合问题包装为 exact。",
+      "next_action": "补查房内容质量与输血闭环组合规则，按日期聚合 2025-11-17 至 2025-11-18 文书后再回归。"
     },
     {
       "sheet2_row_id": "Sheet2-R0109",
@@ -1375,13 +1375,13 @@
       "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
       "primary_rule_id": "LX-020",
       "manual_issue_text": "患者2月4日手术，无术前主刀医师查房记录，无术后首次病程记录及手术记录。",
-      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "reason": "人工问题混合术前主刀医师查房、术后首次病程和手术记录缺失，需围手术期多文书时效/存在性聚合；单条 LX-020 不能精确复现整条人工问题。",
       "blocked_reason_type": "规则不支持",
-      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
-      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "review_subgroup": "可补规则5条与SC069-still_blocked_with_specific_gap",
+      "decision_source": "sheet2_fixable_5_and_sc069_family_prompt_report",
       "backlog_category": "可补规则",
-      "backlog_reason": "人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
-      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+      "backlog_reason": "人工问题混合术前主刀医师查房、术后首次病程和手术记录缺失，需围手术期多文书时效/存在性聚合；单条 LX-020 不能精确复现整条人工问题。",
+      "next_action": "补围手术期 family 聚合规则，串联手术时间、术前查房、手术记录和术后首次病程后再回归。"
     },
     {
       "sheet2_row_id": "Sheet2-R0173",
@@ -1390,13 +1390,13 @@
       "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
       "primary_rule_id": "LX-016",
       "manual_issue_text": "1月30日后7天无病程记录，请心血管、肾内科、呼吸科、麻醉科、皮肤科等科室会诊后，无请会诊执行记录。",
-      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "reason": "会诊执行记录缺失可进入 SC-069/SC-070/LX-016 family prompt，但人工问题还包含 1月30日后 7 天无病程记录，属于病程时效程序核查；只能部分有效，不能整条 exact。",
       "blocked_reason_type": "规则不支持",
-      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
-      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "review_subgroup": "可补规则5条与SC069-partial_effective_keep_blocked",
+      "decision_source": "sheet2_fixable_5_and_sc069_family_prompt_report",
       "backlog_category": "可补规则",
-      "backlog_reason": "人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
-      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+      "backlog_reason": "会诊执行记录缺失可进入 SC-069/SC-070/LX-016 family prompt，但人工问题还包含 1月30日后 7 天无病程记录，属于病程时效程序核查；只能部分有效，不能整条 exact。",
+      "next_action": "补会诊执行 family 与病程时效 LXE-18 聚合，输出部分命中和未覆盖锚点。"
     },
     {
       "sheet2_row_id": "Sheet2-R0175",
@@ -1510,13 +1510,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "患者行经阴道子宫切除术，术前无尿路感染，术后诊断尿路感染。未请泌尿外科会诊，未分析原因。",
-      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "reason": "术后新增尿路感染诊断未分析可由病程分析规则覆盖，无泌尿外科会诊属于会诊/诊疗计划锚点，需术前术后诊断、病程分析和会诊链路聚合；不能按单规则 pure exact。",
       "blocked_reason_type": "规则不支持",
-      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
-      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "review_subgroup": "可补规则5条与SC069-partial_effective_keep_blocked",
+      "decision_source": "sheet2_fixable_5_and_sc069_family_prompt_report",
       "backlog_category": "可补规则",
-      "backlog_reason": "人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
-      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+      "backlog_reason": "术后新增尿路感染诊断未分析可由病程分析规则覆盖，无泌尿外科会诊属于会诊/诊疗计划锚点，需术前术后诊断、病程分析和会诊链路聚合；不能按单规则 pure exact。",
+      "next_action": "补术前术后诊断变化、病程分析和会诊必要性组合判断后再回归。"
     },
     {
       "sheet2_row_id": "Sheet2-R0207",
@@ -1600,13 +1600,13 @@
       "issue_family": "会诊记录质量缺陷",
       "primary_rule_id": "SC-069",
       "manual_issue_text": "患者BP163/90mmHg，未复测及进一步处理；3月7日请康复科会诊记录里面，明确记录“与患者沟通后，表示拒绝康复治疗”本患者仍然开具超声波、电刺激、光照射、中药溻渍等康复治疗项目；患者进行左侧膝关节清创术，无操作记录。",
-      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；第三方纠偏：人工问题混合 BP163/90mmHg 未复测/处理、康复科会诊拒绝后仍开康复治疗、左膝清创术无操作记录，跨病程/会诊执行/有创操作多个质控点。康复会诊执行问题可能成立，但“无操作记录”与现有清创记录/mr_surgery 证据冲突，不能整条 exact。",
+      "reason": "SC-069 family prompt 可拆出康复会诊拒绝后仍记录/开具康复治疗的会诊执行或医嘱一致性锚点；但“左膝清创术无操作记录”与现有清创记录冲突，整条人工问题不能 exact。",
       "blocked_reason_type": "规则不支持",
-      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
-      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "review_subgroup": "可补规则5条与SC069-partial_effective_keep_blocked",
+      "decision_source": "sheet2_fixable_5_and_sc069_family_prompt_report",
       "backlog_category": "可补规则",
-      "backlog_reason": "第三方纠偏：人工问题混合 BP163/90mmHg 未复测/处理、康复科会诊拒绝后仍开康复治疗、左膝清创术无操作记录，跨病程/会诊执行/有创操作多个质控点。康复会诊执行问题可能成立，但“无操作记录”与现有清创记录/mr_surgery 证据冲突，不能整条 exact。",
-      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+      "backlog_reason": "SC-069 family prompt 可拆出康复会诊拒绝后仍记录/开具康复治疗的会诊执行或医嘱一致性锚点；但“左膝清创术无操作记录”与现有清创记录冲突，整条人工问题不能 exact。",
+      "next_action": "补 SC-069 family 与医嘱明细/执行清单拼接；有创操作记录子项按原文冲突保留 blocked。"
     },
     {
       "sheet2_row_id": "Sheet2-R0221",

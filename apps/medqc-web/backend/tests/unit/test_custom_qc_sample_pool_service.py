@@ -104,6 +104,72 @@ def test_classify_consultation_record_quality_issue():
     assert result["candidate_rule_ids"] == ["SC-069"]
 
 
+def test_consultation_family_prompt_includes_multi_subitem_contract():
+    prompt = sample_pool_module.build_consultation_family_prompt(
+        manual_issue_text="会诊意见未落实，后续医嘱与会诊记录不一致。",
+        consultation_bundle={"consultation_records": [], "course_records": [], "order_summary": []},
+    )
+
+    assert "一次 LLM 调用" in prompt
+    assert "sub_items" in prompt
+    assert "SC-069" in prompt
+    assert "SC-070" in prompt
+    assert "LX-016" in prompt
+    assert "SC-146" in prompt
+    assert "SC-046" in prompt
+    assert "不要把人工问题文本当作事实" in prompt
+
+
+def test_resolve_consultation_family_recommendations_keeps_partial_not_exact():
+    result = sample_pool_module.resolve_consultation_family_rule_recommendations(
+        "康复会诊拒绝后仍开康复治疗，且清创术无操作记录。",
+        llm_output={
+            "primary_rule_id": "SC-069",
+            "recommended_rule_ids": ["SC-069", "LX-016", "SC-146", "SC-046"],
+            "overall_result": "partial_hit",
+            "overall_status": "non_compliant",
+            "qc_result": "non_compliant",
+            "sub_items": [
+                {
+                    "rule_id": "LX-016",
+                    "status": "non_compliant",
+                    "item": "会诊意见落实",
+                    "evidence": "会诊记录写患者拒绝康复治疗，后续病程仍写继续康复治疗。",
+                    "reason": "会诊沟通结论与后续执行记录不一致。",
+                },
+                {
+                    "rule_id": "SC-046",
+                    "status": "compliant",
+                    "item": "清创操作记录",
+                    "evidence": "病程记录可见左膝清创引流术记录。",
+                    "reason": "人工问题称无操作记录与当前原文冲突。",
+                },
+                {
+                    "rule_id": "SC-146",
+                    "status": "uncertain",
+                    "item": "康复治疗医嘱一致性",
+                    "evidence": "",
+                    "reason": "缺医嘱明细，无法核准实际开具项目。",
+                },
+            ],
+            "conflicts": ["清创术无操作记录与现有清创记录冲突"],
+            "missing_evidence": ["缺康复治疗医嘱明细"],
+            "qc_conclusion": "只能确认会诊执行链路部分成立，不能整条 exact。",
+            "confidence": 0.77,
+        },
+    )
+
+    assert result["primary_rule_id"] == "SC-069"
+    assert result["secondary_rule_ids"] == ["LX-016", "SC-146", "SC-046"]
+    assert result["overall_result"] == "partial_hit"
+    assert result["overall_status"] == "non_compliant"
+    assert len(result["sub_items"]) == 3
+    assert result["sub_items"][0]["rule_id"] == "LX-016"
+    assert result["sub_items"][1]["status"] == "compliant"
+    assert result["conflicts"] == ["清创术无操作记录与现有清创记录冲突"]
+    assert result["missing_evidence"] == ["缺康复治疗医嘱明细"]
+
+
 def test_classify_senior_round_content_issue():
     result = classify_manual_issue_text("3月10日副主任医师查房记录内容空洞，无病情分析，无诊疗意见。")
     assert result["coverage_type"] == "llm_intrinsic"

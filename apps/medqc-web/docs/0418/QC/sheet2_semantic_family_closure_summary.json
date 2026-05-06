@@ -83,7 +83,7 @@
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "跨问题族/跨质控点，需要拆规则后聚合。"
+      "top_next_actions": "补查房内容质量与输血闭环组合规则，按日期聚合 2025-11-17 至 2025-11-18 文书后再回归。"
     },
     {
       "issue_family": "不合理复制病历内容",
@@ -161,7 +161,7 @@
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "跨问题族/跨质控点，需要拆规则后聚合。 | 已核验完成"
+      "top_next_actions": "补会诊执行 family 与病程时效 LXE-18 聚合，输出部分命中和未覆盖锚点。 | 已核验完成"
     },
     {
       "issue_family": "会诊记录内容质量/复制粘贴/结论不足",
@@ -200,7 +200,7 @@
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "跨问题族/跨质控点，需要拆规则后聚合。"
+      "top_next_actions": "补 SC-069 family 与医嘱明细/执行清单拼接；有创操作记录子项按原文冲突保留 blocked。"
     },
     {
       "issue_family": "入院记录内容不完整/前后矛盾",
@@ -486,7 +486,7 @@
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "跨问题族/跨质控点，需要拆规则后聚合。"
+      "top_next_actions": "补围手术期 family 聚合规则，串联手术时间、术前查房、手术记录和术后首次病程后再回归。"
     },
     {
       "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
