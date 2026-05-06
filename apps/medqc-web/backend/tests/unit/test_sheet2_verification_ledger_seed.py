@@ -382,3 +382,75 @@ def test_sc020_diagnosis_review_should_not_force_uncertain_pending_diagnosis():
 
     assert status == "blocked_with_reason"
     assert "证据链不足" in reason
+
+
+def test_fixable_rule_backlog_regression_should_select_only_fixable_rows():
+    module = _load_script_module("run_sheet2_fixable_rule_backlog_regression.py")
+    rows = [
+        {"sheet2_row_id": "Sheet2-R0046", "backlog_category": "可补规则"},
+        {"sheet2_row_id": "Sheet2-R0009", "backlog_category": "人工问题过宽/不可判"},
+    ]
+    monkey_decisions = {"Sheet2-R0046": module.FIXABLE_RULE_DECISIONS["Sheet2-R0046"]}
+
+    original = module.FIXABLE_RULE_DECISIONS
+    module.FIXABLE_RULE_DECISIONS = monkey_decisions
+    try:
+        selected = module._select_fixable_rows(rows)
+    finally:
+        module.FIXABLE_RULE_DECISIONS = original
+
+    assert [row["sheet2_row_id"] for row in selected] == ["Sheet2-R0046"]
+
+
+def test_fixable_rule_backlog_regression_should_reject_unreviewed_fixable_rows():
+    module = _load_script_module("run_sheet2_fixable_rule_backlog_regression.py")
+    rows = [
+        {"sheet2_row_id": "Sheet2-R0046", "backlog_category": "可补规则"},
+        {"sheet2_row_id": "Sheet2-R9999", "backlog_category": "可补规则"},
+    ]
+    monkey_decisions = {"Sheet2-R0046": module.FIXABLE_RULE_DECISIONS["Sheet2-R0046"]}
+
+    original = module.FIXABLE_RULE_DECISIONS
+    module.FIXABLE_RULE_DECISIONS = monkey_decisions
+    try:
+        try:
+            module._select_fixable_rows(rows)
+        except ValueError as exc:
+            assert "Sheet2-R9999" in str(exc)
+        else:
+            raise AssertionError("expected ValueError")
+    finally:
+        module.FIXABLE_RULE_DECISIONS = original
+
+
+def test_fixable_rule_backlog_regression_should_map_effective_confirmation():
+    module = _load_script_module("run_sheet2_fixable_rule_backlog_regression.py")
+    row = {
+        "sheet2_row_id": "Sheet2-R0046",
+        "visit_id": "V001",
+        "patient_name": "患者甲",
+        "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+        "manual_issue_text": "转科记录缺项",
+        "primary_rule_id": "SC-023",
+        "blocked_reason_type": "规则不支持",
+        "backlog_category": "可补规则",
+    }
+    monkeypatch_payload = {
+        "document_count": 2,
+        "document_summary": [],
+        "marker_hits": ["转入记录"],
+        "marker_misses": [],
+        "snippets": [{"marker": "转入记录", "snippet": "转入记录为空"}],
+        "empty_target_documents": ["转入记录"],
+    }
+
+    original_probe = module._probe_evidence
+    module._probe_evidence = lambda row, decision: monkeypatch_payload
+    try:
+        result = module._build_result(row)
+    finally:
+        module._probe_evidence = original_probe
+
+    assert result["phase_outcome"] == "same_family_or_effective_confirmed"
+    assert result["target_exact_review_status"] == "exact_confirmed"
+    assert result["target_primary_rule_id"] == "SC-064"

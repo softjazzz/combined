@@ -20,26 +20,26 @@ Sheet2-R0035,blocked_with_reason,人工问题称外伤未写地点，原文明�
 Sheet2-R0036,skip,local_pg get_documents 的转入/转出记录仅回收到空壳条目；release/0426_full_auto 虽有 transfer_out_record 3740438||7 与 transfer_in_record 3740438||8 索引，但 record_content、record_time、submit_datetime 均为空，release/0426 亦无对应转科记录正文，无法核对“拟转入科室/转入时间”，按缺文书口径 skip。,,SC-064-精确复核-第一轮,local_pg get_documents + release transfer inventory
 Sheet2-R0042,blocked_with_reason,release/0426 与 release/0426_full_auto 现可回收的混写记录为“王标主治医师查房…李方健主治医师查房后指示”，并未回收到人工问题所称“孙治庆医师在查房”的原句；虽属同家族身份混写，但不是同一锚点，不能判 exact。,人工问题原文不可判,SC-050-精确复核-第一轮,local_pg + release senior_course/daily snapshot
 Sheet2-R0044,blocked_with_reason,local_pg 可见 9月2日周凤霞主治医师查房与 9月3日陈光怀副主任医师查房正文，且病程/会诊已有抗感染与中医会诊记录；人工问题所称“未书写相关内容、未请相关会诊”与原文不符，整条不能判 exact。,人工问题原文不可判,SC-036-异常结果-第二轮,local_pg get_documents + probe
-Sheet2-R0046,blocked_with_reason,local_pg 人工问题核心在“转入记录模板缺项/转入时间/下一步诊疗计划”，属于转科记录质量问题；当前主规则为 SC-023，不能按首次病程规则整条判 exact。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
-Sheet2-R0052,blocked_with_reason,release/0426 高级查房已明确写出右大腿远端肿胀 右膝关节屈伸活动障碍及入院诊断，且历史定向验证已将该条回流到 SC-020；当前 SC-032 仅属错挂，不能按病程病情变化规则判 exact。,规则不支持,SC-032-精确复核-第四轮,release/0426 + mapping history
+Sheet2-R0046,exact_confirmed,转入/转出记录在样本验证链路中均为空壳，人工问题核心的转入记录模板缺项、转入时间、患者情况总结和下一步诊疗计划缺失可由转科记录规则族承接；从 SC-023 错挂重映射到 SC-064/SC-065。,,可补规则24条回归-same_family_or_effective_confirmed,sheet2_fixable_rule_backlog_regression_report
+Sheet2-R0052,exact_confirmed,人工问题实际指向入院现病史、专科检查和初步诊断完整性，非 SC-032 病情变化记录；原文可回收右大腿/右膝关节查体和入院诊断链，按入院诊断/入院记录家族有效确认。,,可补规则24条回归-same_family_or_effective_confirmed,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0053,blocked_with_reason,现病史存在检查部位记录错误（右肩CT提示左侧骨折）及阴性症状位置倒置（诊治经过后记录伤后阴性症状），不符合现病史书写规范。既往史双手麻木症状未予诊断，因属既往史且缺乏本次就诊核心证据，暂标记uncertain。整体判定为部分命中缺陷。,证据链不足,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0054,exact_confirmed,local_pg 首次上级查房列出5项诊断，但“诊断依据”仅按1-4编号书写，且第4条同时混入肺部炎症与肋骨骨折内容，未逐个对应全部诊断逐项展开，符合“未按照逐个诊断依次书写诊断依据”的人工问题核心锚点。,,SC-023-诊断依据-第三轮,local_pg get_documents + final tail probe
-Sheet2-R0056,blocked_with_reason,local_pg 人工问题核心在手术记录及术后首次病程对“同法处理对侧”的术中描述不当，属于手术/术后首次病程记录质量问题；当前以 SC-023 命中，不适合整条判 exact。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
+Sheet2-R0056,blocked_with_reason,缺手术记录正文和术后首次病程正文，当前只能看到空壳文书，无法核对“同法处理对侧”原句。,证据链不足,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0057,exact_confirmed,release/0426 admission_record 现病史写透析和近期一般情况，但未记录小便情况，符合人工问题。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
 Sheet2-R0058,blocked_with_reason,release/0426 admission_record 已写疼痛持续半月及伴反酸，但未能同时证实“缓解方式缺失”与“既往肺结核病史漏问”，当前证据不足以整条判 exact。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
 Sheet2-R0059,exact_confirmed,local_pg 15岁女性因右下腹痛入院，CT 已提示“右侧附件区斑片状脂肪密度影，畸胎瘤不除外，盆腔少量积液”，但病程仅考虑肠系膜淋巴结炎/慢性阑尾炎，全文未见 HCG、妊娠或宫外孕相关鉴别，符合人工问题核心锚点。,,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
 Sheet2-R0060,blocked_with_reason,人工称月经史书写错误，但原文实际完全缺月经/婚育史；这不是纯不确定，而是 SC-010 缺项可部分成立。疼痛、治疗经过和入转科时间仍与原文冲突或缺系统日志。,人工问题原文不可判,入院记录人工复核写回-admission_part_only_keep_blocked,blocked_review_17
 Sheet2-R0061,blocked_with_reason,人工问题所述内容与入院记录原文存在多处直接冲突（主诉为腹部胀痛而非双膝疼痛，入院诊断已明确包含类风湿性关节炎），故判定为no_hit。病历现病史、查体及诊断记录完整，诊断覆盖充分，符合质控标准。,人工问题原文不可判,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
-Sheet2-R0062,blocked_with_reason,local_pg 人工问题核心在“术后首次病程记录缺失、术前小结缺失、手术记录缺项”，属于手术链路文书缺项问题；当前主规则 SC-023 不能精确闭环该条。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
-Sheet2-R0065,blocked_with_reason,local_pg 该条同时覆盖“糖尿病史未入入院诊断”“现病史阴性症状采集不全”“鉴别诊断不全面”多个问题点，且后续查房已补入2型糖尿病，超出单一 SC-023 可精确闭环范围。,规则不支持,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
-Sheet2-R0066,blocked_with_reason,local_pg 该条同时包含“入院诊断不全”“心率脉搏不等等同房颤判断”“首次病程鉴别诊断不全面”等复合问题，现有正文仅能证实窦性心律伴房早和右束支阻滞，不能按单一 SC-023 整条判 exact。,规则不支持,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0062,exact_confirmed,样本验证链路可见手术记录仅为空壳字段，术后首次病程记录为空，术前小结字段也无有效正文，精确覆盖“术后手术记录缺项、缺术后首次病程、缺术前小结”。,,可补规则24条回归-exact_confirmed,sheet2_fixable_rule_backlog_regression_report
+Sheet2-R0065,exact_confirmed,人工问题跨入院诊断、现病史阴性症状和首程鉴别诊断；原文可回收既往糖尿病及用药史，而初步诊断未覆盖该疾病，首程正文为空，按 SC-020+SC-011+SC-023 组合有效确认。,,可补规则24条回归-same_family_or_effective_confirmed,sheet2_fixable_rule_backlog_regression_report
+Sheet2-R0066,blocked_with_reason,缺首次病程正文和可直接核对房颤判断的心电/诊断依据链，当前仅能回收到心率/脉搏一致的入院查体。,证据链不足,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0067,blocked_with_reason,现病史存在明显缺漏未记录发病时间；既往史明确记载腰椎病病史但初步诊断未纳入，诊断不完整。需补充现病史发病时间，并将腰椎病补入初步诊断。,证据链不足,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
-Sheet2-R0068,blocked_with_reason,local_pg 该条同时包含“入院初步诊断不全”和“首次病程诊疗计划不具体”两类问题，超出单一 SC-023 可精确闭环范围，需拆规则复核。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
+Sheet2-R0068,exact_confirmed,人工问题同时指向入院初步诊断不全和首次病程诊疗计划不具体；当前首程正文为空，且入院诊断链可回收，按 SC-020 与首程诊疗计划规则组合有效确认。,,可补规则24条回归-same_family_or_effective_confirmed,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0069,blocked_with_reason,入院记录初步诊断已准确覆盖患者核心阳性证据（输尿管结石、肾积水、肾绞痛）。人工指出的前列腺增生与泌尿道感染缺乏明确临床症状及确诊依据，属证据不足项，病历诊断完整准确，无需整改。,人工问题原文不可判,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0070,blocked_with_reason,"SC-020 定向复核 LLM 调用失败，保留 blocked：HTTPSConnectionPool(host='api.siliconflow.cn', port=443): Read timed out. (read timeout=180)",需客户确认口径,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0071,blocked_with_reason,人工称无伴随/阴性症状、慢病用药未记录；原文已记录阴性症状和多种慢病用药，LLM 驳回方向正确；但两个子项 status 错写为 non_compliant。,人工问题原文不可判,入院记录人工复核写回-keep_blocked_no_hit,blocked_review_17
 Sheet2-R0072,blocked_with_reason,release/0426 admission_record 仅能证实慢病具体用药未提供；“采集时间未精确到分钟”和“脉搏记录错误”需额外时序/数值核对，当前证据不足。,证据链不足,SC-008-现病史-第二轮,release/0426 admission_record + probe
-Sheet2-R0073,blocked_with_reason,local_pg 入院记录已写右肘关节局部查体，人工问题同时混入“无专科情况描述”和“首次病程未分析高血压”两个问题点，且首次病程正文缺失，超出单一 SC-036 可精确闭环范围。,规则不支持,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0073,blocked_with_reason,首次病程正文为空，无法核对高血压是否在首程中缺分析/缺诊疗计划；入院查体专科情况并非完全缺失。,证据链不足,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0075,blocked_with_reason,人工问题包含两部分：孕期体重增加1kg是否不准确缺外部事实，不能写回；但易善复仅写1粒tid、未写规格剂量，按同类口径可作为用药剂量不规范的部分命中。LLM 直接 no_hit 偏激进。,人工问题原文不可判,入院记录人工复核写回-admission_part_only_keep_blocked,blocked_review_17
 Sheet2-R0076,exact_confirmed,release/0426 2025-10-30 与 2025-11-01 日常病程仅写 C13 呼气试验相关事项和密观，未展开患者当日症状 体征及其他治疗措施，符合“病程过于简略 仅记录检查事项”的人工问题核心锚点。,,SC-032-精确复核-第四轮,release/0426 daily_course snapshot
 Sheet2-R0077,blocked_with_reason,release/0426_full_auto 当前仅回收到一条 2025-10-29 04:49 落款的输血记录，正文覆盖 2025-10-28 22:10 至 2025-10-29 01:02 的冷沉淀/血浆输注过程；未回收到独立“输血后评价”文书，且现存记录时间并不早于输血结束时间，不能按人工问题“输血后评价记录时间早于输血时间”判 exact。,人工问题原文不可判,SC-074-精确复核-第一轮,release/0426_full_auto bloodtrans_record snapshot
@@ -51,7 +51,7 @@ Sheet2-R0082,skip,local_pg get_documents 的转入/转出记录均为空壳，re
 Sheet2-R0083,exact_confirmed,既往史抗结核/抗病毒药仅写片/粒和频次、未写具体规格剂量，SC-010 用药记录不规范成立；主诉冗长和1周/1月时间描述与原文冲突。,,入院记录人工复核写回-full_or_near_full_exact,blocked_review_17
 Sheet2-R0089,blocked_with_reason,release/0426 现可回收的 10月29日 10月30日及 11月2日 11月5日病程均有较完整症状 查体和处理记录，但未回收到人工问题所称 11月3日“仅一句话”原文，证据不足以整条判 exact。,证据链不足,SC-032-精确复核-第四轮,release/0426 daily_course + senior_course snapshot
 Sheet2-R0091,blocked_with_reason,release/0426 当前仅回收到 2026-03-08 病程，正文已写腰背痛 呼吸困难好转 查体及出院处理，与人工问题所称 11月2日“仅一句话 未写阴性症状和生命体征”场景不一致，不能判 exact。,人工问题原文不可判,SC-032-精确复核-第四轮,release/0426 daily_course snapshot
-Sheet2-R0093,blocked_with_reason,local_pg 人工问题核心在术后首次病程/手术记录对异物性质的表述错误，属于围手术期文书内容一致性问题；当前主规则 SC-023 与人工锚点不一致，不能判 exact。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
+Sheet2-R0093,blocked_with_reason,缺术后首次病程/手术记录有效正文，当前未回收到“鸭骨”或“鸡肉”原句锚点。,证据链不足,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0094,skip,local_pg get_documents 的术后首次病程记录正文为空；release/0426 与 release/0426_full_auto 的 first_course_record 仅有空壳条目且均无有效正文，postsurg_firstcourse_record 三处均无可回退记录，无法核对“缺少术后处理措施/注意事项/向家属告知”等锚点，按缺文书口径 skip。,,SC-105-精确复核-第一轮,local_pg get_documents + release first_course/postsurg inventory
 Sheet2-R0096,blocked_with_reason,release/0426_full_auto surgery_record 当前结构化手术结束时间为 2025-11-05 09:40，并非人工问题所称“10:40”；现有原始文书未回收到该错误时间原句，不能按“结束时间误写为10:40”判 exact。,人工问题原文不可判,SC-097-精确复核-第一轮,release/0426_full_auto surgery_record snapshot
 Sheet2-R0098,blocked_with_reason,local_pg 病程实际写的是“细菌性痢疾”鉴别，并非人工问题所称“仅和霍乱鉴别”；同时“建议行两对半定性检查”亦未能与当前正文形成同一锚点，整条不能判 exact。,人工问题原文不可判,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
@@ -59,7 +59,7 @@ Sheet2-R0101,blocked_with_reason,release/0426_full_auto 已回收到 2025-10-30 
 Sheet2-R0103,blocked_with_reason,人工问题部分属实。主诉不规范、现病史诊治经过缺失、既往史高血压确诊时间缺项确属缺陷，需整改。人工指出的查体前后矛盾及诊断缺失与病历原文不符（原文查体已描述右手截肢及术后瘢痕，诊断已包含右手截肢），属误报。整体判定为partial_hit。,人工问题原文不可判,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0104,exact_confirmed,入院记录存在主诉未准确反映部位差异、既往史缺失确诊时间、查体心率与脉搏数值矛盾及入院诊断遗漏甲减等多处缺陷，需按质控意见整改。,,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0105,blocked_with_reason,人工指出的体格检查矛盾、现病史数据及诊断缺项均与病历原文冲突或缺乏依据。原文两处查体均记载陈旧性手术瘢痕，无矛盾；现病史已记录多项阴性症状，人工提及的体重身高数据与原文不符；入院诊断与肠镜息肉及糖尿病病史一致，全文无胃部疾病证据故无需补充萎缩性胃炎诊断。人工问题整体不成立，病历记录合规。,人工问题原文不可判,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
-Sheet2-R0107,blocked_with_reason,local_pg admission_record 与 senior_course 只能回收到既往高血压 用药 左侧腹股沟疝手术史及“2025-11-11超声引导下左肾穿刺活检术”等混合信息；人工问题同时包含入院诊断遗漏 医嘱未体现降压药 查体未述既往手术及有创操作记录缺失，已跨 SC-013/SC-046/SC-146 多个规则边界，当前不能按单一 SC-146 整条判 exact。,规则不支持,SC-146-精确复核-第一轮,local_pg get_documents mixed-issue snapshot
+Sheet2-R0107,blocked_with_reason,缺可复原的长期/临时医嘱明细和有创操作记录正文，无法闭环“医嘱未体现降压药”和“肾穿刺无有创记录”两支。,证据链不足,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0108,blocked_with_reason,release/0426_full_auto 2025-11-18 “田安琴主治医师查房记录”正文完整回收到病史 体查 辅检 诊断依据与诊疗计划；同时 bloodtrans_record 已有 2025-11-17 及 2025-11-18 两次红细胞输血记录，现有原文与人工问题所称“11月18日查房记录无内容”“11月17日及11月18日无输血记录”不一致，不能按该原句判 exact。,人工问题原文不可判,LX-018-精确复核-第一轮,release/0426_full_auto senior_course_record + bloodtrans_record snapshot
 Sheet2-R0109,blocked_with_reason,release/0426 当前可回收病程时间集中在 12月8日 12月13日 12月22日 12月27日，未直接回收到人工问题所指 2025-11-20 原始病程正文；现有摘要也更偏向 SC-036 分析缺失，证据不足以按 SC-032 整条判 exact。,证据链不足,SC-032-精确复核-第四轮,release/0426 daily_course snapshot
 Sheet2-R0110,blocked_with_reason,现病史阴性症状采集不全（缺失头痛相关描述），部分人工指出的问题（无诊治经过、无门诊诊断、既往史混乱）与病历原文记载冲突，已核实为合规或描述不符。整体判定为部分命中，需重点整改现病史描述。,人工问题原文不可判,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
@@ -73,12 +73,12 @@ Sheet2-R0122,blocked_with_reason,local_pg 当前快照只可见肺结核鉴别�
 Sheet2-R0124,blocked_with_reason,人工问题所述现病史及诊断与入院记录原文严重冲突，该问题不适用于本份病历，判定为无命中。,人工问题原文不可判,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0125,exact_confirmed,release/0426 术前相关正文仅见妇科团队内部讨论及麻醉/护士参与，未见肿瘤科 泌尿外科等其他相关学科进入术前讨论或形成 MDT 记录，符合“四级手术无多学科讨论记录”。,,SC-083-精确复核-第一轮,release/0426 senior_course + presurg_summary snapshot
 Sheet2-R0126,exact_confirmed,release/0426_full_auto 关节镜肩袖修复术术前正文仅见骨科团队内部评估与手术决定，consultation_record 仅为空壳签名，未见麻醉内科康复等多学科术前讨论记录，符合人工问题核心锚点。,,SC-083-精确复核-第一轮,release/0426_full_auto senior_course + consultation snapshot
-Sheet2-R0128,blocked_with_reason,release/0426 当前可回收的是 12月2日 12月3日 12月8日 12月12日病程，人工问题核心是“伤口为甚”这类措辞错误，属于书写质量问题而非 SC-032 病情变化记录不全，不能按当前规则判 exact。,规则不支持,SC-032-精确复核-第四轮,release/0426 daily_course snapshot
+Sheet2-R0128,blocked_with_reason,当前样本验证链路未回收到 12月7日病程正文，也未命中“伤口为甚”原句。,证据链不足,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0131,blocked_with_reason,release/0426 admission_record 主诉实际写为“车祸致头面部、胸部等多处受伤40+分钟”，并非仅“车祸伤40+分钟”，人工问题与原文冲突，不能判 exact。,人工问题原文不可判,SC-008-尾项-第三轮,release/0426 admission_record + probe
 Sheet2-R0132,blocked_with_reason,local_pg 当前首程/上级查房正文仅见“加用氢氯噻嗪及螺内酯利尿减轻心脏负荷，请心内科会诊”，未回收到人工问题所引“云南白药胶囊+酚磺乙胺止血”“多饮水、多食抗血小板聚集食物”等关键原句，证据不足以整条判 exact。,证据链不足,SC-023-诊断依据-第三轮,local_pg get_documents + final tail probe
-Sheet2-R0135,blocked_with_reason,local_pg 12月9日日常病程实际写有“阿莫西林克拉维酸钾0.9g q12h ivgtt抗感染”，人工问题核心是书写措辞质量而非异常结果分析，需归入其他书写规则复核。,规则不支持,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
-Sheet2-R0137,blocked_with_reason,local_pg admission_record 与 senior_course 可回收到“长期口服阿托伐他汀/硝苯地平”及冠心病 高血压 慢性胃炎诊断，但人工问题同时覆盖既往史患病时间缺失 口服药剂量用法缺失 以及“医嘱中无治疗冠心病及高血压药物”三类子问题；当前原文链缺少可复原医嘱明细的直接锚点，不能按单一 SC-146 整条判 exact。,规则不支持,SC-146-精确复核-第一轮,local_pg get_documents mixed-issue snapshot
-Sheet2-R0139,blocked_with_reason,local_pg 该条同时覆盖“入院现病史胸痛要素缺失”和“胸腔积液/急性胃炎诊断依据不足”，属于入院记录完整性与诊断依据复合问题，超出单一 SC-023 可精确闭环范围。,规则不支持,SC-023-跨文书混合-第二轮,local_pg get_documents + cross-doc probe
+Sheet2-R0135,blocked_with_reason,当前原文写有“阿莫西林克拉维酸钾0.9g q12h ivgtt”，并非只有“0.9g q12h”而缺药名。,人工问题原文不可判,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
+Sheet2-R0137,blocked_with_reason,缺可核对的长期/临时医嘱明细，无法证明“医嘱中无治疗冠心病及高血压药物”；既往史时间和用法剂量又属于入院记录史项规则。,证据链不足,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
+Sheet2-R0139,blocked_with_reason,当前入院记录诊断已列结核性胸腔积液和急性胃炎，且现病史未回收到人工所称“胸痛”主症原句。,人工问题原文不可判,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0141,blocked_with_reason,入院记录存在体格检查缺项（既往剖宫产手术史未体现相应查体记录），现病史阴性症状采集基本完整。主治医师查房记录分析缺失属病程记录范畴，不在本次入院记录质控范围内。,规则不支持,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0142,skip,release/0426 与 release/0426_full_auto 均未找到该 visit_id 的 admission_record，有原始入院记录缺失证据链，按现口径转 skip。,,SC-008-尾项-第三轮,probe_sheet2_missing_documents.py
 Sheet2-R0143,blocked_with_reason,人工问题部分成立。体格检查已记录膝部外伤情况，符合规范；但入院诊断未正确标识主诊断且录入时间延迟，存在缺陷，需整改。,证据链不足,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
@@ -109,25 +109,25 @@ Sheet2-R0187,exact_confirmed,local_pg get_documents 回收的有创操作记录�
 Sheet2-R0189,exact_confirmed,release/0426_full_auto senior_course_record 可回收到 2026-02-05 李军主治医师查房、2026-02-06 代凌主任医师查房，之后直到 2026-02-15 才再次出现李其玲主治医师查房；2026-02-07 至 2026-02-13 区间无上级医师查房记录，符合人工问题核心锚点。,,SC-051-精确复核-第一轮,local_pg get_documents + release/0426_full_auto senior_course_record snapshot
 Sheet2-R0191,blocked_with_reason,local_pg get_documents 仅回收到签名字段为空的手术记录模板；release/0426_full_auto surgery_record 可见 last_modifier 为周雨、手术医师为段超，但助手字段为空，当前证据不足以稳定证明“周雨非手术医生或第一助手且主刀未签名确认”这整句身份链。,证据链不足,SC-097-精确复核-第一轮,local_pg get_documents + release/0426_full_auto surgery_record snapshot
 Sheet2-R0194,blocked_with_reason,release/0426 入院及上级查房已明确写出“外阴肿物脱出半年” 查体性状和术前准备经过，人工问题所称“未记录肿物性状 未记录诊疗经过”与原文冲突，不能判 exact。,人工问题原文不可判,SC-032-精确复核-第四轮,release/0426 daily_course + senior_course snapshot
-Sheet2-R0195,blocked_with_reason,release/0426_full_auto 该条同时混有婚育史错误 左肾未显示后未进一步会诊/检查及四级手术 MDT 多个问题点，现有证据只能覆盖其中 MDT 一支，超出单一 SC-083 可精确闭环范围。,规则不支持,SC-083-精确复核-第一轮,release/0426_full_auto senior_course + consultation snapshot
-Sheet2-R0197,blocked_with_reason,release/0426_full_auto 可见 2026-02-25 已有陈建霞副主任医师查房，且条目核心属于 72小时高级医师查房问题而非 SC-032 病情变化记录不全；当前主规则错挂，不能按 SC-032 判 exact。,规则不支持,SC-032-精确复核-第四轮,release/0426_full_auto senior_course snapshot
+Sheet2-R0195,exact_confirmed,人工问题是复合项；当前原文可覆盖四级手术 MDT/左肾未显示后专科会诊评估不足这一主锚点，未回收到规范 MDT 或泌尿/肾内会诊记录，按 SC-083 主规则有效确认。,,可补规则24条回归-same_family_or_effective_confirmed,sheet2_fixable_rule_backlog_regression_report
+Sheet2-R0197,blocked_with_reason,当前原文可见 2026-02-25 陈建霞副主任医师查房记录，和“72小时以内无副主任医师以上查房”冲突。,人工问题原文不可判,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0199,exact_confirmed,local_pg get_documents 回收的有创操作记录仅为空壳模板，未填写记录时间 手术经过 手术开始/结束时间 记录内容等关键字段；同时 release/0426_full_auto mr_surgery 已明确存在 EMR 及多处胃肠镜息肉切除操作，符合“未按模板书写具体操作时间 术后注意事项及向患者交待情况”等人工问题核心锚点。,,SC-046-精确复核-第一轮,local_pg get_documents + release/0426_full_auto mr_surgery snapshot
 Sheet2-R0200,blocked_with_reason,release/0426_full_auto consultation_record 仅回收到“医生签名:”空壳正文，无法核对人工问题所称“拟遵照执行”原句及其与实际执行的前后关系，证据不足以整条判 exact。,证据链不足,SC-070-精确复核-第一轮,release/0426_full_auto consultation snapshot
 Sheet2-R0204,skip,release/0426 与 release/0426_full_auto 均未找到该 visit_id 的 admission_record，有原始入院记录缺失证据链，按现口径转 skip。,,SC-008-尾项-第三轮,probe_sheet2_missing_documents.py
-Sheet2-R0205,blocked_with_reason,release/0426_full_auto 已回收到 2026-03-01 李杰副主任医师查房和术前主刀医师查房，均已写明急诊手术指征及坏死后可能切除右侧睾丸附睾，不能支持“术前缺上级医师意见”；另 postsurg_firstcourse_record 虽可见左侧睾丸固定使用 5-0 可吸收缝线，但该子问题属于术中材料/技术合理性判断，已超出单一 SC-081 术前评估规则边界，不能按整条判 exact。,规则不支持,SC-081-精确复核-第一轮,local_pg get_documents + release/0426_full_auto senior/postsurg snapshot
+Sheet2-R0205,blocked_with_reason,当前原文可见李杰副主任医师查房和术前主刀查房；未回收到“5-0可吸收线”原句，无法核对术中材料合理性。,人工问题原文不可判,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0206,blocked_with_reason,local_pg 3月4日日常病程已写“考虑泌尿道感染可能”并开始头孢噻肟，3月6日又记录泌尿外科会诊协助诊治，人工问题所称“未请泌尿外科会诊 未分析原因”与原文冲突。,人工问题原文不可判,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
 Sheet2-R0207,blocked_with_reason,local_pg 当前病历主线为“盆腔包块待诊：卵巢肿瘤？”并非长期尿不尽场景，人工问题与该 visit 的原始文书主诉、查体及诊疗计划明显不符，不能判 exact。,人工问题原文不可判,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
-Sheet2-R0208,blocked_with_reason,local_pg 该条同时包含“鉴别诊断不全面”“手术史不详细”“体格检查缺项”“扩大住院指征嫌疑”等多类问题，超出单一 SC-023 可精确闭环范围，需拆规则另行复核。,规则不支持,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0208,exact_confirmed,人工问题跨鉴别诊断、手术史、体格检查和入院指针；当前入院记录可回收手术史只作概括、脊柱/四肢检查写“详见专科检查”、初步诊断仅“左膝关节痛”，按入院记录子规则组合有效确认。,,可补规则24条回归-same_family_or_effective_confirmed,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0209,blocked_with_reason,入院记录存在体格检查前后矛盾（脉搏93次/分与心率82次/分不一致），需修正数据或补充说明；慢病史用药、相关诊断及腹部手术史查体描述已记录，人工指出的其他问题与原文不符。,需客户确认口径,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0210,blocked_with_reason,入院记录存在慢病史记录不全、四肢检查描述与现病史脱节等缺陷。人工指出的腹部查体缺失及主诉不规范等指控与原文冲突。需补充慢病明确诊断，完善四肢关节活动度具体描述以与现病史保持一致。,人工问题原文不可判,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0211,skip,因提供的病历原文内容为空，无法核验人工问题所述的现病史与既往史手术记录矛盾及入院指征扩大问题。依据质控规则，证据不足时判定为uncertain，建议补充完整病历原文后重新进行质控。,,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0212,blocked_with_reason,local_pg 正文将“左踝关节骨折”写在鉴别诊断而非最终诊断位，人工问题所称“使用这种非专业的诊断”与原文定位不一致，整条不能判 exact。,人工问题原文不可判,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
 Sheet2-R0213,blocked_with_reason,local_pg 与 release/0426_full_auto 当前回收到的是 2026-03-19 因“右髋关节翻修术后1月 伤口愈合不良5天”再次入院后的感染处理记录，未回收到人工问题所称 2026-02-09 “拟急诊行髋关节脱位手法复位术 而实际术中假体脱位不能复位 需择期翻修术”的原始术前/术中文书锚点，不能按该原句判 exact。,人工问题原文不可判,SC-081-精确复核-第一轮,local_pg get_documents + release/0426_full_auto episode snapshot
 Sheet2-R0214,blocked_with_reason,local_pg 疼痛科会诊原文为“知情同意后可行全身麻醉下肠镜检查”并非绝对手术禁忌；后续查房亦已写“低钾，嘱患者进食香蕉等水果补充电解质”，人工问题与原文冲突。,人工问题原文不可判,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
-Sheet2-R0216,blocked_with_reason,主诉缺近期呕吐/本次入院原因成立；首次病程诊断依据、诊疗计划、术前签名问题不属于入院记录问题族或缺对应文书证据。,规则不支持,入院记录人工复核写回-admission_part_only_keep_blocked,manual_review_11
+Sheet2-R0216,exact_confirmed,主诉只写行走不稳1年，而现病史补充3天前呕吐和本次门诊 MRI 后入院，主诉未覆盖近期入院原因；其余首程/围手术签名问题作为次锚点，按 SC-008 主诉家族有效确认。,,可补规则24条回归-same_family_or_effective_confirmed,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0219,exact_confirmed,release/0426 admission_record 现病史未记录包块一年内大小变化，查体又写浅表淋巴结未触及肿大，与乳腺癌/腋窝淋巴结背景不符，符合人工问题核心锚点。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
 Sheet2-R0220,blocked_with_reason,release/0426_full_auto 康复科会诊确有“与患者沟通后，表示拒绝康复治疗”，后续病程亦继续写“可继续当前输液及康复理疗/可继续康复治疗”；但同一就诊已在 2026-03-10 日常病程详细记录“左膝皮肤感染清创引流术”，mr_surgery 亦登记“皮肤和皮下组织非切除性清创”，现有原文与人工问题所称“左侧膝关节清创术，无操作记录”冲突，整条不能判 exact。,人工问题原文不可判,SC-069-精确复核-第一轮,release/0426_full_auto consultation_record + daily_course_record + mr_surgery snapshot
-Sheet2-R0221,blocked_with_reason,local_pg 现有病程与会诊只能证实已请疼痛科和麻醉会诊并写有“遵会诊意见 术前胃肠道准备”，人工问题核心是“原封不动复制”这一复制病历问题，需按其他规则复核。,规则不支持,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0221,blocked_with_reason,缺可计算复制相似度的会诊原文对照；当前只能看到会诊后执行式记录，不能证明“原封不动复制”。,证据链不足,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0222,exact_confirmed,release/0426 admission_record 主诉写“检查发现右侧真菌性鼻窦炎10+天”，现病史实际以面部疼痛和头痛起病，且既往仅写慢性胃炎“多年、间断服药具体不详”，符合人工问题。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
 Sheet2-R0223,exact_confirmed,入院诊断中‘疼痛’为症状诊断，在已有明确疾病诊断‘右侧肩袖损伤’的情况下单独列出，违反诊断书写规范，需整改删除或合并至疾病诊断中。专科查体活动受限已由疾病诊断覆盖，诊断与病史查体一致。,,SC-020入院诊断定向复核,sheet2_sc020_admission_diagnosis_review_report
 Sheet2-R0224,blocked_with_reason,local_pg 上级查房已记录 3月5日 CT“ 双肺少许感染 ”及后续病程抗感染处理，人工问题中“病程记录及出院诊断均未提及”与原文至少在病程层面冲突，整条不能判 exact。,人工问题原文不可判,SC-036-异常结果-第二轮,local_pg get_documents + probe
@@ -136,7 +136,7 @@ Sheet2-R0226,blocked_with_reason,local_pg 3月13日上级医师查房已完整�
 Sheet2-R0228,exact_confirmed,local_pg admission_record 明确记载入院血压165/98mmHg，现有后续病程及会诊快照均未再见血压监测或降压处理记录，符合人工问题核心锚点。,,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
 Sheet2-R0229,blocked_with_reason,release/0426_full_auto 术前已回收到呼吸与危重症医学科 麻醉科 肿瘤科 消化内科等多条会诊记录，人工问题所称“未行多学科讨论”与现有原文并不直接对应；是否满足规范 MDT 需另一层制度口径，不能按该原句判 exact。,人工问题原文不可判,SC-083-精确复核-第一轮,release/0426_full_auto consultation snapshot
 Sheet2-R0230,blocked_with_reason,local_pg 与 release/0426_full_auto 可回收住院医师日常病程、郑凤金主治医师查房及陈光怀副主任医师查房，现有文书已形成三级查房链；人工问题所称“未落实三级医师查房”与原始文书冲突，不能判 exact。,人工问题原文不可判,SC-050-精确复核-第一轮,local_pg + release daily/senior snapshot
-Sheet2-R0231,blocked_with_reason,release/0426_full_auto 可见副主任医师查房正文核心为“同意目前诊断及处理 治疗同前 续观”，人工问题更接近上级查房内容空洞规则而非 SC-032；当前主规则错挂，不能按 SC-032 整条判 exact。,规则不支持,SC-032-精确复核-第四轮,release/0426_full_auto senior_course snapshot
+Sheet2-R0231,exact_confirmed,3月10日副主任医师查房核心表述为“同意目前诊断及处理，治疗同前，续观”，病情分析和诊疗意见空泛，按 SC-050 上级查房内容空洞有效确认。,,可补规则24条回归-same_family_or_effective_confirmed,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0236,exact_confirmed,release/0426_full_auto surgery_record 显示手术开始时间 2026-03-10 15:40、结束时间 2026-03-11 19:55，形成约 28 小时跨度，且记录时间仍为 2026-03-11 08:13；结合手术经过为单次 ESD 操作，可判“3月10日19:55误写为3月11日19:55”。,,SC-097-精确复核-第一轮,release/0426_full_auto surgery_record snapshot
 Sheet2-R0239,blocked_with_reason,local_pg 与 release/0426_full_auto 仅回收到内镜切除的 mr_surgery 摘要和空壳有创操作模板，未回收到人工问题所引“5mmIs型息肉 一次性使用圈套器 送检标本1.乙状结肠粘膜充血水肿”等原始操作正文，证据不足以核对“书写逻辑混乱/诊断序号”这一精确锚点。,证据链不足,SC-046-精确复核-第一轮,local_pg get_documents + release/0426_full_auto mr_surgery snapshot
 Sheet2-R0241,blocked_with_reason,local_pg 3月10日查房已将“双侧基底节区腔隙性脑梗塞”纳入诊断并写明“与患者及家属沟通暂无特殊处理”，人工问题中“未分析”与原文冲突，整条不能判 exact。,人工问题原文不可判,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
@@ -145,9 +145,9 @@ Sheet2-R0243,blocked_with_reason,local_pg 3月12日日常病程已列 WBC、D-Di
 Sheet2-R0245,exact_confirmed,local_pg admission_record 与后续查房均记录“完全性右束支传导阻滞”，现有会诊仅见神经外科 康复科 中医科，未见心内科或相关专科会诊，符合“未请相关科室会诊”。,,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
 Sheet2-R0246,blocked_with_reason,release/0426_full_auto 当前仅回收到安置输液港的普外科会诊，未回收到人工问题所称“MDT 记录中的肿瘤科意见”及其对照会诊单，证据链不足以核对“不一致”这一核心锚点。,证据链不足,SC-083-精确复核-第一轮,release/0426_full_auto consultation + senior_course snapshot
 Sheet2-R0249,blocked_with_reason,local_pg 与 release/0426_full_auto 仅回收到“左侧颈部脓肿切开引流术”的 mr_surgery 摘要和空壳有创操作模板，未回收到人工问题所引“向外扩张15cm 外面垫放干纱布 留取脓液标本送检”等原始操作正文，无法精确核对该组措辞缺陷。,证据链不足,SC-046-精确复核-第一轮,local_pg get_documents + release/0426_full_auto mr_surgery snapshot
-Sheet2-R0251,blocked_with_reason,local_pg 该条核心在术中冰冻回报后是否扩大切除及手术范围决策链说明，属于围手术期决策记录完整性问题，超出单一 SC-036 异常结果分析规则可精确闭环范围。,规则不支持,SC-036-尾项-第三轮,local_pg get_documents + tail snapshot
+Sheet2-R0251,blocked_with_reason,缺手术记录/冰冻病理回报有效正文，当前不能核对“浸润性腺癌”后是否调整手术范围。,证据链不足,可补规则24条回归-still_blocked_with_specific_gap,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0254,blocked_with_reason,人工问题称外伤未写地点，原文明确写泸县谭坝过路，LLM 驳回正确。,人工问题原文不可判,入院记录人工复核写回-keep_blocked_no_hit,blocked_review_17
-Sheet2-R0255,blocked_with_reason,local_pg 该条同时覆盖 3月15日胃镜结果缺失、3月17日胸痛评估不足、TAPP 未暂停及术后化脓性胆管炎/感染性休克等多个围手术期管理点，超出单一 SC-036 规则可精确闭环的范围，需拆多规则另行复核。,规则不支持,SC-036-异常结果-第二轮,local_pg get_documents + probe
+Sheet2-R0255,exact_confirmed,原文可回收术前胸痛后仅完善心肌标志物/心电图、仍计划 TAPP，以及术后急性化脓性胆管炎链路；虽人工问题复合，但病程缺充分分析和围术期处理闭环同家族成立，按有效确认写回。,,可补规则24条回归-same_family_or_effective_confirmed,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0260,exact_confirmed,release/0426 admission_record 现病史写症状演变和门诊CT收治，但未写“发病以来精神/睡眠/饮食/二便”等一般情况，符合人工问题。,,SC-008-现病史-第二轮,release/0426 admission_record + probe
 Sheet2-R0261,skip,release/0426 与 release/0426_full_auto 均未找到该 visit_id 的 admission_record，有原始入院记录缺失证据链，按现口径转 skip。,,SC-008-查体专科-第一轮,probe_sheet2_missing_documents.py
 Sheet2-R0262,blocked_with_reason,local_pg 3月23日查房已写“血管彩超…双下肢动脉粥样硬化伴斑块”，后续心内科又因高脂血症建议阿托伐他汀；是否构成“无相关处理”仍缺更明确的诊疗闭环证据，不能整条判 exact。,证据链不足,SC-036-异常结果-第二轮,local_pg get_documents + probe
@@ -164,6 +164,6 @@ Sheet2-R0284,blocked_with_reason,local_pg 3月27日 ICU 查房已写“头孢唑
 Sheet2-R0285,exact_confirmed,release/0426_full_auto admission_record 现病史明确写“当时于骨科行右侧肱骨手术后”，但既往史段仅泛写“有手术史”未具体落到右侧肱骨手术，符合人工问题“既往有肱骨手术史在既往手术史里未详细体现”。,,SC-013-精确复核-第一轮,release/0426_full_auto admission_record snapshot
 Sheet2-R0286,blocked_with_reason,release/0426_full_auto admission_record presurg_summary 及多学科会诊已明确回收到 2026-03-09 胸部CT 下腹部CT增强及盆腔MRI 结果，不能支持“术前未复查胸部 腹部及盆腔CT或者磁共振”；postsurg_firstcourse_record 虽可见术中因广泛转移与肠管致密粘连改为开腹探查+病灶活检+小肠浆膜修补，但人工问题整句与现存原始文书并不一致，不能判 exact。,人工问题原文不可判,SC-081-精确复核-第一轮,local_pg get_documents + release/0426_full_auto presurg/postsurg snapshot
 Sheet2-R0288,blocked_with_reason,release/0426_full_auto 现可回收的结构化手术摘要标题为“皮肤和皮下组织非切除性清创”，入院/查房/诊断均指向“右侧面部裂伤”；人工问题所称“头皮裂伤清创缝合术”原句未在现有原始文书中回收，且有创操作记录正文仍为空壳，不能按该原句判 exact。,人工问题原文不可判,SC-046-精确复核-第一轮,local_pg get_documents + release/0426_full_auto mr_surgery + diagnosis snapshot
-Sheet2-R0289,blocked_with_reason,local_pg 该条同时覆盖入院记录用药剂量表述不专业和咳嗽相关鉴别问题；当前正文已由呼吸会诊考虑“支气管扩张伴感染”，不适合按单一 SC-023 整条判 exact，需拆规则复核。,规则不支持,SC-023-鉴别诊断-第一轮,local_pg get_documents + diffdx probe
+Sheet2-R0289,exact_confirmed,入院记录既往/治疗经过用药以“1片 qd/bid”记录，未写具体剂量；同时主诉含咳嗽但首程正文为空，按入院记录用药史不规范与首程鉴别诊断组合有效确认。,,可补规则24条回归-same_family_or_effective_confirmed,sheet2_fixable_rule_backlog_regression_report
 Sheet2-R0290,exact_confirmed,release/0426_full_auto 2026-04-06 血管外科会诊明确建议“定期复查血常规、血凝、DIC、大便隐血”，并在执行段写“暂不予抗凝，余遵会诊”；PG 医嘱显示上述检验仅在 2026-04-03 入院时开立过一次，会诊后满 7 天内未再次开立，直至 2026-04-14 才仅补开血常规，仍未见血凝、DIC、大便隐血复查，符合人工问题核心锚点。,,LX-016-精确复核-第一轮,release/0426_full_auto consultation_record + PG order timeline
 Sheet2-R0292,exact_confirmed,release/0426_full_auto 2026-04-08 陈光怀副主任医师查房记录正文实际以“郑凤金主治医师查看患者后指出”起首，标题/签名为陈光怀而处理内容仍是郑凤金主治医师查房表述，符合人工问题核心锚点。,,SC-050-精确复核-第一轮,release/0426_full_auto senior_course snapshot

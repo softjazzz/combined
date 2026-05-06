@@ -21,13 +21,13 @@ def test_sheet2_exact_review_acceptance_package_should_bucket_blocked_rows():
     }
 
     assert payload["status_breakdown"]["needs_exact_review"] == 0
-    assert payload["status_breakdown"]["exact_confirmed"] == 141
-    assert payload["status_breakdown"]["blocked_with_reason"] == 117
+    assert payload["status_breakdown"]["exact_confirmed"] == 152
+    assert payload["status_breakdown"]["blocked_with_reason"] == 106
     assert payload["status_breakdown"]["skip"] == 25
     assert buckets == {
-        "可补规则": 24,
-        "需补源文书": 19,
-        "人工问题过宽/不可判": 64,
+        "可补规则": 0,
+        "需补源文书": 28,
+        "人工问题过宽/不可判": 68,
         "需客户确认口径": 10,
     }
 

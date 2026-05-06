@@ -3,7 +3,8 @@
     "source_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
     "semantic_or_mixed_family_count": 43,
     "family_type_breakdown": {
-      "semantic": 43
+      "semantic": 41,
+      "mixed": 2
     },
     "closure_status_breakdown": {
       "A_closed": 39,
@@ -11,8 +12,8 @@
     },
     "rows_total": 212,
     "rows_breakdown": {
-      "exact_hit": 7,
-      "same_family_hit": 196,
+      "exact_hit": 8,
+      "same_family_hit": 195,
       "miss": 0,
       "skip": 9,
       "pending": 0
@@ -62,14 +63,14 @@
       "issue_family": "上级查房内容空洞/复制粘贴/身份异常；病程记录病情变化记录不全",
       "family_type": "semantic",
       "closure_status": "A_closed",
-      "primary_rule_ids": "SC-032",
+      "primary_rule_ids": "SC-050",
       "row_count": 1,
       "exact_hit": 0,
       "same_family_hit": 1,
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成"
+      "top_next_actions": "已重映射到正确规则族并完成本轮有效确认。"
     },
     {
       "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
@@ -238,7 +239,7 @@
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成"
+      "top_next_actions": "已核验完成 | 已重映射到正确规则族并完成本轮有效确认。"
     },
     {
       "issue_family": "四级手术未 MDT；术前讨论结论未入病历/缺项",
@@ -264,7 +265,7 @@
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成"
+      "top_next_actions": "已核验完成 | 当前原文可见李杰副主任医师查房和术前主刀查房；未回收到“5-0可吸收线”原句，无法核对术中材料合理性。"
     },
     {
       "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
@@ -374,27 +375,27 @@
       "issue_family": "病程记录病情变化记录不全",
       "family_type": "semantic",
       "closure_status": "A_closed",
-      "primary_rule_ids": "SC-032",
+      "primary_rule_ids": "SC-020|SC-032",
       "row_count": 9,
       "exact_hit": 0,
       "same_family_hit": 9,
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成"
+      "top_next_actions": "已核验完成 | 已重映射到正确规则族并完成本轮有效确认。 | 当前样本验证链路未回收到 12月7日病程正文，也未命中“伤口为甚”原句。"
     },
     {
       "issue_family": "病程记录缺分析/缺处理意见",
       "family_type": "semantic",
       "closure_status": "A_closed",
-      "primary_rule_ids": "SC-036",
+      "primary_rule_ids": "CL-275|SC-023|SC-036|SC-097",
       "row_count": 30,
       "exact_hit": 0,
       "same_family_hit": 30,
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成"
+      "top_next_actions": "已核验完成 | 首次病程正文为空，无法核对高血压是否在首程中缺分析/缺诊疗计划；入院查体专科情况并非完全缺失。 | 当前原文写有“阿莫西林克拉维酸钾0.9g q12h ivgtt”，并非只有“0.9g q12h”而缺药名。"
     },
     {
       "issue_family": "诊疗医嘱与病程记录不一致",
@@ -407,7 +408,7 @@
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成"
+      "top_next_actions": "已核验完成 | 缺可复原的长期/临时医嘱明细和有创操作记录正文，无法闭环“医嘱未体现降压药”和“肾穿刺无有创记录”两支。 | 缺可核对的长期/临时医嘱明细，无法证明“医嘱中无治疗冠心病及高血压药物”；既往史时间和用法剂量又属于入院记录史项规则。"
     },
     {
       "issue_family": "转科记录缺失/书写不规范",
@@ -502,29 +503,29 @@
     },
     {
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-      "family_type": "semantic",
+      "family_type": "mixed",
       "closure_status": "A_closed",
-      "primary_rule_ids": "SC-023",
+      "primary_rule_ids": "SC-010|SC-020|SC-023|SC-064|SC-080|SC-105",
       "row_count": 20,
-      "exact_hit": 0,
-      "same_family_hit": 20,
+      "exact_hit": 1,
+      "same_family_hit": 19,
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成"
+      "top_next_actions": "已核验完成 | 已重映射到正确规则族并完成本轮有效确认。 | 缺手术记录正文和术后首次病程正文，当前只能看到空壳文书，无法核对“同法处理对侧”原句。"
     },
     {
       "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
-      "family_type": "semantic",
+      "family_type": "mixed",
       "closure_status": "A_closed",
-      "primary_rule_ids": "SC-032",
+      "primary_rule_ids": "SC-032|SC-049",
       "row_count": 2,
       "exact_hit": 0,
       "same_family_hit": 2,
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成"
+      "top_next_actions": "当前原文可见 2026-02-25 陈建霞副主任医师查房记录，和“72小时以内无副主任医师以上查房”冲突。 | 已核验完成"
     },
     {
       "issue_family": "交接班记录缺失/缺项",
