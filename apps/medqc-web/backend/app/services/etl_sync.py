@@ -1173,7 +1173,7 @@ SYNC_TABLES = [
         "label": "输血申请单",
         "procedure": "web.blood_application",
         "params": 1,
-        "key_fields": ["patient_id", "visit_id", "document_id"],
+        "key_fields": ["patient_id", "visit_id", "application_id"],
     },
     {
         "name": "crisis_value_record",

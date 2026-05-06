@@ -81,10 +81,12 @@ _RUNNING_DOC_PRIORITY: tuple[str, ...] = (
     "handover_record",
     "diffcase_discussion_record",
     "bloodtrans_record",
+    "blood_application",
     "inpat_drug_order",
     "inpat_nondrug_order",
     "inpat_bill_item",
     "crisis_value_record",
+    "docpat_commu_record",
 )
 _FINAL_DOC_PRIORITY: tuple[str, ...] = (
     "discharge_record",
@@ -106,6 +108,7 @@ _FINAL_DOC_PRIORITY: tuple[str, ...] = (
     "handover_record",
     "diffcase_discussion_record",
     "bloodtrans_record",
+    "blood_application",
     "inpat_drug_order",
     "inpat_nondrug_order",
     "inpat_bill_item",
@@ -117,6 +120,8 @@ _FINAL_DOC_PRIORITY: tuple[str, ...] = (
     "postsurg_firstcourse_record",
     "surgery_safecheck_record",
     "surgery_inventory_record",
+    "postane_surveil_record",
+    "docpat_commu_record",
 )
 _FRONTPAGE_DOC_PRIORITY: tuple[str, ...] = (
     "mr",
@@ -221,12 +226,15 @@ _SCENE_GROUP_BY_DOC_TYPE: dict[str, str] = {
     "exam_master": "exam_results",
     "exam_item_report": "exam_results",
     "bloodtrans_record": "orders",
+    "blood_application": "orders",
     "surgery_record": "surgery",
     "anesthesia_record": "surgery",
     "presurg_summary": "surgery",
     "presurg_discussion": "surgery",
     "postsurg_firstcourse_record": "surgery",
     "surgery_safecheck_record": "surgery",
+    "postane_surveil_record": "surgery",
+    "docpat_commu_record": "surgery",
     "discharge_record": "terminal",
     "discharge_record_diagnosis": "terminal",
     "death_record": "terminal",
@@ -234,7 +242,6 @@ _SCENE_GROUP_BY_DOC_TYPE: dict[str, str] = {
     "inpat_drug_order": "orders",
     "inpat_nondrug_order": "orders",
     "inpat_bill_item": "orders",
-    "blood_application": "orders",
     "crisis_value_record": "exam_attention",
 }
 _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
@@ -256,6 +263,7 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "inpat_drug_order",
         "inpat_nondrug_order",
         "inpat_bill_item",
+        "blood_application",
         "crisis_value_record",
         "exam_master",
         "exam_item_report",
@@ -275,6 +283,7 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "surgery_risk_assessment",
         "surgery_inventory_record",
         "postane_surveil_record",
+        "docpat_commu_record",
     ),
     "consult_discussion": (
         "consultation_record",
@@ -285,6 +294,7 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "inpat_drug_order",
         "inpat_nondrug_order",
         "inpat_bill_item",
+        "blood_application",
     ),
     "terminal": (
         "discharge_record",
@@ -316,6 +326,7 @@ _DOMAIN_FETCH_LIMITS: dict[str, int] = {
     "inpat_drug_order": 100,
     "inpat_nondrug_order": 100,
     "inpat_bill_item": 200,
+    "blood_application": 50,
     "crisis_value_record": 50,
     "exam_master": 50,
     "exam_item_report": 50,
@@ -333,6 +344,7 @@ _DOMAIN_FETCH_LIMITS: dict[str, int] = {
     "surgery_risk_assessment": 50,
     "surgery_inventory_record": 50,
     "postane_surveil_record": 50,
+    "docpat_commu_record": 50,
     "consultation_record": 100,
     "diffcase_discussion_record": 50,
     "death_discussion": 50,

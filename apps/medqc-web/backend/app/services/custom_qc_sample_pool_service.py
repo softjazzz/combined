@@ -3589,6 +3589,7 @@ class CustomQCSamplePoolService:
         remote_schema = str(cfg.get("remote_schema") or "public").strip() or "public"
         anchor_tables = {"mr", "admission_record"}
         results: List[Dict[str, Any]] = []
+        skipped_table_errors: List[Dict[str, Any]] = []
         total_rows_pulled = 0
         total_rows_upserted = 0
         bundle_refresh_rows: List[Dict[str, Any]] = []
@@ -3613,12 +3614,44 @@ class CustomQCSamplePoolService:
             if not table_config:
                 continue
             source_table = str(table_config.get("source_table") or table_name)
-            rows = fetch_remote_rows_by_visit_keys(
-                remote_url=remote_url,
-                remote_schema=remote_schema,
-                source_table=source_table,
-                visit_keys=visit_keys,
-            )
+            try:
+                rows = fetch_remote_rows_by_visit_keys(
+                    remote_url=remote_url,
+                    remote_schema=remote_schema,
+                    source_table=source_table,
+                    visit_keys=visit_keys,
+                )
+            except Exception as exc:
+                error_message = _safe_text(str(exc))
+                if table_name in anchor_tables:
+                    raise
+                skipped = {
+                    "table_name": table_name,
+                    "source_table": source_table,
+                    "rows_pulled": 0,
+                    "rows_upserted": 0,
+                    "sync_status": "source_table_unavailable",
+                    "skip_reason": error_message,
+                }
+                results.append(skipped)
+                skipped_table_errors.append(skipped)
+                if progress_callback is not None:
+                    progress_callback(
+                        {
+                            "step_key": "syncing",
+                            "step_label": "正在同步病历表",
+                            "total_candidates": len(items),
+                            "eligible_visits": len(visit_keys),
+                            "processed_tables": index,
+                            "total_tables": total_tables,
+                            "current_table": table_name,
+                            "remaining_tables": max(total_tables - index, 0),
+                            "total_rows_pulled": total_rows_pulled,
+                            "total_rows_upserted": total_rows_upserted,
+                            "skipped_optional_tables": len(skipped_table_errors),
+                        }
+                    )
+                continue
             upserted = upsert_to_local(
                 table_name=table_name,
                 records=rows,
@@ -3667,6 +3700,8 @@ class CustomQCSamplePoolService:
                     "source_table": source_table,
                     "rows_pulled": len(rows),
                     "rows_upserted": upserted,
+                    "sync_status": "synced",
+                    "skip_reason": "",
                 }
             )
             if progress_callback is not None:
@@ -3728,6 +3763,7 @@ class CustomQCSamplePoolService:
             "total_rows_upserted": total_rows_upserted,
             "sync_group_ids": sync_plan["group_ids"],
             "missing_group_ids": sync_plan["missing_group_ids"],
+            "skipped_optional_tables": skipped_table_errors,
             "pool": match_result.get("pool") or self.get_pool(pool_id=pool_id),
             "post_match": match_result,
         }

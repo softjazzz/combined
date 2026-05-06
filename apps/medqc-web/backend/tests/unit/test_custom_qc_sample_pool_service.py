@@ -1090,6 +1090,77 @@ def test_sync_pool_records_aggregates_rows_and_refreshes_running_and_final_bundl
     assert progress_events[-1]["step_key"] == "matching"
 
 
+def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
+    service = object.__new__(CustomQCSamplePoolService)
+
+    monkeypatch.setattr(
+        service,
+        "_list_sync_candidate_items",
+        lambda **_: [
+            {"id": "item-1", "mr_no": "ZY001", "patient_name": "张三", "department": "普外科", "qc_date": "2026-04-20"},
+        ],
+    )
+    monkeypatch.setattr(
+        service,
+        "_resolve_remote_visit_keys",
+        lambda **_: {
+            "matched": 1,
+            "ambiguous": 0,
+            "unmatched": 0,
+            "visit_keys": [("P001", "V001")],
+        },
+    )
+    monkeypatch.setattr(
+        service,
+        "match_pool_items",
+        lambda **_: {
+            "pool": {"id": "pool-1", "matched_items": 1, "ready_items": 1},
+            "matched": 1,
+            "ambiguous": 0,
+            "unmatched": 0,
+        },
+    )
+
+    monkeypatch.setattr(
+        sample_pool_module,
+        "list_sync_tables",
+        lambda: [
+            {"name": "mr", "source_table": "mr", "key_fields": ["institute_id", "patient_id", "visit_id"]},
+            {
+                "name": "docpat_commu_record",
+                "source_table": "docpat_commu_record",
+                "key_fields": ["institute_id", "patient_id", "visit_id", "document_id"],
+            },
+        ],
+    )
+    monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
+    monkeypatch.setattr(sample_pool_module, "load_db_config", lambda: {"remote_schema": "public"})
+
+    def fake_fetch(**kwargs):
+        if kwargs["source_table"] == "docpat_commu_record":
+            raise ValueError("docpat_commu_record 缺少 patient_id/visit_id 字段，无法按病例集合抽取")
+        return [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}]
+
+    monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_visit_keys", fake_fetch)
+    monkeypatch.setattr(sample_pool_module, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
+    monkeypatch.setattr(sample_pool_module, "ingest_sync_rows", lambda **kwargs: None)
+    monkeypatch.setattr(sample_pool_module, "refresh_scene_bundles_for_rows", lambda **kwargs: None)
+    monkeypatch.setattr(sample_pool_module, "refresh_domain_bundles_for_rows", lambda **kwargs: None)
+
+    result = service.sync_pool_records(
+        pool_id="pool-1",
+        only_intrinsic=True,
+        include_in_batch_1=True,
+        table_groups=["sample_full_domain"],
+    )
+
+    assert result["total_rows_pulled"] == 1
+    assert result["total_rows_upserted"] == 1
+    assert result["synced_tables"][1]["table_name"] == "docpat_commu_record"
+    assert result["synced_tables"][1]["sync_status"] == "source_table_unavailable"
+    assert result["skipped_optional_tables"][0]["source_table"] == "docpat_commu_record"
+
+
 def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeypatch):
     service = CustomQCSamplePoolService()
     rows = [
