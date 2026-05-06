@@ -758,9 +758,9 @@
       "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
       "primary_rule_id": "SC-070",
       "manual_issue_text": "1月30日后7天无病程记录，请心血管、肾内科、呼吸科、麻醉科、皮肤科等科室会诊后，无请会诊执行记录。",
-      "reason": "已补医嘱明细，但未发现独立会诊执行清单表；人工问题还包含 1月30日后7天无病程记录的时效程序锚点，需会诊执行表与病程时间轴聚合后才能 exact。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "SC069医嘱执行证据链-partial_effective_keep_blocked",
+      "reason": "客户源库导出已回收到多条会诊执行/遵会诊意见记录：皮肤科会诊后予以抗过敏治疗、肾病内科会诊后完善甲状旁腺激素/无机磷/贫血三项、麻醉科会诊后做好术前准备；人工问题称会诊后无执行记录与当前源库原文冲突，保留 blocked。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC069医嘱执行证据链-source_text_conflict_keep_blocked",
       "decision_source": "sheet2_sc069_order_execution_evidence_replay_report"
     },
     {
@@ -854,9 +854,9 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "患者行经阴道子宫切除术，术前无尿路感染，术后诊断尿路感染。未请泌尿外科会诊，未分析原因。",
-      "reason": "术后尿路感染病程分析/未请泌尿外科会诊可部分核验，但仍存在缺证或冲突：缺尿培养结果",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "SC069医嘱执行证据链-partial_effective_keep_blocked",
+      "reason": "客户源库导出已回收到术后排尿不畅/尿液分析异常/头孢噻肟抗炎及泌尿外科唐远君副主任医师会诊，且记录写“已遵执行”；人工问题称未请泌尿外科会诊与源库原文冲突，保留 blocked。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "SC069医嘱执行证据链-source_text_conflict_keep_blocked",
       "decision_source": "sheet2_sc069_order_execution_evidence_replay_report"
     },
     {

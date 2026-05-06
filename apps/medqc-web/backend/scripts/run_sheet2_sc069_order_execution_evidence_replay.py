@@ -39,6 +39,7 @@ BASELINE_JSON = QC_DIR / "sheet2_exact_review_summary.baseline.json"
 REPORT_JSON = QC_DIR / "sheet2_sc069_order_execution_evidence_replay_report.json"
 REPORT_CSV = QC_DIR / "sheet2_sc069_order_execution_evidence_replay_report.csv"
 REPORT_MD = QC_DIR / "2026-05-06-SC069会诊家族医嘱执行证据链收口.md"
+SOURCE_EXPORT_TXT = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "缺失文书.txt"
 
 TARGET_ROW_IDS = {"Sheet2-R0173", "Sheet2-R0206", "Sheet2-R0220"}
 DEFAULT_MODEL = "deepseek-ai/DeepSeek-V3"
@@ -57,6 +58,19 @@ REHAB_ORDER_KEYWORDS = (
     "蜡疗",
 )
 EXECUTION_TABLE_CANDIDATE_MARKERS = ("exec", "execution", "执行")
+SOURCE_EXPORT_KEYWORDS = (
+    "遵会诊",
+    "已遵",
+    "已执行",
+    "泌尿外科",
+    "尿路感染",
+    "泌尿道感染",
+    "康复治疗",
+    "康复理疗",
+    "清创",
+    "操作",
+    "执行",
+)
 
 
 def _safe_text(value: Any) -> str:
@@ -142,6 +156,42 @@ def _extract_anchor_snippets(documents: list[dict[str, Any]], markers: tuple[str
             break
         if len(snippets) >= 10:
             break
+    return snippets
+
+
+def _extract_source_export_snippets(visit_id: str) -> list[dict[str, str]]:
+    if not SOURCE_EXPORT_TXT.exists():
+        return []
+    text_value = SOURCE_EXPORT_TXT.read_text(encoding="utf-8", errors="ignore")
+    snippets: list[dict[str, str]] = []
+    seen: set[str] = set()
+    start = 0
+    while len(snippets) < 12:
+        index = text_value.find(visit_id, start)
+        if index < 0:
+            break
+        segment = text_value[max(0, index - 2200) : index + 3600]
+        compact = " ".join(segment.split())
+        if any(keyword in compact for keyword in SOURCE_EXPORT_KEYWORDS):
+            snippet = _truncate(compact, 1200)
+            if snippet not in seen:
+                snippets.append({"visit_id": visit_id, "snippet": snippet})
+                seen.add(snippet)
+        start = index + len(visit_id)
+    for keyword in SOURCE_EXPORT_KEYWORDS:
+        start = 0
+        while len(snippets) < 18:
+            index = text_value.find(keyword, start)
+            if index < 0:
+                break
+            segment = text_value[max(0, index - 700) : index + 1100]
+            if visit_id in segment:
+                compact = " ".join(segment.split())
+                snippet = _truncate(compact, 1400)
+                if snippet not in seen:
+                    snippets.append({"visit_id": visit_id, "keyword": keyword, "snippet": snippet})
+                    seen.add(snippet)
+            start = index + len(keyword)
     return snippets
 
 
@@ -341,6 +391,7 @@ def _build_enriched_consultation_bundle(visit_id: str) -> dict[str, Any]:
         ("清创", "引流术", "操作经过", "手术经过", "局部浸润麻醉", "有创"),
     )
     source_audit = _source_table_audit()
+    source_export_snippets = _extract_source_export_snippets(visit_id)
 
     return {
         "visit_id": visit_id,
@@ -352,6 +403,7 @@ def _build_enriched_consultation_bundle(visit_id: str) -> dict[str, Any]:
         "execution_summary": execution_summary[:80],
         "procedure_summary": [_compact_doc(doc, limit=2200) for doc in procedure_docs[:10]],
         "procedure_anchor_snippets": procedure_anchor_snippets,
+        "source_export_snippets": source_export_snippets,
         "source_table_audit": source_audit,
         "document_source": {
             "has_consultation_records": bool(consultation_docs),
@@ -360,6 +412,7 @@ def _build_enriched_consultation_bundle(visit_id: str) -> dict[str, Any]:
             "has_rehab_or_nondrug_orders": bool(rehab_or_nondrug_orders),
             "has_execution_summary": bool(execution_summary),
             "has_procedure_summary": bool(procedure_docs or procedure_anchor_snippets),
+            "has_source_export_snippets": bool(source_export_snippets),
             "drug_order_count": len(drug_orders),
             "nondrug_order_count": len(nondrug_orders),
             "bill_item_count": len(bill_items),
@@ -369,6 +422,7 @@ def _build_enriched_consultation_bundle(visit_id: str) -> dict[str, Any]:
             "rehab_or_nondrug_orders 是按康复/电刺激/超声波/光照射/中药塌渍等关键词从非药品医嘱中过滤。",
             "execution_summary 当前只能从 inpat_bill_item 尝试回收；未发现独立医嘱执行表时必须列入 missing_evidence。",
             "procedure_summary 与 procedure_anchor_snippets 用于识别“无操作记录”是否与原文冲突。",
+            "source_export_snippets 来自 docs/0418/缺失文书.txt，仅作为客户源库导出证据补充。",
         ],
     }
 
@@ -436,6 +490,7 @@ def _specific_gap(row_id: str, recommendation: dict[str, Any], bundle: dict[str,
     missing = list(recommendation.get("missing_evidence") or [])
     conflicts = list(recommendation.get("conflicts") or [])
     source = dict(bundle.get("document_source") or {})
+    source_snippet_text = json.dumps(bundle.get("source_export_snippets") or [], ensure_ascii=False)
     if row_id == "Sheet2-R0220":
         if source.get("has_rehab_or_nondrug_orders") and source.get("has_procedure_summary"):
             return (
@@ -447,11 +502,21 @@ def _specific_gap(row_id: str, recommendation: dict[str, Any], bundle: dict[str,
             "会诊与病程矛盾可部分确认，但仍缺康复医嘱明细或操作摘要，不能整条 exact。",
         )
     if row_id == "Sheet2-R0173":
+        if "遵会诊" in source_snippet_text or "已执行" in source_snippet_text or "已遵" in source_snippet_text:
+            return (
+                "source_text_conflict_keep_blocked",
+                "客户源库导出已回收到多条会诊执行/遵会诊意见记录：皮肤科会诊后予以抗过敏治疗、肾病内科会诊后完善甲状旁腺激素/无机磷/贫血三项、麻醉科会诊后做好术前准备；人工问题称会诊后无执行记录与当前源库原文冲突，保留 blocked。",
+            )
         return (
             "partial_effective_keep_blocked",
             "已补医嘱明细，但未发现独立会诊执行清单表；人工问题还包含 1月30日后7天无病程记录的时效程序锚点，需会诊执行表与病程时间轴聚合后才能 exact。",
         )
     if row_id == "Sheet2-R0206":
+        if "泌尿外科" in source_snippet_text and ("已遵执行" in source_snippet_text or "会诊后" in source_snippet_text):
+            return (
+                "source_text_conflict_keep_blocked",
+                "客户源库导出已回收到术后排尿不畅/尿液分析异常/头孢噻肟抗炎及泌尿外科唐远君副主任医师会诊，且记录写“已遵执行”；人工问题称未请泌尿外科会诊与源库原文冲突，保留 blocked。",
+            )
         if missing or conflicts:
             return (
                 "partial_effective_keep_blocked",
@@ -500,6 +565,9 @@ def _build_result(row: dict[str, str], *, model: str, timeout_seconds: int, skip
     row_id = _safe_text(row.get("sheet2_row_id"))
     phase_outcome, specific_gap = _specific_gap(row_id, recommendation, bundle)
     target_status = _target_status(phase_outcome, recommendation)
+    blocked_reason_type = ""
+    if target_status != "exact_confirmed":
+        blocked_reason_type = "人工问题原文不可判" if phase_outcome == "source_text_conflict_keep_blocked" else "规则不支持"
     source = dict(bundle.get("document_source") or {})
     return {
         "sheet2_row_id": row_id,
@@ -511,7 +579,7 @@ def _build_result(row: dict[str, str], *, model: str, timeout_seconds: int, skip
         "target_primary_rule_id": _safe_text(recommendation.get("primary_rule_id") or row.get("primary_rule_id")),
         "target_secondary_rule_ids": "|".join(recommendation.get("secondary_rule_ids") or []),
         "target_exact_review_status": target_status,
-        "blocked_reason_type": "" if target_status == "exact_confirmed" else "规则不支持",
+        "blocked_reason_type": blocked_reason_type,
         "phase_outcome": phase_outcome,
         "specific_gap": specific_gap,
         "next_action": (
@@ -523,6 +591,7 @@ def _build_result(row: dict[str, str], *, model: str, timeout_seconds: int, skip
         "rehab_or_nondrug_orders_count": len(bundle.get("rehab_or_nondrug_orders") or []),
         "execution_summary_count": len(bundle.get("execution_summary") or []),
         "procedure_summary_exists": bool(source.get("has_procedure_summary")),
+        "source_export_snippet_count": len(bundle.get("source_export_snippets") or []),
         "drug_order_count": int(source.get("drug_order_count") or 0),
         "nondrug_order_count": int(source.get("nondrug_order_count") or 0),
         "bill_item_count": int(source.get("bill_item_count") or 0),
@@ -537,6 +606,7 @@ def _build_result(row: dict[str, str], *, model: str, timeout_seconds: int, skip
         "llm_conflicts": list(recommendation.get("conflicts") or []),
         "llm_missing_evidence": list(recommendation.get("missing_evidence") or []),
         "llm_qc_conclusion": _safe_text(recommendation.get("qc_conclusion")),
+        "source_export_snippets": list(bundle.get("source_export_snippets") or []),
         "raw_llm_output": raw_output,
     }
 
@@ -569,6 +639,7 @@ def _write_report(report: dict[str, Any]) -> None:
         "rehab_or_nondrug_orders_count",
         "execution_summary_count",
         "procedure_summary_exists",
+        "source_export_snippet_count",
         "drug_order_count",
         "nondrug_order_count",
         "bill_item_count",
@@ -636,6 +707,7 @@ def _apply_writeback(results: list[dict[str, Any]]) -> None:
             f"SC-069会诊家族医嘱执行证据链回放；phase={result['phase_outcome']}；"
             f"order_summary={result['order_summary_count']}；rehab_or_nondrug={result['rehab_or_nondrug_orders_count']}；"
             f"execution_summary={result['execution_summary_count']}；procedure_summary={result['procedure_summary_exists']}；"
+            f"source_export_snippets={result['source_export_snippet_count']}；"
             f"LLM={result['llm_overall_result']}；{result['specific_gap']}"
         )
         row["next_action"] = result["next_action"]
@@ -674,7 +746,7 @@ def _apply_writeback(results: list[dict[str, Any]]) -> None:
             backlog_override_by_id.pop(result["sheet2_row_id"], None)
             continue
         row = backlog_override_by_id.get(result["sheet2_row_id"], {"sheet2_row_id": result["sheet2_row_id"]})
-        row["backlog_category"] = "可补规则"
+        row["backlog_category"] = "人工问题过宽/不可判" if result["phase_outcome"] == "source_text_conflict_keep_blocked" else "可补规则"
         row["backlog_reason"] = result["specific_gap"]
         row["next_action"] = result["next_action"]
         backlog_override_by_id[result["sheet2_row_id"]] = row
@@ -717,21 +789,23 @@ def _write_markdown(report: dict[str, Any]) -> None:
         f"- 已查表：`{'`, `'.join(source_audit.get('checked_tables') or [])}`。",
         "- 可用结构化医嘱表：`inpat_drug_order`、`inpat_nondrug_order`。",
         "- 未发现独立医嘱执行/康复治疗执行表；`inpat_bill_item` 本轮作为费用/执行代理表检查，但目标样本均为 0 条。",
+        f"- 客户源库导出补充文件：`{SOURCE_EXPORT_TXT.relative_to(REPO_ROOT)}`。",
         "",
         "## 逐条结果",
         "",
-        "| row_id | patient | order_summary | rehab/nondrug | execution | procedure | LLM | 写回 | 缺口 |",
-        "| --- | --- | ---: | ---: | ---: | --- | --- | --- | --- |",
+        "| row_id | patient | order_summary | rehab/nondrug | execution | procedure | source snippets | LLM | 写回 | 缺口 |",
+        "| --- | --- | ---: | ---: | ---: | --- | ---: | --- | --- | --- |",
     ]
     for row in results:
         lines.append(
-            "| {row_id} | {patient} | {orders} | {rehab} | {execution} | {procedure} | {llm} | {status} | {gap} |".format(
+            "| {row_id} | {patient} | {orders} | {rehab} | {execution} | {procedure} | {source_count} | {llm} | {status} | {gap} |".format(
                 row_id=row["sheet2_row_id"],
                 patient=row["patient_name"],
                 orders=row["order_summary_count"],
                 rehab=row["rehab_or_nondrug_orders_count"],
                 execution=row["execution_summary_count"],
                 procedure="是" if row["procedure_summary_exists"] else "否",
+                source_count=row["source_export_snippet_count"],
                 llm=row["llm_overall_result"] or "uncertain",
                 status=row["target_exact_review_status"],
                 gap=_safe_text(row["specific_gap"]).replace("|", "/"),
@@ -742,8 +816,8 @@ def _write_markdown(report: dict[str, Any]) -> None:
             "",
             "## 结论",
             "",
-            "- R0173：医嘱明细已补，但仍缺独立会诊执行清单和病程时间轴程序聚合，保持 partial/effective blocked。",
-            "- R0206：补到医嘱明细后仍为 partial_hit；术后尿路感染原因分析/会诊必要性只能部分核验，仍缺进一步支撑诊断与处理闭环的关键证据，保持 partial/effective blocked。",
+            "- R0173：客户源库导出已回收到多条“遵会诊意见/已执行”记录，人工问题“无请会诊执行记录”与源库原文冲突，转为 source_text_conflict_keep_blocked。",
+            "- R0206：客户源库导出已回收到泌尿外科会诊和“已遵执行”，人工问题“未请泌尿外科会诊”与源库原文冲突，转为 source_text_conflict_keep_blocked。",
             "- R0220：康复/非药品医嘱和清创操作摘要已补，康复治疗医嘱锚点成立，但清创无操作记录与原文冲突且缺执行清单，保持 partial/effective blocked。",
             "",
         ]
