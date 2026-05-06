@@ -375,6 +375,79 @@ def _has_named_diagnosis(doc: dict[str, Any], *, allowed_types: set[str]) -> boo
     return "诊断名称:" in content or "诊断编码:" in content
 
 
+def _diagnosis_field(doc: dict[str, Any], field_name: str) -> str:
+    wanted = _safe_text(field_name).lower()
+    for field in doc.get("source_fields") or []:
+        if not isinstance(field, dict):
+            continue
+        if _safe_text(field.get("source_field")).lower() == wanted:
+            return _safe_text(field.get("raw_value_preview"))
+    content = _safe_text(doc.get("content"))
+    pattern = re.compile(rf"^{re.escape(_FIELD_LABELS.get(wanted, field_name))}\s*[:：]\s*(.+)$", re.MULTILINE)
+    match = pattern.search(content)
+    return match.group(1).strip() if match else ""
+
+
+def _is_main_diagnosis(value: str) -> bool:
+    normalized = _safe_text(value).lower()
+    return normalized in {"是", "true", "1", "yes", "y", "主诊断"}
+
+
+def _diagnosis_sort_key(doc: dict[str, Any]) -> tuple[int, str, str]:
+    raw_no = _diagnosis_field(doc, "diagnosis_no") or _diagnosis_field(doc, "diagnosis_id")
+    try:
+        no_value = int(raw_no)
+    except ValueError:
+        no_value = 9999
+    return (
+        no_value,
+        _diagnosis_field(doc, "diagnosis_type"),
+        _diagnosis_field(doc, "diagnosis_name") or _diagnosis_field(doc, "diagnosis_code"),
+    )
+
+
+def _format_merged_diagnosis_content(valid_docs: list[dict[str, Any]], *, section_label: str) -> str:
+    main_items: list[str] = []
+    other_items: list[str] = []
+    diagnosis_types: list[str] = []
+    diagnosis_times: list[str] = []
+
+    for doc in sorted(valid_docs, key=_diagnosis_sort_key):
+        diagnosis_type = _diagnosis_field(doc, "diagnosis_type")
+        diagnosis_name = _diagnosis_field(doc, "diagnosis_name")
+        diagnosis_code = _diagnosis_field(doc, "diagnosis_code")
+        diagnosis_main = _diagnosis_field(doc, "diagnosis_main")
+        diagnosis_time = _diagnosis_field(doc, "diagnosis_time") or _diagnosis_field(doc, "diagnosis_datetime")
+        if diagnosis_type and diagnosis_type not in diagnosis_types:
+            diagnosis_types.append(diagnosis_type)
+        if diagnosis_time and diagnosis_time not in diagnosis_times:
+            diagnosis_times.append(diagnosis_time)
+
+        label = diagnosis_name or diagnosis_code
+        if diagnosis_name and diagnosis_code:
+            label = f"{diagnosis_name}（{diagnosis_code}）"
+        if not label:
+            continue
+        if _is_main_diagnosis(diagnosis_main):
+            main_items.append(label)
+        else:
+            other_items.append(label)
+
+    if not main_items and not other_items:
+        return ""
+
+    lines = [section_label]
+    if diagnosis_types:
+        lines.append(f"诊断类型: {'；'.join(diagnosis_types)}")
+    if main_items:
+        lines.append(f"主诊断: {'；'.join(main_items)}")
+    if other_items:
+        lines.append(f"其他诊断: {'；'.join(other_items)}")
+    if diagnosis_times:
+        lines.append(f"诊断时间: {'；'.join(diagnosis_times)}")
+    return "\n".join(lines)
+
+
 def _merge_record_diagnosis_documents(
     documents: list[dict[str, Any]],
     *,
@@ -393,7 +466,7 @@ def _merge_record_diagnosis_documents(
     if not valid_docs:
         return other_docs
 
-    content = "\n\n".join(_safe_text(doc.get("content")) for doc in valid_docs if _safe_text(doc.get("content")))
+    content = _format_merged_diagnosis_content(valid_docs, section_label=section_label)
     document_id = _safe_text(valid_docs[0].get("document_id") or valid_docs[0].get("doc_id") or diagnosis_doc_type)
     parent_document_id = document_id.split("::diagnosis::", 1)[0]
     if not content:

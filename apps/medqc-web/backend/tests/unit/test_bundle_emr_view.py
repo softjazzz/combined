@@ -162,7 +162,19 @@ def test_build_documents_should_merge_only_discharge_diagnoses():
                 {
                     "document_type": "discharge_record_diagnosis",
                     "document_id": "dis-2::diagnosis::2",
-                    "document_title": "出院记录诊断-初步诊断-2",
+                    "document_title": "出院记录诊断-出院诊断-2",
+                    "display_time": "2026-03-08 11:00:00",
+                    "content": "诊断类型: 出院诊断\n诊断名称: 腹腔感染\n是否主诊断: 否",
+                    "source_fields": [
+                        {"source_field": "diagnosis_type", "used": True, "raw_value_preview": "出院诊断"},
+                        {"source_field": "diagnosis_name", "used": True, "raw_value_preview": "腹腔感染"},
+                        {"source_field": "diagnosis_main", "used": True, "raw_value_preview": "否"},
+                    ],
+                },
+                {
+                    "document_type": "discharge_record_diagnosis",
+                    "document_id": "dis-2::diagnosis::3",
+                    "document_title": "出院记录诊断-初步诊断-3",
                     "display_time": "2026-03-08 11:00:00",
                     "content": "诊断类型: 初步诊断\n诊断名称: 初步诊断不应进入出院记录",
                     "source_fields": [
@@ -183,7 +195,9 @@ def test_build_documents_should_merge_only_discharge_diagnoses():
     assert discharge_doc["sort_time"] == "2026-03-08 10:00:00"
     assert "出院情况：好转" in discharge_doc["content"]
     assert "出院诊断" in discharge_doc["content"]
-    assert "急性阑尾炎" in discharge_doc["content"]
+    assert "主诊断: 急性阑尾炎" in discharge_doc["content"]
+    assert "其他诊断: 腹腔感染" in discharge_doc["content"]
+    assert discharge_doc["content"].count("诊断类型: 出院诊断") == 1
     assert "初步诊断不应进入出院记录" not in discharge_doc["content"]
     assert discharge_doc["sections"][-1]["section_label"] == "出院记录诊断"
 
