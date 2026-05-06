@@ -35,3 +35,20 @@ def test_build_document_select_columns_should_include_v2_schema_for_first_course
     )
 
     assert columns == ["document_id", "record_time", "v2_schema"]
+
+
+def test_first_course_record_diagnosis_should_assemble_like_record_diagnosis() -> None:
+    document = assemble_document(
+        "first_course_record_diagnosis",
+        {
+            "diagnosis_id": "D1",
+            "diagnosis_type": "初步诊断",
+            "diagnosis_name": "右侧输尿管结石",
+            "diagnosis_code": "N20.100",
+            "diagnosis_time": "2026-02-01 09:00:00",
+        },
+    )
+
+    assert document.assembly_status in {"assembled", "partial"}
+    assert "诊断名称: 右侧输尿管结石" in document.assembled_text
+    assert document.document_title.startswith("首次病程诊断")

@@ -4,6 +4,7 @@ from app.services.custom_qc_sample_pool_service import (
     classify_manual_issue_text,
     load_manual_case_rows_from_excel,
 )
+from app.services.etl_sync import expand_table_groups, list_sync_table_groups
 import pandas as pd
 from types import SimpleNamespace
 
@@ -64,6 +65,27 @@ def test_classify_first_course_intrinsic_issue():
     assert result["issue_category"] == "first_course_reasoning"
     assert "SC-026" in result["candidate_rule_ids"]
     assert result["include_in_batch_1"] is True
+
+
+def test_sample_pool_default_sync_uses_full_domain_group():
+    plan = CustomQCSamplePoolService.resolve_sync_table_names()
+
+    assert plan["group_ids"] == ["sample_full_domain"]
+    assert "first_course_record_diagnosis" in plan["table_names"]
+    assert "postsurg_firstcourse_record" in plan["table_names"]
+    assert "inpat_bill_item" in plan["table_names"]
+    assert "crisis_value_record" in plan["table_names"]
+
+
+def test_sample_full_domain_group_is_available_for_source_coverage_audit():
+    group_ids = {item["id"] for item in list_sync_table_groups()}
+    table_names, missing = expand_table_groups(["sample_full_domain"])
+
+    assert "sample_full_domain" in group_ids
+    assert missing == []
+    assert "admission_record" in table_names
+    assert "consultation_record" in table_names
+    assert "pathology_exam_report" in table_names
 
 
 def test_resolve_first_course_reasoning_should_route_sc025():
@@ -978,10 +1000,11 @@ def test_load_manual_case_rows_from_excel_keeps_mr_no_only_rows(monkeypatch):
 
 def test_resolve_sync_table_names_defaults_cover_core_groups():
     result = CustomQCSamplePoolService.resolve_sync_table_names()
-    assert "core_8" in result["group_ids"]
-    assert "document_extended" in result["group_ids"]
+    assert result["group_ids"] == ["sample_full_domain"]
     assert "mr" in result["table_names"]
     assert "admission_record" in result["table_names"]
+    assert "consultation_record" in result["table_names"]
+    assert "inpat_bill_item" in result["table_names"]
     assert result["missing_group_ids"] == []
 
 

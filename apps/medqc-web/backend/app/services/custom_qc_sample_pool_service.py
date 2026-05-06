@@ -2335,13 +2335,7 @@ class CustomQCSamplePoolService:
 
     @staticmethod
     def resolve_sync_table_names(group_ids: Optional[Sequence[str]] = None) -> Dict[str, List[str]]:
-        default_group_ids = [
-            "core_8",
-            "document_extended",
-            "diagnosis_extended",
-            "orders_prescriptions",
-            "exam_lab_pathology",
-        ]
+        default_group_ids = ["sample_full_domain"]
         selected_groups = [str(item).strip() for item in (group_ids or default_group_ids) if str(item).strip()]
         table_names, missing = expand_table_groups(selected_groups)
         if not table_names:

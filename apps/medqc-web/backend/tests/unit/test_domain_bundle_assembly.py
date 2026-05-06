@@ -38,6 +38,37 @@ def test_assemble_domain_bundle_should_keep_more_than_three_course_documents(mon
     assert daily_call["limit"] == 200
 
 
+def test_assemble_domain_bundle_should_emit_source_and_assembly_coverage(monkeypatch):
+    def _fake_select_records(**kwargs):
+        if kwargs["table"] == "inpat_bill_item":
+            return [
+                {
+                    "bill_item_id": "B1",
+                    "visit_id": "V1",
+                    "medical_catalog_name": "康复训练",
+                    "billing_datetime": "2026-02-03 09:00:00",
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_select_records", _fake_select_records)
+    monkeypatch.setattr(assembly_module, "_build_document_inventory", lambda docs, schema: [])
+    monkeypatch.setattr(assembly_module, "_build_timeline_facts_from_docs", lambda docs: [])
+
+    bundle = assembly_module.assemble_domain_bundle(
+        execution_domain="consult_discussion",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        source_schema="cdm",
+    )
+
+    context = bundle["structured_context"]
+    assert context["source_table_coverage"]["inpat_bill_item"]["row_count"] == 1
+    assert context["assembly_coverage"]["inpat_bill_item"]["assembled_count"] == 1
+
+
 def test_assemble_final_record_bundle_should_fallback_to_mr_admission_datetime(monkeypatch):
     select_calls: list[dict[str, object]] = []
 

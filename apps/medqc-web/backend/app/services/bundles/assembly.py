@@ -67,7 +67,9 @@ _ORDER_COLUMNS_PRIORITY: tuple[str, ...] = (
 )
 _RUNNING_DOC_PRIORITY: tuple[str, ...] = (
     "admission_record",
+    "admission_record_diagnosis",
     "first_course_record",
+    "first_course_record_diagnosis",
     "daily_course_record",
     "senior_course_record",
     "rescue_record",
@@ -81,6 +83,8 @@ _RUNNING_DOC_PRIORITY: tuple[str, ...] = (
     "bloodtrans_record",
     "inpat_drug_order",
     "inpat_nondrug_order",
+    "inpat_bill_item",
+    "crisis_value_record",
 )
 _FINAL_DOC_PRIORITY: tuple[str, ...] = (
     "discharge_record",
@@ -88,7 +92,9 @@ _FINAL_DOC_PRIORITY: tuple[str, ...] = (
     "death_record",
     "death_discussion",
     "admission_record",
+    "admission_record_diagnosis",
     "first_course_record",
+    "first_course_record_diagnosis",
     "daily_course_record",
     "senior_course_record",
     "rescue_record",
@@ -102,12 +108,15 @@ _FINAL_DOC_PRIORITY: tuple[str, ...] = (
     "bloodtrans_record",
     "inpat_drug_order",
     "inpat_nondrug_order",
+    "inpat_bill_item",
+    "crisis_value_record",
     "presurg_summary",
     "presurg_discussion",
     "surgery_record",
     "anesthesia_record",
     "postsurg_firstcourse_record",
     "surgery_safecheck_record",
+    "surgery_inventory_record",
 )
 _FRONTPAGE_DOC_PRIORITY: tuple[str, ...] = (
     "mr",
@@ -204,6 +213,7 @@ _SCENE_GROUP_BY_DOC_TYPE: dict[str, str] = {
     "senior_course_record": "course",
     "rescue_record": "course",
     "consultation_record": "course",
+    "first_course_record_diagnosis": "course",
     _EXAM_ATTENTION_DOC_TYPE: "exam_attention",
     _LAB_ATTENTION_DOC_TYPE: "exam_attention",
     "labtest_master": "lab_results",
@@ -223,6 +233,9 @@ _SCENE_GROUP_BY_DOC_TYPE: dict[str, str] = {
     "death_discussion": "terminal",
     "inpat_drug_order": "orders",
     "inpat_nondrug_order": "orders",
+    "inpat_bill_item": "orders",
+    "blood_application": "orders",
+    "crisis_value_record": "exam_attention",
 }
 _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
     "admission": (
@@ -231,6 +244,7 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
     ),
     "course": (
         "first_course_record",
+        "first_course_record_diagnosis",
         "daily_course_record",
         "senior_course_record",
         "rescue_record",
@@ -241,7 +255,11 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "medical_order",
         "inpat_drug_order",
         "inpat_nondrug_order",
+        "inpat_bill_item",
+        "crisis_value_record",
+        "exam_master",
         "exam_item_report",
+        "labtest_master",
         "labtest_item_report",
     ),
     "surgery": (
@@ -250,9 +268,13 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "surgery_record",
         "anesthesia_record",
         "consent_form",
+        "surgery_inform_consent",
+        "surgery_application",
         "postsurg_firstcourse_record",
         "surgery_safecheck_record",
         "surgery_risk_assessment",
+        "surgery_inventory_record",
+        "postane_surveil_record",
     ),
     "consult_discussion": (
         "consultation_record",
@@ -260,6 +282,9 @@ _DOMAIN_DOC_PRIORITY: dict[str, tuple[str, ...]] = {
         "death_discussion",
         "handoff_record",
         "handover_record",
+        "inpat_drug_order",
+        "inpat_nondrug_order",
+        "inpat_bill_item",
     ),
     "terminal": (
         "discharge_record",
@@ -279,6 +304,7 @@ _DOMAIN_FETCH_LIMITS: dict[str, int] = {
     "admission_record": 20,
     "admission_record_diagnosis": 50,
     "first_course_record": 50,
+    "first_course_record_diagnosis": 50,
     "daily_course_record": 200,
     "senior_course_record": 200,
     "rescue_record": 50,
@@ -289,16 +315,24 @@ _DOMAIN_FETCH_LIMITS: dict[str, int] = {
     "medical_order": 100,
     "inpat_drug_order": 100,
     "inpat_nondrug_order": 100,
+    "inpat_bill_item": 200,
+    "crisis_value_record": 50,
+    "exam_master": 50,
     "exam_item_report": 50,
+    "labtest_master": 50,
     "labtest_item_report": 50,
     "presurg_summary": 50,
     "presurg_discussion": 50,
     "surgery_record": 50,
     "anesthesia_record": 50,
     "consent_form": 50,
+    "surgery_inform_consent": 50,
+    "surgery_application": 50,
     "postsurg_firstcourse_record": 50,
     "surgery_safecheck_record": 50,
     "surgery_risk_assessment": 50,
+    "surgery_inventory_record": 50,
+    "postane_surveil_record": 50,
     "consultation_record": 100,
     "diffcase_discussion_record": 50,
     "death_discussion": 50,
@@ -1056,6 +1090,63 @@ def _build_document_hits(docs: dict[str, list[dict[str, Any]]], priority: tuple[
     return {table_name: bool(docs.get(table_name)) for table_name in priority}
 
 
+def _build_source_table_coverage(
+    docs: dict[str, list[dict[str, Any]]],
+    priority: tuple[str, ...],
+) -> dict[str, dict[str, Any]]:
+    coverage: dict[str, dict[str, Any]] = {}
+    for table_name in priority:
+        rows = docs.get(table_name) or []
+        coverage[table_name] = {
+            "row_count": len(rows),
+            "hit": bool(rows),
+        }
+    return coverage
+
+
+def _build_assembly_coverage(
+    docs: dict[str, list[dict[str, Any]]],
+    priority: tuple[str, ...],
+) -> dict[str, dict[str, Any]]:
+    coverage: dict[str, dict[str, Any]] = {}
+    for table_name in priority:
+        rows = docs.get(table_name) or []
+        assembled_count = 0
+        partial_count = 0
+        empty_count = 0
+        used_fields: set[str] = set()
+        flags: set[str] = set()
+        for row in rows:
+            assembled = assemble_document(table_name, row)
+            if assembled.assembled_text:
+                assembled_count += 1
+            if assembled.assembly_status == "partial":
+                partial_count += 1
+            if assembled.assembly_status == "empty_document":
+                empty_count += 1
+            for field in assembled.source_fields:
+                if field.used and field.source_field:
+                    used_fields.add(field.source_field)
+            flags.update(assembled.data_quality_flags)
+        status = "missing"
+        if rows and assembled_count == len(rows):
+            status = "assembled"
+        elif rows and assembled_count > 0:
+            status = "partial"
+        elif rows:
+            status = "text_unavailable"
+        coverage[table_name] = {
+            "status": status,
+            "row_count": len(rows),
+            "assembled_count": assembled_count,
+            "partial_count": partial_count,
+            "empty_count": empty_count,
+            "used_source_fields": sorted(used_fields),
+            "data_quality_flags": sorted(flags),
+        }
+    return coverage
+
+
 def _build_attention_line(prefix: str, body: str) -> str:
     if prefix and body:
         return f"{prefix} {body}".strip()
@@ -1524,6 +1615,8 @@ def _assemble_scene_bundle(
     department = str(structured_context.get("department") or "").strip()
     priority_with_attention = tuple(dict.fromkeys([*priority, *[name for name in _SCENE_ATTENTION_PRIORITY if docs.get(name)]]))
     document_hits = _build_document_hits(docs, priority_with_attention)
+    source_table_coverage = _build_source_table_coverage(docs, priority_with_attention)
+    assembly_coverage = _build_assembly_coverage(docs, priority_with_attention)
     medical_text = _build_medical_text(docs, priority_with_attention, source_schema)
 
     data_quality_flags: list[str] = []
@@ -1562,6 +1655,8 @@ def _assemble_scene_bundle(
     bundle["bundle_schema_version"] = BUNDLE_SCHEMA_VERSION_CURRENT
     bundle["source_documents"] = source_documents
     bundle["timeline_facts"] = timeline_facts
+    bundle["structured_context"]["source_table_coverage"] = source_table_coverage
+    bundle["structured_context"]["assembly_coverage"] = assembly_coverage
     if scene in {"frontpage", "coding"}:
         bundle["structured_context"]["frontpage_coding"] = _build_frontpage_coding_context(
             docs=docs,
@@ -1840,6 +1935,8 @@ def assemble_domain_bundle(
         )
 
     document_hits = _build_document_hits(docs, priority)
+    source_table_coverage = _build_source_table_coverage(docs, priority)
+    assembly_coverage = _build_assembly_coverage(docs, priority)
     source_documents = _build_document_inventory(docs, effective_schema)
     timeline_facts = _build_timeline_facts_from_docs(docs)
     data_quality_flags = [f"missing:{table_name}" for table_name, hit in document_hits.items() if not hit]
@@ -1860,6 +1957,8 @@ def assemble_domain_bundle(
             "document_priority": list(priority),
             "document_inventory": source_documents,
             "timeline_facts": timeline_facts,
+            "source_table_coverage": source_table_coverage,
+            "assembly_coverage": assembly_coverage,
         },
     }
 

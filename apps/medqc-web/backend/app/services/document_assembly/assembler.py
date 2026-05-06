@@ -43,6 +43,30 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "diagnosis_uptime",
         "v2_schema",
     ),
+    "first_course_record_diagnosis": (
+        "diagnosis_id",
+        "diagnosis_type",
+        "diagnosis_no",
+        "diagnosis_name",
+        "diagnosis_code",
+        "diagnosis_main",
+        "diagnosis_time",
+        "diagnosis_datetime",
+        "diagnosis_uptime",
+        "v2_schema",
+    ),
+    "mr_diagnosis": (
+        "diagnosis_id",
+        "diagnosis_type",
+        "diagnosis_no",
+        "diagnosis_name",
+        "diagnosis_code",
+        "diagnosis_main",
+        "diagnosis_time",
+        "diagnosis_datetime",
+        "diagnosis_uptime",
+        "v2_schema",
+    ),
     "discharge_record_diagnosis": (
         "diagnosis_id",
         "diagnosis_type",
@@ -191,6 +215,22 @@ _SPECIAL_SELECT_FIELDS: dict[str, tuple[str, ...]] = {
         "quantity_unit",
         "order_status",
     ),
+    "inpat_bill_item": (
+        "bill_item_id",
+        "order_id",
+        "item_type",
+        "medical_catalog_name",
+        "medinsur_catalog_name",
+        "item_specification",
+        "quantity",
+        "quantity_unit",
+        "cost",
+        "charge",
+        "billing_datetime",
+        "order_dept_name",
+        "executive_dept_name",
+        "record_content",
+    ),
 }
 
 _SECTION_LABELS: dict[str, str] = {
@@ -226,12 +266,24 @@ _SECTION_LABELS: dict[str, str] = {
     "order_name": "医嘱名称",
     "quantity": "数量",
     "quantity_unit": "数量单位",
+    "bill_item_id": "费用明细号",
+    "item_type": "项目类别",
+    "medical_catalog_name": "医疗目录名称",
+    "medinsur_catalog_name": "医保目录名称",
+    "item_specification": "项目规格",
+    "cost": "应收金额",
+    "charge": "实收金额",
+    "billing_datetime": "费用发生时间",
+    "order_dept_name": "开单科室",
+    "executive_dept_name": "执行科室",
 }
 
 _DOC_TYPE_LABELS: dict[str, str] = {
     "admission_record": "入院记录",
     "admission_record_diagnosis": "入院记录诊断",
     "first_course_record": "首次病程记录",
+    "first_course_record_diagnosis": "首次病程诊断",
+    "mr_diagnosis": "病案首页诊断",
     "daily_course_record": "日常病程记录",
     "senior_course_record": "上级医师查房记录",
     "consultation_record": "会诊记录",
@@ -254,8 +306,16 @@ _DOC_TYPE_LABELS: dict[str, str] = {
     "labtest_item_report": "检验明细",
     "inpat_drug_order": "长期医嘱",
     "inpat_nondrug_order": "临时医嘱",
+    "inpat_bill_item": "住院费用/执行明细",
     "exam_attention_report": "检查关注摘要",
     "lab_attention_report": "检验关注摘要",
+}
+
+_RECORD_DIAGNOSIS_TYPES = {
+    "admission_record_diagnosis",
+    "discharge_record_diagnosis",
+    "first_course_record_diagnosis",
+    "mr_diagnosis",
 }
 
 
@@ -369,6 +429,20 @@ _MULTI_FIELD_RULES: dict[str, tuple[AssemblyFieldSpec, ...]] = {
         AssemblyFieldSpec("prescribed_datetime"),
         AssemblyFieldSpec("prescribed_doctor"),
         AssemblyFieldSpec("order_status"),
+    ),
+    "inpat_bill_item": (
+        AssemblyFieldSpec("order_id"),
+        AssemblyFieldSpec("item_type"),
+        AssemblyFieldSpec("medical_catalog_name"),
+        AssemblyFieldSpec("medinsur_catalog_name"),
+        AssemblyFieldSpec("item_specification"),
+        AssemblyFieldSpec("quantity"),
+        AssemblyFieldSpec("quantity_unit"),
+        AssemblyFieldSpec("cost"),
+        AssemblyFieldSpec("charge"),
+        AssemblyFieldSpec("billing_datetime"),
+        AssemblyFieldSpec("order_dept_name"),
+        AssemblyFieldSpec("executive_dept_name"),
     ),
 }
 
@@ -612,6 +686,16 @@ def _resolve_title(document_type: str, row: dict[str, Any], assembled_text: str)
         diagnosis_no = _merge_field_text(row, "diagnosis_no", "diagnosis_id")
         suffix = f"-{diagnosis_no}" if diagnosis_no else ""
         return f"出院记录诊断-{diagnosis_type}{suffix}", flags
+    if document_type == "first_course_record_diagnosis":
+        diagnosis_type = _merge_field_text(row, "diagnosis_type") or "诊断"
+        diagnosis_no = _merge_field_text(row, "diagnosis_no", "diagnosis_id")
+        suffix = f"-{diagnosis_no}" if diagnosis_no else ""
+        return f"首次病程诊断-{diagnosis_type}{suffix}", flags
+    if document_type == "mr_diagnosis":
+        diagnosis_type = _merge_field_text(row, "diagnosis_type") or "诊断"
+        diagnosis_no = _merge_field_text(row, "diagnosis_no", "diagnosis_id")
+        suffix = f"-{diagnosis_no}" if diagnosis_no else ""
+        return f"病案首页诊断-{diagnosis_type}{suffix}", flags
 
     raw_title = _normalize_text(row.get("document_title"))
     if raw_title:
@@ -643,7 +727,7 @@ def _resolve_display_times(row: dict[str, Any]) -> tuple[str | None, str | None,
 
 def _resolve_document_id(document_type: str, payload: dict[str, Any]) -> str:
     document_id = _normalize_text(payload.get("document_id"))
-    if document_type in {"admission_record_diagnosis", "discharge_record_diagnosis"}:
+    if document_type in _RECORD_DIAGNOSIS_TYPES:
         diagnosis_id = _merge_field_text(payload, "diagnosis_id", "diagnosis_no")
         if document_id and diagnosis_id:
             return f"{document_id}::diagnosis::{diagnosis_id}"
@@ -677,11 +761,11 @@ def assemble_document(document_type: str, row: dict[str, Any] | None) -> Assembl
     sections: list[AssembledSection] = []
     flags: list[str] = []
 
-    if document_type in {"admission_record_diagnosis", "discharge_record_diagnosis"}:
+    if document_type in _RECORD_DIAGNOSIS_TYPES:
         assembled_text = _assemble_record_diagnosis_text(payload)
         source_fields.extend(_build_record_diagnosis_source_fields(document_type, payload))
         if assembled_text:
-            section_label = "入院记录诊断" if document_type == "admission_record_diagnosis" else "出院记录诊断"
+            section_label = _DOC_TYPE_LABELS.get(document_type, "诊断")
             sections.append(
                 AssembledSection(
                     section_key=document_type,
