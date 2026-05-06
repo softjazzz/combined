@@ -53,7 +53,7 @@ PROMOTED_EFFECTIVE_ROWS: dict[str, dict[str, Any]] = {
         "secondary_rule_ids": ["SC-009", "SC-010"],
         "matched_subitems": ["主诉不规范", "现病史诊治经过缺失", "既往史高血压确诊时间缺项"],
         "unmatched_subitems": ["右手查体/诊断缺失与原文冲突"],
-        "reason": "同一入院记录问题族内多锚点，原复核已判定主诉、现病史、既往史三支属实；可通过一次 admission family prompt 输出多个 subitem，不应因多锚点笼统 blocked。",
+        "reason": "同一入院记录问题族内多锚点，真实 family-level LLM 回放已证明可一次 prompt 输出多个 subitem；主诉、现病史、既往史子项成立，右手查体/诊断子项与原文冲突。该结论是 partial/effective confirmed，不代表整条人工问题完全复现。",
     },
     "Sheet2-R0110": {
         "category": "same_family_multi_subitem_promptable",
@@ -61,7 +61,7 @@ PROMOTED_EFFECTIVE_ROWS: dict[str, dict[str, Any]] = {
         "secondary_rule_ids": ["SC-010"],
         "matched_subitems": ["头痛相关阴性症状采集不全"],
         "unmatched_subitems": ["无诊治经过、无门诊诊断、既往史混乱与原文不完全一致"],
-        "reason": "入院记录同族多 subitem，现病史阴性症状缺项可确认，其他子项存在冲突；适合一次 family prompt 输出 partial/effective subitem。",
+        "reason": "入院记录同族多 subitem，真实 family-level LLM 回放已证明可一次 prompt 输出多个 subitem；现病史阴性症状缺项可确认，诊治经过、门诊诊断、既往史混乱等子项与原文冲突。该结论是 partial/effective confirmed，不代表整条人工问题完全复现。",
     },
     "Sheet2-R0210": {
         "category": "same_family_multi_subitem_promptable",
@@ -69,14 +69,26 @@ PROMOTED_EFFECTIVE_ROWS: dict[str, dict[str, Any]] = {
         "secondary_rule_ids": ["SC-010", "SC-020"],
         "matched_subitems": ["慢病史记录不全", "四肢检查描述与专科情况脱节"],
         "unmatched_subitems": ["腹部查体缺失、主诉不规范与原文冲突"],
-        "reason": "入院记录同族多锚点，慢病史和四肢/专科查体矛盾可确认，冲突子项可在 sub_items 中标为 compliant/uncertain。",
+        "reason": "入院记录同族多锚点，真实 family-level LLM 回放已证明可一次 prompt 输出多个 subitem；主诉规范性和既往慢病史子项成立，腹部查体、四肢/专科查体矛盾子项与原文冲突。该结论是 partial/effective confirmed，不代表整条人工问题完全复现。",
     },
 }
 
 SPECIFIC_RECLASSIFICATION: dict[str, dict[str, Any]] = {
+    "Sheet2-R0069": {
+        "category": "source_text_conflict_keep_blocked",
+        "reason": "第三方纠偏：这是单一 SC-020 入院诊断完整性问题，不是多锚点 promptable。当前原文支持右侧输尿管结石、右肾积水、右侧肾绞痛；“前列腺增生、泌尿道感染”缺乏足够症状或确诊依据，人工问题与当前原文证据不匹配。",
+    },
+    "Sheet2-R0101": {
+        "category": "source_text_conflict_keep_blocked",
+        "reason": "第三方纠偏：这是单一 SC-051 出院前上级查房/病程时效核查，不是跨质控点复合。当前可回收 senior_course_record 存在“马晨曦副主任医师出院前查房记录”，sort_time=2025-10-30 09:37:42；出院诊断时间为 2025-10-30 17:37:42+08，人工问题称出院当天/前一天无上级医师查房与原文冲突。",
+    },
     "Sheet2-R0135": {
         "category": "source_text_conflict_keep_blocked",
         "reason": "原文写有“阿莫西林克拉维酸钾0.9g q12h ivgtt”，人工问题声称缺药名/仅写剂量，与当前可回收正文冲突。",
+    },
+    "Sheet2-R0166": {
+        "category": "source_text_conflict_keep_blocked",
+        "reason": "第三方纠偏：这是单一 SC-105 术后首次病程手术时间一致性问题，不是跨质控点复合。现有证据 surgery_record.surgery_begin_time=2026-02-02 10:45，postsurg_firstcourse_record 亦写“手术时间:2026年02月02日 10:45”，人工问题与当前可回收原文冲突。",
     },
     "Sheet2-R0139": {
         "category": "source_text_conflict_keep_blocked",
@@ -89,6 +101,10 @@ SPECIFIC_RECLASSIFICATION: dict[str, dict[str, Any]] = {
     "Sheet2-R0205": {
         "category": "missing_anchor_or_source_move_to_evidence_gap",
         "reason": "术前缺上级医师意见与当前查房原文冲突；缝线材料问题未回收到“5-0可吸收线”原句，需补手术正文锚点。",
+    },
+    "Sheet2-R0220": {
+        "category": "cross_family_composite_split_required",
+        "reason": "第三方纠偏：人工问题混合 BP163/90mmHg 未复测/处理、康复科会诊拒绝后仍开康复治疗、左膝清创术无操作记录，跨病程/会诊执行/有创操作多个质控点。康复会诊执行问题可能成立，但“无操作记录”与现有清创记录/mr_surgery 证据冲突，不能整条 exact。",
     },
 }
 
@@ -157,6 +173,28 @@ def _load_script_module(script_name: str):
 
 def _select_target_rows(backlog_rows: list[dict[str, str]]) -> list[dict[str, str]]:
     rows = [row for row in backlog_rows if _safe_text(row.get("backlog_category")) == TARGET_CATEGORY]
+    if len(rows) != 68 and REPORT_JSON.exists():
+        previous_report = json.loads(REPORT_JSON.read_text(encoding="utf-8-sig"))
+        previous_results = list(previous_report.get("results") or [])
+        if len(previous_results) == 68:
+            return [
+                {
+                    "sheet2_row_id": _safe_text(item.get("sheet2_row_id")),
+                    "visit_id": _safe_text(item.get("visit_id")),
+                    "patient_name": _safe_text(item.get("patient_name")),
+                    "issue_family": _safe_text(item.get("issue_family")),
+                    "primary_rule_id": _safe_text(
+                        item.get("before_primary_rule_id") or item.get("target_primary_rule_id")
+                    ),
+                    "manual_issue_text": _safe_text(item.get("manual_issue_text")),
+                    "reason": _safe_text(
+                        item.get("previous_reason")
+                        or item.get("reaudit_reason")
+                        or item.get("status_reason")
+                    ),
+                }
+                for item in previous_results
+            ]
     if len(rows) != 68:
         raise ValueError(f"本轮期望 68 条 {TARGET_CATEGORY}，实际 {len(rows)} 条")
     return rows

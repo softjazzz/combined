@@ -44,7 +44,7 @@
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "跨问题族/跨质控点，需要拆规则后聚合。"
+      "top_next_actions": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
@@ -200,7 +200,7 @@
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
+      "top_next_actions": "跨问题族/跨质控点，需要拆规则后聚合。"
     },
     {
       "issue_family": "入院记录内容不完整/前后矛盾",
@@ -499,7 +499,7 @@
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "已核验完成 | 跨问题族/跨质控点，需要拆规则后聚合。"
+      "top_next_actions": "已核验完成 | 当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",

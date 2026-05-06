@@ -4,6 +4,7 @@
 
 ## 结论
 
+- 第三方纠偏后，R0069 已从 `same_rule_multi_anchor_promptable` 改为 `source_text_conflict_keep_blocked`，R0220 已改为 `cross_family_composite_split_required`；本文件保留为当时真实 LLM 回放记录，不再作为当前 68 条最终分类统计来源。
 - 本轮验证 6 条：真实调用 LLM 5 条，单 prompt 多 subitem 验证通过 4 条，失败 2 条。
 - 5 条入院记录问题族走客户样本验证页同链路：`build_admission_issue_family_bundle` -> `build_admission_issue_family_prompt` -> LLM -> `normalize_admission_consistency_llm_output`。
 - R0220 属 SC-069 会诊记录质量缺陷，当前客户样本验证页没有 family-level 多 subitem prompt；不能算“真实可跑”，需新增对应 family prompt 后再验。

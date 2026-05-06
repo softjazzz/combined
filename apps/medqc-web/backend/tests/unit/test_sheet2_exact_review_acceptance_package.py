@@ -25,9 +25,9 @@ def test_sheet2_exact_review_acceptance_package_should_bucket_blocked_rows():
     assert payload["status_breakdown"]["blocked_with_reason"] == 103
     assert payload["status_breakdown"]["skip"] == 25
     assert buckets == {
-        "可补规则": 6,
+        "可补规则": 5,
         "需补源文书": 42,
-        "人工问题过宽/不可判": 45,
+        "人工问题过宽/不可判": 46,
         "需客户确认口径": 10,
     }
 
