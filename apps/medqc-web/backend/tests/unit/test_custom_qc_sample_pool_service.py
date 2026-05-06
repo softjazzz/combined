@@ -545,6 +545,33 @@ def test_resolve_admission_consistency_recommendations_should_return_multi_rule_
     assert recommendation["review_required"] is False
 
 
+def test_resolve_admission_consistency_should_keep_family_level_contract_fields():
+    recommendation = sample_pool_module.resolve_admission_consistency_rule_recommendations(
+        "现病史疼痛性质缺失，既往史用药不详，体格检查缺专科情况。",
+        llm_output={
+            "primary_rule_id": "SC-009",
+            "matched_rule_ids": ["SC-009", "SC-010", "SC-018"],
+            "sub_items": [
+                {"rule_id": "SC-009", "status": "non_compliant", "item": "疼痛性质"},
+                {"rule_id": "SC-010", "status": "non_compliant", "item": "用药史"},
+                {"rule_id": "SC-018", "status": "uncertain", "item": "专科情况"},
+            ],
+            "overall_status": "non_compliant",
+            "overall_result": "partial_hit",
+            "conflicts": ["专科情况原文存在但不完整"],
+            "missing_evidence": ["缺门诊治疗经过原句"],
+            "confidence": 0.86,
+        },
+    )
+
+    assert recommendation["primary_rule_id"] == "SC-009"
+    assert recommendation["recommended_rule_ids"] == ["SC-009", "SC-010", "SC-018"]
+    assert recommendation["matched_rule_ids"] == ["SC-009", "SC-010", "SC-018"]
+    assert recommendation["overall_status"] == "non_compliant"
+    assert recommendation["conflicts"] == ["专科情况原文存在但不完整"]
+    assert recommendation["missing_evidence"] == ["缺门诊治疗经过原句"]
+
+
 def test_resolve_admission_consistency_should_mark_invalid_rule_id_uncertain():
     recommendation = sample_pool_module.resolve_admission_consistency_rule_recommendations(
         "入院记录问题",

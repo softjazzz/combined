@@ -2,8 +2,8 @@
   "generated_at": "2026-05-03",
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 152,
-    "blocked_with_reason": 106,
+    "exact_confirmed": 155,
+    "blocked_with_reason": 103,
     "skip": 25,
     "needs_exact_review": 0
   },
@@ -14,29 +14,129 @@
     "acceptance_note": "Sheet2 精确复核已完成清零；`blocked_with_reason` 表示当前可解释、可追踪、可进入下一轮增强 backlog，而不是遗留未处理。"
   },
   "blocked_reason_breakdown": {
-    "人工问题原文不可判": 70,
-    "证据链不足": 31,
+    "人工问题原文不可判": 47,
+    "证据链不足": 45,
     "需客户确认口径": 3,
-    "规则不支持": 2
+    "规则不支持": 8
   },
   "blocked_backlog_breakdown": [
     {
       "category": "可补规则",
-      "count": 0,
+      "count": 6,
       "definition": "原始文书可回收，但现有主规则或跨文书链路无法精确覆盖人工锚点，属于规则能力缺口。",
       "next_action": "优先补主规则、次规则重试与跨文书证据拼接，再回归样本验证页。",
-      "blocked_reason_types": {},
-      "top_issue_families": [],
-      "top_primary_rules": [],
-      "sample_rows": []
+      "blocked_reason_types": {
+        "规则不支持": 6
+      },
+      "top_issue_families": [
+        {
+          "issue_family": "上级医师查房缺失/未及时书写；出院前一天/当天上级医师查房或病程缺失",
+          "count": 1
+        },
+        {
+          "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
+          "count": 1
+        },
+        {
+          "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
+          "count": 1
+        },
+        {
+          "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
+          "count": 1
+        },
+        {
+          "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
+          "count": 1
+        }
+      ],
+      "top_primary_rules": [
+        {
+          "primary_rule_id": "SC-051",
+          "count": 1
+        },
+        {
+          "primary_rule_id": "LX-018",
+          "count": 1
+        },
+        {
+          "primary_rule_id": "SC-105",
+          "count": 1
+        },
+        {
+          "primary_rule_id": "LX-020",
+          "count": 1
+        },
+        {
+          "primary_rule_id": "LX-016",
+          "count": 1
+        }
+      ],
+      "sample_rows": [
+        {
+          "sheet2_row_id": "Sheet2-R0101",
+          "visit_id": "2033353",
+          "patient_name": "章继书",
+          "primary_rule_id": "SC-051",
+          "issue_family": "上级医师查房缺失/未及时书写；出院前一天/当天上级医师查房或病程缺失",
+          "manual_issue_text": "出院当天或前一天无上级医师查房记录，最后一次病程为出院4天前的病程记录",
+          "blocked_reason_type": "规则不支持",
+          "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+          "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+        },
+        {
+          "sheet2_row_id": "Sheet2-R0108",
+          "visit_id": "2083787",
+          "patient_name": "付学云",
+          "primary_rule_id": "LX-018",
+          "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
+          "manual_issue_text": "2025.11.18田安琴主治医师查房记录无内容；11月17日及11月18日，无输血前评估、无输血记录、无输血后评估。",
+          "blocked_reason_type": "规则不支持",
+          "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+          "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+        },
+        {
+          "sheet2_row_id": "Sheet2-R0166",
+          "visit_id": "2200224",
+          "patient_name": "张乃军",
+          "primary_rule_id": "SC-105",
+          "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
+          "manual_issue_text": "术后首次病程记录中手术时间与实际手术时间不一致",
+          "blocked_reason_type": "规则不支持",
+          "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+          "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+        },
+        {
+          "sheet2_row_id": "Sheet2-R0172",
+          "visit_id": "2199396",
+          "patient_name": "王生明",
+          "primary_rule_id": "LX-020",
+          "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
+          "manual_issue_text": "患者2月4日手术，无术前主刀医师查房记录，无术后首次病程记录及手术记录。",
+          "blocked_reason_type": "规则不支持",
+          "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+          "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+        },
+        {
+          "sheet2_row_id": "Sheet2-R0173",
+          "visit_id": "2200664",
+          "patient_name": "朱泰廷",
+          "primary_rule_id": "LX-016",
+          "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
+          "manual_issue_text": "1月30日后7天无病程记录，请心血管、肾内科、呼吸科、麻醉科、皮肤科等科室会诊后，无请会诊执行记录。",
+          "blocked_reason_type": "规则不支持",
+          "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+          "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
+        }
+      ]
     },
     {
       "category": "需补源文书",
-      "count": 28,
+      "count": 42,
       "definition": "人工问题可能成立，但当前缺少可核对的原始正文、诊断字段、执行清单或时序元数据。",
       "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。",
       "blocked_reason_types": {
-        "证据链不足": 28
+        "证据链不足": 42
       },
       "top_issue_families": [
         {
@@ -44,11 +144,11 @@
           "count": 7
         },
         {
-          "issue_family": "入院记录内容不完整/前后矛盾",
-          "count": 5
+          "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+          "count": 6
         },
         {
-          "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+          "issue_family": "入院记录内容不完整/前后矛盾",
           "count": 5
         },
         {
@@ -56,33 +156,66 @@
           "count": 3
         },
         {
-          "issue_family": "诊疗医嘱与病程记录不一致",
-          "count": 2
+          "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
+          "count": 3
         }
       ],
       "top_primary_rules": [
         {
-          "primary_rule_id": "SC-036",
+          "primary_rule_id": "SC-023",
           "count": 4
         },
         {
-          "primary_rule_id": "SC-023",
-          "count": 3
+          "primary_rule_id": "SC-097",
+          "count": 4
+        },
+        {
+          "primary_rule_id": "SC-036",
+          "count": 4
         },
         {
           "primary_rule_id": "SC-032",
           "count": 3
         },
         {
-          "primary_rule_id": "SC-009",
-          "count": 2
-        },
-        {
-          "primary_rule_id": "SC-105",
-          "count": 2
+          "primary_rule_id": "SC-146",
+          "count": 3
         }
       ],
       "sample_rows": [
+        {
+          "sheet2_row_id": "Sheet2-R0030",
+          "visit_id": "1915580",
+          "patient_name": "雷德超",
+          "primary_rule_id": "SC-050",
+          "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
+          "manual_issue_text": "三级医师查房执行不到位（主治医师查房写的是管床医生本人查房）",
+          "blocked_reason_type": "证据链不足",
+          "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+          "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
+        },
+        {
+          "sheet2_row_id": "Sheet2-R0031",
+          "visit_id": "2337741",
+          "patient_name": "余定远",
+          "primary_rule_id": "CL-275",
+          "issue_family": "不合理复制病历内容",
+          "manual_issue_text": "请会诊执行记录中复制粘贴严重，记录中“ 余同贵科！谢邀！我科愿随访”直接引用会诊意见未进行修改。",
+          "blocked_reason_type": "证据链不足",
+          "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+          "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
+        },
+        {
+          "sheet2_row_id": "Sheet2-R0042",
+          "visit_id": "1966656",
+          "patient_name": "周光容",
+          "primary_rule_id": "SC-050",
+          "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
+          "manual_issue_text": "9月2日上级查房医师为王标，但在分析病情时是孙治庆医师在查房，涉嫌伪造病历。",
+          "blocked_reason_type": "证据链不足",
+          "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+          "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
+        },
         {
           "sheet2_row_id": "Sheet2-R0053",
           "visit_id": "1991072",
@@ -104,92 +237,59 @@
           "blocked_reason_type": "证据链不足",
           "reason": "缺手术记录正文和术后首次病程正文，当前只能看到空壳文书，无法核对“同法处理对侧”原句。",
           "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
-        },
-        {
-          "sheet2_row_id": "Sheet2-R0058",
-          "visit_id": "2024757",
-          "patient_name": "游得利",
-          "primary_rule_id": "SC-008",
-          "issue_family": "入院记录内容不完整/前后矛盾",
-          "manual_issue_text": "现病史未描述疼痛性质、持续时间、缓解方式等，既往史未询问出患者既往有肺结核病史。",
-          "blocked_reason_type": "证据链不足",
-          "reason": "release/0426 admission_record 已写疼痛持续半月及伴反酸，但未能同时证实“缓解方式缺失”与“既往肺结核病史漏问”，当前证据不足以整条判 exact。",
-          "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
-        },
-        {
-          "sheet2_row_id": "Sheet2-R0066",
-          "visit_id": "2144246",
-          "patient_name": "张世英",
-          "primary_rule_id": "SC-020",
-          "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-          "manual_issue_text": "入院记录诊断不全，患者无房颤，但入院记录心率和脉搏不等，首次病程记录中鉴别诊断不全面。",
-          "blocked_reason_type": "证据链不足",
-          "reason": "缺首次病程正文和可直接核对房颤判断的心电/诊断依据链，当前仅能回收到心率/脉搏一致的入院查体。",
-          "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
-        },
-        {
-          "sheet2_row_id": "Sheet2-R0067",
-          "visit_id": "2042774",
-          "patient_name": "张世坤",
-          "primary_rule_id": "SC-009",
-          "issue_family": "入院记录内容不完整/前后矛盾",
-          "manual_issue_text": "入院记录中现病史缺患者发病时间，初步诊断中腰椎病未诊断。",
-          "blocked_reason_type": "证据链不足",
-          "reason": "现病史存在明显缺漏未记录发病时间；既往史明确记载腰椎病病史但初步诊断未纳入，诊断不完整。需补充现病史发病时间，并将腰椎病补入初步诊断。",
-          "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
         }
       ]
     },
     {
       "category": "人工问题过宽/不可判",
-      "count": 68,
+      "count": 45,
       "definition": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
       "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。",
       "blocked_reason_types": {
-        "人工问题原文不可判": 68
+        "人工问题原文不可判": 45
       },
       "top_issue_families": [
         {
           "issue_family": "入院记录内容不完整/前后矛盾",
-          "count": 19
+          "count": 16
         },
         {
           "issue_family": "病程记录缺分析/缺处理意见",
-          "count": 14
+          "count": 13
         },
         {
           "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
-          "count": 5
-        },
-        {
-          "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
-          "count": 3
+          "count": 4
         },
         {
           "issue_family": "病程记录病情变化记录不全",
           "count": 3
+        },
+        {
+          "issue_family": "会诊意见已写遵执但实际未落实",
+          "count": 2
         }
       ],
       "top_primary_rules": [
         {
           "primary_rule_id": "SC-036",
-          "count": 14
+          "count": 13
         },
         {
           "primary_rule_id": "SC-009",
-          "count": 6
+          "count": 5
         },
         {
           "primary_rule_id": "SC-020",
           "count": 5
         },
         {
-          "primary_rule_id": "SC-018",
-          "count": 4
+          "primary_rule_id": "SC-032",
+          "count": 3
         },
         {
-          "primary_rule_id": "SC-023",
-          "count": 4
+          "primary_rule_id": "SC-008",
+          "count": 3
         }
       ],
       "sample_rows": [
@@ -201,8 +301,8 @@
           "issue_family": "病程记录缺分析/缺处理意见",
           "manual_issue_text": "使用抗菌药物治疗的患者，使用情况未在病程记录中记录（(依普林)左氧氟沙星氯化钠注射液）",
           "blocked_reason_type": "人工问题原文不可判",
-          "reason": "local_pg 病程正文直接写明“输注左氧氟沙星过程中出现左前壁皮肤麻木、瘙痒、肿痛”，人工问题所称“使用情况未在病程记录中记录”与原文冲突，不能判 exact。",
-          "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+          "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+          "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
         },
         {
           "sheet2_row_id": "Sheet2-R0010",
@@ -212,8 +312,8 @@
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "入院记录-体格检查缺体重",
           "blocked_reason_type": "人工问题原文不可判",
-          "reason": "人工问题称缺体重，但原文生命体征明确记录体重68.5kg，LLM 驳回正确。",
-          "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+          "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前证据不足以证明人工问题成立，按原文冲突/不可判保留 blocked。",
+          "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
         },
         {
           "sheet2_row_id": "Sheet2-R0015",
@@ -223,8 +323,8 @@
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "入院记录中未记录患儿喂养史（患儿2岁1月）",
           "blocked_reason_type": "人工问题原文不可判",
-          "reason": "人工问题称未记录患儿喂养史，但原文已记录母乳喂养、辅食添加和当前人工喂养，LLM 驳回正确；但子项 status 错写为 non_compliant。",
-          "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+          "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+          "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
         },
         {
           "sheet2_row_id": "Sheet2-R0020",
@@ -234,8 +334,8 @@
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "既往史患者用药情况未详细记录",
           "blocked_reason_type": "人工问题原文不可判",
-          "reason": "人工问题称既往用药未详细记录，但原文已记录右佐匹克隆、坦度螺酮、利伐沙班等用药，LLM 驳回正确。",
-          "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+          "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+          "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
         },
         {
           "sheet2_row_id": "Sheet2-R0021",
@@ -245,8 +345,8 @@
           "issue_family": "入院记录内容不完整/前后矛盾",
           "manual_issue_text": "现病史中主诉有咽痛，但未详细记录疼痛的性质、持续时间、是否有缓解方式等；诉有咳痰，未记录痰液的性状、咳痰的频率、是否有伴随症状等；未记录在当地卫生院具体的治疗情况；未记录在我院门诊的检查项目及结果；无体重变化情况的记录。",
           "blocked_reason_type": "人工问题原文不可判",
-          "reason": "人工列出的咽痛、咳痰、院外治疗、门诊检查、体重变化等缺项，原文均有对应记录，LLM 驳回正确。",
-          "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+          "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；同一规则下多锚点，应通过一次 prompt 输出多个缺陷。",
+          "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
         }
       ]
     },
@@ -360,13 +460,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "使用抗菌药物治疗的患者，使用情况未在病程记录中记录（(依普林)左氧氟沙星氯化钠注射液）",
-      "reason": "local_pg 病程正文直接写明“输注左氧氟沙星过程中出现左前壁皮肤麻木、瘙痒、肿痛”，人工问题所称“使用情况未在病程记录中记录”与原文冲突，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-用药记录-第一轮",
-      "decision_source": "local_pg get_documents + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0010",
@@ -375,13 +475,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-018",
       "manual_issue_text": "入院记录-体格检查缺体重",
-      "reason": "人工问题称缺体重，但原文生命体征明确记录体重68.5kg，LLM 驳回正确。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前证据不足以证明人工问题成立，按原文冲突/不可判保留 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
-      "decision_source": "blocked_review_17",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前证据不足以证明人工问题成立，按原文冲突/不可判保留 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0015",
@@ -390,13 +490,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-010",
       "manual_issue_text": "入院记录中未记录患儿喂养史（患儿2岁1月）",
-      "reason": "人工问题称未记录患儿喂养史，但原文已记录母乳喂养、辅食添加和当前人工喂养，LLM 驳回正确；但子项 status 错写为 non_compliant。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
-      "decision_source": "blocked_review_17",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0020",
@@ -405,13 +505,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-010",
       "manual_issue_text": "既往史患者用药情况未详细记录",
-      "reason": "人工问题称既往用药未详细记录，但原文已记录右佐匹克隆、坦度螺酮、利伐沙班等用药，LLM 驳回正确。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
-      "decision_source": "blocked_review_17",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0021",
@@ -420,13 +520,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-009",
       "manual_issue_text": "现病史中主诉有咽痛，但未详细记录疼痛的性质、持续时间、是否有缓解方式等；诉有咳痰，未记录痰液的性状、咳痰的频率、是否有伴随症状等；未记录在当地卫生院具体的治疗情况；未记录在我院门诊的检查项目及结果；无体重变化情况的记录。",
-      "reason": "人工列出的咽痛、咳痰、院外治疗、门诊检查、体重变化等缺项，原文均有对应记录，LLM 驳回正确。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；同一规则下多锚点，应通过一次 prompt 输出多个缺陷。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
-      "decision_source": "blocked_review_17",
+      "review_subgroup": "人工问题过宽再审计-same_rule_multi_anchor_promptable",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "同一规则下多锚点，应通过一次 prompt 输出多个缺陷。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0028",
@@ -435,13 +535,13 @@
       "issue_family": "会诊意见已写遵执但实际未落实",
       "primary_rule_id": "SC-070",
       "manual_issue_text": "请会诊执行记录书写不规范仅描述“遵会诊意见执行”",
-      "reason": "release/0426_full_auto 该 visit 的会诊记录实际写有“已遵嘱执行”“已遵嘱继续煎药服用调理”“已将会诊意见告知患者并加用药物医嘱”等具体动作，并非仅写“遵会诊意见执行”；人工问题与原文不符，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-070-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto consultation snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0029",
@@ -450,13 +550,13 @@
       "issue_family": "有创诊疗操作记录缺失/书写不规范",
       "primary_rule_id": "SC-045",
       "manual_issue_text": "患者行了骨髓穿刺，无有创操作记录",
-      "reason": "release/0426_full_auto mr_surgery 已直接登记 2025-08-05 “骨髓穿刺术”，同 visit 还存在胸椎骨折相关手术登记；现有原文与人工问题所称“患者行了骨髓穿刺，无有创操作记录”冲突，不能按该原句判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前证据不足以证明人工问题成立，按原文冲突/不可判保留 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-045-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto mr_surgery snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前证据不足以证明人工问题成立，按原文冲突/不可判保留 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0030",
@@ -465,13 +565,13 @@
       "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
       "primary_rule_id": "SC-050",
       "manual_issue_text": "三级医师查房执行不到位（主治医师查房写的是管床医生本人查房）",
-      "reason": "local_pg 与 release/0426_full_auto 可回收到“黄河副主任医师代主治医师查房”及后续邓腾孝主治医师 胡定祥主任医师查房记录，但未回收到人工问题所称“主治医师查房写的是管床医生本人查房”这一原句锚点，不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-050-精确复核-第一轮",
-      "decision_source": "local_pg + release senior_course snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0031",
@@ -480,13 +580,13 @@
       "issue_family": "不合理复制病历内容",
       "primary_rule_id": "CL-275",
       "manual_issue_text": "请会诊执行记录中复制粘贴严重，记录中“ 余同贵科！谢邀！我科愿随访”直接引用会诊意见未进行修改。",
-      "reason": "local_pg 当前可回收的是 2026-04-13/2026-04-14 两条会诊执行式记录及 2026-04-11/2026-04-13 上级查房间的高度复用，但未回收到人工问题所引“余同贵科！谢邀！我科愿随访”这一原句锚点；虽属同一复制粘贴问题族，仍不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "CL-275-精确复核-第一轮",
-      "decision_source": "local_pg get_documents copy-chain snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0035",
@@ -495,13 +595,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-009",
       "manual_issue_text": "外伤病人未描述受伤地点",
-      "reason": "人工问题称外伤未写地点，原文明确写在家里，LLM 驳回正确。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
-      "decision_source": "blocked_review_17",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0042",
@@ -510,13 +610,13 @@
       "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
       "primary_rule_id": "SC-050",
       "manual_issue_text": "9月2日上级查房医师为王标，但在分析病情时是孙治庆医师在查房，涉嫌伪造病历。",
-      "reason": "release/0426 与 release/0426_full_auto 现可回收的混写记录为“王标主治医师查房…李方健主治医师查房后指示”，并未回收到人工问题所称“孙治庆医师在查房”的原句；虽属同家族身份混写，但不是同一锚点，不能判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-050-精确复核-第一轮",
-      "decision_source": "local_pg + release senior_course/daily snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0044",
@@ -525,13 +625,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "患者入院时血压升高，未持续监测血压，未请相关科室会诊，未送检病原微生物，9月2日周凤霞主治医师查房及9月3日陈光怀副主任医师查房未书写相关内容。",
-      "reason": "local_pg 可见 9月2日周凤霞主治医师查房与 9月3日陈光怀副主任医师查房正文，且病程/会诊已有抗感染与中医会诊记录；人工问题所称“未书写相关内容、未请相关会诊”与原文不符，整条不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-异常结果-第二轮",
-      "decision_source": "local_pg get_documents + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0053",
@@ -600,13 +700,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-020",
       "manual_issue_text": "患者双膝疼痛10年，现病史治疗经过不详细，不能很好的指导本次住院治疗；患者既往有类风湿关节炎，入院诊断未体现。",
-      "reason": "人工问题所述内容与入院记录原文存在多处直接冲突（主诉为腹部胀痛而非双膝疼痛，入院诊断已明确包含类风湿性关节炎），故判定为no_hit。病历现病史、查体及诊断记录完整，诊断覆盖充分，符合质控标准。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-020入院诊断定向复核",
-      "decision_source": "sheet2_sc020_admission_diagnosis_review_report",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0066",
@@ -645,13 +745,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-020",
       "manual_issue_text": "入院记录初步诊断不全：前列腺增生、泌尿道感染未诊断",
-      "reason": "入院记录初步诊断已准确覆盖患者核心阳性证据（输尿管结石、肾积水、肾绞痛）。人工指出的前列腺增生与泌尿道感染缺乏明确临床症状及确诊依据，属证据不足项，病历诊断完整准确，无需整改。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；同一规则下多锚点，应通过一次 prompt 输出多个缺陷。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-020入院诊断定向复核",
-      "decision_source": "sheet2_sc020_admission_diagnosis_review_report",
+      "review_subgroup": "人工问题过宽再审计-same_rule_multi_anchor_promptable",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "同一规则下多锚点，应通过一次 prompt 输出多个缺陷。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0070",
@@ -675,13 +775,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-009",
       "manual_issue_text": "现病史中患者既往十年只有主要症状，无伴随症状及阴性症状。患者长期治疗慢性病的用药情况未记录。",
-      "reason": "人工称无伴随/阴性症状、慢病用药未记录；原文已记录阴性症状和多种慢病用药，LLM 驳回方向正确；但两个子项 status 错写为 non_compliant。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
-      "decision_source": "blocked_review_17",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0072",
@@ -735,13 +835,13 @@
       "issue_family": "输血时间/量/前后记录不一致",
       "primary_rule_id": "SC-074",
       "manual_issue_text": "输血后评价记录时间记录错误，记录时间早于输血时间",
-      "reason": "release/0426_full_auto 当前仅回收到一条 2025-10-29 04:49 落款的输血记录，正文覆盖 2025-10-28 22:10 至 2025-10-29 01:02 的冷沉淀/血浆输注过程；未回收到独立“输血后评价”文书，且现存记录时间并不早于输血结束时间，不能按人工问题“输血后评价记录时间早于输血时间”判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-074-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto bloodtrans_record snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0078",
@@ -750,13 +850,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-009",
       "manual_issue_text": "现病史中发病情况描述不完整，未记录本次病情加重的情况",
-      "reason": "人工称未记录病情加重，原文已写腹痛加重1天及症状变化，LLM 驳回正确；但子项 status 错写为 non_compliant。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
-      "decision_source": "blocked_review_17",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0079",
@@ -795,13 +895,13 @@
       "issue_family": "病程记录病情变化记录不全",
       "primary_rule_id": "SC-032",
       "manual_issue_text": "11月2日日常病程记录过于简略，仅一句话（未写明患者阴性症状、无生命体征描述，未描述可能诊断给予患者法莫替丁抑酸治疗）。",
-      "reason": "release/0426 当前仅回收到 2026-03-08 病程，正文已写腰背痛 呼吸困难好转 查体及出院处理，与人工问题所称 11月2日“仅一句话 未写阴性症状和生命体征”场景不一致，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-032-精确复核-第四轮",
-      "decision_source": "release/0426 daily_course snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0093",
@@ -825,13 +925,13 @@
       "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
       "primary_rule_id": "SC-097",
       "manual_issue_text": "手术记录中手术结束时间书写错误（9：40错误写为10:40）",
-      "reason": "release/0426_full_auto surgery_record 当前结构化手术结束时间为 2025-11-05 09:40，并非人工问题所称“10:40”；现有原始文书未回收到该错误时间原句，不能按“结束时间误写为10:40”判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-097-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto surgery_record snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0098",
@@ -840,13 +940,13 @@
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
       "primary_rule_id": "SC-023",
       "manual_issue_text": "首次病程记录中鉴别诊断仅和霍乱鉴别，不全面；患者无传染病史，建议行两对半定性检查。",
-      "reason": "local_pg 病程实际写的是“细菌性痢疾”鉴别，并非人工问题所称“仅和霍乱鉴别”；同时“建议行两对半定性检查”亦未能与当前正文形成同一锚点，整条不能判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-023-鉴别诊断-第一轮",
-      "decision_source": "local_pg get_documents + diffdx probe",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0101",
@@ -855,28 +955,13 @@
       "issue_family": "上级医师查房缺失/未及时书写；出院前一天/当天上级医师查房或病程缺失",
       "primary_rule_id": "SC-051",
       "manual_issue_text": "出院当天或前一天无上级医师查房记录，最后一次病程为出院4天前的病程记录",
-      "reason": "release/0426_full_auto 已回收到 2025-10-30 “马晨曦副主任医师出院前查房记录”，正文明确写“上级医师查看后予以出院”；同时 local_pg 还能回收到 2025-11-13 日常病程记录，现有原文链与人工问题所称“出院当天或前一天无上级医师查房记录，最后一次病程为出院4天前”不一致，不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-051-精确复核-第一轮",
-      "decision_source": "local_pg get_documents + release/0426_full_auto senior/discharge snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
-    },
-    {
-      "sheet2_row_id": "Sheet2-R0103",
-      "visit_id": "2073404",
-      "patient_name": "古正洪",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-018",
-      "manual_issue_text": "主诉书写不完整，“右侧腰腹部1+天”，现病史诊治经过不详，既往史无诊断高血压的时间，既往史描述：2+月前右手因外伤截肢，而体格检查中未描述右手情况，并且记录四肢无畸形，入院诊断也无右手相关诊断。",
-      "reason": "人工问题部分属实。主诉不规范、现病史诊治经过缺失、既往史高血压确诊时间缺项确属缺陷，需整改。人工指出的查体前后矛盾及诊断缺失与病历原文不符（原文查体已描述右手截肢及术后瘢痕，诊断已包含右手截肢），属误报。整体判定为partial_hit。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-020入院诊断定向复核",
-      "decision_source": "sheet2_sc020_admission_diagnosis_review_report",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "可补规则",
+      "backlog_reason": "人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
     },
     {
       "sheet2_row_id": "Sheet2-R0105",
@@ -885,13 +970,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-018",
       "manual_issue_text": "现病史中阴性症状无针对性，体重87kg 身高135cm记录有误，体格检查中：皮肤和黏膜检查：胸部可见陈旧性手术瘢痕，胸部检查： 胸廓对称无畸形，无疤痕，前后矛盾。入院诊断未诊断慢性萎缩性胃炎。",
-      "reason": "人工指出的体格检查矛盾、现病史数据及诊断缺项均与病历原文冲突或缺乏依据。原文两处查体均记载陈旧性手术瘢痕，无矛盾；现病史已记录多项阴性症状，人工提及的体重身高数据与原文不符；入院诊断与肠镜息肉及糖尿病病史一致，全文无胃部疾病证据故无需补充萎缩性胃炎诊断。人工问题整体不成立，病历记录合规。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-020入院诊断定向复核",
-      "decision_source": "sheet2_sc020_admission_diagnosis_review_report",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0107",
@@ -915,13 +1000,13 @@
       "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
       "primary_rule_id": "LX-018",
       "manual_issue_text": "2025.11.18田安琴主治医师查房记录无内容；11月17日及11月18日，无输血前评估、无输血记录、无输血后评估。",
-      "reason": "release/0426_full_auto 2025-11-18 “田安琴主治医师查房记录”正文完整回收到病史 体查 辅检 诊断依据与诊疗计划；同时 bloodtrans_record 已有 2025-11-17 及 2025-11-18 两次红细胞输血记录，现有原文与人工问题所称“11月18日查房记录无内容”“11月17日及11月18日无输血记录”不一致，不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "LX-018-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto senior_course_record + bloodtrans_record snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "可补规则",
+      "backlog_reason": "人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
     },
     {
       "sheet2_row_id": "Sheet2-R0109",
@@ -939,34 +1024,19 @@
       "next_action": "优先补 admission diagnosis、手术/会诊正文、执行清单与病程时间轴等源数据快照。"
     },
     {
-      "sheet2_row_id": "Sheet2-R0110",
-      "visit_id": "2326610",
-      "patient_name": "张仕枝",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-009",
-      "manual_issue_text": "现病史对于头痛的描述不细致，阴性症状采集不全面，无诊治经过，无门诊初步诊断，既往史书写混乱，无条理。",
-      "reason": "现病史阴性症状采集不全（缺失头痛相关描述），部分人工指出的问题（无诊治经过、无门诊诊断、既往史混乱）与病历原文记载冲突，已核实为合规或描述不符。整体判定为部分命中，需重点整改现病史描述。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-020入院诊断定向复核",
-      "decision_source": "sheet2_sc020_admission_diagnosis_review_report",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0112",
       "visit_id": "2081312",
       "patient_name": "冷克蓉",
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-008",
       "manual_issue_text": "现病史患病部位描述不准确、阴性病史采集不完整，入院血压138/102mmHg，未做血压监测，未做高血压方面的筛查，既往史1月前重庆大坪医院行胰腺脓肿引流术，未做进一步描述，未做相关的检查。",
-      "reason": "release/0426 admission_record 现病史已明确“右侧腋区、肋部皮肤红斑丘疱疹伴疼痛”，人工问题中“患病部位描述不准确”与原文冲突，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-现病史-第二轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0117",
@@ -975,13 +1045,13 @@
       "issue_family": "主治首次查房48小时；病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-033",
       "manual_issue_text": "入院48小时内，无主治医师查房记录；首次病程鉴别诊断中：血精的常见病因精囊结石及精囊结核，未做分析鉴别。",
-      "reason": "release/0426_full_auto 已回收到 2025-11-27 09:52 的“徐应福主治医师查看病人”记录，距 2025-11-26 10:03 入院不足 24 小时；同时 first_course_record 仅存空壳条目，未回收到人工问题所称“首次病程中对精囊结石及精囊结核未做分析”的原始正文，整条不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-033-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto senior_course_record + first_course_record snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0118",
@@ -990,13 +1060,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-008",
       "manual_issue_text": "患者行剖宫产2次，体格检查中腹部情况未做相关描述。",
-      "reason": "release/0426 admission_record 腹部查体已记录腹部膨隆及耻骨联合上剖宫产瘢痕，人工问题与原始文书冲突，不能判定为 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-查体专科-第一轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0119",
@@ -1035,13 +1105,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-020",
       "manual_issue_text": "患者现病史“进食蔬菜时呛咳起病，主要表现为咳嗽、气促，伴少量咳痰，咳痰较费力，伴精神欠佳、饮食较差、浑身乏力”。诊断：社区获得性肺炎。诊断不合理。",
-      "reason": "人工问题所述现病史及诊断与入院记录原文严重冲突，该问题不适用于本份病历，判定为无命中。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-020入院诊断定向复核",
-      "decision_source": "sheet2_sc020_admission_diagnosis_review_report",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0128",
@@ -1065,13 +1135,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-008",
       "manual_issue_text": "主诉不完整“车祸伤40+分钟”无法推导出主要诊断，主诉应包含主要症状或体征及持续时间",
-      "reason": "release/0426 admission_record 主诉实际写为“车祸致头面部、胸部等多处受伤40+分钟”，并非仅“车祸伤40+分钟”，人工问题与原文冲突，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-008-尾项-第三轮",
-      "decision_source": "release/0426 admission_record + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0132",
@@ -1095,13 +1165,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "12月9日病程记录书写存在错误“请示上级医师后予以0.9g q12h ivgtt抗感染”",
-      "reason": "当前原文写有“阿莫西林克拉维酸钾0.9g q12h ivgtt”，并非只有“0.9g q12h”而缺药名。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；原文写有“阿莫西林克拉维酸钾0.9g q12h ivgtt”，人工问题声称缺药名/仅写剂量，与当前可回收正文冲突。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "可补规则24条回归-still_blocked_with_specific_gap",
-      "decision_source": "sheet2_fixable_rule_backlog_regression_report",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "原文写有“阿莫西林克拉维酸钾0.9g q12h ivgtt”，人工问题声称缺药名/仅写剂量，与当前可回收正文冲突。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0137",
@@ -1125,13 +1195,13 @@
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
       "primary_rule_id": "SC-020",
       "manual_issue_text": "患者入院时诊断胸腔积液诊断依据不足，诊断急性胃炎依据不足。现病史中，对主要症状胸痛的描述缺乏相应要素：如疼痛持续时间、具体部位、加重或者缓解方式等。",
-      "reason": "当前入院记录诊断已列结核性胸腔积液和急性胃炎，且现病史未回收到人工所称“胸痛”主症原句。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；入院记录诊断已列结核性胸腔积液和急性胃炎，且现病史未回收到人工所称“胸痛”主症锚点。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "可补规则24条回归-still_blocked_with_specific_gap",
-      "decision_source": "sheet2_fixable_rule_backlog_regression_report",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "入院记录诊断已列结核性胸腔积液和急性胃炎，且现病史未回收到人工所称“胸痛”主症锚点。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0141",
@@ -1170,13 +1240,13 @@
       "issue_family": "诊疗医嘱与病程记录不一致",
       "primary_rule_id": "SC-146",
       "manual_issue_text": "医嘱：急支糖浆10毫升，口服，每日三次。剂量不足。",
-      "reason": "local_pg 当前回收到的是眼科围术期病程与泪囊/白内障手术相关记录，未回收到人工问题所称“急支糖浆10毫升 口服 每日三次”这一医嘱原句；现有原文无法对应该剂量问题，不能判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-146-精确复核-第一轮",
-      "decision_source": "local_pg get_documents mixed-issue snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0148",
@@ -1185,13 +1255,13 @@
       "issue_family": "病程记录病情变化记录不全",
       "primary_rule_id": "SC-032",
       "manual_issue_text": "1月17日，1月20日，病程记录无具体内容",
-      "reason": "release/0426 与 release/0426_full_auto 可回收到 1月20日上级查房正文，内容包含症状 查体和治疗方案，并非“无具体内容”；人工问题与现有原文冲突，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-032-精确复核-第四轮",
-      "decision_source": "release/0426 + release/0426_full_auto snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0150",
@@ -1200,13 +1270,13 @@
       "issue_family": "会诊执行记录缺失/未写执行情况；危急值记录不完整/处理不充分；诊疗医嘱与病程记录不一致",
       "primary_rule_id": "LX-016",
       "manual_issue_text": "1月13日，危急值处理不及时，请内分泌科会诊后，无会诊执行记录。1月16日病程记录中，未描述患者血糖控制情况及内分泌科会诊指导用药情况。1月23日，开具医嘱为普通饮食欠妥，",
-      "reason": "local_pg 与 release/0426_full_auto 当前回收到的是 2026-03-29 因“左侧外踝红肿、破溃、流脓3天”入院后的骨科感染病程，相关会诊仅见 2026-04-01 肾病内科与 2026-04-02 临床药学会诊，未回收到人工问题所称 1月13日危急值、内分泌科会诊、1月16日血糖控制及 1月23日普通饮食锚点，不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "LX-016-精确复核-第一轮",
-      "decision_source": "local_pg get_documents + release/0426_full_auto consult/daily snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0153",
@@ -1215,13 +1285,13 @@
       "issue_family": "会诊意见已写遵执但实际未落实",
       "primary_rule_id": "SC-070",
       "manual_issue_text": "1月23日康复科会诊建议给予针灸、低频、中药贴敷、关节松动术、偏瘫肢体综合训练、肌力训练等康复治疗以舒经通络、滑利关节。请会诊执行记录中书写遵会诊意见。但实际并未按照会诊意见执行。",
-      "reason": "release/0426_full_auto 当前可回收原文是泌尿外科关于下肢静脉血栓的会诊与后续抗凝执行，并非人工问题所述“1月23日康复科会诊建议针灸 低频 中药贴敷等但实际未执行”场景，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-070-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto consultation + daily snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0157",
@@ -1245,13 +1315,13 @@
       "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
       "primary_rule_id": "SC-097",
       "manual_issue_text": "手术记录手术结束时间错误（1月26日10：00误写为1月27日10:00）",
-      "reason": "release/0426_full_auto surgery_record 当前结构化手术结束时间为 2026-01-26 10:00，并非人工问题所称“误写为1月27日10:00”；现有原始文书未回收到该错误时间原句，不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-097-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto surgery_record snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0166",
@@ -1260,13 +1330,13 @@
       "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
       "primary_rule_id": "SC-105",
       "manual_issue_text": "术后首次病程记录中手术时间与实际手术时间不一致",
-      "reason": "release/0426_full_auto postsurg_firstcourse_record 明确写“手术时间:2026年02月02日 10:45”；PG surgery_record 同时记录 surgery_begin_time=2026-02-02 10:45:00+08，现有原文与人工问题所称“术后首次病程记录中手术时间与实际手术时间不一致”不一致，不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-105-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto postsurg_firstcourse_record + PG surgery_record",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "可补规则",
+      "backlog_reason": "人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
     },
     {
       "sheet2_row_id": "Sheet2-R0169",
@@ -1275,13 +1345,13 @@
       "issue_family": "四级手术未 MDT",
       "primary_rule_id": "SC-083",
       "manual_issue_text": "患者行腹腔镜下直肠前切除术，国考四级手术术前无多学科会诊。",
-      "reason": "release/0426_full_auto 术前已回收到胸外科 心内科 麻醉科等多条会诊记录，人工问题所称“术前无多学科会诊”与原文不一致；是否构成规范 MDT 属同家族但非同锚点，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-083-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto consultation snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0171",
@@ -1290,13 +1360,13 @@
       "issue_family": "会诊记录内容质量/复制粘贴/结论不足",
       "primary_rule_id": "SC-069",
       "manual_issue_text": "2026年2月4日会诊记录中存在大量复制其他科室会诊意见的情况，并无综合会诊结果提出建设性诊疗意见。",
-      "reason": "release/0426_full_auto 当前仅回收到 2026-04-06 肿瘤科会诊，内容为贫血原因待查并建议完善贫血三项/血清铁/网织红细胞/促红细胞生成素/甲功五项/自身免疫抗体及必要时骨髓穿刺；未回收到人工问题所称“2026年2月4日会诊记录”及其“复制其他科室意见、无建设性意见”原句锚点，不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-069-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto consultation_record snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0172",
@@ -1305,13 +1375,13 @@
       "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
       "primary_rule_id": "LX-020",
       "manual_issue_text": "患者2月4日手术，无术前主刀医师查房记录，无术后首次病程记录及手术记录。",
-      "reason": "release/0426_full_auto 已回收到 2026-02-04 15:35 的术后首次病程记录，正文明确写“手术时间:2026年02月04日 12:45…手术方式:膀胱镜检查+尿道狭窄扩张术+经皮耻骨上膀胱造口导尿管插入术”；同时 surgery_record 与 mr_surgery 均登记了同日手术，现有原文与人工问题所称“无术后首次病程记录及手术记录”冲突，整条不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "LX-020-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto postsurg_firstcourse_record + surgery_record + mr_surgery snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "可补规则",
+      "backlog_reason": "人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
     },
     {
       "sheet2_row_id": "Sheet2-R0173",
@@ -1320,13 +1390,13 @@
       "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
       "primary_rule_id": "LX-016",
       "manual_issue_text": "1月30日后7天无病程记录，请心血管、肾内科、呼吸科、麻醉科、皮肤科等科室会诊后，无请会诊执行记录。",
-      "reason": "release/0426_full_auto 当前可回收到 2026-02-01 皮肤科会诊“遵会诊意见予以抗过敏治疗”、2026-02-05 肾病内科会诊“遵会诊意见予以完善甲状旁腺激素、无机磷、贫血三项”，并有 2026-02-08、02-10、02-11、02-12 连续上级查房记录；现有原文与人工问题所称“1月30日后7天无病程记录…无请会诊执行记录”不一致，不能判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "LX-016-精确复核-第一轮",
-      "decision_source": "local_pg get_documents + PG consult/order snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "可补规则",
+      "backlog_reason": "人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
     },
     {
       "sheet2_row_id": "Sheet2-R0175",
@@ -1335,13 +1405,13 @@
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
       "primary_rule_id": "SC-023",
       "manual_issue_text": "鉴别诊断不完整，未鉴别中耳炎。2月3日请会诊执行记录仅复制儿科会诊意见。",
-      "reason": "local_pg 病程当前诊断已明确写出“双耳分泌性中耳炎”，人工问题所称“未鉴别中耳炎”与原文冲突；同时还混有会诊执行记录复制问题，整条不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-023-鉴别诊断-第一轮",
-      "decision_source": "local_pg get_documents + diffdx probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0177",
@@ -1380,13 +1450,13 @@
       "issue_family": "病程记录病情变化记录不全",
       "primary_rule_id": "SC-032",
       "manual_issue_text": "现病史记录不全，未记录肿物性状、未记录诊疗经过。",
-      "reason": "release/0426 入院及上级查房已明确写出“外阴肿物脱出半年” 查体性状和术前准备经过，人工问题所称“未记录肿物性状 未记录诊疗经过”与原文冲突，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-032-精确复核-第四轮",
-      "decision_source": "release/0426 daily_course + senior_course snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0197",
@@ -1395,13 +1465,13 @@
       "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
       "primary_rule_id": "SC-049",
       "manual_issue_text": "入院72小时以内无副主任医师以上的医师（已新建无具体内容）",
-      "reason": "当前原文可见 2026-02-25 陈建霞副主任医师查房记录，和“72小时以内无副主任医师以上查房”冲突。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前原文可见 2026-02-25 陈建霞副主任医师查房记录，与“72小时以内无副主任医师以上查房”冲突。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "可补规则24条回归-still_blocked_with_specific_gap",
-      "decision_source": "sheet2_fixable_rule_backlog_regression_report",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前原文可见 2026-02-25 陈建霞副主任医师查房记录，与“72小时以内无副主任医师以上查房”冲突。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0200",
@@ -1425,13 +1495,13 @@
       "issue_family": "围手术期术前评估/讨论/小结缺陷",
       "primary_rule_id": "SC-081",
       "manual_issue_text": "患者17岁男性，入院诊断右侧睾丸扭转，急诊手术，存在器官切除的可能，术前缺上级医师意见。手术中，右侧睾丸附睾切除后，行左侧睾丸固定时，使用5-0可吸收线欠妥，文献建议使用丝线固定以确保永久固定。",
-      "reason": "当前原文可见李杰副主任医师查房和术前主刀查房；未回收到“5-0可吸收线”原句，无法核对术中材料合理性。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "可补规则24条回归-still_blocked_with_specific_gap",
-      "decision_source": "sheet2_fixable_rule_backlog_regression_report",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；术前缺上级医师意见与当前查房原文冲突；缝线材料问题未回收到“5-0可吸收线”原句，需补手术正文锚点。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "术前缺上级医师意见与当前查房原文冲突；缝线材料问题未回收到“5-0可吸收线”原句，需补手术正文锚点。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0206",
@@ -1440,13 +1510,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "患者行经阴道子宫切除术，术前无尿路感染，术后诊断尿路感染。未请泌尿外科会诊，未分析原因。",
-      "reason": "local_pg 3月4日日常病程已写“考虑泌尿道感染可能”并开始头孢噻肟，3月6日又记录泌尿外科会诊协助诊治，人工问题所称“未请泌尿外科会诊 未分析原因”与原文冲突。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-尾项-第三轮",
-      "decision_source": "local_pg get_documents + tail snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "跨问题族/跨质控点，需要拆规则后聚合。；人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "blocked_reason_type": "规则不支持",
+      "review_subgroup": "人工问题过宽再审计-cross_family_composite_split_required",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "可补规则",
+      "backlog_reason": "人工问题跨多个文书域或质控点，需要拆规则后聚合，而不是一次单规则 exact。",
+      "next_action": "跨问题族/跨质控点，需要拆规则后聚合。"
     },
     {
       "sheet2_row_id": "Sheet2-R0207",
@@ -1455,13 +1525,13 @@
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
       "primary_rule_id": "SC-023",
       "manual_issue_text": "患者病史中有长期尿不尽感，但未做膀胱残余尿等相关检查，首次病程记录鉴别诊断不全面",
-      "reason": "local_pg 当前病历主线为“盆腔包块待诊：卵巢肿瘤？”并非长期尿不尽场景，人工问题与该 visit 的原始文书主诉、查体及诊疗计划明显不符，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-023-鉴别诊断-第一轮",
-      "decision_source": "local_pg get_documents + diffdx probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0209",
@@ -1479,34 +1549,19 @@
       "next_action": "需先与客户确认“欠妥/不详细/无法体现水平/诊断是否充分”等判定阈值，再决定是否规则化。"
     },
     {
-      "sheet2_row_id": "Sheet2-R0210",
-      "visit_id": "2256518",
-      "patient_name": "赖世成",
-      "issue_family": "入院记录内容不完整/前后矛盾",
-      "primary_rule_id": "SC-018",
-      "manual_issue_text": "入院记录主诉“无明显诱因出现左膝疼痛3月”描述不规范；慢病史记录不全，心率和脉搏不一致，也无相关诊断，患者有腹部手术史，查体未做描述；四肢检查中记录为四肢关节活动正常，与专科情况中描述左膝屈膝活动受限，前后不一致。",
-      "reason": "入院记录存在慢病史记录不全、四肢检查描述与现病史脱节等缺陷。人工指出的腹部查体缺失及主诉不规范等指控与原文冲突。需补充慢病明确诊断，完善四肢关节活动度具体描述以与现病史保持一致。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-020入院诊断定向复核",
-      "decision_source": "sheet2_sc020_admission_diagnosis_review_report",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0212",
       "visit_id": "2260677",
       "patient_name": "秦祖全",
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
       "primary_rule_id": "SC-023",
       "manual_issue_text": "首次病程记录鉴别诊断不全面，且使用“左踝关节骨折”这种非专业的诊断。",
-      "reason": "local_pg 正文将“左踝关节骨折”写在鉴别诊断而非最终诊断位，人工问题所称“使用这种非专业的诊断”与原文定位不一致，整条不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-023-鉴别诊断-第一轮",
-      "decision_source": "local_pg get_documents + diffdx probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0213",
@@ -1515,13 +1570,13 @@
       "issue_family": "围手术期术前评估/讨论/小结缺陷",
       "primary_rule_id": "SC-081",
       "manual_issue_text": "2026.2.9急诊手术术前准备不充分，预案不清晰，拟急诊行髋关节脱位手法复位术，而实际术中情况是“假体脱位不能复位”，需择期行髋关节翻修术。",
-      "reason": "local_pg 与 release/0426_full_auto 当前回收到的是 2026-03-19 因“右髋关节翻修术后1月 伤口愈合不良5天”再次入院后的感染处理记录，未回收到人工问题所称 2026-02-09 “拟急诊行髋关节脱位手法复位术 而实际术中假体脱位不能复位 需择期翻修术”的原始术前/术中文书锚点，不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-081-精确复核-第一轮",
-      "decision_source": "local_pg get_documents + release/0426_full_auto episode snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     },
     {
       "sheet2_row_id": "Sheet2-R0214",
@@ -1530,13 +1585,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "2026-3-3主治医生查房，患者检查见低钾血症，无处理及诊断，疼痛科评估绝对手术禁忌症（病历书写误，应为无手术禁忌症），2026-3-5患者检查见低钾3.08mmol/l，较前进一步加重，无处理。",
-      "reason": "local_pg 疼痛科会诊原文为“知情同意后可行全身麻醉下肠镜检查”并非绝对手术禁忌；后续查房亦已写“低钾，嘱患者进食香蕉等水果补充电解质”，人工问题与原文冲突。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-尾项-第三轮",
-      "decision_source": "local_pg get_documents + tail snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0220",
@@ -1545,13 +1600,13 @@
       "issue_family": "会诊记录质量缺陷",
       "primary_rule_id": "SC-069",
       "manual_issue_text": "患者BP163/90mmHg，未复测及进一步处理；3月7日请康复科会诊记录里面，明确记录“与患者沟通后，表示拒绝康复治疗”本患者仍然开具超声波、电刺激、光照射、中药溻渍等康复治疗项目；患者进行左侧膝关节清创术，无操作记录。",
-      "reason": "release/0426_full_auto 康复科会诊确有“与患者沟通后，表示拒绝康复治疗”，后续病程亦继续写“可继续当前输液及康复理疗/可继续康复治疗”；但同一就诊已在 2026-03-10 日常病程详细记录“左膝皮肤感染清创引流术”，mr_surgery 亦登记“皮肤和皮下组织非切除性清创”，现有原文与人工问题所称“左侧膝关节清创术，无操作记录”冲突，整条不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；同一规则下多锚点，应通过一次 prompt 输出多个缺陷。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-069-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto consultation_record + daily_course_record + mr_surgery snapshot",
+      "review_subgroup": "人工问题过宽再审计-same_rule_multi_anchor_promptable",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "同一规则下多锚点，应通过一次 prompt 输出多个缺陷。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0221",
@@ -1575,13 +1630,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "胸部CT提示双肺感染，未请呼吸内科会诊，病程记录及出院诊断均未提及",
-      "reason": "local_pg 上级查房已记录 3月5日 CT“ 双肺少许感染 ”及后续病程抗感染处理，人工问题中“病程记录及出院诊断均未提及”与原文至少在病程层面冲突，整条不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-异常结果-第二轮",
-      "decision_source": "local_pg get_documents + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0225",
@@ -1590,13 +1645,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "胸部CT提示双肺结节，检验结果提示低钾，病程记录未提及",
-      "reason": "local_pg 主治/出院前查房已写胸部 CT“ 双肺多发结节 ”，3月7日查房又记录 3月6日 K 3.44mmol/L；人工问题所称“病程记录未提及”与原文冲突，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-异常结果-第二轮",
-      "decision_source": "local_pg get_documents + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0226",
@@ -1605,13 +1660,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "3月11日检查检验结果数据异常未进行分析和记录",
-      "reason": "local_pg 3月13日上级医师查房已完整列出 3月11日 proBNP、血常规、D-Dimer/FDP、白蛋白等异常检查，人工问题中“3月11日异常数据未进行记录”与原文冲突，整条不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-异常结果-第二轮",
-      "decision_source": "local_pg get_documents + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0229",
@@ -1620,13 +1675,13 @@
       "issue_family": "四级手术未 MDT",
       "primary_rule_id": "SC-083",
       "manual_issue_text": "四级肿瘤手术，未行多学科讨论，",
-      "reason": "release/0426_full_auto 术前已回收到呼吸与危重症医学科 麻醉科 肿瘤科 消化内科等多条会诊记录，人工问题所称“未行多学科讨论”与现有原文并不直接对应；是否满足规范 MDT 需另一层制度口径，不能按该原句判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前证据不足以证明人工问题成立，按原文冲突/不可判保留 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-083-精确复核-第一轮",
-      "decision_source": "release/0426_full_auto consultation snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前证据不足以证明人工问题成立，按原文冲突/不可判保留 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0230",
@@ -1635,13 +1690,13 @@
       "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
       "primary_rule_id": "SC-050",
       "manual_issue_text": "未落实三级医师查房。",
-      "reason": "local_pg 与 release/0426_full_auto 可回收住院医师日常病程、郑凤金主治医师查房及陈光怀副主任医师查房，现有文书已形成三级查房链；人工问题所称“未落实三级医师查房”与原始文书冲突，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-050-精确复核-第一轮",
-      "decision_source": "local_pg + release daily/senior snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0239",
@@ -1665,13 +1720,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "颅脑平扫提示基底节区腔隙性脑梗塞，未请神经内科会诊及分析。",
-      "reason": "local_pg 3月10日查房已将“双侧基底节区腔隙性脑梗塞”纳入诊断并写明“与患者及家属沟通暂无特殊处理”，人工问题中“未分析”与原文冲突，整条不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-尾项-第三轮",
-      "decision_source": "local_pg get_documents + tail snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0242",
@@ -1695,13 +1750,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "异常检验结果在病程记录中未体现",
-      "reason": "local_pg 3月12日日常病程已列 WBC、D-Dimer、FDP、CRP、Alb、肾功等异常，3月13日又结合血气分析安排拔管和继续观察；“异常检验结果在病程记录中未体现”与原文冲突，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-异常结果-第二轮",
-      "decision_source": "local_pg get_documents + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0246",
@@ -1755,13 +1810,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-009",
       "manual_issue_text": "外伤病人未描述受伤地点",
-      "reason": "人工问题称外伤未写地点，原文明确写泸县谭坝过路，LLM 驳回正确。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "入院记录人工复核写回-keep_blocked_no_hit",
-      "decision_source": "blocked_review_17",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0262",
@@ -1785,13 +1840,13 @@
       "issue_family": "入院记录内容不完整/前后矛盾",
       "primary_rule_id": "SC-020",
       "manual_issue_text": "既往史中有直肠癌手术病史，但入院诊断无相关诊断",
-      "reason": "人工问题指出的缺陷与病历原文不符。入院记录初步诊断已明确列出'直肠术后'，完整覆盖了既往史中的直肠Ca手术史；同时'肠梗阻'与'急性腹膜炎'准确对应了现病史症状及腹部压痛、反跳痛等查体阳性体征。病历诊断书写规范，证据覆盖充分，无需整改。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-020入院诊断定向复核",
-      "decision_source": "sheet2_sc020_admission_diagnosis_review_report",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0265",
@@ -1815,13 +1870,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "胸部CT提示肋骨骨折，无胸外科会诊，病程记录未体现",
-      "reason": "local_pg 日常病程与上级医师查房均已记录 3月28日胸部CT 结果及“左侧部分肋骨骨折”，人工问题中“病程记录未体现”与原文冲突，整条不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-用药记录-第一轮",
-      "decision_source": "local_pg get_documents + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0268",
@@ -1830,13 +1885,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "4.1异常检查检验结果病程记录未分析和记录",
-      "reason": "local_pg 4月2日查房已回顾 4月1日血常规与胸部 CT 结果，后续病程亦持续按感染指标和腹盆腔影像调整治疗；人工问题所称“4.1异常检查检验结果病程记录未分析和记录”与原文不完全一致，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前证据不足以证明人工问题成立，按原文冲突/不可判保留 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-异常结果-第二轮",
-      "decision_source": "local_pg get_documents + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前证据不足以证明人工问题成立，按原文冲突/不可判保留 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0272",
@@ -1845,13 +1900,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "4.1日病程记录中检查检验结果停留在3.22，而最新的4.1检验结果在病程记录中未体现",
-      "reason": "local_pg 4月1日上级查房已更新 4月1日血气和血常规，并未停留在 3月22日旧结果；人工问题所称“4.1日病程记录中检查检验结果停留在3.22”与原文冲突，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-异常结果-第二轮",
-      "decision_source": "local_pg get_documents + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0279",
@@ -1905,13 +1960,13 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "3.27用药病程记录未体现",
-      "reason": "local_pg 3月27日 ICU 查房已写“头孢唑林钠防治感染”等用药，3月28日病程又补记吲哚布芬及氢氯吡格雷治疗，人工问题所称“3.27用药病程记录未体现”与原文冲突，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-036-用药记录-第一轮",
-      "decision_source": "local_pg get_documents + probe",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0286",
@@ -1920,13 +1975,13 @@
       "issue_family": "围手术期术前评估/讨论/小结缺陷",
       "primary_rule_id": "SC-081",
       "manual_issue_text": "平滑肌肉瘤二期手术，术前未复查胸部、腹部及盆腔CT或者磁共振，术前评估不充分，未充分认识到该病例的复杂性，而导致术中更改手术方式。",
-      "reason": "release/0426_full_auto admission_record presurg_summary 及多学科会诊已明确回收到 2026-03-09 胸部CT 下腹部CT增强及盆腔MRI 结果，不能支持“术前未复查胸部 腹部及盆腔CT或者磁共振”；postsurg_firstcourse_record 虽可见术中因广泛转移与肠管致密粘连改为开腹探查+病灶活检+小肠浆膜修补，但人工问题整句与现存原始文书并不一致，不能判 exact。",
+      "reason": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。；当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
       "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-081-精确复核-第一轮",
-      "decision_source": "local_pg get_documents + release/0426_full_auto presurg/postsurg snapshot",
+      "review_subgroup": "人工问题过宽再审计-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
       "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "backlog_reason": "当前可回收原文与人工问题核心锚点冲突，继续 blocked。",
+      "next_action": "当前可回收原文与人工问题核心锚点冲突或不能按原句判定。"
     },
     {
       "sheet2_row_id": "Sheet2-R0288",
@@ -1935,13 +1990,13 @@
       "issue_family": "有创诊疗操作记录缺失/书写不规范",
       "primary_rule_id": "SC-046",
       "manual_issue_text": "4月8日清创记录：标题为“头皮裂伤清创缝合术”，但操作部位实际是“右侧面部”。需明确“操作开始时间”，操作医师姓名、操作地点、局麻药浓度等关键信息。",
-      "reason": "release/0426_full_auto 现可回收的结构化手术摘要标题为“皮肤和皮下组织非切除性清创”，入院/查房/诊断均指向“右侧面部裂伤”；人工问题所称“头皮裂伤清创缝合术”原句未在现有原始文书中回收，且有创操作记录正文仍为空壳，不能按该原句判 exact。",
-      "blocked_reason_type": "人工问题原文不可判",
-      "review_subgroup": "SC-046-精确复核-第一轮",
-      "decision_source": "local_pg get_documents + release/0426_full_auto mr_surgery + diagnosis snapshot",
-      "backlog_category": "人工问题过宽/不可判",
-      "backlog_reason": "已经核到原始文书，但人工问题过宽、跨多个锚点或与现存正文冲突，无法按原句精确复现。",
-      "next_action": "建议客户下一轮把人工问题拆到单锚点、单文书、单日期，并保留原句截图。"
+      "reason": "缺原句、源文书或关键表字段，迁移到证据链不足。；当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "人工问题过宽再审计-missing_anchor_or_source_move_to_evidence_gap",
+      "decision_source": "sheet2_overbroad_blocked_reaudit_report",
+      "backlog_category": "需补源文书",
+      "backlog_reason": "当前可回收文书缺人工问题原句、源表或关键正文，不能继续归为人工问题过宽。",
+      "next_action": "缺原句、源文书或关键表字段，迁移到证据链不足。"
     }
   ],
   "artifacts": {

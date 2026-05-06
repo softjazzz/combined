@@ -748,7 +748,7 @@ def normalize_admission_consistency_llm_output(
     if raw_primary and raw_primary not in allowed:
         invalid_rule_ids.append(raw_primary)
 
-    raw_recommended = _unique_rule_ids(payload.get("recommended_rule_ids") or [])
+    raw_recommended = _unique_rule_ids(payload.get("recommended_rule_ids") or payload.get("matched_rule_ids") or [])
     if raw_primary and raw_primary not in raw_recommended:
         raw_recommended.insert(0, raw_primary)
     recommended_rule_ids: List[str] = []
@@ -799,10 +799,14 @@ def normalize_admission_consistency_llm_output(
     qc_result = _safe_text(payload.get("qc_result"), "uncertain").lower()
     if qc_result not in ADMISSION_ISSUE_FAMILY_ALLOWED_STATUSES:
         qc_result = "uncertain"
+    overall_status = _safe_text(payload.get("overall_status") or qc_result, "uncertain").lower()
+    if overall_status not in ADMISSION_ISSUE_FAMILY_ALLOWED_STATUSES:
+        overall_status = "uncertain"
 
     review_required = False
     if invalid_rule_ids or not payload:
         overall_result = "uncertain"
+        overall_status = "uncertain"
         review_required = True
 
     secondary_rule_ids = [rule_id for rule_id in recommended_rule_ids if rule_id != primary_rule_id]
@@ -810,7 +814,9 @@ def normalize_admission_consistency_llm_output(
         "primary_rule_id": primary_rule_id,
         "secondary_rule_ids": secondary_rule_ids,
         "recommended_rule_ids": recommended_rule_ids,
+        "matched_rule_ids": recommended_rule_ids,
         "sub_items": sub_items,
+        "overall_status": overall_status,
         "matched_manual_issue_parts": [
             _safe_text(item) for item in list(payload.get("matched_manual_issue_parts") or []) if _safe_text(item)
         ],
@@ -828,6 +834,12 @@ def normalize_admission_consistency_llm_output(
         ],
         "core_abnormal_evidence": [
             _safe_text(item) for item in list(payload.get("core_abnormal_evidence") or []) if _safe_text(item)
+        ],
+        "conflicts": [
+            _safe_text(item) for item in list(payload.get("conflicts") or []) if _safe_text(item)
+        ],
+        "missing_evidence": [
+            _safe_text(item) for item in list(payload.get("missing_evidence") or []) if _safe_text(item)
         ],
         "diagnosis_coverage": diagnosis_coverage,
         "qc_result": qc_result,
@@ -877,6 +889,7 @@ def build_admission_issue_family_prompt(
 {{
   "primary_rule_id": "SC-008|SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
   "recommended_rule_ids": ["..."],
+  "matched_rule_ids": ["同 recommended_rule_ids，用于客户验收页按家族展示"],
   "sub_items": [
     {{
       "rule_id": "...",
@@ -890,11 +903,14 @@ def build_admission_issue_family_prompt(
   "matched_manual_issue_parts": [],
   "unmatched_manual_issue_parts": [],
   "overall_result": "hit|partial_hit|no_hit|uncertain",
+  "overall_status": "non_compliant|compliant|uncertain",
   "admission_diagnoses": ["入院/初步诊断原文条目"],
   "symptom_or_sign_only_diagnoses": ["仅为症状、体征或笼统描述的诊断条目"],
   "core_abnormal_evidence": ["现病史/专科查体/辅助检查/既往检查中的核心异常证据"],
   "diagnosis_coverage": "covered|partially_covered|not_covered|uncertain",
   "qc_result": "non_compliant|compliant|uncertain",
+  "conflicts": ["人工问题与原文冲突的子项"],
+  "missing_evidence": ["缺原句、缺源表或缺关键正文的子项"],
   "qc_conclusion": "...",
   "confidence": 0.0
 }}"""
@@ -914,13 +930,17 @@ def resolve_admission_consistency_rule_recommendations(
             "primary_rule_id": fallback_primary,
             "secondary_rule_ids": [],
             "recommended_rule_ids": [fallback_primary],
+            "matched_rule_ids": [fallback_primary],
             "sub_items": [],
+            "overall_status": "uncertain",
             "matched_manual_issue_parts": [],
             "unmatched_manual_issue_parts": [_normalize_issue_text(text)] if _normalize_issue_text(text) else [],
             "overall_result": "uncertain",
             "admission_diagnoses": [],
             "symptom_or_sign_only_diagnoses": [],
             "core_abnormal_evidence": [],
+            "conflicts": [],
+            "missing_evidence": [],
             "diagnosis_coverage": "uncertain",
             "qc_result": "uncertain",
             "qc_conclusion": "未提供 LLM 语义分流结果，需进入 reclassification dry-run。",
