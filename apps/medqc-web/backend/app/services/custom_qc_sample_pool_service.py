@@ -712,6 +712,7 @@ CONSULTATION_FAMILY_RULE_DEFINITIONS: Dict[str, str] = {
     "SC-036": "病程记录对异常结果、会诊意见或处理方案缺分析/缺处理意见",
     "SC-046": "有创诊疗操作记录缺失或书写不规范",
 }
+CONSULTATION_FAMILY_ALLOWED_RESULTS = {"exact_hit", "hit", "partial_hit", "no_hit", "uncertain"}
 
 
 def _unique_rule_ids(rule_ids: Iterable[Any]) -> List[str]:
@@ -1027,8 +1028,10 @@ def normalize_consultation_family_llm_output(
         )
 
     overall_result = _safe_text(payload.get("overall_result"), "uncertain").lower()
-    if overall_result not in ADMISSION_ISSUE_FAMILY_ALLOWED_RESULTS:
+    if overall_result not in CONSULTATION_FAMILY_ALLOWED_RESULTS:
         overall_result = "uncertain"
+    if overall_result == "hit":
+        overall_result = "exact_hit"
     if overall_result == "no_hit":
         for item in sub_items:
             if item.get("status") == "non_compliant":
@@ -1090,12 +1093,13 @@ def build_consultation_family_prompt(
 1. 一条人工问题只执行一次 LLM 调用；如果包含多个锚点，必须在 sub_items 中拆开，不要按子项重复调用。
 2. 只允许输出白名单中的 rule_id；无法判断时选择最接近主规则并将相关 sub_item 标记 uncertain。
 3. primary_rule_id 选择人工问题中最核心或最先需要整改的会诊相关锚点；其他锚点放入 recommended_rule_ids 和 sub_items。
-4. 不要把人工问题文本当作事实。只能依据 bundle 中的原始会诊记录、病程记录、医嘱摘要、有创/手术记录摘要作证据。
+4. 不要把人工问题文本当作事实。只能依据 bundle 中的原始会诊记录、病程记录、查房记录、医嘱摘要、非药物/康复治疗医嘱、执行清单、有创/手术记录摘要作证据。
 5. 不能因为人工问题里出现“复制粘贴严重、无建设性意见、未落实、无操作记录”等评价性表述就直接判 non_compliant；必须引用原文证据或说明缺证据。
-6. 如果人工问题跨多个质控点，例如会诊执行 + 医嘱一致性 + 有创操作记录，overall_result 只能是 partial_hit 或 uncertain，不得把整条人工问题判为 hit。
+6. 如果人工问题跨多个质控点，例如会诊执行 + 医嘱一致性 + 有创操作记录，overall_result 只能是 partial_hit 或 uncertain，不得把整条人工问题判为 exact_hit。
 7. 如果某个子项与原文冲突，应将该 sub_item 标记 compliant，并在 conflicts 中说明。
 8. 如果缺医嘱明细、执行清单、会诊原文或操作记录正文，应将该 sub_item 标记 uncertain，并在 missing_evidence 中说明。
 9. 有创/操作记录证据可能来自手术记录表，也可能来自病程中的原始操作经过；如果 bundle 的 procedure_anchor_snippets 已给出操作时间、名称和经过，不能简单按“缺手术记录表”判无操作记录。
+10. 只有人工问题所有关键锚点均由证据支持，且无 conflicts、无关键 missing_evidence 时，才允许 overall_result=exact_hit；部分成立或部分冲突必须输出 partial_hit。
 
 【人工问题】
 {_safe_text(manual_issue_text)}
@@ -1108,7 +1112,7 @@ def build_consultation_family_prompt(
   "primary_rule_id": "SC-069|SC-070|LX-016|SC-146|SC-036|SC-046",
   "recommended_rule_ids": ["..."],
   "matched_rule_ids": ["同 recommended_rule_ids"],
-  "overall_result": "hit|partial_hit|no_hit|uncertain",
+  "overall_result": "exact_hit|partial_hit|no_hit|uncertain",
   "overall_status": "non_compliant|compliant|uncertain",
   "qc_result": "non_compliant|compliant|uncertain",
   "sub_items": [

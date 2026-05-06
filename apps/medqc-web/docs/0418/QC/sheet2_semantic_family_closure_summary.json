@@ -154,14 +154,14 @@
       "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
       "family_type": "semantic",
       "closure_status": "A_closed",
-      "primary_rule_ids": "LX-016",
+      "primary_rule_ids": "LX-016|SC-070",
       "row_count": 2,
       "exact_hit": 0,
       "same_family_hit": 2,
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "补会诊执行 family 与病程时效 LXE-18 聚合，输出部分命中和未覆盖锚点。 | 已核验完成"
+      "top_next_actions": "补独立医嘱执行表/会诊执行表，并串联病程时间轴后再回归。 | 已核验完成"
     },
     {
       "issue_family": "会诊记录内容质量/复制粘贴/结论不足",
@@ -193,14 +193,14 @@
       "issue_family": "会诊记录质量缺陷",
       "family_type": "semantic",
       "closure_status": "A_closed",
-      "primary_rule_ids": "SC-069",
+      "primary_rule_ids": "SC-146",
       "row_count": 1,
       "exact_hit": 0,
       "same_family_hit": 1,
       "miss": 0,
       "skip": 0,
       "pending": 0,
-      "top_next_actions": "补 SC-069 family 与医嘱明细/执行清单拼接；有创操作记录子项按原文冲突保留 blocked。"
+      "top_next_actions": "补独立医嘱执行表/会诊执行表，并串联病程时间轴后再回归。"
     },
     {
       "issue_family": "入院记录内容不完整/前后矛盾",

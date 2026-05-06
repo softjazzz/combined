@@ -1,0 +1,195 @@
+{
+  "generated_at": "2026-05-06",
+  "mode": "writeback",
+  "scope": "SC-069/SC-070/LX-016/SC-146 会诊 family 医嘱执行证据链定向回放",
+  "row_count": 3,
+  "status_breakdown": {
+    "blocked_with_reason": 3
+  },
+  "phase_outcome_breakdown": {
+    "partial_effective_keep_blocked": 3
+  },
+  "source_table_audit": {
+    "checked_tables": ["inpat_bill_item", "inpat_drug_order", "inpat_nondrug_order"],
+    "order_tables": ["inpat_drug_order", "inpat_nondrug_order"],
+    "execution_table_candidates": [],
+    "execution_source_status": "未发现独立医嘱执行/康复治疗执行表；本轮仅能使用医嘱表和费用明细表作为结构化证据。"
+  },
+  "results": [
+    {
+      "sheet2_row_id": "Sheet2-R0173",
+      "visit_id": "2200664",
+      "patient_name": "朱泰廷",
+      "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
+      "manual_issue_text": "1月30日后7天无病程记录，请心血管、肾内科、呼吸科、麻醉科、皮肤科等科室会诊后，无请会诊执行记录。",
+      "before_primary_rule_id": "LX-016",
+      "target_primary_rule_id": "SC-070",
+      "target_secondary_rule_ids": "SC-036",
+      "target_exact_review_status": "blocked_with_reason",
+      "blocked_reason_type": "规则不支持",
+      "phase_outcome": "partial_effective_keep_blocked",
+      "specific_gap": "已补医嘱明细，但未发现独立会诊执行清单表；人工问题还包含 1月30日后7天无病程记录的时效程序锚点，需会诊执行表与病程时间轴聚合后才能 exact。",
+      "next_action": "补独立医嘱执行表/会诊执行表，并串联病程时间轴后再回归。",
+      "order_summary_count": 186,
+      "rehab_or_nondrug_orders_count": 0,
+      "execution_summary_count": 0,
+      "procedure_summary_exists": true,
+      "drug_order_count": 55,
+      "nondrug_order_count": 131,
+      "bill_item_count": 0,
+      "execution_source_status": "未发现独立医嘱执行/康复治疗执行表；本轮仅能使用医嘱表和费用明细表作为结构化证据。",
+      "checked_source_tables": "inpat_bill_item|inpat_drug_order|inpat_nondrug_order",
+      "llm_error": "",
+      "llm_overall_result": "partial_hit",
+      "llm_overall_status": "non_compliant",
+      "llm_matched_rule_ids": "SC-070|SC-036",
+      "llm_subitem_count": 2,
+      "llm_subitems": [
+        {
+          "rule_id": "SC-070",
+          "status": "non_compliant",
+          "item": "会诊执行记录缺失或仅笼统写遵会诊意见",
+          "evidence": "病程记录中未提及1月30日后7天的会诊执行情况，仅见会诊记录",
+          "reason": "病程记录中未详细记录会诊后的执行情况，仅笼统提及遵会诊意见"
+        },
+        {
+          "rule_id": "SC-036",
+          "status": "non_compliant",
+          "item": "病程记录对异常结果、会诊意见或处理方案缺分析/缺处理意见",
+          "evidence": "病程记录中未对会诊意见进行详细分析或处理意见",
+          "reason": "病程记录中未详细分析会诊意见或提出具体处理方案"
+        }
+      ],
+      "llm_conflicts": [],
+      "llm_missing_evidence": ["缺执行清单"],
+      "llm_qc_conclusion": "会诊执行记录缺失，病程记录中对会诊意见的分析和处理不足",
+      "raw_llm_output": "```json\n{\n  \"primary_rule_id\": \"SC-070\",\n  \"recommended_rule_ids\": [\"SC-036\"],\n  \"matched_rule_ids\": [\"SC-070\", \"SC-036\"],\n  \"overall_result\": \"partial_hit\",\n  \"overall_status\": \"non_compliant\",\n  \"qc_result\": \"non_compliant\",\n  \"sub_items\": [\n    {\n      \"rule_id\": \"SC-070\",\n      \"status\": \"non_compliant\",\n      \"item\": \"会诊执行记录缺失或仅笼统写遵会诊意见\",\n      \"evidence\": \"病程记录中未提及1月30日后7天的会诊执行情况，仅见会诊记录\",\n      \"reason\": \"病程记录中未详细记录会诊后的执行情况，仅笼统提及遵会诊意见\"\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"status\": \"non_compliant\",\n      \"item\": \"病程记录对异常结果、会诊意见或处理方案缺分析/缺处理意见\",\n      \"evidence\": \"病程记录中未对会诊意见进行详细分析或处理意见\",\n      \"reason\": \"病程记录中未详细分析会诊意见或提出具体处理方案\"\n    }\n  ],\n  \"conflicts\": [],\n  \"missing_evidence\": [\"缺执行清单\"],\n  \"qc_conclusion\": \"会诊执行记录缺失，病程记录中对会诊意见的分析和处理不足\",\n  \"confidence\": 0.8\n}\n```"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0206",
+      "visit_id": "2246915",
+      "patient_name": "黄金莲",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "manual_issue_text": "患者行经阴道子宫切除术，术前无尿路感染，术后诊断尿路感染。未请泌尿外科会诊，未分析原因。",
+      "before_primary_rule_id": "SC-036",
+      "target_primary_rule_id": "SC-036",
+      "target_secondary_rule_ids": "SC-146",
+      "target_exact_review_status": "blocked_with_reason",
+      "blocked_reason_type": "规则不支持",
+      "phase_outcome": "partial_effective_keep_blocked",
+      "specific_gap": "术后尿路感染病程分析/未请泌尿外科会诊可部分核验，但仍存在缺证或冲突：缺尿培养结果",
+      "next_action": "补独立医嘱执行表/会诊执行表，并串联病程时间轴后再回归。",
+      "order_summary_count": 211,
+      "rehab_or_nondrug_orders_count": 1,
+      "execution_summary_count": 0,
+      "procedure_summary_exists": true,
+      "drug_order_count": 50,
+      "nondrug_order_count": 161,
+      "bill_item_count": 0,
+      "execution_source_status": "未发现独立医嘱执行/康复治疗执行表；本轮仅能使用医嘱表和费用明细表作为结构化证据。",
+      "checked_source_tables": "inpat_bill_item|inpat_drug_order|inpat_nondrug_order",
+      "llm_error": "",
+      "llm_overall_result": "partial_hit",
+      "llm_overall_status": "non_compliant",
+      "llm_matched_rule_ids": "SC-036|SC-146",
+      "llm_subitem_count": 2,
+      "llm_subitems": [
+        {
+          "rule_id": "SC-036",
+          "status": "non_compliant",
+          "item": "病程记录对异常结果、会诊意见或处理方案缺分析/缺处理意见",
+          "evidence": "病程记录中未提及术后尿路感染的原因分析或处理意见。",
+          "reason": "病程记录中未对术后尿路感染进行原因分析或提出处理意见，不符合要求。"
+        },
+        {
+          "rule_id": "SC-146",
+          "status": "non_compliant",
+          "item": "会诊意见、医嘱与病程记录不一致",
+          "evidence": "泌尿外科会诊建议根据培养结果选择敏感抗生素治疗7-14日，但病程记录中未提及培养结果或抗生素选择依据。",
+          "reason": "会诊意见与病程记录中的治疗措施不一致，缺乏明确的抗生素选择依据。"
+        }
+      ],
+      "llm_conflicts": [],
+      "llm_missing_evidence": ["缺尿培养结果"],
+      "llm_qc_conclusion": "病程记录中未对术后尿路感染进行充分分析，且会诊意见与病程记录中的治疗措施不一致，需进一步完善记录和调整治疗方案。",
+      "raw_llm_output": "```json\n{\n  \"primary_rule_id\": \"SC-036\",\n  \"recommended_rule_ids\": [\"SC-146\"],\n  \"matched_rule_ids\": [\"SC-036\", \"SC-146\"],\n  \"overall_result\": \"partial_hit\",\n  \"overall_status\": \"non_compliant\",\n  \"qc_result\": \"non_compliant\",\n  \"sub_items\": [\n    {\n      \"rule_id\": \"SC-036\",\n      \"status\": \"non_compliant\",\n      \"item\": \"病程记录对异常结果、会诊意见或处理方案缺分析/缺处理意见\",\n      \"evidence\": \"病程记录中未提及术后尿路感染的原因分析或处理意见。\",\n      \"reason\": \"病程记录中未对术后尿路感染进行原因分析或提出处理意见，不符合要求。\"\n    },\n    {\n      \"rule_id\": \"SC-146\",\n      \"status\": \"non_compliant\",\n      \"item\": \"会诊意见、医嘱与病程记录不一致\",\n      \"evidence\": \"泌尿外科会诊建议根据培养结果选择敏感抗生素治疗7-14日，但病程记录中未提及培养结果或抗生素选择依据。\",\n      \"reason\": \"会诊意见与病程记录中的治疗措施不一致，缺乏明确的抗生素选择依据。\"\n    }\n  ],\n  \"conflicts\": [],\n  \"missing_evidence\": [\"缺尿培养结果\"],\n  \"qc_conclusion\": \"病程记录中未对术后尿路感染进行充分分析，且会诊意见与病程记录中的治疗措施不一致，需进一步完善记录和调整治疗方案。\",\n  \"confidence\": 0.8\n}\n```"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0220",
+      "visit_id": "2268187",
+      "patient_name": "代云聪",
+      "issue_family": "会诊记录质量缺陷",
+      "manual_issue_text": "患者BP163/90mmHg，未复测及进一步处理；3月7日请康复科会诊记录里面，明确记录“与患者沟通后，表示拒绝康复治疗”本患者仍然开具超声波、电刺激、光照射、中药溻渍等康复治疗项目；患者进行左侧膝关节清创术，无操作记录。",
+      "before_primary_rule_id": "SC-069",
+      "target_primary_rule_id": "SC-146",
+      "target_secondary_rule_ids": "SC-069|SC-070|LX-016|SC-036|SC-046",
+      "target_exact_review_status": "blocked_with_reason",
+      "blocked_reason_type": "规则不支持",
+      "phase_outcome": "partial_effective_keep_blocked",
+      "specific_gap": "已补到康复/非药品医嘱和清创操作摘要；康复会诊拒绝后仍存在康复治疗医嘱/病程记录的部分锚点成立，但清创无操作记录与原文冲突，且缺独立医嘱执行清单，不能整条 exact。",
+      "next_action": "补独立医嘱执行表/会诊执行表，并串联病程时间轴后再回归。",
+      "order_summary_count": 79,
+      "rehab_or_nondrug_orders_count": 7,
+      "execution_summary_count": 0,
+      "procedure_summary_exists": true,
+      "drug_order_count": 17,
+      "nondrug_order_count": 62,
+      "bill_item_count": 0,
+      "execution_source_status": "未发现独立医嘱执行/康复治疗执行表；本轮仅能使用医嘱表和费用明细表作为结构化证据。",
+      "checked_source_tables": "inpat_bill_item|inpat_drug_order|inpat_nondrug_order",
+      "llm_error": "",
+      "llm_overall_result": "partial_hit",
+      "llm_overall_status": "non_compliant",
+      "llm_matched_rule_ids": "SC-146|SC-069|SC-070|LX-016|SC-036|SC-046",
+      "llm_subitem_count": 6,
+      "llm_subitems": [
+        {
+          "rule_id": "SC-146",
+          "status": "non_compliant",
+          "item": "会诊意见、医嘱与病程记录不一致",
+          "evidence": "康复科会诊记录中明确记录‘与患者沟通后，表示拒绝康复治疗’，但医嘱中仍开具了超声波、电刺激、光照射、中药溻渍等康复治疗项目。",
+          "reason": "会诊记录显示患者拒绝康复治疗，但医嘱中仍开具了相关治疗项目，存在不一致。"
+        },
+        {
+          "rule_id": "SC-069",
+          "status": "non_compliant",
+          "item": "会诊记录内容质量",
+          "evidence": "康复科会诊记录中记录了患者拒绝康复治疗，但未详细记录拒绝的具体原因或进一步的处理建议。",
+          "reason": "会诊记录内容不够充分，未详细记录患者拒绝治疗的原因或进一步的处理建议。"
+        },
+        {
+          "rule_id": "SC-070",
+          "status": "non_compliant",
+          "item": "会诊执行记录缺失或仅笼统写遵会诊意见",
+          "evidence": "会诊记录中未详细记录会诊意见的执行情况，仅笼统写‘已执行’。",
+          "reason": "会诊执行记录不够详细，未明确记录会诊意见的具体执行情况。"
+        },
+        {
+          "rule_id": "LX-016",
+          "status": "non_compliant",
+          "item": "会诊意见已写遵执但实际未落实或执行闭环不足",
+          "evidence": "会诊记录中写‘已执行’，但医嘱中仍开具了患者拒绝的康复治疗项目。",
+          "reason": "会诊意见未完全落实，存在执行闭环不足的问题。"
+        },
+        {
+          "rule_id": "SC-036",
+          "status": "non_compliant",
+          "item": "病程记录对异常结果、会诊意见或处理方案缺分析/缺处理意见",
+          "evidence": "病程记录中未对患者拒绝康复治疗的情况进行分析或提出进一步的处理意见。",
+          "reason": "病程记录中对会诊意见的处理不够充分，缺乏分析和处理意见。"
+        },
+        {
+          "rule_id": "SC-046",
+          "status": "compliant",
+          "item": "有创诊疗操作记录缺失或书写不规范",
+          "evidence": "日常病程记录中详细记录了左膝关节清创术的操作过程。",
+          "reason": "有创操作记录在病程记录中详细描述，与原文无冲突。"
+        }
+      ],
+      "llm_conflicts": [],
+      "llm_missing_evidence": ["缺执行清单"],
+      "llm_qc_conclusion": "会诊记录与医嘱存在不一致，会诊执行记录不充分，病程记录对会诊意见的处理不足，但操作记录完整。",
+      "raw_llm_output": "```json\n{\n  \"primary_rule_id\": \"SC-146\",\n  \"recommended_rule_ids\": [\"SC-069\", \"SC-070\", \"LX-016\", \"SC-036\", \"SC-046\"],\n  \"matched_rule_ids\": [\"SC-146\", \"SC-069\", \"SC-070\", \"LX-016\", \"SC-036\", \"SC-046\"],\n  \"overall_result\": \"partial_hit\",\n  \"overall_status\": \"non_compliant\",\n  \"qc_result\": \"non_compliant\",\n  \"sub_items\": [\n    {\n      \"rule_id\": \"SC-146\",\n      \"status\": \"non_compliant\",\n      \"item\": \"会诊意见、医嘱与病程记录不一致\",\n      \"evidence\": \"康复科会诊记录中明确记录‘与患者沟通后，表示拒绝康复治疗’，但医嘱中仍开具了超声波、电刺激、光照射、中药溻渍等康复治疗项目。\",\n      \"reason\": \"会诊记录显示患者拒绝康复治疗，但医嘱中仍开具了相关治疗项目，存在不一致。\"\n    },\n    {\n      \"rule_id\": \"SC-069\",\n      \"status\": \"non_compliant\",\n      \"item\": \"会诊记录内容质量\",\n      \"evidence\": \"康复科会诊记录中记录了患者拒绝康复治疗，但未详细记录拒绝的具体原因或进一步的处理建议。\",\n      \"reason\": \"会诊记录内容不够充分，未详细记录患者拒绝治疗的原因或进一步的处理建议。\"\n    },\n    {\n      \"rule_id\": \"SC-070\",\n      \"status\": \"non_compliant\",\n      \"item\": \"会诊执行记录缺失或仅笼统写遵会诊意见\",\n      \"evidence\": \"会诊记录中未详细记录会诊意见的执行情况，仅笼统写‘已执行’。\",\n      \"reason\": \"会诊执行记录不够详细，未明确记录会诊意见的具体执行情况。\"\n    },\n    {\n      \"rule_id\": \"LX-016\",\n      \"status\": \"non_compliant\",\n      \"item\": \"会诊意见已写遵执但实际未落实或执行闭环不足\",\n      \"evidence\": \"会诊记录中写‘已执行’，但医嘱中仍开具了患者拒绝的康复治疗项目。\",\n      \"reason\": \"会诊意见未完全落实，存在执行闭环不足的问题。\"\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"status\": \"non_compliant\",\n      \"item\": \"病程记录对异常结果、会诊意见或处理方案缺分析/缺处理意见\",\n      \"evidence\": \"病程记录中未对患者拒绝康复治疗的情况进行分析或提出进一步的处理意见。\",\n      \"reason\": \"病程记录中对会诊意见的处理不够充分，缺乏分析和处理意见。\"\n    },\n    {\n      \"rule_id\": \"SC-046\",\n      \"status\": \"compliant\",\n      \"item\": \"有创诊疗操作记录缺失或书写不规范\",\n      \"evidence\": \"日常病程记录中详细记录了左膝关节清创术的操作过程。\",\n      \"reason\": \"有创操作记录在病程记录中详细描述，与原文无冲突。\"\n    }\n  ],\n  \"conflicts\": [],\n  \"missing_evidence\": [\"缺执行清单\"],\n  \"qc_conclusion\": \"会诊记录与医嘱存在不一致，会诊执行记录不充分，病程记录对会诊意见的处理不足，但操作记录完整。\",\n  \"confidence\": 0.9\n}\n```"
+    }
+  ]
+}

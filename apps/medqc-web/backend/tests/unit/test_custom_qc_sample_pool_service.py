@@ -170,6 +170,33 @@ def test_resolve_consultation_family_recommendations_keeps_partial_not_exact():
     assert result["missing_evidence"] == ["缺康复治疗医嘱明细"]
 
 
+def test_resolve_consultation_family_recommendations_accepts_exact_hit_contract():
+    result = sample_pool_module.resolve_consultation_family_rule_recommendations(
+        "会诊后无执行记录。",
+        llm_output={
+            "primary_rule_id": "SC-070",
+            "recommended_rule_ids": ["SC-070", "LX-016"],
+            "overall_result": "exact_hit",
+            "overall_status": "non_compliant",
+            "qc_result": "non_compliant",
+            "sub_items": [
+                {
+                    "rule_id": "SC-070",
+                    "status": "non_compliant",
+                    "item": "会诊执行记录缺失",
+                    "evidence": "会诊记录存在，后续病程和执行清单均无执行记录。",
+                    "reason": "核心锚点完整覆盖。",
+                }
+            ],
+            "confidence": 0.9,
+        },
+    )
+
+    assert result["primary_rule_id"] == "SC-070"
+    assert result["overall_result"] == "exact_hit"
+    assert result["overall_status"] == "non_compliant"
+
+
 def test_classify_senior_round_content_issue():
     result = classify_manual_issue_text("3月10日副主任医师查房记录内容空洞，无病情分析，无诊疗意见。")
     assert result["coverage_type"] == "llm_intrinsic"
