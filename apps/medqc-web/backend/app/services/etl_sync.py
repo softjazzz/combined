@@ -22,7 +22,7 @@ from psycopg2.extensions import make_dsn
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from ..database.connection import engine
+from ..database.connection import DB_SCHEMA_MODE, engine
 from .bundles.assembly import refresh_scene_bundles_for_rows
 from .visit_index_service import ingest_sync_rows
 from .sync_policy import load_sync_policy
@@ -98,6 +98,7 @@ def _get_local_target_schemas() -> Tuple[str, ...]:
 
 
 _LOCAL_TARGET_SCHEMAS = _get_local_target_schemas()
+_CDM_TARGET_SCHEMA = "cdm"
 
 
 def _pg_required_in_current_env() -> bool:
@@ -1384,6 +1385,12 @@ for _item in SYNC_TABLES:
     _item.setdefault("fallback_date_field", None)
     _item.setdefault("enabled", _name in _CORE_ENABLED_TABLES)
 
+_CDM_SYNC_TABLE_NAMES = {
+    str(item.get("name") or "").strip()
+    for item in SYNC_TABLES
+    if str(item.get("name") or "").strip()
+}
+
 
 def _load_sync_table_overrides() -> Dict[str, Dict[str, Any]]:
     pg_raw = get_config(_TABLE_CONFIG_NAMESPACE, _TABLE_CONFIG_KEY)
@@ -1636,7 +1643,8 @@ def _resolve_local_table_schema(session: Session, table_name: str) -> Optional[s
     candidates = [str(row[0]) for row in rows if str(row[0] or "").strip()]
     if not candidates:
         return None
-    for schema in _LOCAL_TARGET_SCHEMAS:
+    schema_priority = _resolve_local_table_schema_priority(table_name)
+    for schema in schema_priority:
         if schema in candidates:
             if len(candidates) > 1:
                 logger.warning(
@@ -1647,6 +1655,15 @@ def _resolve_local_table_schema(session: Session, table_name: str) -> Optional[s
                 )
             return schema
     return candidates[0]
+
+
+def _resolve_local_table_schema_priority(table_name: str) -> Tuple[str, ...]:
+    normalized_table = str(table_name or "").strip()
+    if DB_SCHEMA_MODE == "split" and normalized_table in _CDM_SYNC_TABLE_NAMES:
+        ordered = [_CDM_TARGET_SCHEMA]
+        ordered.extend(schema for schema in _LOCAL_TARGET_SCHEMAS if schema != _CDM_TARGET_SCHEMA)
+        return tuple(ordered)
+    return _LOCAL_TARGET_SCHEMAS
 
 
 def _get_local_table_columns(session: Session, table_name: str, schema: Optional[str] = None) -> List[str]:

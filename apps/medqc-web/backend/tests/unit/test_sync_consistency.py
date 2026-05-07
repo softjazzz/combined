@@ -6,6 +6,37 @@ from sqlalchemy import create_engine
 from app.services import etl_sync, mongo_sync, sync_run_history
 
 
+def test_split_schema_cdm_sync_tables_prefer_cdm_over_public(monkeypatch):
+    monkeypatch.setattr(etl_sync, "DB_SCHEMA_MODE", "split")
+    monkeypatch.setattr(etl_sync, "_LOCAL_TARGET_SCHEMAS", ("public", "cdm"))
+
+    assert etl_sync._resolve_local_table_schema_priority("labtest_item_report")[0] == "cdm"
+    assert etl_sync._resolve_local_table_schema_priority("blood_application")[0] == "cdm"
+
+
+def test_single_schema_keeps_configured_local_schema_order(monkeypatch):
+    monkeypatch.setattr(etl_sync, "DB_SCHEMA_MODE", "single")
+    monkeypatch.setattr(etl_sync, "_LOCAL_TARGET_SCHEMAS", ("public", "cdm"))
+
+    assert etl_sync._resolve_local_table_schema_priority("labtest_item_report") == ("public", "cdm")
+
+
+def test_resolve_local_table_schema_chooses_cdm_when_duplicate_cdm_table_exists(monkeypatch):
+    class _FakeResult:
+        def fetchall(self):
+            return [("public",), ("cdm",)]
+
+    class _FakeSession:
+        def execute(self, stmt, params=None):
+            return _FakeResult()
+
+    monkeypatch.setattr(etl_sync, "DB_SCHEMA_MODE", "split")
+    monkeypatch.setattr(etl_sync, "_LOCAL_TARGET_SCHEMAS", ("public", "cdm"))
+
+    assert etl_sync._resolve_local_table_schema(_FakeSession(), "labtest_item_report") == "cdm"
+    assert etl_sync._resolve_local_table_schema(_FakeSession(), "blood_application") == "cdm"
+
+
 class _ScalarResult:
     def __init__(self, value):
         self._value = value
