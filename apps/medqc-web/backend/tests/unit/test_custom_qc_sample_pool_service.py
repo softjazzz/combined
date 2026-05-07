@@ -1,4 +1,5 @@
 from app.services import custom_qc_sample_pool_service as sample_pool_module
+from app.database.models.cdm import FirstCourseRecord
 from app.services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
     classify_manual_issue_text,
@@ -103,6 +104,15 @@ def test_sample_full_domain_key_fields_cover_customer_source_tables():
     assert table_map["labtest_item_report"]["key_fields"] == ["patient_id", "visit_id", "test_no", "item_no"]
     assert table_map["exam_item_report"]["key_fields"] == ["patient_id", "visit_id", "exam_no", "item_no"]
     assert table_map["blood_application"]["key_fields"] == ["patient_id", "visit_id", "application_id"]
+
+
+def test_first_course_record_model_contains_structured_content_fields():
+    columns = set(FirstCourseRecord.__table__.columns.keys())
+
+    assert "case_characteristic" in columns
+    assert "diagnose_based_on" in columns
+    assert "differential_diagnosis" in columns
+    assert "treatment_plan" in columns
 
 
 def test_resolve_first_course_reasoning_should_route_sc025():

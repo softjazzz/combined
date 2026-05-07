@@ -280,6 +280,70 @@ def test_upsert_to_local_derives_exam_document_id_from_source_keys(monkeypatch):
     assert executed_params[0]["record_content"] == "双肺炎症"
 
 
+def test_upsert_to_local_keeps_first_course_structured_fields(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "document_id",
+                "case_characteristic",
+                "diagnose_based_on",
+                "differential_diagnosis",
+                "treatment_plan",
+                "record_content",
+            ],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="first_course_record",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "document_id": "F1",
+                "case_characteristic": "病例特点原文",
+                "diagnose_based_on": "诊断依据原文",
+                "differential_diagnosis": "鉴别诊断原文",
+                "treatment_plan": "诊疗计划原文",
+                "source_only_column": "不应落库",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["case_characteristic"] == "病例特点原文"
+    assert executed_params[0]["diagnose_based_on"] == "诊断依据原文"
+    assert executed_params[0]["differential_diagnosis"] == "鉴别诊断原文"
+    assert executed_params[0]["treatment_plan"] == "诊疗计划原文"
+    assert "source_only_column" not in executed_params[0]
+
+
 def test_upsert_to_local_raises_when_records_cannot_match_local_primary_keys(monkeypatch):
     class _FakeSession:
         def __enter__(self):

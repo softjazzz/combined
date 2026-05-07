@@ -3,6 +3,30 @@ import json
 from app.services.document_assembly.assembler import assemble_document, build_document_select_columns
 
 
+def test_first_course_record_should_assemble_structured_content_fields() -> None:
+    document = assemble_document(
+        "first_course_record",
+        {
+            "document_id": "first-course-structured-1",
+            "case_characteristic": "患者老年女性，因反复胸闷入院。",
+            "diagnose_based_on": "结合胸闷症状、心电图ST-T改变，考虑冠心病。",
+            "differential_diagnosis": "需与肺栓塞、主动脉夹层等鉴别。",
+            "treatment_plan": "完善心肌酶、冠脉CTA，给予抗血小板及调脂治疗。",
+        },
+    )
+
+    assert document.assembly_status in {"assembled", "partial"}
+    assert "患者老年女性" in document.assembled_text
+    assert "诊断依据" not in document.assembled_text
+    assert [section.source_field for section in document.sections] == [
+        "case_characteristic",
+        "diagnose_based_on",
+        "differential_diagnosis",
+        "treatment_plan",
+    ]
+    assert "missing_required_field" not in "|".join(document.data_quality_flags)
+
+
 def test_first_course_record_should_fallback_to_v2_record_content_when_structured_fields_empty() -> None:
     document = assemble_document(
         "first_course_record",
