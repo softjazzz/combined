@@ -74,6 +74,25 @@ def _safe_json_loads(value: Any, default: Any) -> Any:
         return default
 
 
+def _is_remote_source_unavailable_error(exc: Exception) -> bool:
+    message = _safe_text(str(exc)).lower()
+    if isinstance(exc, ValueError) and "patient_id/visit_id" in message:
+        return True
+    pgcode = _safe_text(getattr(exc, "pgcode", ""))
+    if pgcode in {"42P01", "42703"}:
+        return True
+    unavailable_patterns = (
+        "undefinedtable",
+        "undefinedcolumn",
+        "relation does not exist",
+        "column does not exist",
+        "缺少 patient_id/visit_id",
+        "表不存在",
+        "字段不存在",
+    )
+    return any(pattern in message for pattern in unavailable_patterns)
+
+
 def _sanitize_json_value(value: Any) -> Any:
     if isinstance(value, float):
         return value if math.isfinite(value) else None
@@ -3630,6 +3649,8 @@ class CustomQCSamplePoolService:
             except Exception as exc:
                 error_message = _safe_text(str(exc))
                 if table_name in anchor_tables:
+                    raise
+                if not _is_remote_source_unavailable_error(exc):
                     raise
                 skipped = {
                     "table_name": table_name,

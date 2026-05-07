@@ -98,14 +98,8 @@ class SamplePoolSyncRequest(BaseModel):
     only_intrinsic: bool = Field(default=True, description="只同步内涵样本")
     include_in_batch_1: bool = Field(default=True, description="只同步首批样本")
     table_groups: list[str] = Field(
-        default_factory=lambda: [
-            "core_8",
-            "document_extended",
-            "diagnosis_extended",
-            "orders_prescriptions",
-            "exam_lab_pathology",
-        ],
-        description="同步表分组",
+        default_factory=list,
+        description="同步表分组；为空时使用样本验证服务默认组 sample_full_domain",
     )
 
 
@@ -130,7 +124,7 @@ def _run_sample_pool_sync_job(job_id: str) -> None:
             pool_id=pool_id,
             only_intrinsic=bool(payload.get("only_intrinsic", True)),
             include_in_batch_1=bool(payload.get("include_in_batch_1", True)),
-            table_groups=payload.get("table_groups") or [],
+            table_groups=payload.get("table_groups") or None,
             progress_callback=emit_progress,
         )
         service.finish_sync_job(job_id=job_id, summary=result)
@@ -369,7 +363,7 @@ async def sync_sample_pool_records(
         job = _service().create_sync_job(
             pool_id=pool_id,
             created_by=_current_user_id(current_user),
-            payload=payload.model_dump(),
+            payload=payload.model_dump(exclude_unset=True),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

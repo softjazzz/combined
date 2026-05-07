@@ -6,6 +6,7 @@ from app.services.custom_qc_sample_pool_service import (
 )
 from app.services.etl_sync import expand_table_groups, list_sync_table_groups
 import pandas as pd
+import pytest
 from types import SimpleNamespace
 
 
@@ -74,7 +75,10 @@ def test_sample_pool_default_sync_uses_full_domain_group():
     assert "first_course_record_diagnosis" in plan["table_names"]
     assert "postsurg_firstcourse_record" in plan["table_names"]
     assert "inpat_bill_item" in plan["table_names"]
+    assert "blood_application" in plan["table_names"]
     assert "crisis_value_record" in plan["table_names"]
+    assert "docpat_commu_record" in plan["table_names"]
+    assert "postane_surveil_record" in plan["table_names"]
 
 
 def test_sample_full_domain_group_is_available_for_source_coverage_audit():
@@ -1206,6 +1210,60 @@ def test_sync_pool_records_skips_optional_source_table_unavailable(monkeypatch):
     assert result["synced_tables"][1]["table_name"] == "docpat_commu_record"
     assert result["synced_tables"][1]["sync_status"] == "source_table_unavailable"
     assert result["skipped_optional_tables"][0]["source_table"] == "docpat_commu_record"
+
+
+def test_sync_pool_records_should_fail_on_optional_table_runtime_error(monkeypatch):
+    service = object.__new__(CustomQCSamplePoolService)
+
+    monkeypatch.setattr(
+        service,
+        "_list_sync_candidate_items",
+        lambda **_: [
+            {"id": "item-1", "mr_no": "ZY001", "patient_name": "张三", "department": "普外科", "qc_date": "2026-04-20"},
+        ],
+    )
+    monkeypatch.setattr(
+        service,
+        "_resolve_remote_visit_keys",
+        lambda **_: {
+            "matched": 1,
+            "ambiguous": 0,
+            "unmatched": 0,
+            "visit_keys": [("P001", "V001")],
+        },
+    )
+    monkeypatch.setattr(
+        sample_pool_module,
+        "list_sync_tables",
+        lambda: [
+            {"name": "mr", "source_table": "mr", "key_fields": ["institute_id", "patient_id", "visit_id"]},
+            {
+                "name": "docpat_commu_record",
+                "source_table": "docpat_commu_record",
+                "key_fields": ["institute_id", "patient_id", "visit_id", "document_id"],
+            },
+        ],
+    )
+    monkeypatch.setattr(sample_pool_module, "get_remote_db_url", lambda: "postgresql://demo")
+    monkeypatch.setattr(sample_pool_module, "load_db_config", lambda: {"remote_schema": "public"})
+
+    def fake_fetch(**kwargs):
+        if kwargs["source_table"] == "docpat_commu_record":
+            raise RuntimeError("permission denied for table docpat_commu_record")
+        return [{"institute_id": "H1", "patient_id": "P001", "visit_id": "V001"}]
+
+    monkeypatch.setattr(sample_pool_module, "fetch_remote_rows_by_visit_keys", fake_fetch)
+    monkeypatch.setattr(sample_pool_module, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
+    monkeypatch.setattr(sample_pool_module, "ingest_sync_rows", lambda **kwargs: None)
+    monkeypatch.setattr(sample_pool_module, "refresh_scene_bundles_for_rows", lambda **kwargs: None)
+
+    with pytest.raises(RuntimeError, match="permission denied"):
+        service.sync_pool_records(
+            pool_id="pool-1",
+            only_intrinsic=True,
+            include_in_batch_1=True,
+            table_groups=["sample_full_domain"],
+        )
 
 
 def test_list_pool_records_groups_multiple_sample_items_into_real_record(monkeypatch):

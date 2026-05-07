@@ -120,8 +120,91 @@ class _WorkspaceServiceStub:
         return {"id": "job-sample-pool-1"}
 
 
+class _SyncServiceStub:
+    def __init__(self) -> None:
+        self.created_payloads = []
+        self.sync_calls = []
+        self.finished_summary = None
+        self.failed_error = ""
+        self.jobs = {
+            "job-1": {
+                "id": "job-1",
+                "pool_id": "pool-1",
+                "payload": {
+                    "only_intrinsic": True,
+                    "include_in_batch_1": True,
+                },
+            }
+        }
+
+    def get_pool(self, *, pool_id: str):
+        if pool_id == "pool-1":
+            return {"id": "pool-1", "name": "样本池"}
+        return None
+
+    def create_sync_job(self, *, pool_id: str, created_by: str, payload: dict):
+        self.created_payloads.append({"pool_id": pool_id, "created_by": created_by, "payload": dict(payload)})
+        return {"id": "job-1", "pool_id": pool_id, "status": "queued", "summary": {}, "payload": dict(payload)}
+
+    def get_sync_job(self, *, job_id: str):
+        return self.jobs.get(job_id)
+
+    def mark_sync_job_running(self, *, job_id: str) -> None:
+        self.jobs[job_id]["status"] = "running"
+
+    def update_sync_job_progress(self, *, job_id: str, progress: dict) -> None:
+        self.jobs[job_id]["progress"] = dict(progress)
+
+    def sync_pool_records(self, **kwargs):
+        self.sync_calls.append(kwargs)
+        return {"sync_group_ids": ["sample_full_domain"], "total_rows_pulled": 1, "total_rows_upserted": 1}
+
+    def finish_sync_job(self, *, job_id: str, summary: dict) -> None:
+        self.finished_summary = dict(summary)
+
+    def fail_sync_job(self, *, job_id: str, error_message: str) -> None:
+        self.failed_error = error_message
+
+
 def _build_request():
     return SimpleNamespace(state=SimpleNamespace(trace_id="trace-test"))
+
+
+@pytest.mark.asyncio
+async def test_sync_sample_pool_records_should_not_persist_default_table_groups(monkeypatch):
+    sample_service = _SyncServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    response = await qc_sample_pools.sync_sample_pool_records(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolSyncRequest(),
+        background_tasks=BackgroundTasks(),
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert sample_service.created_payloads[0]["payload"] == {}
+
+
+def test_run_sample_pool_sync_job_should_use_service_default_when_table_groups_missing(monkeypatch):
+    sample_service = _SyncServiceStub()
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    qc_sample_pools._run_sample_pool_sync_job("job-1")
+
+    assert sample_service.sync_calls[0]["table_groups"] is None
+    assert sample_service.finished_summary["sync_group_ids"] == ["sample_full_domain"]
+
+
+def test_run_sample_pool_sync_job_should_preserve_explicit_table_groups(monkeypatch):
+    sample_service = _SyncServiceStub()
+    sample_service.jobs["job-1"]["payload"]["table_groups"] = ["core_8"]
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+
+    qc_sample_pools._run_sample_pool_sync_job("job-1")
+
+    assert sample_service.sync_calls[0]["table_groups"] == ["core_8"]
 
 
 class _ListResult:

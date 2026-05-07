@@ -280,13 +280,17 @@ def _build_persistent_bundle_probe(
         table: {
             "scene_bundles": {},
             "domain_bundles": {},
-            "bundle_hit_visit_count": 0,
-            "bundle_assembled_visit_count": 0,
+            "bundle_surface_hit_count": 0,
+            "bundle_surface_assembled_count": 0,
+            "distinct_bundle_hit_visit_count": 0,
+            "distinct_bundle_assembled_visit_count": 0,
             "stale_bundle_count": 0,
         }
         for table in table_names
     }
     table_set = set(table_names)
+    distinct_hit_visits_by_table: dict[str, set[str]] = {table: set() for table in table_names}
+    distinct_assembled_visits_by_table: dict[str, set[str]] = {table: set() for table in table_names}
 
     for scene, priority in _SCENE_DOC_PRIORITY.items():
         target_tables = [table for table in priority if table in table_set]
@@ -319,8 +323,10 @@ def _build_persistent_bundle_probe(
                 "assembled_visit_count": len(assembled_visits),
                 "stale_bundle_count": stale_count,
             }
-            probe[table]["bundle_hit_visit_count"] += len(hit_visits)
-            probe[table]["bundle_assembled_visit_count"] += len(assembled_visits)
+            probe[table]["bundle_surface_hit_count"] += len(hit_visits)
+            probe[table]["bundle_surface_assembled_count"] += len(assembled_visits)
+            distinct_hit_visits_by_table[table].update(hit_visits)
+            distinct_assembled_visits_by_table[table].update(assembled_visits)
             probe[table]["stale_bundle_count"] += stale_count
 
     for domain, priority in _DOMAIN_DOC_PRIORITY.items():
@@ -354,14 +360,22 @@ def _build_persistent_bundle_probe(
                 "assembled_visit_count": len(assembled_visits),
                 "stale_bundle_count": stale_count,
             }
-            probe[table]["bundle_hit_visit_count"] += len(hit_visits)
-            probe[table]["bundle_assembled_visit_count"] += len(assembled_visits)
+            probe[table]["bundle_surface_hit_count"] += len(hit_visits)
+            probe[table]["bundle_surface_assembled_count"] += len(assembled_visits)
+            distinct_hit_visits_by_table[table].update(hit_visits)
+            distinct_assembled_visits_by_table[table].update(assembled_visits)
             probe[table]["stale_bundle_count"] += stale_count
 
     for table, item in probe.items():
+        item["distinct_bundle_hit_visit_count"] = len(distinct_hit_visits_by_table[table])
+        item["distinct_bundle_assembled_visit_count"] = len(distinct_assembled_visits_by_table[table])
+        item["bundle_hit_visit_count"] = item["distinct_bundle_hit_visit_count"]
+        item["bundle_assembled_visit_count"] = item["distinct_bundle_assembled_visit_count"]
         item["bundle_status"] = "not_in_bundle_priority"
         if item["scene_bundles"] or item["domain_bundles"]:
-            item["bundle_status"] = "covered" if item["bundle_hit_visit_count"] > 0 else "bundle_missing_or_empty"
+            item["bundle_status"] = (
+                "covered" if item["distinct_bundle_hit_visit_count"] > 0 else "bundle_missing_or_empty"
+            )
     return probe
 
 
@@ -515,6 +529,10 @@ def write_reports(report: dict[str, Any], *, output_json: Path, output_csv: Path
         "bundle_status",
         "bundle_hit_visit_count",
         "bundle_assembled_visit_count",
+        "bundle_surface_hit_count",
+        "bundle_surface_assembled_count",
+        "distinct_bundle_hit_visit_count",
+        "distinct_bundle_assembled_visit_count",
         "stale_bundle_count",
     ]
     with output_csv.open("w", encoding="utf-8", newline="") as handle:
@@ -528,6 +546,10 @@ def write_reports(report: dict[str, Any], *, output_json: Path, output_csv: Path
                     "bundle_status": bundle.get("bundle_status", ""),
                     "bundle_hit_visit_count": bundle.get("bundle_hit_visit_count", ""),
                     "bundle_assembled_visit_count": bundle.get("bundle_assembled_visit_count", ""),
+                    "bundle_surface_hit_count": bundle.get("bundle_surface_hit_count", ""),
+                    "bundle_surface_assembled_count": bundle.get("bundle_surface_assembled_count", ""),
+                    "distinct_bundle_hit_visit_count": bundle.get("distinct_bundle_hit_visit_count", ""),
+                    "distinct_bundle_assembled_visit_count": bundle.get("distinct_bundle_assembled_visit_count", ""),
                     "stale_bundle_count": bundle.get("stale_bundle_count", ""),
                 }
             )
