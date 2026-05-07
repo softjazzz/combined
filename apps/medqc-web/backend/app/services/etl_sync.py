@@ -56,6 +56,28 @@ _TABLE_COLUMN_ALIASES: Dict[str, Dict[str, Tuple[str, ...]]] = {
         "surgery_begin_datetime": ("surgery_begin_time",),
         "surgery_end_datetime": ("surgery_end_time",),
     },
+    "labtest_item_report": {
+        "document_id": ("document_id", "sys_index_id", "print_order_id"),
+        "submit_datetime": ("submit_datetime", "report_time", "report_datetime", "result_datetime"),
+        "record_content": ("record_content", "content", "summary_text"),
+    },
+    "exam_item_report": {
+        "document_id": ("document_id", "sys_index_id"),
+        "submit_datetime": ("submit_datetime", "report_time", "report_datetime", "exam_datetime"),
+        "record_content": (
+            "record_content",
+            "exam_result",
+            "exam_impression",
+            "exam_conclusion",
+            "exam_findings",
+            "findings",
+            "impression",
+            "conclusion",
+            "description",
+            "summary_text",
+            "content",
+        ),
+    },
 }
 
 
@@ -424,7 +446,85 @@ def _apply_sync_column_aliases(
                 continue
             normalized[target_col] = alias_value
             break
+    _apply_sync_derived_fields(
+        table_name=table_name,
+        normalized=normalized,
+        existing_columns=existing_columns,
+    )
     return normalized
+
+
+def _first_non_empty(record: Dict[str, Any], field_names: Tuple[str, ...]) -> str:
+    for field_name in field_names:
+        value = record.get(field_name)
+        if value in (None, ""):
+            continue
+        text_value = str(value).strip()
+        if text_value:
+            return text_value
+    return ""
+
+
+def _apply_sync_derived_fields(
+    *,
+    table_name: str,
+    normalized: Dict[str, Any],
+    existing_columns: set[str],
+) -> None:
+    normalized_table = str(table_name or "").strip().lower()
+    if "document_id" in existing_columns and not _first_non_empty(normalized, ("document_id",)):
+        if normalized_table == "labtest_item_report":
+            test_no = _first_non_empty(normalized, ("test_no", "test_id"))
+            item_no = _first_non_empty(normalized, ("item_no", "item_id", "item_code", "item_name"))
+            if test_no or item_no:
+                normalized["document_id"] = f"lab:{test_no or '-'}:{item_no or '-'}"
+        elif normalized_table == "exam_item_report":
+            exam_no = _first_non_empty(normalized, ("exam_no", "exam_id"))
+            item_no = _first_non_empty(normalized, ("item_no", "item_id", "item_code", "exam_item_name", "item_name"))
+            if exam_no or item_no:
+                normalized["document_id"] = f"exam:{exam_no or '-'}:{item_no or '-'}"
+
+    if normalized_table == "labtest_item_report" and "record_content" in existing_columns:
+        if not _first_non_empty(normalized, ("record_content",)):
+            item_name = _first_non_empty(normalized, ("item_name", "item_abbreviation", "item_code"))
+            result = _first_non_empty(normalized, ("result", "result_value"))
+            unit = _first_non_empty(normalized, ("unit", "result_unit"))
+            abnormal = _first_non_empty(normalized, ("abnormal_indicator", "abnormal_flag"))
+            reference = _first_non_empty(normalized, ("reference_range",))
+            if not reference:
+                ref_min = _first_non_empty(normalized, ("referencevalue_min", "reference_min"))
+                ref_max = _first_non_empty(normalized, ("referencevalue_max", "reference_max"))
+                reference = "-".join([item for item in (ref_min, ref_max) if item])
+            fragments = []
+            if item_name or result:
+                fragments.append(f"{item_name or '检验项目'}：{result or '未填写'}{(' ' + unit) if unit else ''}")
+            if reference:
+                fragments.append(f"参考范围：{reference}")
+            if abnormal:
+                fragments.append(f"异常标记：{abnormal}")
+            if fragments:
+                normalized["record_content"] = "；".join(fragments)
+
+    if normalized_table == "exam_item_report" and "record_content" in existing_columns:
+        if not _first_non_empty(normalized, ("record_content",)):
+            exam_text = _first_non_empty(
+                normalized,
+                (
+                    "exam_result",
+                    "exam_impression",
+                    "exam_conclusion",
+                    "exam_findings",
+                    "findings",
+                    "impression",
+                    "conclusion",
+                    "diagnosis",
+                    "description",
+                    "summary_text",
+                    "content",
+                ),
+            )
+            if exam_text:
+                normalized["record_content"] = exam_text
 
 
 def _route_tables_by_scene(
@@ -2101,6 +2201,9 @@ def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str
         existing_columns = set(local_columns)
 
         inserted = 0
+        skipped_empty_rows = 0
+        skipped_missing_pk_rows = 0
+        missing_pk_names: set[str] = set()
         for record in records:
             normalized_record = _apply_sync_column_aliases(
                 table_name=table_name,
@@ -2114,8 +2217,12 @@ def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str
                     filtered[col_name] = v
 
             if not filtered:
+                skipped_empty_rows += 1
                 continue
-            if not all(pk in filtered for pk in effective_primary_keys):
+            row_missing_pks = [pk for pk in effective_primary_keys if pk not in filtered or filtered.get(pk) in (None, "")]
+            if row_missing_pks:
+                skipped_missing_pk_rows += 1
+                missing_pk_names.update(row_missing_pks)
                 continue
 
             columns = list(filtered.keys())
@@ -2141,6 +2248,24 @@ def upsert_to_local(table_name: str, records: List[Dict], primary_keys: List[str
             inserted += 1
 
         session.commit()
+        if inserted == 0 and records:
+            if skipped_missing_pk_rows:
+                missing_keys = ", ".join(sorted(missing_pk_names))
+                raise ValueError(
+                    f"表 {table_name} 源库返回 {len(records)} 行，但全部因缺少本地主键字段而未落库: {missing_keys}"
+                )
+            if skipped_empty_rows:
+                raise ValueError(
+                    f"表 {table_name} 源库返回 {len(records)} 行，但没有任何字段匹配本地 CDM 表结构"
+                )
+        if skipped_missing_pk_rows:
+            logger.warning(
+                "表 %s 有 %s/%s 行因缺少本地主键字段被跳过: %s",
+                table_name,
+                skipped_missing_pk_rows,
+                len(records),
+                sorted(missing_pk_names),
+            )
         return inserted
 
 

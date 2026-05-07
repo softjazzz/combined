@@ -593,6 +593,20 @@ class LabtestItemReport(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     document_id = Column(String(100), primary_key=True, comment="文档编号/报告单号")
     visit_type = Column(String(100), comment="就诊类型")
     record_content = Column(Text, comment="非结构化全文")
+    test_no = Column(String(100), comment="检验申请号")
+    test_id = Column(String(100), comment="检验申请ID")
+    item_no = Column(String(100), comment="检验项目序号")
+    item_id = Column(String(100), comment="检验项目ID")
+    item_code = Column(String(100), comment="检验项目编码")
+    item_name = Column(String(200), comment="检验项目名称")
+    item_abbreviation = Column(String(100), comment="检验项目简称")
+    result = Column(String(500), comment="检验结果")
+    unit = Column(String(100), comment="单位")
+    abnormal_indicator = Column(String(100), comment="异常标志")
+    reference_range = Column(String(200), comment="参考范围")
+    referencevalue_min = Column(String(100), comment="参考下限")
+    referencevalue_max = Column(String(100), comment="参考上限")
+    report_time = Column(DateTime, comment="报告时间")
 
 
 class ExamItemReport(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
@@ -605,6 +619,26 @@ class ExamItemReport(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     document_id = Column(String(100), primary_key=True, comment="文档编号/报告单号")
     visit_type = Column(String(100), comment="就诊类型")
     record_content = Column(Text, comment="非结构化全文")
+    exam_no = Column(String(100), comment="检查申请号")
+    exam_id = Column(String(100), comment="检查ID")
+    item_no = Column(String(100), comment="检查项目序号")
+    item_id = Column(String(100), comment="检查项目ID")
+    item_code = Column(String(100), comment="检查项目编码")
+    item_name = Column(String(200), comment="检查项目名称")
+    exam_name = Column(String(200), comment="检查名称")
+    exam_item_name = Column(String(200), comment="检查项目名称")
+    exam_type = Column(String(100), comment="检查类别")
+    exam_result = Column(Text, comment="检查结果")
+    exam_impression = Column(Text, comment="检查印象")
+    exam_conclusion = Column(Text, comment="检查结论")
+    exam_findings = Column(Text, comment="检查所见")
+    findings = Column(Text, comment="所见")
+    impression = Column(Text, comment="印象")
+    conclusion = Column(Text, comment="结论")
+    diagnosis = Column(Text, comment="诊断")
+    description = Column(Text, comment="描述")
+    summary_text = Column(Text, comment="摘要")
+    report_time = Column(DateTime, comment="报告时间")
 
 
 # ==================== 12. 第三批接口 - 质控规则涉及的缺失文书类型 ====================
@@ -1493,4 +1527,3 @@ class AiFrontpageDraft(Base):
         Index("ix_ai_draft_visit", "visit_id", unique=True),
         Index("ix_ai_draft_patient", "patient_id"),
     )
-

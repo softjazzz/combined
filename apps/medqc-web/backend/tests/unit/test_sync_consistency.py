@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import create_engine
 
 from app.services import etl_sync, mongo_sync, sync_run_history
@@ -157,6 +158,166 @@ def test_upsert_to_local_uses_real_local_primary_keys(monkeypatch):
     assert count == 1
     assert len(executed_sql) == 1
     assert "ON CONFLICT (institute_id, patient_id, visit_id)" in executed_sql[0]
+
+
+def test_upsert_to_local_derives_labtest_document_id_from_source_keys(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "document_id",
+                "test_no",
+                "item_no",
+                "item_name",
+                "result",
+                "unit",
+                "record_content",
+            ],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="labtest_item_report",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "test_no": "T100",
+                "item_no": "I2",
+                "item_name": "白细胞计数",
+                "result": "12.5",
+                "unit": "10^9/L",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "test_no", "item_no"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["document_id"] == "lab:T100:I2"
+    assert executed_params[0]["record_content"] == "白细胞计数：12.5 10^9/L"
+
+
+def test_upsert_to_local_derives_exam_document_id_from_source_keys(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "document_id",
+                "exam_no",
+                "item_no",
+                "exam_name",
+                "exam_conclusion",
+                "record_content",
+            ],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="exam_item_report",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "exam_no": "E100",
+                "item_no": "1",
+                "exam_name": "胸部CT",
+                "exam_conclusion": "双肺炎症",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "exam_no", "item_no"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["document_id"] == "exam:E100:1"
+    assert executed_params[0]["record_content"] == "双肺炎症"
+
+
+def test_upsert_to_local_raises_when_records_cannot_match_local_primary_keys(monkeypatch):
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            raise AssertionError("missing primary key rows must not be inserted")
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            ["institute_id", "patient_id", "visit_id", "document_id", "record_content"],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    with pytest.raises(ValueError, match="缺少本地主键字段"):
+        etl_sync.upsert_to_local(
+            table_name="daily_course_record",
+            records=[
+                {
+                    "institute_id": "A",
+                    "patient_id": "P1",
+                    "visit_id": "V1",
+                    "record_content": "有正文但缺 document_id",
+                }
+            ],
+            primary_keys=["patient_id", "visit_id", "document_id"],
+        )
 
 
 def test_sync_run_history_persists_and_caps_records(monkeypatch):

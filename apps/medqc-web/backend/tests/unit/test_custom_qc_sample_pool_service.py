@@ -4,7 +4,7 @@ from app.services.custom_qc_sample_pool_service import (
     classify_manual_issue_text,
     load_manual_case_rows_from_excel,
 )
-from app.services.etl_sync import expand_table_groups, list_sync_table_groups
+from app.services.etl_sync import expand_table_groups, list_sync_table_groups, list_sync_tables
 import pandas as pd
 import pytest
 from types import SimpleNamespace
@@ -75,6 +75,8 @@ def test_sample_pool_default_sync_uses_full_domain_group():
     assert "first_course_record_diagnosis" in plan["table_names"]
     assert "postsurg_firstcourse_record" in plan["table_names"]
     assert "inpat_bill_item" in plan["table_names"]
+    assert "labtest_item_report" in plan["table_names"]
+    assert "exam_item_report" in plan["table_names"]
     assert "blood_application" in plan["table_names"]
     assert "crisis_value_record" in plan["table_names"]
     assert "docpat_commu_record" in plan["table_names"]
@@ -89,7 +91,18 @@ def test_sample_full_domain_group_is_available_for_source_coverage_audit():
     assert missing == []
     assert "admission_record" in table_names
     assert "consultation_record" in table_names
+    assert "exam_item_report" in table_names
+    assert "labtest_item_report" in table_names
+    assert "blood_application" in table_names
     assert "pathology_exam_report" in table_names
+
+
+def test_sample_full_domain_key_fields_cover_customer_source_tables():
+    table_map = {item["name"]: item for item in list_sync_tables()}
+
+    assert table_map["labtest_item_report"]["key_fields"] == ["patient_id", "visit_id", "test_no", "item_no"]
+    assert table_map["exam_item_report"]["key_fields"] == ["patient_id", "visit_id", "exam_no", "item_no"]
+    assert table_map["blood_application"]["key_fields"] == ["patient_id", "visit_id", "application_id"]
 
 
 def test_resolve_first_course_reasoning_should_route_sc025():
