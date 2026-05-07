@@ -344,6 +344,68 @@ def test_upsert_to_local_keeps_first_course_structured_fields(monkeypatch):
     assert "source_only_column" not in executed_params[0]
 
 
+def test_upsert_to_local_keeps_transfer_record_structured_fields(monkeypatch):
+    executed_params: list[dict] = []
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def execute(self, stmt, params=None):
+            executed_params.append(dict(params or {}))
+            return None
+
+        def commit(self):
+            return None
+
+    monkeypatch.setattr(etl_sync, "Session", lambda _engine: _FakeSession())
+    monkeypatch.setattr(
+        etl_sync,
+        "_get_local_table_meta",
+        lambda _session, _table_name: (
+            "cdm",
+            [
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "document_id",
+                "transfer_purpose",
+                "treatment_course",
+                "transfer_treatment_plan",
+                "current_situation",
+                "record_content",
+            ],
+            ["institute_id", "patient_id", "visit_id", "document_id"],
+        ),
+    )
+
+    count = etl_sync.upsert_to_local(
+        table_name="transfer_in_record",
+        records=[
+            {
+                "institute_id": "A",
+                "patient_id": "P1",
+                "visit_id": "V1",
+                "document_id": "T1",
+                "transfer_purpose": "转科目的原文",
+                "treatment_course": "诊疗经过原文",
+                "transfer_treatment_plan": "转入诊疗计划原文",
+                "current_situation": "目前情况原文",
+            }
+        ],
+        primary_keys=["patient_id", "visit_id", "document_id"],
+    )
+
+    assert count == 1
+    assert executed_params[0]["transfer_purpose"] == "转科目的原文"
+    assert executed_params[0]["treatment_course"] == "诊疗经过原文"
+    assert executed_params[0]["transfer_treatment_plan"] == "转入诊疗计划原文"
+    assert executed_params[0]["current_situation"] == "目前情况原文"
+
+
 def test_upsert_to_local_raises_when_records_cannot_match_local_primary_keys(monkeypatch):
     class _FakeSession:
         def __enter__(self):

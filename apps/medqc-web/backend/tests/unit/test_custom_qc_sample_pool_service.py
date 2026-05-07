@@ -1,5 +1,5 @@
 from app.services import custom_qc_sample_pool_service as sample_pool_module
-from app.database.models.cdm import FirstCourseRecord
+from app.database.models.cdm import FirstCourseRecord, TransferInRecord, TransferOutRecord
 from app.services.custom_qc_sample_pool_service import (
     CustomQCSamplePoolService,
     classify_manual_issue_text,
@@ -113,6 +113,19 @@ def test_first_course_record_model_contains_structured_content_fields():
     assert "diagnose_based_on" in columns
     assert "differential_diagnosis" in columns
     assert "treatment_plan" in columns
+
+
+def test_transfer_record_models_contain_structured_content_fields():
+    transfer_in_columns = set(TransferInRecord.__table__.columns.keys())
+    transfer_out_columns = set(TransferOutRecord.__table__.columns.keys())
+
+    assert "transfer_purpose" in transfer_in_columns
+    assert "treatment_course" in transfer_in_columns
+    assert "transfer_treatment_plan" in transfer_in_columns
+    assert "current_situation" in transfer_in_columns
+    assert "transfer_purpose" in transfer_out_columns
+    assert "treatment_course" in transfer_out_columns
+    assert "current_situation" in transfer_out_columns
 
 
 def test_resolve_first_course_reasoning_should_route_sc025():

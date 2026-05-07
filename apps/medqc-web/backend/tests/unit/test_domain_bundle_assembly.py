@@ -34,6 +34,48 @@ def test_course_domain_bundle_should_assemble_first_course_structured_fields(mon
     assert "diagnose_based_on" in context["assembly_coverage"]["first_course_record"]["used_source_fields"]
 
 
+def test_course_domain_bundle_should_assemble_transfer_structured_fields(monkeypatch):
+    def _fake_select_records(**kwargs):
+        if kwargs["table"] == "transfer_in_record":
+            return [
+                {
+                    "document_id": "transfer-in-1",
+                    "transfer_purpose": "转入心内科进一步诊治。",
+                    "treatment_course": "已予抗感染治疗。",
+                    "transfer_treatment_plan": "完善心电图并调整治疗。",
+                }
+            ]
+        if kwargs["table"] == "transfer_out_record":
+            return [
+                {
+                    "document_id": "transfer-out-1",
+                    "transfer_purpose": "转出至骨科继续处理。",
+                    "treatment_course": "已完成清创换药。",
+                    "current_situation": "生命体征平稳。",
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_select_records", _fake_select_records)
+    monkeypatch.setattr(assembly_module, "_build_document_inventory", lambda docs, schema: [])
+    monkeypatch.setattr(assembly_module, "_build_timeline_facts_from_docs", lambda docs: [])
+
+    bundle = assembly_module.assemble_domain_bundle(
+        execution_domain="course",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        source_schema="cdm",
+    )
+
+    context = bundle["structured_context"]
+    assert context["assembly_coverage"]["transfer_in_record"]["assembled_count"] == 1
+    assert context["assembly_coverage"]["transfer_out_record"]["assembled_count"] == 1
+    assert "transfer_treatment_plan" in context["assembly_coverage"]["transfer_in_record"]["used_source_fields"]
+    assert "current_situation" in context["assembly_coverage"]["transfer_out_record"]["used_source_fields"]
+
+
 def test_assemble_domain_bundle_should_keep_more_than_three_course_documents(monkeypatch):
     course_rows = [
         {

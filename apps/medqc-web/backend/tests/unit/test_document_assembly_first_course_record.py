@@ -76,3 +76,39 @@ def test_first_course_record_diagnosis_should_assemble_like_record_diagnosis() -
     assert document.assembly_status in {"assembled", "partial"}
     assert "诊断名称: 右侧输尿管结石" in document.assembled_text
     assert document.document_title.startswith("首次病程诊断")
+
+
+def test_transfer_in_record_should_assemble_structured_content_fields() -> None:
+    document = assemble_document(
+        "transfer_in_record",
+        {
+            "document_id": "transfer-in-1",
+            "transfer_purpose": "因病情复杂转入心内科进一步诊治。",
+            "treatment_course": "外科已予抗感染、补液治疗。",
+            "transfer_treatment_plan": "转入后完善心电图、心肌酶检查并调整治疗。",
+            "current_situation": "患者仍诉胸闷。",
+        },
+    )
+
+    assert document.assembled_text
+    assert "因病情复杂转入心内科" in document.assembled_text
+    assert "转入后完善心电图" in document.assembled_text
+    assert "transfer_treatment_plan" in [section.source_field for section in document.sections]
+
+
+def test_transfer_out_record_should_assemble_structured_content_fields() -> None:
+    document = assemble_document(
+        "transfer_out_record",
+        {
+            "document_id": "transfer-out-1",
+            "transfer_purpose": "需转入骨科继续处理左膝伤口。",
+            "treatment_course": "本科已完成清创换药及抗感染治疗。",
+            "current_situation": "伤口渗出减少，生命体征平稳。",
+            "note": "转科后继续观察伤口及感染指标。",
+        },
+    )
+
+    assert document.assembled_text
+    assert "需转入骨科继续处理左膝伤口" in document.assembled_text
+    assert "伤口渗出减少" in document.assembled_text
+    assert "current_situation" in [section.source_field for section in document.sections]
