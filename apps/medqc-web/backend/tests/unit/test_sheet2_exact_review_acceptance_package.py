@@ -112,3 +112,29 @@ def test_sheet2_fixable_12_rule_replay_report_should_close_fixable_backlog():
     }
     assert payload["still_fixable_rows"] == []
     assert [row["sheet2_row_id"] for row in payload["blocked_to_exact_rows"]] == ["Sheet2-R0242"]
+
+
+def test_sheet2_blocked_customer_gap_list_should_cover_all_blocked_rows():
+    report_path = (
+        Path(__file__).resolve().parents[3]
+        / "docs"
+        / "0418"
+        / "QC"
+        / "sheet2_blocked_customer_gap_list.json"
+    )
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert payload["total"] == 102
+    assert payload["group_breakdown"] == {
+        "需补源文书": 36,
+        "人工问题过宽/不可判": 57,
+        "需客户确认口径": 9,
+    }
+    for group in payload["groups"]:
+        for row in group["rows"]:
+            assert row["sample_id"]
+            assert row["visit_id"]
+            assert row["rule_and_issue"]
+            assert row["current_conclusion"].startswith("blocked_with_reason")
+            assert row["gap_reason"]
+            assert row["customer_request"]
