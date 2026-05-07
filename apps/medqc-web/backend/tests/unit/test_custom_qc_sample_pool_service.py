@@ -998,6 +998,53 @@ def test_load_manual_case_rows_from_excel_keeps_mr_no_only_rows(monkeypatch):
     assert rows[0]["visit_id"] == ""
 
 
+def test_load_manual_case_rows_from_excel_supports_mr_no_only_template(monkeypatch):
+    dataframe = pd.DataFrame(
+        [
+            ["住院号"],
+            ["2248248"],
+            ["161241"],
+        ]
+    )
+    calls = []
+
+    def fake_read_excel(*args, **kwargs):
+        calls.append(kwargs)
+        return dataframe
+
+    monkeypatch.setattr(pd, "read_excel", fake_read_excel)
+
+    rows = load_manual_case_rows_from_excel(file_path="demo.xlsx", sheet_name="")
+
+    assert [row["mr_no"] for row in rows] == ["2248248", "161241"]
+    assert all(row["visit_id"] == "" for row in rows)
+    assert calls[0]["sheet_name"] == 0
+
+
+def test_load_manual_case_rows_from_excel_falls_back_to_first_sheet_when_sheet2_missing(monkeypatch):
+    dataframe = pd.DataFrame(
+        [
+            ["住院号"],
+            ["2248248"],
+        ]
+    )
+    calls = []
+
+    def fake_read_excel(*args, **kwargs):
+        calls.append(kwargs)
+        if kwargs.get("sheet_name") == "Sheet2":
+            raise ValueError("Worksheet named 'Sheet2' not found")
+        return dataframe
+
+    monkeypatch.setattr(pd, "read_excel", fake_read_excel)
+
+    rows = load_manual_case_rows_from_excel(file_path="demo.xlsx", sheet_name="Sheet2")
+
+    assert len(rows) == 1
+    assert rows[0]["mr_no"] == "2248248"
+    assert [call["sheet_name"] for call in calls] == ["Sheet2", 0]
+
+
 def test_resolve_sync_table_names_defaults_cover_core_groups():
     result = CustomQCSamplePoolService.resolve_sync_table_names()
     assert result["group_ids"] == ["sample_full_domain"]

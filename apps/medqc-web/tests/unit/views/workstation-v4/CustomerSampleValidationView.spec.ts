@@ -717,11 +717,7 @@ describe('CustomerSampleValidationView', () => {
     expect(writeFile).toHaveBeenCalled()
     const args = writeFile.mock.calls[0]
     expect(args[1]).toBe('客户样本导入模板.xlsx')
-    expect(aoaToSheet).toHaveBeenCalledWith([
-      ['住院号', 'visit_id', '存在问题'],
-      ['2248248', '', ''],
-      ['', 'VISIT-001', '首次病程记录鉴别诊断不全面'],
-    ])
+    expect(aoaToSheet).toHaveBeenCalledWith([['住院号'], ['2248248'], ['161241']])
   })
 
   it('导入模板成功后应切换到新样本池并刷新病历池', async () => {
@@ -808,7 +804,6 @@ describe('CustomerSampleValidationView', () => {
 
     expect(importManualSamplePoolByUpload).toHaveBeenCalledWith({
       pool_name: '第二轮样本池',
-      source_sheet: 'Sheet2',
       description: '',
       scene: 'running',
       file: expect.objectContaining({

@@ -191,7 +191,7 @@ async def import_manual_sheet(
 async def import_manual_sheet_upload(
     request: Request,
     pool_name: str = Form(..., description="样本池名称"),
-    source_sheet: str = Form(default="Sheet2", description="Sheet 名称"),
+    source_sheet: str = Form(default="", description="Sheet 名称；为空时自动读取第一个工作表"),
     description: Optional[str] = Form(default=None, description="备注"),
     scene: str = Form(default="running", description="目标场景"),
     file: UploadFile = File(..., description="Excel 模板文件"),
@@ -219,7 +219,7 @@ async def import_manual_sheet_upload(
     pool = _service().create_pool_with_items(
         name=str(pool_name).strip(),
         source_file=str(saved_path),
-        source_sheet=str(source_sheet).strip() or "Sheet2",
+        source_sheet=str(source_sheet).strip() or "自动识别",
         created_by=_current_user_id(current_user),
         rows=rows,
         description=(description or "").strip() or None,

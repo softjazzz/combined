@@ -2023,7 +2023,13 @@ def _apply_sample_sc_rule_whitelist(items: Sequence[Dict[str, Any]]) -> List[Dic
 def load_manual_case_rows_from_excel(*, file_path: str, sheet_name: str = "Sheet2") -> List[Dict[str, Any]]:
     import pandas as pd
 
-    df = pd.read_excel(file_path, sheet_name=sheet_name, header=None)
+    requested_sheet = _safe_text(sheet_name)
+    try:
+        df = pd.read_excel(file_path, sheet_name=requested_sheet or 0, header=None)
+    except ValueError:
+        if requested_sheet and requested_sheet != "Sheet2":
+            raise
+        df = pd.read_excel(file_path, sheet_name=0, header=None)
     if df.empty or len(df.index) < 1:
         return []
     known_headers = {"科室", "患者姓名", "住院号", "visit_id", "存在问题", "责任医生", "质控日期", "质控人员"}

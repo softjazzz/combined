@@ -63,7 +63,9 @@ export async function importManualSamplePoolByUpload(payload: {
 }) {
   const formData = new FormData()
   formData.append('pool_name', payload.pool_name)
-  formData.append('source_sheet', payload.source_sheet || 'Sheet2')
+  if (payload.source_sheet) {
+    formData.append('source_sheet', payload.source_sheet)
+  }
   formData.append('description', payload.description || '')
   formData.append('scene', payload.scene || 'running')
   formData.append('file', payload.file)

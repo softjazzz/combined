@@ -535,27 +535,6 @@
             :maxlength="60"
           />
         </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          <div>
-            <div class="mb-2 text-[13px] font-medium text-slate-700">
-              Sheet 名称
-            </div>
-            <a-input
-              v-model:value="importForm.sourceSheet"
-              placeholder="默认 Sheet2"
-              :maxlength="40"
-            />
-          </div>
-          <div>
-            <div class="mb-2 text-[13px] font-medium text-slate-700">
-              目标场景
-            </div>
-            <a-select
-              v-model:value="importForm.scene"
-              :options="sceneOptions"
-            />
-          </div>
-        </div>
         <div>
           <div class="mb-2 text-[13px] font-medium text-slate-700">
             备注
@@ -594,10 +573,10 @@
               点击或拖拽上传 Excel 模板
             </p>
             <p class="ant-upload-hint">
-              支持 .xls / .xlsx，默认读取 Sheet2。
+              支持 .xls / .xlsx，默认读取第一个工作表。
             </p>
             <p class="mt-2 text-[12px] text-slate-400">
-              核心列：住院号 或 visit_id；存在问题为可选。其余字段可不填。
+              模板只需填写住院号，一行一个。
             </p>
           </a-upload-dragger>
         </div>
@@ -831,9 +810,7 @@ const filters = ref({
 })
 const importForm = ref({
   poolName: '',
-  sourceSheet: 'Sheet2',
   description: '',
-  scene: 'running',
 })
 const runOptions = ref({
   maxParallelRecords: 4,
@@ -846,11 +823,6 @@ const poolOptions = computed(() =>
     value: item.id,
   })),
 )
-
-const sceneOptions = [
-  { label: '运行病历', value: 'running' },
-  { label: '终末病历', value: 'final' },
-]
 
 const coverageOptions = [
   { label: '内涵验证', value: 'llm_intrinsic' },
@@ -1603,9 +1575,7 @@ function resetImportForm() {
   importModalOpen.value = false
   importForm.value = {
     poolName: '',
-    sourceSheet: 'Sheet2',
     description: '',
-    scene: 'running',
   }
   importFileList.value = []
 }
@@ -1638,9 +1608,8 @@ async function handleImportPool() {
   importingPool.value = true
   const result = await importManualSamplePoolByUpload({
     pool_name: poolName,
-    source_sheet: importForm.value.sourceSheet.trim() || 'Sheet2',
     description: importForm.value.description.trim(),
-    scene: importForm.value.scene,
+    scene: 'running',
     file,
   })
   importingPool.value = false
@@ -1657,13 +1626,9 @@ async function handleImportPool() {
 async function handleDownloadTemplate() {
   const XLSX = await import('xlsx')
   const workbook = XLSX.utils.book_new()
-  const worksheet = XLSX.utils.aoa_to_sheet([
-    ['住院号', 'visit_id', '存在问题'],
-    ['2248248', '', ''],
-    ['', 'VISIT-001', '首次病程记录鉴别诊断不全面'],
-  ])
-  worksheet['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 48 }]
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet2')
+  const worksheet = XLSX.utils.aoa_to_sheet([['住院号'], ['2248248'], ['161241']])
+  worksheet['!cols'] = [{ wch: 18 }]
+  XLSX.utils.book_append_sheet(workbook, worksheet, '住院号')
   XLSX.writeFile(workbook, '客户样本导入模板.xlsx')
 }
 
