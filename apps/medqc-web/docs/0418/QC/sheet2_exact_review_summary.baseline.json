@@ -1,8 +1,8 @@
 {
   "total_rows": 283,
   "status_breakdown": {
-    "exact_confirmed": 155,
-    "blocked_with_reason": 103,
+    "exact_confirmed": 156,
+    "blocked_with_reason": 102,
     "skip": 25
   },
   "needs_exact_review_rows": [],
@@ -218,10 +218,10 @@
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
       "primary_rule_id": "SC-020",
       "manual_issue_text": "入院记录诊断不全，患者无房颤，但入院记录心率和脉搏不等，首次病程记录中鉴别诊断不全面。",
-      "reason": "本轮已补齐并验证所需 CDM/bundle 证据域，缺口不再是源文书缺失；但尚未取得与人工问题核心锚点等价的规则/LLM 命中，保持 blocked_with_reason，进入定向规则重放。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "证据缺口回归-evidence_chain_recovered",
-      "decision_source": "sheet2_evidence_gap_backlog_recheck_report"
+      "reason": "当前可复原入院诊断未见房颤诊断，查体心率/脉搏记录一致；首次病程正文在本机链路仍为空，不能证明人工所称房颤/首程鉴别诊断缺陷成立。 证据摘录：心率: 腺无肿大，无血管杂音。胸部检查：:胸廓对称，肋间隙正常，双肺呼吸运动对称，触觉语颤对称，双肺叩诊清音，呼吸音增粗，未闻干细湿罗音及哮鸣音，无胸膜摩擦音。无心前区隆起，心浊音界正常，心率77次/分，心音清晰，节律整齐，各瓣膜听诊区未闻及明显病理性杂音。腹部检查：:外形平坦，腹式呼吸存在；无蠕动波；无腹壁静脉显露。腹壁柔软，无液波感，全腹无压痛，无反跳痛，无腹部包块；脉搏: 喘证，未闻及口臭，无鼻臭、汗臭、身臭等。 切诊：按肌肤不凹陷，无枯燥、甲错，肤温正常；腰椎棘突旁轻度压痛，无症瘕积聚；手足无异常冷热，虚里搏动应手。脉濡细。 体温36.4℃ 脉搏77次/分 呼吸20次/分 血压128/77mmHg，体重55kg 身高155cm。一般状况检查：:神志清楚，精神良好，发育正常，营养好，表情自如，无特殊面容，自主体位，步入；初步诊断: 、口腔黏膜溃疡； 是否主诊断: 是 诊断时间: 2026-01-04 16:11:02+08 [bundle:admission_record_diagnosis] 入院记录诊断-初步诊断-2 诊断类型: 初步诊断 诊断名称: 中医诊断：心悸 气虚血瘀 西医诊断：1、冠状动脉粥样硬化性心脏病 2、急性上呼吸道感染 3、高血压病3级",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "可补规则12条重放-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0067",
@@ -290,10 +290,10 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-023",
       "manual_issue_text": "入院查体无专科情况描述，患者入院时BP151/121mmHg，首次病程中未做分析、未提出诊疗计划。",
-      "reason": "本轮已补齐并验证所需 CDM/bundle 证据域，缺口不再是源文书缺失；但尚未取得与人工问题核心锚点等价的规则/LLM 命中，保持 blocked_with_reason，进入定向规则重放。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "证据缺口回归-evidence_chain_recovered",
-      "decision_source": "sheet2_evidence_gap_backlog_recheck_report"
+      "reason": "本机样本验证链路未复原首次病程正文，且当前可见文书未出现 BP151/121mmHg 锚点；不能核准首程缺分析/缺计划。 证据摘录：首次病程: :24:46+08 [bundle:admission_record_diagnosis] 入院记录诊断-入院诊断-1 [bundle:first_course_record] 首次病程记录 [bundle:daily_course_record] 日常病程记录 查房内容：:今日查房，患者神清、精神尚可，诉右肘关节疼痛疼痛较前明显缓解，右上臂疼痛较前缓解，右上臂",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "可补规则12条重放-move_back_to_evidence_gap",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0075",
@@ -314,10 +314,10 @@
       "issue_family": "输血时间/量/前后记录不一致",
       "primary_rule_id": "SC-074",
       "manual_issue_text": "输血后评价记录时间记录错误，记录时间早于输血时间",
-      "reason": "本轮已补齐并验证所需 CDM/bundle 证据域，缺口不再是源文书缺失；但尚未取得与人工问题核心锚点等价的规则/LLM 命中，保持 blocked_with_reason，进入定向规则重放。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "证据缺口回归-evidence_chain_recovered",
-      "decision_source": "sheet2_evidence_gap_backlog_recheck_report"
+      "reason": "release 输血记录显示末次输注 2025-10-29 01:02 完毕，医师签名日期 2025-10-29 04:49，未支持“评价时间早于输血时间”。 证据摘录：2025年10月29日 04:49: 无寒战、皮疹、发热、恶心等不适症状，无输血不良反应；上级医师：彭中 医师签名：孙艳行 日期： 2025年10月29日 04:49 康蕊 0825 2025-11-08 08:19:31 输血记录 Save 康蕊 0825 IP0000146812 胡启凤 女 [release:consultation_re；22:10开始输入: ，86岁。输血目的:补充凝血因子，第1次输血；由护士淦晓林和叶金核对无误后，采用紧急输血，输入0231125018249 B型Rh(D)阳性 冷沉淀2u，于2025年10月28日 22:10开始输入，于2025年10月28日 22:13输注完毕，输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应； 由护士淦晓林和叶金核对无误后，采用紧急输血，输入0231；01:02输注完毕: 秀和刘婷婷核对无误后，采用紧急输血，输入0231125010597 B型Rh(D)阳性 冰冻血浆150ml，于2025年10月29日 00:57开始输入，于2025年10月29日 01:02输注完毕，输血过程顺利，患者无寒战、皮疹、发热、恶心等不适症状，无输血不良反应；上级医师：彭中 医师签名：孙艳行",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "可补规则12条重放-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0078",
@@ -374,10 +374,10 @@
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
       "primary_rule_id": "SC-105",
       "manual_issue_text": "患者入院时主诉为“进食鸡肉后咽痛、吞咽梗阻感4天”，术后首次病程记录描述为“可见一长约2cm鸭骨嵌顿”，病程前后描述存在错误，建议描述为“可见一长约2cm异物嵌顿”",
-      "reason": "本轮已补齐并验证所需 CDM/bundle 证据域，缺口不再是源文书缺失；但尚未取得与人工问题核心锚点等价的规则/LLM 命中，保持 blocked_with_reason，进入定向规则重放。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "证据缺口回归-evidence_chain_recovered",
-      "decision_source": "sheet2_evidence_gap_backlog_recheck_report"
+      "reason": "release 手术/术后首程可见“鸡骨嵌顿”，入院记录为“进食鸡肉”；人工问题写“鸭骨”与当前原文不一致，只能确认同类前后描述差异，不能整条 exact。 证据摘录：进食鸡肉: [bundle:admission_record] 入院记录 进食鸡肉后咽痛、吞咽梗阻感4天。 患者于4天前，进食鸡肉后起病，出现咽喉部疼痛感，自觉咽喉部吞咽梗阻感，无咳血、咳嗽、咳痰，无呼吸困难不适。未予以重视，自行按摩颈部、吞咽食团，自觉症状无明；鸡骨嵌顿: 阻塞性肺病急性加重期?3、左肺下叶结节,性质?4、房颤伴快速心室率。 ;手术简要经过(术中所见):术中全麻效果良,术中见距离门齿19cm处可见脓性分泌物,予以吸出,可见一长约2cm鸡骨嵌顿,检查四周,粘膜损伤,少许渗血,食管壁可见气泡漏出,将异物取出,吸尽后,继续推进至22cm,其余未见异物,考虑食管异物伴食管穿孔,手术顺利,术后安置胃管一根;术后处理措施:术后抗炎",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "可补规则12条重放-partial_anchor_conflict_keep_blocked",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0096",
@@ -398,10 +398,10 @@
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
       "primary_rule_id": "SC-023",
       "manual_issue_text": "首次病程记录中鉴别诊断仅和霍乱鉴别，不全面；患者无传染病史，建议行两对半定性检查。",
-      "reason": "本轮已补齐并验证所需 CDM/bundle 证据域，缺口不再是源文书缺失；但尚未取得与人工问题核心锚点等价的规则/LLM 命中，保持 blocked_with_reason，进入定向规则重放。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "证据缺口回归-evidence_chain_recovered",
-      "decision_source": "sheet2_evidence_gap_backlog_recheck_report"
+      "reason": "可复原查房记录已写细菌性痢疾鉴别，且已记录乙肝两对半阴性；人工称“仅和霍乱鉴别/建议两对半”与原文不匹配。 证据摘录：霍乱: 在可疑压痛，无反跳痛、肌紧张，肝脾肋下未扪及，胆囊未及，Murphy征（-），无肝区叩击痛，移动性浊音（-）。肠鸣音正常，4次/分。辅助检查：2025-11-08 O1和O139群霍乱弧菌快速检测(免费): 大便轮状病毒抗原:RGB 阴性,O1群霍乱弧菌快速检测 阴性,O139群霍乱弧菌快速检测 阴性,大便轮状病毒抗原。目前诊断：1、感染性腹泻；2、急性胃黏膜病；细菌性痢疾: 异常。目前诊断：1、感染性腹泻；2、急性胃黏膜病变。诊断依据：1.患者有腹痛、腹泻症状，查体：脐周压痛，大便常规可见白细胞，故诊断。2.患者有腹痛症状，上腹压痛，故诊断。鉴别诊断：细菌性痢疾：表现为腹痛、腹泻，为粘液脓血便、里急后重等，完善大便培养排除。患者目前腹泻次数减少，进食后感上腹疼痛，有便意，可自行缓解，症状缓解，继续现护胃、止泻等治疗，观察病情变化。；乙肝两对半: 05 大便常规+隐血+寄生虫镜检:CLB 稀便,WBC ++/HP,LQ 0-1/HP,隐血 阳性；HIV抗体阴性；2025-11-07 C反应蛋白测定:CRP 15.2mg/L；乙肝两对半、丙肝抗体检测阴性；2025-11-08 大便轮状病毒抗原、O1和O139群霍乱弧菌快速检测阴性；血脂、肝功、血凝、肾功、电解质未见异常。目前诊断：1、感染性腹泻；2、急性胃黏膜病",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "可补规则12条重放-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0101",
@@ -446,10 +446,10 @@
       "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
       "primary_rule_id": "LX-018",
       "manual_issue_text": "2025.11.18田安琴主治医师查房记录无内容；11月17日及11月18日，无输血前评估、无输血记录、无输血后评估。",
-      "reason": "人工问题同时包含主治医师查房内容空洞和输血前评估/输血记录/输血后评估链路缺失，需上级查房内容质量规则与输血闭环规则聚合；本轮未将跨家族复合问题包装为 exact。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "可补规则5条与SC069-still_blocked_with_specific_gap",
-      "decision_source": "sheet2_fixable_5_and_sc069_family_prompt_report"
+      "reason": "当前可见田安琴主治医师查房记录有正文，release 也有 11月17日、11月18日输血记录；人工称查房无内容且无输血记录链，不能整条成立。 证据摘录：田安琴主治医师: course_record] 首次病程记录 [bundle:daily_course_record] 日常病程记录 [bundle:senior_course_record] 田安琴主治医师查房记录 :今日田安琴主治医师查看患者并总结病史：一、病史：患者中老年男性，起病缓，病程长。患者于1年前西南医科大学附属医院就诊，完善相关检查后确诊前列腺癌伴骨转移，后行内分泌治疗；2025年11月17日 15:10: 无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。上级医师：李永中 医师签名：何雪 日期： 2025年11月17日 15:10 何雪 0969 2025-11-20 08:29:46 输血记录 Save 何雪 0969 IP0000148916 付学云 男 [release:bloodtrans_reco；2025年11月18日 17:25: 无寒战、皮疹、发热、恶心等不适症状，无输血不良反应。上级医师：李永中 医师签名：何雪 日期： 2025年11月18日 17:25 何雪 0969 2025-11-20 08:29:46 输血记录 Save 何雪 0969 IP0000148916 付学云 男 [release:discharge_recor",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "可补规则12条重放-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0109",
@@ -482,10 +482,10 @@
       "issue_family": "主治首次查房48小时；病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-033",
       "manual_issue_text": "入院48小时内，无主治医师查房记录；首次病程鉴别诊断中：血精的常见病因精囊结石及精囊结核，未做分析鉴别。",
-      "reason": "本轮已补齐并验证所需 CDM/bundle 证据域，缺口不再是源文书缺失；但尚未取得与人工问题核心锚点等价的规则/LLM 命中，保持 blocked_with_reason，进入定向规则重放。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "证据缺口回归-evidence_chain_recovered",
-      "decision_source": "sheet2_evidence_gap_backlog_recheck_report"
+      "reason": "当前可见徐应福主治医师查房记录；首次病程正文未复原，且未见人工所称精囊结石/精囊结核原句，不能证明“48小时无主治查房+首程鉴别不全”整条成立。 证据摘录：徐应福主治医师: course_record] 首次病程记录 [bundle:daily_course_record] 日常病程记录 [bundle:senior_course_record] 徐应福主治医师查房记录 :今日徐应福主治医师查看病人后总结病史特点如下：1、患者中年男性，起病时间缓，以血精1年为主。2、既往史：既往无特殊病史，否认冶游史。3、入院时查体：双侧肾区及上腹部无隆；血精: [bundle:admission_record] 入院记录 血精1年 患者于1年，无诱因起病，出现血精不适，为鲜红色精液，伴有射精时疼痛及尿道分泌物，无腰痛、腹痛，无畏寒、发热，无尿频、尿急、尿痛及肉眼血尿不适。于我院门诊及西南医科大学附属医院",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "可补规则12条重放-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0118",
@@ -566,10 +566,10 @@
       "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
       "primary_rule_id": "SC-023",
       "manual_issue_text": "首次病程诊疗计划前后矛盾“予以云南白药胶囊+酚磺乙胺止血”、“饮食指导：多饮水，多食新鲜蔬菜、水果及抗血小板聚集的食物。”",
-      "reason": "本轮已补齐并验证所需 CDM/bundle 证据域，缺口不再是源文书缺失；但尚未取得与人工问题核心锚点等价的规则/LLM 命中，保持 blocked_with_reason，进入定向规则重放。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "证据缺口回归-evidence_chain_recovered",
-      "decision_source": "sheet2_evidence_gap_backlog_recheck_report"
+      "reason": "本机样本验证链路未复原首次病程正文，未命中云南白药/酚磺乙胺/多饮水/抗血小板等人工核心原句。 证据摘录：云南白药: 阳性(+),ABO O型,2025-12-07 乙肝两对半(定量):HBsAb >1000.00mIU/ml,HBcAb 5.74IU/ml,HBsAg 0.02IU/ml。予以云南白药胶囊+酚磺乙胺止血、环磷腺苷葡胺改善心肌泵血减轻心脏负荷、静推呋塞米利尿、自备马昔腾坦片降肺动脉压,今日症状好转,上级医师查房后安排出院。 1、注意休息、避免受凉,低盐低脂饮食,增；酚磺乙胺: ABO O型,2025-12-07 乙肝两对半(定量):HBsAb >1000.00mIU/ml,HBcAb 5.74IU/ml,HBsAg 0.02IU/ml。予以云南白药胶囊+酚磺乙胺止血、环磷腺苷葡胺改善心肌泵血减轻心脏负荷、静推呋塞米利尿、自备马昔腾坦片降肺动脉压,今日症状好转,上级医师查房后安排出院。 1、注意休息、避免受凉,低盐低脂饮食,增强体质; 2、",
+      "blocked_reason_type": "证据链不足",
+      "review_subgroup": "可补规则12条重放-move_back_to_evidence_gap",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0135",
@@ -746,10 +746,10 @@
       "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
       "primary_rule_id": "LX-020",
       "manual_issue_text": "患者2月4日手术，无术前主刀医师查房记录，无术后首次病程记录及手术记录。",
-      "reason": "人工问题混合术前主刀医师查房、术后首次病程和手术记录缺失，需围手术期多文书时效/存在性聚合；单条 LX-020 不能精确复现整条人工问题。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "可补规则5条与SC069-still_blocked_with_specific_gap",
-      "decision_source": "sheet2_fixable_5_and_sc069_family_prompt_report"
+      "reason": "release 可见 2026-02-04 手术记录和术后首次病程记录，人工称无术后首次病程及手术记录与当前原文冲突；术前主刀查房仍需单独时效核查。 证据摘录：手术时间:2026年02月04日 12:45: 07 08:00:00 [release:postsurg_firstcourse_record] 泸县人民医院 0000065414 2199396 4343203||8 住院 手术时间:2026年02月04日 12:45;麻醉方式:腰麻联合硬脊膜外腔阻滞麻醉;手术方式:膀胱镜检查+尿道狭窄扩张术+经皮耻骨上膀胱造口导尿管插入术;术中诊断:1.尿道狭窄,2.尿潴留,3.前列腺增生,4.泌尿道感染,5；膀胱镜检查: 显变化,建议随诊复查。冠状动脉壁钙化。胸椎退行性改变。 入院后给予患者完善辅助检查,对症导尿失败,患者尿常规提示感染,给予患者阿莫西林克拉维酸钾抗感染治疗,待患者泌尿道感染好转后行膀胱镜检查+超声引导下耻骨上膀胱穿刺造瘘术,术中使用筋膜扩张器扩张尿道后留置尿管,现患者一般情况良好,术后无发热,于今日出院。 1.院外注意休息,多饮水,建议每日饮水2000ml; 2.1月；手术记录: 医生签名: [bundle:consultation_record] 会诊记录 医生签名: [bundle:surgery_record] 手术记录 记录时间: 科室: 病房: 记录者: 手术医生签名: 术前小结: 手术项目: 手术编码: 手术等级: 手术医师: 手术I助: 手术II助: 麻醉医师:",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "可补规则12条重放-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0173",
@@ -924,12 +924,12 @@
       "visit_id": "2268187",
       "patient_name": "代云聪",
       "issue_family": "会诊记录质量缺陷",
-      "primary_rule_id": "SC-146",
+      "primary_rule_id": "SC-069",
       "manual_issue_text": "患者BP163/90mmHg，未复测及进一步处理；3月7日请康复科会诊记录里面，明确记录“与患者沟通后，表示拒绝康复治疗”本患者仍然开具超声波、电刺激、光照射、中药溻渍等康复治疗项目；患者进行左侧膝关节清创术，无操作记录。",
-      "reason": "已补到康复/非药品医嘱和清创操作摘要；康复会诊拒绝后仍存在康复治疗医嘱/病程记录的部分锚点成立，但清创无操作记录与原文冲突，且缺独立医嘱执行清单，不能整条 exact。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "SC069医嘱执行证据链-partial_effective_keep_blocked",
-      "decision_source": "sheet2_sc069_order_execution_evidence_replay_report"
+      "reason": "会诊拒绝康复后仍有康复治疗锚点可部分成立，但清创术无操作记录与当前清创/手术摘要冲突，且 BP163 未复测处理属于另一病程/生命体征质控点，不能按可补单规则 exact。 证据摘录：拒绝康复治疗: 性,磨髌试验阳性;左踝关节淤青肿胀,触压痛,运动功能障碍。结合病史,目前我科建议:给予电刺激治疗、耳穴、中药贴敷、超声波、中药塌渍等康复治疗以舒经通络、消肿止痛。与患者沟通后,表示拒绝康复治疗。余同贵科!谢邀!我科愿随访。已执行。 医生签名:；超声波: 形成,周围皮肤红肿,皮温稍高,压痛,膝关节屈伸活动受限,浮髌试验阳性,磨髌试验阳性;左踝关节淤青肿胀,触压痛,运动功能障碍。结合病史,目前我科建议:给予电刺激治疗、耳穴、中药贴敷、超声波、中药塌渍等康复治疗以舒经通络、消肿止痛。与患者沟通后,表示拒绝康复治疗。余同贵科!谢邀!我科愿随访。已执行。；电刺激: 关节前方见皮肤挫伤,黑色血痂形成,周围皮肤红肿,皮温稍高,压痛,膝关节屈伸活动受限,浮髌试验阳性,磨髌试验阳性;左踝关节淤青肿胀,触压痛,运动功能障碍。结合病史,目前我科建议:给予电刺激治疗、耳穴、中药贴敷、超声波、中药塌渍等康复治疗以舒经通络、消肿止痛。与患者沟通后,表示拒绝康复治疗。余同贵科!谢邀!我科愿随访。已执行。",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "可补规则12条重放-partial_effective_keep_blocked",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0221",
@@ -1028,18 +1028,6 @@
       "decision_source": "sheet2_overbroad_blocked_reaudit_report"
     },
     {
-      "sheet2_row_id": "Sheet2-R0242",
-      "visit_id": "2281076",
-      "patient_name": "蒋光琼",
-      "issue_family": "病程记录缺分析/缺处理意见",
-      "primary_rule_id": "SC-036",
-      "manual_issue_text": "病程记录对检验结果未分析",
-      "reason": "本轮已补齐并验证所需 CDM/bundle 证据域，缺口不再是源文书缺失；但尚未取得与人工问题核心锚点等价的规则/LLM 命中，保持 blocked_with_reason，进入定向规则重放。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "证据缺口回归-evidence_chain_recovered",
-      "decision_source": "sheet2_evidence_gap_backlog_recheck_report"
-    },
-    {
       "sheet2_row_id": "Sheet2-R0243",
       "visit_id": "2273134",
       "patient_name": "李宗良",
@@ -1130,10 +1118,10 @@
       "issue_family": "病程记录缺分析/缺处理意见",
       "primary_rule_id": "SC-036",
       "manual_issue_text": "尿常规阳性结果无诊断分析及处理。",
-      "reason": "本轮已补齐并验证所需 CDM/bundle 证据域，缺口不再是源文书缺失；但尚未取得与人工问题核心锚点等价的规则/LLM 命中，保持 blocked_with_reason，进入定向规则重放。",
-      "blocked_reason_type": "规则不支持",
-      "review_subgroup": "证据缺口回归-evidence_chain_recovered",
-      "decision_source": "sheet2_evidence_gap_backlog_recheck_report"
+      "reason": "当前首程/查房已分析尿常规白细胞：患者无尿路感染症状，考虑膀胱结石所致尿液异常，并有抗感染等处理；人工称未分析及处理与原文冲突。 证据摘录：尿常规提示存在白细胞: 阻。病人常有中枢或周围神经系统损害的病史和体征，如有下肢感觉和运动障碍，会阴皮肤感觉及肛门括约肌张力减退或消失。8.诊疗计划：患者既往存在排尿困难症状，考虑前列腺增生所致，入院前查尿常规提示存在白细胞，但患者无尿频、尿急、尿痛、畏寒、发热等尿路感染症状，考虑膀胱结石所致尿液异常，结合患者前列腺增生合并膀胱结石，手术指征明确，完善术前检查，拟明日行手术治疗；患者睡眠障碍，加用右佐；无尿频: 统损害的病史和体征，如有下肢感觉和运动障碍，会阴皮肤感觉及肛门括约肌张力减退或消失。8.诊疗计划：患者既往存在排尿困难症状，考虑前列腺增生所致，入院前查尿常规提示存在白细胞，但患者无尿频、尿急、尿痛、畏寒、发热等尿路感染症状，考虑膀胱结石所致尿液异常，结合患者前列腺增生合并膀胱结石，手术指征明确，完善术前检查，拟明日行手术治疗；患者睡眠障碍，加用右佐匹克隆改善睡眠；考虑膀胱结石: 阴皮肤感觉及肛门括约肌张力减退或消失。8.诊疗计划：患者既往存在排尿困难症状，考虑前列腺增生所致，入院前查尿常规提示存在白细胞，但患者无尿频、尿急、尿痛、畏寒、发热等尿路感染症状，考虑膀胱结石所致尿液异常，结合患者前列腺增生合并膀胱结石，手术指征明确，完善术前检查，拟明日行手术治疗；患者睡眠障碍，加用右佐匹克隆改善睡眠；继续予以监测及控制血压，完善心肌标志物检查，患者拟",
+      "blocked_reason_type": "人工问题原文不可判",
+      "review_subgroup": "可补规则12条重放-source_text_conflict_keep_blocked",
+      "decision_source": "sheet2_fixable_12_rule_replay_report"
     },
     {
       "sheet2_row_id": "Sheet2-R0266",
@@ -1409,8 +1397,8 @@
       "exact_confirmed": 1
     },
     "病程记录缺分析/缺处理意见": {
-      "blocked_with_reason": 23,
-      "exact_confirmed": 7
+      "blocked_with_reason": 22,
+      "exact_confirmed": 8
     },
     "诊疗医嘱与病程记录不一致": {
       "blocked_with_reason": 3,

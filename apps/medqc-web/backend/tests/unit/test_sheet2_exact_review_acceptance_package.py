@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 
@@ -21,13 +22,13 @@ def test_sheet2_exact_review_acceptance_package_should_bucket_blocked_rows():
     }
 
     assert payload["status_breakdown"]["needs_exact_review"] == 0
-    assert payload["status_breakdown"]["exact_confirmed"] == 155
-    assert payload["status_breakdown"]["blocked_with_reason"] == 103
+    assert payload["status_breakdown"]["exact_confirmed"] == 156
+    assert payload["status_breakdown"]["blocked_with_reason"] == 102
     assert payload["status_breakdown"]["skip"] == 25
     assert buckets == {
-        "可补规则": 12,
-        "需补源文书": 34,
-        "人工问题过宽/不可判": 48,
+        "可补规则": 0,
+        "需补源文书": 36,
+        "人工问题过宽/不可判": 57,
         "需客户确认口径": 9,
     }
 
@@ -83,3 +84,31 @@ def test_sheet2_evidence_gap_recheck_should_not_promote_bundle_coverage_to_exact
     assert result["coverage_status"] == "evidence_chain_recovered"
     assert result["target_exact_review_status"] == "blocked_with_reason"
     assert result["target_backlog_category"] == "可补规则"
+
+
+def test_sheet2_fixable_12_rule_replay_report_should_close_fixable_backlog():
+    report_path = (
+        Path(__file__).resolve().parents[3]
+        / "docs"
+        / "0418"
+        / "QC"
+        / "sheet2_fixable_12_rule_replay_report.json"
+    )
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert payload["total"] == 12
+    assert payload["source_bucket_breakdown"] == {
+        "新迁入可补规则": 9,
+        "原可补规则": 3,
+    }
+    assert payload["target_status_breakdown"] == {
+        "blocked_with_reason": 11,
+        "exact_confirmed": 1,
+    }
+    assert payload["target_backlog_breakdown"] == {
+        "人工问题过宽/不可判": 9,
+        "需补源文书": 2,
+        "not_blocked": 1,
+    }
+    assert payload["still_fixable_rows"] == []
+    assert [row["sheet2_row_id"] for row in payload["blocked_to_exact_rows"]] == ["Sheet2-R0242"]
