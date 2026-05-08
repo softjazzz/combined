@@ -731,6 +731,7 @@ async def run_final_fast_screen(
                 for item in pack_results
                 if str(item.get("rule_id") or "").strip()
             }
+            normalized_pack_results: list[dict[str, Any]] = []
             for rule in pack_rules:
                 rule_id = str(rule.get("rule_id") or "").strip().upper()
                 item = pack_result_map.get(rule_id)
@@ -749,6 +750,8 @@ async def run_final_fast_screen(
                 if isinstance(metadata, dict):
                     metadata["target_document_type"] = pack.document_type
                     metadata["rule_family"] = str(metadata.get("rule_family") or pack.rule_family)
+                normalized_pack_results.append(item)
+            pack_results = normalized_pack_results
             status_counts: dict[str, int] = {}
             for item in pack_results:
                 status = str(item.get("status") or "unknown")

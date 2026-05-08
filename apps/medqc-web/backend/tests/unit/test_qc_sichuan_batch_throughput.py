@@ -720,6 +720,7 @@ async def test_workspace_batch_final_fast_screen_should_use_fast_screen_path(mon
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
     assert len(fast_screen_calls) == 2
+    assert all("pack_concurrency" not in call for call in fast_screen_calls)
     assert service.evaluate_calls == 0
     assert workspace.summary is not None
     assert workspace.summary.get("execution_strategy") == "fast_screen"
