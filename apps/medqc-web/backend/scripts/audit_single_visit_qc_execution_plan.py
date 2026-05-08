@@ -22,9 +22,11 @@ from app.services.fast_screen_qc import (  # noqa: E402
     EXECUTION_STRATEGY_FAST_SCREEN,
     FAST_SCREEN_BUCKET_STRATEGY,
     FAST_SCREEN_FULL_PACK_DEFINITIONS,
+    _extract_bundle_documents,
     get_fast_screen_full_rule_ids,
     get_fast_screen_pack_definitions,
 )
+from app.services.bundles import assemble_final_record_bundle  # noqa: E402
 from app.services.programmatic_rule_executor import ProgrammaticRuleExecutor  # noqa: E402
 from app.services.qc_rule_orchestrator import DEFAULT_PACK_CANDIDATES, resolve_rule_execution_meta  # noqa: E402
 from app.services.sichuan_qc_service import SichuanQCService  # noqa: E402
@@ -36,6 +38,12 @@ RULES_RUNTIME = DATA_DIR / "sichuan_rules_146.json"
 RELEASE_MR = REPO_ROOT / "release" / "0426_full_auto" / "0426_full_auto" / "mr.csv"
 DEFAULT_OUTPUT_JSON = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0508" / "single_visit_qc_execution_plan_audit.json"
 DEFAULT_OUTPUT_CSV = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0508" / "single_visit_qc_execution_plan_audit.csv"
+DEFAULT_PACK_BREAKDOWN_JSON = (
+    REPO_ROOT / "apps" / "medqc-web" / "docs" / "0508" / "single_visit_qc_pack_performance_breakdown.json"
+)
+DEFAULT_PACK_BREAKDOWN_CSV = (
+    REPO_ROOT / "apps" / "medqc-web" / "docs" / "0508" / "single_visit_qc_pack_performance_breakdown.csv"
+)
 
 RISK_SCAN_TARGETS = [
     BACKEND_ROOT / "app" / "routers",
@@ -271,6 +279,25 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
 
     qc_service = SichuanQCService()
     selected_rule_ids = _select_rule_ids(args.rule_set)
+    bundle: dict[str, Any] = {}
+    bundle_documents: list[dict[str, Any]] = []
+    if args.scene == "final":
+        try:
+            bundle = assemble_final_record_bundle(
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=args.visit_id,
+                source_schema="cdm",
+            )
+            bundle_documents = [
+                dict(item)
+                for item in _extract_bundle_documents(bundle)
+                if str(item.get("content") or "").strip()
+            ]
+        except Exception:
+            bundle = {}
+            bundle_documents = []
+
     if args.scene == "final" and str(args.rule_set).strip().lower() in {"fast_screen_full", "customer_luxian_full_v1"}:
         from app.services.fast_screen_qc import run_final_fast_screen
 
@@ -304,6 +331,13 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
     token_usage = dict(result.get("token_usage") or {})
     eval_rows = list(result.get("evaluation_results") or result.get("parsed_evaluation_results") or [])
     status_counts = Counter(str(item.get("status") or "unknown") for item in eval_rows if isinstance(item, dict))
+    pack_breakdown = _build_actual_pack_breakdown(
+        args=args,
+        eval_rows=eval_rows,
+        bundle=bundle,
+        bundle_documents=bundle_documents,
+        selected_rule_ids=selected_rule_ids,
+    )
     return {
         "mode": "run",
         "summary": {
@@ -338,9 +372,134 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
         },
         "raw_result_summary": summary,
         "pack_metrics": pack_metrics,
+        "pack_breakdown": pack_breakdown,
         "entry_audit": build_entry_audit(),
         "risk_scan": scan_legacy_llm_risks(),
     }
+
+
+def _build_actual_pack_breakdown(
+    *,
+    args: argparse.Namespace,
+    eval_rows: list[Any],
+    bundle: dict[str, Any],
+    bundle_documents: list[dict[str, Any]],
+    selected_rule_ids: list[str],
+) -> list[dict[str, Any]]:
+    rules_by_id = {_normalize_rule_id(item.get("rule_id")): item for item in _load_rules()}
+    selected = set(_normalize_rule_id(item) for item in selected_rule_ids)
+    pack_defs = [
+        pack
+        for pack in get_fast_screen_pack_definitions(selected_rule_ids)
+        if any(_normalize_rule_id(rule_id) in selected for rule_id in pack.rule_ids)
+    ]
+    packs_by_id = {pack.pack_id: pack for pack in pack_defs}
+    docs_by_type: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for doc in bundle_documents:
+        docs_by_type[str(doc.get("document_type") or "").strip()].append(doc)
+
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for raw in eval_rows:
+        if not isinstance(raw, dict):
+            continue
+        metadata = dict(raw.get("metadata") or {})
+        pack_id = str(metadata.get("pack_id") or "").strip()
+        if not pack_id:
+            continue
+        grouped[pack_id].append(raw)
+
+    data_quality_flags = list((bundle or {}).get("data_quality_flags") or [])
+    document_hits = dict((bundle or {}).get("document_hits") or {})
+    missing_document_hits = [
+        str(key)
+        for key, value in document_hits.items()
+        if not bool(value)
+    ]
+
+    rows: list[dict[str, Any]] = []
+    program_executor = ProgrammaticRuleExecutor()
+    for pack_id, items in sorted(grouped.items()):
+        pack = packs_by_id.get(pack_id)
+        rule_ids = [_normalize_rule_id(item.get("rule_id")) for item in items if _normalize_rule_id(item.get("rule_id"))]
+        if pack is not None:
+            document_type = pack.document_type
+            rule_family = pack.rule_family
+            configured_rule_ids = [_normalize_rule_id(item) for item in pack.rule_ids]
+        else:
+            document_type = str((items[0].get("metadata") or {}).get("target_document_type") or "")
+            rule_family = str((items[0].get("metadata") or {}).get("rule_family") or "")
+            configured_rule_ids = rule_ids
+
+        docs = docs_by_type.get(document_type) or []
+        primary_document_chars = max((len(str(doc.get("content") or "")) for doc in docs), default=0)
+        source_text_chars = sum(len(str(doc.get("content") or "")) for doc in docs)
+        status_count = Counter(str(item.get("status") or "unknown") for item in items)
+        metadata_rows = [dict(item.get("metadata") or {}) for item in items]
+        tokens_used = sum(int(meta.get("tokens_used") or 0) for meta in metadata_rows)
+        prompt_tokens = sum(int(meta.get("prompt_tokens") or 0) for meta in metadata_rows)
+        completion_tokens = sum(int(meta.get("completion_tokens") or 0) for meta in metadata_rows)
+        api_time = sum(float(meta.get("api_time") or 0.0) for meta in metadata_rows)
+        first_result_latency = min(
+            [float(meta.get("first_result_latency") or 0.0) for meta in metadata_rows if float(meta.get("first_result_latency") or 0.0) > 0],
+            default=0.0,
+        )
+        context_tokens_estimate = max((int(meta.get("context_tokens_estimate") or 0) for meta in metadata_rows), default=0)
+        missing_rule_ids = [
+            rule_id
+            for rule_id in configured_rule_ids
+            if rule_id not in set(rule_ids)
+        ]
+        low_confidence_rule_ids = [
+            str(item.get("rule_id") or "")
+            for item in items
+            if float(item.get("confidence") or 0.0) < 0.45 and str(item.get("status") or "") != "not_applicable"
+        ]
+        program_candidate_rule_ids = [
+            rule_id
+            for rule_id in configured_rule_ids
+            if program_executor.can_execute(rules_by_id.get(rule_id, {"rule_id": rule_id}))
+        ]
+        rows.append(
+            {
+                "visit_id": args.visit_id,
+                "scene": args.scene,
+                "rule_set": args.rule_set,
+                "pack_id": pack_id,
+                "document_type": document_type,
+                "rule_family": rule_family,
+                "rule_ids": ",".join(configured_rule_ids),
+                "pack_size": len(configured_rule_ids),
+                "status_count": dict(status_count),
+                "compliant_count": int(status_count.get("compliant") or 0),
+                "non_compliant_count": int(status_count.get("non_compliant") or 0),
+                "uncertain_count": int(status_count.get("uncertain") or 0),
+                "not_applicable_count": int(status_count.get("not_applicable") or 0),
+                "issues_found": int(status_count.get("non_compliant") or 0),
+                "tokens_used": tokens_used,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "api_time": api_time,
+                "first_result_latency": first_result_latency,
+                "context_tokens_estimate": context_tokens_estimate,
+                "evidence_source": "bundle",
+                "source_document_count": len(docs),
+                "source_text_chars": source_text_chars,
+                "primary_document_chars": primary_document_chars,
+                "data_quality_flags": data_quality_flags,
+                "missing_document_hits": missing_document_hits,
+                "parse_error": False,
+                "missing_rule_ids": missing_rule_ids,
+                "low_confidence_rule_ids": low_confidence_rule_ids,
+                "cache_hit": 0,
+                "cache_miss": len(configured_rule_ids),
+                "has_defect": bool(status_count.get("non_compliant")),
+                "program_candidate_rule_ids": program_candidate_rule_ids,
+                "program_candidate_count": len(program_candidate_rule_ids),
+                "high_cost_low_yield": bool(tokens_used >= 3000 and not status_count.get("non_compliant") and not status_count.get("uncertain")),
+                "zero_defect_high_token": bool(tokens_used >= 3000 and not status_count.get("non_compliant")),
+            }
+        )
+    return rows
 
 
 def build_entry_audit() -> list[dict[str, Any]]:
@@ -447,6 +606,61 @@ def _write_outputs(payload: dict[str, Any], output_json: Path, output_csv: Path)
             writer.writerow(row)
 
 
+def _write_pack_breakdown(payload: dict[str, Any], output_json: Path, output_csv: Path) -> None:
+    rows = list(payload.get("pack_breakdown") or [])
+    if not rows:
+        return
+    output_json.parent.mkdir(parents=True, exist_ok=True)
+    output_json.write_text(json.dumps({"rows": rows}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    fieldnames = [
+        "visit_id",
+        "scene",
+        "rule_set",
+        "pack_id",
+        "document_type",
+        "rule_family",
+        "rule_ids",
+        "pack_size",
+        "status_count",
+        "compliant_count",
+        "non_compliant_count",
+        "uncertain_count",
+        "not_applicable_count",
+        "issues_found",
+        "tokens_used",
+        "prompt_tokens",
+        "completion_tokens",
+        "api_time",
+        "first_result_latency",
+        "context_tokens_estimate",
+        "evidence_source",
+        "source_document_count",
+        "source_text_chars",
+        "primary_document_chars",
+        "data_quality_flags",
+        "missing_document_hits",
+        "parse_error",
+        "missing_rule_ids",
+        "low_confidence_rule_ids",
+        "cache_hit",
+        "cache_miss",
+        "has_defect",
+        "program_candidate_rule_ids",
+        "program_candidate_count",
+        "high_cost_low_yield",
+        "zero_defect_high_token",
+    ]
+    with output_csv.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            serializable = dict(row)
+            for key, value in list(serializable.items()):
+                if isinstance(value, (dict, list)):
+                    serializable[key] = json.dumps(value, ensure_ascii=False)
+            writer.writerow(serializable)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="只读审计单病历正式质控执行计划。")
     parser.add_argument("--visit-id", required=True)
@@ -465,6 +679,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-output-mode", default="minimal")
     parser.add_argument("--output-json", type=Path, default=DEFAULT_OUTPUT_JSON)
     parser.add_argument("--output-csv", type=Path, default=DEFAULT_OUTPUT_CSV)
+    parser.add_argument("--pack-breakdown-json", type=Path, default=DEFAULT_PACK_BREAKDOWN_JSON)
+    parser.add_argument("--pack-breakdown-csv", type=Path, default=DEFAULT_PACK_BREAKDOWN_CSV)
     return parser.parse_args()
 
 
@@ -481,9 +697,13 @@ def main() -> None:
         payload = _build_dry_run_plan(args)
 
     _write_outputs(payload, args.output_json, args.output_csv)
+    _write_pack_breakdown(payload, args.pack_breakdown_json, args.pack_breakdown_csv)
     print(json.dumps(payload.get("summary") or {}, ensure_ascii=False, indent=2))
     print(f"wrote: {args.output_json}")
     print(f"wrote: {args.output_csv}")
+    if payload.get("pack_breakdown"):
+        print(f"wrote: {args.pack_breakdown_json}")
+        print(f"wrote: {args.pack_breakdown_csv}")
 
 
 if __name__ == "__main__":
