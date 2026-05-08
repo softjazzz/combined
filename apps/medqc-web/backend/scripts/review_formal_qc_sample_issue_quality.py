@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import sys
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -12,12 +13,23 @@ from typing import Any
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = BACKEND_ROOT.parents[2]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.services.qc_result_postprocessor import (  # noqa: E402
+    postprocess_qc_results,
+    summarize_postprocessed_results,
+)
+
 DOCS_DIR = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0508"
 INPUT_ISSUE_CSV = DOCS_DIR / "formal_qc_sample_issue_review.csv"
 INPUT_RUN_SUMMARY_CSV = DOCS_DIR / "formal_qc_sample_run_summary.csv"
 OUTPUT_CSV = DOCS_DIR / "formal_qc_sample_issue_quality_review.csv"
 OUTPUT_JSON = DOCS_DIR / "formal_qc_sample_issue_quality_review.json"
 OUTPUT_MD = DOCS_DIR / "正式质控小样本结果质量治理报告.md"
+POSTPROCESSED_CSV = DOCS_DIR / "formal_qc_sample_postprocessed_issue_review.csv"
+POSTPROCESSED_JSON = DOCS_DIR / "formal_qc_sample_postprocessed_issue_review.json"
+POSTPROCESSED_MD = DOCS_DIR / "正式质控小样本后处理准入层验证报告.md"
 
 CROSS_DOC_RULES = {
     "SC-036",
@@ -175,6 +187,7 @@ def build_review_rows(issue_rows: list[dict[str, str]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for row in issue_rows:
         label, reason, problems, action = _classify(row)
+        postprocessed = postprocess_qc_results([dict(row)], mode="formal_final_sample_review")[0]
         next_row = dict(row)
         next_row.update(
             {
@@ -184,6 +197,18 @@ def build_review_rows(issue_rows: list[dict[str, str]]) -> list[dict[str, Any]]:
                 "suggested_postprocess_action": action,
             }
         )
+        for key in [
+            "display_status",
+            "display_bucket",
+            "postprocess_label",
+            "postprocess_reason",
+            "can_show_as_defect",
+            "can_show_to_doctor",
+            "internal_only",
+            "postprocess_mode",
+        ]:
+            next_row[key] = postprocessed.get(key)
+        next_row["postprocess_evidence_problem_type"] = postprocessed.get("evidence_problem_type")
         out.append(next_row)
     return out
 
@@ -353,18 +378,96 @@ def write_report(stats: dict[str, Any]) -> None:
     OUTPUT_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def write_postprocess_report(rows: list[dict[str, Any]], stats: dict[str, Any]) -> None:
+    confirmed = [row for row in rows if str(row.get("display_status")) == "confirmed_defect"]
+    needs_review = [row for row in rows if str(row.get("display_status")) == "needs_review"]
+    data_gaps = [row for row in rows if str(row.get("display_status")) == "data_quality_gap"]
+    raw_non_compliant = int(stats["raw_status_counts"].get("non_compliant") or 0)
+    lines = [
+        "# 正式质控小样本后处理准入层验证报告",
+        "",
+        f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "",
+        "## 结论",
+        "",
+        f"- 原始 `non_compliant`：{raw_non_compliant} 条。",
+        f"- 后处理后 `confirmed_defect`：{stats['confirmed_defect_count']} 条。",
+        f"- `needs_review`：{stats['needs_review_count']} 条。",
+        f"- `data_quality_gap`：{stats['data_quality_gap_count']} 条。",
+        f"- `technical_error_internal`：{stats['technical_error_internal_count']} 条。",
+        f"- 原始 `non_compliant` 被降级或分流：{stats['non_compliant_downgraded_count']} 条。",
+        "",
+        "## 展示层分布",
+        "",
+    ]
+    lines += _md_table(
+        [{"display_status": key, "count": value} for key, value in sorted(stats["display_status_counts"].items())],
+        ["display_status", "count"],
+    )
+    lines += [
+        "",
+        "## 被降级规则 Top 10",
+        "",
+    ]
+    lines += _md_table(stats["downgraded_rule_top10"], ["rule_id", "count"])
+    lines += [
+        "",
+        "## confirmed_defect 列表",
+        "",
+    ]
+    lines += _md_table(
+        confirmed[:30],
+        ["visit_id", "rule_id", "rule_name", "status", "display_status", "postprocess_reason"],
+    )
+    lines += [
+        "",
+        "## 仍需人工复核的问题列表",
+        "",
+    ]
+    lines += _md_table(
+        needs_review[:30],
+        ["visit_id", "rule_id", "rule_name", "status", "display_status", "postprocess_label", "postprocess_reason"],
+    )
+    lines += [
+        "",
+        "## 数据缺口列表",
+        "",
+    ]
+    lines += _md_table(
+        data_gaps[:30],
+        ["visit_id", "rule_id", "rule_name", "status", "display_status", "postprocess_reason"],
+    )
+    lines += [
+        "",
+        "## 准入原则",
+        "",
+        "- 原始 `status` 全部保留，页面和报告使用新增 `display_status` / `can_show_as_defect`。",
+        "- 技术异常只进入内部诊断，不进入医生缺陷清单。",
+        "- 数据缺口不包装成医生病历缺陷。",
+        "- 跨文书/时间链规则缺对照证据时进入待复核，不直接确认为缺陷。",
+    ]
+    POSTPROCESSED_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def main() -> None:
     issue_rows = _read_csv(INPUT_ISSUE_CSV)
     _ = _read_csv(INPUT_RUN_SUMMARY_CSV)
     review_rows = build_review_rows(issue_rows)
     stats = build_stats(review_rows)
+    postprocess_stats = summarize_postprocessed_results(review_rows)
     _write_csv(OUTPUT_CSV, review_rows)
     _write_json(OUTPUT_JSON, {"rows": review_rows, "stats": stats})
+    _write_csv(POSTPROCESSED_CSV, review_rows)
+    _write_json(POSTPROCESSED_JSON, {"rows": review_rows, "stats": postprocess_stats})
     write_report(stats)
+    write_postprocess_report(review_rows, postprocess_stats)
     print(json.dumps(stats, ensure_ascii=False, indent=2))
     print(f"wrote: {OUTPUT_CSV}")
     print(f"wrote: {OUTPUT_JSON}")
     print(f"wrote: {OUTPUT_MD}")
+    print(f"wrote: {POSTPROCESSED_CSV}")
+    print(f"wrote: {POSTPROCESSED_JSON}")
+    print(f"wrote: {POSTPROCESSED_MD}")
 
 
 if __name__ == "__main__":

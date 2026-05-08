@@ -24,6 +24,7 @@ from app.services.fast_screen_qc import (  # noqa: E402
     get_fast_screen_full_rule_ids,
     run_final_fast_screen,
 )
+from app.services.qc_result_postprocessor import postprocess_qc_results  # noqa: E402
 from app.services.sichuan_qc_service import SichuanQCService  # noqa: E402
 
 
@@ -186,6 +187,14 @@ def _build_issue_rows(
                 "rate_limit_count": meta.get("rate_limit_count", ""),
                 "technical_error_internal": meta.get("technical_error_internal", ""),
                 "final_decision_source": _safe_text(meta.get("final_decision_source")),
+                "display_status": _safe_text(item.get("display_status")),
+                "display_bucket": _safe_text(item.get("display_bucket")),
+                "postprocess_label": _safe_text(item.get("postprocess_label")),
+                "postprocess_reason": _safe_text(item.get("postprocess_reason")),
+                "evidence_problem_type": _safe_text(item.get("evidence_problem_type")),
+                "can_show_as_defect": item.get("can_show_as_defect", ""),
+                "can_show_to_doctor": item.get("can_show_to_doctor", ""),
+                "internal_only": item.get("internal_only", ""),
                 "data_quality_flags": json.dumps(data_quality_flags, ensure_ascii=False),
                 "suspected_duplicate": "yes" if dup_map.get(idx) else "no",
                 "review_label": "",
@@ -229,6 +238,7 @@ async def _run_one_visit(
         pack_concurrency=pack_concurrency,
     )
     results = [dict(item) for item in list(result.get("evaluation_results") or []) if isinstance(item, dict)]
+    results = postprocess_qc_results(results, bundle_metadata=profile, mode="formal_final_sample_audit")
     counts = _result_counts(results)
     token_usage = dict(result.get("token_usage") or {})
     pack_metrics = dict(result.get("pack_metrics") or {})
@@ -263,6 +273,10 @@ async def _run_one_visit(
         "uncertain_count": int(counts.get("uncertain") or 0),
         "compliant_count": int(counts.get("compliant") or 0),
         "not_applicable_count": int(counts.get("not_applicable") or 0),
+        "confirmed_defect_count": sum(1 for item in results if bool(item.get("can_show_as_defect"))),
+        "needs_review_count": sum(1 for item in results if item.get("display_status") == "needs_review"),
+        "data_quality_gap_count": sum(1 for item in results if item.get("display_status") == "data_quality_gap"),
+        "technical_error_internal_count": sum(1 for item in results if item.get("display_status") == "technical_error_internal"),
         "provider_error_count": int(pack_metrics.get("provider_error_count") or 0),
         "retry_count": int(pack_metrics.get("retry_count") or 0),
         "timeout_count": int(pack_metrics.get("timeout_count") or 0),
