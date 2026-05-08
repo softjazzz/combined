@@ -1,0 +1,378 @@
+{
+  "mode": "run",
+  "summary": {
+    "scene": "final",
+    "rule_set": "fast_screen_full",
+    "total_candidate_rules": 84,
+    "program_rule_count": 2,
+    "llm_rule_count": 59,
+    "pack_count": 18,
+    "expected_llm_call_count": 18,
+    "actual_llm_call_count": 18,
+    "single_rule_fallback_count": 0,
+    "cache_hit_count": 0,
+    "cache_miss_count": 59,
+    "total_tokens": 71623,
+    "prompt_tokens": 63503,
+    "completion_tokens": 8120,
+    "total_api_time": 202.00531816482544,
+    "first_result_latency": 3.002613067626953,
+    "issues_found": 11,
+    "uncertain_count": 8,
+    "non_compliant_count": 11,
+    "compliant_count": 26,
+    "not_applicable_count": 39,
+    "execution_strategy": "fast_screen",
+    "bucket_strategy": "fixed_packs",
+    "prompt_strategy": "fast_screen_fixed_v1",
+    "quality_profile": "throughput_v1",
+    "batch_output_mode": "minimal"
+  },
+  "raw_result_summary": {
+    "compliance_rate": 77.38,
+    "issues_found": 11,
+    "not_applicable": 39,
+    "total_rules": 84,
+    "compliant_rules": 65,
+    "model": "Qwen/Qwen3.6-35B-A3B",
+    "executor_breakdown": {
+      "program": 2,
+      "llm": 59
+    },
+    "cache_breakdown": {
+      "hit": 0,
+      "miss": 59
+    },
+    "pack_metrics": {
+      "prompt_strategy": "fast_screen_fixed_v1",
+      "quality_profile": "throughput_v1",
+      "batch_output_mode": "minimal",
+      "bucket_strategy": "fixed_packs",
+      "bucket_count": 30,
+      "total_packs": 18,
+      "avg_pack_size": 3.28,
+      "fallback_packs": 0,
+      "single_rule_retries": 0,
+      "pack_parse_retry_count": 0,
+      "pack_fallback_count": 0,
+      "pack_parse_failures": 0,
+      "pack_parse_error_count": 0,
+      "missing_rule_items": 0,
+      "low_confidence_items": 0,
+      "context_tokens_estimate": 48978,
+      "probe_calls": 0,
+      "selected_pack_size": 10,
+      "selected_pack_size_by_bucket": {
+        "admission_content_core": 10,
+        "admission_consistency_core": 4,
+        "first_course_features": 2,
+        "first_course_reasoning": 3,
+        "daily_course_content_core": 9,
+        "daily_course_procedure_core": 5,
+        "daily_course_procedure_followup": 6,
+        "daily_course_consistency": 1,
+        "senior_course_content": 2,
+        "rescue_content": 1,
+        "diffcase_content": 2,
+        "death_discussion_content": 1,
+        "handoff_content": 1,
+        "newborn_consistency": 1,
+        "presurg_summary_procedure": 1,
+        "presurg_discussion_procedure": 3,
+        "anesthesia_procedure": 5,
+        "consent_content": 5,
+        "surgery_content": 2,
+        "surgery_procedure": 5,
+        "surgery_safecheck_procedure": 1,
+        "postsurg_firstcourse_procedure": 1,
+        "presurg_summary_content": 1,
+        "discharge_content": 3,
+        "discharge_procedure": 2,
+        "discharge_consistency": 2,
+        "exam_consistency": 2,
+        "exam_procedure": 1,
+        "daily_order_procedure": 1,
+        "daily_order_consistency": 1
+      },
+      "execution_strategy": "fast_screen"
+    },
+    "quality_profile": "throughput_v1",
+    "refine_summary": {
+      "enabled": false,
+      "candidate_count": 0,
+      "eligible_candidate_count": 0,
+      "refined_rule_count": 0,
+      "refine_failed_count": 0,
+      "budget_applied": 0,
+      "budget_skipped_count": 0,
+      "refine_reasons": {}
+    },
+    "refined_rule_count": 0,
+    "refine_reasons": {},
+    "total_prompt_tokens": 63503,
+    "total_completion_tokens": 8120,
+    "first_result_latency": 3.002613067626953,
+    "first_result_source": "presurg_summary_content",
+    "cot_summary": {
+      "explicit_calls": 0,
+      "implicit_calls": 0,
+      "disabled_calls": 0,
+      "thinking_heuristic_calls": 0,
+      "response_has_think_tags_calls": 0,
+      "response_has_reasoning_content_calls": 0
+    }
+  },
+  "pack_metrics": {
+    "prompt_strategy": "fast_screen_fixed_v1",
+    "quality_profile": "throughput_v1",
+    "batch_output_mode": "minimal",
+    "bucket_strategy": "fixed_packs",
+    "bucket_count": 30,
+    "total_packs": 18,
+    "avg_pack_size": 3.28,
+    "fallback_packs": 0,
+    "single_rule_retries": 0,
+    "pack_parse_retry_count": 0,
+    "pack_fallback_count": 0,
+    "pack_parse_failures": 0,
+    "pack_parse_error_count": 0,
+    "missing_rule_items": 0,
+    "low_confidence_items": 0,
+    "context_tokens_estimate": 48978,
+    "probe_calls": 0,
+    "selected_pack_size": 10,
+    "selected_pack_size_by_bucket": {
+      "admission_content_core": 10,
+      "admission_consistency_core": 4,
+      "first_course_features": 2,
+      "first_course_reasoning": 3,
+      "daily_course_content_core": 9,
+      "daily_course_procedure_core": 5,
+      "daily_course_procedure_followup": 6,
+      "daily_course_consistency": 1,
+      "senior_course_content": 2,
+      "rescue_content": 1,
+      "diffcase_content": 2,
+      "death_discussion_content": 1,
+      "handoff_content": 1,
+      "newborn_consistency": 1,
+      "presurg_summary_procedure": 1,
+      "presurg_discussion_procedure": 3,
+      "anesthesia_procedure": 5,
+      "consent_content": 5,
+      "surgery_content": 2,
+      "surgery_procedure": 5,
+      "surgery_safecheck_procedure": 1,
+      "postsurg_firstcourse_procedure": 1,
+      "presurg_summary_content": 1,
+      "discharge_content": 3,
+      "discharge_procedure": 2,
+      "discharge_consistency": 2,
+      "exam_consistency": 2,
+      "exam_procedure": 1,
+      "daily_order_procedure": 1,
+      "daily_order_consistency": 1
+    },
+    "execution_strategy": "fast_screen"
+  },
+  "entry_audit": [
+    {
+      "entry": "客户样本验证页",
+      "api_path": "/api/v1/qc/sample-pools/* + /api/v1/qc/sichuan/workspace/batch-jobs",
+      "service_method": "CustomQCSamplePoolService / qc_sichuan.workspace batch job",
+      "uses_bundle": true,
+      "uses_fast_screen": false,
+      "uses_qc_rule_orchestrator": "样本复现链路按人工问题/规则定向，非正式全量质控入口",
+      "single_rule_llm_fallback": "按样本人工问题定向时可能单规则，不代表正式单病历质控"
+    },
+    {
+      "entry": "running/frontpage 质控",
+      "api_path": "/api/v1/qc/sichuan/workspace/batch-jobs 或 /api/v1/qc/sichuan/evaluate-bundle",
+      "service_method": "evaluate_running_final_bundle -> evaluate_running_final_bundle_input",
+      "uses_bundle": true,
+      "uses_fast_screen": false,
+      "uses_qc_rule_orchestrator": true,
+      "single_rule_llm_fallback": "pack 解析失败、低置信或规则级 visit 样本模式时可能触发"
+    },
+    {
+      "entry": "final/终末质控",
+      "api_path": "/api/v1/qc/sichuan/workspace/batch-jobs",
+      "service_method": "run_final_fast_screen when execution_strategy=fast_screen",
+      "uses_bundle": true,
+      "uses_fast_screen": true,
+      "uses_qc_rule_orchestrator": false,
+      "single_rule_llm_fallback": "固定包路径无逐规则外层循环；包异常降级 uncertain，不逐条补跑"
+    },
+    {
+      "entry": "workstation-v4 质控按钮",
+      "api_path": "/api/v1/qc/formal-qc/validate",
+      "service_method": "frontpage formal QC validate",
+      "uses_bundle": false,
+      "uses_fast_screen": false,
+      "uses_qc_rule_orchestrator": false,
+      "single_rule_llm_fallback": "前端病案首页表单规则校验，不是 146 项正式病历质控"
+    }
+  ],
+  "risk_scan": [
+    {
+      "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "function": "_exec",
+      "risk_type": "document_fallback",
+      "evidence_line": "654: result = await qc_service.evaluate_document(",
+      "whether_user_facing": "yes",
+      "recommended_action": "仅 bundle 缺失或旧单文书入口使用；正式页面应避免回退到长文本。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "function": "evaluate_rule_for_visit",
+      "risk_type": "rule_for_visit_loop",
+      "evidence_line": "757: async def evaluate_rule_for_visit(",
+      "whether_user_facing": "yes",
+      "recommended_action": "规则定向验证入口，避免作为正式全量质控默认入口。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "function": "evaluate_rule_for_visit",
+      "risk_type": "rule_for_visit_loop",
+      "evidence_line": "771: result = await qc_service.evaluate_rule_for_visit(",
+      "whether_user_facing": "yes",
+      "recommended_action": "规则定向验证入口，避免作为正式全量质控默认入口。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "function": "_evaluate_single_record",
+      "risk_type": "rule_for_visit_loop",
+      "evidence_line": "1082: for rule_id in active_rule_ids",
+      "whether_user_facing": "yes",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "function": "_evaluate_rule_level_visit_bundle",
+      "risk_type": "rule_for_visit_loop",
+      "evidence_line": "1129: for single_rule_id in active_rule_ids:",
+      "whether_user_facing": "yes",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "function": "_evaluate_rule_level_visit_bundle",
+      "risk_type": "rule_for_visit_loop",
+      "evidence_line": "1130: single_result = await qc_service.evaluate_rule_for_visit(",
+      "whether_user_facing": "yes",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "function": "_evaluate_rule_level_visit_bundle",
+      "risk_type": "document_fallback",
+      "evidence_line": "1338: result = await qc_service.evaluate_document(",
+      "whether_user_facing": "yes",
+      "recommended_action": "仅 bundle 缺失或旧单文书入口使用；正式页面应避免回退到长文本。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "function": "_evaluate_rule_level_visit_bundle",
+      "risk_type": "rule_for_visit_loop",
+      "evidence_line": "1384: for rule_id in active_rule_ids:",
+      "whether_user_facing": "yes",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/routers/qc_sichuan.py",
+      "function": "test_rule",
+      "risk_type": "single_rule_engine_call",
+      "evidence_line": "2812: engine_result = await qc_service.rule_engine.evaluate(",
+      "whether_user_facing": "yes",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/custom_qc_service.py",
+      "function": "_llm_evaluate",
+      "risk_type": "single_rule_engine_call",
+      "evidence_line": "339: return await qc_service.rule_engine.evaluate(",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/sichuan_qc_service.py",
+      "function": "_llm_evaluate",
+      "risk_type": "single_rule_engine_call",
+      "evidence_line": "1005: return await self.rule_engine.evaluate(rule, medical_record=medical_record)",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/sichuan_qc_service.py",
+      "function": "_apply_selective_refine",
+      "risk_type": "single_rule_engine_call",
+      "evidence_line": "1151: refined = await self.rule_engine.evaluate(rule, medical_record=medical_record)",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/sichuan_qc_service.py",
+      "function": "_evaluate_rules_with_engine",
+      "risk_type": "multi_document_loop",
+      "evidence_line": "1368: async def _evaluate_rules_with_engine(",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/sichuan_qc_service.py",
+      "function": "evaluate_document",
+      "risk_type": "document_fallback",
+      "evidence_line": "3791: async def evaluate_document(",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "仅 bundle 缺失或旧单文书入口使用；正式页面应避免回退到长文本。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/sichuan_qc_service.py",
+      "function": "evaluate_rule_for_visit",
+      "risk_type": "rule_for_visit_loop",
+      "evidence_line": "4083: async def evaluate_rule_for_visit(",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "规则定向验证入口，避免作为正式全量质控默认入口。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/sichuan_qc_service.py",
+      "function": "evaluate_batch",
+      "risk_type": "document_fallback",
+      "evidence_line": "4256: await self.evaluate_document(",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "确认仅样本/单规则偏好时启用；正式 final fast_screen 应走 fixed pack。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/sichuan_qc_service.py",
+      "function": "extract_text",
+      "risk_type": "multi_document_loop",
+      "evidence_line": "4428: for doc_type in doc_map.keys():",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/sichuan_qc_service.py",
+      "function": "extract_text",
+      "risk_type": "multi_document_loop",
+      "evidence_line": "4440: for doc_type, text in doc_map.items():",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/sichuan_qc_service.py",
+      "function": "extract_text",
+      "risk_type": "multi_document_loop",
+      "evidence_line": "4442: rule_results, tokens, api_time = await self._evaluate_rules_with_engine(",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "静态风险，需结合调用场景确认是否用户可触发。"
+    },
+    {
+      "file": "apps/medqc-web/backend/app/services/qc_input_adapters/running_final_bundle_adapter.py",
+      "function": "adapt_bundle_to_sichuan_eval_args",
+      "risk_type": "document_fallback",
+      "evidence_line": "176: Convert running/final bundle to `SichuanQCService.evaluate_document(...)` args.",
+      "whether_user_facing": "service/internal",
+      "recommended_action": "仅 bundle 缺失或旧单文书入口使用；正式页面应避免回退到长文本。"
+    }
+  ]
+}
