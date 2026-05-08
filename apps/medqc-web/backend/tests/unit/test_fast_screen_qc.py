@@ -110,21 +110,37 @@ def test_normalize_execution_strategy_should_fall_back_to_standard():
 
 
 class _FakeFastScreenRuleEngine:
-    def __init__(self, *, fail_pack_id: str = "", omit_rule_id: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        fail_pack_id: str = "",
+        fail_once_pack_id: str = "",
+        omit_rule_id: str = "",
+        omit_once_rule_ids: set[str] | None = None,
+    ) -> None:
         self.fail_pack_id = fail_pack_id
+        self.fail_once_pack_id = fail_once_pack_id
         self.omit_rule_id = omit_rule_id
+        self.omit_once_rule_ids = omit_once_rule_ids or set()
         self.running = 0
         self.max_running = 0
         self.call_order: list[str] = []
+        self.call_counts: dict[str, int] = {}
 
     async def evaluate_batch_compact(self, *, rules: list[dict[str, Any]], pack_id: str, **kwargs: Any) -> dict[str, Any]:
         self.running += 1
         self.max_running = max(self.max_running, self.running)
         self.call_order.append(pack_id)
+        self.call_counts[pack_id] = int(self.call_counts.get(pack_id) or 0) + 1
         await asyncio.sleep(0.01)
         self.running -= 1
+        if pack_id == self.fail_once_pack_id and self.call_counts[pack_id] == 1:
+            raise RuntimeError("mock transient provider failure")
         if pack_id == self.fail_pack_id:
             raise RuntimeError("mock pack failure")
+        omit_rule_ids = {self.omit_rule_id} if self.omit_rule_id else set()
+        if self.call_counts[pack_id] == 1:
+            omit_rule_ids |= self.omit_once_rule_ids
         return {
             "results": [
                 {
@@ -148,7 +164,7 @@ class _FakeFastScreenRuleEngine:
                     },
                 }
                 for rule in rules
-                if rule["rule_id"] != self.omit_rule_id
+                if rule["rule_id"] not in omit_rule_ids
             ],
             "tokens_used": 10 * len(rules),
             "prompt_tokens": 8 * len(rules),
@@ -303,6 +319,56 @@ async def test_run_final_fast_screen_pack_failure_should_only_mark_that_pack_unc
     assert by_rule["SC-032"]["status"] == "compliant"
     assert by_rule["SC-121"]["status"] == "compliant"
     assert result["pack_metrics"]["provider_error_count"] == 1
+    assert result["pack_metrics"]["retry_count"] == 1
+    assert by_rule["SC-023"]["metadata"]["technical_error_internal"] is True
+    assert by_rule["SC-023"]["metadata"]["final_decision_source"] == "technical_error_fallback"
+
+
+@pytest.mark.asyncio
+async def test_run_final_fast_screen_pack_transient_failure_should_retry_and_return_success(monkeypatch: pytest.MonkeyPatch):
+    _patch_fast_screen_bundle(monkeypatch)
+    engine = _FakeFastScreenRuleEngine(fail_once_pack_id="first_course_features")
+    service = _FakeFastScreenService(engine)
+
+    result = await fast_screen_qc.run_final_fast_screen(
+        qc_service=service,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        rule_ids=["SC-004", "SC-023", "SC-032"],
+        pack_concurrency=3,
+    )
+
+    by_rule = {item["rule_id"]: item for item in result["evaluation_results"]}
+    assert by_rule["SC-023"]["status"] == "compliant"
+    assert engine.call_counts["first_course_features"] == 2
+    assert result["pack_metrics"]["provider_error_count"] == 0
+    assert result["pack_metrics"]["retry_count"] == 1
+    assert by_rule["SC-023"]["metadata"]["pack_retry_attempts"] == 1
+    assert by_rule["SC-023"]["metadata"]["pack_retry_success"] is True
+    assert by_rule["SC-023"]["metadata"]["final_decision_source"] == "batch_retry"
+
+
+@pytest.mark.asyncio
+async def test_run_final_fast_screen_majority_missing_rule_items_should_retry_once(monkeypatch: pytest.MonkeyPatch):
+    _patch_fast_screen_bundle(monkeypatch)
+    engine = _FakeFastScreenRuleEngine(omit_once_rule_ids={"SC-023", "SC-024"})
+    service = _FakeFastScreenService(engine)
+
+    result = await fast_screen_qc.run_final_fast_screen(
+        qc_service=service,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        rule_ids=["SC-023", "SC-024"],
+        pack_concurrency=3,
+    )
+
+    by_rule = {item["rule_id"]: item for item in result["evaluation_results"]}
+    assert by_rule["SC-023"]["status"] == "compliant"
+    assert by_rule["SC-024"]["status"] == "compliant"
+    assert engine.call_counts["first_course_features"] == 2
+    assert result["pack_metrics"]["retry_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -324,4 +390,6 @@ async def test_run_final_fast_screen_missing_rule_item_should_be_uncertain_witho
     assert set(by_rule) == {"SC-023", "SC-024"}
     assert by_rule["SC-023"]["status"] == "compliant"
     assert by_rule["SC-024"]["status"] == "uncertain"
+    assert engine.call_counts["first_course_features"] == 1
     assert result["pack_metrics"]["provider_error_count"] == 0
+    assert result["pack_metrics"]["retry_count"] == 0

@@ -541,6 +541,7 @@ async def run_final_fast_screen(
     context_token_budget: int = FAST_SCREEN_DEFAULT_CONTEXT_TOKEN_BUDGET,
     low_confidence_threshold: float = FAST_SCREEN_DEFAULT_LOW_CONFIDENCE_THRESHOLD,
     pack_concurrency: int = 3,
+    max_pack_retries: int = 1,
 ) -> dict[str, Any]:
     overall_started = time.perf_counter()
     quality_profile_normalized = normalize_quality_profile(quality_profile)
@@ -606,6 +607,7 @@ async def run_final_fast_screen(
     observed_max_concurrency = 0
     diagnostics_lock = asyncio.Lock()
     max_pack_concurrency = max(1, int(pack_concurrency or 1))
+    max_retry_count = max(0, int(max_pack_retries or 0))
     semaphore = asyncio.Semaphore(max_pack_concurrency)
 
     async def _execute_pack(index: int, pack: FastScreenPackDefinition) -> dict[str, Any]:
@@ -637,6 +639,11 @@ async def run_final_fast_screen(
             "parse_error": False,
             "missing_rule_ids": [],
             "low_confidence_rule_ids": [],
+            "pack_retry_attempts": 0,
+            "pack_retry_success": False,
+            "pack_retry_reason": "",
+            "technical_error_internal": False,
+            "final_decision_source": "batch",
         }
         if not pack_rules:
             return {
@@ -691,7 +698,58 @@ async def run_final_fast_screen(
         )
         queued_at = time.perf_counter()
         pack_results: list[dict[str, Any]] = []
-        try:
+        retry_attempts = 0
+        retry_reason = ""
+        last_exception: Exception | None = None
+        last_evaluated: dict[str, Any] = {}
+        final_decision_source = "batch"
+
+        def _provider_flags_from_error(error: str) -> tuple[int, int, int]:
+            error_lower = error.lower()
+            timeout = 1 if ("timeout" in error_lower or "timed out" in error_lower or "超时" in error) else 0
+            rate_limit = 1 if ("rate limit" in error_lower or "429" in error_lower or "限流" in error) else 0
+            return 1, timeout, rate_limit
+
+        def _metadata_error_count(rows: list[dict[str, Any]], key: str) -> int:
+            total = 0
+            for row in rows:
+                metadata = row.get("metadata")
+                if isinstance(metadata, dict):
+                    try:
+                        total += int(metadata.get(key) or 0)
+                    except Exception:
+                        continue
+            return total
+
+        def _should_retry_pack(
+            *,
+            evaluated: dict[str, Any],
+            rows: list[dict[str, Any]],
+            missing_rule_ids: list[str],
+        ) -> tuple[bool, str]:
+            provider_errors = int(evaluated.get("provider_error_count") or 0) + _metadata_error_count(rows, "provider_error_count")
+            timeout_errors = int(evaluated.get("timeout_count") or 0) + _metadata_error_count(rows, "timeout_count")
+            rate_limit_errors = int(evaluated.get("rate_limit_count") or 0) + _metadata_error_count(rows, "rate_limit_count")
+            if provider_errors or timeout_errors or rate_limit_errors:
+                return True, "provider_error"
+            if bool(evaluated.get("parse_error")):
+                return True, "parse_error"
+            missing_count = len(missing_rule_ids)
+            if missing_count >= max(2, (len(pack_rules) + 1) // 2):
+                return True, "majority_missing_rule_items"
+            if rows and len(rows) >= max(1, len(pack_rules) // 2):
+                all_zero_empty_batch_error = all(
+                    float(item.get("confidence") or 0.0) == 0.0
+                    and not str(item.get("evidence") or "").strip()
+                    and "批量执行异常" in str(item.get("findings") or "")
+                    for item in rows
+                )
+                if all_zero_empty_batch_error:
+                    return True, "batch_technical_error_results"
+            return False, ""
+
+        async def _call_pack_once() -> dict[str, Any]:
+            nonlocal running_pack_count, observed_max_concurrency
             async with semaphore:
                 started_perf = time.perf_counter()
                 async with diagnostics_lock:
@@ -721,11 +779,30 @@ async def run_final_fast_screen(
                         running_pack_count = max(0, running_pack_count - 1)
                 diagnostic["finished_at"] = datetime.now(timezone.utc).isoformat()
                 diagnostic["wall_time"] = max(0.0, time.perf_counter() - started_perf)
+                return evaluated
+
+        for attempt_index in range(max_retry_count + 1):
             pack_results = [
                 dict(item)
-                for item in list(evaluated.get("results") or [])
+                for item in list(last_evaluated.get("results") or [])
                 if isinstance(item, dict)
             ]
+            try:
+                last_evaluated = await _call_pack_once()
+                pack_results = [
+                    dict(item)
+                    for item in list(last_evaluated.get("results") or [])
+                    if isinstance(item, dict)
+                ]
+            except Exception as exc:
+                last_exception = exc
+                retry_reason = "pack_exception"
+                if attempt_index < max_retry_count:
+                    retry_attempts += 1
+                    final_decision_source = "batch_retry"
+                    continue
+                break
+
             pack_result_map = {
                 str(item.get("rule_id") or "").strip().upper(): item
                 for item in pack_results
@@ -761,6 +838,21 @@ async def run_final_fast_screen(
                 for rule_id in configured_rule_ids
                 if rule_id not in pack_result_map
             ]
+            should_retry, detected_retry_reason = _should_retry_pack(
+                evaluated=last_evaluated,
+                rows=pack_results,
+                missing_rule_ids=missing_rule_ids,
+            )
+            if should_retry and attempt_index < max_retry_count:
+                retry_attempts += 1
+                retry_reason = detected_retry_reason
+                final_decision_source = "batch_retry"
+                continue
+            if should_retry:
+                retry_reason = detected_retry_reason
+                final_decision_source = "technical_error_fallback"
+                break
+
             low_confidence_rule_ids = [
                 str(item.get("rule_id") or "").strip().upper()
                 for item in pack_results
@@ -769,68 +861,104 @@ async def run_final_fast_screen(
             ]
             diagnostic.update(
                 {
-                    "api_time": float(evaluated.get("api_time") or 0.0),
-                    "first_result_latency": float(evaluated.get("first_result_latency") or 0.0),
-                    "tokens_used": int(evaluated.get("tokens_used") or 0),
-                    "prompt_tokens": int(evaluated.get("prompt_tokens") or 0),
-                    "completion_tokens": int(evaluated.get("completion_tokens") or 0),
-                    "context_tokens_estimate": int(evaluated.get("context_tokens_estimate") or 0),
+                    "api_time": float(last_evaluated.get("api_time") or 0.0),
+                    "first_result_latency": float(last_evaluated.get("first_result_latency") or 0.0),
+                    "tokens_used": int(last_evaluated.get("tokens_used") or 0),
+                    "prompt_tokens": int(last_evaluated.get("prompt_tokens") or 0),
+                    "completion_tokens": int(last_evaluated.get("completion_tokens") or 0),
+                    "context_tokens_estimate": int(last_evaluated.get("context_tokens_estimate") or 0),
                     "status_count": status_counts,
                     "missing_rule_ids": missing_rule_ids,
                     "low_confidence_rule_ids": low_confidence_rule_ids,
                     "parse_error": bool(missing_rule_ids),
+                    "pack_retry_attempts": retry_attempts,
+                    "pack_retry_success": retry_attempts > 0 and not should_retry,
+                    "pack_retry_reason": retry_reason,
+                    "retry_count": retry_attempts,
+                    "provider_error_count": 0 if not should_retry else int(last_evaluated.get("provider_error_count") or 0),
+                    "timeout_count": 0 if not should_retry else int(last_evaluated.get("timeout_count") or 0),
+                    "rate_limit_count": 0 if not should_retry else int(last_evaluated.get("rate_limit_count") or 0),
+                    "technical_error_internal": False,
+                    "final_decision_source": final_decision_source,
                 }
             )
-            latency = float(evaluated.get("first_result_latency") or 0.0)
+            for item in pack_results:
+                metadata = item.setdefault("metadata", {})
+                if isinstance(metadata, dict):
+                    metadata["pack_retry_attempts"] = retry_attempts
+                    metadata["pack_retry_success"] = retry_attempts > 0 and not should_retry
+                    metadata["pack_retry_reason"] = retry_reason
+                    metadata["provider_error_count"] = 0 if not should_retry else int(last_evaluated.get("provider_error_count") or 0)
+                    metadata["timeout_count"] = 0 if not should_retry else int(last_evaluated.get("timeout_count") or 0)
+                    metadata["rate_limit_count"] = 0 if not should_retry else int(last_evaluated.get("rate_limit_count") or 0)
+                    metadata["technical_error_internal"] = False
+                    metadata["final_decision_source"] = final_decision_source
+            latency = float(last_evaluated.get("first_result_latency") or 0.0)
             return {
                 "index": index,
                 "results": pack_results,
                 "executed": True,
                 "pack_size": len(pack_rules),
-                "tokens": int(evaluated.get("tokens_used") or 0),
-                "prompt_tokens": int(evaluated.get("prompt_tokens") or 0),
-                "completion_tokens": int(evaluated.get("completion_tokens") or 0),
-                "api_time": float(evaluated.get("api_time") or 0.0),
+                "tokens": int(last_evaluated.get("tokens_used") or 0),
+                "prompt_tokens": int(last_evaluated.get("prompt_tokens") or 0),
+                "completion_tokens": int(last_evaluated.get("completion_tokens") or 0),
+                "api_time": float(last_evaluated.get("api_time") or 0.0),
                 "first_result_latency": latency,
                 "first_result_source": pack.pack_id if latency > 0 else "",
-                "cot_observation": dict(evaluated.get("cot_observation") or {}),
-                "context_tokens_estimate": int(evaluated.get("context_tokens_estimate") or 0),
+                "cot_observation": dict(last_evaluated.get("cot_observation") or {}),
+                "context_tokens_estimate": int(last_evaluated.get("context_tokens_estimate") or 0),
                 "diagnostic": diagnostic,
             }
-        except Exception as exc:
-            error_text = str(exc)
-            error_lower = error_text.lower()
-            diagnostic["provider_error_count"] = 1
-            diagnostic["timeout_count"] = 1 if ("timeout" in error_lower or "timed out" in error_lower or "超时" in error_text) else 0
-            diagnostic["rate_limit_count"] = 1 if ("rate limit" in error_lower or "429" in error_lower or "限流" in error_text) else 0
-            diagnostic["finished_at"] = datetime.now(timezone.utc).isoformat()
-            for rule in pack_rules:
-                item = _build_pack_uncertain_result_item(
-                    qc_service=qc_service,
-                    rule=rule,
-                    document_type=pack.document_type,
-                    quality_profile=quality_profile_normalized,
-                    batch_output_mode=batch_output_mode_normalized,
-                    reason=f"批量执行异常，已降级为待复核：{exc}",
-                )
-                item["_document_type"] = pack.document_type
-                pack_results.append(item)
-            diagnostic["status_count"] = {"uncertain": len(pack_results)}
-            return {
-                "index": index,
-                "results": pack_results,
-                "executed": True,
-                "pack_size": len(pack_rules),
-                "tokens": 0,
-                "prompt_tokens": 0,
-                "completion_tokens": 0,
-                "api_time": 0.0,
-                "first_result_latency": 0.0,
-                "first_result_source": "",
-                "cot_observation": {},
-                "context_tokens_estimate": 0,
-                "diagnostic": diagnostic,
-            }
+
+        error_text = str(last_exception or retry_reason or "batch technical error")
+        provider_error, timeout_error, rate_limit_error = _provider_flags_from_error(error_text)
+        diagnostic["provider_error_count"] = provider_error
+        diagnostic["timeout_count"] = timeout_error
+        diagnostic["rate_limit_count"] = rate_limit_error
+        diagnostic["pack_retry_attempts"] = retry_attempts
+        diagnostic["pack_retry_success"] = False
+        diagnostic["pack_retry_reason"] = retry_reason or "pack_exception"
+        diagnostic["retry_count"] = retry_attempts
+        diagnostic["technical_error_internal"] = True
+        diagnostic["final_decision_source"] = "technical_error_fallback"
+        diagnostic["finished_at"] = datetime.now(timezone.utc).isoformat()
+        for rule in pack_rules:
+            item = _build_pack_uncertain_result_item(
+                qc_service=qc_service,
+                rule=rule,
+                document_type=pack.document_type,
+                quality_profile=quality_profile_normalized,
+                batch_output_mode=batch_output_mode_normalized,
+                reason="批量执行异常，已降级为内部技术异常。",
+            )
+            item["_document_type"] = pack.document_type
+            metadata = item.setdefault("metadata", {})
+            if isinstance(metadata, dict):
+                metadata["pack_retry_attempts"] = retry_attempts
+                metadata["pack_retry_success"] = False
+                metadata["pack_retry_reason"] = diagnostic["pack_retry_reason"]
+                metadata["provider_error_count"] = provider_error
+                metadata["timeout_count"] = timeout_error
+                metadata["rate_limit_count"] = rate_limit_error
+                metadata["technical_error_internal"] = True
+                metadata["final_decision_source"] = "technical_error_fallback"
+            pack_results.append(item)
+        diagnostic["status_count"] = {"uncertain": len(pack_results)}
+        return {
+            "index": index,
+            "results": pack_results,
+            "executed": True,
+            "pack_size": len(pack_rules),
+            "tokens": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "api_time": 0.0,
+            "first_result_latency": 0.0,
+            "first_result_source": "",
+            "cot_observation": {},
+            "context_tokens_estimate": 0,
+            "diagnostic": diagnostic,
+        }
 
     pack_outputs = await asyncio.gather(*[
         _execute_pack(index, pack)
