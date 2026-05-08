@@ -138,3 +138,26 @@ def test_sheet2_blocked_customer_gap_list_should_cover_all_blocked_rows():
             assert row["current_conclusion"].startswith("blocked_with_reason")
             assert row["gap_reason"]
             assert row["customer_request"]
+
+
+def test_sheet2_p0_anchor_replay_should_not_promote_partial_anchors_to_exact():
+    report_path = (
+        Path(__file__).resolve().parents[3]
+        / "docs"
+        / "0418"
+        / "QC"
+        / "sheet2_p0_anchor_enhancement_replay_report.json"
+    )
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert payload["total"] == 35
+    assert payload["status_breakdown"] == {"blocked_with_reason": 35}
+    assert payload["blocked_to_exact_rows"] == []
+    assert payload["anchor_breakdown"] == {
+        "SC-009-trauma-location": 2,
+        "SC-009-symptom-detail": 6,
+        "SC-036-abnormal-result-unaddressed": 12,
+        "SC-020-admission-diagnosis-omission": 6,
+        "SC-070-consultation-not-implemented": 6,
+        "SC-046-invasive-operation-required-fields": 3,
+    }
