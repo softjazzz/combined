@@ -310,6 +310,7 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
             rule_ids=selected_rule_ids,
             quality_profile=args.quality_profile,
             batch_output_mode=args.batch_output_mode,
+            pack_concurrency=args.pack_concurrency,
         )
     else:
         from app.services.qc_input_adapters import evaluate_running_final_bundle
@@ -337,6 +338,7 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
         bundle=bundle,
         bundle_documents=bundle_documents,
         selected_rule_ids=selected_rule_ids,
+        pack_metrics=pack_metrics,
     )
     return {
         "mode": "run",
@@ -365,6 +367,18 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
             "compliant_count": status_counts.get("compliant", 0),
             "not_applicable_count": status_counts.get("not_applicable", 0),
             "execution_strategy": str(result.get("execution_strategy") or pack_metrics.get("execution_strategy") or ""),
+            "execution_mode": str(pack_metrics.get("execution_mode") or ""),
+            "configured_concurrency": int(pack_metrics.get("configured_concurrency") or args.pack_concurrency or 0),
+            "observed_max_concurrency": int(pack_metrics.get("observed_max_concurrency") or 0),
+            "sum_pack_api_time": float(pack_metrics.get("sum_pack_api_time") or 0.0),
+            "wall_clock_time": float(pack_metrics.get("wall_clock_time") or 0.0),
+            "concurrency_efficiency": float(pack_metrics.get("concurrency_efficiency") or 0.0),
+            "slowest_pack": str(pack_metrics.get("slowest_pack") or ""),
+            "slowest_pack_api_time": float(pack_metrics.get("slowest_pack_api_time") or 0.0),
+            "provider_error_count": int(pack_metrics.get("provider_error_count") or 0),
+            "retry_count": int(pack_metrics.get("retry_count") or 0),
+            "timeout_count": int(pack_metrics.get("timeout_count") or 0),
+            "rate_limit_count": int(pack_metrics.get("rate_limit_count") or 0),
             "bucket_strategy": str(pack_metrics.get("bucket_strategy") or ""),
             "prompt_strategy": str(pack_metrics.get("prompt_strategy") or ""),
             "quality_profile": str(result.get("quality_profile") or args.quality_profile),
@@ -373,6 +387,7 @@ async def _run_actual(args: argparse.Namespace) -> dict[str, Any]:
         "raw_result_summary": summary,
         "pack_metrics": pack_metrics,
         "pack_breakdown": pack_breakdown,
+        "pack_diagnostics": list(pack_metrics.get("pack_diagnostics") or []),
         "entry_audit": build_entry_audit(),
         "risk_scan": scan_legacy_llm_risks(),
     }
@@ -385,6 +400,7 @@ def _build_actual_pack_breakdown(
     bundle: dict[str, Any],
     bundle_documents: list[dict[str, Any]],
     selected_rule_ids: list[str],
+    pack_metrics: dict[str, Any],
 ) -> list[dict[str, Any]]:
     rules_by_id = {_normalize_rule_id(item.get("rule_id")): item for item in _load_rules()}
     selected = set(_normalize_rule_id(item) for item in selected_rule_ids)
@@ -407,6 +423,11 @@ def _build_actual_pack_breakdown(
         if not pack_id:
             continue
         grouped[pack_id].append(raw)
+    diagnostics_by_pack = {
+        str(item.get("pack_id") or ""): dict(item)
+        for item in list(pack_metrics.get("pack_diagnostics") or [])
+        if isinstance(item, dict) and str(item.get("pack_id") or "")
+    }
 
     data_quality_flags = list((bundle or {}).get("data_quality_flags") or [])
     document_hits = dict((bundle or {}).get("document_hits") or {})
@@ -469,6 +490,8 @@ def _build_actual_pack_breakdown(
                 "rule_family": rule_family,
                 "rule_ids": ",".join(configured_rule_ids),
                 "pack_size": len(configured_rule_ids),
+                "started_at": diagnostics_by_pack.get(pack_id, {}).get("started_at", ""),
+                "finished_at": diagnostics_by_pack.get(pack_id, {}).get("finished_at", ""),
                 "status_count": dict(status_count),
                 "compliant_count": int(status_count.get("compliant") or 0),
                 "non_compliant_count": int(status_count.get("non_compliant") or 0),
@@ -479,6 +502,8 @@ def _build_actual_pack_breakdown(
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "api_time": api_time,
+                "wall_time": float(diagnostics_by_pack.get(pack_id, {}).get("wall_time") or 0.0),
+                "queue_wait_time": float(diagnostics_by_pack.get(pack_id, {}).get("queue_wait_time") or 0.0),
                 "first_result_latency": first_result_latency,
                 "context_tokens_estimate": context_tokens_estimate,
                 "evidence_source": "bundle",
@@ -594,7 +619,7 @@ def _recommend_for_risk(rel: str, function_name: str, risk_type: str) -> str:
 def _write_outputs(payload: dict[str, Any], output_json: Path, output_csv: Path) -> None:
     output_json.parent.mkdir(parents=True, exist_ok=True)
     output_json.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    rows = list(payload.get("pack_rows") or [])
+    rows = list(payload.get("pack_rows") or payload.get("pack_diagnostics") or [])
     if not rows and payload.get("summary"):
         rows = [dict(payload["summary"])]
     output_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -621,6 +646,8 @@ def _write_pack_breakdown(payload: dict[str, Any], output_json: Path, output_csv
         "rule_family",
         "rule_ids",
         "pack_size",
+        "started_at",
+        "finished_at",
         "status_count",
         "compliant_count",
         "non_compliant_count",
@@ -631,6 +658,8 @@ def _write_pack_breakdown(payload: dict[str, Any], output_json: Path, output_csv
         "prompt_tokens",
         "completion_tokens",
         "api_time",
+        "wall_time",
+        "queue_wait_time",
         "first_result_latency",
         "context_tokens_estimate",
         "evidence_source",
@@ -677,6 +706,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--persist", action="store_true", help="预留参数；本脚本不写 qc_results/qc_defects。")
     parser.add_argument("--quality-profile", default="throughput_v1")
     parser.add_argument("--batch-output-mode", default="minimal")
+    parser.add_argument("--pack-concurrency", type=int, default=3)
     parser.add_argument("--output-json", type=Path, default=DEFAULT_OUTPUT_JSON)
     parser.add_argument("--output-csv", type=Path, default=DEFAULT_OUTPUT_CSV)
     parser.add_argument("--pack-breakdown-json", type=Path, default=DEFAULT_PACK_BREAKDOWN_JSON)

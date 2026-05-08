@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import time
 from typing import TYPE_CHECKING, Any, Iterable
 
 from app.constants.doc_types import DOC_TYPE_FULL_MAP
@@ -537,7 +540,9 @@ async def run_final_fast_screen(
     batch_output_mode: str = BATCH_OUTPUT_MODE_MINIMAL,
     context_token_budget: int = FAST_SCREEN_DEFAULT_CONTEXT_TOKEN_BUDGET,
     low_confidence_threshold: float = FAST_SCREEN_DEFAULT_LOW_CONFIDENCE_THRESHOLD,
+    pack_concurrency: int = 3,
 ) -> dict[str, Any]:
+    overall_started = time.perf_counter()
     quality_profile_normalized = normalize_quality_profile(quality_profile)
     batch_output_mode_normalized = normalize_batch_output_mode(
         batch_output_mode,
@@ -592,49 +597,130 @@ async def run_final_fast_screen(
     executed_pack_count = 0
     pack_size_sum = 0
     context_tokens_estimate = 0
+    pack_diagnostics: list[dict[str, Any]] = []
+    provider_error_count = 0
+    retry_count = 0
+    timeout_count = 0
+    rate_limit_count = 0
+    running_pack_count = 0
+    observed_max_concurrency = 0
+    diagnostics_lock = asyncio.Lock()
+    max_pack_concurrency = max(1, int(pack_concurrency or 1))
+    semaphore = asyncio.Semaphore(max_pack_concurrency)
 
-    for pack in pack_definitions:
+    async def _execute_pack(index: int, pack: FastScreenPackDefinition) -> dict[str, Any]:
+        nonlocal running_pack_count, observed_max_concurrency
         pack_rules = [rules_by_id[rule_id] for rule_id in pack.rule_ids if rule_id in rules_by_id]
+        configured_rule_ids = [rule_id for rule_id in pack.rule_ids if rule_id in rules_by_id]
+        diagnostic: dict[str, Any] = {
+            "pack_index": index,
+            "pack_id": pack.pack_id,
+            "document_type": pack.document_type,
+            "rule_family": pack.rule_family,
+            "rule_ids": list(configured_rule_ids),
+            "pack_size": len(pack_rules),
+            "started_at": "",
+            "finished_at": "",
+            "api_time": 0.0,
+            "wall_time": 0.0,
+            "queue_wait_time": 0.0,
+            "first_result_latency": 0.0,
+            "tokens_used": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "context_tokens_estimate": 0,
+            "status_count": {},
+            "provider_error_count": 0,
+            "retry_count": 0,
+            "timeout_count": 0,
+            "rate_limit_count": 0,
+            "parse_error": False,
+            "missing_rule_ids": [],
+            "low_confidence_rule_ids": [],
+        }
         if not pack_rules:
-            continue
+            return {
+                "index": index,
+                "results": [],
+                "executed": False,
+                "pack_size": 0,
+                "tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "api_time": 0.0,
+                "first_result_latency": 0.0,
+                "first_result_source": "",
+                "cot_observation": {},
+                "context_tokens_estimate": 0,
+                "diagnostic": diagnostic,
+            }
 
         primary_document = _pick_primary_document(documents, document_type=pack.document_type)
         if primary_document is None:
+            missing_results = []
             for rule in pack_rules:
-                results.append(
+                missing_results.append(
                     qc_service._build_bundle_missing_doc_result_item(
                         rule=rule,
                         bucket_strategy=FAST_SCREEN_BUCKET_STRATEGY,
                         quality_profile=quality_profile_normalized,
                     )
                 )
-            continue
+            diagnostic["status_count"] = {"not_applicable": len(missing_results)}
+            diagnostic["finished_at"] = datetime.now(timezone.utc).isoformat()
+            return {
+                "index": index,
+                "results": missing_results,
+                "executed": False,
+                "pack_size": len(pack_rules),
+                "tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "api_time": 0.0,
+                "first_result_latency": 0.0,
+                "first_result_source": "",
+                "cot_observation": {},
+                "context_tokens_estimate": 0,
+                "diagnostic": diagnostic,
+            }
 
         evidence_payload = _build_evidence_payload(
             primary_document=primary_document,
             all_documents=documents,
             bundle=bundle,
         )
-        executed_pack_count += 1
-        pack_size_sum += len(pack_rules)
-        llm_rule_count += len(pack_rules)
+        queued_at = time.perf_counter()
+        pack_results: list[dict[str, Any]] = []
         try:
-            evaluated = await qc_service.rule_engine.evaluate_batch_compact(
-                rules=pack_rules,
-                medical_record={
-                    "content": str(primary_document.get("content") or ""),
-                    "evidence_payload": evidence_payload,
-                    "execution_domain": "final_fast_screen",
-                    "doc_scope": "primary",
-                    "model_version": str(qc_service.client.model or ""),
-                },
-                pack_id=pack.pack_id,
-                pack_size=len(pack_rules),
-                low_confidence_threshold=low_confidence_threshold,
-                context_token_budget=context_token_budget,
-                quality_profile=quality_profile_normalized,
-                batch_output_mode=batch_output_mode_normalized,
-            )
+            async with semaphore:
+                started_perf = time.perf_counter()
+                async with diagnostics_lock:
+                    running_pack_count += 1
+                    observed_max_concurrency = max(observed_max_concurrency, running_pack_count)
+                diagnostic["queue_wait_time"] = max(0.0, started_perf - queued_at)
+                diagnostic["started_at"] = datetime.now(timezone.utc).isoformat()
+                try:
+                    evaluated = await qc_service.rule_engine.evaluate_batch_compact(
+                        rules=pack_rules,
+                        medical_record={
+                            "content": str(primary_document.get("content") or ""),
+                            "evidence_payload": evidence_payload,
+                            "execution_domain": "final_fast_screen",
+                            "doc_scope": "primary",
+                            "model_version": str(qc_service.client.model or ""),
+                        },
+                        pack_id=pack.pack_id,
+                        pack_size=len(pack_rules),
+                        low_confidence_threshold=low_confidence_threshold,
+                        context_token_budget=context_token_budget,
+                        quality_profile=quality_profile_normalized,
+                        batch_output_mode=batch_output_mode_normalized,
+                    )
+                finally:
+                    async with diagnostics_lock:
+                        running_pack_count = max(0, running_pack_count - 1)
+                diagnostic["finished_at"] = datetime.now(timezone.utc).isoformat()
+                diagnostic["wall_time"] = max(0.0, time.perf_counter() - started_perf)
             pack_results = [
                 dict(item)
                 for item in list(evaluated.get("results") or [])
@@ -663,18 +749,58 @@ async def run_final_fast_screen(
                 if isinstance(metadata, dict):
                     metadata["target_document_type"] = pack.document_type
                     metadata["rule_family"] = str(metadata.get("rule_family") or pack.rule_family)
-                results.append(item)
-            total_tokens += int(evaluated.get("tokens_used") or 0)
-            total_prompt_tokens += int(evaluated.get("prompt_tokens") or 0)
-            total_completion_tokens += int(evaluated.get("completion_tokens") or 0)
-            total_api_time += float(evaluated.get("api_time") or 0.0)
+            status_counts: dict[str, int] = {}
+            for item in pack_results:
+                status = str(item.get("status") or "unknown")
+                status_counts[status] = int(status_counts.get(status) or 0) + 1
+            missing_rule_ids = [
+                rule_id
+                for rule_id in configured_rule_ids
+                if rule_id not in pack_result_map
+            ]
+            low_confidence_rule_ids = [
+                str(item.get("rule_id") or "").strip().upper()
+                for item in pack_results
+                if float(item.get("confidence") or 0.0) < low_confidence_threshold
+                and str(item.get("status") or "").strip() != "not_applicable"
+            ]
+            diagnostic.update(
+                {
+                    "api_time": float(evaluated.get("api_time") or 0.0),
+                    "first_result_latency": float(evaluated.get("first_result_latency") or 0.0),
+                    "tokens_used": int(evaluated.get("tokens_used") or 0),
+                    "prompt_tokens": int(evaluated.get("prompt_tokens") or 0),
+                    "completion_tokens": int(evaluated.get("completion_tokens") or 0),
+                    "context_tokens_estimate": int(evaluated.get("context_tokens_estimate") or 0),
+                    "status_count": status_counts,
+                    "missing_rule_ids": missing_rule_ids,
+                    "low_confidence_rule_ids": low_confidence_rule_ids,
+                    "parse_error": bool(missing_rule_ids),
+                }
+            )
             latency = float(evaluated.get("first_result_latency") or 0.0)
-            if latency > 0 and (first_result_latency <= 0 or latency < first_result_latency):
-                first_result_latency = latency
-                first_result_source = pack.pack_id
-            cot_summary = _merge_cot_summary(cot_summary, dict(evaluated.get("cot_observation") or {}))
-            context_tokens_estimate += int(evaluated.get("context_tokens_estimate") or 0)
+            return {
+                "index": index,
+                "results": pack_results,
+                "executed": True,
+                "pack_size": len(pack_rules),
+                "tokens": int(evaluated.get("tokens_used") or 0),
+                "prompt_tokens": int(evaluated.get("prompt_tokens") or 0),
+                "completion_tokens": int(evaluated.get("completion_tokens") or 0),
+                "api_time": float(evaluated.get("api_time") or 0.0),
+                "first_result_latency": latency,
+                "first_result_source": pack.pack_id if latency > 0 else "",
+                "cot_observation": dict(evaluated.get("cot_observation") or {}),
+                "context_tokens_estimate": int(evaluated.get("context_tokens_estimate") or 0),
+                "diagnostic": diagnostic,
+            }
         except Exception as exc:
+            error_text = str(exc)
+            error_lower = error_text.lower()
+            diagnostic["provider_error_count"] = 1
+            diagnostic["timeout_count"] = 1 if ("timeout" in error_lower or "timed out" in error_lower or "超时" in error_text) else 0
+            diagnostic["rate_limit_count"] = 1 if ("rate limit" in error_lower or "429" in error_lower or "限流" in error_text) else 0
+            diagnostic["finished_at"] = datetime.now(timezone.utc).isoformat()
             for rule in pack_rules:
                 item = _build_pack_uncertain_result_item(
                     qc_service=qc_service,
@@ -685,7 +811,54 @@ async def run_final_fast_screen(
                     reason=f"批量执行异常，已降级为待复核：{exc}",
                 )
                 item["_document_type"] = pack.document_type
-                results.append(item)
+                pack_results.append(item)
+            diagnostic["status_count"] = {"uncertain": len(pack_results)}
+            return {
+                "index": index,
+                "results": pack_results,
+                "executed": True,
+                "pack_size": len(pack_rules),
+                "tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "api_time": 0.0,
+                "first_result_latency": 0.0,
+                "first_result_source": "",
+                "cot_observation": {},
+                "context_tokens_estimate": 0,
+                "diagnostic": diagnostic,
+            }
+
+    pack_outputs = await asyncio.gather(*[
+        _execute_pack(index, pack)
+        for index, pack in enumerate(pack_definitions)
+    ])
+    pack_outputs.sort(key=lambda item: int(item.get("index") or 0))
+
+    for output in pack_outputs:
+        output_results = [dict(item) for item in list(output.get("results") or []) if isinstance(item, dict)]
+        results.extend(output_results)
+        diagnostic = dict(output.get("diagnostic") or {})
+        if diagnostic:
+            pack_diagnostics.append(diagnostic)
+        if bool(output.get("executed")):
+            executed_pack_count += 1
+            pack_size_sum += int(output.get("pack_size") or 0)
+            llm_rule_count += int(output.get("pack_size") or 0)
+        total_tokens += int(output.get("tokens") or 0)
+        total_prompt_tokens += int(output.get("prompt_tokens") or 0)
+        total_completion_tokens += int(output.get("completion_tokens") or 0)
+        total_api_time += float(output.get("api_time") or 0.0)
+        latency = float(output.get("first_result_latency") or 0.0)
+        if latency > 0 and (first_result_latency <= 0 or latency < first_result_latency):
+            first_result_latency = latency
+            first_result_source = str(output.get("first_result_source") or "")
+        cot_summary = _merge_cot_summary(cot_summary, dict(output.get("cot_observation") or {}))
+        context_tokens_estimate += int(output.get("context_tokens_estimate") or 0)
+        provider_error_count += int(diagnostic.get("provider_error_count") or 0)
+        retry_count += int(diagnostic.get("retry_count") or 0)
+        timeout_count += int(diagnostic.get("timeout_count") or 0)
+        rate_limit_count += int(diagnostic.get("rate_limit_count") or 0)
 
     for rule in selected_rules:
         if str(rule.get("executor_type") or "").strip().lower() == "program":
@@ -731,6 +904,19 @@ async def run_final_fast_screen(
                 for pack in pack_definitions
             },
             "execution_strategy": EXECUTION_STRATEGY_FAST_SCREEN,
+            "execution_mode": "serial" if max_pack_concurrency <= 1 else "concurrent",
+            "configured_concurrency": max_pack_concurrency,
+            "observed_max_concurrency": observed_max_concurrency,
+            "sum_pack_api_time": total_api_time,
+            "wall_clock_time": max(0.0, time.perf_counter() - overall_started),
+            "concurrency_efficiency": round(total_api_time / max(0.001, time.perf_counter() - overall_started), 4),
+            "slowest_pack": max(pack_diagnostics, key=lambda item: float(item.get("api_time") or 0.0)).get("pack_id") if pack_diagnostics else "",
+            "slowest_pack_api_time": max((float(item.get("api_time") or 0.0) for item in pack_diagnostics), default=0.0),
+            "provider_error_count": provider_error_count,
+            "retry_count": retry_count,
+            "timeout_count": timeout_count,
+            "rate_limit_count": rate_limit_count,
+            "pack_diagnostics": pack_diagnostics,
         },
         "quality_profile": quality_profile_normalized,
         "refine_summary": {
