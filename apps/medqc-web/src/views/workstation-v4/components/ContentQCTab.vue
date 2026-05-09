@@ -230,6 +230,19 @@
           <span class="summary-label">发现问题</span>
           <span class="summary-value text-red-500">{{ summary.issueCount }}</span>
         </div>
+        <div
+          v-if="subitemAnchorCount > 0"
+          class="summary-row summary-row--action"
+        >
+          <span class="summary-label">专项检查项</span>
+          <button
+            type="button"
+            class="summary-link"
+            @click="subitemAnchorDetailOpen = true"
+          >
+            {{ subitemAnchorCount }} 项待复核
+          </button>
+        </div>
         <div class="summary-row">
           <span class="summary-label">待复核</span>
           <span class="summary-value text-amber-500">{{ summary.uncertainCount }}</span>
@@ -368,6 +381,43 @@
 
             <div class="issue-card__findings">
               {{ record.findings || '未提供结论' }}
+            </div>
+
+            <div
+              v-if="record.metadata.subitemAnchors.length"
+              class="issue-card__subitem-anchors"
+            >
+              <div class="subitem-anchor-head">
+                <span>父规则专项检查项</span>
+                <span>{{ record.metadata.subitemAnchors.length }} 项</span>
+              </div>
+              <div
+                v-for="anchor in record.metadata.subitemAnchors"
+                :key="anchor.subitemId || anchor.anchorId"
+                class="subitem-anchor"
+              >
+                <div class="subitem-anchor__top">
+                  <span class="subitem-anchor__name">{{ anchor.subitemName || '专项检查项' }}</span>
+                  <a-tag
+                    class="subitem-anchor__tag"
+                    :color="subitemAnchorTagColor(anchor.displayStatus)"
+                  >
+                    {{ subitemAnchorDisplayLabel(anchor) }}
+                  </a-tag>
+                </div>
+                <div
+                  v-if="anchor.anchorEvidence"
+                  class="subitem-anchor__evidence"
+                >
+                  {{ anchor.anchorEvidence }}
+                </div>
+                <div
+                  v-if="anchor.anchorDecisionReason"
+                  class="subitem-anchor__reason"
+                >
+                  判定原因：{{ anchor.anchorDecisionReason }}
+                </div>
+              </div>
             </div>
 
             <div
@@ -531,6 +581,40 @@
           </div>
         </div>
         <div
+          v-if="issueDetailRecord.metadata.subitemAnchors.length"
+          class="issue-detail-block"
+        >
+          <div class="issue-detail-block__title">
+            专项检查项
+          </div>
+          <div class="issue-detail-subitem-list">
+            <div
+              v-for="anchor in issueDetailRecord.metadata.subitemAnchors"
+              :key="anchor.subitemId || anchor.anchorId"
+              class="subitem-anchor subitem-anchor--detail"
+            >
+              <div class="subitem-anchor__top">
+                <span class="subitem-anchor__name">{{ anchor.subitemName || '专项检查项' }}</span>
+                <a-tag :color="subitemAnchorTagColor(anchor.displayStatus)">
+                  {{ subitemAnchorDisplayLabel(anchor) }}
+                </a-tag>
+              </div>
+              <div
+                v-if="anchor.anchorEvidence"
+                class="subitem-anchor__evidence"
+              >
+                {{ anchor.anchorEvidence }}
+              </div>
+              <div
+                v-if="anchor.anchorDecisionReason"
+                class="subitem-anchor__reason"
+              >
+                判定原因：{{ anchor.anchorDecisionReason }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
           v-if="viewMode === 'advanced'"
           class="issue-detail-block"
         >
@@ -558,6 +642,47 @@
                   ? '-'
                   : issueDetailRecord.metadata.llmFallback
               }}</span>
+          </div>
+        </div>
+      </div>
+    </a-modal>
+
+    <a-modal
+      v-model:open="subitemAnchorDetailOpen"
+      title="专项检查项（待复核）"
+      width="760px"
+      :footer="null"
+      destroy-on-close
+    >
+      <div class="subitem-anchor-modal">
+        <div class="subitem-anchor-modal__hint">
+          以下为父规则下的专项检查项，只作为待复核或数据缺口提示，不计入确认缺陷数量。
+        </div>
+        <div
+          v-for="anchor in structuredResult?.subitemAnchors || []"
+          :key="`${anchor.parentRuleId}-${anchor.subitemId || anchor.anchorId}`"
+          class="subitem-anchor subitem-anchor--detail"
+        >
+          <div class="subitem-anchor__top">
+            <span class="subitem-anchor__name">{{ anchor.subitemName || '专项检查项' }}</span>
+            <a-tag :color="subitemAnchorTagColor(anchor.displayStatus)">
+              {{ subitemAnchorDisplayLabel(anchor) }}
+            </a-tag>
+          </div>
+          <div class="subitem-anchor__parent">
+            父规则：{{ anchor.parentRuleId || '-' }}
+          </div>
+          <div
+            v-if="anchor.anchorEvidence"
+            class="subitem-anchor__evidence"
+          >
+            {{ anchor.anchorEvidence }}
+          </div>
+          <div
+            v-if="anchor.anchorDecisionReason"
+            class="subitem-anchor__reason"
+          >
+            判定原因：{{ anchor.anchorDecisionReason }}
           </div>
         </div>
       </div>
@@ -597,6 +722,7 @@ import { extractApiData } from '@/utils/api-helpers'
 import {
   createDefaultStructuredQCFilter,
   filterStructuredQCIssues,
+  getSubitemAnchorDisplayLabel,
   isProblemStatus,
   mapSichuanEvaluationToStructuredQC,
 } from '@/views/workstation-v4/utils/structuredQc'
@@ -605,6 +731,7 @@ import type {
   StructuredQCIssue,
   StructuredQCResult,
   StructuredQCStatus,
+  StructuredQCSubitemAnchor,
 } from '@/views/workstation-v4/types'
 
 // ==================== 类型 ====================
@@ -699,6 +826,7 @@ const activeGroupKey = ref('')
 const issueFilter = ref<StructuredQCFilterState>(createDefaultStructuredQCFilter())
 const issueDetailOpen = ref(false)
 const issueDetailRecord = ref<StructuredQCIssue | null>(null)
+const subitemAnchorDetailOpen = ref(false)
 
 const detailPagination = ref({
   current: 1,
@@ -707,6 +835,9 @@ const detailPagination = ref({
 })
 
 const totalCount = computed(() => Number(summary.value?.issueCount || issues.value.length || 0))
+const subitemAnchorCount = computed(() =>
+  Number(structuredResult.value?.subitemAnchors?.length || 0),
+)
 const progressPercent = computed(() =>
   totalSections.value > 0
     ? Math.round((completedSections.value.length / totalSections.value) * 100)
@@ -768,6 +899,7 @@ const fallbackStructuredIssues = computed<StructuredQCIssue[]>(() => {
       refineReason: '',
       screeningStatus: '',
       finalDecisionSource: '',
+      subitemAnchors: [],
     },
   }))
 })
@@ -861,6 +993,15 @@ function statusTagColor(status: StructuredQCStatus) {
   if (status === 'not_applicable') return 'default'
   if (status === 'failed' || status === 'error') return 'error'
   return 'success'
+}
+
+function subitemAnchorDisplayLabel(anchor: StructuredQCSubitemAnchor) {
+  return getSubitemAnchorDisplayLabel(anchor)
+}
+
+function subitemAnchorTagColor(status: string) {
+  if (status === 'data_quality_gap') return 'default'
+  return 'warning'
 }
 
 function formatConfidence(value: number | string | undefined) {
@@ -1113,6 +1254,7 @@ async function runContentQCLegacy(docs: DocItem[]) {
           refine_reason: item.metadata.refineReason,
           screening_status: item.metadata.screeningStatus,
           final_decision_source: item.metadata.finalDecisionSource,
+          subitem_anchors: item.metadata.subitemAnchors,
         },
       })),
     },
@@ -1716,6 +1858,25 @@ watch(
   padding: 4px 8px;
 }
 
+.summary-row--action {
+  border-radius: 10px;
+  background: #fffbeb;
+}
+
+.summary-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.summary-link:hover {
+  color: #92400e;
+}
+
 .summary-label {
   font-size: 11px;
   color: #94a3b8;
@@ -1892,6 +2053,71 @@ watch(
   padding: 6px 8px;
 }
 
+.issue-card__subitem-anchors {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+}
+
+.subitem-anchor-head,
+.subitem-anchor__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.subitem-anchor-head {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #92400e;
+}
+
+.subitem-anchor {
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(253, 230, 138, 0.82);
+}
+
+.subitem-anchor + .subitem-anchor {
+  margin-top: 6px;
+}
+
+.subitem-anchor--detail {
+  background: #fff;
+}
+
+.subitem-anchor__name {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.subitem-anchor__tag {
+  flex-shrink: 0;
+  margin-right: 0;
+}
+
+.subitem-anchor__parent,
+.subitem-anchor__evidence,
+.subitem-anchor__reason {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #475569;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.subitem-anchor__reason {
+  color: #92400e;
+}
+
 .issue-card__meta {
   margin-top: 7px;
   display: flex;
@@ -1996,6 +2222,22 @@ watch(
   line-height: 1.6;
   color: #0f172a;
   white-space: pre-wrap;
+}
+
+.issue-detail-subitem-list,
+.subitem-anchor-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subitem-anchor-modal__hint {
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .issue-group {

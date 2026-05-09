@@ -5,6 +5,7 @@ import type {
   StructuredQCOverview,
   StructuredQCResult,
   StructuredQCStatus,
+  StructuredQCSubitemAnchor,
 } from '@/views/workstation-v4/types'
 import type {
   SichuanBatchJob,
@@ -40,6 +41,8 @@ function toNumber(value: unknown, fallback = 0): number {
 function toBoolean(value: unknown): boolean | null {
   if (value === true) return true
   if (value === false) return false
+  if (String(value).trim().toLowerCase() === 'true') return true
+  if (String(value).trim().toLowerCase() === 'false') return false
   return null
 }
 
@@ -109,6 +112,67 @@ function buildIssueKey(input: {
   ].join('|')
 }
 
+function normalizeSubitemAnchor(
+  raw: Record<string, unknown>,
+  fallback: Partial<StructuredQCSubitemAnchor> = {},
+): StructuredQCSubitemAnchor | null {
+  const anchorId = toText(raw.anchor_id) || toText(raw.anchorId) || fallback.anchorId || ''
+  const subitemId = toText(raw.subitem_id) || toText(raw.subitemId) || anchorId
+  const parentRuleId =
+    toText(raw.parent_rule_id) ||
+    toText(raw.parentRuleId) ||
+    toText(raw.rule_id) ||
+    fallback.parentRuleId ||
+    ''
+  if (!anchorId && !subitemId) return null
+  const displayStatus =
+    toText(raw.display_status) ||
+    toText(raw.displayStatus) ||
+    fallback.displayStatus ||
+    'needs_review'
+  const displayBucket =
+    toText(raw.display_bucket) ||
+    toText(raw.displayBucket) ||
+    fallback.displayBucket ||
+    (displayStatus === 'data_quality_gap' ? '数据缺口' : '待复核')
+  return {
+    parentRuleId,
+    anchorId: anchorId || subitemId,
+    subitemId: subitemId || anchorId,
+    subitemName:
+      toText(raw.subitem_name) || toText(raw.subitemName) || fallback.subitemName || '专项检查项',
+    anchorEvidenceStatus:
+      toText(raw.anchor_evidence_status) ||
+      toText(raw.anchorEvidenceStatus) ||
+      fallback.anchorEvidenceStatus ||
+      '',
+    anchorEvidence:
+      toText(raw.anchor_evidence) ||
+      toText(raw.anchorEvidence) ||
+      toText(raw.evidence) ||
+      fallback.anchorEvidence ||
+      '',
+    anchorDecisionReason:
+      toText(raw.anchor_decision_reason) ||
+      toText(raw.anchorDecisionReason) ||
+      toText(raw.findings) ||
+      fallback.anchorDecisionReason ||
+      '',
+    displayStatus,
+    displayBucket,
+    canShowAsDefect: toBoolean(raw.can_show_as_defect) ?? toBoolean(raw.canShowAsDefect) ?? false,
+    internalOnly: toBoolean(raw.internal_only) ?? toBoolean(raw.internalOnly) ?? false,
+  }
+}
+
+function normalizeSubitemAnchorList(value: unknown): StructuredQCSubitemAnchor[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map((item) => normalizeSubitemAnchor(item))
+    .filter((item): item is StructuredQCSubitemAnchor => Boolean(item))
+}
+
 function toStructuredIssue(
   raw: Record<string, unknown>,
   fallback: Partial<StructuredQCIssue> = {},
@@ -162,6 +226,7 @@ function toStructuredIssue(
       screeningStatus: toText(raw.screening_status) || toText(metadataSource.screening_status),
       finalDecisionSource:
         toText(raw.final_decision_source) || toText(metadataSource.final_decision_source),
+      subitemAnchors: normalizeSubitemAnchorList(metadataSource.subitem_anchors),
     },
   }
 
@@ -173,6 +238,21 @@ function toStructuredIssue(
     traceId: issue.metadata.traceId,
   })
   return issue
+}
+
+function collectTopLevelSubitemAnchors(
+  payload: Record<string, unknown>,
+): StructuredQCSubitemAnchor[] {
+  return normalizeSubitemAnchorList(payload.subitem_anchor_results)
+}
+
+export function getSubitemAnchorDisplayLabel(anchor: StructuredQCSubitemAnchor): string {
+  if (anchor.displayStatus === 'data_quality_gap') return '数据缺口'
+  return '专项检查项（待复核）'
+}
+
+export function shouldCountSubitemAnchorAsDefect(_anchor: StructuredQCSubitemAnchor): boolean {
+  return false
 }
 
 function buildOverview(
@@ -310,6 +390,7 @@ export function mapSichuanEvaluationToStructuredQC(
   const issues = results
     .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
     .map((item) => toStructuredIssue(item, { recordId: toText(payload.document_id) }))
+  const subitemAnchors = collectTopLevelSubitemAnchors(payload)
 
   return {
     overview: buildOverview(issues, summary, {
@@ -318,6 +399,7 @@ export function mapSichuanEvaluationToStructuredQC(
     }),
     issues,
     groups: buildGroups(issues),
+    subitemAnchors,
   }
 }
 
@@ -365,5 +447,11 @@ export function mapBatchJobToStructuredQC(
     overview,
     issues,
     groups: buildGroups(issues),
+    subitemAnchors: [],
   }
+}
+
+export const __structuredQcTestUtils = {
+  normalizeSubitemAnchor,
+  normalizeSubitemAnchorList,
 }

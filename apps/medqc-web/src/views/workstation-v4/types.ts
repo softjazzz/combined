@@ -276,6 +276,20 @@ export interface StructuredQCOverview {
   processingTimeSeconds: number
 }
 
+export interface StructuredQCSubitemAnchor {
+  parentRuleId: string
+  anchorId: string
+  subitemId: string
+  subitemName: string
+  anchorEvidenceStatus: string
+  anchorEvidence: string
+  anchorDecisionReason: string
+  displayStatus: string
+  displayBucket: string
+  canShowAsDefect: boolean
+  internalOnly: boolean
+}
+
 export interface StructuredQCIssue {
   id: string
   status: StructuredQCStatus
@@ -312,6 +326,7 @@ export interface StructuredQCIssue {
     refineReason: string
     screeningStatus: string
     finalDecisionSource: string
+    subitemAnchors: StructuredQCSubitemAnchor[]
   }
 }
 
@@ -334,4 +349,5 @@ export interface StructuredQCResult {
   overview: StructuredQCOverview
   issues: StructuredQCIssue[]
   groups: StructuredQCGroup[]
+  subitemAnchors: StructuredQCSubitemAnchor[]
 }
