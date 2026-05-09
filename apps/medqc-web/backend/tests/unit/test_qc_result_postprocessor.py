@@ -155,6 +155,10 @@ def test_formal_subitem_anchor_should_never_enter_confirmed_defect():
             "parent_rule_id": "SC-036",
             "anchor_id": "SC-036-abnormal-result-unaddressed",
             "subitem_id": "SC-036-abnormal-result-unaddressed",
+            "subitem_name": "异常检查检验结果后续病程分析处理",
+            "anchor_evidence_status": "abnormal_and_course_evidence_needs_review",
+            "anchor_evidence": "检验血钾2.9mmol/L；病程记录未见低钾处理分析。",
+            "anchor_decision_reason": "找到异常结果和后续病程片段，需人工复核。",
             "status": "non_compliant",
             "findings": "异常检查结果未在病程中分析。",
             "evidence": "检验血钾2.9mmol/L；病程记录未见低钾处理分析。",
@@ -166,6 +170,12 @@ def test_formal_subitem_anchor_should_never_enter_confirmed_defect():
     assert row["display_status"] == "needs_review"
     assert row["postprocess_label"] == "needs_human_review"
     assert row["can_show_as_defect"] is False
+    assert row["anchor_id"] == "SC-036-abnormal-result-unaddressed"
+    assert row["subitem_id"] == "SC-036-abnormal-result-unaddressed"
+    assert row["subitem_name"] == "异常检查检验结果后续病程分析处理"
+    assert row["anchor_evidence_status"] == "abnormal_and_course_evidence_needs_review"
+    assert row["anchor_evidence"]
+    assert row["anchor_decision_reason"]
 
 
 def test_header_only_evidence_should_not_be_confirmed_defect():
