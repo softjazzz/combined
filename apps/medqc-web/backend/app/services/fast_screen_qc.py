@@ -16,6 +16,10 @@ from .effect_priority_qc import (
     normalize_batch_output_mode,
     normalize_quality_profile,
 )
+from .formal_qc_subitem_anchors import (
+    attach_subitem_anchors_to_parent_results,
+    evaluate_formal_qc_p0_subitem_anchors,
+)
 
 if TYPE_CHECKING:
     from .sichuan_qc_service import SichuanQCService
@@ -995,8 +999,12 @@ async def run_final_fast_screen(
         if str(rule.get("executor_type") or "").strip().lower() == "program":
             program_rule_count += 1
 
+    subitem_anchor_results = evaluate_formal_qc_p0_subitem_anchors(results=results, bundle=bundle)
+    results = attach_subitem_anchors_to_parent_results(results, subitem_anchor_results)
+
     orchestrated = {
         "results": results,
+        "subitem_anchor_results": subitem_anchor_results,
         "total_tokens": total_tokens,
         "total_prompt_tokens": total_prompt_tokens,
         "total_completion_tokens": total_completion_tokens,
@@ -1048,6 +1056,8 @@ async def run_final_fast_screen(
             "timeout_count": timeout_count,
             "rate_limit_count": rate_limit_count,
             "pack_diagnostics": pack_diagnostics,
+            "subitem_anchor_count": len(subitem_anchor_results),
+            "subitem_anchor_ids": sorted({str(item.get("anchor_id") or "") for item in subitem_anchor_results if item.get("anchor_id")}),
         },
         "quality_profile": quality_profile_normalized,
         "refine_summary": {
@@ -1082,5 +1092,6 @@ async def run_final_fast_screen(
         "adapter_version": "fast-screen-final-v1",
         "compat_strategy": "fixed-packs-no-fallback",
     }
+    result["subitem_anchor_results"] = subitem_anchor_results
     result["execution_strategy"] = EXECUTION_STRATEGY_FAST_SCREEN
     return result

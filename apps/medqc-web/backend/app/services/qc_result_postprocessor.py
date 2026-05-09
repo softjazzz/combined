@@ -194,8 +194,23 @@ def postprocess_qc_result(
     can_show_as_defect = False
     can_show_to_doctor = True
     internal_only = False
+    metadata = _metadata(next_result)
+    is_subitem_anchor = _safe_bool(metadata.get("formal_subitem_anchor")) or bool(
+        _safe_text(next_result.get("anchor_id") or next_result.get("subitem_id"))
+    )
 
-    if "provider_error" in problems:
+    if is_subitem_anchor:
+        if _safe_text(next_result.get("display_status")) == "data_quality_gap" or "data_quality_gap" in problems:
+            display_status = "data_quality_gap"
+            display_bucket = "数据缺口"
+            postprocess_label = "data_gap_not_defect"
+            postprocess_reason = "正式质控子锚点缺少必要对照证据，不能作为医生病历缺陷。"
+        else:
+            display_status = "needs_review"
+            display_bucket = "待复核"
+            postprocess_label = "needs_human_review"
+            postprocess_reason = "正式质控子锚点默认只进入待复核，不直接作为确认缺陷。"
+    elif "provider_error" in problems:
         display_status = "technical_error_internal"
         display_bucket = "内部技术异常"
         postprocess_label = "technical_error"

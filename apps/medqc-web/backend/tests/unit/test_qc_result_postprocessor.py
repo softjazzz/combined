@@ -148,6 +148,26 @@ def test_original_status_should_be_preserved():
     assert row["display_status"] == "needs_review"
 
 
+def test_formal_subitem_anchor_should_never_enter_confirmed_defect():
+    row = postprocess_qc_result(
+        {
+            "rule_id": "SC-036",
+            "parent_rule_id": "SC-036",
+            "anchor_id": "SC-036-abnormal-result-unaddressed",
+            "subitem_id": "SC-036-abnormal-result-unaddressed",
+            "status": "non_compliant",
+            "findings": "异常检查结果未在病程中分析。",
+            "evidence": "检验血钾2.9mmol/L；病程记录未见低钾处理分析。",
+            "metadata": {"formal_subitem_anchor": True},
+        }
+    )
+
+    assert row["status"] == "non_compliant"
+    assert row["display_status"] == "needs_review"
+    assert row["postprocess_label"] == "needs_human_review"
+    assert row["can_show_as_defect"] is False
+
+
 def test_header_only_evidence_should_not_be_confirmed_defect():
     row = postprocess_qc_result(
         {

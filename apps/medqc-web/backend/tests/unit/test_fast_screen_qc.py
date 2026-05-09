@@ -252,6 +252,33 @@ def _patch_fast_screen_bundle(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _patch_fast_screen_bundle_with_anchor_docs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        fast_screen_qc,
+        "assemble_final_record_bundle",
+        lambda **kwargs: {
+            "scene": "final",
+            "document_hits": {"admission_record": True},
+            "structured_context": {
+                "documents": {
+                    "admission_record": [
+                        {
+                            "history_of_present_illness": "患者1小时前外伤致左手疼痛出血，院外未做处理后急诊入院。"
+                        }
+                    ]
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(
+        fast_screen_qc,
+        "_extract_bundle_documents",
+        lambda bundle: [
+            {"id": "1:admission", "document_type": "入院记录", "source_table": "admission_record", "content": "入院记录正文"},
+        ],
+    )
+
+
 @pytest.mark.asyncio
 async def test_run_final_fast_screen_pack_concurrency_one_should_keep_stable_order(monkeypatch: pytest.MonkeyPatch):
     _patch_fast_screen_bundle(monkeypatch)
@@ -393,3 +420,28 @@ async def test_run_final_fast_screen_missing_rule_item_should_be_uncertain_witho
     assert engine.call_counts["first_course_features"] == 1
     assert result["pack_metrics"]["provider_error_count"] == 0
     assert result["pack_metrics"]["retry_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_final_fast_screen_should_emit_subitem_anchors_without_changing_parent_rule_count(monkeypatch: pytest.MonkeyPatch):
+    _patch_fast_screen_bundle_with_anchor_docs(monkeypatch)
+    engine = _FakeFastScreenRuleEngine()
+    service = _FakeFastScreenService(engine)
+
+    result = await fast_screen_qc.run_final_fast_screen(
+        qc_service=service,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        rule_ids=["SC-009"],
+        pack_concurrency=1,
+    )
+
+    assert [item["rule_id"] for item in result["evaluation_results"]] == ["SC-009"]
+    anchors = result["subitem_anchor_results"]
+    assert len(anchors) == 1
+    assert anchors[0]["anchor_id"] == "SC-009-trauma-location"
+    assert anchors[0]["display_status"] == "needs_review"
+    assert anchors[0]["can_show_as_defect"] is False
+    assert result["evaluation_results"][0]["metadata"]["subitem_anchor_count"] == 1
+    assert result["pack_metrics"]["subitem_anchor_count"] == 1
