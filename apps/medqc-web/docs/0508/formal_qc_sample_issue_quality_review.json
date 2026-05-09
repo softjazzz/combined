@@ -30,7 +30,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "evidence_findings_mismatch"
+      "postprocess_evidence_problem_type": "evidence_findings_mismatch,weak_evidence_length"
     },
     {
       "visit_id": "1883111",
@@ -54,15 +54,15 @@
       "auto_quality_reason": "evidence 为空、过短或与 findings 锚点不匹配，不能支撑缺陷。",
       "evidence_problem_type": "evidence_findings_mismatch",
       "suggested_postprocess_action": "downgrade_to_uncertain",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "truncated_evidence"
     },
     {
       "visit_id": "1883111",
@@ -86,15 +86,15 @@
       "auto_quality_reason": "evidence 为空、过短或与 findings 锚点不匹配，不能支撑缺陷。",
       "evidence_problem_type": "evidence_findings_mismatch",
       "suggested_postprocess_action": "downgrade_to_uncertain",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "weak_evidence_length"
     },
     {
       "visit_id": "1883111",
@@ -126,7 +126,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "evidence_findings_mismatch"
+      "postprocess_evidence_problem_type": "evidence_findings_mismatch,weak_evidence_length"
     },
     {
       "visit_id": "1883111",
@@ -158,7 +158,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "evidence_findings_mismatch"
+      "postprocess_evidence_problem_type": "evidence_findings_mismatch,weak_evidence_length"
     },
     {
       "visit_id": "1883111",
@@ -182,15 +182,15 @@
       "auto_quality_reason": "具备可读 evidence，未命中明显技术/数据/证据缺口。",
       "evidence_problem_type": "none",
       "suggested_postprocess_action": "keep_non_compliant",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "truncated_evidence"
     },
     {
       "visit_id": "1883111",
@@ -222,7 +222,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "cross_doc_proof_missing,evidence_findings_mismatch"
+      "postprocess_evidence_problem_type": "cross_doc_proof_missing,evidence_findings_mismatch,weak_evidence_length"
     },
     {
       "visit_id": "1883111",
@@ -254,7 +254,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "temporal_proof_missing"
+      "postprocess_evidence_problem_type": "absence_proof_missing,temporal_proof_missing,weak_evidence_length"
     },
     {
       "visit_id": "1883111",
@@ -286,7 +286,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "evidence_findings_mismatch,temporal_proof_missing"
+      "postprocess_evidence_problem_type": "document_completeness_context_missing,evidence_findings_mismatch,temporal_proof_missing,weak_evidence_length"
     },
     {
       "visit_id": "1883111",
@@ -662,15 +662,15 @@
       "auto_quality_reason": "evidence 为空、过短或与 findings 锚点不匹配，不能支撑缺陷。",
       "evidence_problem_type": "evidence_findings_mismatch",
       "suggested_postprocess_action": "downgrade_to_uncertain",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "absence_proof_missing,weak_evidence_length"
     },
     {
       "visit_id": "1915580",
@@ -694,15 +694,15 @@
       "auto_quality_reason": "evidence 为空、过短或与 findings 锚点不匹配，不能支撑缺陷。",
       "evidence_problem_type": "evidence_findings_mismatch",
       "suggested_postprocess_action": "downgrade_to_uncertain",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "absence_proof_missing"
     },
     {
       "visit_id": "1915580",
@@ -726,15 +726,15 @@
       "auto_quality_reason": "evidence 为空、过短或与 findings 锚点不匹配，不能支撑缺陷。",
       "evidence_problem_type": "evidence_findings_mismatch",
       "suggested_postprocess_action": "downgrade_to_uncertain",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "absence_proof_missing"
     },
     {
       "visit_id": "1915580",
@@ -758,15 +758,15 @@
       "auto_quality_reason": "evidence 为空、过短或与 findings 锚点不匹配，不能支撑缺陷。",
       "evidence_problem_type": "evidence_findings_mismatch",
       "suggested_postprocess_action": "downgrade_to_uncertain",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "truncated_evidence"
     },
     {
       "visit_id": "1915580",
@@ -830,7 +830,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "evidence_findings_mismatch"
+      "postprocess_evidence_problem_type": "absence_proof_missing,evidence_findings_mismatch"
     },
     {
       "visit_id": "1915580",
@@ -862,7 +862,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "cross_doc_proof_missing"
+      "postprocess_evidence_problem_type": "absence_proof_missing,cross_doc_proof_missing,weak_evidence_length"
     },
     {
       "visit_id": "1915580",
@@ -894,7 +894,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "evidence_findings_mismatch"
+      "postprocess_evidence_problem_type": "evidence_findings_mismatch,weak_evidence_length"
     },
     {
       "visit_id": "1915580",
@@ -990,7 +990,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "header_only_evidence"
     },
     {
       "visit_id": "1915580",
@@ -1022,7 +1022,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "header_only_evidence"
     },
     {
       "visit_id": "1915580",
@@ -1054,7 +1054,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "header_only_evidence"
     },
     {
       "visit_id": "1915580",
@@ -1086,7 +1086,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "header_only_evidence"
     },
     {
       "visit_id": "1915580",
@@ -1118,7 +1118,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "header_only_evidence"
     },
     {
       "visit_id": "1915580",
@@ -1238,15 +1238,15 @@
       "auto_quality_reason": "evidence 为空、过短或与 findings 锚点不匹配，不能支撑缺陷。",
       "evidence_problem_type": "evidence_findings_mismatch",
       "suggested_postprocess_action": "downgrade_to_uncertain",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "truncated_evidence"
     },
     {
       "visit_id": "2024757",
@@ -1278,7 +1278,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "violation_missing"
+      "postprocess_evidence_problem_type": "violation_missing,weak_evidence_length"
     },
     {
       "visit_id": "2024757",
@@ -1302,15 +1302,15 @@
       "auto_quality_reason": "具备可读 evidence，未命中明显技术/数据/证据缺口。",
       "evidence_problem_type": "none",
       "suggested_postprocess_action": "keep_non_compliant",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "diagnosis_context_missing,truncated_evidence"
     },
     {
       "visit_id": "2024757",
@@ -1342,7 +1342,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "cross_doc_proof_missing"
+      "postprocess_evidence_problem_type": "cross_doc_proof_missing,document_completeness_context_missing,truncated_evidence"
     },
     {
       "visit_id": "2024757",
@@ -1662,7 +1662,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "cross_doc_proof_missing"
+      "postprocess_evidence_problem_type": "cross_doc_proof_missing,truncated_evidence"
     },
     {
       "visit_id": "2246915",
@@ -1686,15 +1686,15 @@
       "auto_quality_reason": "具备可读 evidence，未命中明显技术/数据/证据缺口。",
       "evidence_problem_type": "none",
       "suggested_postprocess_action": "keep_non_compliant",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "absence_proof_missing,truncated_evidence"
     },
     {
       "visit_id": "2246915",
@@ -1718,15 +1718,15 @@
       "auto_quality_reason": "evidence 为空、过短或与 findings 锚点不匹配，不能支撑缺陷。",
       "evidence_problem_type": "evidence_findings_mismatch",
       "suggested_postprocess_action": "downgrade_to_uncertain",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "absence_proof_missing,header_only_evidence"
     },
     {
       "visit_id": "2246915",
@@ -1758,7 +1758,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "short_evidence,temporal_proof_missing"
+      "postprocess_evidence_problem_type": "document_completeness_context_missing,short_evidence,temporal_proof_missing"
     },
     {
       "visit_id": "2246915",
@@ -1790,7 +1790,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "short_evidence,temporal_proof_missing"
+      "postprocess_evidence_problem_type": "document_completeness_context_missing,short_evidence,temporal_proof_missing"
     },
     {
       "visit_id": "2246915",
@@ -1822,7 +1822,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "evidence_findings_mismatch"
+      "postprocess_evidence_problem_type": "evidence_findings_mismatch,weak_evidence_length"
     },
     {
       "visit_id": "2246915",
@@ -1854,7 +1854,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "cross_doc_proof_missing,evidence_findings_mismatch"
+      "postprocess_evidence_problem_type": "cross_doc_proof_missing,document_completeness_context_missing,evidence_findings_mismatch,weak_evidence_length"
     },
     {
       "visit_id": "2246915",
@@ -1886,7 +1886,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "cross_doc_proof_missing"
+      "postprocess_evidence_problem_type": "cross_doc_proof_missing,diagnosis_context_missing,document_completeness_context_missing,weak_evidence_length"
     },
     {
       "visit_id": "2246915",
@@ -2334,7 +2334,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "short_evidence"
+      "postprocess_evidence_problem_type": "absence_proof_missing,short_evidence"
     },
     {
       "visit_id": "2287309",
@@ -2358,15 +2358,15 @@
       "auto_quality_reason": "具备可读 evidence，未命中明显技术/数据/证据缺口。",
       "evidence_problem_type": "none",
       "suggested_postprocess_action": "keep_non_compliant",
-      "display_status": "confirmed_defect",
-      "display_bucket": "确认缺陷",
-      "postprocess_label": "likely_valid",
-      "postprocess_reason": "具备可读 evidence，未命中技术异常、数据缺口或关键证据不足。",
-      "can_show_as_defect": true,
+      "display_status": "needs_review",
+      "display_bucket": "待复核",
+      "postprocess_label": "evidence_insufficient",
+      "postprocess_reason": "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。",
+      "can_show_as_defect": false,
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "none"
+      "postprocess_evidence_problem_type": "document_completeness_context_missing,truncated_evidence"
     },
     {
       "visit_id": "2287309",
@@ -2398,7 +2398,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "cross_doc_proof_missing"
+      "postprocess_evidence_problem_type": "cross_doc_proof_missing,document_completeness_context_missing,truncated_evidence"
     },
     {
       "visit_id": "2287309",
@@ -2430,7 +2430,7 @@
       "can_show_to_doctor": true,
       "internal_only": false,
       "postprocess_mode": "formal_final_sample_review",
-      "postprocess_evidence_problem_type": "cross_doc_proof_missing,evidence_findings_mismatch,violation_missing"
+      "postprocess_evidence_problem_type": "cross_doc_proof_missing,diagnosis_context_missing,document_completeness_context_missing,evidence_findings_mismatch,violation_missing"
     },
     {
       "visit_id": "2287309",

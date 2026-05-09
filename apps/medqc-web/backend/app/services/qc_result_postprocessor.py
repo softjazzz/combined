@@ -18,6 +18,9 @@ CROSS_DOC_RULES = {
 }
 
 TEMPORAL_RULES = {"SC-037", "SC-051", "SC-052", "SC-105", "SC-118", "SC-119", "SC-121"}
+DIAGNOSIS_RULES = {"SC-020", "SC-047", "SC-125"}
+DISCHARGE_COMPLETENESS_RULES = {"SC-118", "SC-121", "SC-123", "SC-125"}
+NEGATIVE_ABSENCE_RULES = {"SC-037", "SC-050", "SC-051", "SC-081", "SC-097", "SC-099", "SC-100", "SC-107", "SC-108", "SC-110"}
 
 DATA_GAP_KEYWORDS = [
     "未提供",
@@ -83,6 +86,15 @@ def _chinese_ngrams(text: str, *, min_len: int = 2, max_len: int = 4) -> set[str
     return grams
 
 
+def _looks_like_header_only_evidence(evidence: str) -> bool:
+    compact = re.sub(r"\s+", "", evidence)
+    if len(compact) <= 40 and re.fullmatch(r"(【当前文书】)?(记录时间[:：])?\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?\d{0,2}:?\d{0,2}:?\d{0,2}", compact):
+        return True
+    header_markers = ["记录时间", "医生签名", "签名", "姓名", "科别", "住院号"]
+    clinical_markers = ["诊断", "病程", "医嘱", "检查", "检验", "治疗", "手术", "会诊", "症状", "体征", "处理", "分析"]
+    return len(compact) <= 50 and any(marker in compact for marker in header_markers) and not any(marker in compact for marker in clinical_markers)
+
+
 def _problem_types(result: dict[str, Any], *, bundle_metadata: dict[str, Any] | None = None) -> list[str]:
     rule_id = _safe_text(result.get("rule_id")).upper()
     status = _safe_text(result.get("status"))
@@ -106,6 +118,12 @@ def _problem_types(result: dict[str, Any], *, bundle_metadata: dict[str, Any] | 
         problems.append("empty_evidence")
     elif len(evidence) < 20:
         problems.append("short_evidence")
+    elif status == "non_compliant" and "..." in evidence and len(evidence) < 180:
+        problems.append("truncated_evidence")
+    elif _looks_like_header_only_evidence(evidence):
+        problems.append("header_only_evidence")
+    elif status == "non_compliant" and len(evidence) < 50:
+        problems.append("weak_evidence_length")
 
     if _contains_any(combined, DATA_GAP_KEYWORDS):
         problems.append("data_quality_gap")
@@ -140,6 +158,21 @@ def _problem_types(result: dict[str, Any], *, bundle_metadata: dict[str, Any] | 
         has_interval = _contains_any(combined, ["至", "到", "后", "前", "间隔", "连续", "超过", "未在"])
         if not (has_date and has_interval):
             problems.append("temporal_proof_missing")
+
+    if status == "non_compliant" and rule_id in DIAGNOSIS_RULES and "诊断" not in evidence:
+        problems.append("diagnosis_context_missing")
+
+    if status == "non_compliant" and rule_id in DISCHARGE_COMPLETENESS_RULES:
+        discharge_markers = ["入院日期", "出院日期", "入院情况", "入院诊断", "诊疗经过", "出院情况", "出院医嘱", "医师签名", "出院记录"]
+        if sum(1 for marker in discharge_markers if marker in evidence) < 2:
+            problems.append("document_completeness_context_missing")
+
+    if status == "non_compliant" and rule_id in NEGATIVE_ABSENCE_RULES:
+        absence_markers = ["未见", "无", "缺", "未记录", "缺失", "查无", "未提供", "未体现", "仅见", "均为"]
+        finding_claims_absence = _contains_any(findings + suggestion, ["未", "无", "缺", "未记录", "缺失", "仅见", "均为"])
+        evidence_supports_absence = _contains_any(evidence, absence_markers)
+        if finding_claims_absence and not evidence_supports_absence:
+            problems.append("absence_proof_missing")
 
     return sorted(set(problems)) or ["none"]
 
@@ -189,11 +222,17 @@ def postprocess_qc_result(
         blocking = {
             "empty_evidence",
             "short_evidence",
+            "weak_evidence_length",
+            "truncated_evidence",
+            "header_only_evidence",
             "evidence_findings_mismatch",
             "trigger_missing",
             "violation_missing",
             "cross_doc_proof_missing",
             "temporal_proof_missing",
+            "diagnosis_context_missing",
+            "document_completeness_context_missing",
+            "absence_proof_missing",
         }
         if set(problems) & blocking:
             display_status = "needs_review"

@@ -50,7 +50,7 @@ def test_non_compliant_with_sufficient_evidence_should_be_confirmed_defect():
             "rule_id": "SC-034",
             "status": "non_compliant",
             "findings": "病程记录未记录治疗措施及医嘱变化分析。",
-            "evidence": "病程记录显示患者今日调整治疗措施，医嘱新增抗感染治疗，但病程未分析医嘱变化原因。",
+            "evidence": "病程记录显示患者今日调整治疗措施，医嘱新增抗感染治疗，并记录患者病情变化，但病程未分析医嘱变化原因及后续处理依据。",
             "suggestion": "补充治疗措施及医嘱变化分析。",
         }
     )
@@ -73,6 +73,21 @@ def test_non_compliant_with_empty_evidence_should_need_review():
     assert row["display_status"] == "needs_review"
     assert row["postprocess_label"] == "evidence_insufficient"
     assert row["can_show_as_defect"] is False
+
+
+def test_non_compliant_with_truncated_evidence_should_need_review():
+    row = postprocess_qc_result(
+        {
+            "rule_id": "SC-034",
+            "status": "non_compliant",
+            "findings": "病程未记录治疗措施及医嘱变化分析",
+            "evidence": "查房内容：患者疼痛缓解。今日办理出院前往上级医院治疗。嘱：1.院外继续治疗...",
+            "suggestion": "补充治疗措施及医嘱变化分析",
+        }
+    )
+
+    assert row["display_status"] == "needs_review"
+    assert "truncated_evidence" in row["evidence_problem_type"]
 
 
 def test_non_compliant_with_data_gap_text_should_move_to_data_quality_gap():
@@ -131,3 +146,48 @@ def test_original_status_should_be_preserved():
 
     assert row["status"] == "non_compliant"
     assert row["display_status"] == "needs_review"
+
+
+def test_header_only_evidence_should_not_be_confirmed_defect():
+    row = postprocess_qc_result(
+        {
+            "rule_id": "SC-110",
+            "status": "non_compliant",
+            "findings": "手术记录未体现急诊手术主治及以上医师指示。",
+            "evidence": "【当前文书】记录时间: 2026-02-27 12:40:19",
+            "suggestion": "补充急诊手术上级医师指示记录。",
+        }
+    )
+
+    assert row["display_status"] == "needs_review"
+    assert "header_only_evidence" in row["evidence_problem_type"]
+
+
+def test_diagnosis_rule_requires_diagnosis_context():
+    row = postprocess_qc_result(
+        {
+            "rule_id": "SC-020",
+            "status": "non_compliant",
+            "findings": "入院诊断顺序错误，遗漏主要诊断肺结核。",
+            "evidence": "患者于半月前出现剑突下疼痛，伴反酸，无明显呕吐。",
+            "suggestion": "调整入院诊断顺序。",
+        }
+    )
+
+    assert row["display_status"] == "needs_review"
+    assert "diagnosis_context_missing" in row["evidence_problem_type"]
+
+
+def test_discharge_completeness_rule_requires_document_field_context():
+    row = postprocess_qc_result(
+        {
+            "rule_id": "SC-118",
+            "status": "non_compliant",
+            "findings": "出院记录缺失入院日期、诊疗经过、出院医嘱及医师签名。",
+            "evidence": "患者于1年前慢性起病，扪及双侧腹股沟包块。",
+            "suggestion": "补充完整出院信息。",
+        }
+    )
+
+    assert row["display_status"] == "needs_review"
+    assert "document_completeness_context_missing" in row["evidence_problem_type"]
