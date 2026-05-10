@@ -2118,6 +2118,16 @@ watch(
   color: #92400e;
 }
 
+.issue-card__subitem-anchors .subitem-anchor__evidence {
+  max-height: 120px;
+  overflow: auto;
+}
+
+.subitem-anchor--detail .subitem-anchor__evidence {
+  max-height: 240px;
+  overflow: auto;
+}
+
 .issue-card__meta {
   margin-top: 7px;
   display: flex;

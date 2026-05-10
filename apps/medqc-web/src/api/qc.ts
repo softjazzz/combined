@@ -154,6 +154,7 @@ export interface BatchQCResult {
   rule_name: string
   is_compliant: boolean
   status?: QCStatus
+  severity?: string
   applicability?: QCApplicability
   not_applicable?: boolean
   not_applicable_reason?: string
@@ -174,12 +175,16 @@ export interface BatchQCEvaluateResponse {
       issues_found?: number
       total_rules?: number
       compliant_rules?: number
+      compliant_count?: number
+      uncertain_count?: number
       not_applicable?: number
+      not_applicable_count?: number
       overall_grade?: string
       critical_violations?: number
       model?: string // 使用的模型名称
     }
     evaluation_results?: BatchQCResult[]
+    subitem_anchor_results?: Record<string, unknown>[]
     performance_metrics?: {
       processing_time: number
       token_usage: number
