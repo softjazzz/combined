@@ -7,7 +7,7 @@ from fastapi import BackgroundTasks, HTTPException
 
 from app.routers import qc_sample_pools
 from app.services.qc_rule_sets import get_sichuan_rule_set
-from app.services.sample_validation_rule_sets import SAMPLE_PROGRAMMATIC_RULE_IDS
+from app.services.sample_validation_rule_sets import SAMPLE_PROGRAMMATIC_RULE_IDS, SAMPLE_VALIDATION_DRAFTS
 
 
 class _SamplePoolServiceStub:
@@ -173,6 +173,12 @@ class _SyncServiceStub:
 
 def _build_request():
     return SimpleNamespace(state=SimpleNamespace(trace_id="trace-test"))
+
+
+def test_sample_validation_pseudo_draft_ids_should_fit_batch_job_columns():
+    for validation_mode, draft in SAMPLE_VALIDATION_DRAFTS.items():
+        assert len(draft["id"]) <= 36, f"{validation_mode} draft_id exceeds custom_qc_batch_jobs.draft_id"
+        assert len(draft["rule_code"]) <= 32, f"{validation_mode} rule_code exceeds custom_qc_batch_jobs.rule_code"
 
 
 @pytest.mark.asyncio
@@ -659,7 +665,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_formal_fast_scree
             "record_ids": ["V001", "V002"],
         }
     ]
-    assert created["draft"]["id"] == "manual-sample-formal-fast-screen-full"
+    assert created["draft"]["id"] == "sample-formal-fast-screen-full"
     assert created["draft"]["scene"] == "final"
     assert created["scope"] == "final"
     assert created["filters"]["validation_mode"] == "formal_fast_screen_full"

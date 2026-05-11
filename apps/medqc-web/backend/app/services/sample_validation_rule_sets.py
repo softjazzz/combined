@@ -51,7 +51,7 @@ SAMPLE_VALIDATION_DRAFTS: dict[str, dict[str, str]] = {
         "rule_set_name": SAMPLE_PROGRAMMATIC_RULE_SET_NAME,
     },
     FORMAL_FAST_SCREEN_FULL_MODE: {
-        "id": "manual-sample-formal-fast-screen-full",
+        "id": "sample-formal-fast-screen-full",
         "rule_code": "FORMAL-FAST-SCREEN-FULL",
         "rule_set_key": FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
         "rule_set_name": "内涵质控全量 v1",
