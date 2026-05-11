@@ -415,6 +415,185 @@ def _safe_list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
 
 
+def _compact_text(value: Any, *, limit: int = 500) -> str:
+    text = " ".join(_safe_text(value).split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def _documents_by_source(
+    all_documents: list[dict[str, Any]],
+    source_tables: set[str],
+) -> list[dict[str, Any]]:
+    return [
+        dict(item)
+        for item in all_documents
+        if _safe_text(item.get("source_table")) in source_tables and _safe_text(item.get("content"))
+    ]
+
+
+def _document_excerpt(
+    all_documents: list[dict[str, Any]],
+    source_tables: set[str],
+    *,
+    limit: int = 420,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in _documents_by_source(all_documents, source_tables):
+        content = _safe_text(item.get("content"))
+        excerpt = content[:limit]
+        rows.append(
+            {
+                "source_table": _safe_text(item.get("source_table")),
+                "document_type": _safe_text(item.get("document_type")),
+                "evidence_text": _compact_text(excerpt, limit=limit),
+                "hit": bool(item.get("hit")),
+            }
+        )
+    return rows
+
+
+def _build_sc083_evidence_context(
+    *,
+    all_documents: list[dict[str, Any]],
+    bundle: dict[str, Any],
+) -> dict[str, Any]:
+    surgery_docs = _document_excerpt(
+        all_documents,
+        {"mr_surgery", "surgery_record", "presurg_summary"},
+    )
+    discussion_docs = _document_excerpt(
+        all_documents,
+        {"presurg_discussion", "consultation_record", "diffcase_discussion", "daily_course_record"},
+    )
+    hits = dict(bundle.get("document_hits") or {})
+    return {
+        "rule_id": "SC-083",
+        "purpose": "四级手术术前讨论是否有 MDT/多学科讨论闭环证据。",
+        "required_evidence": [
+            "手术等级或可判定为四级手术的手术名称",
+            "术前讨论参与人员/讨论记录",
+            "MDT、会诊或多学科参与证据",
+        ],
+        "surgery_grade_evidence": surgery_docs,
+        "mdt_or_discussion_evidence": discussion_docs,
+        "coverage_flags": {
+            "has_surgery_source": bool(hits.get("mr_surgery") or hits.get("surgery_record") or surgery_docs),
+            "has_presurg_discussion": bool(hits.get("presurg_discussion") or discussion_docs),
+            "has_mdt_or_consultation_source": bool(hits.get("consultation_record") or hits.get("diffcase_discussion")),
+        },
+    }
+
+
+def _build_sc019_evidence_context(
+    *,
+    all_documents: list[dict[str, Any]],
+    bundle: dict[str, Any],
+) -> dict[str, Any]:
+    admission_docs = _document_excerpt(
+        all_documents,
+        {"admission_record", "admission_record_diagnosis"},
+    )
+    first_course_docs = _document_excerpt(
+        all_documents,
+        {"first_course_record"},
+    )
+    report_docs = _document_excerpt(
+        all_documents,
+        {"exam_master", "exam_item_report", "labtest_master", "labtest_item_report", "pathology_exam_report"},
+    )
+    hits = dict(bundle.get("document_hits") or {})
+    return {
+        "rule_id": "SC-019",
+        "purpose": "入院前/院外辅助检查在入院记录中是否记录完整、清楚、准确。",
+        "required_evidence": [
+            "入院记录辅助检查/院外检查段落",
+            "首次病程诊断依据或检查引用",
+            "原始检查检验报告摘要",
+        ],
+        "admission_exam_section": admission_docs,
+        "first_course_reference": first_course_docs,
+        "source_report_evidence": report_docs[:8],
+        "coverage_flags": {
+            "has_admission_record_source": bool(hits.get("admission_record") or admission_docs),
+            "has_source_report": bool(
+                hits.get("exam_master")
+                or hits.get("exam_item_report")
+                or hits.get("labtest_master")
+                or hits.get("labtest_item_report")
+                or hits.get("pathology_exam_report")
+                or report_docs
+            ),
+            "has_admission_assist_exam_text": bool(admission_docs),
+            "has_first_course_reference": bool(first_course_docs),
+        },
+    }
+
+
+def _build_sc100_evidence_context(
+    *,
+    all_documents: list[dict[str, Any]],
+    bundle: dict[str, Any],
+) -> dict[str, Any]:
+    surgery_docs = _document_excerpt(
+        all_documents,
+        {"surgery_record", "mr_surgery", "surgery_safecheck_record"},
+    )
+    charge_docs = _document_excerpt(
+        all_documents,
+        {"inpat_bill_item", "inpat_nondrug_order", "inpat_execution_record"},
+    )
+    hits = dict(bundle.get("document_hits") or {})
+    return {
+        "rule_id": "SC-100",
+        "purpose": "植入物条形码是否齐全，需要植入物和条码/追溯码记录域同时可核。",
+        "required_evidence": [
+            "手术记录或手术清单中存在植入物/耗材",
+            "条形码、条码、追溯码、标签或 UDI 记录",
+            "费用/医嘱/执行中的耗材记录作为对照",
+        ],
+        "surgery_implant_evidence": surgery_docs,
+        "charge_or_order_evidence": charge_docs[:8],
+        "coverage_flags": {
+            "has_surgery_record": bool(hits.get("surgery_record") or surgery_docs),
+            "has_consumable_cross_source": bool(
+                hits.get("inpat_bill_item")
+                or hits.get("inpat_nondrug_order")
+                or hits.get("inpat_execution_record")
+                or charge_docs
+            ),
+            "has_barcode_source": False,
+        },
+    }
+
+
+def _build_targeted_evidence_context(
+    *,
+    pack_id: str,
+    rule_ids: tuple[str, ...] | list[str],
+    all_documents: list[dict[str, Any]],
+    bundle: dict[str, Any],
+) -> list[dict[str, Any]]:
+    selected = {str(item or "").strip().upper() for item in rule_ids}
+    contexts: list[dict[str, Any]] = []
+    if "SC-083" in selected or pack_id == "presurg_discussion_procedure":
+        contexts.append(_build_sc083_evidence_context(all_documents=all_documents, bundle=bundle))
+    if "SC-019" in selected or pack_id == "admission_consistency_core":
+        contexts.append(_build_sc019_evidence_context(all_documents=all_documents, bundle=bundle))
+    if "SC-100" in selected or pack_id == "surgery_procedure":
+        contexts.append(_build_sc100_evidence_context(all_documents=all_documents, bundle=bundle))
+    return contexts
+
+
+def _targeted_context_by_rule(contexts: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        _safe_text(item.get("rule_id")): dict(item)
+        for item in contexts
+        if isinstance(item, dict) and _safe_text(item.get("rule_id"))
+    }
+
+
 def _resolve_scene(bundle: dict[str, Any]) -> str:
     scene = _safe_text(bundle.get("scene")).lower()
     return scene if scene in {"running", "final"} else "final"
@@ -490,6 +669,8 @@ def _build_evidence_payload(
     primary_document: dict[str, Any],
     all_documents: list[dict[str, Any]],
     bundle: dict[str, Any],
+    pack_id: str = "",
+    rule_ids: tuple[str, ...] | list[str] = (),
 ) -> dict[str, Any]:
     primary_id = str(primary_document.get("id") or "")
     supporting_documents: list[dict[str, Any]] = []
@@ -509,12 +690,19 @@ def _build_evidence_payload(
                 "hit": bool(item.get("hit")),
             }
         )
+    targeted_context = _build_targeted_evidence_context(
+        pack_id=pack_id,
+        rule_ids=rule_ids,
+        all_documents=all_documents,
+        bundle=bundle,
+    )
     return {
         "primary_document_text": str(primary_document.get("content") or "").strip(),
         "supporting_documents": supporting_documents,
         "timeline_facts": list(bundle.get("timeline_facts") or []),
         "document_hits": dict(bundle.get("document_hits") or {}),
         "data_quality_flags": list(bundle.get("data_quality_flags") or []),
+        "targeted_evidence_context": targeted_context,
     }
 
 
@@ -699,6 +887,11 @@ async def run_final_fast_screen(
             primary_document=primary_document,
             all_documents=documents,
             bundle=bundle,
+            pack_id=pack.pack_id,
+            rule_ids=pack.rule_ids,
+        )
+        targeted_context_by_rule = _targeted_context_by_rule(
+            list(evidence_payload.get("targeted_evidence_context") or [])
         )
         queued_at = time.perf_counter()
         pack_results: list[dict[str, Any]] = []
@@ -831,6 +1024,10 @@ async def run_final_fast_screen(
                 if isinstance(metadata, dict):
                     metadata["target_document_type"] = pack.document_type
                     metadata["rule_family"] = str(metadata.get("rule_family") or pack.rule_family)
+                    targeted_context = targeted_context_by_rule.get(rule_id)
+                    if targeted_context:
+                        metadata["targeted_evidence_context"] = targeted_context
+                        metadata["formal_evidence_coverage"] = dict(targeted_context.get("coverage_flags") or {})
                 normalized_pack_results.append(item)
             pack_results = normalized_pack_results
             status_counts: dict[str, int] = {}

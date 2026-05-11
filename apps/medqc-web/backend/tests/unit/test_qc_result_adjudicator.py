@@ -77,3 +77,180 @@ async def test_adjudicator_should_not_leave_boundary_state_when_llm_unavailable(
     assert rows[0]["adjudicated_display_status"] == "technical_error_internal"
     assert rows[0]["can_show_as_defect"] is False
     assert rows[0]["internal_only"] is True
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_downgrade_first_pass_confirmed_without_reason_quote():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-083",
+                "status": "non_compliant",
+                "display_status": "confirmed_defect",
+                "findings": "四级手术术前讨论未体现多学科参与。",
+                "evidence": "参与人员: 胡定祥主任医师 马晨曦副主任医师 黄河副主任医师",
+                "can_show_as_defect": True,
+            }
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["can_show_as_defect"] is False
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["original_adjudicated_display_status"] == "confirmed_defect"
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_keep_confirmed_with_reason_and_direct_quote():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-097",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "手术记录椎体深度出现明显异常数值，能够直接支撑描述不清。",
+                                        "adjudicator_supporting_quote": "T12椎体深度分别为405mm、直径为6.5mm",
+                                        "adjudicator_confidence": 0.92,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-097",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "手术记录存在明显数据错误。",
+                "evidence": "T12椎体深度分别为405mm、直径为6.5mm",
+                "can_show_as_defect": False,
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    assert rows[0]["can_show_as_defect"] is True
+    assert rows[0].get("adjudicator_guardrail_failed") is not True
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_downgrade_sc019_without_outside_exam_trigger():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-019",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "辅助检查为空，怀疑未记录。",
+                                        "adjudicator_supporting_quote": "辅助检查：",
+                                        "adjudicator_confidence": 0.9,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-019",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "入院记录辅助检查未记录。",
+                "evidence": "辅助检查：",
+                "can_show_as_defect": False,
+                "metadata": {
+                    "formal_evidence_coverage": {
+                        "has_admission_record_source": True,
+                        "has_source_report": False,
+                        "has_admission_assist_exam_text": True,
+                    }
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_downgrade_sc100_without_barcode_domain():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-100",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "手术记录存在植入物但未见条形码。",
+                                        "adjudicator_supporting_quote": "植入椎弓根螺钉及连接棒内固定材料",
+                                        "adjudicator_confidence": 0.9,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-100",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "植入物条形码不齐全。",
+                "evidence": "植入椎弓根螺钉及连接棒内固定材料",
+                "can_show_as_defect": False,
+                "metadata": {
+                    "formal_evidence_coverage": {
+                        "has_surgery_record": True,
+                        "has_consumable_cross_source": True,
+                        "has_barcode_source": False,
+                    }
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False

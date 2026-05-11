@@ -109,6 +109,33 @@ def test_normalize_execution_strategy_should_fall_back_to_standard():
     assert normalize_execution_strategy(None) == EXECUTION_STRATEGY_STANDARD
 
 
+def test_targeted_evidence_payload_should_include_sc083_sc019_sc100_contexts():
+    docs = [
+        {"id": "1:admission", "document_type": "入院记录", "source_table": "admission_record", "content": "辅助检查：院外CT提示肺部结节。"},
+        {"id": "1:first", "document_type": "首次病程记录", "source_table": "first_course_record", "content": "诊断依据：院外CT提示肺部结节。"},
+        {"id": "1:exam", "document_type": "检查报告", "source_table": "exam_item_report", "content": "胸部CT报告：肺部结节。"},
+        {"id": "1:surg", "document_type": "手术记录", "source_table": "surgery_record", "content": "手术名称：腰椎内固定术，植入椎弓根螺钉。"},
+        {"id": "1:disc", "document_type": "术前讨论", "source_table": "presurg_discussion", "content": "参与人员：外科医师讨论。"},
+        {"id": "1:bill", "document_type": "费用清单", "source_table": "inpat_bill_item", "content": "一次性内固定材料。"},
+    ]
+    payload = fast_screen_qc._build_evidence_payload(
+        primary_document=docs[0],
+        all_documents=docs,
+        bundle={"document_hits": {"surgery_record": True, "presurg_discussion": True, "inpat_bill_item": True}},
+        pack_id="surgery_procedure",
+        rule_ids=("SC-019", "SC-083", "SC-100"),
+    )
+
+    by_rule = {item["rule_id"]: item for item in payload["targeted_evidence_context"]}
+    assert {"SC-019", "SC-083", "SC-100"} <= set(by_rule)
+    assert by_rule["SC-019"]["coverage_flags"]["has_source_report"] is True
+    assert by_rule["SC-019"]["coverage_flags"]["has_admission_record_source"] is True
+    assert by_rule["SC-083"]["coverage_flags"]["has_presurg_discussion"] is True
+    assert by_rule["SC-100"]["coverage_flags"]["has_surgery_record"] is True
+    assert by_rule["SC-100"]["coverage_flags"]["has_consumable_cross_source"] is True
+    assert by_rule["SC-100"]["coverage_flags"]["has_barcode_source"] is False
+
+
 class _FakeFastScreenRuleEngine:
     def __init__(
         self,

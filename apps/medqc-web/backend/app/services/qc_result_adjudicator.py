@@ -27,6 +27,23 @@ LABEL_BY_STATUS = {
     "rejected_by_system": "rejected_by_system",
     "technical_error_internal": "technical_error",
 }
+CONFIRMED_QUOTE_MIN_LEN = 12
+TARGETED_COVERAGE_GUARDRAIL_RULES = {"SC-019", "SC-083", "SC-100"}
+NEGATIVE_ONLY_TERMS = ("未见", "缺失", "未提供", "未记录", "没有")
+DATA_GAP_TERMS = (
+    "缺文书",
+    "缺源",
+    "缺报告",
+    "缺医嘱",
+    "缺执行",
+    "缺少",
+    "无法判定",
+    "未提供",
+    "证据不足",
+    "数据缺口",
+    "覆盖不足",
+    "缺少必要",
+)
 
 
 def _safe_text(value: Any) -> str:
@@ -44,6 +61,31 @@ def _safe_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or "").strip().lower() in {"1", "true", "yes", "y", "是"}
+
+
+def _normalize_rule_id(value: Any) -> str:
+    return _safe_text(value).upper()
+
+
+def _contains_any(text: str, terms: tuple[str, ...] | list[str] | set[str]) -> bool:
+    return any(term and term in text for term in terms)
+
+
+def _metadata(item: dict[str, Any]) -> dict[str, Any]:
+    value = item.get("metadata")
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _coverage_flags(item: dict[str, Any]) -> dict[str, Any]:
+    metadata = _metadata(item)
+    value = metadata.get("formal_evidence_coverage")
+    if isinstance(value, dict):
+        return dict(value)
+    context = metadata.get("targeted_evidence_context")
+    if isinstance(context, dict) and isinstance(context.get("coverage_flags"), dict):
+        return dict(context.get("coverage_flags") or {})
+    value = item.get("formal_evidence_coverage")
+    return dict(value) if isinstance(value, dict) else {}
 
 
 def _truncate(value: Any, limit: int = 900) -> str:
@@ -207,6 +249,123 @@ def _apply_adjudication(
     return next_item
 
 
+def _set_display_status(item: dict[str, Any], status: str, *, reason: str) -> dict[str, Any]:
+    next_item = dict(item)
+    next_item.update(
+        {
+            "display_status": status,
+            "display_bucket": DISPLAY_BUCKET_BY_STATUS[status],
+            "postprocess_label": LABEL_BY_STATUS[status],
+            "postprocess_reason": reason,
+            "can_show_as_defect": status == "confirmed_defect",
+            "can_show_to_doctor": status == "confirmed_defect",
+            "internal_only": status in {"rejected_by_system", "technical_error_internal"},
+        }
+    )
+    if status == "technical_error_internal":
+        next_item["technical_error_internal"] = True
+    return next_item
+
+
+def _guardrail_targeted_rule(
+    *,
+    rule_id: str,
+    coverage: dict[str, Any],
+) -> tuple[str, str] | None:
+    if not coverage:
+        return (
+            "data_quality_gap",
+            f"{rule_id} 确认缺陷需要结构化 formal_evidence_coverage；当前结果缺少证据覆盖标记，不能直接 confirmed。",
+        )
+    if rule_id == "SC-083":
+        if not (
+            bool(coverage.get("has_surgery_source"))
+            and bool(coverage.get("has_presurg_discussion"))
+            and bool(coverage.get("has_mdt_or_consultation_source"))
+        ):
+            return (
+                "data_quality_gap",
+                "SC-083 确认缺陷需要手术来源、术前讨论和 MDT/会诊来源均覆盖；当前结构化覆盖不完整。",
+            )
+    if rule_id == "SC-019":
+        if not (
+            bool(coverage.get("has_admission_record_source"))
+            and bool(coverage.get("has_source_report"))
+            and bool(coverage.get("has_admission_assist_exam_text"))
+        ):
+            return (
+                "data_quality_gap",
+                "SC-019 确认缺陷需要入院记录、辅助检查段落和原始检查/检验报告来源均覆盖；当前结构化覆盖不完整。",
+            )
+    if rule_id == "SC-100":
+        if not bool(coverage.get("has_surgery_record")):
+            return (
+                "data_quality_gap",
+                "SC-100 确认缺陷需要手术记录来源覆盖；当前结构化覆盖不完整。",
+            )
+        if not bool(coverage.get("has_consumable_cross_source")) or not bool(coverage.get("has_barcode_source")):
+            return (
+                "data_quality_gap",
+                "SC-100 确认缺陷需要耗材/植入物对照来源和条码/追溯码记录域覆盖；当前结构化覆盖不完整。",
+            )
+    return None
+
+
+def _confirmed_guardrail(item: dict[str, Any]) -> dict[str, Any]:
+    if _safe_text(item.get("display_status")) != "confirmed_defect":
+        return dict(item)
+
+    next_item = dict(item)
+    rule_id = _normalize_rule_id(next_item.get("rule_id") or next_item.get("rule_code"))
+    reason = _safe_text(next_item.get("adjudicator_reason"))
+    quote = _safe_text(next_item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(next_item.get("evidence"))
+    findings = _safe_text(next_item.get("findings"))
+    problem_type = _safe_text(next_item.get("evidence_problem_type"))
+    combined = f"{findings}\n{evidence}\n{quote}\n{reason}\n{problem_type}"
+
+    failure_status = ""
+    failure_reason = ""
+    if not reason:
+        failure_status = "data_quality_gap" if rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES else "rejected_by_system"
+        failure_reason = "confirmed_defect 缺少二审 adjudicator_reason，不能作为正式确认缺陷。"
+    elif len(quote) < CONFIRMED_QUOTE_MIN_LEN:
+        failure_status = "data_quality_gap" if rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES else "rejected_by_system"
+        failure_reason = "confirmed_defect 缺少足够长度的 adjudicator_supporting_quote，不能证明规则核心要件。"
+    elif rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES and _contains_any(quote, NEGATIVE_ONLY_TERMS):
+        failure_status = "data_quality_gap"
+        failure_reason = "confirmed_defect 仅凭缺失类表述成立，但目标规则缺陷需要结构化证据域覆盖。"
+    elif rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES:
+        targeted_failure = _guardrail_targeted_rule(
+            rule_id=rule_id,
+            coverage=_coverage_flags(next_item),
+        )
+        if targeted_failure:
+            failure_status, failure_reason = targeted_failure
+
+    if not failure_status:
+        next_item.setdefault("adjudicator_guardrail_failed", False)
+        return next_item
+
+    if failure_status == "rejected_by_system" and _contains_any(combined, DATA_GAP_TERMS):
+        failure_status = "data_quality_gap"
+
+    next_item["original_adjudicated_display_status"] = _safe_text(
+        next_item.get("adjudicated_display_status")
+    ) or "confirmed_defect"
+    next_item["adjudicated_display_status"] = failure_status
+    next_item["adjudicator_guardrail_failed"] = True
+    next_item["adjudicator_guardrail_reason"] = failure_reason
+    next_item = _set_display_status(next_item, failure_status, reason=failure_reason)
+
+    metadata = next_item.get("metadata")
+    if isinstance(metadata, dict):
+        metadata["original_adjudicated_display_status"] = "confirmed_defect"
+        metadata["adjudicator_guardrail_failed"] = True
+        metadata["adjudicator_guardrail_reason"] = failure_reason
+    return next_item
+
+
 def _technical_error_for_candidate(item: dict[str, Any], reason: str) -> dict[str, Any]:
     return _apply_adjudication(
         item,
@@ -229,6 +388,10 @@ def needs_llm_adjudication(item: dict[str, Any]) -> bool:
     return True
 
 
+def apply_confirmed_guardrails(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_confirmed_guardrail(dict(item)) for item in rows]
+
+
 async def adjudicate_postprocessed_qc_results(
     rows: list[dict[str, Any]],
     *,
@@ -242,14 +405,14 @@ async def adjudicate_postprocessed_qc_results(
         if isinstance(item, dict) and needs_llm_adjudication(item)
     ]
     if not candidates:
-        return [dict(item) for item in rows]
+        return apply_confirmed_guardrails(rows)
 
     rules = rules_by_id or {}
     next_rows = [dict(item) for item in rows]
     if llm_generate is None:
         for index, item in candidates:
             next_rows[index] = _technical_error_for_candidate(item, "未配置正式质控二审 LLM，边界项进入内部技术异常。")
-        return next_rows
+        return apply_confirmed_guardrails(next_rows)
 
     prompt_items = [
         _candidate_payload(
@@ -266,7 +429,7 @@ async def adjudicate_postprocessed_qc_results(
     except Exception as exc:
         for index, item in candidates:
             next_rows[index] = _technical_error_for_candidate(item, f"正式质控二审 LLM 调用失败：{exc}")
-        return next_rows
+        return apply_confirmed_guardrails(next_rows)
 
     by_candidate_index: dict[int, dict[str, Any]] = {}
     for item in adjudicated_items:
@@ -289,4 +452,4 @@ async def adjudicate_postprocessed_qc_results(
         final_item = _apply_adjudication(original_item, adjudication)
         final_item["postprocess_mode"] = mode
         next_rows[row_index] = final_item
-    return next_rows
+    return apply_confirmed_guardrails(next_rows)
