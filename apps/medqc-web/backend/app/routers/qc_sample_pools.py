@@ -23,9 +23,12 @@ from ..services.customer_rule_sets import (
     get_customer_luxian_rule_set,
 )
 from ..services.sample_validation_rule_sets import (
+    FORMAL_FAST_SCREEN_FULL_MODE,
+    FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
     get_sample_programmatic_rule_set,
     resolve_sample_validation_pseudo_draft,
 )
+from ..services.qc_rule_sets import get_sichuan_rule_set
 
 
 router = APIRouter(
@@ -90,8 +93,8 @@ class SamplePoolRunRequest(BaseModel):
     max_parallel_records: Optional[int] = Field(default=None, description="病历级并发数")
     sample_item_ids: list[str] = Field(default_factory=list, description="选中的样本项 ID")
     record_ids: list[str] = Field(default_factory=list, description="选中的真实病历 visit_id")
-    validation_mode: str = Field(default="customer", description="验证模式：customer/sc/programmatic")
-    rule_set_key: Optional[str] = Field(default=None, description="指定规则包 key，仅客户专项模式使用")
+    validation_mode: str = Field(default="customer", description="验证模式：customer/sc/programmatic/formal_fast_screen_full")
+    rule_set_key: Optional[str] = Field(default=None, description="指定规则包 key")
 
 
 class SamplePoolSyncRequest(BaseModel):
@@ -427,8 +430,9 @@ async def run_sample_pool_intrinsic_validation(
         raise HTTPException(status_code=404, detail="样本池不存在")
 
     validation_mode = str(payload.validation_mode or "customer").strip().lower() or "customer"
-    if validation_mode not in {"customer", "sc", "programmatic"}:
-        raise HTTPException(status_code=422, detail="未知验证模式，仅支持 customer、sc 或 programmatic")
+    if validation_mode not in {"customer", "sc", "programmatic", FORMAL_FAST_SCREEN_FULL_MODE}:
+        raise HTTPException(status_code=422, detail="未知验证模式，仅支持 customer、sc、programmatic 或 formal_fast_screen_full")
+    is_formal_fast_screen_full = validation_mode == FORMAL_FAST_SCREEN_FULL_MODE
 
     runnable_items = service.get_runnable_items(
         pool_id=pool_id,
@@ -451,15 +455,16 @@ async def run_sample_pool_intrinsic_validation(
         }
     )
     record_rule_map: Dict[str, list[str]] = {}
-    for item in runnable_items:
-        record_id = str(item.get("matched_visit_id") or "").strip()
-        if not record_id:
-            continue
-        bucket = record_rule_map.setdefault(record_id, [])
-        for rule_id in list(item.get("candidate_rule_ids") or []):
-            normalized_rule_id = str(rule_id or "").strip()
-            if normalized_rule_id and normalized_rule_id not in bucket:
-                bucket.append(normalized_rule_id)
+    if not is_formal_fast_screen_full:
+        for item in runnable_items:
+            record_id = str(item.get("matched_visit_id") or "").strip()
+            if not record_id:
+                continue
+            bucket = record_rule_map.setdefault(record_id, [])
+            for rule_id in list(item.get("candidate_rule_ids") or []):
+                normalized_rule_id = str(rule_id or "").strip()
+                if normalized_rule_id and normalized_rule_id not in bucket:
+                    bucket.append(normalized_rule_id)
     if not record_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有已匹配的病历")
 
@@ -484,22 +489,35 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_key = ""
         rule_set_name = "SC样本规则模式"
         rule_set_version = "running-batch-1"
-    else:
+    elif validation_mode == "programmatic":
         programmatic_rule_set = get_sample_programmatic_rule_set()
         rule_ids = list(programmatic_rule_set.rule_ids)
         rule_set_key = programmatic_rule_set.key
         rule_set_name = programmatic_rule_set.name
         rule_set_version = programmatic_rule_set.version
+    else:
+        requested_rule_set_key = str(payload.rule_set_key or FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY).strip() or FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY
+        if requested_rule_set_key != FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY:
+            raise HTTPException(status_code=422, detail=f"正式质控 84 条仅支持规则集: {FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY}")
+        formal_rule_set = get_sichuan_rule_set(FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY)
+        rule_ids = [str(rule_id).strip() for rule_id in formal_rule_set.rule_ids if str(rule_id).strip()]
+        rule_set_key = formal_rule_set.key
+        rule_set_name = formal_rule_set.name
+        rule_set_version = formal_rule_set.version
 
     if not rule_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有可执行规则")
-    execution_strategy = _resolve_sample_validation_execution_strategy(
-        validation_mode=validation_mode,
-        rule_ids=rule_ids,
+    execution_strategy = (
+        EXECUTION_STRATEGY_FAST_SCREEN
+        if is_formal_fast_screen_full
+        else _resolve_sample_validation_execution_strategy(
+            validation_mode=validation_mode,
+            rule_ids=rule_ids,
+        )
     )
 
     workspace = _workspace_service()
-    requested_scope = str(pool.get("scene") or "running").strip().lower() or "running"
+    requested_scope = "final" if is_formal_fast_screen_full else str(pool.get("scene") or "running").strip().lower() or "running"
     effective_scope = requested_scope
     records = workspace.collect_records(
         scope=effective_scope,
@@ -511,6 +529,8 @@ async def run_sample_pool_intrinsic_validation(
         keyword=None,
         record_ids=record_ids,
     )
+    if not records and is_formal_fast_screen_full:
+        raise HTTPException(status_code=422, detail="选中病历未同步为终末病历，无法发起正式终末质控")
     if not records and record_ids and effective_scope != "all":
         fallback_records = workspace.collect_records(
             scope="all",
@@ -533,39 +553,42 @@ async def run_sample_pool_intrinsic_validation(
         pool_name=str(pool.get("name") or ""),
         rule_count=len(rule_ids),
     )
+    job_filters = {
+        "rule_ids": rule_ids,
+        "rule_set_key": rule_set_key,
+        "rule_set_name": rule_set_name,
+        "rule_set_version": rule_set_version,
+        "execution_strategy": execution_strategy,
+        "quality_profile": "throughput_v1",
+        "bucket_strategy": "fixed_packs",
+        "batch_output_mode": "minimal",
+        "enable_selective_refine": False,
+        "refine_confidence_threshold": 0.0,
+        "max_refine_candidates": 0,
+        "source": "manual_sample_formal_fast_screen_full" if is_formal_fast_screen_full else "manual_problem_sample_pool",
+        "sample_pool_id": pool_id,
+        "selected_record_ids": payload.record_ids,
+        "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
+        "selected_sample_count": len(runnable_items),
+        "dedup_record_count": len(record_ids),
+        "department": payload.department,
+        "doctor": payload.doctor,
+        "temperature": payload.temperature,
+        "top_p": payload.top_p,
+        "max_tokens": payload.max_tokens,
+        "model_code": payload.model_code,
+        "max_parallel_records": payload.max_parallel_records,
+        "effective_scope": effective_scope,
+        "validation_mode": validation_mode,
+    }
+    if record_rule_map:
+        job_filters["record_rule_map"] = record_rule_map
+
     job = workspace.create_batch_job(
         draft=pseudo_draft,
         created_by=_current_user_id(current_user),
         scope=effective_scope,
-        filters={
-            "rule_ids": rule_ids,
-            "rule_set_key": rule_set_key,
-            "rule_set_name": rule_set_name,
-            "rule_set_version": rule_set_version,
-            "execution_strategy": execution_strategy,
-            "quality_profile": "throughput_v1",
-            "bucket_strategy": "fixed_packs",
-            "batch_output_mode": "minimal",
-            "enable_selective_refine": False,
-            "refine_confidence_threshold": 0.0,
-            "max_refine_candidates": 0,
-            "source": "manual_problem_sample_pool",
-            "sample_pool_id": pool_id,
-            "selected_record_ids": payload.record_ids,
-            "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
-            "selected_sample_count": len(runnable_items),
-            "dedup_record_count": len(record_ids),
-            "record_rule_map": record_rule_map,
-            "department": payload.department,
-            "doctor": payload.doctor,
-            "temperature": payload.temperature,
-            "top_p": payload.top_p,
-            "max_tokens": payload.max_tokens,
-            "model_code": payload.model_code,
-            "max_parallel_records": payload.max_parallel_records,
-            "effective_scope": effective_scope,
-            "validation_mode": validation_mode,
-        },
+        filters=job_filters,
         record_ids=record_ids,
         total_records=len(records),
         draft_ids=rule_ids,
@@ -590,6 +613,6 @@ async def run_sample_pool_intrinsic_validation(
             "rule_set_name": rule_set_name,
             "rule_set_version": rule_set_version,
         },
-        message="客户样本验证任务已创建",
+        message="正式质控任务已创建" if is_formal_fast_screen_full else "客户样本验证任务已创建",
         trace_id=get_trace_id(request),
     )

@@ -2208,3 +2208,39 @@ def test_get_runnable_items_should_allow_programmatic_without_bundle_ready_or_ba
 
     assert len(runnable) == 1
     assert runnable[0]["coverage_type"] == "programmatic"
+
+
+def test_get_runnable_items_should_allow_formal_fast_screen_without_bundle_ready_or_batch1(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-1",
+            "pool_id": "pool-1",
+            "row_no": 1,
+            "patient_name": "张三",
+            "mr_no": "ZY001",
+            "department": "普外科",
+            "manual_issue_text": "首次病程记录鉴别诊断不全面",
+            "coverage_type": "llm_intrinsic",
+            "candidate_rule_ids_json": '["SC-023"]',
+            "include_in_batch_1": False,
+            "matched_visit_id": "V010",
+            "matched_patient_id": "P010",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "missing",
+            "raw_payload_json": "{}",
+        },
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+
+    runnable = service.get_runnable_items(
+        pool_id="pool-1",
+        validation_mode="formal_fast_screen_full",
+        record_ids=["V010"],
+    )
+
+    assert len(runnable) == 1
+    assert runnable[0]["matched_visit_id"] == "V010"
+    assert runnable[0]["bundle_status"] == "missing"

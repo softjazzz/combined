@@ -71,7 +71,11 @@ export type ManualSamplePoolRecord = {
   sample_items: ManualSamplePoolItem[]
 }
 
-export type ManualSampleValidationMode = 'customer' | 'sc' | 'programmatic'
+export type ManualSampleValidationMode =
+  | 'customer'
+  | 'sc'
+  | 'programmatic'
+  | 'formal_fast_screen_full'
 
 export type ManualSamplePoolListResult = {
   items: ManualSamplePool[]

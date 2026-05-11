@@ -23,8 +23,9 @@
                   客户样本验证
                 </h1>
                 <p class="mt-2 max-w-4xl text-[14px] leading-7 text-slate-600">
-                  先核对人工问题样本与系统病历的匹配关系，再在当前页面直接发起客户专项 LLM
-                  复核。页面只展示可直接用于客户演示的样本状态、验证任务和命中结果。
+                  先核对人工问题样本与系统病历的匹配关系；默认发起客户专项规则包验证，也可对选中病历发起正式终末
+                  <span class="font-semibold text-slate-800">sc_content_full_v1 / 全量内涵 84 条</span>
+                  质控，两条链路互不混用。
                 </p>
               </div>
               <div class="flex flex-col gap-3 xl:flex-row xl:items-center">
@@ -126,6 +127,14 @@
                 查看最近任务
               </a-button>
             </div>
+          </div>
+          <div
+            v-if="selectedValidationMode === 'formal_fast_screen_full'"
+            class="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-[13px] leading-6 text-sky-800"
+          >
+            正式质控模式：本次将执行
+            <span class="font-semibold">sc_content_full_v1 / 全量内涵 84 条</span>
+            ，不使用客户专项 276 条规则包，也不作为 Sheet2 exact 回放。
           </div>
         </section>
 
@@ -454,11 +463,11 @@
                   class="flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
                 >
                   <span class="mr-2">{{
-                    selectedValidationMode === 'programmatic' ? '首批筛选已关闭' : '仅首批'
+                    isSyncedOnlyValidationMode ? '首批筛选已关闭' : '仅首批'
                   }}</span>
                   <a-switch
                     v-model:checked="filters.includeInBatch"
-                    :disabled="selectedValidationMode === 'programmatic'"
+                    :disabled="isSyncedOnlyValidationMode"
                   />
                 </div>
                 <div
@@ -816,6 +825,13 @@ const runOptions = ref({
   maxParallelRecords: 4,
 })
 const selectedValidationMode = ref<ManualSampleValidationMode>('customer')
+const FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = 'sc_content_full_v1'
+const isFormalFastScreenMode = computed(
+  () => selectedValidationMode.value === 'formal_fast_screen_full',
+)
+const isSyncedOnlyValidationMode = computed(
+  () => selectedValidationMode.value === 'programmatic' || isFormalFastScreenMode.value,
+)
 
 const poolOptions = computed(() =>
   pools.value.map((item) => ({
@@ -844,34 +860,35 @@ const validationModeOptions = [
   { label: '客户专项规则包模式', value: 'customer' },
   { label: 'SC 样本规则模式', value: 'sc' },
   { label: '硬门槛程序规则模式', value: 'programmatic' },
+  { label: '正式终末全量内涵 84 条', value: 'formal_fast_screen_full' },
 ]
 
 const summaryCards = computed(() => {
   const pool = selectedPool.value
-  const issueSampleLabel =
-    selectedValidationMode.value === 'customer'
-      ? '问题样本'
-      : selectedValidationMode.value === 'programmatic'
-        ? '程序样本'
-        : '内涵样本'
-  const issueSampleValue =
-    selectedValidationMode.value === 'programmatic'
-      ? (pool?.programmatic_items ?? 0)
-      : (pool?.llm_intrinsic_items ?? 0)
-  const issueSampleHelp =
-    selectedValidationMode.value === 'customer'
-      ? '当前纳入客户专项规则包验证的问题样本'
-      : selectedValidationMode.value === 'programmatic'
-        ? '当前纳入样本硬门槛程序规则包的样本'
-        : '当前纳入 LLM 验证的问题样本'
-  const runnableValue =
-    selectedValidationMode.value === 'programmatic'
-      ? (pool?.matched_items ?? 0)
-      : (pool?.ready_items ?? 0)
-  const runnableHelp =
-    selectedValidationMode.value === 'programmatic'
-      ? '已匹配且已同步，可直接发起程序规则验证'
-      : 'running bundle 已就绪，可直接发起验证'
+  let issueSampleLabel = '内涵样本'
+  let issueSampleValue = pool?.llm_intrinsic_items ?? 0
+  let issueSampleHelp = '当前纳入 LLM 验证的问题样本'
+  if (selectedValidationMode.value === 'customer') {
+    issueSampleLabel = '问题样本'
+    issueSampleHelp = '当前纳入客户专项规则包验证的问题样本'
+  } else if (isFormalFastScreenMode.value) {
+    issueSampleLabel = '正式质控病历'
+    issueSampleValue = pool?.matched_items ?? 0
+    issueSampleHelp = '当前已匹配真实病历，可按正式终末 84 条发起质控'
+  } else if (selectedValidationMode.value === 'programmatic') {
+    issueSampleLabel = '程序样本'
+    issueSampleValue = pool?.programmatic_items ?? 0
+    issueSampleHelp = '当前纳入样本硬门槛程序规则包的样本'
+  }
+  const runnableValue = isSyncedOnlyValidationMode.value
+    ? (pool?.matched_items ?? 0)
+    : (pool?.ready_items ?? 0)
+  let runnableHelp = 'running bundle 已就绪，可直接发起验证'
+  if (isFormalFastScreenMode.value) {
+    runnableHelp = '已匹配且已同步，可发起正式终末 fast_screen_full'
+  } else if (selectedValidationMode.value === 'programmatic') {
+    runnableHelp = '已匹配且已同步，可直接发起程序规则验证'
+  }
   return [
     { label: '样本总数', value: pool?.total_items ?? 0, help: 'Sheet2 导入后的样本总量' },
     {
@@ -954,14 +971,11 @@ const currentScopeDescription = computed(() => {
     `验证模式：${modeLabel}`,
     filters.value.coverageType ? `样本范围：${coverageLabel(filters.value.coverageType)}` : '',
     filters.value.matchStatus ? `病历关联：${matchStatusLabel(filters.value.matchStatus)}` : '',
-    selectedValidationMode.value !== 'programmatic' && filters.value.includeInBatch
-      ? '仅看首批样本'
-      : '',
+    !isSyncedOnlyValidationMode.value && filters.value.includeInBatch ? '仅看首批样本' : '',
   ].filter(Boolean)
-  const base =
-    selectedValidationMode.value === 'programmatic'
-      ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份、已同步 ${synced} 份。`
-      : `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，文书已就绪 ${ready} 份。`
+  const base = isSyncedOnlyValidationMode.value
+    ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份、已同步 ${synced} 份。`
+    : `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，文书已就绪 ${ready} 份。`
   if (!filterLabels.length) {
     return `${base} ${runnableRequirementHint()}`
   }
@@ -982,9 +996,13 @@ const selectedRecordStats = computed(() => {
 })
 
 const runButtonText = computed(() =>
-  selectedRecordStats.value.selectedCount > 0
-    ? `发起选中病历验证（${selectedRecordStats.value.selectedCount}）`
-    : '发起样本验证',
+  isFormalFastScreenMode.value
+    ? selectedRecordStats.value.selectedCount > 0
+      ? `正式质控 84 条（${selectedRecordStats.value.selectedCount}）`
+      : '正式质控 84 条'
+    : selectedRecordStats.value.selectedCount > 0
+      ? `发起选中病历验证（${selectedRecordStats.value.selectedCount}）`
+      : '发起样本验证',
 )
 
 const paginationConfig = computed(() => ({
@@ -1176,6 +1194,7 @@ function coverageLabel(value: string): string {
 }
 
 function validationModeLabel(value: string): string {
+  if (value === 'formal_fast_screen_full') return '正式终末全量内涵 84 条'
   if (value === 'programmatic') return '硬门槛程序规则模式'
   if (value === 'sc') return 'SC 样本规则模式'
   return '客户专项规则包模式'
@@ -1304,6 +1323,9 @@ function summarizeRecordScope(record: ManualSamplePoolRecord): string {
   if (labels.length) {
     return labels.join(' / ')
   }
+  if (selectedValidationMode.value === 'formal_fast_screen_full') {
+    return 'sc_content_full_v1 / 全量内涵 84 条'
+  }
   if (selectedValidationMode.value === 'programmatic') {
     return '样本硬门槛程序规则包 v1'
   }
@@ -1314,6 +1336,9 @@ function summarizeRecordScope(record: ManualSamplePoolRecord): string {
 }
 
 function recordScopeHint(record: ManualSamplePoolRecord): string {
+  if (selectedValidationMode.value === 'formal_fast_screen_full') {
+    return '当前按正式终末 fast_screen_full 执行 sc_content_full_v1 全量内涵 84 条，不依赖单条样本候选规则。'
+  }
   if ((record.document_scope_labels || []).length > 0) {
     return '已按当前病历实际同步到的文书类型识别验证范围。'
   }
@@ -1455,7 +1480,7 @@ function resolvePrimaryAction(record: ManualSamplePoolRecord): {
 }
 
 function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
-  if (selectedValidationMode.value === 'programmatic') {
+  if (isSyncedOnlyValidationMode.value) {
     return (
       record.match_status === 'matched' &&
       record.sync_status === 'synced' &&
@@ -1471,10 +1496,23 @@ function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
 }
 
 function runnableRequirementHint(): string {
+  if (selectedValidationMode.value === 'formal_fast_screen_full') {
+    return '未关联真实病历或尚未同步到本地 PG 的病历不会进入正式质控；若后台 final scope 收集不到，会返回终末病历未同步错误。'
+  }
   if (selectedValidationMode.value === 'programmatic') {
     return '未关联到真实病历或尚未同步的病历不会进入程序规则批量验证。'
   }
   return '未关联到真实病历或文书未就绪的病历不会进入批量验证。'
+}
+
+function selectedRecordNotRunnableMessage(): string {
+  if (selectedValidationMode.value === 'formal_fast_screen_full') {
+    return '当前选中的病历还未完成匹配或同步，暂时无法发起正式质控 84 条'
+  }
+  if (selectedValidationMode.value === 'programmatic') {
+    return '当前选中的病历还未完成匹配或同步，暂时无法发起程序规则验证'
+  }
+  return '当前选中的病历还未完成匹配、同步或 bundle 准备，暂时无法发起验证'
 }
 
 async function loadPools() {
@@ -1520,8 +1558,7 @@ async function loadRecords() {
   const result = await getManualSamplePoolRecords(selectedPoolId.value, {
     coverage_type: filters.value.coverageType,
     match_status: filters.value.matchStatus,
-    include_in_batch_1:
-      selectedValidationMode.value === 'programmatic' ? undefined : filters.value.includeInBatch,
+    include_in_batch_1: isSyncedOnlyValidationMode.value ? undefined : filters.value.includeInBatch,
     q: filters.value.query || undefined,
     page: pagination.value.page,
     page_size: pagination.value.pageSize,
@@ -1551,8 +1588,14 @@ async function handleValidationModeChange(mode: ManualSampleValidationMode) {
   if (mode === 'programmatic') {
     filters.value.coverageType = 'programmatic'
     filters.value.includeInBatch = false
+  } else if (mode === 'formal_fast_screen_full') {
+    filters.value.coverageType = undefined
+    filters.value.includeInBatch = false
   } else if (mode === 'sc' && filters.value.coverageType === 'programmatic') {
     filters.value.coverageType = 'llm_intrinsic'
+    filters.value.includeInBatch = true
+  } else {
+    filters.value.includeInBatch = true
   }
   pagination.value.page = 1
   selectedRowKeys.value = []
@@ -1564,7 +1607,7 @@ function resetFilters() {
     query: '',
     coverageType: undefined,
     matchStatus: undefined,
-    includeInBatch: selectedValidationMode.value !== 'programmatic',
+    includeInBatch: !isSyncedOnlyValidationMode.value,
   }
   pagination.value.page = 1
   selectedRowKeys.value = []
@@ -1683,9 +1726,10 @@ async function handleMatchPool() {
 async function handleSyncPoolRecords() {
   if (!selectedPoolId.value) return
   syncLoading.value = true
+  const limitToIntrinsic = !isSyncedOnlyValidationMode.value
   const result = await syncManualSamplePoolRecords(selectedPoolId.value, {
-    only_intrinsic: selectedValidationMode.value !== 'programmatic',
-    include_in_batch_1: selectedValidationMode.value !== 'programmatic',
+    only_intrinsic: limitToIntrinsic,
+    include_in_batch_1: limitToIntrinsic,
   })
   syncLoading.value = false
   if (!result.success || !result.data) {
@@ -1701,11 +1745,7 @@ async function handleRunPool() {
   const { selectedCount, runnableCount, skippedCount, runnableRecordIds } =
     selectedRecordStats.value
   if (selectedCount > 0 && runnableCount === 0) {
-    message.warning(
-      selectedValidationMode.value === 'programmatic'
-        ? '当前选中的病历还未完成匹配或同步，暂时无法发起程序规则验证'
-        : '当前选中的病历还未完成匹配、同步或 bundle 准备，暂时无法发起验证',
-    )
+    message.warning(selectedRecordNotRunnableMessage())
     return
   }
   if (selectedCount > 0 && skippedCount > 0) {
@@ -1714,11 +1754,20 @@ async function handleRunPool() {
     )
   }
   runLoading.value = true
-  const result = await runManualSamplePool(selectedPoolId.value, {
+  const runPayload = {
     record_ids: runnableRecordIds,
     max_parallel_records: runOptions.value.maxParallelRecords,
     validation_mode: selectedValidationMode.value,
-  })
+  } as {
+    record_ids: string[]
+    max_parallel_records: number
+    validation_mode: ManualSampleValidationMode
+    rule_set_key?: string
+  }
+  if (isFormalFastScreenMode.value) {
+    runPayload.rule_set_key = FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY
+  }
+  const result = await runManualSamplePool(selectedPoolId.value, runPayload)
   runLoading.value = false
   if (!result.success || !result.data) {
     message.error(result.message || '创建样本验证任务失败')
@@ -1727,8 +1776,10 @@ async function handleRunPool() {
   const ruleSetName = String(
     result.data.rule_set_name || validationModeLabel(selectedValidationMode.value),
   ).trim()
+  const ruleSetKey = String(result.data.rule_set_key || '').trim()
+  const ruleSetDisplay = ruleSetKey ? `${ruleSetKey} / ${ruleSetName}` : ruleSetName
   message.success(
-    `已创建${ruleSetName}验证任务，覆盖 ${result.data.sample_item_count} 条样本 / ${result.data.record_count} 份病历 / ${result.data.rule_count} 条规则，并发 ${runOptions.value.maxParallelRecords} 份病历`,
+    `已创建${ruleSetDisplay}验证任务，覆盖 ${result.data.sample_item_count} 条样本 / ${result.data.record_count} 份病历 / ${result.data.rule_count} 条规则，并发 ${runOptions.value.maxParallelRecords} 份病历`,
   )
   selectedRowKeys.value = []
   await loadPools()

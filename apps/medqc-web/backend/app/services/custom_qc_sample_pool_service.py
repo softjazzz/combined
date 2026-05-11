@@ -3362,6 +3362,13 @@ class CustomQCSamplePoolService:
                         self._item_table.c.matched_visit_id.is_not(None),
                     ]
                 )
+            elif normalized_mode == "formal_fast_screen_full":
+                clauses.extend(
+                    [
+                        self._item_table.c.matched_visit_id.is_not(None),
+                        self._item_table.c.matched_visit_id != "",
+                    ]
+                )
             else:
                 raise ValueError(f"未知验证模式: {validation_mode}")
             stmt = (

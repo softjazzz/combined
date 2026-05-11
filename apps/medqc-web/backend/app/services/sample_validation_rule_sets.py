@@ -6,6 +6,8 @@ from .customer_rule_sets import get_customer_luxian_rule_set
 from .qc_rule_sets import QCRuleSet
 
 
+FORMAL_FAST_SCREEN_FULL_MODE = "formal_fast_screen_full"
+FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = "sc_content_full_v1"
 SAMPLE_PROGRAMMATIC_RULE_SET_KEY = "sample_programmatic_gate_v1"
 SAMPLE_PROGRAMMATIC_RULE_SET_NAME = "样本硬门槛程序规则包 v1"
 SAMPLE_PROGRAMMATIC_RULE_SET_VERSION = "2026-04-27"
@@ -48,6 +50,12 @@ SAMPLE_VALIDATION_DRAFTS: dict[str, dict[str, str]] = {
         "rule_set_key": SAMPLE_PROGRAMMATIC_RULE_SET_KEY,
         "rule_set_name": SAMPLE_PROGRAMMATIC_RULE_SET_NAME,
     },
+    FORMAL_FAST_SCREEN_FULL_MODE: {
+        "id": "manual-sample-formal-fast-screen-full",
+        "rule_code": "FORMAL-FAST-SCREEN-FULL",
+        "rule_set_key": FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
+        "rule_set_name": "内涵质控全量 v1",
+    },
 }
 
 SAMPLE_VALIDATION_DRAFT_IDS = frozenset(str(item["id"]) for item in SAMPLE_VALIDATION_DRAFTS.values())
@@ -76,7 +84,7 @@ def resolve_sample_validation_pseudo_draft(*, validation_mode: str, pool_name: s
     draft = dict(SAMPLE_VALIDATION_DRAFTS.get(validation_mode) or SAMPLE_VALIDATION_DRAFTS["customer"])
     normalized_pool_name = str(pool_name or "样本验证").strip() or "样本验证"
     draft["name"] = f"{normalized_pool_name}样本验证任务({max(1, int(rule_count or 1))}条规则)"
-    draft["scene"] = "running"
+    draft["scene"] = "final" if validation_mode == FORMAL_FAST_SCREEN_FULL_MODE else "running"
     return draft
 
 

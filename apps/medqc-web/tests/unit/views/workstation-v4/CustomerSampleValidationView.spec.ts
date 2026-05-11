@@ -1018,6 +1018,80 @@ describe('CustomerSampleValidationView', () => {
     })
   })
 
+  it('切换到正式终末全量内涵 84 条后应按 sc_content_full_v1 提交且不要求 bundle ready', async () => {
+    const wrapper = await mountView()
+
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord({
+            id: 'V084',
+            matched_visit_id: 'V084',
+            bundle_status: 'pending',
+            sync_status: 'synced',
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    runManualSamplePool.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool_id: 'pool-1',
+        job_id: 'job-84',
+        sample_item_count: 1,
+        selected_record_count: 1,
+        record_count: 1,
+        rule_count: 84,
+        record_ids: ['V084'],
+        rule_ids: ['SC-001'],
+        validation_mode: 'formal_fast_screen_full',
+        rule_set_key: 'sc_content_full_v1',
+        rule_set_name: '内涵质控全量 v1',
+      },
+    })
+
+    const selectElements = wrapper.findAll('select')
+    const modeSelect = selectElements.find((node) =>
+      node.findAll('option').some((option) => option.text() === '正式终末全量内涵 84 条'),
+    )
+    expect(modeSelect).toBeTruthy()
+    await modeSelect!.setValue('formal_fast_screen_full')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('sc_content_full_v1 / 全量内涵 84 条')
+    expect(getManualSamplePoolRecords).toHaveBeenLastCalledWith(
+      'pool-1',
+      expect.objectContaining({
+        include_in_batch_1: undefined,
+      }),
+    )
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('正式质控 84 条'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
+      record_ids: ['V084'],
+      max_parallel_records: 4,
+      validation_mode: 'formal_fast_screen_full',
+      rule_set_key: 'sc_content_full_v1',
+    })
+    expect(message.success).toHaveBeenCalledWith(
+      '已创建sc_content_full_v1 / 内涵质控全量 v1验证任务，覆盖 1 条样本 / 1 份病历 / 84 条规则，并发 4 份病历',
+    )
+  })
+
   it('程序规则模式同步样本病历时不再限制内涵和首批', async () => {
     const wrapper = await mountView()
 
@@ -1041,6 +1115,30 @@ describe('CustomerSampleValidationView', () => {
     )
     expect(modeSelect).toBeTruthy()
     await modeSelect!.setValue('programmatic')
+    await flushPromises()
+
+    const syncButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('同步样本病历'))
+    expect(syncButton).toBeTruthy()
+    await syncButton!.trigger('click')
+    await flushPromises()
+
+    expect(syncManualSamplePoolRecords).toHaveBeenLastCalledWith('pool-1', {
+      only_intrinsic: false,
+      include_in_batch_1: false,
+    })
+  })
+
+  it('正式终末全量内涵 84 条同步样本病历时不限制内涵和首批', async () => {
+    const wrapper = await mountView()
+
+    const selectElements = wrapper.findAll('select')
+    const modeSelect = selectElements.find((node) =>
+      node.findAll('option').some((option) => option.text() === '正式终末全量内涵 84 条'),
+    )
+    expect(modeSelect).toBeTruthy()
+    await modeSelect!.setValue('formal_fast_screen_full')
     await flushPromises()
 
     const syncButton = wrapper

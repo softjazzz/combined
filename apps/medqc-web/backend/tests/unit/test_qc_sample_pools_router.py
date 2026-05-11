@@ -3,9 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, HTTPException
 
 from app.routers import qc_sample_pools
+from app.services.qc_rule_sets import get_sichuan_rule_set
 from app.services.sample_validation_rule_sets import SAMPLE_PROGRAMMATIC_RULE_IDS
 
 
@@ -58,6 +59,10 @@ class _WorkspaceServiceStub:
         self.create_batch_job_calls = []
         self.records_by_scope = {
             "running": [
+                {"record_id": "V001", "visit_id": "V001"},
+                {"record_id": "V002", "visit_id": "V002"},
+            ],
+            "final": [
                 {"record_id": "V001", "visit_id": "V001"},
                 {"record_id": "V002", "visit_id": "V002"},
             ],
@@ -617,6 +622,99 @@ async def test_run_sample_pool_intrinsic_validation_should_use_fixed_programmati
     assert created["filters"]["rule_set_name"] == "样本硬门槛程序规则包 v1"
     assert created["draft_ids"] == list(SAMPLE_PROGRAMMATIC_RULE_IDS)
     assert response["data"]["rule_ids"] == list(SAMPLE_PROGRAMMATIC_RULE_IDS)
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_use_formal_fast_screen_full_rule_pack(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V001", "V002"],
+            sample_item_ids=["item-1", "item-2"],
+            max_parallel_records=2,
+            validation_mode="formal_fast_screen_full",
+            rule_set_key="sc_content_full_v1",
+        ),
+        background_tasks=BackgroundTasks(),
+        current_user={"id": "tester"},
+    )
+
+    formal_rule_set = get_sichuan_rule_set("sc_content_full_v1")
+    created = workspace_service.create_batch_job_calls[0]
+    assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "formal_fast_screen_full"
+    assert workspace_service.collect_records_calls == [
+        {
+            "scope": "final",
+            "department": None,
+            "doctor": None,
+            "date_field": "admission",
+            "record_ids": ["V001", "V002"],
+        }
+    ]
+    assert created["draft"]["id"] == "manual-sample-formal-fast-screen-full"
+    assert created["draft"]["scene"] == "final"
+    assert created["scope"] == "final"
+    assert created["filters"]["validation_mode"] == "formal_fast_screen_full"
+    assert created["filters"]["source"] == "manual_sample_formal_fast_screen_full"
+    assert created["filters"]["rule_set_key"] == "sc_content_full_v1"
+    assert created["filters"]["rule_set_name"] == formal_rule_set.name
+    assert created["filters"]["rule_set_version"] == formal_rule_set.version
+    assert created["filters"]["execution_strategy"] == "fast_screen"
+    assert created["filters"]["bucket_strategy"] == "fixed_packs"
+    assert created["filters"]["quality_profile"] == "throughput_v1"
+    assert "record_rule_map" not in created["filters"]
+    assert created["draft_ids"] == list(formal_rule_set.rule_ids)
+    assert response["data"]["validation_mode"] == "formal_fast_screen_full"
+    assert response["data"]["rule_set_key"] == "sc_content_full_v1"
+    assert response["data"]["rule_count"] == len(formal_rule_set.rule_ids) == 84
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_formal_mode_should_not_fallback_to_all(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+    workspace_service.records_by_scope["final"] = []
+    workspace_service.records_by_scope["all"] = [
+        {"record_id": "V001", "visit_id": "V001"},
+        {"record_id": "V002", "visit_id": "V002"},
+    ]
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                record_ids=["V001", "V002"],
+                validation_mode="formal_fast_screen_full",
+                rule_set_key="sc_content_full_v1",
+            ),
+            background_tasks=BackgroundTasks(),
+            current_user={"id": "tester"},
+        )
+
+    assert getattr(exc_info.value, "detail", "") == "选中病历未同步为终末病历，无法发起正式终末质控"
+    assert workspace_service.collect_records_calls == [
+        {
+            "scope": "final",
+            "department": None,
+            "doctor": None,
+            "date_field": "admission",
+            "record_ids": ["V001", "V002"],
+        }
+    ]
+    assert workspace_service.create_batch_job_calls == []
 
 
 @pytest.mark.asyncio
