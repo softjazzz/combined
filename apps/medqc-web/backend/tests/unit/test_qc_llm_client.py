@@ -1,3 +1,6 @@
+import pytest
+
+import app.services.qc_llm_client as qc_llm_client_module
 from app.services.qc_llm_client import SichuanQCLLMClient
 
 
@@ -94,3 +97,40 @@ def test_deepseek_reasoner_should_send_thinking_and_reasoning_effort():
 
     assert payload["thinking"] == {"type": "enabled"}
     assert payload["reasoning_effort"] == "high"
+
+
+@pytest.mark.asyncio
+async def test_generate_should_raise_clear_error_when_upstream_http_error(monkeypatch):
+    async def fake_safe_post_json(**kwargs):
+        return {
+            "__status__": 400,
+            "__error__": True,
+            "body": {
+                "code": "InvalidParameter",
+                "message": "model not found",
+                "request_id": "req-123",
+            },
+        }
+
+    monkeypatch.setattr(qc_llm_client_module, "safe_post_json", fake_safe_post_json)
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "api_key": "sk-test-secret",
+            "model": "qwen3.6-35b-a3b",
+            "provider_code": "alibaba",
+        }
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await client.generate("ping")
+
+    message = str(exc_info.value)
+    assert "upstream_http_error" in message
+    assert "upstream_http_status=400" in message
+    assert "provider_code=alibaba" in message
+    assert "model=qwen3.6-35b-a3b" in message
+    assert "endpoint_host=dashscope.aliyuncs.com" in message
+    assert "InvalidParameter" in message
+    assert "model not found" in message
+    assert "sk-test-secret" not in message
