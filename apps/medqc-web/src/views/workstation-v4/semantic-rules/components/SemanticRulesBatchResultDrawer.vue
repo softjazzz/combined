@@ -231,7 +231,7 @@
                   </div>
                 </div>
                 <a-tag class="aggregation-count-tag">
-                  {{ resolveStatusText(item.status) }}
+                  {{ resolveDisplayStatusText(item) || resolveStatusText(item.status) }}
                 </a-tag>
               </div>
               <div class="issue-conclusion-summary">
@@ -1354,6 +1354,16 @@ const issueItems = computed<SichuanBatchIssueItem[]>(() => {
       can_show_to_doctor: item.canShowToDoctor,
       internal_only: item.internalOnly,
       postprocess_mode: item.postprocessMode || sourceIssue.postprocess_mode,
+      first_pass_status: item.firstPassStatus || sourceIssue.first_pass_status,
+      first_pass_display_status:
+        item.firstPassDisplayStatus || sourceIssue.first_pass_display_status,
+      adjudicated_display_status:
+        item.adjudicatedDisplayStatus || sourceIssue.adjudicated_display_status,
+      adjudicator_reason: item.adjudicatorReason || sourceIssue.adjudicator_reason,
+      adjudicator_supporting_quote:
+        item.adjudicatorSupportingQuote || sourceIssue.adjudicator_supporting_quote,
+      adjudicator_confidence: item.adjudicatorConfidence || sourceIssue.adjudicator_confidence,
+      rule_requirement_match: item.ruleRequirementMatch || sourceIssue.rule_requirement_match,
       findings: item.findings,
       evidence: item.evidence,
       suggestion: item.suggestion,
@@ -1695,7 +1705,7 @@ function isConfirmedDefectItem(item: SichuanBatchIssueItem): boolean {
 
 function isNeedsReviewItem(item: SichuanBatchIssueItem): boolean {
   if (isPostprocessedFormalResult.value) {
-    return item.display_status === 'qc_review_candidate' || item.display_status === 'needs_review'
+    return false
   }
   return item.status === 'uncertain'
 }
@@ -1715,10 +1725,18 @@ const ruleLevelSummary = computed(() => {
       resolvedRuleResults.value.length,
   )
   const issueItemsList = issueItems.value
+  const summary = props.batchJobDetail?.summary
   const nonCompliantCount = issueItemsList.filter((item) => isConfirmedDefectItem(item)).length
   const uncertainCount = issueItemsList.filter((item) => isNeedsReviewItem(item)).length
   const dataQualityGapCount = issueItemsList.filter((item) => isDataQualityGapItem(item)).length
-  const summary = props.batchJobDetail?.summary
+  const technicalErrorCount = isPostprocessedFormalResult.value
+    ? Number(
+        summary?.technical_error_internal_count ??
+          summary?.postprocess_summary?.technical_error_internal_count ??
+          issueItemsList.filter((item) => item.display_status === 'technical_error_internal')
+            .length,
+      )
+    : 0
   const rejectedBySystemCount = isPostprocessedFormalResult.value
     ? Number(
         summary?.rejected_by_system_count ??
@@ -1740,6 +1758,12 @@ const ruleLevelSummary = computed(() => {
       .filter(Boolean),
   ).size
   const processingTimeSeconds = Number(
+    props.batchJobDetail?.summary?.wall_clock_time ??
+      props.batchJobDetail?.wall_clock_time ??
+      props.batchJobDetail?.total_processing_time ??
+      0,
+  )
+  const modelProcessingTimeSeconds = Number(
     props.batchJobDetail?.summary?.total_processing_time ??
       props.batchJobDetail?.total_processing_time ??
       0,
@@ -1750,10 +1774,12 @@ const ruleLevelSummary = computed(() => {
     uncertainCount,
     dataQualityGapCount,
     rejectedBySystemCount,
+    technicalErrorCount,
     focusCount,
     docIssueCount,
     docUncertainCount,
     processingTimeSeconds,
+    modelProcessingTimeSeconds,
   }
 })
 
@@ -1781,6 +1807,14 @@ const statusHero = computed(() => {
   if (status === 'completed') {
     if (ruleLevelSummary.value.processingTimeSeconds > 0) {
       meta.push(`总耗时 ${formatProcessingTime(ruleLevelSummary.value.processingTimeSeconds)}`)
+    }
+    if (
+      isPostprocessedFormalResult.value &&
+      ruleLevelSummary.value.modelProcessingTimeSeconds > 0
+    ) {
+      meta.push(
+        `累计模型处理耗时 ${formatProcessingTime(ruleLevelSummary.value.modelProcessingTimeSeconds)}`,
+      )
     }
     if (finishedAt) {
       meta.push(`完成于 ${props.formatDateTime(finishedAt)}`)
@@ -1861,9 +1895,10 @@ const primarySummaryCards = computed(() => {
   const uncertainRecords = ruleLevelSummary.value.uncertainCount
   const dataQualityGapRecords = ruleLevelSummary.value.dataQualityGapCount
   const rejectedBySystemRecords = ruleLevelSummary.value.rejectedBySystemCount
+  const technicalErrorRecords = ruleLevelSummary.value.technicalErrorCount
   const focusCount = ruleLevelSummary.value.focusCount
   const processingTimeSeconds = ruleLevelSummary.value.processingTimeSeconds
-  return [
+  const cards = [
     { key: 'total', label: '总病历', value: totalRecords, desc: '' },
     { key: 'rules', label: '总规则', value: ruleLevelSummary.value.totalRules, desc: '' },
     { key: 'failed-records', label: '失败病历', value: failedRecordCount, desc: '去重后的病历数' },
@@ -1879,12 +1914,16 @@ const primarySummaryCards = computed(() => {
       value: issueRecords,
       desc: isPostprocessedFormalResult.value ? '后处理准入后可展示为缺陷' : '',
     },
-    {
-      key: 'uncertain',
-      label: isPostprocessedFormalResult.value ? '待质控员确认' : '待复核规则',
-      value: uncertainRecords,
-      desc: '',
-    },
+    ...(isPostprocessedFormalResult.value
+      ? []
+      : [
+          {
+            key: 'uncertain',
+            label: '待复核规则',
+            value: uncertainRecords,
+            desc: '',
+          },
+        ]),
     ...(isPostprocessedFormalResult.value
       ? [
           { key: 'data-quality-gap', label: '数据缺口', value: dataQualityGapRecords, desc: '' },
@@ -1892,6 +1931,12 @@ const primarySummaryCards = computed(() => {
             key: 'rejected-by-system',
             label: '系统驳回',
             value: rejectedBySystemRecords,
+            desc: '仅内部诊断',
+          },
+          {
+            key: 'technical-error',
+            label: '技术异常',
+            value: technicalErrorRecords,
             desc: '仅内部诊断',
           },
         ]
@@ -1903,6 +1948,19 @@ const primarySummaryCards = computed(() => {
       value: processingTimeSeconds > 0 ? formatProcessingTime(processingTimeSeconds) : '-',
       desc: '',
     },
+    ...(isPostprocessedFormalResult.value
+      ? [
+          {
+            key: 'model-duration',
+            label: '累计模型处理耗时',
+            value:
+              ruleLevelSummary.value.modelProcessingTimeSeconds > 0
+                ? formatProcessingTime(ruleLevelSummary.value.modelProcessingTimeSeconds)
+                : '-',
+            desc: '并发 pack 的模型耗时累计',
+          },
+        ]
+      : []),
     { key: 'success', label: '执行成功', value: successCount, desc: '' },
     {
       key: 'issue-records',
@@ -1912,11 +1970,14 @@ const primarySummaryCards = computed(() => {
     },
     {
       key: 'uncertain-records',
-      label: isPostprocessedFormalResult.value ? '涉及待确认病历' : '涉及待复核病历',
+      label: '涉及待复核病历',
       value: ruleLevelSummary.value.docUncertainCount,
       desc: '病历级去重统计',
     },
   ]
+  return isPostprocessedFormalResult.value
+    ? cards.filter((item) => item.key !== 'uncertain-records')
+    : cards
 })
 
 const focusedSummaryCards = computed(() => {
@@ -1931,7 +1992,7 @@ const focusedSummaryCards = computed(() => {
       },
       {
         key: 'uncertain',
-        label: isPostprocessedFormalResult.value ? '待质控员确认' : '待复核规则',
+        label: '待复核规则',
         value: issueItems.value.filter((item) => isNeedsReviewItem(item)).length,
         desc: '',
       },
@@ -1949,6 +2010,12 @@ const focusedSummaryCards = computed(() => {
               value: ruleLevelSummary.value.rejectedBySystemCount,
               desc: '仅内部诊断',
             },
+            {
+              key: 'technical-error',
+              label: '技术异常',
+              value: ruleLevelSummary.value.technicalErrorCount,
+              desc: '仅内部诊断',
+            },
           ]
         : []),
       {
@@ -1958,14 +2025,21 @@ const focusedSummaryCards = computed(() => {
           ruleLevelSummary.value.processingTimeSeconds > 0
             ? formatProcessingTime(ruleLevelSummary.value.processingTimeSeconds)
             : '-',
-        desc: '当前仍展示任务总耗时',
+        desc: isPostprocessedFormalResult.value ? '真实任务墙钟耗时' : '任务总耗时',
       },
-    ]
+    ].filter((item) => !(isPostprocessedFormalResult.value && item.key === 'uncertain'))
   }
   return primarySummaryCards.value.filter((item) =>
-    ['total', 'issues', 'uncertain', 'data-quality-gap', 'rejected-by-system', 'duration'].includes(
-      item.key,
-    ),
+    [
+      'total',
+      'issues',
+      ...(isPostprocessedFormalResult.value ? [] : ['uncertain']),
+      'data-quality-gap',
+      'rejected-by-system',
+      'technical-error',
+      'duration',
+      'model-duration',
+    ].includes(item.key),
   )
 })
 
@@ -2080,8 +2154,9 @@ const issueFocusSummary = computed(() => {
   const uncertainCount = issueItems.value.filter((item) => isNeedsReviewItem(item)).length
   const dataQualityGapCount = issueItems.value.filter((item) => isDataQualityGapItem(item)).length
   const rejectedBySystemCount = ruleLevelSummary.value.rejectedBySystemCount
+  const technicalErrorCount = ruleLevelSummary.value.technicalErrorCount
   if (isPostprocessedFormalResult.value) {
-    return `当前为正式质控四层准入结果，共 ${total} 条主列表结果，其中确认缺陷 ${nonCompliantCount} 条，待质控员确认 ${uncertainCount} 条，数据缺口 ${dataQualityGapCount} 条，系统驳回 ${rejectedBySystemCount} 条。原始 LLM 不合规不会直接计入确认缺陷。`
+    return `当前为正式质控四层准入结果，共 ${total} 条可查看结果，其中确认缺陷 ${nonCompliantCount} 条，数据缺口 ${dataQualityGapCount} 条，系统驳回 ${rejectedBySystemCount} 条，技术异常 ${technicalErrorCount} 条。原始 LLM 不合规不会直接计入确认缺陷。`
   }
   if (issueViewMode.value === 'business') {
     if (isFastScreenResult.value) {
@@ -2093,11 +2168,11 @@ const issueFocusSummary = computed(() => {
 })
 
 const issueSectionTitle = computed(() =>
-  isPostprocessedFormalResult.value ? '确认缺陷/待质控员确认/数据缺口' : '问题/待复核明细',
+  isPostprocessedFormalResult.value ? '确认缺陷/数据缺口/系统驳回' : '问题/待复核明细',
 )
 
 const emptyIssueText = computed(() =>
-  isPostprocessedFormalResult.value ? '暂无确认缺陷、待确认项或数据缺口' : '暂无问题/待复核明细',
+  isPostprocessedFormalResult.value ? '暂无确认缺陷、数据缺口或系统驳回项' : '暂无问题/待复核明细',
 )
 
 watch(
@@ -2396,7 +2471,7 @@ function resolveDisplayStatusText(item?: Pick<SichuanBatchIssueItem, 'display_st
     .trim()
     .toLowerCase()
   if (normalized === 'confirmed_defect') return '确认缺陷'
-  if (normalized === 'qc_review_candidate' || normalized === 'needs_review') return '待质控员确认'
+  if (normalized === 'qc_review_candidate' || normalized === 'needs_review') return '系统驳回'
   if (normalized === 'data_quality_gap') return '数据缺口'
   if (normalized === 'rejected_by_system') return '系统驳回'
   if (normalized === 'technical_error_internal') return '内部技术异常'

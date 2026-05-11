@@ -78,6 +78,7 @@ export interface SichuanBatchJobSummary {
   compliant_records: number
   total_tokens: number
   total_processing_time: number
+  wall_clock_time?: number
   rule_count?: number
   processed_rule_count?: number
   progress_percent?: number
@@ -242,6 +243,13 @@ export interface SichuanBatchIssueItem {
   can_show_to_doctor?: boolean
   internal_only?: boolean
   postprocess_mode?: string
+  first_pass_status?: string
+  first_pass_display_status?: string
+  adjudicated_display_status?: string
+  adjudicator_reason?: string
+  adjudicator_supporting_quote?: string
+  adjudicator_confidence?: number
+  rule_requirement_match?: string
 }
 
 export interface SichuanBatchFailedItem {
@@ -280,6 +288,7 @@ export interface SichuanBatchJobRuleResult {
   compliant_records?: number
   total_tokens?: number
   total_processing_time?: number
+  wall_clock_time?: number
 }
 
 export interface SichuanBatchJobDebugSnapshot {
@@ -357,6 +366,7 @@ export interface SichuanBatchJob {
   compliant_records?: number
   total_tokens?: number
   total_processing_time?: number
+  wall_clock_time?: number
   rule_results?: SichuanBatchJobRuleResult[]
 }
 

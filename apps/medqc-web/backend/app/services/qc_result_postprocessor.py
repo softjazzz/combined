@@ -268,7 +268,7 @@ def postprocess_qc_result(
     problems = _problem_types(next_result, bundle_metadata=bundle_metadata)
 
     display_status = "qc_review_candidate"
-    display_bucket = "待质控员确认"
+    display_bucket = "二审候选"
     postprocess_label = "needs_human_review"
     postprocess_reason = "自动准入层无法确认 trigger evidence 与 violation evidence 是否同时成立。"
     can_show_as_defect = False
@@ -287,9 +287,9 @@ def postprocess_qc_result(
             postprocess_reason = "正式质控子锚点缺少必要对照证据，不能作为医生病历缺陷。"
         else:
             display_status = "qc_review_candidate"
-            display_bucket = "待质控员确认"
+            display_bucket = "二审候选"
             postprocess_label = "needs_human_review"
-            postprocess_reason = "正式质控子锚点默认只进入待质控员确认，不直接作为确认缺陷。"
+            postprocess_reason = "正式质控子锚点默认进入二审候选，不直接作为确认缺陷。"
     elif "provider_error" in problems:
         display_status = "technical_error_internal"
         display_bucket = "内部技术异常"
@@ -326,7 +326,7 @@ def postprocess_qc_result(
             internal_only = True
         else:
             display_status = "qc_review_candidate"
-            display_bucket = "待质控员确认"
+            display_bucket = "二审候选"
             postprocess_label = "needs_human_review"
             postprocess_reason = "原始结果为 uncertain，但具备一定病历证据，可作为质控员确认候选。"
     elif status == "non_compliant":
@@ -358,7 +358,7 @@ def postprocess_qc_result(
             internal_only = True
         elif set(problems) & review_candidate:
             display_status = "qc_review_candidate"
-            display_bucket = "待质控员确认"
+            display_bucket = "二审候选"
             postprocess_label = "needs_human_review"
             postprocess_reason = "疑似具备业务价值，但仍缺少跨文书、时间链或专门上下文闭环，需质控员确认。"
         else:

@@ -314,6 +314,13 @@ export interface StructuredQCIssue {
   canShowToDoctor: boolean
   internalOnly: boolean
   postprocessMode: string
+  firstPassStatus?: string
+  firstPassDisplayStatus?: string
+  adjudicatedDisplayStatus?: string
+  adjudicatorReason?: string
+  adjudicatorSupportingQuote?: string
+  adjudicatorConfidence?: number
+  ruleRequirementMatch?: string
   ruleJobId: string
   ruleId: string
   ruleCode: string

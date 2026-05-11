@@ -224,6 +224,16 @@ function toStructuredIssue(
     canShowToDoctor: toBoolean(raw.can_show_to_doctor) ?? toBoolean(raw.canShowToDoctor) ?? true,
     internalOnly: toBoolean(raw.internal_only) ?? toBoolean(raw.internalOnly) ?? false,
     postprocessMode: toText(raw.postprocess_mode) || toText(raw.postprocessMode),
+    firstPassStatus: toText(raw.first_pass_status) || toText(raw.firstPassStatus),
+    firstPassDisplayStatus:
+      toText(raw.first_pass_display_status) || toText(raw.firstPassDisplayStatus),
+    adjudicatedDisplayStatus:
+      toText(raw.adjudicated_display_status) || toText(raw.adjudicatedDisplayStatus),
+    adjudicatorReason: toText(raw.adjudicator_reason) || toText(raw.adjudicatorReason),
+    adjudicatorSupportingQuote:
+      toText(raw.adjudicator_supporting_quote) || toText(raw.adjudicatorSupportingQuote),
+    adjudicatorConfidence: toNumber(raw.adjudicator_confidence ?? raw.adjudicatorConfidence, 0),
+    ruleRequirementMatch: toText(raw.rule_requirement_match) || toText(raw.ruleRequirementMatch),
     ruleJobId: toText(raw.rule_job_id) || toText(raw.ruleJobId),
     ruleId: toText(raw.rule_id) || toText(raw.ruleId) || fallback.ruleId || '',
     ruleCode: toText(raw.rule_code) || toText(raw.ruleCode) || fallback.ruleCode || '',

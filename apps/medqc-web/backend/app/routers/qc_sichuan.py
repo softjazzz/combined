@@ -3,6 +3,7 @@ import asyncio
 import uuid
 import json
 import logging
+import time
 from pathlib import Path
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Query, Request, Depends, BackgroundTasks
@@ -38,6 +39,7 @@ from ..services.qc_result_postprocessor import (
     postprocess_qc_result,
     summarize_postprocessed_results,
 )
+from ..services.qc_result_adjudicator import adjudicate_postprocessed_qc_results
 from ..services.effect_priority_qc import (
     BATCH_OUTPUT_MODE_FULL,
     DEFAULT_MAX_REFINE_CANDIDATES,
@@ -914,6 +916,7 @@ def _sichuan_workspace_service() -> CustomQCWorkspaceService:
 
 
 async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
+    job_wall_started = time.perf_counter()
     workspace = _sichuan_workspace_service()
     job = workspace.get_batch_job_for_processing(job_id=job_id)
     if not job:
@@ -1422,6 +1425,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 local_cache_miss = 0
                 has_issue = False
                 has_uncertain = False
+                record_issue_items: List[Dict[str, Any]] = []
 
                 fallback_tokens_per_rule = int(record_total_tokens / max(1, len(active_rule_ids)))
                 fallback_prompt_tokens_per_rule = int(record_total_prompt_tokens / max(1, len(active_rule_ids)))
@@ -1584,20 +1588,33 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             issue_item,
                             mode="formal_final_online",
                         )
-                    if should_postprocess_formal_results:
-                        if _safe_bool(issue_item.get("can_show_as_defect")):
-                            has_issue = True
-                        elif str(issue_item.get("display_status") or "").strip() in {
-                            "qc_review_candidate",
-                            "needs_review",
-                        }:
-                            has_uncertain = True
-                    elif issue_item["status"] == "non_compliant":
+                    if not should_postprocess_formal_results and issue_item["status"] == "non_compliant":
                         has_issue = True
-                    elif issue_item["status"] == "uncertain":
+                    elif not should_postprocess_formal_results and issue_item["status"] == "uncertain":
                         has_uncertain = True
                     if issue_item["status"] in {"non_compliant", "uncertain"}:
-                        items_by_rule[rule_id].append(issue_item)
+                        record_issue_items.append(issue_item)
+
+                if should_postprocess_formal_results and record_issue_items:
+                    record_issue_items = await adjudicate_postprocessed_qc_results(
+                        record_issue_items,
+                        rules_by_id={
+                            rule_id: dict(rule_states[rule_id]["rule"])
+                            for rule_id in active_rule_ids
+                            if isinstance(rule_states[rule_id].get("rule"), dict)
+                        },
+                        llm_generate=getattr(getattr(qc_service, "client", None), "generate", None),
+                        mode="formal_final_online",
+                    )
+
+                for final_item in record_issue_items:
+                    final_rule_id = str(final_item.get("rule_id") or "").strip().upper()
+                    if final_rule_id not in items_by_rule:
+                        continue
+                    if should_postprocess_formal_results:
+                        if _safe_bool(final_item.get("can_show_as_defect")):
+                            has_issue = True
+                    items_by_rule[final_rule_id].append(final_item)
 
                 return {
                     "record_id": record_id,
@@ -1827,7 +1844,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
         def _item_needs_review(item: Dict[str, Any]) -> bool:
             if should_postprocess_job:
-                return str(item.get("display_status") or "") in {"qc_review_candidate", "needs_review"}
+                return False
             return str(item.get("status") or "") == "uncertain"
 
         def _item_data_quality_gap(item: Dict[str, Any]) -> bool:
@@ -1969,6 +1986,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "total_prompt_tokens": int(total_prompt_tokens),
             "total_completion_tokens": int(total_completion_tokens),
             "total_processing_time": float(total_processing_time),
+            "wall_clock_time": max(0.0, time.perf_counter() - job_wall_started),
             "first_result_latency": round(float(first_result_latency or 0.0), 4),
             "first_result_source": first_result_source,
             "rule_count": len(rule_ids),

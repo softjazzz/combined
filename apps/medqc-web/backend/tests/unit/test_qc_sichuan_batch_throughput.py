@@ -457,28 +457,58 @@ async def test_workspace_batch_formal_full_should_persist_postprocess_fields(mon
 
     monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
 
+    async def _fake_adjudicate(rows: List[Dict[str, Any]], **_: Any) -> List[Dict[str, Any]]:
+        next_rows: List[Dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            first_pass_display = str(item.get("display_status") or "")
+            item["first_pass_status"] = str(item.get("status") or "")
+            item["first_pass_display_status"] = first_pass_display
+            if first_pass_display == "qc_review_candidate":
+                item.update(
+                    {
+                        "display_status": "rejected_by_system",
+                        "display_bucket": "系统驳回",
+                        "postprocess_label": "rejected_by_system",
+                        "postprocess_reason": "测试二审裁决：证据不足，系统驳回。",
+                        "adjudicated_display_status": "rejected_by_system",
+                        "adjudicator_reason": "证据不足，不能作为正式缺陷。",
+                        "adjudicator_supporting_quote": "",
+                        "adjudicator_confidence": 0.7,
+                        "rule_requirement_match": "not_matched",
+                        "can_show_as_defect": False,
+                        "can_show_to_doctor": False,
+                        "internal_only": True,
+                    }
+                )
+            next_rows.append(item)
+        return next_rows
+
+    monkeypatch.setattr(qc_sichuan, "adjudicate_postprocessed_qc_results", _fake_adjudicate)
+
     await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
 
     assert workspace.summary is not None
     assert len(workspace.items) == 9
     postprocess_summary = dict(workspace.summary.get("postprocess_summary") or {})
     assert postprocess_summary["confirmed_defect_count"] == 0
-    assert postprocess_summary["qc_review_candidate_count"] == 4
-    assert postprocess_summary["needs_review_count"] == 4
+    assert postprocess_summary["qc_review_candidate_count"] == 0
+    assert postprocess_summary["needs_review_count"] == 0
     assert postprocess_summary["data_quality_gap_count"] == 4
-    assert postprocess_summary["rejected_by_system_count"] == 1
+    assert postprocess_summary["rejected_by_system_count"] == 5
     assert postprocess_summary["technical_error_internal_count"] == 0
     assert workspace.summary["confirmed_defect_count"] == 0
-    assert workspace.summary["qc_review_candidate_count"] == 4
-    assert workspace.summary["needs_review_count"] == 4
+    assert workspace.summary["qc_review_candidate_count"] == 0
+    assert workspace.summary["needs_review_count"] == 0
     assert workspace.summary["data_quality_gap_count"] == 4
-    assert workspace.summary["rejected_by_system_count"] == 1
+    assert workspace.summary["rejected_by_system_count"] == 5
     sc036 = next(item for item in workspace.items if item["rule_id"] == "SC-036")
     assert sc036["status"] == "non_compliant"
     assert sc036["display_status"] == "rejected_by_system"
     assert sc036["can_show_as_defect"] is False
     assert sc036["postprocess_mode"] == "formal_final_online"
     assert int(workspace.summary.get("issue_records") or 0) == 0
+    assert int(workspace.summary.get("uncertain_records") or 0) == 0
 
 
 @pytest.mark.asyncio
