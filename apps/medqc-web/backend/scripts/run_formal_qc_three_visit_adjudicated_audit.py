@@ -279,6 +279,8 @@ async def _run_one_visit(
     )
     profile = _bundle_profile(bundle)
     qc_service = SichuanQCService()
+    if not await qc_service.reload_config():
+        raise RuntimeError("无法加载 LLM 运行时配置")
     result = await run_final_fast_screen(
         qc_service=qc_service,
         institute_id=institute_id,
