@@ -111,7 +111,7 @@
           <div class="drawer-section-head">
             <div class="drawer-section-title-group">
               <div class="drawer-section-title">
-                问题/待复核明细
+                {{ issueSectionTitle }}
               </div>
               <span
                 v-if="isFastScreenResult"
@@ -523,7 +523,7 @@
           </div>
           <a-empty
             v-else-if="issueViewMode === 'business'"
-            description="暂无问题/待复核明细"
+            :description="emptyIssueText"
           />
           <a-pagination
             v-if="
@@ -546,7 +546,7 @@
             :scroll="{ x: 1700 }"
             :pagination="issuePagination"
             :row-class-name="resolveIssueRowClassName"
-            :locale="{ emptyText: '暂无问题/待复核明细' }"
+            :locale="{ emptyText: emptyIssueText }"
             @change="handleIssueTableChange"
           />
         </div>
@@ -1289,9 +1289,10 @@ const structuredIssues = computed<StructuredQCIssue[]>(() => {
     ...issueFilter.value,
     statusList: showAllStatuses.value ? [] : ['non_compliant', 'uncertain'],
   }
-  let list = filterStructuredQCIssues(scopedStructuredIssues.value, baseFilter).filter(
-    (item) => !item.internalOnly,
-  )
+  let list = filterStructuredQCIssues(scopedStructuredIssues.value, baseFilter)
+  if (!showAllStatuses.value) {
+    list = list.filter((item) => !item.internalOnly)
+  }
   if (selectedDebugRuleJobId.value) {
     list = list.filter((item) => item.ruleJobId === selectedDebugRuleJobId.value)
   }
@@ -1694,13 +1695,17 @@ function isConfirmedDefectItem(item: SichuanBatchIssueItem): boolean {
 
 function isNeedsReviewItem(item: SichuanBatchIssueItem): boolean {
   if (isPostprocessedFormalResult.value) {
-    return item.display_status === 'needs_review'
+    return item.display_status === 'qc_review_candidate' || item.display_status === 'needs_review'
   }
   return item.status === 'uncertain'
 }
 
 function isDataQualityGapItem(item: SichuanBatchIssueItem): boolean {
   return isPostprocessedFormalResult.value && item.display_status === 'data_quality_gap'
+}
+
+function isRejectedBySystemItem(item: SichuanBatchIssueItem): boolean {
+  return isPostprocessedFormalResult.value && item.display_status === 'rejected_by_system'
 }
 
 const ruleLevelSummary = computed(() => {
@@ -1713,6 +1718,14 @@ const ruleLevelSummary = computed(() => {
   const nonCompliantCount = issueItemsList.filter((item) => isConfirmedDefectItem(item)).length
   const uncertainCount = issueItemsList.filter((item) => isNeedsReviewItem(item)).length
   const dataQualityGapCount = issueItemsList.filter((item) => isDataQualityGapItem(item)).length
+  const summary = props.batchJobDetail?.summary
+  const rejectedBySystemCount = isPostprocessedFormalResult.value
+    ? Number(
+        summary?.rejected_by_system_count ??
+          summary?.postprocess_summary?.rejected_by_system_count ??
+          0,
+      )
+    : issueItemsList.filter((item) => isRejectedBySystemItem(item)).length
   const focusCount = nonCompliantCount + uncertainCount + dataQualityGapCount
   const docIssueCount = new Set(
     issueItemsList
@@ -1736,6 +1749,7 @@ const ruleLevelSummary = computed(() => {
     nonCompliantCount,
     uncertainCount,
     dataQualityGapCount,
+    rejectedBySystemCount,
     focusCount,
     docIssueCount,
     docUncertainCount,
@@ -1753,6 +1767,7 @@ const statusHero = computed(() => {
   const totalRecords = progressSummary.value?.totalRecords ?? Number(detail.total_records || 0)
   const issueRecords = ruleLevelSummary.value.nonCompliantCount
   const uncertainRecords = ruleLevelSummary.value.uncertainCount
+  const dataQualityGapRecords = ruleLevelSummary.value.dataQualityGapCount
   const finishedAt = detail.finished_at || detail.updated_at
   const meta: string[] = []
   if (totalRecords > 0) {
@@ -1797,13 +1812,18 @@ const statusHero = computed(() => {
     }
   }
   if (status === 'completed') {
-    const focusCount = issueRecords + uncertainRecords
+    const focusCount =
+      issueRecords +
+      uncertainRecords +
+      (isPostprocessedFormalResult.value ? dataQualityGapRecords : 0)
     return {
       tone: 'completed',
       title: focusCount > 0 ? '任务已完成，已产出可处理问题' : '任务已完成，本次未发现问题',
       description:
         focusCount > 0
-          ? '请优先查看下方“问题/待复核明细”，直接判断需要复核或整改的质控点。'
+          ? isPostprocessedFormalResult.value
+            ? '请优先查看下方四层准入明细，确认缺陷可直接处理，数据缺口需排查链路。'
+            : '请优先查看下方“问题/待复核明细”，直接判断需要复核或整改的质控点。'
           : '本次批量质控已执行完毕，当前规则集下没有发现需要处理的问题。',
       meta,
       pulse: false,
@@ -1840,6 +1860,7 @@ const primarySummaryCards = computed(() => {
   const issueRecords = ruleLevelSummary.value.nonCompliantCount
   const uncertainRecords = ruleLevelSummary.value.uncertainCount
   const dataQualityGapRecords = ruleLevelSummary.value.dataQualityGapCount
+  const rejectedBySystemRecords = ruleLevelSummary.value.rejectedBySystemCount
   const focusCount = ruleLevelSummary.value.focusCount
   const processingTimeSeconds = ruleLevelSummary.value.processingTimeSeconds
   return [
@@ -1858,9 +1879,22 @@ const primarySummaryCards = computed(() => {
       value: issueRecords,
       desc: isPostprocessedFormalResult.value ? '后处理准入后可展示为缺陷' : '',
     },
-    { key: 'uncertain', label: '待复核规则', value: uncertainRecords, desc: '' },
+    {
+      key: 'uncertain',
+      label: isPostprocessedFormalResult.value ? '待质控员确认' : '待复核规则',
+      value: uncertainRecords,
+      desc: '',
+    },
     ...(isPostprocessedFormalResult.value
-      ? [{ key: 'data-quality-gap', label: '数据缺口', value: dataQualityGapRecords, desc: '' }]
+      ? [
+          { key: 'data-quality-gap', label: '数据缺口', value: dataQualityGapRecords, desc: '' },
+          {
+            key: 'rejected-by-system',
+            label: '系统驳回',
+            value: rejectedBySystemRecords,
+            desc: '仅内部诊断',
+          },
+        ]
       : []),
     { key: 'focus', label: '重点结果', value: focusCount, desc: '' },
     {
@@ -1878,7 +1912,7 @@ const primarySummaryCards = computed(() => {
     },
     {
       key: 'uncertain-records',
-      label: '涉及待复核病历',
+      label: isPostprocessedFormalResult.value ? '涉及待确认病历' : '涉及待复核病历',
       value: ruleLevelSummary.value.docUncertainCount,
       desc: '病历级去重统计',
     },
@@ -1897,7 +1931,7 @@ const focusedSummaryCards = computed(() => {
       },
       {
         key: 'uncertain',
-        label: '待复核规则',
+        label: isPostprocessedFormalResult.value ? '待质控员确认' : '待复核规则',
         value: issueItems.value.filter((item) => isNeedsReviewItem(item)).length,
         desc: '',
       },
@@ -1908,6 +1942,12 @@ const focusedSummaryCards = computed(() => {
               label: '数据缺口',
               value: issueItems.value.filter((item) => isDataQualityGapItem(item)).length,
               desc: '',
+            },
+            {
+              key: 'rejected-by-system',
+              label: '系统驳回',
+              value: ruleLevelSummary.value.rejectedBySystemCount,
+              desc: '仅内部诊断',
             },
           ]
         : []),
@@ -1923,7 +1963,9 @@ const focusedSummaryCards = computed(() => {
     ]
   }
   return primarySummaryCards.value.filter((item) =>
-    ['total', 'issues', 'uncertain', 'data-quality-gap', 'duration'].includes(item.key),
+    ['total', 'issues', 'uncertain', 'data-quality-gap', 'rejected-by-system', 'duration'].includes(
+      item.key,
+    ),
   )
 })
 
@@ -2021,7 +2063,7 @@ const advancedSummaryCards = computed(() => {
     },
     {
       key: 'issue-items',
-      label: '问题/待复核明细',
+      label: isPostprocessedFormalResult.value ? '四层准入明细' : '问题/待复核明细',
       value: issueItems.value.length,
       desc: '',
     },
@@ -2037,8 +2079,9 @@ const issueFocusSummary = computed(() => {
   const nonCompliantCount = issueItems.value.filter((item) => isConfirmedDefectItem(item)).length
   const uncertainCount = issueItems.value.filter((item) => isNeedsReviewItem(item)).length
   const dataQualityGapCount = issueItems.value.filter((item) => isDataQualityGapItem(item)).length
+  const rejectedBySystemCount = ruleLevelSummary.value.rejectedBySystemCount
   if (isPostprocessedFormalResult.value) {
-    return `当前为正式质控后处理准入结果，共 ${total} 条重点结果，其中确认缺陷 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条，数据缺口 ${dataQualityGapCount} 条。原始 LLM 不合规不会直接计入确认缺陷。`
+    return `当前为正式质控四层准入结果，共 ${total} 条主列表结果，其中确认缺陷 ${nonCompliantCount} 条，待质控员确认 ${uncertainCount} 条，数据缺口 ${dataQualityGapCount} 条，系统驳回 ${rejectedBySystemCount} 条。原始 LLM 不合规不会直接计入确认缺陷。`
   }
   if (issueViewMode.value === 'business') {
     if (isFastScreenResult.value) {
@@ -2048,6 +2091,14 @@ const issueFocusSummary = computed(() => {
   }
   return `当前共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。高级视图会展示完整表格和追溯字段。`
 })
+
+const issueSectionTitle = computed(() =>
+  isPostprocessedFormalResult.value ? '确认缺陷/待质控员确认/数据缺口' : '问题/待复核明细',
+)
+
+const emptyIssueText = computed(() =>
+  isPostprocessedFormalResult.value ? '暂无确认缺陷、待确认项或数据缺口' : '暂无问题/待复核明细',
+)
 
 watch(
   () => [batchJobDebugSnapshot.value?.job_id, batchJobDebugSnapshot.value?.rules?.length],
@@ -2345,8 +2396,9 @@ function resolveDisplayStatusText(item?: Pick<SichuanBatchIssueItem, 'display_st
     .trim()
     .toLowerCase()
   if (normalized === 'confirmed_defect') return '确认缺陷'
-  if (normalized === 'needs_review') return '待复核'
+  if (normalized === 'qc_review_candidate' || normalized === 'needs_review') return '待质控员确认'
   if (normalized === 'data_quality_gap') return '数据缺口'
+  if (normalized === 'rejected_by_system') return '系统驳回'
   if (normalized === 'technical_error_internal') return '内部技术异常'
   if (normalized === 'not_applicable') return '不适用'
   if (normalized === 'compliant') return '合规'

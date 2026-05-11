@@ -266,8 +266,10 @@ export type StructuredQCStatus =
 
 export type StructuredQCDisplayStatus =
   | 'confirmed_defect'
+  | 'qc_review_candidate'
   | 'needs_review'
   | 'data_quality_gap'
+  | 'rejected_by_system'
   | 'technical_error_internal'
   | 'compliant'
   | 'not_applicable'

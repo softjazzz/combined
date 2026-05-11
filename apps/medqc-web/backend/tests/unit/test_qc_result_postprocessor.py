@@ -60,7 +60,7 @@ def test_non_compliant_with_sufficient_evidence_should_be_confirmed_defect():
     assert row["can_show_as_defect"] is True
 
 
-def test_non_compliant_with_empty_evidence_should_need_review():
+def test_non_compliant_with_empty_evidence_should_be_rejected():
     row = postprocess_qc_result(
         {
             "rule_id": "SC-034",
@@ -70,12 +70,12 @@ def test_non_compliant_with_empty_evidence_should_need_review():
         }
     )
 
-    assert row["display_status"] == "needs_review"
+    assert row["display_status"] == "rejected_by_system"
     assert row["postprocess_label"] == "evidence_insufficient"
     assert row["can_show_as_defect"] is False
 
 
-def test_non_compliant_with_truncated_evidence_should_need_review():
+def test_non_compliant_with_truncated_evidence_should_be_rejected():
     row = postprocess_qc_result(
         {
             "rule_id": "SC-034",
@@ -86,7 +86,7 @@ def test_non_compliant_with_truncated_evidence_should_need_review():
         }
     )
 
-    assert row["display_status"] == "needs_review"
+    assert row["display_status"] == "rejected_by_system"
     assert "truncated_evidence" in row["evidence_problem_type"]
 
 
@@ -116,7 +116,7 @@ def test_cross_doc_rule_with_insufficient_evidence_should_not_be_confirmed():
         }
     )
 
-    assert row["display_status"] == "needs_review"
+    assert row["display_status"] == "rejected_by_system"
     assert "cross_doc_proof_missing" in row["evidence_problem_type"]
 
 
@@ -145,7 +145,7 @@ def test_original_status_should_be_preserved():
     )
 
     assert row["status"] == "non_compliant"
-    assert row["display_status"] == "needs_review"
+    assert row["display_status"] == "rejected_by_system"
 
 
 def test_formal_subitem_anchor_should_never_enter_confirmed_defect():
@@ -167,7 +167,7 @@ def test_formal_subitem_anchor_should_never_enter_confirmed_defect():
     )
 
     assert row["status"] == "non_compliant"
-    assert row["display_status"] == "needs_review"
+    assert row["display_status"] == "qc_review_candidate"
     assert row["postprocess_label"] == "needs_human_review"
     assert row["can_show_as_defect"] is False
     assert row["anchor_id"] == "SC-036-abnormal-result-unaddressed"
@@ -189,7 +189,7 @@ def test_header_only_evidence_should_not_be_confirmed_defect():
         }
     )
 
-    assert row["display_status"] == "needs_review"
+    assert row["display_status"] == "rejected_by_system"
     assert "header_only_evidence" in row["evidence_problem_type"]
 
 
@@ -204,7 +204,7 @@ def test_diagnosis_rule_requires_diagnosis_context():
         }
     )
 
-    assert row["display_status"] == "needs_review"
+    assert row["display_status"] == "rejected_by_system"
     assert "diagnosis_context_missing" in row["evidence_problem_type"]
 
 
@@ -219,5 +219,39 @@ def test_discharge_completeness_rule_requires_document_field_context():
         }
     )
 
-    assert row["display_status"] == "needs_review"
+    assert row["display_status"] == "rejected_by_system"
     assert "document_completeness_context_missing" in row["evidence_problem_type"]
+
+
+def test_non_compliant_with_compliant_findings_should_be_rejected():
+    row = postprocess_qc_result(
+        {
+            "rule_id": "SC-036",
+            "status": "non_compliant",
+            "findings": "病程记录了ALT异常及甲肝抗体阳性，并给出处理意见，合规。",
+            "evidence": "检查提示ALT异常、甲肝抗体阳性；病程记录已分析异常并给出处理意见。",
+            "suggestion": "无需整改。",
+            "confidence": 0.72,
+        }
+    )
+
+    assert row["display_status"] == "rejected_by_system"
+    assert row["can_show_as_defect"] is False
+    assert "status_findings_contradiction" in row["evidence_problem_type"]
+
+
+def test_discharge_medication_with_dose_evidence_should_be_rejected():
+    row = postprocess_qc_result(
+        {
+            "rule_id": "SC-123",
+            "status": "non_compliant",
+            "findings": "出院带药缺少剂量。",
+            "evidence": "出院带药：神农镇痛膏 1贴 外用 bid*7天。",
+            "suggestion": "补充出院带药剂量。",
+            "confidence": 0.7,
+        }
+    )
+
+    assert row["display_status"] == "rejected_by_system"
+    assert row["can_show_as_defect"] is False
+    assert "evidence_supports_compliance" in row["evidence_problem_type"]

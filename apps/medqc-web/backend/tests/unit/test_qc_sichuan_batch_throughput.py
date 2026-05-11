@@ -463,15 +463,19 @@ async def test_workspace_batch_formal_full_should_persist_postprocess_fields(mon
     assert len(workspace.items) == 9
     postprocess_summary = dict(workspace.summary.get("postprocess_summary") or {})
     assert postprocess_summary["confirmed_defect_count"] == 0
-    assert postprocess_summary["needs_review_count"] == 5
+    assert postprocess_summary["qc_review_candidate_count"] == 4
+    assert postprocess_summary["needs_review_count"] == 4
     assert postprocess_summary["data_quality_gap_count"] == 4
+    assert postprocess_summary["rejected_by_system_count"] == 1
     assert postprocess_summary["technical_error_internal_count"] == 0
     assert workspace.summary["confirmed_defect_count"] == 0
-    assert workspace.summary["needs_review_count"] == 5
+    assert workspace.summary["qc_review_candidate_count"] == 4
+    assert workspace.summary["needs_review_count"] == 4
     assert workspace.summary["data_quality_gap_count"] == 4
+    assert workspace.summary["rejected_by_system_count"] == 1
     sc036 = next(item for item in workspace.items if item["rule_id"] == "SC-036")
     assert sc036["status"] == "non_compliant"
-    assert sc036["display_status"] == "needs_review"
+    assert sc036["display_status"] == "rejected_by_system"
     assert sc036["can_show_as_defect"] is False
     assert sc036["postprocess_mode"] == "formal_final_online"
     assert int(workspace.summary.get("issue_records") or 0) == 0

@@ -127,13 +127,17 @@ describe('formal qc subitem anchors mapping', () => {
           rule_count: 84,
           rule_set_key: 'sc_content_full_v1',
           confirmed_defect_count: 0,
-          needs_review_count: 5,
+          qc_review_candidate_count: 4,
+          needs_review_count: 4,
           data_quality_gap_count: 4,
+          rejected_by_system_count: 1,
           technical_error_internal_count: 0,
           postprocess_summary: {
             confirmed_defect_count: 0,
-            needs_review_count: 5,
+            qc_review_candidate_count: 4,
+            needs_review_count: 4,
             data_quality_gap_count: 4,
+            rejected_by_system_count: 1,
             technical_error_internal_count: 0,
           },
         },
@@ -154,13 +158,13 @@ describe('formal qc subitem anchors mapping', () => {
                 evidence: '病程记录已有处理意见。',
                 suggestion: '无需整改。',
                 confidence: 0.72,
-                display_status: 'needs_review',
-                display_bucket: '待复核',
+                display_status: 'rejected_by_system',
+                display_bucket: '系统驳回',
                 postprocess_label: 'evidence_insufficient',
-                postprocess_reason: 'evidence 不足，不能直接作为确认缺陷。',
+                postprocess_reason: '状态和结论自相矛盾，系统驳回。',
                 can_show_as_defect: false,
-                can_show_to_doctor: true,
-                internal_only: false,
+                can_show_to_doctor: false,
+                internal_only: true,
                 postprocess_mode: 'formal_final_online',
               },
             ],
@@ -171,9 +175,9 @@ describe('formal qc subitem anchors mapping', () => {
     )
 
     expect(result.overview.issueCount).toBe(0)
-    expect(result.overview.uncertainCount).toBe(5)
+    expect(result.overview.uncertainCount).toBe(4)
     expect(result.issues[0].status).toBe('non_compliant')
-    expect(result.issues[0].displayStatus).toBe('needs_review')
+    expect(result.issues[0].displayStatus).toBe('rejected_by_system')
     expect(result.issues[0].canShowAsDefect).toBe(false)
     expect(result.issues[0].postprocessMode).toBe('formal_final_online')
   })

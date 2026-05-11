@@ -24,8 +24,10 @@ const STATUS_LABEL_MAP: Record<StructuredQCStatus, string> = {
 
 const DISPLAY_STATUS_SET = new Set<StructuredQCDisplayStatus>([
   'confirmed_defect',
+  'qc_review_candidate',
   'needs_review',
   'data_quality_gap',
+  'rejected_by_system',
   'technical_error_internal',
   'compliant',
   'not_applicable',
@@ -310,7 +312,10 @@ function buildOverview(
   const compliantCount = toNumber(summary.compliant_rules, counter.compliant || 0)
   const notApplicableCount = toNumber(summary.not_applicable, counter.not_applicable || 0)
   const uncertainCount = toNumber(
-    summary.needs_review_count ?? summary.uncertain_count ?? summary.uncertain_records,
+    summary.qc_review_candidate_count ??
+      summary.needs_review_count ??
+      summary.uncertain_count ??
+      summary.uncertain_records,
     counter.uncertain || 0,
   )
   const failedCount = toNumber(summary.failed_count, counter.failed || 0)

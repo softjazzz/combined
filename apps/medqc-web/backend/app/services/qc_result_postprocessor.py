@@ -37,11 +37,46 @@ DATA_GAP_KEYWORDS = [
     "未取得",
     "无法获取",
     "缺对应医嘱原文",
+    "缺原报告单",
+    "缺报告单",
+    "缺执行记录",
+    "缺执行清单",
 ]
 
 TECHNICAL_ERROR_KEYWORDS = ["批量执行异常", "provider", "rate limit", "timeout", "timed out", "解析失败"]
 TRIGGER_WORDS = ["当前文书", "记录", "诊断", "医嘱", "检查", "检验", "病程", "会诊", "手术", "时间", "结果"]
 VIOLATION_WORDS = ["未", "无", "缺", "矛盾", "不全", "不一致", "未记录", "未分析", "未处理", "不规范", "遗漏"]
+COMPLIANCE_CLAIM_KEYWORDS = [
+    "合规",
+    "符合要求",
+    "已记录",
+    "记录了",
+    "已有记录",
+    "已给出处理意见",
+    "给出处理意见",
+    "已处理",
+    "已分析",
+    "未见明显异常且已处理",
+    "无需整改",
+]
+EXPLICIT_VIOLATION_PHRASES = [
+    "不合规",
+    "不符合",
+    "未记录",
+    "未分析",
+    "未处理",
+    "未体现",
+    "未落实",
+    "未见处理",
+    "缺少",
+    "缺乏",
+    "缺失",
+    "遗漏",
+    "不一致",
+    "矛盾",
+    "不全",
+    "不规范",
+]
 
 
 def _safe_text(value: Any) -> str:
@@ -75,6 +110,38 @@ def _metadata(result: dict[str, Any]) -> dict[str, Any]:
 
 def _contains_any(text: str, keywords: list[str] | set[str]) -> bool:
     return any(keyword in text for keyword in keywords)
+
+
+def _has_explicit_violation(text: str) -> bool:
+    compact = re.sub(r"\s+", "", text)
+    return _contains_any(compact, EXPLICIT_VIOLATION_PHRASES)
+
+
+def _has_compliance_claim_without_violation(findings: str, evidence: str, suggestion: str) -> bool:
+    findings_compact = re.sub(r"\s+", "", findings)
+    evidence_compact = re.sub(r"\s+", "", evidence)
+    suggestion_compact = re.sub(r"\s+", "", suggestion)
+    if not findings_compact:
+        return False
+    if _contains_any(findings_compact, ["不合规", "不符合要求"]):
+        return False
+    if _contains_any(findings_compact, COMPLIANCE_CLAIM_KEYWORDS) and not _has_explicit_violation(findings_compact):
+        return True
+    if (
+        _contains_any(evidence_compact + suggestion_compact, COMPLIANCE_CLAIM_KEYWORDS)
+        and _contains_any(findings_compact, ["缺", "未", "无", "不详"])
+        and not _has_explicit_violation(evidence_compact + suggestion_compact)
+    ):
+        return True
+    return False
+
+
+def _evidence_supports_claimed_missing_dose(findings: str, evidence: str) -> bool:
+    if "剂量" not in findings:
+        return False
+    dosage_pattern = r"\d+(?:\.\d+)?\s*(?:贴|片|粒|颗|支|瓶|袋|丸|枚|mg|g|ml|mL|单位|U)"
+    route_or_frequency = ["外用", "口服", "静滴", "静脉", "bid", "tid", "qd", "qn", "q12h", "每日", "每次"]
+    return bool(re.search(dosage_pattern, evidence, flags=re.IGNORECASE)) and _contains_any(evidence, route_or_frequency)
 
 
 def _chinese_ngrams(text: str, *, min_len: int = 2, max_len: int = 4) -> set[str]:
@@ -148,6 +215,11 @@ def _problem_types(result: dict[str, Any], *, bundle_metadata: dict[str, Any] | 
     if status == "non_compliant" and not has_violation:
         problems.append("violation_missing")
 
+    if status == "non_compliant" and _has_compliance_claim_without_violation(findings, evidence, suggestion):
+        problems.append("status_findings_contradiction")
+    if status == "non_compliant" and _evidence_supports_claimed_missing_dose(findings, evidence):
+        problems.append("evidence_supports_compliance")
+
     if status == "non_compliant" and evidence and findings:
         evidence_tokens = _chinese_ngrams(evidence)
         finding_tokens = _chinese_ngrams(findings)
@@ -195,8 +267,8 @@ def postprocess_qc_result(
     status = _safe_text(next_result.get("status"))
     problems = _problem_types(next_result, bundle_metadata=bundle_metadata)
 
-    display_status = "needs_review"
-    display_bucket = "待复核"
+    display_status = "qc_review_candidate"
+    display_bucket = "待质控员确认"
     postprocess_label = "needs_human_review"
     postprocess_reason = "自动准入层无法确认 trigger evidence 与 violation evidence 是否同时成立。"
     can_show_as_defect = False
@@ -214,10 +286,10 @@ def postprocess_qc_result(
             postprocess_label = "data_gap_not_defect"
             postprocess_reason = "正式质控子锚点缺少必要对照证据，不能作为医生病历缺陷。"
         else:
-            display_status = "needs_review"
-            display_bucket = "待复核"
+            display_status = "qc_review_candidate"
+            display_bucket = "待质控员确认"
             postprocess_label = "needs_human_review"
-            postprocess_reason = "正式质控子锚点默认只进入待复核，不直接作为确认缺陷。"
+            postprocess_reason = "正式质控子锚点默认只进入待质控员确认，不直接作为确认缺陷。"
     elif "provider_error" in problems:
         display_status = "technical_error_internal"
         display_bucket = "内部技术异常"
@@ -236,13 +308,29 @@ def postprocess_qc_result(
         display_bucket = "数据缺口"
         postprocess_label = "data_gap_not_defect"
         postprocess_reason = "结果依赖缺文书、缺医嘱、缺执行清单或其他数据缺口，不能作为医生病历缺陷。"
+        can_show_to_doctor = False
     elif status == "uncertain":
-        display_status = "needs_review"
-        display_bucket = "待复核"
-        postprocess_label = "evidence_insufficient" if set(problems) & {"empty_evidence", "short_evidence"} else "needs_human_review"
-        postprocess_reason = "原始结果为 uncertain，需人工复核后才能进入缺陷层。"
+        if set(problems) & {
+            "empty_evidence",
+            "short_evidence",
+            "weak_evidence_length",
+            "truncated_evidence",
+            "header_only_evidence",
+            "evidence_findings_mismatch",
+        }:
+            display_status = "rejected_by_system"
+            display_bucket = "系统驳回"
+            postprocess_label = "evidence_insufficient"
+            postprocess_reason = "原始 uncertain 证据不足或与结论不匹配，不进入质控员主复核清单。"
+            can_show_to_doctor = False
+            internal_only = True
+        else:
+            display_status = "qc_review_candidate"
+            display_bucket = "待质控员确认"
+            postprocess_label = "needs_human_review"
+            postprocess_reason = "原始结果为 uncertain，但具备一定病历证据，可作为质控员确认候选。"
     elif status == "non_compliant":
-        blocking = {
+        rejected = {
             "empty_evidence",
             "short_evidence",
             "weak_evidence_length",
@@ -251,17 +339,28 @@ def postprocess_qc_result(
             "evidence_findings_mismatch",
             "trigger_missing",
             "violation_missing",
+            "status_findings_contradiction",
+            "evidence_supports_compliance",
+        }
+        review_candidate = {
             "cross_doc_proof_missing",
             "temporal_proof_missing",
             "diagnosis_context_missing",
             "document_completeness_context_missing",
             "absence_proof_missing",
         }
-        if set(problems) & blocking:
-            display_status = "needs_review"
-            display_bucket = "待复核"
+        if set(problems) & rejected:
+            display_status = "rejected_by_system"
+            display_bucket = "系统驳回"
             postprocess_label = "evidence_insufficient"
-            postprocess_reason = "evidence 不足或缺少跨文书/时间链对照，不能直接作为确认缺陷。"
+            postprocess_reason = "原始不合规结论存在证据不足、自相矛盾或证据支持合规的问题，系统驳回。"
+            can_show_to_doctor = False
+            internal_only = True
+        elif set(problems) & review_candidate:
+            display_status = "qc_review_candidate"
+            display_bucket = "待质控员确认"
+            postprocess_label = "needs_human_review"
+            postprocess_reason = "疑似具备业务价值，但仍缺少跨文书、时间链或专门上下文闭环，需质控员确认。"
         else:
             display_status = "confirmed_defect"
             display_bucket = "确认缺陷"
@@ -309,8 +408,10 @@ def summarize_postprocessed_results(rows: list[dict[str, Any]]) -> dict[str, Any
         "display_status_counts": dict(display_counts),
         "postprocess_label_counts": dict(label_counts),
         "confirmed_defect_count": len(confirmed),
-        "needs_review_count": int(display_counts.get("needs_review") or 0),
+        "qc_review_candidate_count": int(display_counts.get("qc_review_candidate") or 0),
+        "needs_review_count": int(display_counts.get("qc_review_candidate") or display_counts.get("needs_review") or 0),
         "data_quality_gap_count": int(display_counts.get("data_quality_gap") or 0),
+        "rejected_by_system_count": int(display_counts.get("rejected_by_system") or 0),
         "technical_error_internal_count": int(display_counts.get("technical_error_internal") or 0),
         "non_compliant_downgraded_count": len(downgraded),
         "downgraded_rule_top10": [

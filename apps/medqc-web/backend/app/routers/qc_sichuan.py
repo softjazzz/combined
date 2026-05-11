@@ -1588,8 +1588,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         if _safe_bool(issue_item.get("can_show_as_defect")):
                             has_issue = True
                         elif str(issue_item.get("display_status") or "").strip() in {
+                            "qc_review_candidate",
                             "needs_review",
-                            "data_quality_gap",
                         }:
                             has_uncertain = True
                     elif issue_item["status"] == "non_compliant":
@@ -1827,11 +1827,14 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
         def _item_needs_review(item: Dict[str, Any]) -> bool:
             if should_postprocess_job:
-                return str(item.get("display_status") or "") == "needs_review"
+                return str(item.get("display_status") or "") in {"qc_review_candidate", "needs_review"}
             return str(item.get("status") or "") == "uncertain"
 
         def _item_data_quality_gap(item: Dict[str, Any]) -> bool:
             return should_postprocess_job and str(item.get("display_status") or "") == "data_quality_gap"
+
+        def _item_rejected_by_system(item: Dict[str, Any]) -> bool:
+            return should_postprocess_job and str(item.get("display_status") or "") == "rejected_by_system"
 
         rule_results: List[Dict[str, Any]] = []
         for rule_index, rule_id in enumerate(rule_ids):
@@ -1851,13 +1854,17 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "data_quality_gap_records": len(
                     {str(item.get("record_id") or "") for item in rule_items if _item_data_quality_gap(item)}
                 ),
+                "rejected_by_system_records": len(
+                    {str(item.get("record_id") or "") for item in rule_items if _item_rejected_by_system(item)}
+                ),
                 "compliant_records": max(
                     0,
                     total_records
                     - len(rule_failed)
                     - len({str(item.get("record_id") or "") for item in rule_items if _item_is_confirmed_defect(item)})
                     - len({str(item.get("record_id") or "") for item in rule_items if _item_needs_review(item)})
-                    - len({str(item.get("record_id") or "") for item in rule_items if _item_data_quality_gap(item)}),
+                    - len({str(item.get("record_id") or "") for item in rule_items if _item_data_quality_gap(item)})
+                    - len({str(item.get("record_id") or "") for item in rule_items if _item_rejected_by_system(item)}),
                 ),
                 "total_tokens": int(state.get("total_tokens") or 0),
                 "total_processing_time": float(state.get("total_processing_time") or 0.0),
@@ -1879,6 +1886,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "issue_records": rule_summary["issue_records"],
                     "uncertain_records": rule_summary["uncertain_records"],
                     "data_quality_gap_records": rule_summary["data_quality_gap_records"],
+                    "rejected_by_system_records": rule_summary["rejected_by_system_records"],
                     "compliant_records": rule_summary["compliant_records"],
                     "total_tokens": rule_summary["total_tokens"],
                     "total_processing_time": rule_summary["total_processing_time"],
@@ -1910,6 +1918,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             for item in all_items
             if str(item.get("display_status") or "") == "technical_error_internal" and str(item.get("record_id") or "")
         }
+        rejected_by_system_record_ids = {
+            str(item.get("record_id") or "")
+            for item in all_items
+            if str(item.get("display_status") or "") == "rejected_by_system" and str(item.get("record_id") or "")
+        }
 
         summary = {
             "rule_set_key": rule_set_key,
@@ -1935,13 +1948,16 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             ),
             "postprocess_summary": postprocess_summary,
             "confirmed_defect_count": int(postprocess_summary.get("confirmed_defect_count") or len(issue_record_ids)),
+            "qc_review_candidate_count": int(postprocess_summary.get("qc_review_candidate_count") or 0),
             "needs_review_count": int(postprocess_summary.get("needs_review_count") or 0),
             "data_quality_gap_count": int(postprocess_summary.get("data_quality_gap_count") or 0),
+            "rejected_by_system_count": int(postprocess_summary.get("rejected_by_system_count") or 0),
             "technical_error_internal_count": int(postprocess_summary.get("technical_error_internal_count") or 0),
             "non_compliant_downgraded_count": int(postprocess_summary.get("non_compliant_downgraded_count") or 0),
             "display_status_counts": display_status_counts,
             "postprocess_label_counts": postprocess_label_counts,
             "data_quality_gap_records": len(data_quality_gap_record_ids),
+            "rejected_by_system_records": len(rejected_by_system_record_ids),
             "technical_error_records": len(technical_error_record_ids),
             "status_breakdown": {
                 "non_compliant": len(issue_record_ids),

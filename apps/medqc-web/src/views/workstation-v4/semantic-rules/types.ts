@@ -90,14 +90,18 @@ export interface SichuanBatchJobSummary {
     display_status_counts?: Record<string, number>
     postprocess_label_counts?: Record<string, number>
     confirmed_defect_count?: number
+    qc_review_candidate_count?: number
     needs_review_count?: number
     data_quality_gap_count?: number
+    rejected_by_system_count?: number
     technical_error_internal_count?: number
     non_compliant_downgraded_count?: number
   }
   confirmed_defect_count?: number
+  qc_review_candidate_count?: number
   needs_review_count?: number
   data_quality_gap_count?: number
+  rejected_by_system_count?: number
   technical_error_internal_count?: number
   non_compliant_downgraded_count?: number
   display_status_counts?: Record<string, number>
