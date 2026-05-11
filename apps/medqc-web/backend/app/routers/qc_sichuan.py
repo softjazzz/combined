@@ -34,6 +34,10 @@ from ..services.sample_validation_rule_sets import (
     get_sample_programmatic_rule_set,
     is_workspace_batch_draft_id,
 )
+from ..services.qc_result_postprocessor import (
+    postprocess_qc_result,
+    summarize_postprocessed_results,
+)
 from ..services.effect_priority_qc import (
     BATCH_OUTPUT_MODE_FULL,
     DEFAULT_MAX_REFINE_CANDIDATES,
@@ -350,6 +354,37 @@ def _build_cluster_key(item: Dict[str, Any]) -> str:
 def _to_breakdown_list(counter: Dict[str, int], top_n: int = 8) -> List[Dict[str, Any]]:
     ranked = sorted(counter.items(), key=lambda it: it[1], reverse=True)[:top_n]
     return [{"key": key, "count": int(count)} for key, count in ranked if key]
+
+
+def _safe_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "y", "是"}
+
+
+def _should_postprocess_formal_qc_results(
+    *,
+    rule_set_key: str,
+    validation_mode: str,
+    current_scope: str,
+    execution_strategy: str,
+    bucket_strategy: str,
+) -> bool:
+    normalized_rule_set = str(rule_set_key or "").strip()
+    normalized_mode = str(validation_mode or "").strip().lower()
+    normalized_scope = str(current_scope or "").strip().lower()
+    normalized_execution = str(execution_strategy or "").strip().lower()
+    normalized_bucket = str(bucket_strategy or "").strip().lower()
+    return (
+        normalized_rule_set == "sc_content_full_v1"
+        or normalized_mode == "formal_fast_screen_full"
+        or (
+            normalized_scope == "final"
+            and normalized_execution == EXECUTION_STRATEGY_FAST_SCREEN
+            and normalized_bucket == "fixed_packs"
+            and normalized_rule_set.startswith("sc_content_")
+        )
+    )
 
 
 def _build_result_aggregation(items: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -1032,6 +1067,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             validation_mode == "sc"
             and str(filters.get("source") or "").strip().lower().startswith("manual_problem_sample_pool")
         )
+        should_postprocess_job = _should_postprocess_formal_qc_results(
+            rule_set_key=rule_set_key,
+            validation_mode=validation_mode,
+            current_scope=str(current.get("scope") or "all"),
+            execution_strategy=execution_strategy,
+            bucket_strategy=bucket_strategy,
+        )
 
         def _build_progress_patch(processed_records_count: int) -> Dict[str, Any]:
             return {
@@ -1072,6 +1114,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             institute_id = str(record.get("institute_id") or "").strip()
             patient_id = str(record.get("patient_id") or "").strip()
             current_scope = str(current.get("scope") or "all").strip().lower()
+            should_postprocess_formal_results = _should_postprocess_formal_qc_results(
+                rule_set_key=rule_set_key,
+                validation_mode=validation_mode,
+                current_scope=current_scope,
+                execution_strategy=execution_strategy,
+                bucket_strategy=bucket_strategy,
+            )
             document_type = _resolve_document_type(current_scope, str(record.get("scope") or ""))
             active_rule_ids = (
                 list(record_rule_map.get(visit_id) or record_rule_map.get(record_id) or [])
@@ -1434,11 +1483,6 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             metadata.setdefault("bundle_fallback_reason", bundle_fallback_reason)
                         metadata.setdefault("evidence_source", "medical_text_fallback")
 
-                    if status == "non_compliant":
-                        has_issue = True
-                    elif status == "uncertain":
-                        has_uncertain = True
-
                     tokens_used = int(metadata.get("tokens_used") or 0)
                     api_time = float(metadata.get("api_time") or 0.0)
                     local_total_tokens += tokens_used
@@ -1511,6 +1555,13 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "refine_reason": str(metadata.get("refine_reason") or ""),
                         "screening_status": str(metadata.get("screening_status") or ""),
                         "final_decision_source": str(metadata.get("final_decision_source") or ""),
+                        "provider_error_count": int(metadata.get("provider_error_count") or 0),
+                        "timeout_count": int(metadata.get("timeout_count") or 0),
+                        "rate_limit_count": int(metadata.get("rate_limit_count") or 0),
+                        "pack_retry_attempts": int(metadata.get("pack_retry_attempts") or 0),
+                        "pack_retry_success": bool(metadata.get("pack_retry_success") is True),
+                        "pack_retry_reason": str(metadata.get("pack_retry_reason") or ""),
+                        "technical_error_internal": bool(metadata.get("technical_error_internal") is True),
                         "document_type": str(
                             eval_item.get("_document_type")
                             or eval_item.get("document_type")
@@ -1528,6 +1579,23 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         "defect_level": str((rule or {}).get("defect_level") or ""),
                         "llm_fallback": bool(metadata.get("llm_fallback") is True),
                     }
+                    if should_postprocess_formal_results:
+                        issue_item = postprocess_qc_result(
+                            issue_item,
+                            mode="formal_final_online",
+                        )
+                    if should_postprocess_formal_results:
+                        if _safe_bool(issue_item.get("can_show_as_defect")):
+                            has_issue = True
+                        elif str(issue_item.get("display_status") or "").strip() in {
+                            "needs_review",
+                            "data_quality_gap",
+                        }:
+                            has_uncertain = True
+                    elif issue_item["status"] == "non_compliant":
+                        has_issue = True
+                    elif issue_item["status"] == "uncertain":
+                        has_uncertain = True
                     if issue_item["status"] in {"non_compliant", "uncertain"}:
                         items_by_rule[rule_id].append(issue_item)
 
@@ -1752,6 +1820,19 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_result = await _evaluate_single_record(record)
                 _merge_record_result(record_result, processed_index)
 
+        def _item_is_confirmed_defect(item: Dict[str, Any]) -> bool:
+            if should_postprocess_job:
+                return _safe_bool(item.get("can_show_as_defect")) or str(item.get("display_status") or "") == "confirmed_defect"
+            return str(item.get("status") or "") == "non_compliant"
+
+        def _item_needs_review(item: Dict[str, Any]) -> bool:
+            if should_postprocess_job:
+                return str(item.get("display_status") or "") == "needs_review"
+            return str(item.get("status") or "") == "uncertain"
+
+        def _item_data_quality_gap(item: Dict[str, Any]) -> bool:
+            return should_postprocess_job and str(item.get("display_status") or "") == "data_quality_gap"
+
         rule_results: List[Dict[str, Any]] = []
         for rule_index, rule_id in enumerate(rule_ids):
             state = rule_states[rule_id]
@@ -1762,17 +1843,21 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "success_count": max(0, total_records - len(rule_failed)),
                 "failed_count": len(rule_failed),
                 "issue_records": len(
-                    {str(item.get("record_id") or "") for item in rule_items if str(item.get("status") or "") == "non_compliant"}
+                    {str(item.get("record_id") or "") for item in rule_items if _item_is_confirmed_defect(item)}
                 ),
                 "uncertain_records": len(
-                    {str(item.get("record_id") or "") for item in rule_items if str(item.get("status") or "") == "uncertain"}
+                    {str(item.get("record_id") or "") for item in rule_items if _item_needs_review(item)}
+                ),
+                "data_quality_gap_records": len(
+                    {str(item.get("record_id") or "") for item in rule_items if _item_data_quality_gap(item)}
                 ),
                 "compliant_records": max(
                     0,
                     total_records
                     - len(rule_failed)
-                    - len({str(item.get("record_id") or "") for item in rule_items if str(item.get("status") or "") == "non_compliant"})
-                    - len({str(item.get("record_id") or "") for item in rule_items if str(item.get("status") or "") == "uncertain"}),
+                    - len({str(item.get("record_id") or "") for item in rule_items if _item_is_confirmed_defect(item)})
+                    - len({str(item.get("record_id") or "") for item in rule_items if _item_needs_review(item)})
+                    - len({str(item.get("record_id") or "") for item in rule_items if _item_data_quality_gap(item)}),
                 ),
                 "total_tokens": int(state.get("total_tokens") or 0),
                 "total_processing_time": float(state.get("total_processing_time") or 0.0),
@@ -1793,6 +1878,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "failed_count": rule_summary["failed_count"],
                     "issue_records": rule_summary["issue_records"],
                     "uncertain_records": rule_summary["uncertain_records"],
+                    "data_quality_gap_records": rule_summary["data_quality_gap_records"],
                     "compliant_records": rule_summary["compliant_records"],
                     "total_tokens": rule_summary["total_tokens"],
                     "total_processing_time": rule_summary["total_processing_time"],
@@ -1810,6 +1896,20 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     },
                 }
             )
+
+        postprocess_summary = summarize_postprocessed_results(all_items) if should_postprocess_job else {}
+        display_status_counts = dict(postprocess_summary.get("display_status_counts") or {})
+        postprocess_label_counts = dict(postprocess_summary.get("postprocess_label_counts") or {})
+        data_quality_gap_record_ids = {
+            str(item.get("record_id") or "")
+            for item in all_items
+            if str(item.get("display_status") or "") == "data_quality_gap" and str(item.get("record_id") or "")
+        }
+        technical_error_record_ids = {
+            str(item.get("record_id") or "")
+            for item in all_items
+            if str(item.get("display_status") or "") == "technical_error_internal" and str(item.get("record_id") or "")
+        }
 
         summary = {
             "rule_set_key": rule_set_key,
@@ -1833,6 +1933,16 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 0,
                 total_records - len(issue_record_ids) - len(uncertain_record_ids) - len(failed_record_ids),
             ),
+            "postprocess_summary": postprocess_summary,
+            "confirmed_defect_count": int(postprocess_summary.get("confirmed_defect_count") or len(issue_record_ids)),
+            "needs_review_count": int(postprocess_summary.get("needs_review_count") or 0),
+            "data_quality_gap_count": int(postprocess_summary.get("data_quality_gap_count") or 0),
+            "technical_error_internal_count": int(postprocess_summary.get("technical_error_internal_count") or 0),
+            "non_compliant_downgraded_count": int(postprocess_summary.get("non_compliant_downgraded_count") or 0),
+            "display_status_counts": display_status_counts,
+            "postprocess_label_counts": postprocess_label_counts,
+            "data_quality_gap_records": len(data_quality_gap_record_ids),
+            "technical_error_records": len(technical_error_record_ids),
             "status_breakdown": {
                 "non_compliant": len(issue_record_ids),
                 "uncertain": len(uncertain_record_ids),

@@ -264,6 +264,15 @@ export type StructuredQCStatus =
   | 'failed'
   | 'error'
 
+export type StructuredQCDisplayStatus =
+  | 'confirmed_defect'
+  | 'needs_review'
+  | 'data_quality_gap'
+  | 'technical_error_internal'
+  | 'compliant'
+  | 'not_applicable'
+  | ''
+
 export interface StructuredQCOverview {
   totalRules: number
   complianceRate: number
@@ -294,6 +303,15 @@ export interface StructuredQCIssue {
   id: string
   status: StructuredQCStatus
   statusLabel: string
+  displayStatus: StructuredQCDisplayStatus
+  displayBucket: string
+  postprocessLabel: string
+  postprocessReason: string
+  evidenceProblemType: string
+  canShowAsDefect: boolean
+  canShowToDoctor: boolean
+  internalOnly: boolean
+  postprocessMode: string
   ruleJobId: string
   ruleId: string
   ruleCode: string

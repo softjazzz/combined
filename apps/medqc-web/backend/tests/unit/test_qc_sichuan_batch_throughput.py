@@ -288,6 +288,77 @@ class _ServiceStub:
         }
 
 
+class _FormalPostprocessServiceStub(_ServiceStub):
+    async def evaluate_document(
+        self,
+        document_id: str,
+        content: str,
+        document_type: str = "病程记录",
+        rule_ids: Optional[List[str]] = None,
+        **_: Any,
+    ) -> Dict[str, Any]:
+        self.evaluate_calls += 1
+        rows: List[Dict[str, Any]] = []
+        data_gap_rules = {"SC-070", "SC-074", "SC-107", "SC-146"}
+        for rule_id in list(rule_ids or []):
+            normalized = str(rule_id).upper()
+            if normalized == "SC-036":
+                rows.append(
+                    {
+                        "rule_id": rule_id,
+                        "rule_name": f"规则-{rule_id}",
+                        "status": "non_compliant",
+                        "is_compliant": False,
+                        "findings": "病程记录了ALT异常及甲肝抗体阳性，并给出处理意见，合规。",
+                        "evidence": "检查提示ALT异常、甲肝抗体阳性；病程记录已分析异常并给出处理意见。",
+                        "suggestion": "无需整改。",
+                        "confidence": 0.72,
+                        "metadata": {"executor_type": "llm", "tokens_used": 100, "api_time": 0.1},
+                    }
+                )
+            elif normalized in data_gap_rules:
+                rows.append(
+                    {
+                        "rule_id": rule_id,
+                        "rule_name": f"规则-{rule_id}",
+                        "status": "uncertain",
+                        "is_compliant": False,
+                        "findings": "缺医嘱或缺执行清单，无法判定是否落实。",
+                        "evidence": "未提供长期医嘱单或执行记录。",
+                        "suggestion": "补充长期医嘱单和执行清单后复核。",
+                        "confidence": 0.5,
+                        "metadata": {"executor_type": "llm", "tokens_used": 100, "api_time": 0.1},
+                    }
+                )
+            else:
+                rows.append(
+                    {
+                        "rule_id": rule_id,
+                        "rule_name": f"规则-{rule_id}",
+                        "status": "uncertain",
+                        "is_compliant": False,
+                        "findings": "证据片段不足，需人工复核。",
+                        "evidence": "当前病程记录仅见相关描述，尚不能闭合触发证据与缺陷事实。",
+                        "suggestion": "请人工复核完整文书。",
+                        "confidence": 0.55,
+                        "metadata": {"executor_type": "llm", "tokens_used": 100, "api_time": 0.1},
+                    }
+                )
+        return {
+            "evaluation_results": rows,
+            "token_usage": {"total_tokens": 900, "prompt_tokens": 700, "completion_tokens": 200},
+            "api_time": 1.0,
+            "pack_metrics": {
+                "total_packs": 3,
+                "avg_pack_size": 3.0,
+                "fallback_packs": 0,
+                "single_rule_retries": 0,
+                "pack_parse_retry_count": 0,
+                "context_tokens_estimate": 1200,
+            },
+        }
+
+
 def test_resolve_workspace_bundle_scene_should_follow_record_scope_when_scope_is_all():
     assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="all", record_scope="final") == "final"
     assert qc_sichuan._resolve_workspace_bundle_scene(current_scope="all", record_scope="running") == "running"
@@ -352,6 +423,58 @@ async def test_workspace_batch_should_keep_uncertain_items_in_detail(monkeypatch
         "uncertain",
     }
     assert service.evaluate_rule_for_visit_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_workspace_batch_formal_full_should_persist_postprocess_fields(monkeypatch):
+    workspace = _WorkspaceStub()
+    workspace.job["record_ids"] = ["2207717"]
+    workspace.job["filters"] = {
+        "rule_ids": [
+            "SC-036",
+            "SC-020",
+            "SC-118",
+            "SC-123",
+            "SC-125",
+            "SC-070",
+            "SC-074",
+            "SC-107",
+            "SC-146",
+        ],
+        "rule_set_key": "sc_content_full_v1",
+        "validation_mode": "formal_fast_screen_full",
+        "execution_strategy": "fast_screen",
+        "bucket_strategy": "fixed_packs",
+        "quality_profile": "throughput_v1",
+        "date_field": "discharge",
+    }
+    service = _FormalPostprocessServiceStub()
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+
+    async def _fake_get_qc_service():
+        return service
+
+    monkeypatch.setattr(qc_sichuan, "get_qc_service", _fake_get_qc_service)
+
+    await qc_sichuan._run_sichuan_workspace_batch_job("job-throughput-001")
+
+    assert workspace.summary is not None
+    assert len(workspace.items) == 9
+    postprocess_summary = dict(workspace.summary.get("postprocess_summary") or {})
+    assert postprocess_summary["confirmed_defect_count"] == 0
+    assert postprocess_summary["needs_review_count"] == 5
+    assert postprocess_summary["data_quality_gap_count"] == 4
+    assert postprocess_summary["technical_error_internal_count"] == 0
+    assert workspace.summary["confirmed_defect_count"] == 0
+    assert workspace.summary["needs_review_count"] == 5
+    assert workspace.summary["data_quality_gap_count"] == 4
+    sc036 = next(item for item in workspace.items if item["rule_id"] == "SC-036")
+    assert sc036["status"] == "non_compliant"
+    assert sc036["display_status"] == "needs_review"
+    assert sc036["can_show_as_defect"] is False
+    assert sc036["postprocess_mode"] == "formal_final_online"
+    assert int(workspace.summary.get("issue_records") or 0) == 0
 
 
 @pytest.mark.asyncio

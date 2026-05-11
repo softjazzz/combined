@@ -84,6 +84,24 @@ export interface SichuanBatchJobSummary {
   retryable_rule_count?: number
   progress?: Record<string, unknown>
   status_breakdown?: Record<string, number>
+  postprocess_summary?: {
+    total?: number
+    raw_status_counts?: Record<string, number>
+    display_status_counts?: Record<string, number>
+    postprocess_label_counts?: Record<string, number>
+    confirmed_defect_count?: number
+    needs_review_count?: number
+    data_quality_gap_count?: number
+    technical_error_internal_count?: number
+    non_compliant_downgraded_count?: number
+  }
+  confirmed_defect_count?: number
+  needs_review_count?: number
+  data_quality_gap_count?: number
+  technical_error_internal_count?: number
+  non_compliant_downgraded_count?: number
+  display_status_counts?: Record<string, number>
+  postprocess_label_counts?: Record<string, number>
   rule_set_key?: string
   rule_set_name?: string
   rule_set_version?: string
@@ -211,6 +229,15 @@ export interface SichuanBatchIssueItem {
   refine_reason?: string
   screening_status?: string
   final_decision_source?: string
+  display_status?: string
+  display_bucket?: string
+  postprocess_label?: string
+  postprocess_reason?: string
+  evidence_problem_type?: string
+  can_show_as_defect?: boolean
+  can_show_to_doctor?: boolean
+  internal_only?: boolean
+  postprocess_mode?: string
 }
 
 export interface SichuanBatchFailedItem {

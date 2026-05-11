@@ -107,9 +107,17 @@ def _problem_types(result: dict[str, Any], *, bundle_metadata: dict[str, Any] | 
     combined_lower = combined.lower()
     problems: list[str] = []
 
-    if _safe_bool(metadata.get("technical_error_internal")) or _safe_text(metadata.get("final_decision_source")) == "technical_error_fallback":
+    if (
+        _safe_bool(metadata.get("technical_error_internal"))
+        or _safe_bool(result.get("technical_error_internal"))
+        or _safe_text(metadata.get("final_decision_source") or result.get("final_decision_source")) == "technical_error_fallback"
+    ):
         problems.append("provider_error")
-    if _safe_int(metadata.get("provider_error_count")) or _safe_int(metadata.get("timeout_count")) or _safe_int(metadata.get("rate_limit_count")):
+    if (
+        _safe_int(metadata.get("provider_error_count") or result.get("provider_error_count"))
+        or _safe_int(metadata.get("timeout_count") or result.get("timeout_count"))
+        or _safe_int(metadata.get("rate_limit_count") or result.get("rate_limit_count"))
+    ):
         problems.append("provider_error")
     if _contains_any(combined_lower, TECHNICAL_ERROR_KEYWORDS) or (confidence == 0 and not evidence and status == "uncertain"):
         problems.append("provider_error")

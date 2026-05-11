@@ -1,5 +1,6 @@
 import type {
   StructuredQCFilterState,
+  StructuredQCDisplayStatus,
   StructuredQCGroup,
   StructuredQCIssue,
   StructuredQCOverview,
@@ -20,6 +21,16 @@ const STATUS_LABEL_MAP: Record<StructuredQCStatus, string> = {
   failed: '失败',
   error: '错误',
 }
+
+const DISPLAY_STATUS_SET = new Set<StructuredQCDisplayStatus>([
+  'confirmed_defect',
+  'needs_review',
+  'data_quality_gap',
+  'technical_error_internal',
+  'compliant',
+  'not_applicable',
+  '',
+])
 
 const DEFAULT_FILTER: StructuredQCFilterState = {
   keyword: '',
@@ -60,6 +71,18 @@ function normalizeStatus(status: unknown, isCompliant: unknown): StructuredQCSta
   }
   if (isCompliant === false) return 'non_compliant'
   return 'compliant'
+}
+
+function normalizeDisplayStatus(
+  value: unknown,
+  fallbackStatus: StructuredQCStatus,
+): StructuredQCDisplayStatus {
+  const normalized = toText(value).toLowerCase() as StructuredQCDisplayStatus
+  if (DISPLAY_STATUS_SET.has(normalized)) return normalized
+  if (fallbackStatus === 'non_compliant') return ''
+  if (fallbackStatus === 'uncertain') return ''
+  if (fallbackStatus === 'compliant' || fallbackStatus === 'not_applicable') return fallbackStatus
+  return ''
 }
 
 function isNoChangeSuggestion(text: string): boolean {
@@ -190,6 +213,15 @@ function toStructuredIssue(
     id: '',
     status,
     statusLabel: STATUS_LABEL_MAP[status],
+    displayStatus: normalizeDisplayStatus(raw.display_status ?? raw.displayStatus, status),
+    displayBucket: toText(raw.display_bucket) || toText(raw.displayBucket),
+    postprocessLabel: toText(raw.postprocess_label) || toText(raw.postprocessLabel),
+    postprocessReason: toText(raw.postprocess_reason) || toText(raw.postprocessReason),
+    evidenceProblemType: toText(raw.evidence_problem_type) || toText(raw.evidenceProblemType),
+    canShowAsDefect: toBoolean(raw.can_show_as_defect) ?? toBoolean(raw.canShowAsDefect) ?? false,
+    canShowToDoctor: toBoolean(raw.can_show_to_doctor) ?? toBoolean(raw.canShowToDoctor) ?? true,
+    internalOnly: toBoolean(raw.internal_only) ?? toBoolean(raw.internalOnly) ?? false,
+    postprocessMode: toText(raw.postprocess_mode) || toText(raw.postprocessMode),
     ruleJobId: toText(raw.rule_job_id) || toText(raw.ruleJobId),
     ruleId: toText(raw.rule_id) || toText(raw.ruleId) || fallback.ruleId || '',
     ruleCode: toText(raw.rule_code) || toText(raw.ruleCode) || fallback.ruleCode || '',
@@ -277,10 +309,13 @@ function buildOverview(
   )
   const compliantCount = toNumber(summary.compliant_rules, counter.compliant || 0)
   const notApplicableCount = toNumber(summary.not_applicable, counter.not_applicable || 0)
-  const uncertainCount = toNumber(summary.uncertain_count, counter.uncertain || 0)
+  const uncertainCount = toNumber(
+    summary.needs_review_count ?? summary.uncertain_count ?? summary.uncertain_records,
+    counter.uncertain || 0,
+  )
   const failedCount = toNumber(summary.failed_count, counter.failed || 0)
   const issueCount = toNumber(
-    summary.issues_found ?? summary.issue_records,
+    summary.confirmed_defect_count ?? summary.issues_found ?? summary.issue_records,
     (counter.non_compliant || 0) + (counter.uncertain || 0),
   )
   const complianceRateRaw = summary.compliance_rate

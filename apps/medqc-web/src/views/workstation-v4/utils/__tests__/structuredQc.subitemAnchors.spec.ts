@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   getSubitemAnchorDisplayLabel,
+  mapBatchJobToStructuredQC,
   mapSichuanEvaluationToStructuredQC,
   shouldCountSubitemAnchorAsDefect,
 } from '../structuredQc'
@@ -95,5 +96,85 @@ describe('formal qc subitem anchors mapping', () => {
 
     expect(result.subitemAnchors).toHaveLength(0)
     expect(result.issues[0].metadata.subitemAnchors).toHaveLength(0)
+  })
+
+  it('正式质控在线任务优先使用后处理统计和展示字段', () => {
+    const result = mapBatchJobToStructuredQC(
+      {
+        id: 'job-1',
+        status: 'completed',
+        rule_code: 'FORMAL-FAST-SCREEN-FULL',
+        rule_name: '正式质控 84 条',
+        scene: 'final',
+        scope: 'final',
+        created_at: '',
+        updated_at: '',
+        total_records: 1,
+        success_count: 1,
+        failed_count: 0,
+        issue_records: 0,
+        compliant_records: 1,
+        total_tokens: 0,
+        total_processing_time: 0,
+        summary: {
+          total_records: 1,
+          success_count: 1,
+          failed_count: 0,
+          issue_records: 0,
+          compliant_records: 1,
+          total_tokens: 0,
+          total_processing_time: 0,
+          rule_count: 84,
+          rule_set_key: 'sc_content_full_v1',
+          confirmed_defect_count: 0,
+          needs_review_count: 5,
+          data_quality_gap_count: 4,
+          technical_error_internal_count: 0,
+          postprocess_summary: {
+            confirmed_defect_count: 0,
+            needs_review_count: 5,
+            data_quality_gap_count: 4,
+            technical_error_internal_count: 0,
+          },
+        },
+        rule_results: [
+          {
+            rule_code: 'SC-036',
+            rule_name: '病程记录异常结果处理',
+            status: 'completed',
+            items: [
+              {
+                rule_id: 'SC-036',
+                rule_code: 'SC-036',
+                rule_name: '病程记录异常结果处理',
+                record_id: '2207717',
+                status: 'non_compliant',
+                is_compliant: false,
+                findings: '病程记录了ALT异常及甲肝抗体阳性，并给出处理意见，合规。',
+                evidence: '病程记录已有处理意见。',
+                suggestion: '无需整改。',
+                confidence: 0.72,
+                display_status: 'needs_review',
+                display_bucket: '待复核',
+                postprocess_label: 'evidence_insufficient',
+                postprocess_reason: 'evidence 不足，不能直接作为确认缺陷。',
+                can_show_as_defect: false,
+                can_show_to_doctor: true,
+                internal_only: false,
+                postprocess_mode: 'formal_final_online',
+              },
+            ],
+          },
+        ],
+      },
+      null,
+    )
+
+    expect(result.overview.issueCount).toBe(0)
+    expect(result.overview.uncertainCount).toBe(5)
+    expect(result.issues[0].status).toBe('non_compliant')
+    expect(result.issues[0].displayStatus).toBe('needs_review')
+    expect(result.issues[0].canShowAsDefect).toBe(false)
+    expect(result.issues[0].postprocessMode).toBe('formal_final_online')
   })
 })

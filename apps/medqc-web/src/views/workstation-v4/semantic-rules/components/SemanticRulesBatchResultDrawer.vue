@@ -1170,7 +1170,8 @@ const issueColumns = computed(() => {
       dataIndex: 'status',
       key: 'status',
       width: 92,
-      customRender: ({ text }: { text?: string }) => resolveStatusText(text),
+      customRender: ({ text, record }: { text?: string; record: SichuanBatchIssueItem }) =>
+        resolveDisplayStatusText(record) || resolveStatusText(text),
     },
     {
       title: '质控结论',
@@ -1288,7 +1289,9 @@ const structuredIssues = computed<StructuredQCIssue[]>(() => {
     ...issueFilter.value,
     statusList: showAllStatuses.value ? [] : ['non_compliant', 'uncertain'],
   }
-  let list = filterStructuredQCIssues(scopedStructuredIssues.value, baseFilter)
+  let list = filterStructuredQCIssues(scopedStructuredIssues.value, baseFilter).filter(
+    (item) => !item.internalOnly,
+  )
   if (selectedDebugRuleJobId.value) {
     list = list.filter((item) => item.ruleJobId === selectedDebugRuleJobId.value)
   }
@@ -1328,7 +1331,7 @@ const issueItems = computed<SichuanBatchIssueItem[]>(() => {
           record_id: item.recordId || '-',
           visit_id: item.visitId || '',
         }),
-      ) || {}
+      ) || ({} as Partial<SichuanBatchIssueItem>)
     return {
       ...sourceIssue,
       rule_job_id: item.ruleJobId || undefined,
@@ -1341,6 +1344,15 @@ const issueItems = computed<SichuanBatchIssueItem[]>(() => {
       department: item.department || '',
       status: item.status,
       is_compliant: item.status === 'compliant' || item.status === 'not_applicable',
+      display_status: item.displayStatus || sourceIssue.display_status,
+      display_bucket: item.displayBucket || sourceIssue.display_bucket,
+      postprocess_label: item.postprocessLabel || sourceIssue.postprocess_label,
+      postprocess_reason: item.postprocessReason || sourceIssue.postprocess_reason,
+      evidence_problem_type: item.evidenceProblemType || sourceIssue.evidence_problem_type,
+      can_show_as_defect: item.canShowAsDefect,
+      can_show_to_doctor: item.canShowToDoctor,
+      internal_only: item.internalOnly,
+      postprocess_mode: item.postprocessMode || sourceIssue.postprocess_mode,
       findings: item.findings,
       evidence: item.evidence,
       suggestion: item.suggestion,
@@ -1660,6 +1672,37 @@ const executionSummary = computed(() => {
   return { programCount, llmCount, cacheHit, cacheMiss }
 })
 
+const isPostprocessedFormalResult = computed(() => {
+  const detail = props.batchJobDetail
+  const summary = detail?.summary
+  const filters = (detail?.filters || {}) as Record<string, unknown>
+  return Boolean(
+    summary?.postprocess_summary ||
+      summary?.display_status_counts ||
+      filters.validation_mode === 'formal_fast_screen_full' ||
+      filters.rule_set_key === 'sc_content_full_v1' ||
+      summary?.rule_set_key === 'sc_content_full_v1',
+  )
+})
+
+function isConfirmedDefectItem(item: SichuanBatchIssueItem): boolean {
+  if (isPostprocessedFormalResult.value) {
+    return item.can_show_as_defect === true || item.display_status === 'confirmed_defect'
+  }
+  return item.status === 'non_compliant'
+}
+
+function isNeedsReviewItem(item: SichuanBatchIssueItem): boolean {
+  if (isPostprocessedFormalResult.value) {
+    return item.display_status === 'needs_review'
+  }
+  return item.status === 'uncertain'
+}
+
+function isDataQualityGapItem(item: SichuanBatchIssueItem): boolean {
+  return isPostprocessedFormalResult.value && item.display_status === 'data_quality_gap'
+}
+
 const ruleLevelSummary = computed(() => {
   const totalRules = Math.max(
     0,
@@ -1667,18 +1710,19 @@ const ruleLevelSummary = computed(() => {
       resolvedRuleResults.value.length,
   )
   const issueItemsList = issueItems.value
-  const nonCompliantCount = issueItemsList.filter((item) => item.status === 'non_compliant').length
-  const uncertainCount = issueItemsList.filter((item) => item.status === 'uncertain').length
-  const focusCount = nonCompliantCount + uncertainCount
+  const nonCompliantCount = issueItemsList.filter((item) => isConfirmedDefectItem(item)).length
+  const uncertainCount = issueItemsList.filter((item) => isNeedsReviewItem(item)).length
+  const dataQualityGapCount = issueItemsList.filter((item) => isDataQualityGapItem(item)).length
+  const focusCount = nonCompliantCount + uncertainCount + dataQualityGapCount
   const docIssueCount = new Set(
     issueItemsList
-      .filter((item) => item.status === 'non_compliant')
+      .filter((item) => isConfirmedDefectItem(item))
       .map((item) => String(item.record_id || item.visit_id || '').trim())
       .filter(Boolean),
   ).size
   const docUncertainCount = new Set(
     issueItemsList
-      .filter((item) => item.status === 'uncertain')
+      .filter((item) => isNeedsReviewItem(item))
       .map((item) => String(item.record_id || item.visit_id || '').trim())
       .filter(Boolean),
   ).size
@@ -1691,6 +1735,7 @@ const ruleLevelSummary = computed(() => {
     totalRules,
     nonCompliantCount,
     uncertainCount,
+    dataQualityGapCount,
     focusCount,
     docIssueCount,
     docUncertainCount,
@@ -1794,6 +1839,7 @@ const primarySummaryCards = computed(() => {
   )
   const issueRecords = ruleLevelSummary.value.nonCompliantCount
   const uncertainRecords = ruleLevelSummary.value.uncertainCount
+  const dataQualityGapRecords = ruleLevelSummary.value.dataQualityGapCount
   const focusCount = ruleLevelSummary.value.focusCount
   const processingTimeSeconds = ruleLevelSummary.value.processingTimeSeconds
   return [
@@ -1806,8 +1852,16 @@ const primarySummaryCards = computed(() => {
       value: failedAttemptCount,
       desc: '规则执行失败总次数',
     },
-    { key: 'issues', label: '不合规规则', value: issueRecords, desc: '' },
+    {
+      key: 'issues',
+      label: isPostprocessedFormalResult.value ? '确认缺陷' : '不合规规则',
+      value: issueRecords,
+      desc: isPostprocessedFormalResult.value ? '后处理准入后可展示为缺陷' : '',
+    },
     { key: 'uncertain', label: '待复核规则', value: uncertainRecords, desc: '' },
+    ...(isPostprocessedFormalResult.value
+      ? [{ key: 'data-quality-gap', label: '数据缺口', value: dataQualityGapRecords, desc: '' }]
+      : []),
     { key: 'focus', label: '重点结果', value: focusCount, desc: '' },
     {
       key: 'duration',
@@ -1837,16 +1891,26 @@ const focusedSummaryCards = computed(() => {
       { key: 'total', label: '总病历', value: 1, desc: '当前仅展示选中病历' },
       {
         key: 'issues',
-        label: '不合规规则',
-        value: issueItems.value.filter((item) => item.status === 'non_compliant').length,
+        label: isPostprocessedFormalResult.value ? '确认缺陷' : '不合规规则',
+        value: issueItems.value.filter((item) => isConfirmedDefectItem(item)).length,
         desc: '',
       },
       {
         key: 'uncertain',
         label: '待复核规则',
-        value: issueItems.value.filter((item) => item.status === 'uncertain').length,
+        value: issueItems.value.filter((item) => isNeedsReviewItem(item)).length,
         desc: '',
       },
+      ...(isPostprocessedFormalResult.value
+        ? [
+            {
+              key: 'data-quality-gap',
+              label: '数据缺口',
+              value: issueItems.value.filter((item) => isDataQualityGapItem(item)).length,
+              desc: '',
+            },
+          ]
+        : []),
       {
         key: 'duration',
         label: '总耗时',
@@ -1859,7 +1923,7 @@ const focusedSummaryCards = computed(() => {
     ]
   }
   return primarySummaryCards.value.filter((item) =>
-    ['total', 'issues', 'uncertain', 'duration'].includes(item.key),
+    ['total', 'issues', 'uncertain', 'data-quality-gap', 'duration'].includes(item.key),
   )
 })
 
@@ -1970,10 +2034,12 @@ const issueFocusSummary = computed(() => {
   if (!total) {
     return showAllStatuses.value ? '当前没有可展示的规则结果。' : '当前没有需要复核或整改的问题项。'
   }
-  const nonCompliantCount = issueItems.value.filter(
-    (item) => item.status === 'non_compliant',
-  ).length
-  const uncertainCount = issueItems.value.filter((item) => item.status === 'uncertain').length
+  const nonCompliantCount = issueItems.value.filter((item) => isConfirmedDefectItem(item)).length
+  const uncertainCount = issueItems.value.filter((item) => isNeedsReviewItem(item)).length
+  const dataQualityGapCount = issueItems.value.filter((item) => isDataQualityGapItem(item)).length
+  if (isPostprocessedFormalResult.value) {
+    return `当前为正式质控后处理准入结果，共 ${total} 条重点结果，其中确认缺陷 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条，数据缺口 ${dataQualityGapCount} 条。原始 LLM 不合规不会直接计入确认缺陷。`
+  }
   if (issueViewMode.value === 'business') {
     if (isFastScreenResult.value) {
       return `当前为快速初筛结果（摘要版），共 ${total} 条重点结果，其中不合规 ${nonCompliantCount} 条，待复核 ${uncertainCount} 条。可先展开完整说明，再按需进入深度复核查看全文文书。`
@@ -2271,6 +2337,20 @@ function resolveStatusText(status?: string) {
   if (normalized === 'not_applicable') return '不适用'
   if (normalized === 'failed') return '失败'
   return '合规'
+}
+
+function resolveDisplayStatusText(item?: Pick<SichuanBatchIssueItem, 'display_status'> | null) {
+  if (!isPostprocessedFormalResult.value || !item?.display_status) return ''
+  const normalized = String(item.display_status || '')
+    .trim()
+    .toLowerCase()
+  if (normalized === 'confirmed_defect') return '确认缺陷'
+  if (normalized === 'needs_review') return '待复核'
+  if (normalized === 'data_quality_gap') return '数据缺口'
+  if (normalized === 'technical_error_internal') return '内部技术异常'
+  if (normalized === 'not_applicable') return '不适用'
+  if (normalized === 'compliant') return '合规'
+  return ''
 }
 
 function objectEntriesToCompactList(input: Record<string, unknown> | unknown) {
