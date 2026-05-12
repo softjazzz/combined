@@ -171,6 +171,126 @@ const ASelectStub = defineComponent({
   },
 })
 
+const ASegmentedStub = defineComponent({
+  name: 'ASegmentedStub',
+  props: {
+    value: {
+      type: [String, Number],
+      default: undefined,
+    },
+    options: {
+      type: Array,
+      default: () => [],
+    },
+  },
+  emits: ['update:value', 'change'],
+  setup(props, { emit, attrs }) {
+    return () =>
+      h(
+        'div',
+        { ...attrs, class: ['a-segmented-stub', attrs.class] },
+        (props.options as Array<{ label: string; value: string | number }>).map((option) =>
+          h(
+            'button',
+            {
+              type: 'button',
+              class: option.value === props.value ? 'is-active' : '',
+              onClick: () => {
+                emit('update:value', option.value)
+                emit('change', option.value)
+              },
+            },
+            option.label,
+          ),
+        ),
+      )
+  },
+})
+
+const ADropdownStub = defineComponent({
+  name: 'ADropdownStub',
+  setup(_, { slots }) {
+    return () => h('div', { class: 'a-dropdown-stub' }, [slots.default?.(), slots.overlay?.()])
+  },
+})
+
+const AMenuStub = defineComponent({
+  name: 'AMenuStub',
+  setup(_, { slots }) {
+    return () => h('div', { class: 'a-menu-stub' }, slots.default?.())
+  },
+})
+
+const AMenuItemStub = defineComponent({
+  name: 'AMenuItemStub',
+  props: {
+    disabled: Boolean,
+  },
+  emits: ['click'],
+  setup(props, { slots, emit }) {
+    return () =>
+      h(
+        'button',
+        {
+          type: 'button',
+          disabled: props.disabled,
+          onClick: () => {
+            if (!props.disabled) emit('click')
+          },
+        },
+        slots.default?.(),
+      )
+  },
+})
+
+const ASubMenuStub = defineComponent({
+  name: 'ASubMenuStub',
+  props: {
+    title: {
+      type: String,
+      default: '',
+    },
+  },
+  setup(props, { slots }) {
+    return () =>
+      h('div', { class: 'a-sub-menu-stub' }, [
+        h('div', { class: 'a-sub-menu-title' }, props.title),
+        slots.default?.(),
+      ])
+  },
+})
+
+const AMenuDividerStub = defineComponent({
+  name: 'AMenuDividerStub',
+  setup() {
+    return () => h('hr')
+  },
+})
+
+const ACollapseStub = defineComponent({
+  name: 'ACollapseStub',
+  setup(_, { slots }) {
+    return () => h('div', { class: 'a-collapse-stub' }, slots.default?.())
+  },
+})
+
+const ACollapsePanelStub = defineComponent({
+  name: 'ACollapsePanelStub',
+  props: {
+    header: {
+      type: String,
+      default: '',
+    },
+  },
+  setup(props, { slots }) {
+    return () =>
+      h('section', { class: 'a-collapse-panel-stub' }, [
+        h('button', { type: 'button', class: 'collapse-header' }, props.header),
+        slots.default?.(),
+      ])
+  },
+})
+
 const AInputStub = defineComponent({
   name: 'AInputStub',
   props: {
@@ -479,6 +599,14 @@ async function mountView() {
         ACard: ACardStub,
         ASpin: ASpinStub,
         ASelect: ASelectStub,
+        ASegmented: ASegmentedStub,
+        ADropdown: ADropdownStub,
+        AMenu: AMenuStub,
+        AMenuItem: AMenuItemStub,
+        ASubMenu: ASubMenuStub,
+        AMenuDivider: AMenuDividerStub,
+        ACollapse: ACollapseStub,
+        ACollapsePanel: ACollapsePanelStub,
         AInput: AInputStub,
         ATextarea: ATextareaStub,
         ASwitch: ASwitchStub,
@@ -582,9 +710,7 @@ describe('CustomerSampleValidationView', () => {
     expect(parallelSelect).toBeTruthy()
     await parallelSelect!.setValue('2')
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起选中病历验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -866,9 +992,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起选中病历验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -906,9 +1030,7 @@ describe('CustomerSampleValidationView', () => {
     await recordCheckboxes[0].setValue(true)
     await recordCheckboxes[1].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起选中病历验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -927,9 +1049,7 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起选中病历验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -944,19 +1064,14 @@ describe('CustomerSampleValidationView', () => {
   it('切换到 SC 样本规则模式后应按 sc 模式提交', async () => {
     const wrapper = await mountView()
 
-    const selectElements = wrapper.findAll('select')
-    const modeSelect = selectElements.find((node) =>
-      node.findAll('option').some((option) => option.text() === 'SC 样本规则模式'),
-    )
-    expect(modeSelect).toBeTruthy()
-    await modeSelect!.setValue('sc')
+    const modeButton = wrapper.findAll('button').find((node) => node.text() === 'SC 样本规则模式')
+    expect(modeButton).toBeTruthy()
+    await modeButton!.trigger('click')
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起选中病历验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -993,20 +1108,17 @@ describe('CustomerSampleValidationView', () => {
       },
     })
 
-    const selectElements = wrapper.findAll('select')
-    const modeSelect = selectElements.find((node) =>
-      node.findAll('option').some((option) => option.text() === '硬门槛程序规则模式'),
-    )
-    expect(modeSelect).toBeTruthy()
-    await modeSelect!.setValue('programmatic')
+    const modeButton = wrapper
+      .findAll('button')
+      .find((node) => node.text() === '硬门槛程序规则模式')
+    expect(modeButton).toBeTruthy()
+    await modeButton!.trigger('click')
     await flushPromises()
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper
-      .findAll('button')
-      .find((node) => node.text().includes('发起选中病历验证'))
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1055,15 +1167,12 @@ describe('CustomerSampleValidationView', () => {
       },
     })
 
-    const selectElements = wrapper.findAll('select')
-    const modeSelect = selectElements.find((node) =>
-      node.findAll('option').some((option) => option.text() === '正式终末全量内涵 84 条'),
-    )
-    expect(modeSelect).toBeTruthy()
-    await modeSelect!.setValue('formal_fast_screen_full')
+    const modeButton = wrapper.findAll('button').find((node) => node.text() === '正式84条质控')
+    expect(modeButton).toBeTruthy()
+    await modeButton!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('sc_content_full_v1 / 全量内涵 84 条')
+    expect(wrapper.text()).toContain('正式终末全量内涵 84 条')
     expect(getManualSamplePoolRecords).toHaveBeenLastCalledWith(
       'pool-1',
       expect.objectContaining({
@@ -1076,7 +1185,7 @@ describe('CustomerSampleValidationView', () => {
 
     const runButton = wrapper
       .findAll('button')
-      .find((node) => node.text().includes('正式质控 84 条'))
+      .find((node) => node.text().includes('发起正式84条质控'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1109,12 +1218,11 @@ describe('CustomerSampleValidationView', () => {
       },
     })
 
-    const selectElements = wrapper.findAll('select')
-    const modeSelect = selectElements.find((node) =>
-      node.findAll('option').some((option) => option.text() === '硬门槛程序规则模式'),
-    )
-    expect(modeSelect).toBeTruthy()
-    await modeSelect!.setValue('programmatic')
+    const modeButton = wrapper
+      .findAll('button')
+      .find((node) => node.text() === '硬门槛程序规则模式')
+    expect(modeButton).toBeTruthy()
+    await modeButton!.trigger('click')
     await flushPromises()
 
     const syncButton = wrapper
@@ -1133,12 +1241,9 @@ describe('CustomerSampleValidationView', () => {
   it('正式终末全量内涵 84 条同步样本病历时不限制内涵和首批', async () => {
     const wrapper = await mountView()
 
-    const selectElements = wrapper.findAll('select')
-    const modeSelect = selectElements.find((node) =>
-      node.findAll('option').some((option) => option.text() === '正式终末全量内涵 84 条'),
-    )
-    expect(modeSelect).toBeTruthy()
-    await modeSelect!.setValue('formal_fast_screen_full')
+    const modeButton = wrapper.findAll('button').find((node) => node.text() === '正式84条质控')
+    expect(modeButton).toBeTruthy()
+    await modeButton!.trigger('click')
     await flushPromises()
 
     const syncButton = wrapper

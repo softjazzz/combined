@@ -233,7 +233,6 @@
                     <span>{{
                       item.target_document_type || item.document_type || '未知文书域'
                     }}</span>
-                    <span>{{ item.rule_family || 'general' }}</span>
                     <span>{{ item.defect_level || '未分级' }}</span>
                     <span v-if="item.refined">单条精审</span>
                   </div>
@@ -566,7 +565,7 @@
         >
           <a-collapse-panel
             key="execution"
-            header="执行详情与统计"
+            header="技术详情：执行统计"
           >
             <div
               v-if="progressSummary"
@@ -620,7 +619,7 @@
           <a-collapse-panel
             v-if="resultAggregation"
             key="aggregation"
-            header="结果聚合与命中分布"
+            header="技术详情：结果聚合"
           >
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
@@ -715,7 +714,7 @@
 
           <a-collapse-panel
             key="rules"
-            header="规则结果概览"
+            header="技术详情：规则结果"
           >
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">
@@ -745,7 +744,7 @@
           <a-collapse-panel
             v-if="batchJobDebugSnapshot"
             key="debug"
-            header="执行调试快照"
+            header="技术详情：调试快照"
           >
             <div class="drawer-card drawer-card--nested">
               <div class="drawer-section-head">

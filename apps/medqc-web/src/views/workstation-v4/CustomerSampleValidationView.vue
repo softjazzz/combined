@@ -2,116 +2,46 @@
   <main class="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
     <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
       <div class="mx-auto w-full max-w-[1440px] space-y-4">
-        <section
-          class="rounded-[24px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(239,246,255,0.95),rgba(255,255,255,0.98))] p-5 shadow-[0_14px_34px_rgba(148,163,184,0.16)]"
-        >
-          <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div class="min-w-0 space-y-3">
-              <div class="flex flex-wrap items-center gap-2">
-                <a-tag color="blue">
-                  运行病历
-                </a-tag>
-                <a-tag color="processing">
-                  客户样本验证
-                </a-tag>
-                <a-tag v-if="selectedPool?.latest_job_status">
-                  {{ getBatchJobStatusText(selectedPool.latest_job_status) }}
-                </a-tag>
-              </div>
-              <div>
-                <h1 class="text-[28px] font-bold leading-tight text-slate-900">
-                  客户样本验证
-                </h1>
-                <p class="mt-2 max-w-4xl text-[14px] leading-7 text-slate-600">
-                  先核对人工问题样本与系统病历的匹配关系；默认发起客户专项规则包验证，也可对选中病历发起正式终末
-                  <span class="font-semibold text-slate-800">sc_content_full_v1 / 全量内涵 84 条</span>
-                  质控，两条链路互不混用。
-                </p>
-              </div>
-              <div class="flex flex-col gap-3 xl:flex-row xl:items-center">
-                <div class="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-end">
-                  <div class="flex min-w-0 flex-col gap-1">
-                    <div class="text-[12px] font-medium text-slate-500">
-                      当前样本池
-                    </div>
-                    <a-select
-                      v-model:value="selectedPoolId"
-                      class="w-full min-w-[280px] max-w-[420px] customer-sample-toolbar-select"
-                      size="middle"
-                      :loading="poolLoading"
-                      :options="poolOptions"
-                      placeholder="请选择样本池"
-                      show-search
-                      option-filter-prop="label"
-                      @change="handlePoolChange"
-                    />
+        <section class="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div class="min-w-0 flex-1">
+              <h1 class="text-[24px] font-semibold leading-tight text-slate-900">
+                客户样本质控
+              </h1>
+              <div class="mt-4 grid gap-3 xl:grid-cols-[minmax(280px,420px)_auto] xl:items-end">
+                <div class="min-w-0">
+                  <div class="mb-1 text-[12px] font-medium text-slate-500">
+                    当前样本池
                   </div>
-                  <div class="flex min-w-0 flex-col gap-1">
-                    <div class="text-[12px] font-medium text-slate-500">
-                      验证模式
-                    </div>
-                    <a-select
-                      v-model:value="selectedValidationMode"
-                      class="w-full min-w-[220px] customer-sample-toolbar-select"
-                      size="middle"
-                      :options="validationModeOptions"
-                      @change="handleValidationModeChange"
-                    />
-                  </div>
+                  <a-select
+                    v-model:value="selectedPoolId"
+                    class="w-full customer-sample-toolbar-select"
+                    size="middle"
+                    :loading="poolLoading"
+                    :options="poolOptions"
+                    placeholder="请选择样本池"
+                    show-search
+                    option-filter-prop="label"
+                    @change="handlePoolChange"
+                  />
                 </div>
-                <div class="flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
-                  <span
-                    v-if="selectedPool?.source_sheet"
-                    class="rounded-full border border-slate-200 bg-white px-3 py-1"
-                  >
-                    来源：{{ selectedPool.source_sheet }}
-                  </span>
-                  <span
-                    v-if="selectedPool?.latest_job_id"
-                    class="rounded-full border border-slate-200 bg-white px-3 py-1"
-                  >
-                    最近任务：{{ selectedPool.latest_job_id }}
-                  </span>
+                <div class="min-w-0">
+                  <div class="mb-1 text-[12px] font-medium text-slate-500">
+                    质控模式
+                  </div>
+                  <a-segmented
+                    v-model:value="selectedValidationMode"
+                    class="customer-sample-mode-segmented"
+                    :options="primaryValidationModeOptions"
+                    @change="handleValidationModeChange"
+                  />
                 </div>
               </div>
             </div>
 
-            <div class="flex shrink-0 flex-wrap gap-2 xl:justify-end">
+            <div class="flex shrink-0 flex-wrap items-center gap-2 xl:justify-end">
               <a-button
                 type="primary"
-                ghost
-                class="!rounded-full"
-                @click="importModalOpen = true"
-              >
-                导入模板
-              </a-button>
-              <a-button
-                class="!rounded-full"
-                :loading="poolLoading"
-                @click="loadPools()"
-              >
-                刷新样本池
-              </a-button>
-              <a-button
-                class="!rounded-full"
-                :disabled="!selectedPoolId"
-                :loading="syncLoading"
-                @click="handleSyncPoolRecords"
-              >
-                同步样本病历
-              </a-button>
-              <a-button
-                type="primary"
-                class="!rounded-full"
-                :disabled="!selectedPoolId"
-                :loading="matchLoading"
-                @click="handleMatchPool"
-              >
-                执行病历匹配
-              </a-button>
-              <a-button
-                type="primary"
-                ghost
                 class="!rounded-full"
                 :disabled="!selectedPoolId || !selectedPool?.total_items"
                 :loading="runLoading"
@@ -119,22 +49,58 @@
               >
                 {{ runButtonText }}
               </a-button>
-              <a-button
-                class="!rounded-full"
-                :disabled="!selectedPool?.latest_job_id"
-                @click="openLatestJob"
-              >
-                查看最近任务
-              </a-button>
+              <a-dropdown :trigger="['click']">
+                <a-button class="!rounded-full">
+                  更多
+                </a-button>
+                <template #overlay>
+                  <a-menu>
+                    <a-menu-item @click="handleMoreActionKey('import')">
+                      导入模板
+                    </a-menu-item>
+                    <a-menu-item @click="handleMoreActionKey('refresh')">
+                      刷新样本池
+                    </a-menu-item>
+                    <a-menu-item
+                      :disabled="!selectedPoolId || syncLoading"
+                      @click="handleMoreActionKey('sync')"
+                    >
+                      同步样本病历
+                    </a-menu-item>
+                    <a-menu-item
+                      :disabled="!selectedPoolId || matchLoading"
+                      @click="handleMoreActionKey('match')"
+                    >
+                      执行病历匹配
+                    </a-menu-item>
+                    <a-menu-item
+                      :disabled="!selectedPool?.latest_job_id"
+                      @click="handleMoreActionKey('latest')"
+                    >
+                      查看最近任务
+                    </a-menu-item>
+                    <a-menu-divider />
+                    <a-sub-menu
+                      key="advanced"
+                      title="高级模式"
+                    >
+                      <a-menu-item @click="handleMoreActionKey('mode-sc')">
+                        SC 样本规则模式
+                      </a-menu-item>
+                      <a-menu-item @click="handleMoreActionKey('mode-programmatic')">
+                        硬门槛程序规则模式
+                      </a-menu-item>
+                    </a-sub-menu>
+                  </a-menu>
+                </template>
+              </a-dropdown>
             </div>
           </div>
           <div
             v-if="selectedValidationMode === 'formal_fast_screen_full'"
-            class="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-[13px] leading-6 text-sky-800"
+            class="mt-3 rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-[13px] leading-6 text-sky-800"
           >
-            正式质控模式：本次将执行
-            <span class="font-semibold">sc_content_full_v1 / 全量内涵 84 条</span>
-            ，不使用客户专项 276 条规则包，也不作为 Sheet2 exact 回放。
+            当前按正式终末全量内涵 84 条执行，不使用客户专项规则包。
           </div>
         </section>
 
@@ -160,149 +126,147 @@
           </a-card>
         </section>
 
-        <section
-          class="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
-        >
-          <div class="border-b border-slate-200/80 px-5 py-4">
-            <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-              <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <a-tag color="processing">
-                    Sheet2 精确复核验收包
-                  </a-tag>
-                  <a-tag color="success">
-                    needs_exact_review =
-                    {{ exactReviewAcceptance?.status_breakdown.needs_exact_review ?? 0 }}
-                  </a-tag>
-                </div>
-                <div class="mt-2 text-[17px] font-semibold text-slate-900">
-                  客户验收口径与下一轮规则增强 Backlog
-                </div>
-                <div class="mt-1 text-[13px] leading-6 text-slate-500">
-                  页面直接展示 `exact_confirmed / blocked_with_reason / skip` 的验收结论，并把
-                  blocked 拆成下一轮可执行 backlog。
-                </div>
-              </div>
-              <div class="text-[12px] leading-6 text-slate-400">
-                更新时间：{{ exactReviewAcceptance?.generated_at || '—' }}
-              </div>
-            </div>
-          </div>
-
-          <a-spin :spinning="exactReviewLoading">
-            <div
-              v-if="exactReviewAcceptance"
-              class="space-y-4 px-5 py-4"
+        <section class="rounded-[18px] border border-slate-200 bg-white shadow-sm">
+          <a-collapse
+            v-model:active-key="internalDiagnosticKeys"
+            ghost
+            class="customer-sample-internal-collapse"
+          >
+            <a-collapse-panel
+              key="sheet2"
+              header="内部验收诊断"
             >
-              <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div class="border-b border-slate-200/80 px-5 pb-4">
+                <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                  <div class="min-w-0">
+                    <div class="text-[17px] font-semibold text-slate-900">
+                      客户验收口径与规则增强诊断
+                    </div>
+                    <div class="mt-1 text-[13px] leading-6 text-slate-500">
+                      该区域仅供内部验收、复核和下一轮规则治理使用，默认不展示给操作员。
+                    </div>
+                  </div>
+                  <div class="text-[12px] leading-6 text-slate-400">
+                    更新时间：{{ exactReviewAcceptance?.generated_at || '—' }}
+                  </div>
+                </div>
+              </div>
+
+              <a-spin :spinning="exactReviewLoading">
                 <div
-                  v-for="item in exactReviewStatusCards"
-                  :key="item.label"
-                  class="rounded-[20px] border px-4 py-4 shadow-[0_10px_24px_rgba(148,163,184,0.10)]"
-                  :class="item.cardClass"
+                  v-if="exactReviewAcceptance"
+                  class="space-y-4 px-5 py-4"
                 >
-                  <div class="text-[12px] font-medium text-slate-500">
-                    {{ item.label }}
-                  </div>
-                  <div class="mt-3 text-[30px] font-semibold leading-none text-slate-900">
-                    {{ item.value }}
-                  </div>
-                  <div class="mt-3 text-[12px] leading-6 text-slate-500">
-                    {{ item.help }}
-                  </div>
-                </div>
-              </div>
-
-              <div
-                class="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4 text-[13px] leading-6 text-amber-900"
-              >
-                <div class="font-semibold text-amber-950">
-                  blocked_with_reason 口径
-                </div>
-                <div class="mt-1">
-                  {{ exactReviewAcceptance.explanations.blocked_with_reason }}
-                </div>
-                <div class="mt-2 text-amber-800">
-                  {{ exactReviewAcceptance.explanations.acceptance_note }}
-                </div>
-              </div>
-
-              <div class="flex flex-wrap gap-2">
-                <span
-                  v-for="item in exactReviewReasonTags"
-                  :key="item.label"
-                  class="inline-flex rounded-full border px-3 py-1 text-[12px] font-medium"
-                  :class="item.className"
-                >
-                  {{ item.label }}：{{ item.value }}
-                </span>
-              </div>
-
-              <div class="grid gap-4 xl:grid-cols-2">
-                <article
-                  v-for="bucket in exactReviewBacklogBuckets"
-                  :key="bucket.category"
-                  class="rounded-[20px] border px-4 py-4"
-                  :class="backlogBucketCardClass(bucket.category)"
-                >
-                  <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div class="text-[16px] font-semibold text-slate-900">
-                        {{ bucket.category }}
+                  <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div
+                      v-for="item in exactReviewStatusCards"
+                      :key="item.label"
+                      class="rounded-[20px] border px-4 py-4 shadow-[0_10px_24px_rgba(148,163,184,0.10)]"
+                      :class="item.cardClass"
+                    >
+                      <div class="text-[12px] font-medium text-slate-500">
+                        {{ item.label }}
                       </div>
-                      <div class="mt-1 text-[13px] leading-6 text-slate-500">
-                        {{ bucket.definition }}
+                      <div class="mt-3 text-[30px] font-semibold leading-none text-slate-900">
+                        {{ item.value }}
+                      </div>
+                      <div class="mt-3 text-[12px] leading-6 text-slate-500">
+                        {{ item.help }}
                       </div>
                     </div>
+                  </div>
+
+                  <div
+                    class="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4 text-[13px] leading-6 text-amber-900"
+                  >
+                    <div class="font-semibold text-amber-950">
+                      blocked_with_reason 口径
+                    </div>
+                    <div class="mt-1">
+                      {{ exactReviewAcceptance.explanations.blocked_with_reason }}
+                    </div>
+                    <div class="mt-2 text-amber-800">
+                      {{ exactReviewAcceptance.explanations.acceptance_note }}
+                    </div>
+                  </div>
+
+                  <div class="flex flex-wrap gap-2">
                     <span
-                      class="inline-flex rounded-full border px-3 py-1 text-[12px] font-semibold"
-                      :class="backlogBucketTagClass(bucket.category)"
+                      v-for="item in exactReviewReasonTags"
+                      :key="item.label"
+                      class="inline-flex rounded-full border px-3 py-1 text-[12px] font-medium"
+                      :class="item.className"
                     >
-                      {{ bucket.count }} 条
+                      {{ item.label }}：{{ item.value }}
                     </span>
                   </div>
-                  <div
-                    class="mt-3 rounded-2xl border border-white/70 bg-white/80 px-3 py-3 text-[13px] leading-6 text-slate-600"
-                  >
-                    下一轮动作：{{ bucket.next_action }}
-                  </div>
-                  <div
-                    v-if="bucket.top_issue_families.length"
-                    class="mt-3 flex flex-wrap gap-2"
-                  >
-                    <span
-                      v-for="family in bucket.top_issue_families"
-                      :key="`${bucket.category}-${family.issue_family}`"
-                      class="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12px] text-slate-600"
+
+                  <div class="grid gap-4 xl:grid-cols-2">
+                    <article
+                      v-for="bucket in exactReviewBacklogBuckets"
+                      :key="bucket.category"
+                      class="rounded-[20px] border px-4 py-4"
+                      :class="backlogBucketCardClass(bucket.category)"
                     >
-                      {{ family.issue_family }} × {{ family.count }}
-                    </span>
+                      <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div class="text-[16px] font-semibold text-slate-900">
+                            {{ bucket.category }}
+                          </div>
+                          <div class="mt-1 text-[13px] leading-6 text-slate-500">
+                            {{ bucket.definition }}
+                          </div>
+                        </div>
+                        <span
+                          class="inline-flex rounded-full border px-3 py-1 text-[12px] font-semibold"
+                          :class="backlogBucketTagClass(bucket.category)"
+                        >
+                          {{ bucket.count }} 条
+                        </span>
+                      </div>
+                      <div
+                        class="mt-3 rounded-2xl border border-white/70 bg-white/80 px-3 py-3 text-[13px] leading-6 text-slate-600"
+                      >
+                        下一轮动作：{{ bucket.next_action }}
+                      </div>
+                      <div
+                        v-if="bucket.top_issue_families.length"
+                        class="mt-3 flex flex-wrap gap-2"
+                      >
+                        <span
+                          v-for="family in bucket.top_issue_families"
+                          :key="`${bucket.category}-${family.issue_family}`"
+                          class="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12px] text-slate-600"
+                        >
+                          {{ family.issue_family }} × {{ family.count }}
+                        </span>
+                      </div>
+                    </article>
                   </div>
-                </article>
-              </div>
 
-              <div
-                v-if="exactReviewAcceptance.archive_summary"
-                class="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4 text-[13px] leading-6 text-slate-600"
-              >
-                已归档临时 probe/report
-                {{ exactReviewAcceptance.archive_summary.archived_file_count }} 个； 归档目录：{{
-                  exactReviewAcceptance.archive_summary.archive_dir
-                }}
-              </div>
-            </div>
+                  <div
+                    v-if="exactReviewAcceptance.archive_summary"
+                    class="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-4 text-[13px] leading-6 text-slate-600"
+                  >
+                    已归档临时 probe/report
+                    {{ exactReviewAcceptance.archive_summary.archived_file_count }} 个；
+                    归档目录：{{ exactReviewAcceptance.archive_summary.archive_dir }}
+                  </div>
+                </div>
 
-            <div
-              v-else
-              class="px-5 py-6 text-[13px] leading-6 text-rose-600"
-            >
-              {{ exactReviewError || '暂未读取到 Sheet2 精确复核验收包。' }}
-            </div>
-          </a-spin>
+                <div
+                  v-else
+                  class="px-5 py-6 text-[13px] leading-6 text-rose-600"
+                >
+                  {{ exactReviewError || '暂未读取到 Sheet2 精确复核验收包。' }}
+                </div>
+              </a-spin>
+            </a-collapse-panel>
+          </a-collapse>
         </section>
 
         <section
-          v-if="syncJobDetail"
+          v-if="syncJobDetail && isSyncJobRunning(syncJobDetail.status)"
           class="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
         >
           <div class="border-b border-slate-200/80 px-5 py-4">
@@ -384,9 +348,7 @@
           </div>
         </section>
 
-        <section
-          class="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_14px_34px_rgba(148,163,184,0.12)]"
-        >
+        <section class="rounded-[18px] border border-slate-200 bg-white shadow-sm">
           <div class="border-b border-slate-200/80 px-5 py-4">
             <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div class="min-w-0">
@@ -394,26 +356,7 @@
                   病历池
                 </div>
                 <div class="mt-1 text-[13px] leading-6 text-slate-500">
-                  列表按真实病历聚合展示，人工问题样本作为病历详情里的关联问题保留。客户操作对象是病历，不是
-                  Excel 样本行。
-                </div>
-              </div>
-              <div class="grid gap-2 text-[13px] text-slate-500 sm:grid-cols-2 xl:min-w-[420px]">
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div class="text-[12px] text-slate-400">
-                    当前样本池
-                  </div>
-                  <div class="mt-1 font-medium text-slate-700">
-                    {{ selectedPool?.name || '未选择' }}
-                  </div>
-                </div>
-                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div class="text-[12px] text-slate-400">
-                    当前任务
-                  </div>
-                  <div class="mt-1 font-medium text-slate-700">
-                    {{ selectedPool?.latest_job_id ? '已创建' : '暂无任务' }}
-                  </div>
+                  搜索、筛选并勾选病历后发起当前模式的质控任务。
                 </div>
               </div>
             </div>
@@ -422,17 +365,6 @@
           <div class="space-y-4 px-5 py-4">
             <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div class="flex flex-1 flex-col gap-3 xl:flex-row xl:items-center">
-                <a-select
-                  v-model:value="selectedPoolId"
-                  class="w-full xl:max-w-[280px] customer-sample-toolbar-select"
-                  size="middle"
-                  :loading="poolLoading"
-                  :options="poolOptions"
-                  placeholder="快速切换样本池"
-                  show-search
-                  option-filter-prop="label"
-                  @change="handlePoolChange"
-                />
                 <a-input
                   v-model:value="filters.query"
                   class="w-full xl:min-w-[320px] xl:flex-1 customer-sample-toolbar-input"
@@ -779,6 +711,7 @@ const pools = ref<ManualSamplePool[]>([])
 const selectedPoolId = ref<string>()
 const selectedPool = ref<ManualSamplePool>()
 const records = ref<ManualSamplePoolRecord[]>([])
+const internalDiagnosticKeys = ref<string[]>([])
 
 const detailOpen = ref(false)
 const activeRecord = ref<ManualSamplePoolRecord>()
@@ -861,51 +794,35 @@ const parallelOptions = [
   { label: '2', value: 2 },
   { label: '4', value: 4 },
 ]
-const validationModeOptions = [
-  { label: '客户专项规则包模式', value: 'customer' },
-  { label: 'SC 样本规则模式', value: 'sc' },
-  { label: '硬门槛程序规则模式', value: 'programmatic' },
-  { label: '正式终末全量内涵 84 条', value: 'formal_fast_screen_full' },
+const primaryValidationModeOptions = [
+  { label: '客户样本复现', value: 'customer' },
+  { label: '正式84条质控', value: 'formal_fast_screen_full' },
 ]
 
 const summaryCards = computed(() => {
   const pool = selectedPool.value
-  let issueSampleLabel = '内涵样本'
-  let issueSampleValue = pool?.llm_intrinsic_items ?? 0
-  let issueSampleHelp = '当前纳入 LLM 验证的问题样本'
-  if (selectedValidationMode.value === 'customer') {
-    issueSampleLabel = '问题样本'
-    issueSampleHelp = '当前纳入客户专项规则包验证的问题样本'
-  } else if (isFormalFastScreenMode.value) {
-    issueSampleLabel = '正式质控病历'
-    issueSampleValue = pool?.matched_items ?? 0
-    issueSampleHelp = '当前已匹配真实病历，可按正式终末 84 条发起质控'
-  } else if (selectedValidationMode.value === 'programmatic') {
-    issueSampleLabel = '程序样本'
-    issueSampleValue = pool?.programmatic_items ?? 0
-    issueSampleHelp = '当前纳入样本硬门槛程序规则包的样本'
-  }
   const runnableValue = isSyncedOnlyValidationMode.value
     ? (pool?.matched_items ?? 0)
     : (pool?.ready_items ?? 0)
-  let runnableHelp = 'running bundle 已就绪，可直接发起验证'
+  let runnableHelp = '文书已就绪，可直接发起当前模式质控'
   if (isFormalFastScreenMode.value) {
-    runnableHelp = '已匹配且已同步，可发起正式终末 fast_screen_full'
+    runnableHelp = '已匹配且已同步，可发起正式 84 条质控'
   } else if (selectedValidationMode.value === 'programmatic') {
     runnableHelp = '已匹配且已同步，可直接发起程序规则验证'
   }
+  const latestStatus = pool?.latest_job_status
   return [
-    { label: '样本总数', value: pool?.total_items ?? 0, help: 'Sheet2 导入后的样本总量' },
-    {
-      label: issueSampleLabel,
-      value: issueSampleValue,
-      help: issueSampleHelp,
-    },
+    { label: '样本总数', value: pool?.total_items ?? 0, help: '当前样本池导入的记录数' },
     { label: '已匹配病历', value: pool?.matched_items ?? 0, help: '已映射到系统病历主键的样本数' },
     {
-      label: '可运行样本',
+      label: '可质控病历',
       value: runnableValue,
       help: runnableHelp,
+    },
+    {
+      label: '最近任务状态',
+      value: latestStatus ? getBatchJobStatusText(latestStatus) : '暂无',
+      help: '可在“更多”中查看最近任务详情',
     },
   ]
 })
@@ -1003,10 +920,10 @@ const selectedRecordStats = computed(() => {
 const runButtonText = computed(() =>
   isFormalFastScreenMode.value
     ? selectedRecordStats.value.selectedCount > 0
-      ? `正式质控 84 条（${selectedRecordStats.value.selectedCount}）`
-      : '正式质控 84 条'
+      ? `发起正式84条质控（${selectedRecordStats.value.selectedCount}）`
+      : '发起正式84条质控'
     : selectedRecordStats.value.selectedCount > 0
-      ? `发起选中病历验证（${selectedRecordStats.value.selectedCount}）`
+      ? `发起样本验证（${selectedRecordStats.value.selectedCount}）`
       : '发起样本验证',
 )
 
@@ -1199,10 +1116,10 @@ function coverageLabel(value: string): string {
 }
 
 function validationModeLabel(value: string): string {
-  if (value === 'formal_fast_screen_full') return '正式终末全量内涵 84 条'
-  if (value === 'programmatic') return '硬门槛程序规则模式'
-  if (value === 'sc') return 'SC 样本规则模式'
-  return '客户专项规则包模式'
+  if (value === 'formal_fast_screen_full') return '正式84条质控'
+  if (value === 'programmatic') return '硬门槛程序规则'
+  if (value === 'sc') return 'SC 样本规则'
+  return '客户样本复现'
 }
 
 function matchStatusLabel(value: string): string {
@@ -1329,7 +1246,7 @@ function summarizeRecordScope(record: ManualSamplePoolRecord): string {
     return labels.join(' / ')
   }
   if (selectedValidationMode.value === 'formal_fast_screen_full') {
-    return 'sc_content_full_v1 / 全量内涵 84 条'
+    return '正式终末全量内涵 84 条'
   }
   if (selectedValidationMode.value === 'programmatic') {
     return '样本硬门槛程序规则包 v1'
@@ -1342,7 +1259,7 @@ function summarizeRecordScope(record: ManualSamplePoolRecord): string {
 
 function recordScopeHint(record: ManualSamplePoolRecord): string {
   if (selectedValidationMode.value === 'formal_fast_screen_full') {
-    return '当前按正式终末 fast_screen_full 执行 sc_content_full_v1 全量内涵 84 条，不依赖单条样本候选规则。'
+    return '当前按正式终末全量内涵 84 条执行，不依赖单条样本候选规则。'
   }
   if ((record.document_scope_labels || []).length > 0) {
     return '已按当前病历实际同步到的文书类型识别验证范围。'
@@ -1589,14 +1506,24 @@ async function handlePoolChange() {
   await loadRecords()
 }
 
-async function handleValidationModeChange(mode: ManualSampleValidationMode) {
-  if (mode === 'programmatic') {
+function normalizeValidationMode(mode: string | number): ManualSampleValidationMode {
+  const value = String(mode)
+  if (value === 'formal_fast_screen_full') return 'formal_fast_screen_full'
+  if (value === 'programmatic') return 'programmatic'
+  if (value === 'sc') return 'sc'
+  return 'customer'
+}
+
+async function handleValidationModeChange(mode: ManualSampleValidationMode | string | number) {
+  const normalizedMode = normalizeValidationMode(mode)
+  selectedValidationMode.value = normalizedMode
+  if (normalizedMode === 'programmatic') {
     filters.value.coverageType = 'programmatic'
     filters.value.includeInBatch = false
-  } else if (mode === 'formal_fast_screen_full') {
+  } else if (normalizedMode === 'formal_fast_screen_full') {
     filters.value.coverageType = undefined
     filters.value.includeInBatch = false
-  } else if (mode === 'sc' && filters.value.coverageType === 'programmatic') {
+  } else if (normalizedMode === 'sc' && filters.value.coverageType === 'programmatic') {
     filters.value.coverageType = 'llm_intrinsic'
     filters.value.includeInBatch = true
   } else {
@@ -1605,6 +1532,36 @@ async function handleValidationModeChange(mode: ManualSampleValidationMode) {
   pagination.value.page = 1
   selectedRowKeys.value = []
   await loadRecords()
+}
+
+async function handleMoreActionKey(key: string) {
+  if (key === 'import') {
+    importModalOpen.value = true
+    return
+  }
+  if (key === 'refresh') {
+    await loadPools()
+    return
+  }
+  if (key === 'sync') {
+    await handleSyncPoolRecords()
+    return
+  }
+  if (key === 'match') {
+    await handleMatchPool()
+    return
+  }
+  if (key === 'latest') {
+    await openLatestJob()
+    return
+  }
+  if (key === 'mode-sc') {
+    await handleValidationModeChange('sc')
+    return
+  }
+  if (key === 'mode-programmatic') {
+    await handleValidationModeChange('programmatic')
+  }
 }
 
 function resetFilters() {
@@ -2049,5 +2006,25 @@ onUnmounted(() => {
 
 :deep(.customer-sample-toolbar-select .ant-select-selection-search-input) {
   height: 38px !important;
+}
+
+.customer-sample-mode-segmented {
+  min-width: 280px;
+}
+
+:deep(.customer-sample-mode-segmented .ant-segmented-item-label) {
+  min-width: 118px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+:deep(.customer-sample-internal-collapse .ant-collapse-header) {
+  padding: 12px 20px !important;
+  font-weight: 600;
+  color: #334155 !important;
+}
+
+:deep(.customer-sample-internal-collapse .ant-collapse-content-box) {
+  padding: 0 0 16px !important;
 }
 </style>
