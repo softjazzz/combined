@@ -18,6 +18,7 @@ from .effect_priority_qc import (
     family_pack_candidates,
     normalize_quality_profile,
 )
+from .qc_cancellation import raise_if_cancelled
 
 
 logger = logging.getLogger(__name__)
@@ -165,7 +166,9 @@ class QCRuleOrchestrator:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         execution_cache: Optional[QCExecutionCache] = None,
         cache_ttl_seconds: int = 1800,
+        cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> dict[str, Any]:
+        raise_if_cancelled(cancellation_check)
         results: list[dict[str, Any]] = []
         trace: list[OrchestratedRuleResult] = []
         total_tokens = 0
@@ -230,8 +233,11 @@ class QCRuleOrchestrator:
             meta: RuleExecutionMeta,
             is_fallback: bool,
         ) -> tuple[int, dict[str, Any], RuleExecutionMeta, bool]:
+            raise_if_cancelled(cancellation_check)
             async with semaphore:
+                raise_if_cancelled(cancellation_check)
                 result = await llm_evaluate(rule, medical_record)
+            raise_if_cancelled(cancellation_check)
             return idx, result, meta, is_fallback
 
         async def run_llm_pack(
@@ -241,10 +247,15 @@ class QCRuleOrchestrator:
         ) -> dict[str, Any]:
             if llm_batch_evaluate is None:
                 raise RuntimeError("llm_batch_evaluate 未配置")
+            raise_if_cancelled(cancellation_check)
             async with semaphore:
-                return await llm_batch_evaluate(pack_rules, medical_record, options)
+                raise_if_cancelled(cancellation_check)
+                result = await llm_batch_evaluate(pack_rules, medical_record, options)
+            raise_if_cancelled(cancellation_check)
+            return result
 
         for idx, rule in enumerate(rules):
+            raise_if_cancelled(cancellation_check)
             meta = resolve_rule_execution_meta(rule)
             executor_type = meta.executor_type
             can_program = executor_type == "program" and self._program_executor.can_execute(rule)
@@ -294,6 +305,7 @@ class QCRuleOrchestrator:
             *,
             force_pack_fallback: bool = False,
         ) -> None:
+            raise_if_cancelled(cancellation_check)
             idx = int(entry["idx"])
             rule = dict(entry["rule"])
             meta = entry["meta"]
@@ -462,20 +474,24 @@ class QCRuleOrchestrator:
             force_pack_fallback: bool = False,
         ) -> None:
             nonlocal pack_call_counter, total_tokens, total_api_time
+            raise_if_cancelled(cancellation_check)
             if not entries:
                 return
             if len(entries) == 1 and llm_batch_evaluate is None:
                 await _run_single_entry(entries[0], force_pack_fallback=force_pack_fallback)
+                raise_if_cancelled(cancellation_check)
                 return
 
             if llm_batch_evaluate is None:
                 await asyncio.gather(*[_run_single_entry(entry, force_pack_fallback=force_pack_fallback) for entry in entries])
+                raise_if_cancelled(cancellation_check)
                 return
 
             pack_call_counter += 1
             pack_id = f"{pack_id_prefix}-{pack_call_counter}"
             response: dict[str, Any] = {}
             try:
+                raise_if_cancelled(cancellation_check)
                 response = await run_llm_pack(
                     [dict(item["rule"]) for item in entries],
                     options={
@@ -510,6 +526,7 @@ class QCRuleOrchestrator:
                 force_pack_fallback=force_pack_fallback,
             )
             if accepted:
+                raise_if_cancelled(cancellation_check)
                 return
 
             pack_metrics["pack_parse_retry_count"] = int(pack_metrics.get("pack_parse_retry_count") or 0) + 1
@@ -548,6 +565,7 @@ class QCRuleOrchestrator:
             bucket_key: tuple[str, str, str] = ("generic", "primary", ""),
         ) -> int:
             nonlocal total_tokens, total_api_time, total_prompt_tokens, total_completion_tokens, first_result_latency, first_result_source
+            raise_if_cancelled(cancellation_check)
             if llm_batch_evaluate is None:
                 return 1
             if not entries:
@@ -573,6 +591,7 @@ class QCRuleOrchestrator:
             probe_pool = entries[: min(len(entries), max(normalized_candidates))]
             selected = normalized_candidates[-1]
             for candidate in normalized_candidates:
+                raise_if_cancelled(cancellation_check)
                 probe_rules = [dict(item["rule"]) for item in probe_pool[:candidate]]
                 pack_metrics["probe_calls"] = int(pack_metrics.get("probe_calls") or 0) + 1
                 try:
@@ -641,6 +660,7 @@ class QCRuleOrchestrator:
             pack_metrics["bucket_count"] = len(llm_buckets)
 
             for bucket_key, bucket_entries in llm_buckets.items():
+                raise_if_cancelled(cancellation_check)
                 if not bucket_entries:
                     continue
 
@@ -654,6 +674,7 @@ class QCRuleOrchestrator:
 
                 chunk_size = max(1, min(int(selected_pack_size), len(bucket_entries)))
                 for start in range(0, len(bucket_entries), chunk_size):
+                    raise_if_cancelled(cancellation_check)
                     chunk = bucket_entries[start : start + chunk_size]
                     await _execute_pack(
                         chunk,
@@ -668,6 +689,7 @@ class QCRuleOrchestrator:
             pack_metrics["bucket_count"] = len(llm_buckets)
             llm_tasks: list[Awaitable[tuple[int, dict[str, Any], RuleExecutionMeta, bool]]] = []
             for entries in llm_buckets.values():
+                raise_if_cancelled(cancellation_check)
                 for entry in entries:
                     llm_tasks.append(
                         run_llm_rule(
@@ -678,9 +700,11 @@ class QCRuleOrchestrator:
                         )
                     )
             for idx, result, meta, is_fallback in await asyncio.gather(*llm_tasks):
+                raise_if_cancelled(cancellation_check)
                 llm_results[idx] = (result, meta, is_fallback)
 
         for idx, rule in enumerate(rules):
+            raise_if_cancelled(cancellation_check)
             cache_key = ""
             is_cache_hit = False
             llm_fallback = False

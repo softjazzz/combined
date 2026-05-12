@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import time
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Iterable
 
 from app.constants.doc_types import DOC_TYPE_FULL_MAP
 
@@ -20,6 +20,7 @@ from .formal_qc_subitem_anchors import (
     attach_subitem_anchors_to_parent_results,
     evaluate_formal_qc_p0_subitem_anchors,
 )
+from .qc_cancellation import raise_if_cancelled
 
 if TYPE_CHECKING:
     from .sichuan_qc_service import SichuanQCService
@@ -927,7 +928,9 @@ async def run_final_fast_screen(
     low_confidence_threshold: float = FAST_SCREEN_DEFAULT_LOW_CONFIDENCE_THRESHOLD,
     pack_concurrency: int = 3,
     max_pack_retries: int = 1,
+    cancellation_check: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
+    raise_if_cancelled(cancellation_check)
     overall_started = time.perf_counter()
     quality_profile_normalized = normalize_quality_profile(quality_profile)
     batch_output_mode_normalized = normalize_batch_output_mode(
@@ -997,6 +1000,7 @@ async def run_final_fast_screen(
 
     async def _execute_pack(index: int, pack: FastScreenPackDefinition) -> dict[str, Any]:
         nonlocal running_pack_count, observed_max_concurrency
+        raise_if_cancelled(cancellation_check)
         pack_rules = [rules_by_id[rule_id] for rule_id in pack.rule_ids if rule_id in rules_by_id]
         configured_rule_ids = [rule_id for rule_id in pack.rule_ids if rule_id in rules_by_id]
         diagnostic: dict[str, Any] = {
@@ -1140,7 +1144,9 @@ async def run_final_fast_screen(
 
         async def _call_pack_once() -> dict[str, Any]:
             nonlocal running_pack_count, observed_max_concurrency
+            raise_if_cancelled(cancellation_check)
             async with semaphore:
+                raise_if_cancelled(cancellation_check)
                 started_perf = time.perf_counter()
                 async with diagnostics_lock:
                     running_pack_count += 1
@@ -1148,6 +1154,7 @@ async def run_final_fast_screen(
                 diagnostic["queue_wait_time"] = max(0.0, started_perf - queued_at)
                 diagnostic["started_at"] = datetime.now(timezone.utc).isoformat()
                 try:
+                    raise_if_cancelled(cancellation_check)
                     evaluated = await qc_service.rule_engine.evaluate_batch_compact(
                         rules=pack_rules,
                         medical_record={
@@ -1169,9 +1176,11 @@ async def run_final_fast_screen(
                         running_pack_count = max(0, running_pack_count - 1)
                 diagnostic["finished_at"] = datetime.now(timezone.utc).isoformat()
                 diagnostic["wall_time"] = max(0.0, time.perf_counter() - started_perf)
+                raise_if_cancelled(cancellation_check)
                 return evaluated
 
         for attempt_index in range(max_retry_count + 1):
+            raise_if_cancelled(cancellation_check)
             pack_results = [
                 dict(item)
                 for item in list(last_evaluated.get("results") or [])
@@ -1363,6 +1372,7 @@ async def run_final_fast_screen(
     pack_outputs.sort(key=lambda item: int(item.get("index") or 0))
 
     for output in pack_outputs:
+        raise_if_cancelled(cancellation_check)
         output_results = [dict(item) for item in list(output.get("results") or []) if isinstance(item, dict)]
         results.extend(output_results)
         diagnostic = dict(output.get("diagnostic") or {})

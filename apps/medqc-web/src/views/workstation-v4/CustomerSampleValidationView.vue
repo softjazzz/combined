@@ -706,6 +706,8 @@
       :open="batchResultOpen"
       :batch-job-detail="batchJobDetail"
       :batch-job-detail-loading="batchJobLoading"
+      :cancel-batch-job="handleCancelBatchJob"
+      :cancel-batch-job-loading="cancelBatchJobLoading"
       :batch-job-debug-snapshot="undefined"
       :batch-job-debug-loading="false"
       :fetch-batch-job-debug-snapshot="undefined"
@@ -754,12 +756,14 @@ import {
   syncManualSamplePoolRecords,
 } from '@/services/manual-case-sample-service'
 import {
+  cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
 import type { SichuanBatchJob } from '@/views/workstation-v4/semantic-rules/types'
+import { isBatchJobCancelable } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
 const poolLoading = ref(false)
 const itemLoading = ref(false)
@@ -793,6 +797,7 @@ const reviewDrawerRecord = ref<{
 const batchResultOpen = ref(false)
 const batchJobDetail = ref<SichuanBatchJob>()
 const batchJobLoading = ref(false)
+const cancelBatchJobLoading = ref(false)
 const batchResultFocusRecord = ref<{
   visitId: string
   recordId: string
@@ -1860,8 +1865,7 @@ function closeBatchDrawer() {
 }
 
 function isBatchJobRunning(status?: string) {
-  const normalized = String(status || '').toLowerCase()
-  return normalized === 'queued' || normalized === 'running'
+  return isBatchJobCancelable(status)
 }
 
 function stopBatchJobPolling() {
@@ -1913,6 +1917,26 @@ function startBatchJobPolling(jobId: string) {
       await loadRecords()
     }
   }, 3000)
+}
+
+async function handleCancelBatchJob(jobId: string) {
+  const normalizedJobId = String(jobId || '').trim()
+  if (!normalizedJobId) return
+  cancelBatchJobLoading.value = true
+  try {
+    const result = await cancelSichuanWorkspaceBatchJob(normalizedJobId)
+    if (!result.success || !result.data) {
+      message.error(result.message || '停止质控任务失败')
+      return
+    }
+    stopBatchJobPolling()
+    batchJobDetail.value = result.data
+    message.success('质控任务已停止')
+    await loadPools()
+    await loadRecords()
+  } finally {
+    cancelBatchJobLoading.value = false
+  }
 }
 
 async function handleExportBatchReport(format: 'xlsx' | 'csv' = 'xlsx') {

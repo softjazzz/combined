@@ -19,6 +19,14 @@
         </div>
         <div class="drawer-actions">
           <a-button
+            v-if="canCancelBatchJob"
+            danger
+            :loading="cancelBatchJobLoading"
+            @click="confirmCancelBatchJob"
+          >
+            停止任务
+          </a-button>
+          <a-button
             v-if="batchJobDetail?.status === 'completed'"
             :loading="batchJobDetailLoading"
             @click="exportBatchJobReport('xlsx')"
@@ -1074,7 +1082,7 @@
 
 <script setup lang="ts">
 import { computed, h, nextTick, reactive, ref, watch } from 'vue'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import type {
   SichuanBatchIssueItem,
   SichuanBatchJobDebugSnapshot,
@@ -1088,6 +1096,7 @@ import {
   filterStructuredQCIssues,
   mapBatchJobToStructuredQC,
 } from '@/views/workstation-v4/utils/structuredQc'
+import { isBatchJobCancelable } from '@/views/workstation-v4/semantic-rules/utils/batchJobStatus'
 
 const props = defineProps<{
   open: boolean
@@ -1101,6 +1110,8 @@ const props = defineProps<{
   batchJobDetailLoading: boolean
   close: () => void
   exportBatchJobReport: (format?: 'xlsx' | 'csv') => void
+  cancelBatchJob?: (jobId: string) => Promise<void> | void
+  cancelBatchJobLoading?: boolean
   getBatchJobStatusTagClass: (status?: string) => string
   getBatchJobStatusText: (status?: string) => string
   formatDateTime: (value?: string | Date | null) => string
@@ -1132,9 +1143,37 @@ const issueFilter = ref<StructuredQCFilterState>(createDefaultStructuredQCFilter
 const advancedSectionKeys = ref<string[]>([])
 const normalizedFocusVisitId = computed(() => String(props.focusVisitId || '').trim())
 const normalizedFocusRecordId = computed(() => String(props.focusRecordId || '').trim())
+const cancelBatchJobLoading = computed(() => props.cancelBatchJobLoading === true)
+const canCancelBatchJob = computed(
+  () =>
+    Boolean(props.cancelBatchJob) &&
+    Boolean(props.batchJobDetail?.id) &&
+    isBatchJobCancelable(props.batchJobDetail?.status),
+)
 const isFocusedRecordMode = computed(
   () => !!(normalizedFocusVisitId.value || normalizedFocusRecordId.value),
 )
+
+function confirmCancelBatchJob() {
+  const jobId = String(props.batchJobDetail?.id || '').trim()
+  if (!jobId || !props.cancelBatchJob) return
+  Modal.confirm({
+    title: '停止质控任务',
+    content: '确定停止当前质控任务？已完成结果将保留，未完成规则不再继续执行。',
+    okText: '停止任务',
+    okType: 'danger',
+    cancelText: '继续等待',
+    async onOk() {
+      try {
+        await props.cancelBatchJob?.(jobId)
+      } catch (error) {
+        const text = error instanceof Error ? error.message : ''
+        message.error(text || '停止任务失败')
+        throw error
+      }
+    },
+  })
+}
 
 function matchesFocusedRecord(
   item: Pick<SichuanBatchIssueItem, 'visit_id' | 'record_id'> | StructuredQCIssue,

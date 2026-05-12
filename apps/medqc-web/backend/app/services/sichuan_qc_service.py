@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Callable, Dict, Any, List, Optional, Tuple
 import json
 import hashlib
 import logging
@@ -56,6 +56,7 @@ from .effect_priority_qc import (
     select_refine_candidates,
 )
 from .qc_rule_sets import should_refine_rule_by_default
+from .qc_cancellation import raise_if_cancelled
 from .customer_rule_sets import load_customer_luxian_rules, invalidate_customer_rule_set_cache
 from .sc_rule_family import (
     DEFAULT_RULE_FAMILY,
@@ -990,7 +991,9 @@ class SichuanQCService:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
+        cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
+        raise_if_cancelled(cancellation_check)
         prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
         quality_profile_normalized = normalize_quality_profile(quality_profile)
         batch_output_mode_normalized = normalize_batch_output_mode(
@@ -1029,6 +1032,7 @@ class SichuanQCService:
             refine_confidence_threshold=refine_confidence_threshold,
             execution_cache=self.execution_cache if use_execution_cache else None,
             cache_ttl_seconds=1800,
+            cancellation_check=cancellation_check,
         )
         orchestrated["quality_profile"] = quality_profile_normalized
         orchestrated["batch_output_mode"] = batch_output_mode_normalized
@@ -3804,6 +3808,7 @@ class SichuanQCService:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
+        cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
         对单个病历文档进行质控评估。
@@ -3844,6 +3849,7 @@ class SichuanQCService:
             refine_confidence_threshold=refine_confidence_threshold,
             max_refine_candidates=max_refine_candidates,
             use_execution_cache=use_execution_cache,
+            cancellation_check=cancellation_check,
         )
 
     async def evaluate_document_with_rules(
@@ -3862,6 +3868,7 @@ class SichuanQCService:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
+        cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
 
@@ -3879,6 +3886,7 @@ class SichuanQCService:
             refine_confidence_threshold=refine_confidence_threshold,
             max_refine_candidates=max_refine_candidates,
             use_execution_cache=use_execution_cache,
+            cancellation_check=cancellation_check,
         )
         return self._build_document_evaluation_result(
             document_id=document_id,
@@ -3899,6 +3907,7 @@ class SichuanQCService:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
+        cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
         通过 running/final bundle 输入复用旧规则链入口（evaluate_document）。
@@ -3956,6 +3965,7 @@ class SichuanQCService:
                 refine_confidence_threshold=refine_confidence_threshold,
                 max_refine_candidates=max_refine_candidates,
                 use_execution_cache=use_execution_cache,
+                cancellation_check=cancellation_check,
             )
         else:
             grouped_rules: Dict[str, Dict[str, Any]] = {}
@@ -3972,6 +3982,7 @@ class SichuanQCService:
             refine_reasons_agg: Dict[str, int] = {}
 
             for rule in selected_rules:
+                raise_if_cancelled(cancellation_check)
                 matched_document = self._select_bundle_document_for_rule(
                     rule=rule,
                     bundle_documents=bundle_documents,
@@ -3996,6 +4007,7 @@ class SichuanQCService:
                 slot["rules"].append(rule)
 
             for slot in grouped_rules.values():
+                raise_if_cancelled(cancellation_check)
                 primary_document = dict(slot.get("document") or {})
                 primary_content = str(primary_document.get("content") or "").strip()
                 primary_type = str(primary_document.get("document_type") or document_type or "病程记录")
@@ -4019,6 +4031,7 @@ class SichuanQCService:
                     refine_confidence_threshold=refine_confidence_threshold,
                     max_refine_candidates=max_refine_candidates,
                     use_execution_cache=use_execution_cache,
+                    cancellation_check=cancellation_check,
                 )
                 result_items.extend(list(per_doc_orchestrated.get("results") or []))
                 total_tokens += int(per_doc_orchestrated.get("total_tokens") or 0)
@@ -4090,7 +4103,9 @@ class SichuanQCService:
         source_schema: Optional[str] = None,
         bundle_schema: str = "public",
         force_refresh_bundle: bool = False,
+        cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
+        raise_if_cancelled(cancellation_check)
         rule = self.get_rule_by_id(str(rule_id or "").strip())
         if not rule:
             raise ValueError(f"规则不存在: {rule_id}")
@@ -4157,12 +4172,14 @@ class SichuanQCService:
             )
 
         medical_text = render_rule_execution_medical_text(rule_input)
+        raise_if_cancelled(cancellation_check)
         orchestrated = await self._evaluate_rules_orchestrated(
             document_id=f"{visit_id}:{rule.get('rule_id')}",
             content=medical_text,
             document_type=rule_input.document_type,
             rules=[rule],
             evidence_source="bundle",
+            cancellation_check=cancellation_check,
         )
         orchestrated_results = list(orchestrated.get("results") or [])
         if not orchestrated_results:

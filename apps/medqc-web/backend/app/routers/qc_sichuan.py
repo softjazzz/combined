@@ -40,6 +40,7 @@ from ..services.qc_result_postprocessor import (
     summarize_postprocessed_results,
 )
 from ..services.qc_result_adjudicator import adjudicate_postprocessed_qc_results
+from ..services.qc_cancellation import QCJobCancelled, raise_if_cancelled
 from ..services.effect_priority_qc import (
     BATCH_OUTPUT_MODE_FULL,
     DEFAULT_MAX_REFINE_CANDIDATES,
@@ -923,7 +924,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         return
 
     try:
-        workspace.mark_batch_job_running(job_id=job_id)
+        if not workspace.mark_batch_job_running(job_id=job_id):
+            return
         qc_service = await get_qc_service()
         current = workspace.get_batch_job_for_processing(job_id=job_id) or job
         filters = dict(current.get("filters") or {})
@@ -1078,6 +1080,15 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             bucket_strategy=bucket_strategy,
         )
 
+        def _is_cancelled() -> bool:
+            latest = workspace.get_batch_job_for_processing(job_id=job_id)
+            if not latest:
+                return True
+            return str(latest.get("status") or "").strip().lower() == "canceled"
+
+        def _raise_if_cancelled() -> None:
+            raise_if_cancelled(_is_cancelled)
+
         def _build_progress_patch(processed_records_count: int) -> Dict[str, Any]:
             return {
                 "rule_set_key": rule_set_key,
@@ -1112,6 +1123,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             }
 
         async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
+            _raise_if_cancelled()
             record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
             visit_id = str(record.get("visit_id") or record_id).strip()
             institute_id = str(record.get("institute_id") or "").strip()
@@ -1179,6 +1191,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     first_latency = 0.0
                     first_source = ""
                     for single_rule_id in active_rule_ids:
+                        _raise_if_cancelled()
                         single_result = await qc_service.evaluate_rule_for_visit(
                             rule_id=single_rule_id,
                             institute_id=institute_id,
@@ -1186,6 +1199,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             visit_id=visit_id,
                             source_schema="cdm",
                             bundle_schema="public",
+                            cancellation_check=_is_cancelled,
                         )
                         per_rule_items = list(
                             single_result.get("evaluation_results")
@@ -1272,6 +1286,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         enable_selective_refine=enable_selective_refine,
                         refine_confidence_threshold=refine_confidence_threshold,
                         max_refine_candidates=max_refine_candidates,
+                        cancellation_check=_is_cancelled,
                     )
                     token_usage = dict(result.get("token_usage") or {})
                     record_total_tokens = int(token_usage.get("total_tokens") or 0)
@@ -1308,6 +1323,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 ):
                     used_bundle_path = True
                     try:
+                        _raise_if_cancelled()
                         use_sc_fixed_fast_screen = (
                             bundle_scene == "final"
                             and execution_strategy == EXECUTION_STRATEGY_FAST_SCREEN
@@ -1324,6 +1340,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 rule_ids=active_rule_ids,
                                 quality_profile=quality_profile,
                                 batch_output_mode=batch_output_mode,
+                                cancellation_check=_is_cancelled,
                             )
                         else:
                             single_result = await evaluate_running_final_bundle(
@@ -1340,6 +1357,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 enable_selective_refine=enable_selective_refine,
                                 refine_confidence_threshold=refine_confidence_threshold,
                                 max_refine_candidates=max_refine_candidates,
+                                cancellation_check=_is_cancelled,
                             )
                         eval_items = list(
                             single_result.get("evaluation_results")
@@ -1387,6 +1405,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     bundle_fallback_reason = "缺少 bundle 主键(institute_id/patient_id/visit_id)"
 
                 if not used_bundle_path:
+                    _raise_if_cancelled()
                     result = await qc_service.evaluate_document(
                         document_id=record_id or "unknown",
                         content=str(record.get("medical_text") or ""),
@@ -1398,6 +1417,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         enable_selective_refine=enable_selective_refine,
                         refine_confidence_threshold=refine_confidence_threshold,
                         max_refine_candidates=max_refine_candidates,
+                        cancellation_check=_is_cancelled,
                     )
                     token_usage = dict(result.get("token_usage") or {})
                     record_total_tokens = int(token_usage.get("total_tokens") or 0)
@@ -1638,6 +1658,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "cot_summary": record_cot_summary,
                     "refine_summary": record_refine_summary,
                 }
+            except QCJobCancelled:
+                raise
             except Exception as exc:
                 for rule_id in valid_rule_ids:
                     state = rule_states[rule_id]
@@ -1815,26 +1837,27 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             completed_count = 0
             try:
                 for future in asyncio.as_completed(tasks):
-                    latest = workspace.get_batch_job_for_processing(job_id=job_id)
-                    if not latest or str(latest.get("status") or "").lower() == "canceled":
-                        for task in tasks:
-                            if not task.done():
-                                task.cancel()
-                        await asyncio.gather(*tasks, return_exceptions=True)
-                        logger.info("四川批量任务 %s 已取消，停止执行", job_id)
-                        return
+                    _raise_if_cancelled()
                     record_result = await future
                     completed_count += 1
                     _merge_record_result(record_result, completed_count)
+            except QCJobCancelled:
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                logger.info("四川批量任务 %s 已取消，停止执行", job_id)
+                return
             finally:
                 await asyncio.gather(*tasks, return_exceptions=True)
         else:
             for processed_index, record in enumerate(hydrated_records, start=1):
-                latest = workspace.get_batch_job_for_processing(job_id=job_id)
-                if not latest or str(latest.get("status") or "").lower() == "canceled":
+                try:
+                    _raise_if_cancelled()
+                    record_result = await _evaluate_single_record(record)
+                except QCJobCancelled:
                     logger.info("四川批量任务 %s 已取消，停止执行", job_id)
                     return
-                record_result = await _evaluate_single_record(record)
                 _merge_record_result(record_result, processed_index)
 
         def _item_is_confirmed_defect(item: Dict[str, Any]) -> bool:
@@ -2032,6 +2055,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             items=all_items,
             failed_records=all_failed_records,
         )
+    except QCJobCancelled:
+        logger.info("四川规则批量任务 %s 已取消，后台执行已停止", job_id)
     except Exception as exc:
         logger.exception("四川规则批量任务执行失败: %s", exc)
         workspace.fail_batch_job(job_id=job_id, error_message=str(exc))

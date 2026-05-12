@@ -596,6 +596,8 @@
       :fetch-batch-job-debug-snapshot="fetchBatchJobDebugSnapshot"
       :close="closeBatchJobDrawer"
       :export-batch-job-report="handleExportBatchReport"
+      :cancel-batch-job="executeCancelBatchJob"
+      :cancel-batch-job-loading="cancellingBatchJobId === batchJobDetail?.id"
       :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
       :get-batch-job-status-text="getBatchJobStatusText"
       :format-date-time="formatDateTime"

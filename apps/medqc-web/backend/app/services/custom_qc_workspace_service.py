@@ -1365,6 +1365,11 @@ class CustomQCWorkspaceService:
             if not isinstance(current_summary, dict):
                 current_summary = {}
             now = _now_utc()
+            cancelled_progress = (
+                current_summary.get("progress")
+                if isinstance(current_summary.get("progress"), dict)
+                else {}
+            )
             session.execute(
                 update(self._batch_job_table)
                 .where(
@@ -1376,17 +1381,17 @@ class CustomQCWorkspaceService:
                         {
                             **current_summary,
                             "progress": {
-                                **(
-                                    current_summary.get("progress")
-                                    if isinstance(current_summary.get("progress"), dict)
-                                    else {}
-                                ),
+                                **cancelled_progress,
                                 "step_key": "canceled",
+                                "step_label": "已停止",
                             },
+                            "user_cancelled": True,
+                            "cancelled_by": created_by,
+                            "cancelled_at": now.isoformat(),
                             "updated_at": now.isoformat(),
                         }
                     ),
-                    error_message="任务已取消",
+                    error_message="user_cancelled: 任务已取消",
                     finished_at=now,
                     updated_at=now,
                 )
