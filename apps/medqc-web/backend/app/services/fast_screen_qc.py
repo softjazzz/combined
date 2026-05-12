@@ -454,6 +454,21 @@ def _document_excerpt(
     return rows
 
 
+def _compact_join_excerpts(rows: list[dict[str, Any]], *, limit: int = 900) -> str:
+    parts: list[str] = []
+    for row in rows:
+        source = _safe_text(row.get("source_table"))
+        text = _safe_text(row.get("evidence_text"))
+        if text:
+            parts.append(f"{source}: {text}")
+    return _compact_text("；".join(parts), limit=limit)
+
+
+def _any_excerpt_contains(rows: list[dict[str, Any]], terms: tuple[str, ...] | list[str] | set[str]) -> bool:
+    combined = "\n".join(_safe_text(row.get("evidence_text")) for row in rows)
+    return any(term and term in combined for term in terms)
+
+
 def _build_sc083_evidence_context(
     *,
     all_documents: list[dict[str, Any]],
@@ -478,10 +493,17 @@ def _build_sc083_evidence_context(
         ],
         "surgery_grade_evidence": surgery_docs,
         "mdt_or_discussion_evidence": discussion_docs,
+        "supporting_quote": _compact_join_excerpts(discussion_docs[:3], limit=900),
+        "contrast_quote": _compact_join_excerpts(surgery_docs[:3], limit=700),
         "coverage_flags": {
             "has_surgery_source": bool(hits.get("mr_surgery") or hits.get("surgery_record") or surgery_docs),
             "has_presurg_discussion": bool(hits.get("presurg_discussion") or discussion_docs),
             "has_mdt_or_consultation_source": bool(hits.get("consultation_record") or hits.get("diffcase_discussion")),
+            "has_surgery_grade_text": _any_excerpt_contains(surgery_docs, ("手术等级", "四级", "三级", "急诊")),
+            "has_multidisciplinary_text": _any_excerpt_contains(
+                discussion_docs,
+                ("MDT", "多学科", "会诊", "麻醉", "内科", "感染", "影像", "护理"),
+            ),
         },
     }
 
@@ -555,6 +577,8 @@ def _build_sc100_evidence_context(
         ],
         "surgery_implant_evidence": surgery_docs,
         "charge_or_order_evidence": charge_docs[:8],
+        "supporting_quote": _compact_join_excerpts(surgery_docs[:3], limit=900),
+        "contrast_quote": _compact_join_excerpts(charge_docs[:5], limit=900),
         "coverage_flags": {
             "has_surgery_record": bool(hits.get("surgery_record") or surgery_docs),
             "has_consumable_cross_source": bool(
@@ -563,7 +587,157 @@ def _build_sc100_evidence_context(
                 or hits.get("inpat_execution_record")
                 or charge_docs
             ),
-            "has_barcode_source": False,
+            "has_implant_or_consumable_text": _any_excerpt_contains(
+                surgery_docs + charge_docs,
+                ("植入", "内固定", "螺钉", "钢板", "支架", "人工", "耗材", "材料"),
+            ),
+            "has_barcode_source": _any_excerpt_contains(
+                surgery_docs + charge_docs,
+                ("条形码", "条码", "追溯码", "UDI", "标签", "唯一标识"),
+            ),
+        },
+    }
+
+
+def _build_admission_record_evidence_context(
+    *,
+    all_documents: list[dict[str, Any]],
+    bundle: dict[str, Any],
+) -> dict[str, Any]:
+    admission_docs = _document_excerpt(
+        all_documents,
+        {"admission_record", "admission_record_diagnosis"},
+        limit=900,
+    )
+    first_course_docs = _document_excerpt(all_documents, {"first_course_record"}, limit=700)
+    hits = dict(bundle.get("document_hits") or {})
+    return {
+        "rule_id": "ADMISSION-STRUCTURED-CONTEXT",
+        "applies_to_rule_ids": ["SC-010", "SC-013", "SC-015", "SC-018", "SC-020"],
+        "purpose": "入院记录类规则需要完整病史、查体、诊断列表和首程诊断依据对照，避免只凭单段病史判缺失。",
+        "admission_record_evidence": admission_docs,
+        "first_course_reference": first_course_docs,
+        "supporting_quote": _compact_join_excerpts(admission_docs[:4], limit=1200),
+        "contrast_quote": _compact_join_excerpts(first_course_docs[:2], limit=800),
+        "coverage_flags": {
+            "has_admission_record_source": bool(hits.get("admission_record") or admission_docs),
+            "has_admission_diagnosis_source": bool(hits.get("admission_record_diagnosis")),
+            "has_first_course_source": bool(hits.get("first_course_record") or first_course_docs),
+            "has_history_sections_text": _any_excerpt_contains(
+                admission_docs,
+                ("既往史", "个人史", "婚育史", "月经史", "家族史", "预防接种史", "手术史"),
+            ),
+            "has_physical_exam_text": _any_excerpt_contains(admission_docs, ("体格检查", "专科", "查体", "四肢", "腹部")),
+            "has_diagnosis_text": _any_excerpt_contains(admission_docs, ("入院诊断", "初步诊断", "诊断")),
+        },
+    }
+
+
+def _build_daily_cross_doc_evidence_context(
+    *,
+    all_documents: list[dict[str, Any]],
+    bundle: dict[str, Any],
+) -> dict[str, Any]:
+    daily_docs = _document_excerpt(all_documents, {"daily_course_record", "senior_course_record"}, limit=900)
+    report_docs = _document_excerpt(
+        all_documents,
+        {"exam_master", "exam_item_report", "labtest_master", "labtest_item_report", "pathology_exam_report"},
+        limit=700,
+    )
+    order_docs = _document_excerpt(
+        all_documents,
+        {"inpat_drug_order", "inpat_nondrug_order", "inpat_execution_record", "consultation_record"},
+        limit=700,
+    )
+    hits = dict(bundle.get("document_hits") or {})
+    return {
+        "rule_id": "DAILY-CROSS-DOC-CONTEXT",
+        "applies_to_rule_ids": ["SC-036", "SC-038", "SC-044", "SC-143", "SC-146"],
+        "purpose": "病程、异常检查检验、医嘱/执行/会诊之间的对照证据，避免只凭单一病程片段确认缺陷。",
+        "daily_course_evidence": daily_docs[:6],
+        "abnormal_report_evidence": report_docs[:8],
+        "order_or_consult_evidence": order_docs[:8],
+        "supporting_quote": _compact_join_excerpts(report_docs[:5], limit=900),
+        "contrast_quote": _compact_join_excerpts((daily_docs + order_docs)[:8], limit=1200),
+        "coverage_flags": {
+            "has_daily_course_source": bool(hits.get("daily_course_record") or hits.get("senior_course_record") or daily_docs),
+            "has_report_source": bool(
+                hits.get("exam_master")
+                or hits.get("exam_item_report")
+                or hits.get("labtest_master")
+                or hits.get("labtest_item_report")
+                or hits.get("pathology_exam_report")
+                or report_docs
+            ),
+            "has_order_or_execution_source": bool(
+                hits.get("inpat_drug_order")
+                or hits.get("inpat_nondrug_order")
+                or hits.get("inpat_execution_record")
+                or order_docs
+            ),
+            "has_consultation_source": bool(hits.get("consultation_record")),
+        },
+    }
+
+
+def _build_discharge_evidence_context(
+    *,
+    all_documents: list[dict[str, Any]],
+    bundle: dict[str, Any],
+) -> dict[str, Any]:
+    discharge_docs = _document_excerpt(all_documents, {"discharge_record"}, limit=1000)
+    diagnosis_docs = _document_excerpt(
+        all_documents,
+        {"admission_record_diagnosis", "admission_record", "first_course_record"},
+        limit=700,
+    )
+    hits = dict(bundle.get("document_hits") or {})
+    return {
+        "rule_id": "DISCHARGE-STRUCTURED-CONTEXT",
+        "applies_to_rule_ids": ["SC-118", "SC-121", "SC-123", "SC-125"],
+        "purpose": "出院记录和诊断类规则需要出院记录字段矩阵、出院诊断列表和诊疗经过/出院带药原文。",
+        "discharge_record_evidence": discharge_docs,
+        "diagnosis_reference": diagnosis_docs[:5],
+        "supporting_quote": _compact_join_excerpts(discharge_docs[:4], limit=1200),
+        "contrast_quote": _compact_join_excerpts(diagnosis_docs[:5], limit=900),
+        "coverage_flags": {
+            "has_discharge_record_source": bool(hits.get("discharge_record") or discharge_docs),
+            "has_discharge_structure_text": _any_excerpt_contains(
+                discharge_docs,
+                ("入院日期", "出院日期", "入院情况", "出院情况", "诊疗经过", "出院医嘱", "出院诊断"),
+            ),
+            "has_discharge_medication_text": _any_excerpt_contains(discharge_docs, ("出院带药", "用法", "bid", "tid", "口服", "外用")),
+            "has_diagnosis_reference": bool(hits.get("admission_record_diagnosis") or diagnosis_docs),
+        },
+    }
+
+
+def _build_surgery_evidence_context(
+    *,
+    all_documents: list[dict[str, Any]],
+    bundle: dict[str, Any],
+) -> dict[str, Any]:
+    surgery_docs = _document_excerpt(
+        all_documents,
+        {"surgery_record", "mr_surgery", "surgery_safecheck_record", "presurg_summary", "presurg_discussion"},
+        limit=900,
+    )
+    pathology_docs = _document_excerpt(all_documents, {"pathology_exam_master", "pathology_exam_report"}, limit=700)
+    hits = dict(bundle.get("document_hits") or {})
+    return {
+        "rule_id": "SURGERY-STRUCTURED-CONTEXT",
+        "applies_to_rule_ids": ["SC-099", "SC-100", "SC-101", "SC-108", "SC-110"],
+        "purpose": "手术记录类规则需要完整手术正文、取材/病理、手术等级/急诊属性和签名字段对照。",
+        "surgery_record_evidence": surgery_docs,
+        "pathology_reference": pathology_docs[:5],
+        "supporting_quote": _compact_join_excerpts(surgery_docs[:5], limit=1200),
+        "contrast_quote": _compact_join_excerpts(pathology_docs[:5], limit=900),
+        "coverage_flags": {
+            "has_surgery_record_source": bool(hits.get("surgery_record") or hits.get("mr_surgery") or surgery_docs),
+            "has_pathology_source": bool(hits.get("pathology_exam_master") or hits.get("pathology_exam_report") or pathology_docs),
+            "has_surgery_grade_or_emergency_text": _any_excerpt_contains(surgery_docs, ("手术等级", "急诊", "择期", "四级", "三级")),
+            "has_operator_or_signature_text": _any_excerpt_contains(surgery_docs, ("手术医师", "主刀", "签名", "助手")),
+            "has_specimen_or_pathology_text": _any_excerpt_contains(surgery_docs + pathology_docs, ("标本", "送病检", "病理", "冰冻", "取材")),
         },
     }
 
@@ -577,6 +751,18 @@ def _build_targeted_evidence_context(
 ) -> list[dict[str, Any]]:
     selected = {str(item or "").strip().upper() for item in rule_ids}
     contexts: list[dict[str, Any]] = []
+    if selected & {"SC-010", "SC-013", "SC-015", "SC-018", "SC-020"} or pack_id.startswith("admission_"):
+        contexts.append(_build_admission_record_evidence_context(all_documents=all_documents, bundle=bundle))
+    if selected & {"SC-036", "SC-038", "SC-044", "SC-143", "SC-146"} or pack_id in {
+        "daily_abnormal_results",
+        "daily_order_consistency",
+        "daily_course_core",
+    }:
+        contexts.append(_build_daily_cross_doc_evidence_context(all_documents=all_documents, bundle=bundle))
+    if selected & {"SC-118", "SC-121", "SC-123", "SC-125"} or pack_id.startswith("discharge_"):
+        contexts.append(_build_discharge_evidence_context(all_documents=all_documents, bundle=bundle))
+    if selected & {"SC-099", "SC-100", "SC-101", "SC-108", "SC-110"} or pack_id == "surgery_procedure":
+        contexts.append(_build_surgery_evidence_context(all_documents=all_documents, bundle=bundle))
     if "SC-083" in selected or pack_id == "presurg_discussion_procedure":
         contexts.append(_build_sc083_evidence_context(all_documents=all_documents, bundle=bundle))
     if "SC-019" in selected or pack_id == "admission_consistency_core":
@@ -587,11 +773,18 @@ def _build_targeted_evidence_context(
 
 
 def _targeted_context_by_rule(contexts: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    return {
-        _safe_text(item.get("rule_id")): dict(item)
-        for item in contexts
-        if isinstance(item, dict) and _safe_text(item.get("rule_id"))
-    }
+    result: dict[str, dict[str, Any]] = {}
+    for item in contexts:
+        if not isinstance(item, dict):
+            continue
+        rule_id = _safe_text(item.get("rule_id")).upper()
+        if rule_id:
+            result[rule_id] = dict(item)
+        for applied_rule_id in item.get("applies_to_rule_ids") or []:
+            normalized = _safe_text(applied_rule_id).upper()
+            if normalized:
+                result[normalized] = dict(item)
+    return result
 
 
 def _resolve_scene(bundle: dict[str, Any]) -> str:
@@ -1021,13 +1214,15 @@ async def run_final_fast_screen(
                 item["_document_type"] = pack.document_type
                 item["target_document_type"] = pack.document_type
                 metadata = item.get("metadata")
-                if isinstance(metadata, dict):
-                    metadata["target_document_type"] = pack.document_type
-                    metadata["rule_family"] = str(metadata.get("rule_family") or pack.rule_family)
-                    targeted_context = targeted_context_by_rule.get(rule_id)
-                    if targeted_context:
-                        metadata["targeted_evidence_context"] = targeted_context
-                        metadata["formal_evidence_coverage"] = dict(targeted_context.get("coverage_flags") or {})
+                if not isinstance(metadata, dict):
+                    metadata = {}
+                    item["metadata"] = metadata
+                metadata["target_document_type"] = pack.document_type
+                metadata["rule_family"] = str(metadata.get("rule_family") or pack.rule_family)
+                targeted_context = targeted_context_by_rule.get(rule_id)
+                if targeted_context:
+                    metadata["targeted_evidence_context"] = targeted_context
+                    metadata["formal_evidence_coverage"] = dict(targeted_context.get("coverage_flags") or {})
                 normalized_pack_results.append(item)
             pack_results = normalized_pack_results
             status_counts: dict[str, int] = {}

@@ -95,6 +95,36 @@ def _truncate(value: Any, limit: int = 900) -> str:
     return text[: limit - 3] + "..."
 
 
+def _truncate_jsonable(value: Any, *, limit: int = 3000) -> Any:
+    """Keep adjudicator prompt bounded while preserving structured evidence."""
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return _truncate(value, limit)
+    if isinstance(value, list):
+        result: list[Any] = []
+        budget = limit
+        for item in value[:12]:
+            compact = _truncate_jsonable(item, limit=max(120, budget // 2))
+            result.append(compact)
+            budget -= len(json.dumps(compact, ensure_ascii=False, default=str))
+            if budget <= 0:
+                break
+        return result
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        budget = limit
+        for key, item in value.items():
+            key_text = _safe_text(key)
+            compact = _truncate_jsonable(item, limit=max(120, budget // 2))
+            result[key_text] = compact
+            budget -= len(key_text) + len(json.dumps(compact, ensure_ascii=False, default=str))
+            if budget <= 0:
+                break
+        return result
+    return _truncate(value, limit)
+
+
 def _extract_llm_content(response: dict[str, Any]) -> str:
     choices = response.get("choices")
     if isinstance(choices, list) and choices:
@@ -141,6 +171,8 @@ def _rule_requirement(rule: dict[str, Any]) -> str:
 
 def _candidate_payload(item: dict[str, Any], rule: dict[str, Any] | None, index: int) -> dict[str, Any]:
     metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+    targeted_context = metadata.get("targeted_evidence_context")
+    coverage = metadata.get("formal_evidence_coverage")
     return {
         "index": index,
         "rule_id": _safe_text(item.get("rule_id")),
@@ -155,6 +187,10 @@ def _candidate_payload(item: dict[str, Any], rule: dict[str, Any] | None, index:
         "target_document_type": _safe_text(item.get("target_document_type") or item.get("document_type")),
         "rule_requirement": _truncate(_rule_requirement(rule or {}), 900),
         "pack_id": _safe_text(item.get("pack_id") or metadata.get("pack_id")),
+        "formal_evidence_coverage": _truncate_jsonable(coverage, limit=1200) if isinstance(coverage, dict) else {},
+        "targeted_evidence_context": (
+            _truncate_jsonable(targeted_context, limit=3200) if isinstance(targeted_context, dict) else {}
+        ),
         "source_snippet": _truncate(
             item.get("evidence")
             or item.get("anchor_evidence")

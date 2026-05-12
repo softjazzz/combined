@@ -117,17 +117,36 @@ def test_targeted_evidence_payload_should_include_sc083_sc019_sc100_contexts():
         {"id": "1:surg", "document_type": "手术记录", "source_table": "surgery_record", "content": "手术名称：腰椎内固定术，植入椎弓根螺钉。"},
         {"id": "1:disc", "document_type": "术前讨论", "source_table": "presurg_discussion", "content": "参与人员：外科医师讨论。"},
         {"id": "1:bill", "document_type": "费用清单", "source_table": "inpat_bill_item", "content": "一次性内固定材料。"},
+        {"id": "1:daily", "document_type": "日常病程记录", "source_table": "daily_course_record", "content": "炎症指标稍高，继续观察。"},
+        {"id": "1:order", "document_type": "长期医嘱", "source_table": "inpat_drug_order", "content": "头孢呋辛 静滴 bid。"},
+        {"id": "1:discharge", "document_type": "出院记录", "source_table": "discharge_record", "content": "出院诊断：肺部结节。出院带药：阿莫西林胶囊 口服 bid*3天。"},
     ]
     payload = fast_screen_qc._build_evidence_payload(
         primary_document=docs[0],
         all_documents=docs,
-        bundle={"document_hits": {"surgery_record": True, "presurg_discussion": True, "inpat_bill_item": True}},
+        bundle={
+            "document_hits": {
+                "admission_record": True,
+                "first_course_record": True,
+                "surgery_record": True,
+                "presurg_discussion": True,
+                "inpat_bill_item": True,
+                "daily_course_record": True,
+                "inpat_drug_order": True,
+                "discharge_record": True,
+            }
+        },
         pack_id="surgery_procedure",
-        rule_ids=("SC-019", "SC-083", "SC-100"),
+        rule_ids=("SC-013", "SC-019", "SC-036", "SC-083", "SC-100", "SC-118"),
     )
 
     by_rule = {item["rule_id"]: item for item in payload["targeted_evidence_context"]}
     assert {"SC-019", "SC-083", "SC-100"} <= set(by_rule)
+    by_applied_rule = fast_screen_qc._targeted_context_by_rule(payload["targeted_evidence_context"])
+    assert {"SC-013", "SC-036", "SC-118"} <= set(by_applied_rule)
+    assert by_applied_rule["SC-013"]["coverage_flags"]["has_admission_record_source"] is True
+    assert by_applied_rule["SC-036"]["coverage_flags"]["has_daily_course_source"] is True
+    assert by_applied_rule["SC-118"]["coverage_flags"]["has_discharge_record_source"] is True
     assert by_rule["SC-019"]["coverage_flags"]["has_source_report"] is True
     assert by_rule["SC-019"]["coverage_flags"]["has_admission_record_source"] is True
     assert by_rule["SC-083"]["coverage_flags"]["has_presurg_discussion"] is True

@@ -254,3 +254,68 @@ async def test_confirmed_guardrail_should_downgrade_sc100_without_barcode_domain
     assert rows[0]["display_status"] == "data_quality_gap"
     assert rows[0]["adjudicator_guardrail_failed"] is True
     assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
+async def test_adjudicator_prompt_should_include_targeted_evidence_context():
+    captured_prompt = ""
+
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        nonlocal captured_prompt
+        captured_prompt = prompt
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-036",
+                                        "adjudicated_display_status": "data_quality_gap",
+                                        "adjudicator_reason": "缺少后续病程对异常检验的对照证据。",
+                                        "adjudicator_supporting_quote": "",
+                                        "adjudicator_confidence": 0.7,
+                                        "rule_requirement_match": "data_gap",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-036",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "异常检验未分析。",
+                "evidence": "炎症指标稍高。",
+                "metadata": {
+                    "formal_evidence_coverage": {
+                        "has_daily_course_source": True,
+                        "has_report_source": True,
+                    },
+                    "targeted_evidence_context": {
+                        "rule_id": "DAILY-CROSS-DOC-CONTEXT",
+                        "supporting_quote": "CRP 80mg/L",
+                        "contrast_quote": "后续病程仅写继续观察",
+                        "coverage_flags": {
+                            "has_daily_course_source": True,
+                            "has_report_source": True,
+                        },
+                    },
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert "targeted_evidence_context" in captured_prompt
+    assert "CRP 80mg/L" in captured_prompt
+    assert "formal_evidence_coverage" in captured_prompt
