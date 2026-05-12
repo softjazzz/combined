@@ -32,6 +32,35 @@ FAST_SCREEN_BUCKET_STRATEGY = "fixed_packs"
 FAST_SCREEN_DEFAULT_LOW_CONFIDENCE_THRESHOLD = 0.45
 FAST_SCREEN_DEFAULT_CONTEXT_TOKEN_BUDGET = 7000
 
+SPECIMEN_PATHOLOGY_TRIGGER_TERMS = (
+    "术中取材",
+    "取材",
+    "送病理",
+    "送病检",
+    "快速病理",
+    "冰冻",
+    "活检",
+    "标本",
+    "骨髓穿刺",
+)
+PATHOLOGY_RESULT_TERMS = ("病理结果", "病理诊断", "病检结果", "报告结果")
+IMPLANT_TRIGGER_TERMS = (
+    "植入物",
+    "植入",
+    "内固定",
+    "螺钉",
+    "连接棒",
+    "钢板",
+    "骨水泥",
+    "支架",
+    "假体",
+    "融合器",
+    "钉棒",
+)
+IMPLANT_BARCODE_TERMS = ("条形码", "条码", "追溯码", "UDI", "标签", "唯一标识")
+IMPLANT_QUANTITY_TERMS = ("枚", "根", "套", "支", "个", "ml", "ML", "数量", "剂量")
+IMPLANT_DETAIL_TERMS = IMPLANT_TRIGGER_TERMS + IMPLANT_QUANTITY_TERMS + ("型号", "规格", "品牌", "厂家")
+
 
 @dataclass(frozen=True)
 class FastScreenPackDefinition:
@@ -470,6 +499,38 @@ def _any_excerpt_contains(rows: list[dict[str, Any]], terms: tuple[str, ...] | l
     return any(term and term in combined for term in terms)
 
 
+def _matching_excerpt(
+    rows: list[dict[str, Any]],
+    terms: tuple[str, ...] | list[str] | set[str],
+    *,
+    limit: int = 700,
+) -> str:
+    matched: list[dict[str, Any]] = []
+    for row in rows:
+        text = _safe_text(row.get("evidence_text"))
+        if text and any(term and term in text for term in terms):
+            matched.append(row)
+    return _compact_join_excerpts(matched[:4], limit=limit)
+
+
+def _implant_detail_completeness(
+    *,
+    has_implant_trigger: bool,
+    has_implant_material_record: bool,
+    has_implant_quantity_or_detail: bool,
+    has_implant_barcode_source: bool,
+) -> str:
+    if not has_implant_trigger:
+        return "none"
+    if not has_implant_material_record:
+        return "unknown"
+    if has_implant_quantity_or_detail and has_implant_barcode_source:
+        return "complete"
+    if has_implant_quantity_or_detail or has_implant_material_record:
+        return "partial"
+    return "unknown"
+
+
 def _build_sc083_evidence_context(
     *,
     all_documents: list[dict[str, Any]],
@@ -568,6 +629,17 @@ def _build_sc100_evidence_context(
         {"inpat_bill_item", "inpat_nondrug_order", "inpat_execution_record"},
     )
     hits = dict(bundle.get("document_hits") or {})
+    combined_docs = surgery_docs + charge_docs
+    has_implant_trigger = _any_excerpt_contains(combined_docs, IMPLANT_TRIGGER_TERMS)
+    has_implant_material_record = _any_excerpt_contains(surgery_docs, IMPLANT_TRIGGER_TERMS)
+    has_implant_barcode_source = _any_excerpt_contains(combined_docs, IMPLANT_BARCODE_TERMS)
+    has_implant_quantity_or_detail = _any_excerpt_contains(combined_docs, IMPLANT_DETAIL_TERMS)
+    implant_detail_completeness = _implant_detail_completeness(
+        has_implant_trigger=has_implant_trigger,
+        has_implant_material_record=has_implant_material_record,
+        has_implant_quantity_or_detail=has_implant_quantity_or_detail,
+        has_implant_barcode_source=has_implant_barcode_source,
+    )
     return {
         "rule_id": "SC-100",
         "purpose": "植入物条形码是否齐全，需要植入物和条码/追溯码记录域同时可核。",
@@ -578,7 +650,8 @@ def _build_sc100_evidence_context(
         ],
         "surgery_implant_evidence": surgery_docs,
         "charge_or_order_evidence": charge_docs[:8],
-        "supporting_quote": _compact_join_excerpts(surgery_docs[:3], limit=900),
+        "supporting_quote": _matching_excerpt(surgery_docs, IMPLANT_TRIGGER_TERMS, limit=900)
+        or _compact_join_excerpts(surgery_docs[:3], limit=900),
         "contrast_quote": _compact_join_excerpts(charge_docs[:5], limit=900),
         "coverage_flags": {
             "has_surgery_record": bool(hits.get("surgery_record") or surgery_docs),
@@ -588,14 +661,12 @@ def _build_sc100_evidence_context(
                 or hits.get("inpat_execution_record")
                 or charge_docs
             ),
-            "has_implant_or_consumable_text": _any_excerpt_contains(
-                surgery_docs + charge_docs,
-                ("植入", "内固定", "螺钉", "钢板", "支架", "人工", "耗材", "材料"),
-            ),
-            "has_barcode_source": _any_excerpt_contains(
-                surgery_docs + charge_docs,
-                ("条形码", "条码", "追溯码", "UDI", "标签", "唯一标识"),
-            ),
+            "has_implant_or_consumable_text": has_implant_trigger,
+            "has_barcode_source": has_implant_barcode_source,
+            "has_implant_trigger": has_implant_trigger,
+            "has_implant_material_record": has_implant_material_record,
+            "has_implant_barcode_source": has_implant_barcode_source,
+            "implant_detail_completeness": implant_detail_completeness,
         },
     }
 
@@ -725,20 +796,53 @@ def _build_surgery_evidence_context(
     )
     pathology_docs = _document_excerpt(all_documents, {"pathology_exam_master", "pathology_exam_report"}, limit=700)
     hits = dict(bundle.get("document_hits") or {})
+    combined_docs = surgery_docs + pathology_docs
+    has_specimen_or_pathology_trigger = _any_excerpt_contains(combined_docs, SPECIMEN_PATHOLOGY_TRIGGER_TERMS)
+    has_pathology_source = bool(hits.get("pathology_exam_master") or hits.get("pathology_exam_report") or pathology_docs)
+    has_pathology_result_text = _any_excerpt_contains(pathology_docs, PATHOLOGY_RESULT_TERMS)
+    if not has_specimen_or_pathology_trigger:
+        specimen_pathology_coverage = "not_applicable"
+    elif has_pathology_source and has_pathology_result_text:
+        specimen_pathology_coverage = "documented"
+    elif has_pathology_source:
+        specimen_pathology_coverage = "missing"
+    else:
+        specimen_pathology_coverage = "source_missing"
+
+    has_implant_trigger = _any_excerpt_contains(surgery_docs, IMPLANT_TRIGGER_TERMS)
+    has_implant_material_record = _any_excerpt_contains(surgery_docs, IMPLANT_TRIGGER_TERMS)
+    has_implant_barcode_source = _any_excerpt_contains(surgery_docs, IMPLANT_BARCODE_TERMS)
+    has_implant_quantity_or_detail = _any_excerpt_contains(surgery_docs, IMPLANT_DETAIL_TERMS)
+    implant_detail_completeness = _implant_detail_completeness(
+        has_implant_trigger=has_implant_trigger,
+        has_implant_material_record=has_implant_material_record,
+        has_implant_quantity_or_detail=has_implant_quantity_or_detail,
+        has_implant_barcode_source=has_implant_barcode_source,
+    )
+    specimen_quote = _matching_excerpt(combined_docs, SPECIMEN_PATHOLOGY_TRIGGER_TERMS, limit=700)
+    implant_quote = _matching_excerpt(surgery_docs, IMPLANT_TRIGGER_TERMS, limit=900)
     return {
         "rule_id": "SURGERY-STRUCTURED-CONTEXT",
         "applies_to_rule_ids": ["SC-099", "SC-100", "SC-101", "SC-108", "SC-110"],
         "purpose": "手术记录类规则需要完整手术正文、取材/病理、手术等级/急诊属性和签名字段对照。",
         "surgery_record_evidence": surgery_docs,
         "pathology_reference": pathology_docs[:5],
-        "supporting_quote": _compact_join_excerpts(surgery_docs[:5], limit=1200),
+        "specimen_pathology_quote": specimen_quote,
+        "implant_detail_quote": implant_quote,
+        "supporting_quote": implant_quote or specimen_quote or _compact_join_excerpts(surgery_docs[:5], limit=1200),
         "contrast_quote": _compact_join_excerpts(pathology_docs[:5], limit=900),
         "coverage_flags": {
             "has_surgery_record_source": bool(hits.get("surgery_record") or hits.get("mr_surgery") or surgery_docs),
-            "has_pathology_source": bool(hits.get("pathology_exam_master") or hits.get("pathology_exam_report") or pathology_docs),
+            "has_pathology_source": has_pathology_source,
             "has_surgery_grade_or_emergency_text": _any_excerpt_contains(surgery_docs, ("手术等级", "急诊", "择期", "四级", "三级")),
             "has_operator_or_signature_text": _any_excerpt_contains(surgery_docs, ("手术医师", "主刀", "签名", "助手")),
-            "has_specimen_or_pathology_text": _any_excerpt_contains(surgery_docs + pathology_docs, ("标本", "送病检", "病理", "冰冻", "取材")),
+            "has_specimen_or_pathology_text": has_specimen_or_pathology_trigger,
+            "has_specimen_or_pathology_trigger": has_specimen_or_pathology_trigger,
+            "specimen_pathology_coverage": specimen_pathology_coverage,
+            "has_implant_trigger": has_implant_trigger,
+            "has_implant_material_record": has_implant_material_record,
+            "has_implant_barcode_source": has_implant_barcode_source,
+            "implant_detail_completeness": implant_detail_completeness,
         },
     }
 

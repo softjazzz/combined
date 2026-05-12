@@ -28,7 +28,7 @@ LABEL_BY_STATUS = {
     "technical_error_internal": "technical_error",
 }
 CONFIRMED_QUOTE_MIN_LEN = 12
-TARGETED_COVERAGE_GUARDRAIL_RULES = {"SC-019", "SC-083", "SC-100"}
+TARGETED_COVERAGE_GUARDRAIL_RULES = {"SC-019", "SC-083", "SC-099", "SC-100", "SC-101"}
 NEGATIVE_ONLY_TERMS = ("未见", "缺失", "未提供", "未记录", "没有")
 DATA_GAP_TERMS = (
     "缺文书",
@@ -69,6 +69,11 @@ def _normalize_rule_id(value: Any) -> str:
 
 def _contains_any(text: str, terms: tuple[str, ...] | list[str] | set[str]) -> bool:
     return any(term and term in text for term in terms)
+
+
+def _quote_is_record_time_only(text: str) -> bool:
+    clean = re.sub(r"[\s:：,，;；\-_/年月日时分秒0-9]", "", _safe_text(text))
+    return clean in {"记录时间", "时间记录"} or clean.startswith("记录时间")
 
 
 def _metadata(item: dict[str, Any]) -> dict[str, Any]:
@@ -214,6 +219,11 @@ def _build_adjudicator_prompt(candidates: list[dict[str, Any]]) -> str:
 
 严禁输出“待人工确认”“建议复核”“qc_review_candidate”等终态。
 
+专项适用性口径：
+- SC-099 仅在 formal_evidence_coverage.has_specimen_or_pathology_trigger=true 且可引用取材/送病理/活检/标本等触发片段时，才可能 confirmed_defect；无触发时应 rejected_by_system，缺病理来源时应 data_quality_gap。
+- SC-100 仅在 has_implant_trigger=true 且条码/追溯码来源域可核时，才可能 confirmed_defect；有植入物但缺耗材/条码来源时应 data_quality_gap。
+- SC-101 仅在 has_implant_trigger=true 且 implant_detail_completeness=none 时，才可能 confirmed_defect；partial 表示已有部分植入物种类/数量记录，不能直接确认“未记录”。
+
 输出格式：
 {{
   "items": [
@@ -333,16 +343,62 @@ def _guardrail_targeted_rule(
                 "data_quality_gap",
                 "SC-019 确认缺陷需要入院记录、辅助检查段落和原始检查/检验报告来源均覆盖；当前结构化覆盖不完整。",
             )
+    if rule_id == "SC-099":
+        if not bool(coverage.get("has_specimen_or_pathology_trigger")):
+            return (
+                "rejected_by_system",
+                "SC-099 仅适用于存在术中取材、送病理、活检或标本等触发证据的手术；当前未见适用触发证据。",
+            )
+        coverage_status = _safe_text(coverage.get("specimen_pathology_coverage"))
+        if coverage_status == "source_missing" or not bool(coverage.get("has_pathology_source")):
+            return (
+                "data_quality_gap",
+                "SC-099 已见取材/病理触发线索，但缺少病理来源表或结果对照，不能直接确认为手术记录缺陷。",
+            )
+        if coverage_status not in {"documented", "missing"}:
+            return (
+                "data_quality_gap",
+                "SC-099 需要明确取材/病理结果覆盖状态；当前结构化覆盖不足。",
+            )
     if rule_id == "SC-100":
-        if not bool(coverage.get("has_surgery_record")):
+        if not (bool(coverage.get("has_surgery_record")) or bool(coverage.get("has_surgery_record_source"))):
             return (
                 "data_quality_gap",
                 "SC-100 确认缺陷需要手术记录来源覆盖；当前结构化覆盖不完整。",
             )
-        if not bool(coverage.get("has_consumable_cross_source")) or not bool(coverage.get("has_barcode_source")):
+        if not bool(coverage.get("has_implant_trigger", coverage.get("has_implant_or_consumable_text"))):
+            return (
+                "rejected_by_system",
+                "SC-100 仅适用于存在植入物的手术；当前未见植入物触发证据。",
+            )
+        if not bool(coverage.get("has_consumable_cross_source")) or not bool(
+            coverage.get("has_implant_barcode_source", coverage.get("has_barcode_source"))
+        ):
             return (
                 "data_quality_gap",
                 "SC-100 确认缺陷需要耗材/植入物对照来源和条码/追溯码记录域覆盖；当前结构化覆盖不完整。",
+            )
+    if rule_id == "SC-101":
+        if not bool(coverage.get("has_implant_trigger")):
+            return (
+                "rejected_by_system",
+                "SC-101 仅适用于存在植入物的手术；当前未见植入物触发证据。",
+            )
+        completeness = _safe_text(coverage.get("implant_detail_completeness"))
+        if completeness == "partial":
+            return (
+                "data_quality_gap",
+                "SC-101 已见植入物种类/数量等部分记录，不能直接确认“未记录”；需完整耗材/条码/型号对照后再判定。",
+            )
+        if completeness == "complete":
+            return (
+                "rejected_by_system",
+                "SC-101 结构化覆盖显示植入物详情已相对完整，不支持确认“未记录”。",
+            )
+        if completeness != "none":
+            return (
+                "data_quality_gap",
+                "SC-101 需要明确植入物详情完整性；当前结构化覆盖不足。",
             )
     return None
 
@@ -368,6 +424,9 @@ def _confirmed_guardrail(item: dict[str, Any]) -> dict[str, Any]:
     elif len(quote) < CONFIRMED_QUOTE_MIN_LEN:
         failure_status = "data_quality_gap" if rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES else "rejected_by_system"
         failure_reason = "confirmed_defect 缺少足够长度的 adjudicator_supporting_quote，不能证明规则核心要件。"
+    elif rule_id in {"SC-099", "SC-100", "SC-101"} and _quote_is_record_time_only(quote):
+        failure_status = "data_quality_gap"
+        failure_reason = f"{rule_id} confirmed_defect 不能仅凭记录时间作为支撑原文，需要可追溯的取材/病理或植入物详情证据。"
     elif rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES and _contains_any(quote, NEGATIVE_ONLY_TERMS):
         failure_status = "data_quality_gap"
         failure_reason = "confirmed_defect 仅凭缺失类表述成立，但目标规则缺陷需要结构化证据域覆盖。"

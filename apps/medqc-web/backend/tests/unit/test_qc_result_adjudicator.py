@@ -244,6 +244,8 @@ async def test_confirmed_guardrail_should_downgrade_sc100_without_barcode_domain
                         "has_surgery_record": True,
                         "has_consumable_cross_source": True,
                         "has_barcode_source": False,
+                        "has_implant_trigger": True,
+                        "has_implant_barcode_source": False,
                     }
                 },
             }
@@ -252,6 +254,194 @@ async def test_confirmed_guardrail_should_downgrade_sc100_without_barcode_domain
     )
 
     assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_reject_sc099_without_specimen_trigger():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-099",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "手术记录未见病理结果。",
+                                        "adjudicator_supporting_quote": "手术记录：胸椎骨折切开复位内固定术",
+                                        "adjudicator_confidence": 0.9,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-099",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "术中取材和病理结果未记录。",
+                "evidence": "手术记录：胸椎骨折切开复位内固定术",
+                "metadata": {
+                    "formal_evidence_coverage": {
+                        "has_specimen_or_pathology_trigger": False,
+                        "has_pathology_source": False,
+                        "specimen_pathology_coverage": "not_applicable",
+                    }
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_mark_sc099_pathology_source_gap():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-099",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "骨髓穿刺存在取材线索但未见病理结果。",
+                                        "adjudicator_supporting_quote": "骨髓穿刺术",
+                                        "adjudicator_confidence": 0.9,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-099",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "术中取材和病理结果未记录。",
+                "evidence": "骨髓穿刺术",
+                "metadata": {
+                    "formal_evidence_coverage": {
+                        "has_specimen_or_pathology_trigger": True,
+                        "has_pathology_source": False,
+                        "specimen_pathology_coverage": "source_missing",
+                    }
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_downgrade_sc101_partial_implant_details():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-101",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "植入物数量记录不完整。",
+                                        "adjudicator_supporting_quote": "置入椎弓根螺钉6枚，连接棒2根，骨水泥5ml",
+                                        "adjudicator_confidence": 0.9,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-101",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "植入物种类和数量未在记录中体现。",
+                "evidence": "置入椎弓根螺钉6枚，连接棒2根，骨水泥5ml",
+                "metadata": {
+                    "formal_evidence_coverage": {
+                        "has_implant_trigger": True,
+                        "has_implant_material_record": True,
+                        "has_implant_barcode_source": False,
+                        "implant_detail_completeness": "partial",
+                    }
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_reject_sc101_without_implant_trigger():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-101",
+                "status": "non_compliant",
+                "display_status": "confirmed_defect",
+                "findings": "植入物种类和数量未记录。",
+                "evidence": "记录时间: 2025-08-12 19:29:40",
+                "adjudicator_reason": "未见植入物信息。",
+                "adjudicator_supporting_quote": "记录时间: 2025-08-12 19:29:40",
+                "metadata": {
+                    "formal_evidence_coverage": {
+                        "has_implant_trigger": False,
+                        "implant_detail_completeness": "none",
+                    }
+                },
+            }
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
     assert rows[0]["adjudicator_guardrail_failed"] is True
     assert rows[0]["can_show_as_defect"] is False
 

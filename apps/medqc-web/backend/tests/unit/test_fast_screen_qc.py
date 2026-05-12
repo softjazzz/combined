@@ -153,6 +153,42 @@ def test_targeted_evidence_payload_should_include_sc083_sc019_sc100_contexts():
     assert by_rule["SC-100"]["coverage_flags"]["has_surgery_record"] is True
     assert by_rule["SC-100"]["coverage_flags"]["has_consumable_cross_source"] is True
     assert by_rule["SC-100"]["coverage_flags"]["has_barcode_source"] is False
+    assert by_rule["SC-100"]["coverage_flags"]["has_implant_trigger"] is True
+    assert by_rule["SC-100"]["coverage_flags"]["has_implant_material_record"] is True
+    assert by_rule["SC-100"]["coverage_flags"]["has_implant_barcode_source"] is False
+    assert by_rule["SC-100"]["coverage_flags"]["implant_detail_completeness"] == "partial"
+
+
+def test_surgery_context_should_expose_pathology_and_implant_applicability_flags():
+    docs = [
+        {
+            "id": "1915580:surg",
+            "document_type": "手术记录",
+            "source_table": "surgery_record",
+            "content": "胸椎骨折切开复位内固定术，置入椎弓根螺钉6枚，连接棒2根，骨水泥5ml。",
+        },
+        {
+            "id": "1915580:mr",
+            "document_type": "手术清单",
+            "source_table": "mr_surgery",
+            "content": "骨髓穿刺术；胸椎骨折切开复位内固定术。",
+        },
+    ]
+
+    context = fast_screen_qc._build_surgery_evidence_context(
+        all_documents=docs,
+        bundle={"document_hits": {"surgery_record": True, "mr_surgery": True}},
+    )
+    flags = context["coverage_flags"]
+
+    assert flags["has_specimen_or_pathology_trigger"] is True
+    assert flags["has_pathology_source"] is False
+    assert flags["specimen_pathology_coverage"] == "source_missing"
+    assert flags["has_implant_trigger"] is True
+    assert flags["has_implant_material_record"] is True
+    assert flags["has_implant_barcode_source"] is False
+    assert flags["implant_detail_completeness"] == "partial"
+    assert "椎弓根螺钉" in context["implant_detail_quote"]
 
 
 class _FakeFastScreenRuleEngine:
