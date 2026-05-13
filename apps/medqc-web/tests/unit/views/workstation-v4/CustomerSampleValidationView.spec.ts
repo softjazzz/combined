@@ -504,7 +504,7 @@ const SemanticRulesBatchResultDrawerStub = defineComponent({
   },
 })
 
-function buildPool() {
+function buildPool(overrides: Record<string, unknown> = {}) {
   return {
     id: 'pool-1',
     name: '手工问题样本池-首轮验证',
@@ -522,6 +522,7 @@ function buildPool() {
     ready_items: 2,
     latest_job_id: 'job-1',
     latest_job_status: 'completed',
+    ...overrides,
   }
 }
 
@@ -715,11 +716,15 @@ describe('CustomerSampleValidationView', () => {
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
-      record_ids: ['V001'],
-      max_parallel_records: 2,
-      validation_mode: 'customer',
-    })
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
+        record_ids: ['V001'],
+        max_parallel_records: 2,
+        validation_mode: 'customer',
+      },
+      undefined,
+    )
     expect(message.success).toHaveBeenCalled()
   })
 
@@ -1036,11 +1041,15 @@ describe('CustomerSampleValidationView', () => {
     await flushPromises()
 
     expect(message.info).toHaveBeenCalledWith('已选 2 份病历，其中 1 份可执行，1 份将自动跳过')
-    expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
-      record_ids: ['V001'],
-      max_parallel_records: 4,
-      validation_mode: 'customer',
-    })
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
+        record_ids: ['V001'],
+        max_parallel_records: 4,
+        validation_mode: 'customer',
+      },
+      undefined,
+    )
   })
 
   it('发起验证成功后应自动打开结果抽屉并显示成功提示', async () => {
@@ -1076,11 +1085,15 @@ describe('CustomerSampleValidationView', () => {
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
-      record_ids: ['V001'],
-      max_parallel_records: 4,
-      validation_mode: 'sc',
-    })
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
+        record_ids: ['V001'],
+        max_parallel_records: 4,
+        validation_mode: 'sc',
+      },
+      undefined,
+    )
   })
 
   it('切换到硬门槛程序规则模式后应允许 bundle 未就绪但已同步病历提交', async () => {
@@ -1123,11 +1136,15 @@ describe('CustomerSampleValidationView', () => {
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
-      record_ids: ['V008'],
-      max_parallel_records: 4,
-      validation_mode: 'programmatic',
-    })
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
+        record_ids: ['V008'],
+        max_parallel_records: 4,
+        validation_mode: 'programmatic',
+      },
+      undefined,
+    )
   })
 
   it('切换到正式终末全量内涵 84 条后应按 sc_content_full_v1 提交且不要求 bundle ready', async () => {
@@ -1190,15 +1207,183 @@ describe('CustomerSampleValidationView', () => {
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(runManualSamplePool).toHaveBeenCalledWith('pool-1', {
-      record_ids: ['V084'],
-      max_parallel_records: 4,
-      validation_mode: 'formal_fast_screen_full',
-      rule_set_key: 'sc_content_full_v1',
-    })
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
+        record_ids: ['V084'],
+        max_parallel_records: 4,
+        validation_mode: 'formal_fast_screen_full',
+        rule_set_key: 'sc_content_full_v1',
+      },
+      { timeout: 90000 },
+    )
     expect(message.success).toHaveBeenCalledWith(
       '已创建sc_content_full_v1 / 内涵质控全量 v1验证任务，覆盖 1 条样本 / 1 份病历 / 84 条规则，并发 4 份病历',
     )
+  })
+
+  it('正式84条发起期间重复点击不会重复提交', async () => {
+    let resolveRun: (value: unknown) => void = () => {}
+    runManualSamplePool.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRun = resolve
+      }),
+    )
+
+    const wrapper = await mountView()
+
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord({
+            id: 'V084',
+            matched_visit_id: 'V084',
+            bundle_status: 'pending',
+            sync_status: 'synced',
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+
+    const modeButton = wrapper.findAll('button').find((node) => node.text() === '正式84条质控')
+    expect(modeButton).toBeTruthy()
+    await modeButton!.trigger('click')
+    await flushPromises()
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起正式84条质控'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await nextTick()
+    await runButton!.trigger('click')
+
+    expect(runManualSamplePool).toHaveBeenCalledTimes(1)
+    expect(runButton!.attributes('disabled')).toBeDefined()
+
+    resolveRun({
+      success: true,
+      data: {
+        pool_id: 'pool-1',
+        job_id: 'job-84',
+        sample_item_count: 1,
+        selected_record_count: 1,
+        record_count: 1,
+        rule_count: 84,
+        record_ids: ['V084'],
+        rule_ids: ['SC-001'],
+        validation_mode: 'formal_fast_screen_full',
+        rule_set_key: 'sc_content_full_v1',
+        rule_set_name: '内涵质控全量 v1',
+      },
+    })
+    await flushPromises()
+  })
+
+  it('正式84条请求超时后应按最近任务恢复并打开进度', async () => {
+    const recoveredJob = {
+      id: 'job-timeout',
+      status: 'running',
+      rule_set_key: 'sc_content_full_v1',
+      record_ids: ['V084'],
+      created_at: new Date().toISOString(),
+    }
+    listManualSamplePools
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [buildPool()], total: 1, page: 1, page_size: 50 },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          items: [
+            buildPool({
+              latest_job_id: 'job-timeout',
+              latest_job_status: 'running',
+            }),
+          ],
+          total: 1,
+          page: 1,
+          page_size: 50,
+        },
+      })
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [buildRecord()],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    getSichuanWorkspaceBatchJob
+      .mockResolvedValueOnce({ success: true, data: recoveredJob })
+      .mockResolvedValueOnce({ success: true, data: recoveredJob })
+    runManualSamplePool.mockResolvedValueOnce({
+      success: false,
+      message: '创建客户样本验证任务失败',
+      errorType: 'timeout',
+    })
+
+    const wrapper = await mountView()
+
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool(),
+        items: [
+          buildRecord({
+            id: 'V084',
+            matched_visit_id: 'V084',
+            bundle_status: 'pending',
+            sync_status: 'synced',
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+
+    const modeButton = wrapper.findAll('button').find((node) => node.text() === '正式84条质控')
+    expect(modeButton).toBeTruthy()
+    await modeButton!.trigger('click')
+    await flushPromises()
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起正式84条质控'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
+        record_ids: ['V084'],
+        max_parallel_records: 4,
+        validation_mode: 'formal_fast_screen_full',
+        rule_set_key: 'sc_content_full_v1',
+      },
+      { timeout: 90000 },
+    )
+    expect(message.info).toHaveBeenCalledWith('请求等待较久，正在确认后台任务状态')
+    expect(message.success).toHaveBeenCalledWith('任务已创建，正在打开进度')
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-timeout')
+    expect(message.error).not.toHaveBeenCalledWith('创建客户样本验证任务失败')
+    expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
   })
 
   it('程序规则模式同步样本病历时不再限制内涵和首批', async () => {

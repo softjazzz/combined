@@ -13,10 +13,29 @@ type ServiceResult<T> = {
   success: boolean
   data?: T
   message?: string
+  errorType?: 'timeout' | 'network' | 'server' | 'unknown'
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
   return extractApiErrorMessageFromError(error, fallback)
+}
+
+function classifyRequestError(error: unknown): ServiceResult<never>['errorType'] {
+  if (error && typeof error === 'object') {
+    const candidate = error as { code?: unknown; message?: unknown; response?: unknown }
+    const code = String(candidate.code || '').toLowerCase()
+    const message = String(candidate.message || '').toLowerCase()
+    if (code === 'econnaborted' || message.includes('timeout')) {
+      return 'timeout'
+    }
+    if (!candidate.response && (code === 'err_network' || message.includes('network'))) {
+      return 'network'
+    }
+    if (candidate.response) {
+      return 'server'
+    }
+  }
+  return 'unknown'
 }
 
 async function requestEnvelope<T>(
@@ -35,6 +54,7 @@ async function requestEnvelope<T>(
     return {
       success: false,
       message: toErrorMessage(error, fallbackMessage),
+      errorType: classifyRequestError(error),
     }
   }
 }
@@ -197,12 +217,16 @@ export async function runManualSamplePool(
     validation_mode?: string
     rule_set_key?: string
   },
+  options?: {
+    timeout?: number
+  },
 ) {
   return requestEnvelope<ManualSamplePoolRunResult>(
     {
       method: 'POST',
       url: `/api/v1/qc/sample-pools/${encodeURIComponent(poolId)}/run`,
       data: payload || {},
+      timeout: options?.timeout,
     },
     '创建客户样本验证任务失败',
   )

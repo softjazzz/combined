@@ -43,7 +43,7 @@
               <a-button
                 type="primary"
                 class="!rounded-full"
-                :disabled="!selectedPoolId || !selectedPool?.total_items"
+                :disabled="runLoading || !selectedPoolId || !selectedPool?.total_items"
                 :loading="runLoading"
                 @click="handleRunPool"
               >
@@ -764,12 +764,19 @@ const runOptions = ref({
 })
 const selectedValidationMode = ref<ManualSampleValidationMode>('customer')
 const FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = 'sc_content_full_v1'
+const FORMAL_FAST_SCREEN_RUN_TIMEOUT_MS = 90000
+const RUN_DUPLICATE_GUARD_MS = 120000
 const isFormalFastScreenMode = computed(
   () => selectedValidationMode.value === 'formal_fast_screen_full',
 )
 const isSyncedOnlyValidationMode = computed(
   () => selectedValidationMode.value === 'programmatic' || isFormalFastScreenMode.value,
 )
+const lastRunSubmission = ref<{
+  key: string
+  startedAt: number
+  jobId?: string
+}>()
 
 const poolOptions = computed(() =>
   pools.value.map((item) => ({
@@ -1703,6 +1710,7 @@ async function handleSyncPoolRecords() {
 }
 
 async function handleRunPool() {
+  if (runLoading.value) return
   if (!selectedPoolId.value) return
   const { selectedCount, runnableCount, skippedCount, runnableRecordIds } =
     selectedRecordStats.value
@@ -1715,7 +1723,29 @@ async function handleRunPool() {
       `已选 ${selectedCount} 份病历，其中 ${runnableCount} 份可执行，${skippedCount} 份将自动跳过`,
     )
   }
+  const runKey = buildRunSubmissionKey(
+    selectedPoolId.value,
+    selectedValidationMode.value,
+    runnableRecordIds,
+  )
+  const now = Date.now()
+  if (
+    lastRunSubmission.value?.key === runKey &&
+    now - lastRunSubmission.value.startedAt < RUN_DUPLICATE_GUARD_MS
+  ) {
+    if (lastRunSubmission.value.jobId) {
+      message.info('任务已创建，正在打开进度')
+      await openBatchJob(lastRunSubmission.value.jobId)
+    } else {
+      message.info('正式84条质控任务已提交，正在准备执行')
+    }
+    return
+  }
   runLoading.value = true
+  lastRunSubmission.value = {
+    key: runKey,
+    startedAt: now,
+  }
   const runPayload = {
     record_ids: runnableRecordIds,
     max_parallel_records: runOptions.value.maxParallelRecords,
@@ -1729,11 +1759,45 @@ async function handleRunPool() {
   if (isFormalFastScreenMode.value) {
     runPayload.rule_set_key = FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY
   }
-  const result = await runManualSamplePool(selectedPoolId.value, runPayload)
-  runLoading.value = false
+  if (isFormalFastScreenMode.value) {
+    message.info('正式84条质控任务已提交，正在准备执行')
+  }
+  const result = await runManualSamplePool(
+    selectedPoolId.value,
+    runPayload,
+    isFormalFastScreenMode.value ? { timeout: FORMAL_FAST_SCREEN_RUN_TIMEOUT_MS } : undefined,
+  )
   if (!result.success || !result.data) {
+    if (
+      isFormalFastScreenMode.value &&
+      (result.errorType === 'timeout' || result.errorType === 'network')
+    ) {
+      message.info('请求等待较久，正在确认后台任务状态')
+      const recovered = await recoverFormalRunAfterSlowRequest({
+        poolId: selectedPoolId.value,
+        recordIds: runnableRecordIds,
+        startedAt: now,
+        previousJobId: selectedPool.value?.latest_job_id,
+        runKey,
+      })
+      runLoading.value = false
+      if (recovered) {
+        return
+      }
+    } else {
+      runLoading.value = false
+    }
+    if (lastRunSubmission.value?.key === runKey && !lastRunSubmission.value.jobId) {
+      lastRunSubmission.value = undefined
+    }
     message.error(result.message || '创建样本验证任务失败')
     return
+  }
+  runLoading.value = false
+  lastRunSubmission.value = {
+    key: runKey,
+    startedAt: now,
+    jobId: result.data.job_id,
   }
   const ruleSetName = String(
     result.data.rule_set_name || validationModeLabel(selectedValidationMode.value),
@@ -1746,6 +1810,79 @@ async function handleRunPool() {
   selectedRowKeys.value = []
   await loadPools()
   await openBatchJob(result.data.job_id)
+}
+
+function buildRunSubmissionKey(
+  poolId: string,
+  validationMode: ManualSampleValidationMode,
+  recordIds: string[],
+): string {
+  const normalizedRecordIds = recordIds.map((item) => String(item)).sort()
+  return [poolId, validationMode, normalizedRecordIds.join(',') || 'all'].join('|')
+}
+
+function isCloseToRunStart(createdAt: string | undefined, startedAt: number): boolean {
+  if (!createdAt) return true
+  const createdTime = new Date(createdAt).getTime()
+  if (Number.isNaN(createdTime)) return false
+  return Math.abs(createdTime - startedAt) <= 5 * 60 * 1000
+}
+
+function isSameRecordScope(job: SichuanBatchJob, recordIds: string[]): boolean {
+  if (!recordIds.length || !Array.isArray(job.record_ids) || !job.record_ids.length) {
+    return true
+  }
+  const expected = recordIds
+    .map((item) => String(item))
+    .sort()
+    .join('|')
+  const actual = job.record_ids
+    .map((item) => String(item))
+    .sort()
+    .join('|')
+  return expected === actual
+}
+
+function isRecoverableFormalJob(
+  job: SichuanBatchJob,
+  recordIds: string[],
+  startedAt: number,
+): boolean {
+  return (
+    job.rule_set_key === FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY &&
+    isSameRecordScope(job, recordIds) &&
+    isCloseToRunStart(job.created_at, startedAt)
+  )
+}
+
+async function recoverFormalRunAfterSlowRequest(options: {
+  poolId: string
+  recordIds: string[]
+  startedAt: number
+  previousJobId?: string
+  runKey: string
+}): Promise<boolean> {
+  await loadPools()
+  const refreshedPool = pools.value.find((item) => item.id === options.poolId)
+  const latestJobId = refreshedPool?.latest_job_id
+  if (!latestJobId || latestJobId === options.previousJobId) {
+    return false
+  }
+  const jobResult = await getSichuanWorkspaceBatchJob(latestJobId)
+  if (!jobResult.success || !jobResult.data) {
+    return false
+  }
+  if (!isRecoverableFormalJob(jobResult.data, options.recordIds, options.startedAt)) {
+    return false
+  }
+  lastRunSubmission.value = {
+    key: options.runKey,
+    startedAt: options.startedAt,
+    jobId: latestJobId,
+  }
+  message.success('任务已创建，正在打开进度')
+  await openBatchJob(latestJobId)
+  return true
 }
 
 async function openLatestJob() {
