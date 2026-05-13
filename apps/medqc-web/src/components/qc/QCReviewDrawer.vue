@@ -576,150 +576,152 @@
             </a-button>
           </div>
 
-          <a-spin
-            :spinning="defectLoading"
-            class="review-issues__body"
-          >
-            <div
-              v-if="displayedIssueCount === 0"
-              class="review-empty review-empty--issues"
-            >
-              <div class="review-empty__title">
-                暂无质控问题
-              </div>
-              <div class="review-empty__desc">
-                当前病历没有待联审的质控项
-              </div>
-            </div>
-
-            <div
-              v-else-if="defectList.length > 0"
-              class="review-issue-list"
+          <div class="review-issues__body">
+            <a-spin
+              :spinning="defectLoading"
+              class="review-issues__spin"
             >
               <div
-                v-for="defect in defectList"
-                :key="defect.id"
-                class="review-issue-card"
-                :class="{ 'review-issue-card--active': selectedDefectId === defect.id }"
-                @click="handleDefectSelect(defect)"
+                v-if="displayedIssueCount === 0"
+                class="review-empty review-empty--issues"
               >
-                <div class="review-issue-card__top">
-                  <div class="review-issue-card__title-wrap">
+                <div class="review-empty__title">
+                  暂无质控问题
+                </div>
+                <div class="review-empty__desc">
+                  当前病历没有待联审的质控项
+                </div>
+              </div>
+
+              <div
+                v-else-if="defectList.length > 0"
+                class="review-issue-list"
+              >
+                <div
+                  v-for="defect in defectList"
+                  :key="defect.id"
+                  class="review-issue-card"
+                  :class="{ 'review-issue-card--active': selectedDefectId === defect.id }"
+                  @click="handleDefectSelect(defect)"
+                >
+                  <div class="review-issue-card__top">
+                    <div class="review-issue-card__title-wrap">
+                      <span
+                        class="review-issue-card__dot"
+                        :class="{
+                          'review-issue-card__dot--critical':
+                            defect.severity === 'critical' || defect.severity === 'error',
+                          'review-issue-card__dot--warning': defect.severity === 'warning',
+                          'review-issue-card__dot--info': defect.severity === 'info',
+                        }"
+                      />
+                      <span class="review-issue-card__title">{{ defect.rule_name }}</span>
+                    </div>
                     <span
-                      class="review-issue-card__dot"
+                      class="review-issue-card__status"
                       :class="{
-                        'review-issue-card__dot--critical':
-                          defect.severity === 'critical' || defect.severity === 'error',
-                        'review-issue-card__dot--warning': defect.severity === 'warning',
-                        'review-issue-card__dot--info': defect.severity === 'info',
+                        'review-issue-card__status--pending': defect.status === 'pending',
+                        'review-issue-card__status--urged': defect.status === 'urged',
+                        'review-issue-card__status--approved': defect.status === 'approved',
+                        'review-issue-card__status--rejected': defect.status === 'rejected',
+                        'review-issue-card__status--remediated': defect.status === 'remediated',
                       }"
-                    />
-                    <span class="review-issue-card__title">{{ defect.rule_name }}</span>
+                    >
+                      {{ getDefectStatusText(defect.status) }}
+                    </span>
                   </div>
-                  <span
-                    class="review-issue-card__status"
-                    :class="{
-                      'review-issue-card__status--pending': defect.status === 'pending',
-                      'review-issue-card__status--urged': defect.status === 'urged',
-                      'review-issue-card__status--approved': defect.status === 'approved',
-                      'review-issue-card__status--rejected': defect.status === 'rejected',
-                      'review-issue-card__status--remediated': defect.status === 'remediated',
-                    }"
-                  >
-                    {{ getDefectStatusText(defect.status) }}
-                  </span>
+                  <div class="review-issue-card__summary line-clamp-2">
+                    {{ defect.description }}
+                  </div>
+                  <div class="review-issue-card__meta">
+                    <span>分类：{{ defect.category }}</span>
+                    <span>位置：{{ defect.location }}</span>
+                  </div>
+                  <QCReviewActionBar
+                    v-if="selectedDefectId === defect.id"
+                    :defect="defect"
+                    class="review-issue-card__actions"
+                    @action-done="handleActionDone"
+                  />
                 </div>
-                <div class="review-issue-card__summary line-clamp-2">
-                  {{ defect.description }}
-                </div>
-                <div class="review-issue-card__meta">
-                  <span>分类：{{ defect.category }}</span>
-                  <span>位置：{{ defect.location }}</span>
-                </div>
-                <QCReviewActionBar
-                  v-if="selectedDefectId === defect.id"
-                  :defect="defect"
-                  class="review-issue-card__actions"
-                  @action-done="handleActionDone"
-                />
               </div>
-            </div>
 
-            <div
-              v-else
-              class="review-issue-list"
-            >
               <div
-                v-for="issue in reviewItemList"
-                :key="issue.id"
-                class="review-issue-card"
-                :class="{ 'review-issue-card--active': selectedReviewIssueId === issue.id }"
-                @click="handleReviewIssueSelect(issue)"
+                v-else
+                class="review-issue-list"
               >
-                <div class="review-issue-card__top review-issue-card__top--start">
-                  <div class="review-issue-card__title-block">
-                    <div class="review-issue-card__title">
-                      {{ issue.rule_code ? `${issue.rule_code} · ` : ''
-                      }}{{ issue.rule_name || '质控规则' }}
+                <div
+                  v-for="issue in reviewItemList"
+                  :key="issue.id"
+                  class="review-issue-card"
+                  :class="{ 'review-issue-card--active': selectedReviewIssueId === issue.id }"
+                  @click="handleReviewIssueSelect(issue)"
+                >
+                  <div class="review-issue-card__top review-issue-card__top--start">
+                    <div class="review-issue-card__title-block">
+                      <div class="review-issue-card__title">
+                        {{ issue.rule_code ? `${issue.rule_code} · ` : ''
+                        }}{{ issue.rule_name || '质控规则' }}
+                      </div>
+                      <div class="review-issue-card__chips">
+                        <span
+                          class="review-issue-card__pill"
+                          :class="getReviewStatusClass(issue.status)"
+                        >
+                          {{ getReviewStatusText(issue.status) }}
+                        </span>
+                        <span
+                          v-if="issue.document_type"
+                          class="review-issue-card__pill review-issue-card__pill--plain"
+                        >
+                          {{ issue.document_type }}
+                        </span>
+                        <span
+                          v-if="issue.rule_family"
+                          class="review-issue-card__pill review-issue-card__pill--plain"
+                        >
+                          {{ issue.rule_family }}
+                        </span>
+                        <span
+                          v-if="issue.defect_level"
+                          class="review-issue-card__pill review-issue-card__pill--plain"
+                        >
+                          {{ issue.defect_level }}
+                        </span>
+                      </div>
                     </div>
-                    <div class="review-issue-card__chips">
-                      <span
-                        class="review-issue-card__pill"
-                        :class="getReviewStatusClass(issue.status)"
-                      >
-                        {{ getReviewStatusText(issue.status) }}
-                      </span>
-                      <span
-                        v-if="issue.document_type"
-                        class="review-issue-card__pill review-issue-card__pill--plain"
-                      >
-                        {{ issue.document_type }}
-                      </span>
-                      <span
-                        v-if="issue.rule_family"
-                        class="review-issue-card__pill review-issue-card__pill--plain"
-                      >
-                        {{ issue.rule_family }}
-                      </span>
-                      <span
-                        v-if="issue.defect_level"
-                        class="review-issue-card__pill review-issue-card__pill--plain"
-                      >
-                        {{ issue.defect_level }}
-                      </span>
-                    </div>
+                    <span
+                      v-if="issue.confidence !== null && issue.confidence !== undefined"
+                      class="review-issue-card__confidence"
+                    >
+                      {{ Number(issue.confidence).toFixed(2) }}
+                    </span>
                   </div>
-                  <span
-                    v-if="issue.confidence !== null && issue.confidence !== undefined"
-                    class="review-issue-card__confidence"
+                  <div
+                    v-if="issue.findings"
+                    class="review-issue-card__section"
                   >
-                    {{ Number(issue.confidence).toFixed(2) }}
-                  </span>
-                </div>
-                <div
-                  v-if="issue.findings"
-                  class="review-issue-card__section"
-                >
-                  <span class="review-issue-card__section-label">结论</span>
-                  <span>{{ issue.findings }}</span>
-                </div>
-                <div
-                  v-if="issue.evidence"
-                  class="review-issue-card__section"
-                >
-                  <span class="review-issue-card__section-label">证据</span>
-                  <span>{{ issue.evidence }}</span>
-                </div>
-                <div
-                  v-if="issue.suggestion"
-                  class="review-issue-card__section review-issue-card__section--suggestion"
-                >
-                  <span class="review-issue-card__section-label">建议</span>
-                  <span>{{ issue.suggestion }}</span>
+                    <span class="review-issue-card__section-label">结论</span>
+                    <span>{{ issue.findings }}</span>
+                  </div>
+                  <div
+                    v-if="issue.evidence"
+                    class="review-issue-card__section"
+                  >
+                    <span class="review-issue-card__section-label">证据</span>
+                    <span>{{ issue.evidence }}</span>
+                  </div>
+                  <div
+                    v-if="issue.suggestion"
+                    class="review-issue-card__section review-issue-card__section--suggestion"
+                  >
+                    <span class="review-issue-card__section-label">建议</span>
+                    <span>{{ issue.suggestion }}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </a-spin>
+            </a-spin>
+          </div>
         </aside>
       </section>
     </div>
@@ -2407,13 +2409,21 @@ watch(
 .qc-review-drawer :deep(.ant-drawer-body) {
   padding: 24px;
   background: #f5f7fa;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
 .review-shell {
+  width: 100%;
+  height: calc(100vh - 48px);
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
-  min-height: calc(100vh - 72px);
+  overflow: hidden;
 }
 
 .review-summary {
@@ -2577,6 +2587,7 @@ watch(
   display: grid;
   grid-template-columns: 288px minmax(0, 1fr) 372px;
   gap: 18px;
+  overflow: hidden;
 }
 
 .review-sidebar,
@@ -2599,6 +2610,7 @@ watch(
   gap: 12px;
   padding: 18px 20px;
   border-bottom: 1px solid #eef2f7;
+  flex-shrink: 0;
 }
 
 .review-panel__title {
@@ -2662,6 +2674,16 @@ watch(
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.review-issues__spin {
+  display: block;
+  min-height: 100%;
+}
+
+.review-issues__spin :deep(.ant-spin-container) {
+  min-height: 100%;
 }
 
 .review-sidebar__list {
@@ -3318,6 +3340,7 @@ watch(
   .review-issues {
     grid-column: 1 / -1;
     min-height: 320px;
+    max-height: min(520px, 55vh);
   }
 
   .review-summary__top {
@@ -3331,9 +3354,20 @@ watch(
     grid-template-columns: 1fr;
   }
 
+  .review-shell {
+    height: auto;
+    min-height: calc(100vh - 48px);
+    overflow: visible;
+  }
+
+  .review-workspace {
+    overflow: visible;
+  }
+
   .review-sidebar,
   .review-issues {
     min-height: 280px;
+    max-height: min(520px, 58vh);
   }
 
   .review-structured-row {
