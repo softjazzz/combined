@@ -2409,21 +2409,19 @@ watch(
 .qc-review-drawer :deep(.ant-drawer-body) {
   padding: 24px;
   background: #f5f7fa;
-  height: 100vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
   box-sizing: border-box;
 }
 
 .review-shell {
   width: 100%;
-  height: calc(100vh - 48px);
-  min-height: 0;
+  height: auto;
+  min-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
   gap: 18px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .review-summary {
@@ -2587,7 +2585,6 @@ watch(
   display: grid;
   grid-template-columns: 288px minmax(0, 1fr) 372px;
   gap: 18px;
-  overflow: hidden;
 }
 
 .review-sidebar,
@@ -2600,7 +2597,12 @@ watch(
   border-radius: 20px;
   background: #fff;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  max-height: calc(100vh - 260px);
   overflow: hidden;
+}
+
+.review-issues {
+  min-height: 360px;
 }
 
 .review-panel__header {

@@ -17,18 +17,20 @@ describe('QCReviewDrawer layout', () => {
     expect(source).not.toMatch(/<a-spin[\s\S]{0,160}class="review-issues__body"/)
   })
 
-  it('为抽屉主体建立固定高度边界', () => {
+  it('外层抽屉保持页面级纵向滚动', () => {
     const drawerBody = cssBlock('.qc-review-drawer :deep(.ant-drawer-body)')
     const shell = cssBlock('.review-shell')
     const workspace = cssBlock('.review-workspace')
 
-    expect(drawerBody).toContain('height: 100vh')
-    expect(drawerBody).toContain('overflow: hidden')
-    expect(drawerBody).toContain('display: flex')
-    expect(shell).toContain('height: calc(100vh - 48px)')
-    expect(shell).toContain('overflow: hidden')
+    expect(drawerBody).toContain('overflow-y: auto')
+    expect(drawerBody).toContain('overflow-x: hidden')
+    expect(drawerBody).not.toMatch(/^\s*overflow:\s*hidden/m)
+    expect(shell).toMatch(/^\s*height:\s*auto;/m)
+    expect(shell).toContain('min-height: calc(100vh - 48px)')
+    expect(shell).toContain('overflow: visible')
+    expect(shell).not.toMatch(/^\s*height:\s*calc\(100vh - 48px\)/m)
     expect(workspace).toContain('min-height: 0')
-    expect(workspace).toContain('overflow: hidden')
+    expect(workspace).not.toMatch(/^\s*overflow:\s*hidden/m)
   })
 
   it('右侧质控问题列表拥有独立滚动区域', () => {
@@ -37,9 +39,14 @@ describe('QCReviewDrawer layout', () => {
     )?.[1]
     const spin = cssBlock('.review-issues__spin')
     const spinContainer = cssBlock('.review-issues__spin :deep(.ant-spin-container)')
+    const panelGroup = source.match(
+      /\.review-sidebar,\s*\.review-content,\s*\.review-issues\s*\{([\s\S]*?)\n\}/m,
+    )?.[1]
 
     expect(issueBodyGroup).toContain('overflow-y: auto')
     expect(issueBodyGroup).toContain('overflow-x: hidden')
+    expect(panelGroup).toContain('max-height: calc(100vh - 260px)')
+    expect(source).toMatch(/\.review-issues\s*\{\s*min-height:\s*360px;/)
     expect(spin).toContain('min-height: 100%')
     expect(spinContainer).toContain('min-height: 100%')
   })
