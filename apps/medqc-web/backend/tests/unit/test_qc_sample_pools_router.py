@@ -684,6 +684,34 @@ async def test_run_sample_pool_intrinsic_validation_should_use_formal_fast_scree
 
 
 @pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_formal_mode_requires_selected_record_ids(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                record_ids=[],
+                validation_mode="formal_fast_screen_full",
+                rule_set_key="sc_content_full_v1",
+            ),
+            background_tasks=BackgroundTasks(),
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 422
+    assert getattr(exc_info.value, "detail", "") == "正式84条质控请先选择病历"
+    assert sample_service.get_runnable_items_calls == []
+    assert workspace_service.create_batch_job_calls == []
+
+
+@pytest.mark.asyncio
 async def test_run_sample_pool_intrinsic_validation_formal_mode_should_not_fallback_to_all(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()

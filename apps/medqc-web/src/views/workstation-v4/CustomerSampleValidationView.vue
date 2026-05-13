@@ -43,7 +43,7 @@
               <a-button
                 type="primary"
                 class="!rounded-full"
-                :disabled="runLoading || !selectedPoolId || !selectedPool?.total_items"
+                :disabled="runButtonDisabled"
                 :loading="runLoading"
                 @click="handleRunPool"
               >
@@ -924,11 +924,23 @@ const selectedRecordStats = computed(() => {
   }
 })
 
+const hasFormalSelectedRecords = computed(
+  () => !isFormalFastScreenMode.value || selectedRecordStats.value.selectedCount > 0,
+)
+
+const runButtonDisabled = computed(
+  () =>
+    runLoading.value ||
+    !selectedPoolId.value ||
+    !selectedPool.value?.total_items ||
+    !hasFormalSelectedRecords.value,
+)
+
 const runButtonText = computed(() =>
   isFormalFastScreenMode.value
     ? selectedRecordStats.value.selectedCount > 0
       ? `发起正式84条质控（${selectedRecordStats.value.selectedCount}）`
-      : '发起正式84条质控'
+      : '请选择病历后发起正式84条质控'
     : selectedRecordStats.value.selectedCount > 0
       ? `发起样本验证（${selectedRecordStats.value.selectedCount}）`
       : '发起样本验证',
@@ -1714,6 +1726,10 @@ async function handleRunPool() {
   if (!selectedPoolId.value) return
   const { selectedCount, runnableCount, skippedCount, runnableRecordIds } =
     selectedRecordStats.value
+  if (isFormalFastScreenMode.value && selectedCount === 0) {
+    message.warning('请先选择要质控的病历')
+    return
+  }
   if (selectedCount > 0 && runnableCount === 0) {
     message.warning(selectedRecordNotRunnableMessage())
     return

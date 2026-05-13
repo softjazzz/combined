@@ -433,12 +433,19 @@ async def run_sample_pool_intrinsic_validation(
     if validation_mode not in {"customer", "sc", "programmatic", FORMAL_FAST_SCREEN_FULL_MODE}:
         raise HTTPException(status_code=422, detail="未知验证模式，仅支持 customer、sc、programmatic 或 formal_fast_screen_full")
     is_formal_fast_screen_full = validation_mode == FORMAL_FAST_SCREEN_FULL_MODE
+    requested_record_ids = [
+        str(record_id or "").strip()
+        for record_id in list(payload.record_ids or [])
+        if str(record_id or "").strip()
+    ]
+    if is_formal_fast_screen_full and not requested_record_ids:
+        raise HTTPException(status_code=422, detail="正式84条质控请先选择病历")
 
     runnable_items = service.get_runnable_items(
         pool_id=pool_id,
         validation_mode=validation_mode,
         item_ids=payload.sample_item_ids,
-        record_ids=payload.record_ids,
+        record_ids=requested_record_ids,
     )
     if not runnable_items:
         if payload.record_ids:
@@ -567,7 +574,7 @@ async def run_sample_pool_intrinsic_validation(
         "max_refine_candidates": 0,
         "source": "manual_sample_formal_fast_screen_full" if is_formal_fast_screen_full else "manual_problem_sample_pool",
         "sample_pool_id": pool_id,
-        "selected_record_ids": payload.record_ids,
+        "selected_record_ids": requested_record_ids,
         "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
         "selected_sample_count": len(runnable_items),
         "dedup_record_count": len(record_ids),
@@ -603,7 +610,7 @@ async def run_sample_pool_intrinsic_validation(
             "pool_id": pool_id,
             "job_id": job["id"],
             "sample_item_count": len(runnable_items),
-            "selected_record_count": len(payload.record_ids or []),
+            "selected_record_count": len(requested_record_ids),
             "record_count": len(record_ids),
             "rule_count": len(rule_ids),
             "record_ids": record_ids,

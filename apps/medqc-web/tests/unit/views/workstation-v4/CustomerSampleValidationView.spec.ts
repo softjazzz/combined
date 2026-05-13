@@ -728,6 +728,26 @@ describe('CustomerSampleValidationView', () => {
     expect(message.success).toHaveBeenCalled()
   })
 
+  it('客户样本复现模式未选择病历时保持整池提交行为', async () => {
+    const wrapper = await mountView()
+
+    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
+    expect(runButton).toBeTruthy()
+    expect(runButton!.attributes('disabled')).toBeUndefined()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
+        record_ids: [],
+        max_parallel_records: 4,
+        validation_mode: 'customer',
+      },
+      undefined,
+    )
+  })
+
   it('点击同步样本病历后展示同步进度区块', async () => {
     const wrapper = await mountView()
 
@@ -1220,6 +1240,25 @@ describe('CustomerSampleValidationView', () => {
     expect(message.success).toHaveBeenCalledWith(
       '已创建sc_content_full_v1 / 内涵质控全量 v1验证任务，覆盖 1 条样本 / 1 份病历 / 84 条规则，并发 4 份病历',
     )
+  })
+
+  it('正式84条未选择病历时禁用主按钮且不会提交整池', async () => {
+    const wrapper = await mountView()
+
+    const modeButton = wrapper.findAll('button').find((node) => node.text() === '正式84条质控')
+    expect(modeButton).toBeTruthy()
+    await modeButton!.trigger('click')
+    await flushPromises()
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('请选择病历后发起正式84条质控'))
+    expect(runButton).toBeTruthy()
+    expect(runButton!.attributes('disabled')).toBeDefined()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 
   it('正式84条发起期间重复点击不会重复提交', async () => {
