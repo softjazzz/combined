@@ -217,29 +217,31 @@
 
         <main class="review-content">
           <div
-            v-if="currentDoc"
+            v-if="currentDoc || isOrderOverviewActive"
             class="review-panel__header review-content__header"
           >
             <div class="review-content__header-main">
               <div class="review-content__title-row">
-                <span class="review-content__type-badge">{{ currentDocTypeLabel }}</span>
+                <span class="review-content__type-badge">
+                  {{ isOrderOverviewActive ? '医嘱总览' : currentDocTypeLabel }}
+                </span>
                 <span
-                  v-if="currentDocReadableTime"
+                  v-if="!isOrderOverviewActive && currentDocReadableTime"
                   class="review-content__time"
                 >记录时间：{{ currentDocReadableTime }}</span>
               </div>
               <h3 class="review-content__title">
-                {{ currentDocTitle }}
+                {{ isOrderOverviewActive ? orderOverviewTitle : currentDocTitle }}
               </h3>
               <div
-                v-if="currentDocMeta"
+                v-if="isOrderOverviewActive ? orderOverviewMeta : currentDocMeta"
                 class="review-content__meta"
               >
-                {{ currentDocMeta }}
+                {{ isOrderOverviewActive ? orderOverviewMeta : currentDocMeta }}
               </div>
             </div>
             <div
-              v-if="currentDocVisibleFlags.length > 0"
+              v-if="!isOrderOverviewActive && currentDocVisibleFlags.length > 0"
               class="review-content__flags"
             >
               <span
@@ -254,7 +256,165 @@
 
           <div class="review-content__body">
             <a-spin :spinning="docLoading">
-              <template v-if="currentDoc">
+              <template v-if="isOrderOverviewActive">
+                <div
+                  v-if="activeReviewIssueSummary"
+                  class="review-alert"
+                >
+                  <div class="review-alert__title">
+                    已定位当前质控问题原文
+                  </div>
+                  <div class="review-alert__desc">
+                    {{ activeReviewIssueSummary }}
+                  </div>
+                </div>
+
+                <div class="review-card order-overview">
+                  <div class="order-overview__summary">
+                    <div class="order-overview__stat">
+                      <span>总医嘱</span>
+                      <strong>{{ orderOverviewStats.total }}</strong>
+                    </div>
+                    <div
+                      v-if="orderOverviewStats.temp > 0"
+                      class="order-overview__stat"
+                    >
+                      <span>临时医嘱</span>
+                      <strong>{{ orderOverviewStats.temp }}</strong>
+                    </div>
+                    <div
+                      v-if="orderOverviewStats.long > 0"
+                      class="order-overview__stat"
+                    >
+                      <span>长期医嘱</span>
+                      <strong>{{ orderOverviewStats.long }}</strong>
+                    </div>
+                    <div
+                      v-if="orderOverviewStats.drug > 0"
+                      class="order-overview__stat"
+                    >
+                      <span>药品医嘱</span>
+                      <strong>{{ orderOverviewStats.drug }}</strong>
+                    </div>
+                    <div
+                      v-if="orderOverviewStats.nondrug > 0"
+                      class="order-overview__stat"
+                    >
+                      <span>非药品医嘱</span>
+                      <strong>{{ orderOverviewStats.nondrug }}</strong>
+                    </div>
+                    <div class="order-overview__range">
+                      时间范围：{{ orderOverviewTimeRange || '未标记' }}
+                    </div>
+                  </div>
+
+                  <div class="order-overview__toolbar">
+                    <div class="order-overview__filters">
+                      <button
+                        v-for="option in orderFilterOptions"
+                        :key="option.value"
+                        type="button"
+                        class="order-overview__filter"
+                        :class="{
+                          'order-overview__filter--active': orderOverviewFilter === option.value,
+                        }"
+                        @click="orderOverviewFilter = option.value"
+                      >
+                        {{ option.label }}
+                      </button>
+                    </div>
+                    <input
+                      v-model="orderKeyword"
+                      class="order-overview__search"
+                      type="search"
+                      placeholder="搜索医嘱内容、医生或状态"
+                    >
+                  </div>
+
+                  <div
+                    v-if="filteredOrderRows.length > 0"
+                    class="order-overview__table-scroll"
+                  >
+                    <table class="order-overview__table">
+                      <thead>
+                        <tr>
+                          <th>日期/时间</th>
+                          <th>医嘱类型</th>
+                          <th>医嘱类别</th>
+                          <th>医嘱内容</th>
+                          <th v-if="showOrderDoseUsageColumn">
+                            剂量/频次/用法
+                          </th>
+                          <th v-if="showOrderStopTimeColumn">
+                            停止时间
+                          </th>
+                          <th v-if="showOrderStatusColumn">
+                            状态
+                          </th>
+                          <th v-if="showOrderDoctorColumn">
+                            医生
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="row in filteredOrderRows"
+                          :key="row.key"
+                          :ref="(el) => setHighlightBlockRef(row.blockKey, el as Element | null)"
+                          :class="{
+                            'order-overview__row--active': activeHighlightBlockKey === row.blockKey,
+                          }"
+                        >
+                          <td class="order-overview__time">
+                            {{ row.time || row.startTime || '-' }}
+                          </td>
+                          <td>
+                            <span class="order-overview__tag">{{ row.orderTypeLabel }}</span>
+                          </td>
+                          <td>
+                            <span class="order-overview__tag order-overview__tag--muted">
+                              {{ row.categoryLabel }}
+                            </span>
+                          </td>
+                          <td class="order-overview__content">
+                            <span
+                              v-html="renderBlockHtml({ key: row.blockKey, text: row.content })"
+                            />
+                          </td>
+                          <td v-if="showOrderDoseUsageColumn">
+                            {{ row.doseUsage || '-' }}
+                          </td>
+                          <td v-if="showOrderStopTimeColumn">
+                            {{ row.stopTime || '-' }}
+                          </td>
+                          <td v-if="showOrderStatusColumn">
+                            {{ row.status || '-' }}
+                          </td>
+                          <td v-if="showOrderDoctorColumn">
+                            {{ row.doctor || '-' }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div
+                    v-else
+                    class="review-empty order-overview__empty"
+                  >
+                    <div class="review-empty__title">
+                      {{ orderRows.length > 0 ? '没有匹配的医嘱' : '暂无医嘱数据' }}
+                    </div>
+                    <div class="review-empty__desc">
+                      {{
+                        orderRows.length > 0 ? '请调整筛选或搜索关键词' : '当前病历尚未装配医嘱明细'
+                      }}
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <template v-else-if="currentDoc">
                 <div
                   v-if="activeReviewIssueSummary"
                   class="review-alert"
@@ -608,6 +768,7 @@ interface ReviewDocItem {
   }>
   assembly_status?: string
   data_quality_flags?: string[]
+  order_filter?: OrderFilter
 }
 
 interface ReviewDocTreeNode {
@@ -644,6 +805,26 @@ interface HighlightTarget {
   blockKey: string
   snippet: string
   docTitle: string
+}
+
+type OrderFilter = 'all' | 'long' | 'temp' | 'drug' | 'nondrug'
+
+interface OrderRow {
+  key: string
+  sourceDocKey: string
+  blockKey: string
+  orderType: 'long' | 'temp' | 'unknown'
+  orderTypeLabel: string
+  category: 'drug' | 'nondrug' | 'unknown'
+  categoryLabel: string
+  content: string
+  time: string
+  startTime: string
+  stopTime: string
+  status: string
+  doctor: string
+  doseUsage: string
+  searchText: string
 }
 
 type SelectableIssue = {
@@ -692,8 +873,8 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   postsurg_firstcourse_record: '术后首次病程记录',
   discharge_record: '出院记录',
   death_record: '死亡记录',
-  inpat_drug_order: '长期医嘱',
-  inpat_nondrug_order: '临时医嘱',
+  inpat_drug_order: '药品医嘱',
+  inpat_nondrug_order: '非药品医嘱',
 }
 
 const STRUCTURED_FIELD_ONLY_DOC_TYPES = new Set([
@@ -726,10 +907,22 @@ const recordDetail = ref<Record<string, unknown> | null>(null)
 const activeDocGroup = ref('all')
 const activeCourseSubtype = ref('all')
 const activeDocKey = ref('')
+const orderOverviewFilter = ref<OrderFilter>('all')
+const orderKeyword = ref('')
 const sidebarDocFilter = ref('all')
 const expandedSidebarGroups = ref<string[]>(['course'])
 const activeHighlightTarget = ref<HighlightTarget | null>(null)
 const highlightBlockElements = new Map<string, HTMLElement>()
+
+const ORDER_OVERVIEW_DOC_PREFIX = '__orders_overview__'
+
+const ORDER_FILTER_LABELS: Record<OrderFilter, string> = {
+  all: '全部',
+  long: '长期',
+  temp: '临时',
+  drug: '药品',
+  nondrug: '非药品',
+}
 
 const FIELD_LABELS: Record<string, string> = {
   record_time: '记录时间',
@@ -795,6 +988,21 @@ const FIELD_LABELS: Record<string, string> = {
   blood_loss: '失血量',
   other_content: '其他内容',
   record_content: '记录内容',
+  order_name: '医嘱内容',
+  order_text: '医嘱内容',
+  order_content: '医嘱内容',
+  order_type: '医嘱类型',
+  order_class: '医嘱类别',
+  order_status: '医嘱状态',
+  prescribed_datetime: '开立时间',
+  start_time: '开始时间',
+  stop_time: '停止时间',
+  dosage: '剂量',
+  frequency: '频次',
+  usage: '用法',
+  route: '途径',
+  prescriber: '开立医生',
+  doctor: '医生',
 }
 
 const EN_FIELD_LABELS: Record<string, string> = {
@@ -903,6 +1111,7 @@ function extractIssueSearchText(
 function matchesDocType(doc: ReviewDocItem, documentType?: string): boolean {
   const query = safeText(documentType).toLowerCase()
   if (!query) return false
+  if ((query.includes('order') || query.includes('医嘱')) && isOrderDoc(doc)) return true
   const candidates = [
     safeText(doc.doc_type).toLowerCase(),
     safeText(doc.source_table).toLowerCase(),
@@ -910,6 +1119,24 @@ function matchesDocType(doc: ReviewDocItem, documentType?: string): boolean {
     safeText(doc.doc_name).toLowerCase(),
   ]
   return candidates.some((item) => item && (item.includes(query) || query.includes(item)))
+}
+
+function isOrderIssue(issue: SelectableIssue): boolean {
+  const probe = [
+    issue.document_type,
+    issue.evidence,
+    issue.findings,
+    issue.suggestion,
+    issue.rule_name,
+  ]
+    .map((item) => safeText(item).toLowerCase())
+    .join(' ')
+  return (
+    probe.includes('order') ||
+    probe.includes('医嘱') ||
+    probe.includes('长期') ||
+    probe.includes('临时')
+  )
 }
 
 function formatDocTime(value?: string): string {
@@ -934,6 +1161,162 @@ function formatDocTime(value?: string): string {
     return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
   }
   return raw
+}
+
+function formatOrderDate(value?: string): string {
+  const formatted = formatDocTime(value)
+  return formatted ? formatted.slice(0, 16) : ''
+}
+
+function isOrderDoc(
+  doc?: Pick<
+    ReviewDocItem,
+    'doc_type' | 'source_table' | 'group_key' | 'document_title' | 'doc_name'
+  > | null,
+): boolean {
+  if (!doc) return false
+  if (safeText(doc.group_key) === 'orders') return true
+  const probe = [doc.doc_type, doc.source_table, doc.document_title, doc.doc_name]
+    .map((item) => safeText(item).toLowerCase())
+    .join(' ')
+  return probe.includes('order') || probe.includes('医嘱')
+}
+
+function buildSourceFieldMap(doc: ReviewDocItem): Map<string, string> {
+  const fields = new Map<string, string>()
+  for (const field of doc.source_fields || []) {
+    const key = safeText(field?.source_field).toLowerCase()
+    const value = safeText(field?.raw_value_preview)
+    if (key && value) fields.set(key, value)
+  }
+  return fields
+}
+
+function pickFieldValue(fields: Map<string, string>, keys: string[]): string {
+  for (const key of keys) {
+    const value = fields.get(key.toLowerCase())
+    if (value) return value
+  }
+  return ''
+}
+
+function inferOrderTypeFromText(text: string): OrderRow['orderType'] {
+  if (/临时医嘱|临嘱|临时/u.test(text)) return 'temp'
+  if (/长期医嘱|长嘱|长期/u.test(text)) return 'long'
+  return 'unknown'
+}
+
+function inferOrderCategoryFromText(text: string): OrderRow['category'] {
+  const lower = text.toLowerCase()
+  if (lower.includes('drug_order') || /药品|用药|片|针|注射|胶囊|颗粒/u.test(text)) {
+    return 'drug'
+  }
+  if (
+    lower.includes('nondrug_order') ||
+    /非药品|治疗|检查|检验|护理|康复|理疗|会诊|手术|处置/u.test(text)
+  ) {
+    return 'nondrug'
+  }
+  return 'unknown'
+}
+
+function formatOrderTypeLabel(type: OrderRow['orderType']): string {
+  if (type === 'long') return '长期'
+  if (type === 'temp') return '临时'
+  return '未标记'
+}
+
+function formatOrderCategoryLabel(category: OrderRow['category']): string {
+  if (category === 'drug') return '药品'
+  if (category === 'nondrug') return '非药品'
+  return '未标记'
+}
+
+function normalizeOrderRow(doc: ReviewDocItem, index: number): OrderRow {
+  const fields = buildSourceFieldMap(doc)
+  const title = safeText(doc.document_title || doc.doc_name)
+  const content =
+    pickFieldValue(fields, [
+      'order_name',
+      'order_text',
+      'order_content',
+      'order_item_name',
+      'item_name',
+      'name',
+      'prescription_name',
+    ]) ||
+    title ||
+    safeText(doc.content) ||
+    '未命名医嘱'
+  const typeProbe = [
+    pickFieldValue(fields, ['order_type', 'order_class', 'type', 'class']),
+    doc.doc_type,
+    doc.source_table,
+    title,
+    doc.content,
+  ].join(' ')
+  const categoryProbe = [doc.source_table, doc.doc_type, title, content, doc.content].join(' ')
+  const orderType = inferOrderTypeFromText(typeProbe)
+  const category = inferOrderCategoryFromText(categoryProbe)
+  const startTime = formatOrderDate(
+    pickFieldValue(fields, [
+      'start_time',
+      'start_datetime',
+      'prescribed_datetime',
+      'order_time',
+      'record_time',
+      'create_time',
+    ]) ||
+      doc.record_time ||
+      doc.sort_time,
+  )
+  const stopTime = formatOrderDate(
+    pickFieldValue(fields, ['stop_time', 'stop_datetime', 'end_time', 'end_datetime']),
+  )
+  const doseUsage = [
+    pickFieldValue(fields, ['dosage', 'dose', 'single_dose']),
+    pickFieldValue(fields, ['frequency', 'freq']),
+    pickFieldValue(fields, ['usage', 'route', 'administration_route']),
+  ]
+    .filter(Boolean)
+    .join(' / ')
+  const status = pickFieldValue(fields, ['order_status', 'status', 'execute_status'])
+  const doctor = pickFieldValue(fields, [
+    'doctor',
+    'doctor_name',
+    'prescriber',
+    'prescribed_by',
+    'submitter',
+    'last_modifier',
+  ])
+  const searchText = [
+    content,
+    typeProbe,
+    categoryProbe,
+    startTime,
+    stopTime,
+    doseUsage,
+    status,
+    doctor,
+  ].join(' ')
+  const key = `${doc.doc_key}::order-${index}`
+  return {
+    key,
+    sourceDocKey: doc.doc_key,
+    blockKey: `order-row-${index}`,
+    orderType,
+    orderTypeLabel: formatOrderTypeLabel(orderType),
+    category,
+    categoryLabel: formatOrderCategoryLabel(category),
+    content,
+    time: startTime,
+    startTime,
+    stopTime,
+    status,
+    doctor,
+    doseUsage,
+    searchText,
+  }
 }
 
 function normalizeReviewDocItem(raw: unknown, index: number): ReviewDocItem | null {
@@ -1272,12 +1655,111 @@ const documentList = computed<ReviewDocItem[]>(() =>
     .filter((item): item is ReviewDocItem => Boolean(item)),
 )
 
+const orderSourceDocs = computed(() => documentList.value.filter((doc) => isOrderDoc(doc)))
+
+const orderRows = computed<OrderRow[]>(() =>
+  orderSourceDocs.value
+    .map((doc, index) => normalizeOrderRow(doc, index))
+    .sort((left, right) => {
+      const timeGap = parseSortTimestamp(right.time) - parseSortTimestamp(left.time)
+      if (timeGap !== 0) return timeGap
+      return safeText(left.content).localeCompare(safeText(right.content), 'zh-CN')
+    }),
+)
+
+const orderOverviewStats = computed(() => {
+  const rows = orderRows.value
+  return {
+    total: rows.length,
+    long: rows.filter((row) => row.orderType === 'long').length,
+    temp: rows.filter((row) => row.orderType === 'temp').length,
+    drug: rows.filter((row) => row.category === 'drug').length,
+    nondrug: rows.filter((row) => row.category === 'nondrug').length,
+  }
+})
+
+const orderOverviewTimeRange = computed(() => {
+  const times = orderRows.value
+    .map((row) => row.time || row.startTime)
+    .filter(Boolean)
+    .sort()
+  if (times.length === 0) return ''
+  const first = times[0].slice(0, 10)
+  const last = times[times.length - 1].slice(0, 10)
+  return first === last ? first : `${first} 至 ${last}`
+})
+
+function buildOrderOverviewDoc(filter: OrderFilter): ReviewDocItem {
+  const stats = orderOverviewStats.value
+  const count =
+    filter === 'long'
+      ? stats.long
+      : filter === 'temp'
+        ? stats.temp
+        : filter === 'drug'
+          ? stats.drug
+          : filter === 'nondrug'
+            ? stats.nondrug
+            : stats.total
+  const label = filter === 'all' ? '医嘱总览' : `${ORDER_FILTER_LABELS[filter]}医嘱`
+  const range = orderOverviewTimeRange.value ? ` · ${orderOverviewTimeRange.value}` : ''
+  return {
+    id: `${ORDER_OVERVIEW_DOC_PREFIX}${filter}`,
+    doc_key: `${ORDER_OVERVIEW_DOC_PREFIX}${filter}`,
+    doc_type: 'orders_overview',
+    doc_name: `${label} · ${count} 条${range}`,
+    content: '',
+    has_content: true,
+    length: count,
+    document_id: `${ORDER_OVERVIEW_DOC_PREFIX}${filter}`,
+    document_title: `${label} · ${count} 条${range}`,
+    source_table: 'orders_overview',
+    group_key: 'orders',
+    order_filter: filter,
+  }
+}
+
+const orderSummaryDocs = computed<ReviewDocItem[]>(() => {
+  const stats = orderOverviewStats.value
+  if (stats.total === 0) return [buildOrderOverviewDoc('all')]
+  const summaries: OrderFilter[] = ['all']
+  if (stats.temp > 0) summaries.push('temp')
+  if (stats.long > 0) summaries.push('long')
+  if (stats.drug > 0) summaries.push('drug')
+  if (stats.nondrug > 0) summaries.push('nondrug')
+  return summaries.map((filter) => buildOrderOverviewDoc(filter))
+})
+
 const documentTree = computed<ReviewDocTreeGroup[]>(() => {
   const detail = recordDetail.value
   if (!detail) return []
   const documents = (detail.documents as Record<string, unknown> | undefined) || {}
   const rawTree = detail.documents_tree || documents.documents_tree
-  return normalizeDocTree(rawTree, documentList.value)
+  const normalized = normalizeDocTree(rawTree, documentList.value)
+  if (orderSourceDocs.value.length === 0) return normalized
+  const orderNodes = orderSourceDocs.value.map((doc) => buildTreeNodeFromDoc(doc))
+  const orderGroupIndex = normalized.findIndex((group) => group.key === 'orders')
+  if (orderGroupIndex < 0) {
+    return [
+      ...normalized,
+      {
+        key: 'orders',
+        label: DOC_GROUP_LABELS.orders,
+        count: orderNodes.length,
+        children: orderNodes,
+      },
+    ]
+  }
+  if (normalized[orderGroupIndex].children.length > 0) return normalized
+  return normalized.map((group, index) =>
+    index === orderGroupIndex
+      ? {
+          ...group,
+          count: orderNodes.length,
+          children: orderNodes,
+        }
+      : group,
+  )
 })
 
 const displayDocGroups = computed(() =>
@@ -1357,7 +1839,14 @@ const visibleCurrentGroupDocs = computed<ReviewDocItem[]>(() => {
   )
 })
 
+const isOrderOverviewActive = computed(
+  () =>
+    activeDocGroup.value === 'orders' &&
+    safeText(activeDocKey.value).startsWith(ORDER_OVERVIEW_DOC_PREFIX),
+)
+
 const currentDoc = computed<ReviewDocItem | null>(() => {
+  if (isOrderOverviewActive.value) return null
   if (!visibleCurrentGroupDocs.value.length) return null
   return (
     visibleCurrentGroupDocs.value.find((doc) => doc.doc_key === activeDocKey.value) ||
@@ -1408,6 +1897,53 @@ const currentDocVisibleFlags = computed(() =>
 )
 
 const documentCount = computed(() => documentList.value.length)
+
+const orderOverviewTitle = computed(() => {
+  const selected = orderSummaryDocs.value.find((doc) => doc.doc_key === activeDocKey.value)
+  return selected?.document_title || '医嘱总览'
+})
+
+const orderOverviewMeta = computed(() =>
+  orderOverviewStats.value.total > 0
+    ? `按时间倒序展示医嘱明细，支持类型筛选和关键词搜索。`
+    : '当前病历尚未装配可展示医嘱。',
+)
+
+const orderFilterOptions = computed(() =>
+  orderSummaryDocs.value.map((doc) => ({
+    label: ORDER_FILTER_LABELS[doc.order_filter || 'all'],
+    value: doc.order_filter || 'all',
+  })),
+)
+
+const filteredOrderRows = computed(() => {
+  const filter = orderOverviewFilter.value
+  const keyword = normalizeSearchText(orderKeyword.value)
+  return orderRows.value.filter((row) => {
+    const filterMatched =
+      filter === 'all' ||
+      (filter === 'long' && row.orderType === 'long') ||
+      (filter === 'temp' && row.orderType === 'temp') ||
+      (filter === 'drug' && row.category === 'drug') ||
+      (filter === 'nondrug' && row.category === 'nondrug')
+    if (!filterMatched) return false
+    if (!keyword) return true
+    return normalizeSearchText(row.searchText).includes(keyword)
+  })
+})
+
+const showOrderDoseUsageColumn = computed(() =>
+  filteredOrderRows.value.some((row) => Boolean(row.doseUsage)),
+)
+const showOrderStopTimeColumn = computed(() =>
+  filteredOrderRows.value.some((row) => Boolean(row.stopTime)),
+)
+const showOrderStatusColumn = computed(() =>
+  filteredOrderRows.value.some((row) => Boolean(row.status)),
+)
+const showOrderDoctorColumn = computed(() =>
+  filteredOrderRows.value.some((row) => Boolean(row.doctor)),
+)
 
 const currentDocFieldList = computed(() => buildDocFieldList(currentDoc.value))
 
@@ -1479,6 +2015,7 @@ const activeReviewIssueSummary = computed(() => {
 })
 
 function renderDocListTitle(doc: ReviewDocItem): string {
+  if (doc.order_filter) return doc.document_title || doc.doc_name
   if (activeDocGroup.value === 'course') {
     return inferCourseDisplayTitle(doc)
   }
@@ -1486,6 +2023,7 @@ function renderDocListTitle(doc: ReviewDocItem): string {
 }
 
 function isSidebarGroupExpandable(group: ReviewDocTreeGroup): boolean {
+  if (group.key === 'orders') return true
   return group.children.length > 1
 }
 
@@ -1508,6 +2046,7 @@ function toggleSidebarGroup(groupKey: string) {
 }
 
 function getSidebarGroupDocs(group: ReviewDocTreeGroup): ReviewDocItem[] {
+  if (group.key === 'orders') return orderSummaryDocs.value
   return sortDocsByTimeDesc(
     group.children
       .map((node) => resolveDocByNode(node))
@@ -1519,6 +2058,7 @@ function getSidebarGroupDocs(group: ReviewDocTreeGroup): ReviewDocItem[] {
 }
 
 function renderSidebarDocDate(doc: ReviewDocItem): string {
+  if (doc.order_filter) return '汇总'
   const time = formatDocTime(doc.record_time || doc.sort_time)
   return time ? time.slice(0, 10) : '未标记时间'
 }
@@ -1546,7 +2086,10 @@ function handleSidebarLeafGroupClick(group: ReviewDocTreeGroup) {
   activeDocGroup.value = group.key
   activeCourseSubtype.value = 'all'
   const firstDoc = getSidebarGroupDocs(group)[0]
-  if (firstDoc) activeDocKey.value = firstDoc.doc_key
+  if (firstDoc) {
+    activeDocKey.value = firstDoc.doc_key
+    if (firstDoc.order_filter) orderOverviewFilter.value = firstDoc.order_filter
+  }
 }
 
 function handleSidebarGroupHeaderClick(group: ReviewDocTreeGroup) {
@@ -1556,6 +2099,7 @@ function handleSidebarGroupHeaderClick(group: ReviewDocTreeGroup) {
   const firstDoc = getSidebarGroupDocs(group)[0]
   if (firstDoc && !getSidebarGroupDocs(group).some((doc) => doc.doc_key === activeDocKey.value)) {
     activeDocKey.value = firstDoc.doc_key
+    if (firstDoc.order_filter) orderOverviewFilter.value = firstDoc.order_filter
   }
 }
 
@@ -1564,6 +2108,10 @@ function handleSidebarDocClick(groupKey: string, doc: ReviewDocItem) {
   activeCourseSubtype.value = 'all'
   ensureSidebarGroupExpanded(groupKey)
   activeDocKey.value = doc.doc_key
+  if (doc.order_filter) {
+    orderOverviewFilter.value = doc.order_filter
+    activeHighlightTarget.value = null
+  }
 }
 
 function setHighlightBlockRef(blockKey: string, el: Element | null) {
@@ -1622,7 +2170,24 @@ function findHighlightTargetInDoc(
   }
 }
 
+function findOrderHighlightTarget(issue: SelectableIssue): HighlightTarget | null {
+  if (!isOrderIssue(issue)) return null
+  const queryText = extractIssueSearchText(issue)
+  const normalizedQuery = normalizeSearchText(queryText)
+  const matchedRow = normalizedQuery
+    ? orderRows.value.find((row) => normalizeSearchText(row.searchText).includes(normalizedQuery))
+    : null
+  return {
+    docKey: `${ORDER_OVERVIEW_DOC_PREFIX}all`,
+    blockKey: matchedRow?.blockKey || '',
+    snippet: queryText,
+    docTitle: '医嘱总览',
+  }
+}
+
 function findBestHighlightTarget(issue: SelectableIssue): HighlightTarget | null {
+  const orderTarget = findOrderHighlightTarget(issue)
+  if (orderTarget) return orderTarget
   const docsByType = documentList.value.filter((doc) => matchesDocType(doc, issue.document_type))
   for (const doc of docsByType) {
     const target = findHighlightTargetInDoc(doc, issue)
@@ -1638,6 +2203,20 @@ function findBestHighlightTarget(issue: SelectableIssue): HighlightTarget | null
 async function applyHighlightTarget(target: HighlightTarget | null) {
   if (!target) {
     activeHighlightTarget.value = null
+    return
+  }
+  if (target.docKey.startsWith(ORDER_OVERVIEW_DOC_PREFIX)) {
+    activeDocGroup.value = 'orders'
+    activeCourseSubtype.value = 'all'
+    activeDocKey.value = target.docKey
+    orderOverviewFilter.value = 'all'
+    orderKeyword.value = ''
+    activeHighlightTarget.value = target.blockKey ? target : null
+    await nextTick()
+    if (target.blockKey) {
+      const el = highlightBlockElements.get(target.blockKey)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
     return
   }
   const doc = documentList.value.find((item) => item.doc_key === target.docKey)
@@ -1710,7 +2289,14 @@ async function handleReviewIssueSelect(issue: ReviewIssueItem) {
 async function handleDefectSelect(defect: DefectItem) {
   selectedDefectId.value = defect.id
   selectedReviewIssueId.value = null
-  activeHighlightTarget.value = null
+  const target = findBestHighlightTarget({
+    id: defect.id,
+    rule_name: defect.rule_name,
+    document_type: defect.location,
+    evidence: defect.description,
+    findings: defect.description,
+  })
+  await applyHighlightTarget(target)
 }
 
 function syncActiveDocumentSelection() {
@@ -1740,6 +2326,15 @@ function syncActiveDocumentSelection() {
   const validCourseSubtypes = courseSubtypeOptions.value.map((option) => option.value)
   if (!validCourseSubtypes.includes(activeCourseSubtype.value)) {
     activeCourseSubtype.value = 'all'
+  }
+  if (activeDocGroup.value === 'orders') {
+    const validOrderDocs = orderSummaryDocs.value
+    const validOrderKeys = validOrderDocs.map((doc) => doc.doc_key)
+    if (!validOrderKeys.includes(activeDocKey.value)) {
+      activeDocKey.value = validOrderDocs[0]?.doc_key || `${ORDER_OVERVIEW_DOC_PREFIX}all`
+      orderOverviewFilter.value = validOrderDocs[0]?.order_filter || 'all'
+    }
+    return
   }
   const validDocKeys = visibleCurrentGroupDocs.value.map((doc) => doc.doc_key)
   if (!validDocKeys.includes(activeDocKey.value)) {
@@ -1904,6 +2499,9 @@ watch(activeDocGroup, (groupKey) => {
   if (groupKey !== 'course') {
     activeCourseSubtype.value = 'all'
   }
+  if (groupKey !== 'orders') {
+    orderKeyword.value = ''
+  }
 })
 
 watch(sidebarDocFilter, (groupKey) => {
@@ -1928,6 +2526,8 @@ watch(
       activeDocGroup.value = 'all'
       activeCourseSubtype.value = 'all'
       activeDocKey.value = ''
+      orderOverviewFilter.value = 'all'
+      orderKeyword.value = ''
       sidebarDocFilter.value = 'all'
       expandedSidebarGroups.value = ['course']
       activeHighlightTarget.value = null
@@ -2413,6 +3013,174 @@ watch(
   min-width: 0;
 }
 
+.order-overview {
+  overflow: hidden;
+}
+
+.order-overview__summary {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #eef2f7;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.order-overview__stat {
+  min-width: 96px;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.order-overview__stat span {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.order-overview__stat strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+  color: #172554;
+}
+
+.order-overview__range {
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.order-overview__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #eef2f7;
+  background: #fbfdff;
+}
+
+.order-overview__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.order-overview__filter {
+  border: 1px solid #dbe4f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #475569;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.order-overview__filter--active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.order-overview__search {
+  width: 240px;
+  max-width: 100%;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #fff;
+  color: #1e293b;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 12px;
+  outline: none;
+}
+
+.order-overview__search:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.order-overview__table-scroll {
+  overflow-x: auto;
+}
+
+.order-overview__table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: #334155;
+}
+
+.order-overview__table th,
+.order-overview__table td {
+  border-bottom: 1px solid #eef2f7;
+  padding: 10px 12px;
+  vertical-align: top;
+  text-align: left;
+  line-height: 1.55;
+}
+
+.order-overview__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.order-overview__table tbody tr:hover {
+  background: #f8fbff;
+}
+
+.order-overview__row--active {
+  background: #fff7d6;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.order-overview__time {
+  white-space: nowrap;
+  color: #475569;
+}
+
+.order-overview__content {
+  min-width: 220px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.order-overview__tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.order-overview__tag--muted {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.order-overview__empty {
+  margin: 18px;
+}
+
 .review-alert {
   border: 1px solid #fde68a;
   border-radius: 16px;
@@ -2722,6 +3490,15 @@ watch(
   .review-tree-doc {
     grid-template-columns: 1fr;
     gap: 2px;
+  }
+
+  .order-overview__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .order-overview__search {
+    width: 100%;
   }
 }
 </style>
