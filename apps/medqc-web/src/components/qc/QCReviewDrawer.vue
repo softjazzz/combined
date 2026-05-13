@@ -297,11 +297,32 @@
                       <strong>{{ orderOverviewStats.drug }}</strong>
                     </div>
                     <div
-                      v-if="orderOverviewStats.nondrug > 0"
+                      v-if="orderOverviewStats.exam_lab > 0"
                       class="order-overview__stat"
                     >
-                      <span>非药品医嘱</span>
-                      <strong>{{ orderOverviewStats.nondrug }}</strong>
+                      <span>检验检查</span>
+                      <strong>{{ orderOverviewStats.exam_lab }}</strong>
+                    </div>
+                    <div
+                      v-if="orderOverviewStats.procedure_care > 0"
+                      class="order-overview__stat"
+                    >
+                      <span>处置护理</span>
+                      <strong>{{ orderOverviewStats.procedure_care }}</strong>
+                    </div>
+                    <div
+                      v-if="orderOverviewStats.discharge_admin > 0"
+                      class="order-overview__stat"
+                    >
+                      <span>出院行政</span>
+                      <strong>{{ orderOverviewStats.discharge_admin }}</strong>
+                    </div>
+                    <div
+                      v-if="orderOverviewStats.other > 0"
+                      class="order-overview__stat"
+                    >
+                      <span>其他</span>
+                      <strong>{{ orderOverviewStats.other }}</strong>
                     </div>
                     <div class="order-overview__range">
                       时间范围：{{ orderOverviewTimeRange || '未标记' }}
@@ -710,6 +731,13 @@ import { ref, computed, watch, nextTick } from 'vue'
 import { ReloadOutlined, FileTextOutlined } from '@ant-design/icons-vue'
 import { getDefectList, getRecordDetail, type DefectItem } from '@/api/qcAdmin'
 import QCReviewActionBar from './QCReviewActionBar.vue'
+import {
+  ORDER_FILTER_LABELS,
+  isOrderDoc,
+  normalizeOrderRow,
+  type OrderFilter,
+  type OrderRow,
+} from './orderOverview'
 
 interface RecordData {
   id: string
@@ -807,26 +835,6 @@ interface HighlightTarget {
   docTitle: string
 }
 
-type OrderFilter = 'all' | 'long' | 'temp' | 'drug' | 'nondrug'
-
-interface OrderRow {
-  key: string
-  sourceDocKey: string
-  blockKey: string
-  orderType: 'long' | 'temp' | 'unknown'
-  orderTypeLabel: string
-  category: 'drug' | 'nondrug' | 'unknown'
-  categoryLabel: string
-  content: string
-  time: string
-  startTime: string
-  stopTime: string
-  status: string
-  doctor: string
-  doseUsage: string
-  searchText: string
-}
-
 type SelectableIssue = {
   id: string
   rule_name?: string
@@ -915,14 +923,6 @@ const activeHighlightTarget = ref<HighlightTarget | null>(null)
 const highlightBlockElements = new Map<string, HTMLElement>()
 
 const ORDER_OVERVIEW_DOC_PREFIX = '__orders_overview__'
-
-const ORDER_FILTER_LABELS: Record<OrderFilter, string> = {
-  all: '全部',
-  long: '长期',
-  temp: '临时',
-  drug: '药品',
-  nondrug: '非药品',
-}
 
 const FIELD_LABELS: Record<string, string> = {
   record_time: '记录时间',
@@ -1161,162 +1161,6 @@ function formatDocTime(value?: string): string {
     return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
   }
   return raw
-}
-
-function formatOrderDate(value?: string): string {
-  const formatted = formatDocTime(value)
-  return formatted ? formatted.slice(0, 16) : ''
-}
-
-function isOrderDoc(
-  doc?: Pick<
-    ReviewDocItem,
-    'doc_type' | 'source_table' | 'group_key' | 'document_title' | 'doc_name'
-  > | null,
-): boolean {
-  if (!doc) return false
-  if (safeText(doc.group_key) === 'orders') return true
-  const probe = [doc.doc_type, doc.source_table, doc.document_title, doc.doc_name]
-    .map((item) => safeText(item).toLowerCase())
-    .join(' ')
-  return probe.includes('order') || probe.includes('医嘱')
-}
-
-function buildSourceFieldMap(doc: ReviewDocItem): Map<string, string> {
-  const fields = new Map<string, string>()
-  for (const field of doc.source_fields || []) {
-    const key = safeText(field?.source_field).toLowerCase()
-    const value = safeText(field?.raw_value_preview)
-    if (key && value) fields.set(key, value)
-  }
-  return fields
-}
-
-function pickFieldValue(fields: Map<string, string>, keys: string[]): string {
-  for (const key of keys) {
-    const value = fields.get(key.toLowerCase())
-    if (value) return value
-  }
-  return ''
-}
-
-function inferOrderTypeFromText(text: string): OrderRow['orderType'] {
-  if (/临时医嘱|临嘱|临时/u.test(text)) return 'temp'
-  if (/长期医嘱|长嘱|长期/u.test(text)) return 'long'
-  return 'unknown'
-}
-
-function inferOrderCategoryFromText(text: string): OrderRow['category'] {
-  const lower = text.toLowerCase()
-  if (lower.includes('drug_order') || /药品|用药|片|针|注射|胶囊|颗粒/u.test(text)) {
-    return 'drug'
-  }
-  if (
-    lower.includes('nondrug_order') ||
-    /非药品|治疗|检查|检验|护理|康复|理疗|会诊|手术|处置/u.test(text)
-  ) {
-    return 'nondrug'
-  }
-  return 'unknown'
-}
-
-function formatOrderTypeLabel(type: OrderRow['orderType']): string {
-  if (type === 'long') return '长期'
-  if (type === 'temp') return '临时'
-  return '未标记'
-}
-
-function formatOrderCategoryLabel(category: OrderRow['category']): string {
-  if (category === 'drug') return '药品'
-  if (category === 'nondrug') return '非药品'
-  return '未标记'
-}
-
-function normalizeOrderRow(doc: ReviewDocItem, index: number): OrderRow {
-  const fields = buildSourceFieldMap(doc)
-  const title = safeText(doc.document_title || doc.doc_name)
-  const content =
-    pickFieldValue(fields, [
-      'order_name',
-      'order_text',
-      'order_content',
-      'order_item_name',
-      'item_name',
-      'name',
-      'prescription_name',
-    ]) ||
-    title ||
-    safeText(doc.content) ||
-    '未命名医嘱'
-  const typeProbe = [
-    pickFieldValue(fields, ['order_type', 'order_class', 'type', 'class']),
-    doc.doc_type,
-    doc.source_table,
-    title,
-    doc.content,
-  ].join(' ')
-  const categoryProbe = [doc.source_table, doc.doc_type, title, content, doc.content].join(' ')
-  const orderType = inferOrderTypeFromText(typeProbe)
-  const category = inferOrderCategoryFromText(categoryProbe)
-  const startTime = formatOrderDate(
-    pickFieldValue(fields, [
-      'start_time',
-      'start_datetime',
-      'prescribed_datetime',
-      'order_time',
-      'record_time',
-      'create_time',
-    ]) ||
-      doc.record_time ||
-      doc.sort_time,
-  )
-  const stopTime = formatOrderDate(
-    pickFieldValue(fields, ['stop_time', 'stop_datetime', 'end_time', 'end_datetime']),
-  )
-  const doseUsage = [
-    pickFieldValue(fields, ['dosage', 'dose', 'single_dose']),
-    pickFieldValue(fields, ['frequency', 'freq']),
-    pickFieldValue(fields, ['usage', 'route', 'administration_route']),
-  ]
-    .filter(Boolean)
-    .join(' / ')
-  const status = pickFieldValue(fields, ['order_status', 'status', 'execute_status'])
-  const doctor = pickFieldValue(fields, [
-    'doctor',
-    'doctor_name',
-    'prescriber',
-    'prescribed_by',
-    'submitter',
-    'last_modifier',
-  ])
-  const searchText = [
-    content,
-    typeProbe,
-    categoryProbe,
-    startTime,
-    stopTime,
-    doseUsage,
-    status,
-    doctor,
-  ].join(' ')
-  const key = `${doc.doc_key}::order-${index}`
-  return {
-    key,
-    sourceDocKey: doc.doc_key,
-    blockKey: `order-row-${index}`,
-    orderType,
-    orderTypeLabel: formatOrderTypeLabel(orderType),
-    category,
-    categoryLabel: formatOrderCategoryLabel(category),
-    content,
-    time: startTime,
-    startTime,
-    stopTime,
-    status,
-    doctor,
-    doseUsage,
-    searchText,
-  }
 }
 
 function normalizeReviewDocItem(raw: unknown, index: number): ReviewDocItem | null {
@@ -1674,7 +1518,10 @@ const orderOverviewStats = computed(() => {
     long: rows.filter((row) => row.orderType === 'long').length,
     temp: rows.filter((row) => row.orderType === 'temp').length,
     drug: rows.filter((row) => row.category === 'drug').length,
-    nondrug: rows.filter((row) => row.category === 'nondrug').length,
+    exam_lab: rows.filter((row) => row.category === 'exam_lab').length,
+    procedure_care: rows.filter((row) => row.category === 'procedure_care').length,
+    discharge_admin: rows.filter((row) => row.category === 'discharge_admin').length,
+    other: rows.filter((row) => row.category === 'other').length,
   }
 })
 
@@ -1691,16 +1538,17 @@ const orderOverviewTimeRange = computed(() => {
 
 function buildOrderOverviewDoc(filter: OrderFilter): ReviewDocItem {
   const stats = orderOverviewStats.value
-  const count =
-    filter === 'long'
-      ? stats.long
-      : filter === 'temp'
-        ? stats.temp
-        : filter === 'drug'
-          ? stats.drug
-          : filter === 'nondrug'
-            ? stats.nondrug
-            : stats.total
+  const countByFilter: Record<OrderFilter, number> = {
+    all: stats.total,
+    long: stats.long,
+    temp: stats.temp,
+    drug: stats.drug,
+    exam_lab: stats.exam_lab,
+    procedure_care: stats.procedure_care,
+    discharge_admin: stats.discharge_admin,
+    other: stats.other,
+  }
+  const count = countByFilter[filter]
   const label = filter === 'all' ? '医嘱总览' : `${ORDER_FILTER_LABELS[filter]}医嘱`
   const range = orderOverviewTimeRange.value ? ` · ${orderOverviewTimeRange.value}` : ''
   return {
@@ -1726,7 +1574,10 @@ const orderSummaryDocs = computed<ReviewDocItem[]>(() => {
   if (stats.temp > 0) summaries.push('temp')
   if (stats.long > 0) summaries.push('long')
   if (stats.drug > 0) summaries.push('drug')
-  if (stats.nondrug > 0) summaries.push('nondrug')
+  if (stats.exam_lab > 0) summaries.push('exam_lab')
+  if (stats.procedure_care > 0) summaries.push('procedure_care')
+  if (stats.discharge_admin > 0) summaries.push('discharge_admin')
+  if (stats.other > 0) summaries.push('other')
   return summaries.map((filter) => buildOrderOverviewDoc(filter))
 })
 
@@ -1925,7 +1776,10 @@ const filteredOrderRows = computed(() => {
       (filter === 'long' && row.orderType === 'long') ||
       (filter === 'temp' && row.orderType === 'temp') ||
       (filter === 'drug' && row.category === 'drug') ||
-      (filter === 'nondrug' && row.category === 'nondrug')
+      (filter === 'exam_lab' && row.category === 'exam_lab') ||
+      (filter === 'procedure_care' && row.category === 'procedure_care') ||
+      (filter === 'discharge_admin' && row.category === 'discharge_admin') ||
+      (filter === 'other' && row.category === 'other')
     if (!filterMatched) return false
     if (!keyword) return true
     return normalizeSearchText(row.searchText).includes(keyword)
