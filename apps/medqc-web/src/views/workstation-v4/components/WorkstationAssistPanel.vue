@@ -129,7 +129,7 @@
           <div class="assist-panel__content">
             <div
               v-if="currentTab === 'content'"
-              class="assist-panel__slot"
+              class="assist-panel__slot assist-panel__slot--contained"
             >
               <slot name="content">
                 <div class="assist-empty">
@@ -143,7 +143,7 @@
 
             <div
               v-else-if="currentTab === 'form' || currentTab === 'coding' || currentTab === 'cost'"
-              class="assist-panel__slot"
+              class="assist-panel__slot assist-panel__slot--contained"
             >
               <slot
                 name="qc"
@@ -730,6 +730,7 @@ function changeTab(tab: AssistTabKey) {
 .assist-panel__content {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   background:
     radial-gradient(circle at top right, rgba(96, 165, 250, 0.1), transparent 28%),
@@ -739,6 +740,18 @@ function changeTab(tab: AssistTabKey) {
 .assist-panel__slot {
   min-height: 100%;
   padding: 12px 12px 14px;
+}
+
+.assist-panel__slot--contained {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.assist-panel__slot--contained > :deep(*) {
+  min-height: 0;
 }
 
 .assist-empty {

@@ -98,137 +98,139 @@
       </template>
 
       <template v-else-if="currentIssues.length > 0">
-        <section
-          v-for="(group, gIdx) in groupedIssues"
-          :key="gIdx"
-          class="qc-group"
-        >
-          <header class="qc-group__header">
-            <span
-              class="qc-group__dot"
-              :style="{ background: severityColor(group.severity) }"
-            />
-            <span class="qc-group__title">{{ group.title }} ({{ group.items.length }})</span>
-          </header>
-
-          <article
-            v-for="(issue, iIdx) in group.items"
-            :key="iIdx"
-            :class="['qc-issue', { 'qc-issue--dismissed': issue.dismissed }]"
+        <div class="qc-issue-list custom-scrollbar">
+          <section
+            v-for="(group, gIdx) in groupedIssues"
+            :key="gIdx"
+            class="qc-group"
           >
-            <div class="qc-issue__content">
-              <span :class="['qc-issue__badge', `qc-issue__badge--${issue.severity}`]">{{
-                severityLabel(issue.severity)
-              }}</span>
-              <p
-                class="qc-issue__desc"
-                title="定位到相关字段"
-                @click="locateIssue(issue)"
-              >
-                {{ issue.description }}
-              </p>
-            </div>
+            <header class="qc-group__header">
+              <span
+                class="qc-group__dot"
+                :style="{ background: severityColor(group.severity) }"
+              />
+              <span class="qc-group__title">{{ group.title }} ({{ group.items.length }})</span>
+            </header>
 
-            <div
-              v-if="issue.suggestion"
-              class="qc-issue__ai-suggestion"
+            <article
+              v-for="(issue, iIdx) in group.items"
+              :key="iIdx"
+              :class="['qc-issue', { 'qc-issue--dismissed': issue.dismissed }]"
             >
-              <div class="qc-issue__ai-label">
-                <ThunderboltOutlined class="qc-issue__ai-icon" />
-                <span>AI 修正建议</span>
-              </div>
-              <p class="qc-issue__ai-text">
-                {{ issue.suggestion }}
-              </p>
-            </div>
-
-            <div class="qc-issue__action-bar">
-              <div class="qc-issue__action-group">
-                <button
-                  type="button"
-                  class="qc-issue__ghost-btn"
+              <div class="qc-issue__content">
+                <span :class="['qc-issue__badge', `qc-issue__badge--${issue.severity}`]">{{
+                  severityLabel(issue.severity)
+                }}</span>
+                <p
+                  class="qc-issue__desc"
+                  title="定位到相关字段"
                   @click="locateIssue(issue)"
                 >
-                  <svg
-                    class="qc-issue__btn-icon"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                    />
-                  </svg>
-                  定位字段
-                </button>
-                <button
-                  type="button"
-                  class="qc-issue__ghost-btn"
-                  @click="$emit('jump-evidence', issue)"
-                >
-                  <svg
-                    class="qc-issue__btn-icon"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  文书依据
-                </button>
-                <a-dropdown
-                  v-if="issue.id"
-                  :trigger="['click']"
-                >
+                  {{ issue.description }}
+                </p>
+              </div>
+
+              <div
+                v-if="issue.suggestion"
+                class="qc-issue__ai-suggestion"
+              >
+                <div class="qc-issue__ai-label">
+                  <ThunderboltOutlined class="qc-issue__ai-icon" />
+                  <span>AI 修正建议</span>
+                </div>
+                <p class="qc-issue__ai-text">
+                  {{ issue.suggestion }}
+                </p>
+              </div>
+
+              <div class="qc-issue__action-bar">
+                <div class="qc-issue__action-group">
                   <button
                     type="button"
                     class="qc-issue__ghost-btn"
+                    @click="locateIssue(issue)"
                   >
-                    操作 <DownOutlined />
+                    <svg
+                      class="qc-issue__btn-icon"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                      />
+                    </svg>
+                    定位字段
                   </button>
-                  <template #overlay>
-                    <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
-                      <a-menu-item key="urge">
-                        <SendOutlined /> 催办
-                      </a-menu-item>
-                      <a-menu-item key="mark_remediated">
-                        <EditOutlined /> 标记已整改
-                      </a-menu-item>
-                      <a-menu-divider />
-                      <a-menu-item key="approve">
-                        <CheckOutlined style="color: #52c41a" /> 审核通过
-                      </a-menu-item>
-                      <a-menu-item key="reject">
-                        <CloseCircleOutlined style="color: #ff4d4f" /> 审核存疑
-                      </a-menu-item>
-                    </a-menu>
-                  </template>
-                </a-dropdown>
+                  <button
+                    type="button"
+                    class="qc-issue__ghost-btn"
+                    @click="$emit('jump-evidence', issue)"
+                  >
+                    <svg
+                      class="qc-issue__btn-icon"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
+                    </svg>
+                    文书依据
+                  </button>
+                  <a-dropdown
+                    v-if="issue.id"
+                    :trigger="['click']"
+                  >
+                    <button
+                      type="button"
+                      class="qc-issue__ghost-btn"
+                    >
+                      操作 <DownOutlined />
+                    </button>
+                    <template #overlay>
+                      <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
+                        <a-menu-item key="urge">
+                          <SendOutlined /> 催办
+                        </a-menu-item>
+                        <a-menu-item key="mark_remediated">
+                          <EditOutlined /> 标记已整改
+                        </a-menu-item>
+                        <a-menu-divider />
+                        <a-menu-item key="approve">
+                          <CheckOutlined style="color: #52c41a" /> 审核通过
+                        </a-menu-item>
+                        <a-menu-item key="reject">
+                          <CloseCircleOutlined style="color: #ff4d4f" /> 审核存疑
+                        </a-menu-item>
+                      </a-menu>
+                    </template>
+                  </a-dropdown>
+                </div>
+                <button
+                  type="button"
+                  class="qc-issue__ghost-btn qc-issue__ghost-btn--muted"
+                  @click="dismissIssue(issue)"
+                >
+                  忽略
+                </button>
               </div>
-              <button
-                type="button"
-                class="qc-issue__ghost-btn qc-issue__ghost-btn--muted"
-                @click="dismissIssue(issue)"
-              >
-                忽略
-              </button>
-            </div>
-          </article>
-        </section>
+            </article>
+          </section>
+        </div>
       </template>
 
       <div
@@ -981,7 +983,8 @@ watch(
 
 <style scoped>
 .qc-result-tab {
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   border-radius: 14px;
@@ -1046,12 +1049,24 @@ watch(
 
 .qc-result-tab__body {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 0;
   background: transparent;
 }
 
+.qc-issue-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 2px 14px 0;
+  overscroll-behavior: contain;
+}
+
 .qc-overview {
+  flex-shrink: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1420,6 +1435,21 @@ watch(
 }
 
 @media (max-width: 520px) {
+  .qc-result-tab {
+    min-height: 100%;
+    height: auto;
+  }
+
+  .qc-result-tab__body {
+    overflow: visible;
+  }
+
+  .qc-issue-list {
+    flex: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
   .qc-overview {
     flex-direction: column;
   }

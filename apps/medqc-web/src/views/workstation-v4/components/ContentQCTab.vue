@@ -1419,7 +1419,8 @@ watch(
 
 <style scoped>
 .content-qc-tab {
-  min-height: 100%;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: transparent;
@@ -1430,6 +1431,7 @@ watch(
 }
 
 .content-qc-tab__header {
+  flex-shrink: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1500,6 +1502,7 @@ watch(
 /* ========== 进度时间线 ========== */
 .content-qc-tab__progress {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0;
   background: transparent;
@@ -1794,12 +1797,16 @@ watch(
 
 .content-qc-tab__body {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   padding: 0;
   background: transparent;
 }
 
 .summary-card {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
@@ -1898,6 +1905,7 @@ watch(
 }
 
 .result-toolbar {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1918,6 +1926,7 @@ watch(
 }
 
 .group-panel {
+  flex-shrink: 0;
   margin-bottom: 10px;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
@@ -1974,6 +1983,7 @@ watch(
 }
 
 .filter-panel {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(110px, 1fr)) auto;
   gap: 8px;
@@ -1989,9 +1999,14 @@ watch(
 }
 
 .issue-card-list {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 2px 16px 0;
 }
 
 .issue-card {
@@ -2189,6 +2204,7 @@ watch(
 }
 
 .detail-pagination {
+  flex-shrink: 0;
   display: flex;
   justify-content: flex-end;
   margin-top: 10px;
@@ -2337,6 +2353,7 @@ watch(
 }
 
 .content-qc-tab__empty-result {
+  flex: 1;
   min-height: 200px;
   display: flex;
   flex-direction: column;
@@ -2360,6 +2377,7 @@ watch(
 }
 
 .content-qc-tab__footer {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2371,6 +2389,21 @@ watch(
 }
 
 @media (max-width: 520px) {
+  .content-qc-tab {
+    min-height: 100%;
+    height: auto;
+  }
+
+  .content-qc-tab__body {
+    overflow: visible;
+  }
+
+  .issue-card-list {
+    flex: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
   .result-toolbar {
     flex-direction: column;
     align-items: flex-start;
