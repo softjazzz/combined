@@ -4,6 +4,8 @@ import re
 from collections import Counter
 from typing import Any
 
+from app.services.qc_applicability_gates import GateDecision, run_applicability_gate
+
 
 CROSS_DOC_RULES = {
     "SC-036",
@@ -381,6 +383,84 @@ def postprocess_qc_result(
             "postprocess_mode": mode,
         }
     )
+    next_result = _apply_applicability_gate(next_result, mode=mode)
+    return next_result
+
+
+def _apply_applicability_gate(result: dict[str, Any], *, mode: str) -> dict[str, Any]:
+    """Apply deterministic applicability gates after generic postprocess.
+
+    Gates only narrow or route results. They never produce direct confirmed defects.
+    """
+    if "formal" not in _safe_text(mode):
+        return result
+    gate_result = run_applicability_gate(result)
+    if gate_result.gate_decision == GateDecision.NO_ACTION:
+        return result
+
+    next_result = dict(result)
+    metadata = _metadata(next_result)
+    gate_payload = gate_result.to_metadata()
+    metadata.update(
+        {
+            "applicability_gate": gate_payload,
+            "applicability_gate_decision": gate_result.gate_decision.value,
+            "applicability_gate_reason": gate_result.reason,
+            "applicability_gate_metadata": dict(gate_result.metadata),
+            "applicability_gate_evidence_quote": gate_result.evidence_quote,
+            "applicability_gate_terminal": gate_result.gate_decision
+            in {GateDecision.DATA_QUALITY_GAP, GateDecision.REJECTED_BY_SYSTEM},
+        }
+    )
+    next_result.update(
+        {
+            "metadata": metadata,
+            "applicability_gate": gate_result.gate_name,
+            "applicability_gate_decision": gate_result.gate_decision.value,
+            "applicability_gate_reason": gate_result.reason,
+            "applicability_gate_metadata": dict(gate_result.metadata),
+            "applicability_gate_evidence_quote": gate_result.evidence_quote,
+            "applicability_gate_confirmed_allowed": False,
+            "applicability_gate_needs_second_pass": gate_result.needs_second_pass_gate,
+        }
+    )
+
+    if gate_result.gate_decision == GateDecision.DATA_QUALITY_GAP:
+        next_result.update(
+            {
+                "display_status": "data_quality_gap",
+                "display_bucket": "数据缺口",
+                "postprocess_label": "data_gap_not_defect",
+                "postprocess_reason": gate_result.reason,
+                "can_show_as_defect": False,
+                "can_show_to_doctor": False,
+                "internal_only": False,
+            }
+        )
+    elif gate_result.gate_decision == GateDecision.REJECTED_BY_SYSTEM:
+        next_result.update(
+            {
+                "display_status": "rejected_by_system",
+                "display_bucket": "系统驳回",
+                "postprocess_label": "rejected_by_system",
+                "postprocess_reason": gate_result.reason,
+                "can_show_as_defect": False,
+                "can_show_to_doctor": False,
+                "internal_only": True,
+            }
+        )
+    elif gate_result.gate_decision == GateDecision.PASS_TO_SECOND_GATE:
+        next_result.update(
+            {
+                "display_status": "qc_review_candidate",
+                "display_bucket": "二审候选",
+                "postprocess_label": "needs_human_review",
+                "postprocess_reason": gate_result.reason,
+                "can_show_as_defect": False,
+                "can_show_to_doctor": True,
+                "internal_only": False,
+            }
+        )
     return next_result
 
 

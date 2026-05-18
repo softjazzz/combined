@@ -478,6 +478,13 @@ def needs_llm_adjudication(item: dict[str, Any]) -> bool:
     display_status = _safe_text(item.get("display_status"))
     if display_status not in BOUNDARY_DISPLAY_STATUSES:
         return False
+    metadata = _metadata(item)
+    gate_decision = _safe_text(
+        item.get("applicability_gate_decision") or metadata.get("applicability_gate_decision")
+    )
+    gate_terminal = _safe_bool(item.get("applicability_gate_terminal") or metadata.get("applicability_gate_terminal"))
+    if gate_terminal or gate_decision in {"data_quality_gap", "rejected_by_system"}:
+        return False
     if _safe_bool(item.get("technical_error_internal")) or display_status == "technical_error_internal":
         return False
     return True
