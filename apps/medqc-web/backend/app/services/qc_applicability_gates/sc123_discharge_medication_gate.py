@@ -12,6 +12,9 @@ RULE_ID = "SC-123"
 
 EXPLICIT_DISCHARGE_MEDICATION_PATTERN = re.compile(r"出院带药|出院用药|带药")
 DISCHARGE_CONTEXT_PATTERN = re.compile(r"出院医嘱|出院后|院外|继续.*用药|门诊")
+CONTEXTUAL_DISCHARGE_MEDICATION_PATTERN = re.compile(
+    r"(?:出院后|院外|门诊|继续局部用药|继续用药).{0,40}(?:用药|口服|外用|滴眼|滴耳|胶囊|片|散|膏|滴眼液|眼液)"
+)
 ADMIN_ONLY_PATTERN = re.compile(r"合理饮食|注意休养|定期复查|及时就诊|转上级医院|门诊随访|支具固定|换药|避免辛辣|增加蛋白")
 MEDICATION_HINT_PATTERN = re.compile(
     r"[\u4e00-\u9fffA-Za-z0-9]+(?:片|胶囊|颗粒|丸|散|膏|注射液|滴眼液|眼液|滴耳液|栓|喷雾|口服液|混悬液|糖浆|凝胶)"
@@ -79,6 +82,8 @@ def _split_medication_items(context: str) -> list[str]:
     heading = EXPLICIT_DISCHARGE_MEDICATION_PATTERN.search(segment)
     if heading:
         segment = segment[heading.end() :]
+    # 只把出院带药段内的短药品条目纳入矩阵，避免后续出院记录正文污染药品字段判断。
+    segment = re.split(r"\b(?:discharge_record|入院记录|病程记录|出院小结|出院记录)\b[:：]", segment, maxsplit=1)[0]
     parts = re.split(r"[;；。]\s*|\n+|(?<=。)", segment)
     items: list[str] = []
     for part in parts:
@@ -108,6 +113,40 @@ def _missing_fields_for_item(item: str) -> list[str]:
     return missing
 
 
+def _first_match(pattern: re.Pattern[str], text: str) -> str:
+    match = pattern.search(text)
+    return match.group(0).strip() if match else ""
+
+
+def _drug_name_for_item(item: str) -> str:
+    dosage = DOSAGE_PATTERN.search(item)
+    prefix = item[: dosage.start()] if dosage else item[:80]
+    prefix = re.sub(r"^(?:出院带药|出院用药|带药|出院医嘱)[:：\s、,，]*", "", prefix)
+    hint = MEDICATION_HINT_PATTERN.search(prefix)
+    if hint:
+        return hint.group(0).strip()
+    name = re.search(r"[\u4e00-\u9fffA-Za-z]{2,}(?=\s*\d|每日|每天|一日|1天|一天|口服|外用)", prefix)
+    return name.group(0).strip() if name else prefix.strip(" :：,，.。")
+
+
+def _medication_matrix(items: list[str]) -> list[dict[str, Any]]:
+    matrix: list[dict[str, Any]] = []
+    for item in items:
+        matrix.append(
+            {
+                "drug_name": _drug_name_for_item(item),
+                "dosage": _first_match(DOSAGE_PATTERN, item),
+                "frequency": _first_match(FREQUENCY_PATTERN, item),
+                "route_or_usage": _first_match(ROUTE_PATTERN, item),
+                "quantity_or_days": _first_match(DAYS_PATTERN, item),
+                "missing_fields": _missing_fields_for_item(item),
+                "source_table": "discharge_record_or_issue_evidence",
+                "source_quote": item,
+            }
+        )
+    return matrix
+
+
 def _discharge_record_coverage(text: str) -> str:
     compact = re.sub(r"\s+", "", text)
     if not compact:
@@ -129,19 +168,22 @@ def run_sc123_gate(result: dict[str, Any], context: dict[str, Any] | None = None
     coverage_status = _discharge_record_coverage(text)
     explicit_med = bool(EXPLICIT_DISCHARGE_MEDICATION_PATTERN.search(text))
     discharge_context = bool(DISCHARGE_CONTEXT_PATTERN.search(text))
+    contextual_discharge_med = bool(CONTEXTUAL_DISCHARGE_MEDICATION_PATTERN.search(text))
     med_hints = MEDICATION_HINT_PATTERN.findall(text)
     admin_only = bool(ADMIN_ONLY_PATTERN.search(text)) and not med_hints and not explicit_med
 
     items = _split_medication_items(context_quote)
     missing_by_item = [_missing_fields_for_item(item) for item in items]
     missing_union = sorted({field for missing in missing_by_item for field in missing})
-    trigger_strength = "explicit" if explicit_med else ("contextual_weak" if discharge_context and med_hints else "absent")
+    item_matrix = _medication_matrix(items)
+    trigger_strength = "explicit" if explicit_med else ("contextual_weak" if contextual_discharge_med and med_hints else "absent")
 
     metadata = {
         "discharge_record_coverage": coverage_status,
         "discharge_medication_trigger_status": "unknown",
         "trigger_strength": trigger_strength,
         "medication_items_detected": items,
+        "discharge_medication_matrix": item_matrix,
         "missing_medication_fields": missing_union,
         "context_available": bool(text),
     }
@@ -164,7 +206,7 @@ def run_sc123_gate(result: dict[str, Any], context: dict[str, Any] | None = None
         )
 
     if coverage_status in {"missing", "short_fragment", "admission_or_header_fragment", "partial_unknown"} and not explicit_med and not (
-        discharge_context and med_hints
+        contextual_discharge_med and med_hints
     ):
         metadata["discharge_medication_trigger_status"] = "unknown"
         return ApplicabilityGateResult(
@@ -180,7 +222,7 @@ def run_sc123_gate(result: dict[str, Any], context: dict[str, Any] | None = None
             reason="当前证据无法确认是否存在完整出院记录或出院带药段落，不能判断 SC-123 适用性。",
         )
 
-    if explicit_med or (discharge_context and med_hints):
+    if explicit_med or (contextual_discharge_med and med_hints):
         metadata["discharge_medication_trigger_status"] = "present"
         if not items:
             return ApplicabilityGateResult(

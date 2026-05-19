@@ -80,6 +80,53 @@ async def test_adjudicator_should_not_leave_boundary_state_when_llm_unavailable(
 
 
 @pytest.mark.asyncio
+async def test_adjudicator_should_convert_semantic_mapping_error_to_rejected():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-143",
+                                        "adjudicated_display_status": "technical_error_internal",
+                                        "adjudicator_reason": "第一轮LLM将病程记录内容错误匹配至长期医嘱单规则，属于逻辑映射错误。",
+                                        "adjudicator_supporting_quote": "【当前文书】查房内容：今术后第三天。",
+                                        "adjudicator_confidence": 1.0,
+                                        "rule_requirement_match": "technical_error",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-143",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "长期医嘱单描述不清。",
+                "evidence": "【当前文书】查房内容：今术后第三天。",
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["adjudicated_display_status"] == "rejected_by_system"
+    assert rows[0]["rule_requirement_match"] == "not_matched"
+    assert rows[0].get("technical_error_internal") is not True
+
+
+@pytest.mark.asyncio
 async def test_confirmed_guardrail_should_downgrade_first_pass_confirmed_without_reason_quote():
     rows = await adjudicate_postprocessed_qc_results(
         [
@@ -360,6 +407,145 @@ async def test_confirmed_guardrail_should_mark_sc099_pathology_source_gap():
     )
 
     assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_downgrade_header_only_quote():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-105",
+                "status": "non_compliant",
+                "display_status": "confirmed_defect",
+                "findings": "手术记录术后处理措施缺失。",
+                "evidence": "手术简要经过(术中所见):;术后处理措施:。术后注意事项:。",
+                "adjudicator_reason": "仅见空字段。",
+                "adjudicator_supporting_quote": "手术简要经过(术中所见):;术后处理措施:。术后注意事项:。",
+            }
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_downgrade_sc099_without_linked_pathology_quote():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-099",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "手术记录提到送病检，但缺病理结果对照。",
+                                        "adjudicator_supporting_quote": "切除标本向家属展示后送病检，术毕安返病房。",
+                                        "adjudicator_confidence": 0.9,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-099",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "术中取材和病理结果未记录。",
+                "evidence": "切除标本向家属展示后送病检。",
+                "metadata": {
+                    "applicability_gate_metadata": {
+                        "pathology_linkage_context": {
+                            "linkage_status": "surgery_trigger_only",
+                            "surgery_specimen_quote": "切除标本向家属展示后送病检。",
+                            "pathology_specimen_quote": "",
+                            "pathology_diagnosis_quote": "",
+                        }
+                    }
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
+async def test_confirmed_guardrail_should_downgrade_sc123_without_drug_matrix_missing_field():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-123",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "出院带药缺少字段。",
+                                        "adjudicator_supporting_quote": "出院带药：神农镇痛膏 1贴 外用 bid*7天。",
+                                        "adjudicator_confidence": 0.9,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-123",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "出院带药不完整。",
+                "evidence": "出院带药：神农镇痛膏 1贴 外用 bid*7天。",
+                "metadata": {
+                    "applicability_gate_metadata": {
+                        "discharge_medication_matrix": [
+                            {
+                                "drug_name": "神农镇痛膏",
+                                "dosage": "1贴",
+                                "frequency": "bid",
+                                "route_or_usage": "外用",
+                                "quantity_or_days": "7天",
+                                "missing_fields": [],
+                                "source_quote": "神农镇痛膏 1贴 外用 bid*7天",
+                            }
+                        ]
+                    }
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
     assert rows[0]["adjudicator_guardrail_failed"] is True
     assert rows[0]["can_show_as_defect"] is False
 

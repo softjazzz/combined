@@ -21,6 +21,7 @@ STRONG_TRIGGER_PATTERN = re.compile(
     r"取材|标本|送病理|送病检|送检|活检|穿刺活检|快速病理|冰冻病理|术中病理|病理检查|病理结果|病理诊断"
 )
 WEAK_CONTEXT_PATTERN = re.compile(r"切除|肿物|肿块|息肉|病损|包块|占位")
+PATHOLOGY_DIAGNOSIS_PATTERN = re.compile(r"病理诊断|病理结果|镜下所见|肉眼所见|标本名称|病理号")
 
 
 def _safe_text(value: Any) -> str:
@@ -101,6 +102,52 @@ def _text_has_source_trigger(text_value: str) -> bool:
 
 def _has_weak_context_only(text_value: str) -> bool:
     return bool(WEAK_CONTEXT_PATTERN.search(text_value)) and not _text_has_source_trigger(text_value)
+
+
+def _pathology_identifier(text_value: str) -> str:
+    patterns = (
+        r"(?:病理号|病理编号|报告单号|申请单号)[:：]?\s*([A-Za-z0-9\-_.]+)",
+        r"(?:标本名称|标本)[:：]?\s*([^,，;；。\n]{2,40})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text_value)
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def _build_pathology_linkage_context(
+    *,
+    surgery_text: str,
+    postsurg_text: str,
+    pathology_text: str,
+    pathology_count: int,
+    evidence_tables: list[str],
+) -> dict[str, Any]:
+    surgery_source_text = "\n".join(part for part in (surgery_text, postsurg_text) if part)
+    surgery_quote = _quote_around(surgery_source_text, STRONG_TRIGGER_PATTERN, 520)
+    pathology_specimen_quote = _quote_around(pathology_text, STRONG_TRIGGER_PATTERN, 520)
+    pathology_diagnosis_quote = _quote_around(pathology_text, PATHOLOGY_DIAGNOSIS_PATTERN, 520)
+    has_surgery_trigger = _text_has_source_trigger(surgery_source_text)
+    has_pathology = pathology_count > 0 and bool(_compact(pathology_text))
+
+    if has_surgery_trigger and has_pathology:
+        linkage_status = "linked"
+    elif has_surgery_trigger:
+        linkage_status = "surgery_trigger_only"
+    elif has_pathology:
+        linkage_status = "pathology_only"
+    else:
+        linkage_status = "missing"
+
+    return {
+        "surgery_specimen_quote": surgery_quote if has_surgery_trigger else "",
+        "pathology_specimen_quote": pathology_specimen_quote if has_pathology else "",
+        "pathology_diagnosis_quote": pathology_diagnosis_quote if has_pathology else "",
+        "matched_specimen_or_pathology_id": _pathology_identifier(pathology_text),
+        "source_tables": evidence_tables,
+        "linkage_status": linkage_status,
+    }
 
 
 def _normalize_source_counts(raw: Any) -> dict[str, int]:
@@ -279,6 +326,13 @@ def run_sc099_gate(result: dict[str, Any], context: dict[str, Any] | None = None
     trigger_status = "present" if strong_trigger else ("contextual_weak" if weak_context else "absent")
     trigger_strength = "strong" if strong_trigger else ("contextual_weak" if weak_context else "absent")
     support_quote = _quote_around(strong_text or surgery_text or postsurg_text or pathology_text)
+    linkage_context = _build_pathology_linkage_context(
+        surgery_text=surgery_text,
+        postsurg_text=postsurg_text,
+        pathology_text=pathology_text,
+        pathology_count=pathology_count,
+        evidence_tables=evidence_tables,
+    )
 
     base_metadata = {
         "gate_id": GATE_NAME,
@@ -294,6 +348,7 @@ def run_sc099_gate(result: dict[str, Any], context: dict[str, Any] | None = None
         "pathology_record_count": pathology_count,
         "surgery_record_coverage": "present" if surgery_count else "missing",
         "pathology_source_coverage": "present" if pathology_count else "missing",
+        "pathology_linkage_context": linkage_context,
         "context_keys": collected.get("context_keys") or [],
     }
 
@@ -331,7 +386,7 @@ def run_sc099_gate(result: dict[str, Any], context: dict[str, Any] | None = None
             data_gap_reason="surgery_record_missing",
         )
 
-    if strong_trigger:
+    if linkage_context["linkage_status"] in {"linked", "surgery_trigger_only"}:
         reason = "已发现病理来源或手术/术后记录中的取材、标本、送病理触发；需二轮 LLM 判断手术记录是否真实缺少取材情况或病理结果记录。"
         return build(
             applicability=GateApplicability.APPLICABLE,
@@ -339,6 +394,15 @@ def run_sc099_gate(result: dict[str, Any], context: dict[str, Any] | None = None
             decision=GateDecision.PASS_TO_SECOND_GATE,
             reason=reason,
             needs_second_pass=True,
+        )
+
+    if linkage_context["linkage_status"] == "pathology_only":
+        return build(
+            applicability=GateApplicability.UNKNOWN,
+            coverage=GateCoverage.PARTIAL,
+            decision=GateDecision.DATA_QUALITY_GAP,
+            reason="已见病理来源，但缺少手术记录中的取材/标本/送病理触发片段，不能直接判断 SC-099 缺陷成立。",
+            data_gap_reason="pathology_only_without_surgery_trigger",
         )
 
     if surgery_compact_len and surgery_compact_len < 120 and not pathology_count:

@@ -27,9 +27,21 @@ LABEL_BY_STATUS = {
     "rejected_by_system": "rejected_by_system",
     "technical_error_internal": "technical_error",
 }
-CONFIRMED_QUOTE_MIN_LEN = 12
+CONFIRMED_QUOTE_MIN_LEN = 18
 TARGETED_COVERAGE_GUARDRAIL_RULES = {"SC-019", "SC-083", "SC-099", "SC-100", "SC-101"}
 NEGATIVE_ONLY_TERMS = ("未见", "缺失", "未提供", "未记录", "没有")
+HEADER_ONLY_TERMS = (
+    "记录时间",
+    "文书名称",
+    "标题",
+    "手术医生签名",
+    "术前诊断",
+    "术中诊断",
+    "切口愈合等级",
+    "手术简要经过",
+    "术后处理措施",
+    "术后注意事项",
+)
 DATA_GAP_TERMS = (
     "缺文书",
     "缺源",
@@ -43,6 +55,16 @@ DATA_GAP_TERMS = (
     "数据缺口",
     "覆盖不足",
     "缺少必要",
+)
+SEMANTIC_REJECTION_TECHNICAL_TERMS = (
+    "错配",
+    "错误匹配",
+    "逻辑映射错误",
+    "规则无关",
+    "规则不适用",
+    "文书无关",
+    "与长期医嘱单格式无关",
+    "证据片段为病程记录",
 )
 
 
@@ -76,6 +98,40 @@ def _quote_is_record_time_only(text: str) -> bool:
     return clean in {"记录时间", "时间记录"} or clean.startswith("记录时间")
 
 
+def _quote_is_header_or_empty_fragment(text: str) -> bool:
+    raw = _safe_text(text)
+    raw = re.sub(r"(?i)\bsource_snippet\b[:：]\s*", "", raw)
+    compact = re.sub(r"\s+", "", raw)
+    if not compact:
+        return True
+    if _quote_is_record_time_only(raw):
+        return True
+    if len(compact) < CONFIRMED_QUOTE_MIN_LEN:
+        return True
+    if ("..." in raw or "…" in raw) and len(compact) < 80:
+        return True
+    if re.search(r"患者.{0,8}性别.{0,8}年龄.{0,12}以[“\"]?", compact) and len(compact) < 70:
+        return True
+    label_hits = sum(1 for term in HEADER_ONLY_TERMS if term in compact)
+    content_after_labels = re.sub(
+        r"(记录时间|文书名称|标题|手术医生签名|术前诊断|术中诊断|切口愈合等级|手术简要经过(?:\(术中所见\))?|术后处理措施|术后注意事项)[:：]?",
+        "",
+        compact,
+    )
+    content_after_labels = re.sub(r"[。；;:：,，\-.、\d年月日时分秒/\s]", "", content_after_labels)
+    if label_hits and len(content_after_labels) < 12:
+        return True
+    return False
+
+
+def _semantic_technical_error_should_be_rejected(reason: str, quote: str) -> bool:
+    """二审偶尔把一审语义误判标成 technical_error；这类不应污染稳定性统计。"""
+    combined = f"{_safe_text(reason)} {_safe_text(quote)}"
+    if not combined.strip():
+        return False
+    return _contains_any(combined, SEMANTIC_REJECTION_TECHNICAL_TERMS)
+
+
 def _metadata(item: dict[str, Any]) -> dict[str, Any]:
     value = item.get("metadata")
     return dict(value) if isinstance(value, dict) else {}
@@ -91,6 +147,15 @@ def _coverage_flags(item: dict[str, Any]) -> dict[str, Any]:
         return dict(context.get("coverage_flags") or {})
     value = item.get("formal_evidence_coverage")
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _gate_metadata(item: dict[str, Any]) -> dict[str, Any]:
+    direct = item.get("applicability_gate_metadata")
+    if isinstance(direct, dict):
+        return dict(direct)
+    metadata = _metadata(item)
+    nested = metadata.get("applicability_gate_metadata")
+    return dict(nested) if isinstance(nested, dict) else {}
 
 
 def _truncate(value: Any, limit: int = 900) -> str:
@@ -265,6 +330,10 @@ def _apply_adjudication(
     quote = _safe_text(adjudication.get("adjudicator_supporting_quote"))
     confidence = _safe_float(adjudication.get("adjudicator_confidence"), 0.0)
     match = _safe_text(adjudication.get("rule_requirement_match"))
+    if status == "technical_error_internal" and _semantic_technical_error_should_be_rejected(reason, quote):
+        status = "rejected_by_system"
+        match = "not_matched"
+        reason = reason or "二审判定为一审语义或文书域错配，按系统驳回处理。"
 
     next_item.update(
         {
@@ -403,6 +472,89 @@ def _guardrail_targeted_rule(
     return None
 
 
+def _guardrail_sc099_gate_context(item: dict[str, Any]) -> tuple[str, str] | None:
+    gate_meta = _gate_metadata(item)
+    linkage = gate_meta.get("pathology_linkage_context")
+    if not isinstance(linkage, dict):
+        return None
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    surgery_quote = _safe_text(linkage.get("surgery_specimen_quote"))
+    pathology_quote = _safe_text(linkage.get("pathology_specimen_quote") or linkage.get("pathology_diagnosis_quote"))
+    linkage_status = _safe_text(linkage.get("linkage_status"))
+    if _quote_is_header_or_empty_fragment(quote) or len(re.sub(r"\s+", "", quote)) < 40:
+        return (
+            "data_quality_gap",
+            "SC-099 confirmed 不能只凭短句或截断 quote，需要二审 quote 本身包含可审计的手术取材/送病理与病理结果对照。",
+        )
+    if linkage_status != "linked":
+        return (
+            "data_quality_gap",
+            "SC-099 confirmed 需要手术记录取材/送病理 quote 与病理来源 quote 对照；当前 linkage_status 不是 linked。",
+        )
+    if _quote_is_header_or_empty_fragment(surgery_quote) or _quote_is_header_or_empty_fragment(pathology_quote):
+        return (
+            "data_quality_gap",
+            "SC-099 confirmed 需要可追溯的手术取材/送病理 quote 与病理诊断/标本 quote；当前对照引用不足。",
+        )
+    return None
+
+
+def _guardrail_sc123_gate_matrix(item: dict[str, Any]) -> tuple[str, str] | None:
+    gate_meta = _gate_metadata(item)
+    matrix = gate_meta.get("discharge_medication_matrix")
+    if not isinstance(matrix, list):
+        return None
+    trigger_strength = _safe_text(gate_meta.get("trigger_strength"))
+    if trigger_strength and trigger_strength != "explicit":
+        return (
+            "rejected_by_system",
+            "SC-123 confirmed 需要明确出院带药/出院用药段落；当前仅为弱出院语境或普通治疗用药，不能确认出院带药缺陷。",
+        )
+    valid_items = [row for row in matrix if isinstance(row, dict)]
+    if not valid_items:
+        return (
+            "data_quality_gap",
+            "SC-123 confirmed 需要逐药品字段矩阵支撑；当前未见可核查出院带药药品明细。",
+        )
+    missing_rows = [
+        row
+        for row in valid_items
+        if isinstance(row.get("missing_fields"), list) and row.get("missing_fields")
+    ]
+    if not missing_rows:
+        return (
+            "rejected_by_system",
+            "SC-123 出院带药字段矩阵显示药品名称、剂量、频次、用法和天数/数量初步完整，不支持 confirmed。",
+        )
+    if any("..." in _safe_text(row.get("source_quote")) or "…" in _safe_text(row.get("source_quote")) for row in missing_rows):
+        return (
+            "data_quality_gap",
+            "SC-123 出院带药字段矩阵来自截断 quote，不能直接确认药品字段缺失。",
+        )
+    if not any(not _quote_is_header_or_empty_fragment(_safe_text(row.get("source_quote"))) for row in missing_rows):
+        return (
+            "data_quality_gap",
+            "SC-123 confirmed 需要可追溯的出院带药药品 quote；当前字段缺失只来自短片段或不可审计证据。",
+        )
+    missing_union = {
+        _safe_text(field)
+        for row in missing_rows
+        for field in (row.get("missing_fields") or [])
+        if _safe_text(field)
+    }
+    if missing_union and missing_union.issubset({"用法/途径", "天数/数量/疗程", "频次"}):
+        return (
+            "rejected_by_system",
+            "SC-123 当前字段矩阵仅提示常见隐含用法/疗程或频次边界，缺少可直接展示为缺陷的强证据。",
+        )
+    if any(len(row.get("missing_fields") or []) >= 3 for row in missing_rows):
+        return (
+            "data_quality_gap",
+            "SC-123 单个药品缺失字段过多，多数来自证据截断或上下文不足，应先补全出院带药全文。",
+        )
+    return None
+
+
 def _confirmed_guardrail(item: dict[str, Any]) -> dict[str, Any]:
     if _safe_text(item.get("display_status")) != "confirmed_defect":
         return dict(item)
@@ -421,15 +573,21 @@ def _confirmed_guardrail(item: dict[str, Any]) -> dict[str, Any]:
     if not reason:
         failure_status = "data_quality_gap" if rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES else "rejected_by_system"
         failure_reason = "confirmed_defect 缺少二审 adjudicator_reason，不能作为正式确认缺陷。"
-    elif len(quote) < CONFIRMED_QUOTE_MIN_LEN:
-        failure_status = "data_quality_gap" if rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES else "rejected_by_system"
-        failure_reason = "confirmed_defect 缺少足够长度的 adjudicator_supporting_quote，不能证明规则核心要件。"
-    elif rule_id in {"SC-099", "SC-100", "SC-101"} and _quote_is_record_time_only(quote):
-        failure_status = "data_quality_gap"
-        failure_reason = f"{rule_id} confirmed_defect 不能仅凭记录时间作为支撑原文，需要可追溯的取材/病理或植入物详情证据。"
-    elif rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES and _contains_any(quote, NEGATIVE_ONLY_TERMS):
-        failure_status = "data_quality_gap"
-        failure_reason = "confirmed_defect 仅凭缺失类表述成立，但目标规则缺陷需要结构化证据域覆盖。"
+    elif rule_id == "SC-099":
+        gate_failure = _guardrail_sc099_gate_context(next_item)
+        if gate_failure:
+            failure_status, failure_reason = gate_failure
+        else:
+            targeted_failure = _guardrail_targeted_rule(
+                rule_id=rule_id,
+                coverage=_coverage_flags(next_item),
+            )
+            if targeted_failure:
+                failure_status, failure_reason = targeted_failure
+    elif rule_id == "SC-123":
+        gate_failure = _guardrail_sc123_gate_matrix(next_item)
+        if gate_failure:
+            failure_status, failure_reason = gate_failure
     elif rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES:
         targeted_failure = _guardrail_targeted_rule(
             rule_id=rule_id,
@@ -437,12 +595,40 @@ def _confirmed_guardrail(item: dict[str, Any]) -> dict[str, Any]:
         )
         if targeted_failure:
             failure_status, failure_reason = targeted_failure
+    elif "具体药物不详" in quote:
+        failure_status = "data_quality_gap"
+        failure_reason = "confirmed_defect 仅依据院外用药“具体药物不详”等短片段，缺少完整院外治疗经过和效果对照，不能直接确认缺陷。"
+    elif rule_id == "SC-015" and "不详预防接种史" in quote:
+        failure_status = "rejected_by_system"
+        failure_reason = "SC-015 中“不详预防接种史”属于个人史边界记录，缺少客户明确口径时不应直接 confirmed。"
+    elif rule_id == "SC-004" and len(re.sub(r"\s+", "", quote)) < 60:
+        failure_status = "data_quality_gap"
+        failure_reason = "SC-004 再次入院小结缺陷需要较完整的前次诊疗经过对照；当前 quote 过短，不能直接 confirmed。"
+    elif rule_id == "SC-081" and re.search(r"患者.{0,8}性别.{0,8}年龄", quote):
+        failure_status = "data_quality_gap"
+        failure_reason = "SC-081 confirmed 不能仅凭患者基本信息片段判断术前小结缺项，需要完整术前小结正文覆盖。"
+    elif _quote_is_header_or_empty_fragment(quote):
+        failure_status = "data_quality_gap"
+        failure_reason = "confirmed_defect 的支撑 quote 为空、过短，或仅包含记录时间/标题/文书头/空字段，不能作为正式确认缺陷。"
+    elif len(quote) < CONFIRMED_QUOTE_MIN_LEN:
+        failure_status = "data_quality_gap"
+        failure_reason = "confirmed_defect 缺少足够长度的 adjudicator_supporting_quote，不能证明规则核心要件。"
+    elif rule_id in {"SC-099", "SC-100", "SC-101"} and _quote_is_record_time_only(quote):
+        failure_status = "data_quality_gap"
+        failure_reason = f"{rule_id} confirmed_defect 不能仅凭记录时间作为支撑原文，需要可追溯的取材/病理或植入物详情证据。"
+    elif rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES and _contains_any(quote, NEGATIVE_ONLY_TERMS):
+        failure_status = "data_quality_gap"
+        failure_reason = "confirmed_defect 仅凭缺失类表述成立，但目标规则缺陷需要结构化证据域覆盖。"
 
     if not failure_status:
         next_item.setdefault("adjudicator_guardrail_failed", False)
         return next_item
 
-    if failure_status == "rejected_by_system" and _contains_any(combined, DATA_GAP_TERMS):
+    if (
+        failure_status == "rejected_by_system"
+        and rule_id != "SC-123"
+        and _contains_any(combined, DATA_GAP_TERMS)
+    ):
         failure_status = "data_quality_gap"
 
     next_item["original_adjudicated_display_status"] = _safe_text(

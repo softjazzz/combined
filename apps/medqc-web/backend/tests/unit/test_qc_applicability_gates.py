@@ -96,6 +96,8 @@ def test_sc123_explicit_discharge_medication_missing_route_should_pass_to_second
     assert gate.needs_second_pass_gate is True
     assert gate.confirmed_allowed is False
     assert "用法/途径" in gate.metadata["missing_medication_fields"]
+    assert gate.metadata["discharge_medication_matrix"]
+    assert gate.metadata["discharge_medication_matrix"][0]["source_quote"]
 
 
 def test_sc123_complete_discharge_medication_should_reject() -> None:
@@ -106,6 +108,7 @@ def test_sc123_complete_discharge_medication_should_reject() -> None:
     assert gate.applicability.value == "applicable"
     assert gate.metadata["applicability_status"] == "applicable_no_defect"
     assert gate.metadata["defect_absent"] is True
+    assert gate.metadata["discharge_medication_matrix"][0]["missing_fields"] == []
 
 
 def test_sc123_contextual_weak_medication_should_not_confirm_directly() -> None:
@@ -172,10 +175,29 @@ def test_sc099_pathology_source_should_pass_to_second_gate() -> None:
         ),
     )
 
+    assert gate.gate_decision == GateDecision.DATA_QUALITY_GAP
+    assert gate.needs_second_pass_gate is False
+    assert gate.confirmed_allowed is False
+    assert gate.metadata["trigger_strength"] == "strong"
+    assert gate.metadata["pathology_linkage_context"]["linkage_status"] == "pathology_only"
+
+
+def test_sc099_linked_surgery_and_pathology_should_pass_to_second_gate() -> None:
+    gate = run_applicability_gate(
+        _sc099_result(),
+        _sc099_context(
+            "手术经过: 切除标本向家属展示后送病检，术中生命体征平稳。",
+            pathology_text="标本名称: 阑尾。病理诊断: 急性阑尾炎。",
+        ),
+    )
+
     assert gate.gate_decision == GateDecision.PASS_TO_SECOND_GATE
     assert gate.needs_second_pass_gate is True
     assert gate.confirmed_allowed is False
-    assert gate.metadata["trigger_strength"] == "strong"
+    linkage = gate.metadata["pathology_linkage_context"]
+    assert linkage["linkage_status"] == "linked"
+    assert linkage["surgery_specimen_quote"]
+    assert linkage["pathology_diagnosis_quote"]
 
 
 def test_sc099_specimen_trigger_should_pass_to_second_gate() -> None:
@@ -187,6 +209,7 @@ def test_sc099_specimen_trigger_should_pass_to_second_gate() -> None:
     assert gate.gate_decision == GateDecision.PASS_TO_SECOND_GATE
     assert gate.needs_second_pass_gate is True
     assert gate.confirmed_allowed is False
+    assert gate.metadata["pathology_linkage_context"]["linkage_status"] == "surgery_trigger_only"
 
 
 def test_sc099_weak_surgery_name_only_should_not_be_strong_trigger() -> None:
