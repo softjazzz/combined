@@ -383,18 +383,23 @@ def postprocess_qc_result(
             "postprocess_mode": mode,
         }
     )
-    next_result = _apply_applicability_gate(next_result, mode=mode)
+    next_result = _apply_applicability_gate(next_result, mode=mode, context=bundle_metadata)
     return next_result
 
 
-def _apply_applicability_gate(result: dict[str, Any], *, mode: str) -> dict[str, Any]:
+def _apply_applicability_gate(
+    result: dict[str, Any],
+    *,
+    mode: str,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Apply deterministic applicability gates after generic postprocess.
 
     Gates only narrow or route results. They never produce direct confirmed defects.
     """
     if "formal" not in _safe_text(mode):
         return result
-    gate_result = run_applicability_gate(result)
+    gate_result = run_applicability_gate(result, context)
     if gate_result.gate_decision == GateDecision.NO_ACTION:
         return result
 

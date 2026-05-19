@@ -3,12 +3,14 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from .models import ApplicabilityGateResult, no_action
+from .sc099_pathology_specimen_gate import run_sc099_gate
 from .sc123_discharge_medication_gate import run_sc123_gate
 
 
 GateRunner = Callable[[dict[str, Any], dict[str, Any] | None], ApplicabilityGateResult]
 
 _GATES: dict[str, GateRunner] = {
+    "SC-099": run_sc099_gate,
     "SC-123": run_sc123_gate,
 }
 

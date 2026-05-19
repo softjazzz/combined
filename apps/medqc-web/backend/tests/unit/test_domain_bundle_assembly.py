@@ -173,6 +173,48 @@ def test_surgery_domain_bundle_should_cover_postane_and_docpat_records(monkeypat
     assert context["assembly_coverage"]["postane_surveil_record"]["assembled_count"] == 1
 
 
+def test_surgery_domain_bundle_should_cover_pathology_sources(monkeypatch):
+    def _fake_select_records(**kwargs):
+        if kwargs["table"] == "pathology_exam_master":
+            return [
+                {
+                    "pathology_exam_id": "PEM1",
+                    "specimen_name": "结肠肿物标本",
+                    "surgery_name": "结肠肿物切除术",
+                    "request_datetime": "2026-02-03 10:00:00",
+                }
+            ]
+        if kwargs["table"] == "pathology_exam_report":
+            return [
+                {
+                    "pathology_exam_id": "PER1",
+                    "specimen_name": "结肠肿物标本",
+                    "diagnosis": "腺瘤性息肉。",
+                    "report_datetime": "2026-02-05 09:00:00",
+                }
+            ]
+        return []
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_select_records", _fake_select_records)
+    monkeypatch.setattr(assembly_module, "_build_document_inventory", lambda docs, schema: [])
+    monkeypatch.setattr(assembly_module, "_build_timeline_facts_from_docs", lambda docs: [])
+
+    bundle = assembly_module.assemble_domain_bundle(
+        execution_domain="surgery",
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        source_schema="cdm",
+    )
+
+    context = bundle["structured_context"]
+    assert context["source_table_coverage"]["pathology_exam_master"]["row_count"] == 1
+    assert context["source_table_coverage"]["pathology_exam_report"]["row_count"] == 1
+    assert context["assembly_coverage"]["pathology_exam_master"]["assembled_count"] == 1
+    assert context["assembly_coverage"]["pathology_exam_report"]["assembled_count"] == 1
+
+
 def test_assemble_final_record_bundle_should_fallback_to_mr_admission_datetime(monkeypatch):
     select_calls: list[dict[str, object]] = []
 
@@ -210,6 +252,41 @@ def test_assemble_final_record_bundle_should_fallback_to_mr_admission_datetime(m
 
     mr_call = next(item for item in select_calls if item["table"] == "mr")
     assert mr_call["limit"] == 1
+
+
+def test_assemble_final_record_bundle_should_cover_pathology_sources(monkeypatch):
+    def _fake_select_records(**kwargs):
+        table = kwargs["table"]
+        if table == "pathology_exam_master":
+            return [{"pathology_exam_id": "PEM1", "specimen_name": "阑尾标本"}]
+        if table == "pathology_exam_report":
+            return [{"pathology_exam_id": "PER1", "specimen_name": "阑尾标本", "diagnosis": "急性阑尾炎。"}]
+        return []
+
+    monkeypatch.setattr(assembly_module, "engine", object())
+    monkeypatch.setattr(assembly_module, "_select_records", _fake_select_records)
+    monkeypatch.setattr(assembly_module, "_build_scene_attention_artifacts", lambda **kwargs: ({}, []))
+    monkeypatch.setattr(assembly_module, "_build_document_inventory", lambda docs, schema: [])
+    monkeypatch.setattr(assembly_module, "_build_timeline_facts_from_docs", lambda docs: [])
+    monkeypatch.setattr(assembly_module, "_get_table_columns", lambda schema, table: ())
+    monkeypatch.setattr(
+        assembly_module,
+        "_fetch_patient_profile",
+        lambda **kwargs: {"patient_name": "", "mobile": "", "id_card": ""},
+    )
+
+    bundle = assembly_module.assemble_final_record_bundle(
+        institute_id="H1",
+        patient_id="P1",
+        visit_id="V1",
+        source_schema="cdm",
+    )
+
+    context = bundle["structured_context"]
+    assert context["source_table_coverage"]["pathology_exam_master"]["row_count"] == 1
+    assert context["source_table_coverage"]["pathology_exam_report"]["row_count"] == 1
+    assert context["assembly_coverage"]["pathology_exam_master"]["assembled_count"] == 1
+    assert context["assembly_coverage"]["pathology_exam_report"]["assembled_count"] == 1
 
 
 def test_assemble_final_record_bundle_should_fallback_to_admission_record_time(monkeypatch):
