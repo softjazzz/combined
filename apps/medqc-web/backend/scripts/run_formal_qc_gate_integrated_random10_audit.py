@@ -303,6 +303,67 @@ def _select_balanced(
     return selected[:limit]
 
 
+def _profiles_for_visit_ids(
+    *,
+    visit_ids: list[str],
+    visit_keys: dict[str, dict[str, str]],
+    previous_ids: set[str],
+    sheet2_status: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    selected: list[dict[str, Any]] = []
+    missing: list[str] = []
+    for visit_id in visit_ids:
+        normalized_visit_id = _safe_text(visit_id)
+        if not normalized_visit_id:
+            continue
+        mr = visit_keys.get(normalized_visit_id) or {}
+        patient_id = _safe_text(mr.get("patient_id"))
+        institute_id = _safe_text(mr.get("institute_id"))
+        if not (patient_id and institute_id):
+            missing.append(normalized_visit_id)
+            continue
+        try:
+            bundle = assemble_final_record_bundle(
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=normalized_visit_id,
+                source_schema="cdm",
+            )
+        except Exception:
+            missing.append(normalized_visit_id)
+            continue
+        profile = _bundle_profile(bundle)
+        if _bundle_status(profile) != "final_bundle_available":
+            missing.append(normalized_visit_id)
+            continue
+        sheet2 = sheet2_status.get(normalized_visit_id) or {}
+        selected.append(
+            {
+                "visit_id": normalized_visit_id,
+                "patient_id": patient_id,
+                "patient_name": _safe_text(mr.get("name")),
+                "department": _safe_text(mr.get("discharge_dept_name") or mr.get("admission_dept_name")),
+                "is_surgery": bool(profile.get("is_surgery")),
+                "has_consultation": bool(profile.get("has_consultation")),
+                "has_pathology": _has_pathology(bundle),
+                "has_many_exam_lab_abnormal": _safe_int(profile.get("abnormal_keyword_hit_count")) >= 5,
+                "bundle_status": "final_bundle_available",
+                "source_document_with_text_count": profile.get("source_document_with_text_count", 0),
+                "document_hit_count": profile.get("document_hit_count", 0),
+                "document_missing_count": profile.get("document_missing_count", 0),
+                "abnormal_keyword_hit_count": profile.get("abnormal_keyword_hit_count", 0),
+                "sheet2_row_ids": sheet2.get("sheet2_row_ids", ""),
+                "sheet2_status_counts": _json_dumps(sheet2.get("sheet2_status_counts") or {}),
+                "sheet2_rule_ids": sheet2.get("sheet2_rule_ids", ""),
+                "sheet2_bucket": sheet2.get("sheet2_bucket", "not_in_sheet2"),
+                "is_previous_sample": normalized_visit_id in previous_ids,
+            }
+        )
+    if missing:
+        raise RuntimeError(f"以下 visit_id 未找到或 final bundle 不可用: {', '.join(missing)}")
+    return selected, [row["visit_id"] for row in selected if row.get("is_previous_sample")]
+
+
 def _diag_text(diagnostic: Any) -> str:
     if isinstance(diagnostic, dict):
         return json.dumps(diagnostic, ensure_ascii=False)
@@ -415,6 +476,7 @@ def _augment_issue_row(row: dict[str, Any], summary: dict[str, Any], profile: di
             "source_quote": _truncate(source_quote, 700),
             "supporting_quote": _truncate(row.get("adjudicator_supporting_quote") or gate["gate_evidence_quote"], 700),
             "provider_error": summary.get("provider_error_count", 0),
+            "provider_connection_error": summary.get("provider_connection_error_count", 0),
             "upstream_http_error": summary.get("upstream_http_error_count", 0),
             "parse_error": summary.get("parse_error_count", 0),
             "timeout": summary.get("timeout_count", 0),
@@ -662,6 +724,9 @@ def _totals(summaries: list[dict[str, Any]], issue_rows: list[dict[str, Any]]) -
             else 0
         ),
         "provider_error_count": sum(_safe_int(row.get("provider_error_count")) for row in summaries),
+        "provider_connection_error_count": sum(
+            _safe_int(row.get("provider_connection_error_count")) for row in summaries
+        ),
         "upstream_http_error_count": sum(_safe_int(row.get("upstream_http_error_count")) for row in summaries),
         "parse_error_count": sum(_safe_int(row.get("parse_error_count")) for row in summaries),
         "timeout_count": sum(_safe_int(row.get("timeout_count")) for row in summaries),
@@ -674,6 +739,7 @@ def _totals(summaries: list[dict[str, Any]], issue_rows: list[dict[str, Any]]) -
         _safe_int(total.get(key)) == 0
         for key in [
             "provider_error_count",
+            "provider_connection_error_count",
             "upstream_http_error_count",
             "parse_error_count",
             "timeout_count",
@@ -703,7 +769,7 @@ def _write_report(
     stability_pass = bool(total.get("stability_pass"))
 
     lines = [
-        "# 正式质控 gate 接入后随机 10 病历验收报告",
+        "# 正式质控 gate 接入后随机 10 病历重跑验收报告",
         "",
         f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         "",
@@ -712,8 +778,9 @@ def _write_report(
         "- 链路：正式原链路 `final fast_screen_full / sc_content_full_v1`，一审后走正式后处理与二轮裁决。",
         "- 本轮已启用生产 gate：SC-099、SC-123；SC-100/101、SC-083 未注册。",
         "- 运行方式：只读审计脚本，不写正式 QC 结果表，不接页面，不使用 structured evidence POC。",
+        "- 失败版随机 10 的问题是 provider 运行环境失败（tokens=0），不作为质量结论；本轮在 minimal probe 与 2122521 c1/c3 门禁通过后复用同一批 visit_id 重跑。",
         f"- 完成病历：{len(summaries)} 份；失败：{len(failures)} 份。",
-        f"- 与历史固定/随机样本重复：{', '.join(duplicate_visit_ids) if duplicate_visit_ids else '无'}。",
+        f"- 与历史固定/前三批随机样本重复：{', '.join(duplicate_visit_ids) if duplicate_visit_ids else '无'}；与上一轮失败版随机 10 完全一致，便于对比。",
         "",
         "## 抽样清单",
         "",
@@ -746,7 +813,7 @@ def _write_report(
             "",
             f"- 总墙钟耗时：{_safe_float(total.get('total_wall_clock_time')):.2f}s；平均：{_safe_float(total.get('average_wall_clock_time')):.2f}s；最慢：{_safe_float(total.get('max_wall_clock_time')):.2f}s。",
             f"- LLM 调用数：{total.get('llm_call_count', 0)}；总 token：{total.get('total_tokens', 0)}；平均 token：{_safe_float(total.get('average_tokens')):.0f}。",
-            f"- provider_error={total.get('provider_error_count', 0)}，upstream_http_error={total.get('upstream_http_error_count', 0)}，parse_error={total.get('parse_error_count', 0)}，timeout={total.get('timeout_count', 0)}，rate_limit={total.get('rate_limit_count', 0)}，technical_error_internal={total.get('technical_error_internal_count', 0)}。",
+            f"- provider_error={total.get('provider_error_count', 0)}，provider_connection_error={total.get('provider_connection_error_count', 0)}，upstream_http_error={total.get('upstream_http_error_count', 0)}，parse_error={total.get('parse_error_count', 0)}，timeout={total.get('timeout_count', 0)}，rate_limit={total.get('rate_limit_count', 0)}，technical_error_internal={total.get('technical_error_internal_count', 0)}。",
             f"- 稳定性门禁：{'通过' if stability_pass else '未通过'}。",
             "",
             "## 四层终态统计",
@@ -1012,16 +1079,29 @@ async def _run(args: argparse.Namespace) -> None:
     rules_by_id = _load_rules_by_id()
     previous_ids = _load_previous_visit_ids()
     sheet2_status = _load_sheet2_status()
-    selected_profiles, duplicate_visit_ids = _sample_candidates(
-        visit_keys=visit_keys,
-        previous_ids=previous_ids,
-        sheet2_status=sheet2_status,
-        limit=args.limit,
-        seed=args.random_seed,
-        scan_limit=args.scan_limit,
-    )
-    if len(selected_profiles) < args.limit:
-        raise RuntimeError(f"只找到 {len(selected_profiles)} 份可运行 final bundle 病历，不足 {args.limit} 份")
+    requested_visit_ids = [
+        _safe_text(item)
+        for item in re.split(r"[,;\s]+", _safe_text(args.visit_ids))
+        if _safe_text(item)
+    ]
+    if requested_visit_ids:
+        selected_profiles, duplicate_visit_ids = _profiles_for_visit_ids(
+            visit_ids=requested_visit_ids,
+            visit_keys=visit_keys,
+            previous_ids=previous_ids,
+            sheet2_status=sheet2_status,
+        )
+    else:
+        selected_profiles, duplicate_visit_ids = _sample_candidates(
+            visit_keys=visit_keys,
+            previous_ids=previous_ids,
+            sheet2_status=sheet2_status,
+            limit=args.limit,
+            seed=args.random_seed,
+            scan_limit=args.scan_limit,
+        )
+        if len(selected_profiles) < args.limit:
+            raise RuntimeError(f"只找到 {len(selected_profiles)} 份可运行 final bundle 病历，不足 {args.limit} 份")
 
     summaries: list[dict[str, Any]] = []
     issue_rows: list[dict[str, Any]] = []
@@ -1059,9 +1139,28 @@ async def _run(args: argparse.Namespace) -> None:
                     display=summary.get("adjudicated_display_status_counts"),
                 )
             )
+            if (
+                _safe_int(summary.get("provider_error_count"))
+                or _safe_int(summary.get("upstream_http_error_count"))
+                or _safe_int(summary.get("provider_connection_error_count"))
+                or _safe_int(summary.get("parse_error_count"))
+                or _safe_int(summary.get("timeout_count"))
+                or _safe_int(summary.get("rate_limit_count"))
+                or _safe_int(summary.get("technical_error_internal_count"))
+            ):
+                failures.append(
+                    {
+                        "visit_id": visit_id,
+                        "error": "stability_gate_failed",
+                        "summary": summary,
+                    }
+                )
+                print(f"stability gate failed at {visit_id}; stop further visits")
+                break
         except Exception as exc:
             failures.append({"visit_id": visit_id, "error": str(exc)})
             print(f"failed {visit_id}: {exc}")
+            break
 
     quality_rows, quality_summary = _build_quality_review(issue_rows)
     gate_summary = _gate_metrics(issue_rows)
@@ -1090,6 +1189,7 @@ async def _run(args: argparse.Namespace) -> None:
             "rule_set_key": "sc_content_full_v1",
             "pack_concurrency": args.pack_concurrency,
             "random_seed": args.random_seed,
+            "requested_visit_ids": requested_visit_ids,
             "selected_profiles": selected_profiles,
             "duplicate_visit_ids": duplicate_visit_ids,
             "totals": total,
@@ -1128,6 +1228,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scan-limit", type=int, default=260)
     parser.add_argument("--pack-concurrency", type=int, default=3)
     parser.add_argument("--limit-per-bucket", type=int, default=999)
+    parser.add_argument("--visit-ids", default="")
     parser.add_argument("--summary-csv", type=Path, default=DOCS_DIR / "formal_qc_gate_integrated_random10_run_summary.csv")
     parser.add_argument("--summary-json", type=Path, default=DOCS_DIR / "formal_qc_gate_integrated_random10_run_summary.json")
     parser.add_argument("--issue-csv", type=Path, default=DOCS_DIR / "formal_qc_gate_integrated_random10_issue_review.csv")
