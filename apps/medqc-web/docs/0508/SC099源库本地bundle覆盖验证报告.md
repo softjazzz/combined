@@ -8,7 +8,7 @@
 - public schema 对目标 visit 的 source 行数合计为 `0`；cdm/local 行数合计为 `60`。
 - 本轮未证明客户真实远端源库覆盖；`public` 只是本机 source schema，当前目标表存在但样本行数为 0。
 - 本轮只证明本机 `cdm/local` 与 bundle dry-run 覆盖闭环。
-- pathology local 命中 `8` 份，dry-run bundle 命中 `8` 份，persisted bundle 命中 `0` 份。
+- pathology local 命中 `8` 份，dry-run bundle 命中 `8` 份，persisted bundle 命中 `8` 份。
 - surgery local 命中 `17` 份，dry-run bundle 命中 `17` 份，persisted bundle 命中 `17` 份。
 - 本轮只验证 source/local/bundle 覆盖，不注册 SC-099 gate，不开放 confirmed。
 
@@ -25,21 +25,21 @@
 
 | bundle/source_table                      | persisted_hit_visit_count | dryrun_hit_visit_count |
 | ---------------------------------------- | ------------------------: | ---------------------: |
-| course_bundle_has_pathology_exam_master  |                         0 |                      8 |
-| course_bundle_has_pathology_exam_report  |                         0 |                      7 |
-| final_bundle_has_pathology_exam_master   |                         0 |                      8 |
-| final_bundle_has_pathology_exam_report   |                         0 |                      7 |
+| course_bundle_has_pathology_exam_master  |                         8 |                      8 |
+| course_bundle_has_pathology_exam_report  |                         7 |                      7 |
+| final_bundle_has_pathology_exam_master   |                         8 |                      8 |
+| final_bundle_has_pathology_exam_report   |                         7 |                      7 |
 | final_bundle_has_surgery_record          |                        17 |                     17 |
-| surgery_bundle_has_pathology_exam_master |                         0 |                      8 |
-| surgery_bundle_has_pathology_exam_report |                         0 |                      7 |
-| surgery_bundle_has_surgery_record        |                        16 |                     17 |
+| surgery_bundle_has_pathology_exam_master |                         8 |                      8 |
+| surgery_bundle_has_pathology_exam_report |                         7 |                      7 |
+| surgery_bundle_has_surgery_record        |                        17 |                     17 |
 
 ## 逐病历 dry-run bundle 覆盖
 
 | root_cause                                  | count |
 | ------------------------------------------- | ----: |
 | local_surgery_only_pathology_source_missing |     9 |
-| persisted_bundle_stale_for_pathology        |     8 |
+| persisted_bundle_already_current            |     8 |
 
 ## 根因判定
 
@@ -57,20 +57,20 @@
 | 2229247  | 陈正权       |                         1 |                    0 |                    1 |                      0 | local_surgery_only_pathology_source_missing |
 | 2310639  | 朱瑞银       |                         1 |                    0 |                    1 |                      0 | local_surgery_only_pathology_source_missing |
 | 2191573  | 廖小平       |                         2 |                    0 |                    2 |                      0 | local_surgery_only_pathology_source_missing |
-| 2142472  | 张泽芳       |                         1 |                    2 |                    1 |                      2 | persisted_bundle_stale_for_pathology        |
-| 2200664  | 朱泰廷       |                         1 |                    4 |                    1 |                      4 | persisted_bundle_stale_for_pathology        |
+| 2142472  | 张泽芳       |                         1 |                    2 |                    1 |                      2 | persisted_bundle_already_current            |
+| 2200664  | 朱泰廷       |                         1 |                    4 |                    1 |                      4 | persisted_bundle_already_current            |
 | 2218469  | 刘光蓉       |                         2 |                    0 |                    2 |                      0 | local_surgery_only_pathology_source_missing |
-| 2172686  | 胡启华       |                         2 |                    2 |                    2 |                      2 | persisted_bundle_stale_for_pathology        |
+| 2172686  | 胡启华       |                         2 |                    2 |                    2 |                      2 | persisted_bundle_already_current            |
 | 2327691  | 邹世科       |                         1 |                    0 |                    1 |                      0 | local_surgery_only_pathology_source_missing |
-| 2214679  | 田正群       |                         1 |                    3 |                    1 |                      3 | persisted_bundle_stale_for_pathology        |
+| 2214679  | 田正群       |                         1 |                    3 |                    1 |                      3 | persisted_bundle_already_current            |
 | 2263757  | 杨光中       |                         1 |                    0 |                    1 |                      0 | local_surgery_only_pathology_source_missing |
 | 1961270  | 何维珍       |                         1 |                    0 |                    1 |                      0 | local_surgery_only_pathology_source_missing |
-| 2270715  | 马建倡       |                         1 |                    1 |                    1 |                      1 | persisted_bundle_stale_for_pathology        |
+| 2270715  | 马建倡       |                         1 |                    1 |                    1 |                      1 | persisted_bundle_already_current            |
 | 1915580  | 雷德超       |                         1 |                    0 |                    1 |                      0 | local_surgery_only_pathology_source_missing |
-| 2246915  | 黄金莲       |                         1 |                    4 |                    1 |                      4 | persisted_bundle_stale_for_pathology        |
-| 1966656  | 周光容       |                         1 |                    2 |                    1 |                      2 | persisted_bundle_stale_for_pathology        |
+| 2246915  | 黄金莲       |                         1 |                    4 |                    1 |                      4 | persisted_bundle_already_current            |
+| 1966656  | 周光容       |                         1 |                    2 |                    1 |                      2 | persisted_bundle_already_current            |
 | 2311318  | 范永勤       |                         1 |                    0 |                    1 |                      0 | local_surgery_only_pathology_source_missing |
-| 1870471  | 蒲云鹏       |                         1 |                    2 |                    1 |                      2 | persisted_bundle_stale_for_pathology        |
+| 1870471  | 蒲云鹏       |                         1 |                    2 |                    1 |                      2 | persisted_bundle_already_current            |
 
 ## 收口建议
 
