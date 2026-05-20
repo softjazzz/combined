@@ -265,6 +265,26 @@ class _FakeFastScreenRuleEngine:
         self.call_order: list[str] = []
         self.call_counts: dict[str, int] = {}
         self.last_rules_by_pack: dict[str, list[dict[str, Any]]] = {}
+        self.last_medical_record_by_pack: dict[str, dict[str, Any]] = {}
+
+    def _build_batch_prompt_compact(
+        self,
+        rules: list[dict[str, Any]],
+        medical_record: dict[str, Any],
+        **kwargs: Any,
+    ) -> tuple[str, int]:
+        prompt = json.dumps(
+            {
+                "rules": [rule.get("rule_id") for rule in rules],
+                "content": medical_record.get("content"),
+                "evidence_payload": medical_record.get("evidence_payload"),
+                "quality_profile": kwargs.get("quality_profile"),
+                "batch_output_mode": kwargs.get("batch_output_mode"),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        return prompt, max(1, len(prompt) // 3)
 
     async def evaluate_batch_compact(self, *, rules: list[dict[str, Any]], pack_id: str, **kwargs: Any) -> dict[str, Any]:
         self.running += 1
@@ -272,6 +292,7 @@ class _FakeFastScreenRuleEngine:
         self.call_order.append(pack_id)
         self.call_counts[pack_id] = int(self.call_counts.get(pack_id) or 0) + 1
         self.last_rules_by_pack[pack_id] = [dict(rule) for rule in rules]
+        self.last_medical_record_by_pack[pack_id] = dict(kwargs.get("medical_record") or {})
         await asyncio.sleep(0.01)
         self.running -= 1
         if pack_id == self.fail_once_pack_id and self.call_counts[pack_id] == 1:
@@ -594,10 +615,12 @@ async def test_run_final_fast_screen_missing_rule_item_after_retry_should_be_unc
     assert by_rule["SC-023"]["status"] == "uncertain"
     assert by_rule["SC-024"]["status"] == "uncertain"
     assert engine.call_counts["first_course_features"] == 3
-    assert result["pack_metrics"]["provider_error_count"] == 1
+    assert result["pack_metrics"]["provider_error_count"] == 0
     assert result["pack_metrics"]["retry_count"] == 2
     assert by_rule["SC-023"]["metadata"]["pack_retry_reason"] == "missing_rule_items"
     assert by_rule["SC-024"]["metadata"]["pack_retry_reason"] == "missing_rule_items"
+    assert by_rule["SC-024"]["metadata"]["error_class"] == "missing_rule_items"
+    assert by_rule["SC-024"]["metadata"]["raw_output_summary"]
 
 
 @pytest.mark.asyncio
@@ -626,6 +649,10 @@ async def test_run_final_fast_screen_sc146_single_rule_should_accept_rule_id_ali
     assert metadata["actual_rule_ids"] == ["SC146"]
     assert metadata["missing_rule_ids"] == []
     assert metadata["sc146_single_rule_strict_json_prompt"] is True
+    assert metadata["first_pass_prompt_hash"]
+    assert metadata["first_pass_prompt_chars"] > 0
+    assert metadata["targeted_evidence_context_hash"]
+    assert metadata["targeted_evidence_context_chars"] > 0
     assert diagnostic["raw_output_summary"]
 
 
@@ -650,6 +677,42 @@ async def test_run_final_fast_screen_sc146_single_rule_should_inject_strict_json
     assert rules[0]["sc146_single_rule_strict_json_prompt"] is True
     assert "只评估 rule_id=SC-146" in rules[0]["custom_prompt"]
     assert "不得输出 Markdown" in rules[0]["custom_prompt"]
+
+
+@pytest.mark.asyncio
+async def test_run_final_fast_screen_sc146_should_use_compact_evidence_payload(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(fast_screen_qc, "assemble_final_record_bundle", lambda **kwargs: {"scene": "final", "document_hits": {}})
+    long_daily = "病程记录：" + ("患者继续治疗，复查检查，调整医嘱。无关长文本。" * 300)
+    monkeypatch.setattr(
+        fast_screen_qc,
+        "_extract_bundle_documents",
+        lambda bundle: [
+            {"id": "1:daily", "document_type": "日常病程记录", "source_table": "daily_course_record", "content": long_daily},
+            {"id": "1:order", "document_type": "长期医嘱", "source_table": "inpat_drug_order", "content": "医嘱：胃复安 静推 一次。"},
+            {"id": "1:consult", "document_type": "会诊记录", "source_table": "consultation_record", "content": "会诊意见：继续观察。"},
+        ],
+    )
+    engine = _FakeFastScreenRuleEngine()
+    service = _FakeFastScreenService(engine)
+
+    result = await fast_screen_qc.run_final_fast_screen(
+        qc_service=service,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        rule_ids=["SC-146"],
+        pack_concurrency=1,
+    )
+
+    medical_record = engine.last_medical_record_by_pack["daily_order_consistency"]
+    payload = medical_record["evidence_payload"]
+    metadata = result["evaluation_results"][0]["metadata"]
+    assert payload["sc146_compact_evidence_context"] is True
+    assert len(medical_record["content"]) < len(long_daily)
+    assert metadata["sc146_compact_evidence_context"] is True
+    assert metadata["targeted_evidence_context"]["sc146_compact_evidence_context"] is True
 
 
 @pytest.mark.asyncio

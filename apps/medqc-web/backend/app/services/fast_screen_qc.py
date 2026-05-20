@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
+import json
 import time
 from typing import TYPE_CHECKING, Any, Callable, Iterable
 
@@ -419,6 +421,139 @@ def _summarize_raw_llm_output(raw_output: Any, limit: int = 1200) -> str:
     if len(text) > limit:
         return text[:limit].rstrip() + "..."
     return text
+
+
+def _stable_json_text(value: Any) -> str:
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    except Exception:
+        return str(value or "")
+
+
+def _hash_text(value: Any) -> str:
+    return hashlib.sha256(str(value or "").encode("utf-8")).hexdigest()[:16]
+
+
+def _hash_payload(value: Any) -> str:
+    return _hash_text(_stable_json_text(value))
+
+
+def _truncate_for_prompt(value: Any, limit: int = 900) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) > limit:
+        return text[:limit].rstrip() + "..."
+    return text
+
+
+def _compact_evidence_items(items: Any, *, limit: int = 650, max_items: int = 5) -> list[dict[str, Any]]:
+    compacted: list[dict[str, Any]] = []
+    for item in list(items or []):
+        if not isinstance(item, dict):
+            continue
+        cleaned: dict[str, Any] = {}
+        for key, value in item.items():
+            if isinstance(value, str):
+                cleaned[key] = _truncate_for_prompt(value, limit=limit)
+            elif key in {"content", "evidence_text", "text_preview"}:
+                cleaned[key] = _truncate_for_prompt(value, limit=limit)
+            else:
+                cleaned[key] = value
+        compacted.append(cleaned)
+        if len(compacted) >= max_items:
+            break
+    return compacted
+
+
+def _compact_sc146_primary_text(content: Any) -> str:
+    text = str(content or "").strip()
+    if len(text) <= 2200:
+        return text
+    keywords = ("医嘱", "治疗", "调整", "复查", "检查", "会诊", "执行", "予以", "继续", "停用", "加用")
+    snippets: list[str] = []
+    for keyword in keywords:
+        index = text.find(keyword)
+        if index < 0:
+            continue
+        start = max(0, index - 260)
+        end = min(len(text), index + 460)
+        snippet = text[start:end].strip()
+        if snippet and snippet not in snippets:
+            snippets.append(snippet)
+        if len("".join(snippets)) >= 1800:
+            break
+    if not snippets:
+        return text[:2200].rstrip() + "..."
+    compact = "\n...\n".join(snippets)
+    if len(compact) > 2200:
+        compact = compact[:2200].rstrip() + "..."
+    return compact
+
+
+def _compact_sc146_evidence_payload(evidence_payload: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(evidence_payload or {})
+    contexts = list(payload.get("targeted_evidence_context") or [])
+    compact_contexts: list[dict[str, Any]] = []
+    for context in contexts:
+        if not isinstance(context, dict):
+            continue
+        applies_to = {_normalize_fast_screen_rule_id(item) for item in context.get("applies_to_rule_ids") or []}
+        is_sc146_context = (
+            _normalize_fast_screen_rule_id(context.get("rule_id")) == SC146_SINGLE_RULE_ID
+            or SC146_SINGLE_RULE_ID in applies_to
+            or str(context.get("rule_id") or "") == "DAILY-CROSS-DOC-CONTEXT"
+        )
+        if not is_sc146_context:
+            compact_contexts.append(dict(context))
+            continue
+        daily_items = _compact_evidence_items(context.get("daily_course_evidence"), limit=520, max_items=4)
+        order_items = _compact_evidence_items(context.get("order_or_consult_evidence"), limit=520, max_items=4)
+        report_items = _compact_evidence_items(context.get("abnormal_report_evidence"), limit=420, max_items=3)
+        compact_contexts.append(
+            {
+                "rule_id": "DAILY-CROSS-DOC-CONTEXT",
+                "applies_to_rule_ids": [SC146_SINGLE_RULE_ID],
+                "purpose": "SC-146 compact evidence：只保留病程诊疗行为、相关医嘱/执行/会诊/检查对照和缺口项。",
+                "daily_course_event": daily_items,
+                "matched_orders": order_items,
+                "consult_order_contrast": _truncate_for_prompt(context.get("contrast_quote"), limit=900),
+                "related_reports": report_items,
+                "unmatched_claimed_actions": [],
+                "gap_items": [
+                    "若病程声称已调整治疗/用药/医嘱，需有对应医嘱、执行、会诊或检查对照。",
+                    "若只有症状与对症处理，没有医嘱变化缺失链，不得确认缺陷。",
+                ],
+                "coverage_flags": dict(context.get("coverage_flags") or {}),
+                "supporting_quote": _truncate_for_prompt(context.get("supporting_quote"), limit=700),
+                "contrast_quote": _truncate_for_prompt(context.get("contrast_quote"), limit=900),
+                "sc146_compact_evidence_context": True,
+            }
+        )
+    payload["targeted_evidence_context"] = compact_contexts
+    supporting = []
+    allowed_sources = {
+        "daily_course_record",
+        "senior_course_record",
+        "inpat_drug_order",
+        "inpat_nondrug_order",
+        "inpat_execution_record",
+        "consultation_record",
+        "exam_master",
+        "exam_item_report",
+        "labtest_master",
+        "labtest_item_report",
+    }
+    for item in list(payload.get("supporting_documents") or []):
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("source_table") or "").strip()
+        if source not in allowed_sources:
+            continue
+        supporting.append(dict(item))
+        if len(supporting) >= 8:
+            break
+    payload["supporting_documents"] = _compact_evidence_items(supporting, limit=650, max_items=8)
+    payload["sc146_compact_evidence_context"] = True
+    return payload
 
 
 def _categorize_pack_parse_failure(*, raw_output: Any, parse_error: bool, missing_rule_ids: list[str]) -> str:
@@ -1272,9 +1407,55 @@ async def run_final_fast_screen(
             pack_id=pack.pack_id,
             rule_ids=pack.rule_ids,
         )
-        targeted_context_by_rule = _targeted_context_by_rule(
-            list(evidence_payload.get("targeted_evidence_context") or [])
+        evidence_payload_for_pack = (
+            _compact_sc146_evidence_payload(evidence_payload)
+            if sc146_single_rule_pack
+            else evidence_payload
         )
+        primary_content_for_pack = (
+            _compact_sc146_primary_text(primary_document.get("content"))
+            if sc146_single_rule_pack
+            else str(primary_document.get("content") or "")
+        )
+        targeted_context_by_rule = _targeted_context_by_rule(
+            list(evidence_payload_for_pack.get("targeted_evidence_context") or [])
+        )
+        prompt_diagnostics = {
+            "first_pass_prompt_hash": "",
+            "first_pass_prompt_chars": 0,
+            "targeted_evidence_context_hash": _hash_payload(
+                evidence_payload_for_pack.get("targeted_evidence_context") or []
+            ),
+            "targeted_evidence_context_chars": len(
+                _stable_json_text(evidence_payload_for_pack.get("targeted_evidence_context") or [])
+            ),
+            "primary_document_chars": len(primary_content_for_pack),
+            "sc146_compact_evidence_context": bool(
+                evidence_payload_for_pack.get("sc146_compact_evidence_context")
+            ),
+        }
+        build_prompt = getattr(qc_service.rule_engine, "_build_batch_prompt_compact", None)
+        if callable(build_prompt):
+            try:
+                prompt_text, _ = build_prompt(
+                    pack_rules,
+                    {
+                        "content": primary_content_for_pack,
+                        "evidence_payload": evidence_payload_for_pack,
+                        "execution_domain": "final_fast_screen",
+                        "doc_scope": "primary",
+                        "model_version": str(qc_service.client.model or ""),
+                    },
+                    context_token_budget=context_token_budget,
+                    quality_profile=quality_profile_normalized,
+                    batch_output_mode=batch_output_mode_normalized,
+                )
+                prompt_diagnostics["first_pass_prompt_hash"] = _hash_text(prompt_text)
+                prompt_diagnostics["first_pass_prompt_chars"] = len(prompt_text)
+            except Exception:
+                prompt_diagnostics["first_pass_prompt_hash"] = "unavailable"
+                prompt_diagnostics["first_pass_prompt_chars"] = 0
+        diagnostic.update(prompt_diagnostics)
         queued_at = time.perf_counter()
         pack_results: list[dict[str, Any]] = []
         retry_attempts = 0
@@ -1287,6 +1468,17 @@ async def run_final_fast_screen(
             error_lower = error.lower()
             timeout = 1 if ("timeout" in error_lower or "timed out" in error_lower or "超时" in error) else 0
             rate_limit = 1 if ("rate limit" in error_lower or "429" in error_lower or "限流" in error) else 0
+            non_provider_markers = (
+                "parse_error",
+                "missing_rule",
+                "missing_rule_items",
+                "majority_missing_rule_items",
+                "empty_response",
+                "schema_mismatch",
+                "batch_technical_error_results",
+            )
+            if any(marker in error_lower for marker in non_provider_markers):
+                return 0, timeout, rate_limit
             return 1, timeout, rate_limit
 
         def _metadata_error_count(rows: list[dict[str, Any]], key: str) -> int:
@@ -1345,8 +1537,8 @@ async def run_final_fast_screen(
                     evaluated = await qc_service.rule_engine.evaluate_batch_compact(
                         rules=pack_rules,
                         medical_record={
-                            "content": str(primary_document.get("content") or ""),
-                            "evidence_payload": evidence_payload,
+                            "content": primary_content_for_pack,
+                            "evidence_payload": evidence_payload_for_pack,
                             "execution_domain": "final_fast_screen",
                             "doc_scope": "primary",
                             "model_version": str(qc_service.client.model or ""),
@@ -1423,6 +1615,7 @@ async def run_final_fast_screen(
                     item["metadata"] = metadata
                 metadata["target_document_type"] = pack.document_type
                 metadata["rule_family"] = str(metadata.get("rule_family") or pack.rule_family)
+                metadata.update(prompt_diagnostics)
                 targeted_context = targeted_context_by_rule.get(rule_id)
                 if targeted_context:
                     metadata["targeted_evidence_context"] = targeted_context
@@ -1508,7 +1701,9 @@ async def run_final_fast_screen(
                     metadata["actual_rule_ids"] = list(diagnostic.get("actual_rule_ids") or [])
                     metadata["missing_rule_ids"] = list(missing_rule_ids)
                     metadata["parse_error_reason"] = parse_error_reason
+                    metadata["raw_output_summary"] = diagnostic.get("raw_output_summary") or _summarize_raw_llm_output(last_evaluated.get("raw_output"))
                     metadata["sc146_single_rule_strict_json_prompt"] = sc146_single_rule_pack
+                    metadata.update(prompt_diagnostics)
                     metadata["provider_error_count"] = 0 if not should_retry else int(last_evaluated.get("provider_error_count") or 0)
                     metadata["timeout_count"] = 0 if not should_retry else int(last_evaluated.get("timeout_count") or 0)
                     metadata["rate_limit_count"] = 0 if not should_retry else int(last_evaluated.get("rate_limit_count") or 0)
@@ -1544,12 +1739,23 @@ async def run_final_fast_screen(
         diagnostic["final_decision_source"] = "technical_error_fallback"
         diagnostic["expected_rule_ids"] = list(configured_rule_ids)
         diagnostic["actual_rule_ids"] = []
+        diagnostic["missing_rule_ids"] = list(configured_rule_ids)
         diagnostic["raw_output_summary"] = _summarize_raw_llm_output(last_evaluated.get("raw_output"))
         diagnostic["parse_error_reason"] = _categorize_pack_parse_failure(
             raw_output=last_evaluated.get("raw_output"),
             parse_error=bool(last_evaluated.get("parse_error")),
             missing_rule_ids=list(last_evaluated.get("missing_rule_ids") or []),
         ) or retry_reason or "pack_exception"
+        diagnostic["parse_error"] = diagnostic["parse_error_reason"] in {
+            "parse_error",
+            "missing_rule",
+            "missing_rule_items",
+            "majority_missing_rule_items",
+            "empty_response",
+            "schema_mismatch",
+        }
+        diagnostic["error_class"] = diagnostic["parse_error_reason"]
+        diagnostic["provider_raw_error_summary"] = "" if not provider_error else error_text[:400]
         diagnostic["finished_at"] = datetime.now(timezone.utc).isoformat()
         for rule in pack_rules:
             item = _build_pack_uncertain_result_item(
@@ -1570,7 +1776,11 @@ async def run_final_fast_screen(
                 metadata["actual_rule_ids"] = []
                 metadata["missing_rule_ids"] = list(configured_rule_ids)
                 metadata["parse_error_reason"] = diagnostic["parse_error_reason"]
+                metadata["raw_output_summary"] = diagnostic.get("raw_output_summary") or ""
+                metadata["error_class"] = diagnostic.get("error_class") or ""
+                metadata["provider_raw_error_summary"] = diagnostic.get("provider_raw_error_summary") or ""
                 metadata["sc146_single_rule_strict_json_prompt"] = sc146_single_rule_pack
+                metadata.update(prompt_diagnostics)
                 metadata["provider_error_count"] = provider_error
                 metadata["timeout_count"] = timeout_error
                 metadata["rate_limit_count"] = rate_limit_error
