@@ -127,6 +127,52 @@ async def test_adjudicator_should_convert_semantic_mapping_error_to_rejected():
 
 
 @pytest.mark.asyncio
+async def test_adjudicator_should_convert_unrelated_quote_technical_to_rejected():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-143",
+                                        "adjudicated_display_status": "technical_error_internal",
+                                        "adjudicator_reason": "第一轮输出引用的证据片段与长期医嘱单内容完全无关，属于解析或引用错误。",
+                                        "adjudicator_supporting_quote": "【当前文书】今日查房:患者精神食欲一般。",
+                                        "adjudicator_confidence": 1.0,
+                                        "rule_requirement_match": "technical_error",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-143",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "长期医嘱单描述不清。",
+                "evidence": "【当前文书】今日查房:患者精神食欲一般。",
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["adjudicated_display_status"] == "rejected_by_system"
+    assert rows[0].get("technical_error_internal") is not True
+
+
+@pytest.mark.asyncio
 async def test_confirmed_guardrail_should_downgrade_first_pass_confirmed_without_reason_quote():
     rows = await adjudicate_postprocessed_qc_results(
         [
@@ -1228,3 +1274,110 @@ async def test_context_matrix_should_downgrade_sc034_missing_order_change_source
 
     assert rows[0]["display_status"] == "data_quality_gap"
     assert rows[0]["confirmed_context_matrix_rule"] == "SC-034"
+
+
+@pytest.mark.asyncio
+async def test_adjudicator_prompt_should_include_rule_specific_criteria():
+    captured: dict[str, str] = {}
+
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        captured["prompt"] = prompt
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-012",
+                                        "adjudicated_display_status": "data_quality_gap",
+                                        "adjudicator_reason": "无法确认证据来自入院记录现病史。",
+                                        "adjudicator_supporting_quote": "",
+                                        "adjudicator_confidence": 0.7,
+                                        "rule_requirement_match": "data_gap",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-012",
+                "rule_name": "入院前检查治疗经过欠缺",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "入院前治疗经过欠缺。",
+                "evidence": "外院输液治疗，具体不详。",
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert "规则专属判定标准" in captured["prompt"]
+    assert "required_document" in captured["prompt"]
+    assert "admission_record/入院记录" in captured["prompt"]
+    assert "现病史/发病后到入院前" in captured["prompt"]
+    assert rows[0]["rule_criteria_version"] == "formal_high_false_positive_rule_criteria_v1"
+    assert rows[0]["required_document"] == "admission_record/入院记录"
+    assert rows[0]["data_gap_reason"] == "无法确认证据来自入院记录现病史。"
+
+
+@pytest.mark.asyncio
+async def test_adjudicator_should_keep_criteria_metadata_on_confirmed_result():
+    async def _fake_generate(_prompt: str) -> dict[str, Any]:
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-034",
+                                        "adjudicated_display_status": "confirmed_defect",
+                                        "adjudicator_reason": "存在明确医嘱变化，但病程未记录原因、依据和效果分析。",
+                                        "adjudicator_supporting_quote": "临时医嘱：甲氧氯普胺注射液 10mg 肌注 新开。",
+                                        "adjudicator_confidence": 0.88,
+                                        "rule_requirement_match": "matched",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-034",
+                "rule_name": "病程中对治疗措施、药物、医嘱变化未记录或分析",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "医嘱变化未分析。",
+                "evidence": "临时医嘱：甲氧氯普胺注射液 10mg 肌注 新开。",
+                "metadata": _course_order_context(
+                    "患者术后呕吐多次，病程仅记载予以处理，未见原因分析、依据或后续计划。",
+                    order_text="临时医嘱：甲氧氯普胺注射液 10mg 肌注 新开。",
+                ),
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    assert rows[0]["rule_criteria_version"] == "formal_high_false_positive_rule_criteria_v1"
+    assert rows[0]["required_document"] == "daily_course_record/病程记录 + 医嘱/治疗变化来源"
+    assert "order_or_treatment_change_quote" in rows[0]["field_matrix_evidence"]
+    assert rows[0]["metadata"]["confirmed_guardrail_reason"] == "存在明确医嘱变化，但病程未记录原因、依据和效果分析。"

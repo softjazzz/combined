@@ -6,6 +6,11 @@ from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from .formal_qc_rule_criteria import (
+    get_rule_specific_criteria,
+    rule_criteria_metadata,
+)
+
 
 AdjudicatorGenerateFn = Callable[[str], Awaitable[dict[str, Any]]]
 
@@ -65,6 +70,8 @@ SEMANTIC_REJECTION_TECHNICAL_TERMS = (
     "规则无关",
     "规则不适用",
     "文书无关",
+    "完全无关",
+    "引用错误",
     "与长期医嘱单格式无关",
     "证据片段为病程记录",
 )
@@ -313,9 +320,11 @@ def _candidate_payload(item: dict[str, Any], rule: dict[str, Any] | None, index:
     metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
     targeted_context = metadata.get("targeted_evidence_context")
     coverage = metadata.get("formal_evidence_coverage")
+    rule_id = _safe_text(item.get("rule_id"))
+    criteria = get_rule_specific_criteria(rule_id)
     return {
         "index": index,
-        "rule_id": _safe_text(item.get("rule_id")),
+        "rule_id": rule_id,
         "rule_name": _safe_text(item.get("rule_name")),
         "first_pass_status": _safe_text(item.get("status")),
         "first_pass_display_status": _safe_text(item.get("display_status")),
@@ -328,6 +337,7 @@ def _candidate_payload(item: dict[str, Any], rule: dict[str, Any] | None, index:
         "rule_requirement": _truncate(_rule_requirement(rule or {}), 900),
         "pack_id": _safe_text(item.get("pack_id") or metadata.get("pack_id")),
         "formal_evidence_coverage": _truncate_jsonable(coverage, limit=1200) if isinstance(coverage, dict) else {},
+        "rule_specific_criteria": _truncate_jsonable(criteria, limit=2600) if criteria else {},
         "targeted_evidence_context": (
             _truncate_jsonable(targeted_context, limit=3200) if isinstance(targeted_context, dict) else {}
         ),
@@ -378,6 +388,14 @@ def _build_adjudicator_prompt(
 - SC-099 仅在 formal_evidence_coverage.has_specimen_or_pathology_trigger=true 且可引用取材/送病理/活检/标本等触发片段时，才可能 confirmed_defect；无触发时应 rejected_by_system，缺病理来源时应 data_quality_gap。
 - SC-100 仅在 has_implant_trigger=true 且条码/追溯码来源域可核时，才可能 confirmed_defect；有植入物但缺耗材/条码来源时应 data_quality_gap。
 - SC-101 仅在 has_implant_trigger=true 且 implant_detail_completeness=none 时，才可能 confirmed_defect；partial 表示已有部分植入物种类/数量记录，不能直接确认“未记录”。
+
+规则专属判定标准：
+- 若 item.rule_specific_criteria 非空，必须优先遵守其中 required_document、required_section、required_fields、confirmed_conditions、not_confirmed_conditions、data_quality_gap_conditions。
+- SC-012/SC-013 只评价入院记录对应段落；缺完整入院记录上下文时 data_quality_gap。
+- SC-034 confirmed 必须同时有病情/治疗/医嘱变化事件与缺少分析/处理依据的证据；仅症状 + 对症处理不得 confirmed。
+- SC-118/SC-121 必须基于完整出院记录字段矩阵；文书头、记录时间或短片段不得 confirmed。
+- SC-122 必须基于完整出院医嘱段；只有随访/复查/局部建议片段时 data_quality_gap。
+- SC-123 必须先确认存在出院带药/出院用药；非药品出院医嘱不得当出院带药，字段完整时 rejected_by_system。
 
 输出格式：
 {{
@@ -446,11 +464,28 @@ def _apply_adjudication(
     )
     if status == "technical_error_internal":
         next_item["technical_error_internal"] = True
+    criteria_metadata = rule_criteria_metadata(next_item.get("rule_id") or next_item.get("rule_code"))
+    if criteria_metadata:
+        next_item.update(criteria_metadata)
+        if status == "data_quality_gap":
+            next_item["data_gap_reason"] = reason
+        elif status == "rejected_by_system":
+            next_item["rejected_reason"] = reason
+        elif status == "confirmed_defect":
+            next_item["confirmed_guardrail_reason"] = reason
     metadata = next_item.get("metadata")
     if isinstance(metadata, dict):
         metadata["first_pass_display_status"] = first_pass_display_status
         metadata["adjudicated_display_status"] = status
         metadata["adjudicator_confidence"] = confidence
+        if criteria_metadata:
+            metadata.update(criteria_metadata)
+            if status == "data_quality_gap":
+                metadata["data_gap_reason"] = reason
+            elif status == "rejected_by_system":
+                metadata["rejected_reason"] = reason
+            elif status == "confirmed_defect":
+                metadata["confirmed_guardrail_reason"] = reason
     return next_item
 
 
@@ -469,6 +504,26 @@ def _set_display_status(item: dict[str, Any], status: str, *, reason: str) -> di
     )
     if status == "technical_error_internal":
         next_item["technical_error_internal"] = True
+    criteria_metadata = rule_criteria_metadata(next_item.get("rule_id") or next_item.get("rule_code"))
+    if criteria_metadata:
+        next_item.update(criteria_metadata)
+        if status == "data_quality_gap":
+            next_item["data_gap_reason"] = reason
+        elif status == "rejected_by_system":
+            next_item["rejected_reason"] = reason
+        elif status == "confirmed_defect":
+            next_item["confirmed_guardrail_reason"] = reason
+        metadata = next_item.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+            next_item["metadata"] = metadata
+        metadata.update(criteria_metadata)
+        if status == "data_quality_gap":
+            metadata["data_gap_reason"] = reason
+        elif status == "rejected_by_system":
+            metadata["rejected_reason"] = reason
+        elif status == "confirmed_defect":
+            metadata["confirmed_guardrail_reason"] = reason
     return next_item
 
 

@@ -4,6 +4,11 @@ from typing import Any
 import pytest
 
 from app.services import fast_screen_qc
+from app.services.formal_qc_rule_criteria import (
+    RULE_CRITERIA_VERSION,
+    enrich_rule_with_specific_criteria,
+    rule_criteria_metadata,
+)
 from app.services.fast_screen_qc import (
     EXECUTION_STRATEGY_FAST_SCREEN,
     EXECUTION_STRATEGY_STANDARD,
@@ -48,6 +53,32 @@ def test_fast_screen_pack_definitions_should_match_fixed_grouping():
             ]
         )
     )
+
+
+def test_high_false_positive_rule_should_be_enriched_with_specific_criteria():
+    rule = {
+        "rule_id": "SC-121",
+        "name": "诊疗经过不全面、不详细",
+        "custom_prompt": "检查诊疗经过是否完整。",
+        "prompt_version": "custom-v1",
+    }
+
+    enriched = enrich_rule_with_specific_criteria(rule)
+
+    assert enriched["rule_criteria_version"] == RULE_CRITERIA_VERSION
+    assert RULE_CRITERIA_VERSION in enriched["prompt_version"]
+    assert "required_document=discharge_record/出院记录" in enriched["custom_prompt"]
+    assert "完整诊疗经过段" in enriched["custom_prompt"]
+    assert "检查诊疗经过是否完整" in enriched["custom_prompt"]
+
+
+def test_rule_criteria_metadata_should_expose_required_document_and_fields():
+    metadata = rule_criteria_metadata("SC-123")
+
+    assert metadata["rule_criteria_version"] == RULE_CRITERIA_VERSION
+    assert metadata["required_document"] == "discharge_record/出院记录"
+    assert metadata["required_section"] == "出院带药/出院用药"
+    assert metadata["field_matrix_evidence"]["drug_name"] == "required"
 
 
 def test_fast_screen_pack_definitions_should_filter_by_rule_ids():

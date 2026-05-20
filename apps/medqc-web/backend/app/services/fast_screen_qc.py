@@ -20,6 +20,10 @@ from .formal_qc_subitem_anchors import (
     attach_subitem_anchors_to_parent_results,
     evaluate_formal_qc_p0_subitem_anchors,
 )
+from .formal_qc_rule_criteria import (
+    enrich_rule_with_specific_criteria,
+    rule_criteria_metadata,
+)
 from .qc_cancellation import raise_if_cancelled
 
 if TYPE_CHECKING:
@@ -1066,7 +1070,7 @@ async def run_final_fast_screen(
         rule = qc_service.get_rule_by_id(rule_id)
         if not rule:
             continue
-        normalized_rule = qc_service._ensure_rule_execution_meta(rule)
+        normalized_rule = enrich_rule_with_specific_criteria(qc_service._ensure_rule_execution_meta(rule))
         selected_rules.append(normalized_rule)
         rules_by_id[rule_id] = normalized_rule
 
@@ -1336,6 +1340,10 @@ async def run_final_fast_screen(
                 if targeted_context:
                     metadata["targeted_evidence_context"] = targeted_context
                     metadata["formal_evidence_coverage"] = dict(targeted_context.get("coverage_flags") or {})
+                criteria_metadata = rule_criteria_metadata(rule_id)
+                if criteria_metadata:
+                    metadata.update(criteria_metadata)
+                    item.update(criteria_metadata)
                 normalized_pack_results.append(item)
             pack_results = normalized_pack_results
             status_counts: dict[str, int] = {}
