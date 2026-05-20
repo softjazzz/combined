@@ -150,6 +150,29 @@ def test_sc123_complete_discharge_medication_should_reject() -> None:
     assert gate.metadata["discharge_medication_matrix"][0]["missing_fields"] == []
 
 
+def test_sc123_complete_core_fields_from_discharge_context_should_reject() -> None:
+    context = {
+        "source_documents": [
+            {
+                "source_table": "discharge_record",
+                "document_type": "出院记录",
+                "text": (
+                    "出院医嘱：1、避免使用非甾体抗炎药，注意休息。"
+                    "2、出院带药:替普瑞酮胶囊(50mg*36粒),剂量:1,剂量单位:粒,服用方法:口服,频率:Tid;"
+                    "胶体果胶铋干混悬剂(0.15g*12袋) 每天4次 口服 每次1包。"
+                ),
+            }
+        ]
+    }
+
+    gate = run_applicability_gate(_sc123_result("出院带药记录不详细。"), context)
+
+    assert gate.gate_decision == GateDecision.REJECTED_BY_SYSTEM
+    assert gate.metadata["medication_fields_complete"] is True
+    assert gate.metadata["core_missing_medication_fields"] == []
+    assert gate.confirmed_allowed is False
+
+
 def test_sc123_contextual_weak_medication_should_not_confirm_directly() -> None:
     gate = run_applicability_gate(
         _sc123_result("1.继续局部用药：妥布霉素地塞米松眼液、左氧氟沙星滴眼液、普拉洛芬滴眼（一天三次）。")

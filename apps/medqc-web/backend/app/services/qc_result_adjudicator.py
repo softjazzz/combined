@@ -30,7 +30,7 @@ LABEL_BY_STATUS = {
 }
 CONFIRMED_QUOTE_MIN_LEN = 18
 TARGETED_COVERAGE_GUARDRAIL_RULES = {"SC-019", "SC-083", "SC-099", "SC-100", "SC-101"}
-CONTEXT_MATRIX_GUARDRAIL_RULES = {"SC-012", "SC-013", "SC-118", "SC-121"}
+CONTEXT_MATRIX_GUARDRAIL_RULES = {"SC-012", "SC-013", "SC-034", "SC-118", "SC-121", "SC-122"}
 NEGATIVE_ONLY_TERMS = ("未见", "缺失", "未提供", "未记录", "没有")
 HEADER_ONLY_TERMS = (
     "记录时间",
@@ -187,6 +187,13 @@ def _context_evidence_texts(context: dict[str, Any], key: str) -> list[str]:
         text = _safe_text(row.get("evidence_text") or row.get("source_quote") or row.get("text"))
         if text:
             texts.append(text)
+    return texts
+
+
+def _context_texts_by_keys(context: dict[str, Any], keys: tuple[str, ...]) -> list[str]:
+    texts: list[str] = []
+    for key in keys:
+        texts.extend(_context_evidence_texts(context, key))
     return texts
 
 
@@ -797,15 +804,151 @@ def _guardrail_discharge_treatment_course_matrix(item: dict[str, Any]) -> dict[s
     )
 
 
+def _guardrail_discharge_advice_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    discharge_text = "\n".join(_context_evidence_texts(context, "discharge_record_evidence"))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    combined = f"{discharge_text}\n{quote}\n{evidence}"
+    compact_discharge = re.sub(r"\s+", "", discharge_text)
+    quote_compact = re.sub(r"\s+", "", quote)
+    section_present = _matrix_terms(combined, ("出院医嘱", "出院指导", "出院注意事项", "出院后"))
+    source_full_section = bool(compact_discharge) and len(compact_discharge) >= 70 and section_present
+    followup_only_fragment = bool(quote_compact) and len(quote_compact) < 60 and _matrix_terms(
+        quote_compact, ("随访方式", "随访周期", "随访日期", "无需随访")
+    )
+    matrix = {
+        "discharge_advice_section_present": section_present,
+        "source_is_full_discharge_advice_section": source_full_section,
+        "medication_advice_present": _matrix_terms(combined, ("出院带药", "出院用药", "口服", "外用", "胶囊", "片", "颗粒")),
+        "followup_advice_present": _matrix_terms(combined, ("随访", "复查", "门诊", "就诊")),
+        "diet_or_activity_advice_present": _matrix_terms(combined, ("饮食", "休息", "休养", "活动", "功能锻炼", "避免")),
+        "warning_signs_or_return_visit_present": _matrix_terms(combined, ("不适", "加重", "及时就诊", "返院", "急诊")),
+    }
+    if followup_only_fragment or not source_full_section:
+        return _context_matrix_result(
+            rule="SC-122",
+            document_type="discharge_record",
+            section="discharge_advice",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-122 confirmed 需要完整出院医嘱段；当前仅见随访方式/周期等局部片段，不能确认出院医嘱缺失或不全。",
+        )
+    if matrix["followup_advice_present"] and (
+        matrix["medication_advice_present"]
+        or matrix["diet_or_activity_advice_present"]
+        or matrix["warning_signs_or_return_visit_present"]
+    ):
+        return _context_matrix_result(
+            rule="SC-122",
+            document_type="discharge_record",
+            section="discharge_advice",
+            matrix=matrix,
+            failure_status="rejected_by_system",
+            failure_reason="SC-122 出院医嘱段已包含随访及用药/饮食活动/注意事项等合理内容，不支持 confirmed。",
+        )
+    return _context_matrix_result(
+        rule="SC-122",
+        document_type="discharge_record",
+        section="discharge_advice",
+        matrix=matrix,
+    )
+
+
+def _guardrail_course_order_change_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    course_text = "\n".join(
+        _context_texts_by_keys(context, ("daily_course_evidence", "senior_course_evidence", "course_record_evidence"))
+    )
+    order_text = "\n".join(
+        _context_texts_by_keys(
+            context,
+            (
+                "order_or_consult_evidence",
+                "order_evidence",
+                "drug_order_evidence",
+                "nondrug_order_evidence",
+                "execution_evidence",
+            ),
+        )
+    )
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    reason = _safe_text(item.get("adjudicator_reason"))
+    combined = f"{course_text}\n{order_text}\n{quote}\n{evidence}\n{reason}"
+    order_quote = order_text or _safe_text(context.get("contrast_quote"))
+    trigger_event_present = _matrix_terms(
+        combined,
+        ("呕吐", "发热", "疼痛", "呼吸困难", "血压", "血糖", "病情变化", "症状", "体征", "异常"),
+    )
+    order_change_present = bool(order_quote) and _matrix_terms(
+        order_quote,
+        ("新开", "停", "调整", "改", "加用", "减量", "医嘱", "用药", "治疗", "胃复安", "止吐"),
+    )
+    course_analysis_present = _matrix_terms(
+        course_text or quote,
+        ("考虑", "原因", "分析", "由于", "因", "依据", "评估", "计划", "续观", "复查", "调整"),
+    )
+    if re.search(r"(未见|未记录|缺乏|无).{0,12}(原因|病因|分析|依据|效果|后续|计划|调整)", course_text):
+        course_analysis_present = False
+    matrix = {
+        "trigger_event_present": trigger_event_present,
+        "trigger_event_quote": bool(course_text or quote),
+        "order_or_treatment_change_present": order_change_present,
+        "order_or_treatment_change_quote": bool(order_quote),
+        "course_analysis_present": course_analysis_present,
+        "course_analysis_quote": bool(course_text and course_analysis_present),
+        "course_analysis_missing": bool(trigger_event_present and order_change_present and not course_analysis_present),
+        "treatment_effect_or_followup_present": _matrix_terms(combined, ("好转", "缓解", "无好转", "继续", "续观", "复查", "观察")),
+    }
+    if not order_change_present:
+        return _context_matrix_result(
+            rule="SC-034",
+            document_type="daily_course_record",
+            section="order_treatment_change_analysis",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-034 confirmed 需要医嘱/治疗变化来源 quote；当前仅见症状与对症处理片段，不能证明“医嘱变化未记录或未分析”。",
+        )
+    if not course_text:
+        return _context_matrix_result(
+            rule="SC-034",
+            document_type="daily_course_record",
+            section="order_treatment_change_analysis",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-034 confirmed 需要病程记录上下文对照；当前缺少可核查病程正文。",
+        )
+    if not matrix["course_analysis_missing"]:
+        return _context_matrix_result(
+            rule="SC-034",
+            document_type="daily_course_record",
+            section="order_treatment_change_analysis",
+            matrix=matrix,
+            failure_status="rejected_by_system",
+            failure_reason="SC-034 未形成“医嘱/治疗变化 + 病程分析缺失”的完整缺陷链，不能 confirmed。",
+        )
+    return _context_matrix_result(
+        rule="SC-034",
+        document_type="daily_course_record",
+        section="order_treatment_change_analysis",
+        matrix=matrix,
+    )
+
+
 def _guardrail_context_matrix(item: dict[str, Any], rule_id: str) -> dict[str, Any] | None:
     if rule_id == "SC-012":
         return _guardrail_admission_present_illness_matrix(item)
     if rule_id == "SC-013":
         return _guardrail_admission_past_history_matrix(item)
+    if rule_id == "SC-034":
+        return _guardrail_course_order_change_matrix(item)
     if rule_id == "SC-118":
         return _guardrail_discharge_record_matrix(item)
     if rule_id == "SC-121":
         return _guardrail_discharge_treatment_course_matrix(item)
+    if rule_id == "SC-122":
+        return _guardrail_discharge_advice_matrix(item)
     return None
 
 
@@ -838,6 +981,11 @@ def _guardrail_sc099_gate_context(item: dict[str, Any]) -> tuple[str, str] | Non
 
 def _guardrail_sc123_gate_matrix(item: dict[str, Any]) -> tuple[str, str] | None:
     gate_meta = _gate_metadata(item)
+    if _safe_bool(gate_meta.get("medication_fields_complete")):
+        return (
+            "rejected_by_system",
+            "SC-123 出院带药字段完整性矩阵显示药品名称、剂量、频次和用法/途径基本完整，不支持 confirmed。",
+        )
     matrix = gate_meta.get("discharge_medication_matrix")
     if not isinstance(matrix, list):
         return None

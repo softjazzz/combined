@@ -888,6 +888,36 @@ def _discharge_context(text: str, *, contrast_quote: str = "") -> dict[str, Any]
     }
 
 
+def _course_order_context(
+    course_text: str,
+    *,
+    order_text: str = "",
+    contrast_quote: str = "",
+) -> dict[str, Any]:
+    return {
+        "targeted_evidence_context": {
+            "rule_id": "DAILY-ORDER-CHANGE-CONTEXT",
+            "daily_course_evidence": [
+                {
+                    "source_table": "daily_course_record",
+                    "document_type": "日常病程记录",
+                    "evidence_text": course_text,
+                }
+            ],
+            "order_or_consult_evidence": [
+                {
+                    "source_table": "inpat_drug_order",
+                    "document_type": "医嘱",
+                    "evidence_text": order_text,
+                }
+            ]
+            if order_text
+            else [],
+            "contrast_quote": contrast_quote,
+        }
+    }
+
+
 @pytest.mark.asyncio
 async def test_context_matrix_should_keep_sc012_short_quote_from_present_illness():
     admission_text = (
@@ -1070,3 +1100,131 @@ async def test_context_matrix_should_downgrade_sc121_short_treatment_sentence_wi
 
     assert rows[0]["display_status"] == "data_quality_gap"
     assert rows[0]["adjudicator_guardrail_failed"] is True
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc122_followup_fragment_only():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-122",
+                quote="随访方式:其他随访周期:无需随访日期:2026年04月07日",
+                reason="出院记录仅见随访方式，缺其他出院医嘱。",
+                evidence="随访方式:其他随访周期:无需随访日期:2026年04月07日",
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-122"
+    assert rows[0]["confirmed_context_matrix"]["source_is_full_discharge_advice_section"] is False
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_keep_sc122_full_discharge_advice_with_missing_core_content():
+    discharge_text = (
+        "出院医嘱：出院后注意休息，保持伤口清洁干燥。若腹痛、发热、阴道流血增多及时返院。"
+        "本次出院医嘱仅记录一般注意事项，未给出后续治疗计划和复诊安排，请患者自行观察。"
+        "医生签名：张三。"
+    )
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-122",
+                quote="本次出院医嘱仅记录一般注意事项，未给出后续治疗计划和复诊安排。",
+                reason="完整出院医嘱段缺后续治疗计划和复诊安排。",
+                metadata=_discharge_context(discharge_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-122"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_reject_sc122_reasonable_full_discharge_advice():
+    discharge_text = (
+        "出院医嘱：1、按时口服出院带药。2、清淡饮食，避免剧烈活动，注意休息。"
+        "3、术后两周门诊复查，如出现发热、腹痛或伤口渗液及时就诊。"
+        "4、保持伤口清洁干燥，遵医嘱换药。"
+    )
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-122",
+                quote="出院医嘱缺失。",
+                reason="无出院医嘱或出院医嘱不全。",
+                metadata=_discharge_context(discharge_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-122"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc034_symptom_and_symptomatic_treatment_only():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-034",
+                quote="患者术后呕吐多次浅褐色胃内容物，予以胃复安止吐对症治疗。",
+                reason="针对术后呕吐缺乏病因分析及后续调整依据。",
+                evidence="患者术后呕吐多次浅褐色胃内容物，予以胃复安止吐对症治疗。",
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-034"
+    assert rows[0]["confirmed_context_matrix"]["order_or_treatment_change_present"] is False
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_keep_sc034_order_change_without_course_analysis():
+    course_text = "患者术后呕吐多次，查房记录仅记载予以处理，未见原因分析、依据或后续计划。"
+    order_text = "临时医嘱：甲氧氯普胺注射液 10mg 肌注 新开。"
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-034",
+                quote="临时医嘱：甲氧氯普胺注射液 10mg 肌注 新开。",
+                reason="存在止吐医嘱变化，但病程未记录原因、依据及效果分析。",
+                metadata=_course_order_context(course_text, order_text=order_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-034"
+    assert rows[0]["confirmed_context_matrix"]["order_or_treatment_change_present"] is True
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc034_missing_order_change_source():
+    course_text = "患者术后发热，予以对症处理，继续观察。"
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-034",
+                quote="患者术后发热，予以对症处理，继续观察。",
+                reason="治疗措施变化未分析。",
+                metadata=_course_order_context(course_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-034"
