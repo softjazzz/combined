@@ -16,6 +16,7 @@ def _criteria(
     confirmed_conditions: list[str],
     not_confirmed_conditions: list[str],
     data_quality_gap_conditions: list[str],
+    first_pass_guidance: list[str] | None = None,
     rejected_conditions: list[str] | None = None,
     policy_pending_flags: list[str] | None = None,
 ) -> dict[str, Any]:
@@ -27,6 +28,7 @@ def _criteria(
         "confirmed_conditions": confirmed_conditions,
         "not_confirmed_conditions": not_confirmed_conditions,
         "data_quality_gap_conditions": data_quality_gap_conditions,
+        "first_pass_guidance": first_pass_guidance or [],
         "rejected_conditions": rejected_conditions or [],
         "policy_pending_flags": policy_pending_flags or [],
     }
@@ -60,6 +62,10 @@ RULE_SPECIFIC_CRITERIA: dict[str, dict[str, Any]] = {
             "只看到截断片段，无法判断后文是否补充。",
             "无法确认患者是否存在入院前检查或治疗。",
         ],
+        first_pass_guidance=[
+            "一审以候选召回为主：证据来自入院记录现病史且存在入院前诊疗线索时，不要因最终缺项尚需二审确认而直接消除候选。",
+            "只有明确不是入院记录现病史、仅文书头/记录时间或完全无院前诊疗触发时才不输出候选。",
+        ],
     ),
     "SC-013": _criteria(
         required_document="admission_record/入院记录",
@@ -88,6 +94,10 @@ RULE_SPECIFIC_CRITERIA: dict[str, dict[str, Any]] = {
             "只能看到片段，不能判断字段完整性。",
         ],
         policy_pending_flags=["policy_pending_vaccination_unknown"],
+        first_pass_guidance=[
+            "一审以候选召回为主：入院记录既往史字段疑似缺项或前后矛盾时保留候选。",
+            "仅“不详预防接种史”属于客户口径敏感项，一审可保留为复核候选，但二审不得直接 confirmed。",
+        ],
     ),
     "SC-034": _criteria(
         required_document="daily_course_record/病程记录 + 医嘱/治疗变化来源",
@@ -117,6 +127,10 @@ RULE_SPECIFIC_CRITERIA: dict[str, dict[str, Any]] = {
             "缺病程上下文。",
             "无法形成触发事件、变化、缺分析三段链路。",
         ],
+        first_pass_guidance=[
+            "一审以候选召回为主：出现病情变化、治疗措施或医嘱调整线索时可以保留候选，由二审核对三段链路。",
+            "仅有症状加普通对症处理且无医嘱/治疗变化线索时，不应作为 confirmed 候选。",
+        ],
     ),
     "SC-118": _criteria(
         required_document="discharge_record/出院记录",
@@ -132,9 +146,9 @@ RULE_SPECIFIC_CRITERIA: dict[str, dict[str, Any]] = {
             "doctor_signature",
         ],
         confirmed_conditions=[
-            "必须看到完整出院记录或结构化字段矩阵。",
+            "必须看到完整或近完整出院记录正文，或结构化字段矩阵。",
             "必须明确列出具体 missing_fields。",
-            "supporting_quote 能支撑对应字段缺失或内容错误。",
+            "supporting_quote 可以较短，但必须能回连到完整出院记录上下文，并支撑对应字段缺失或内容错误。",
         ],
         not_confirmed_conditions=[
             "只有患者姓名、性别、年龄、主诉、记录时间等文书头片段。",
@@ -145,6 +159,11 @@ RULE_SPECIFIC_CRITERIA: dict[str, dict[str, Any]] = {
             "只看到出院记录片段。",
             "缺完整出院记录上下文。",
             "无法判断具体字段是否在后文补充。",
+        ],
+        first_pass_guidance=[
+            "一审以候选召回为主：命中出院记录且疑似缺入院日期、出院日期、诊疗经过、出院情况、出院医嘱或签名等字段时，应保留 qc_review_candidate。",
+            "不要把 confirmed 条件当作一审硬过滤；完整/近完整上下文是否足以 confirmed 交由二审字段矩阵裁决。",
+            "只有证据仅为文书头、记录时间、患者基本信息，或无法确认来自出院记录时，才不输出 confirmed 候选。",
         ],
     ),
     "SC-121": _criteria(
@@ -158,9 +177,11 @@ RULE_SPECIFIC_CRITERIA: dict[str, dict[str, Any]] = {
             "cross_document_contrast_present_when_claiming_missing_drug",
         ],
         confirmed_conditions=[
-            "必须看到完整诊疗经过段。",
+            "必须看到完整或近完整诊疗经过段。",
             "能证明主要治疗、主要药品、重要辅助检查结果或治疗转归确实缺失。",
             "若声称主要药品缺失，必须有医嘱、会诊建议或治疗方案对照。",
+            "若缺陷主张不是主要药品名称缺失，has_discharge_medication_text=false 不能一票否决 confirmed。",
+            "supporting_quote 可以较短，但必须能回连到完整/近完整诊疗经过上下文。",
         ],
         not_confirmed_conditions=[
             "仅凭“护胃、补液”等短句 confirmed。",
@@ -171,6 +192,11 @@ RULE_SPECIFIC_CRITERIA: dict[str, dict[str, Any]] = {
             "缺完整诊疗经过段。",
             "只有短片段或截断文本。",
             "需要跨文书对照但缺医嘱/会诊/治疗方案来源。",
+        ],
+        first_pass_guidance=[
+            "一审以候选召回为主：命中出院记录诊疗经过且疑似缺主要治疗、重要检查结果、治疗转归或必要治疗方案时，应保留 qc_review_candidate。",
+            "不要因为 supporting_quote 本身较短或 has_discharge_medication_text=false 直接消除候选；二审需结合 targeted_evidence_context.discharge_record_evidence 的完整/近完整上下文裁决。",
+            "只有证据仅为文书头、记录时间、孤立短句且无法回连诊疗经过上下文时，才不输出 confirmed 候选。",
         ],
     ),
     "SC-122": _criteria(
@@ -198,6 +224,10 @@ RULE_SPECIFIC_CRITERIA: dict[str, dict[str, Any]] = {
             "缺完整出院医嘱段。",
             "只有随访/复查/局部建议片段。",
             "无法确认该片段是否为完整出院医嘱。",
+        ],
+        first_pass_guidance=[
+            "一审以候选召回为主：命中出院医嘱段且疑似缺核心出院指导内容时保留候选。",
+            "只有随访方式/周期等局部片段时不应直接 confirmed，交由二审或 postprocess 转 data_quality_gap。",
         ],
     ),
     "SC-123": _criteria(
@@ -231,6 +261,10 @@ RULE_SPECIFIC_CRITERIA: dict[str, dict[str, Any]] = {
         rejected_conditions=[
             "无出院带药且仅有非药品出院医嘱时 rejected_by_system。",
             "出院带药核心字段基本完整时 rejected_by_system/defect_absent。",
+        ],
+        first_pass_guidance=[
+            "一审以候选召回为主：仅在确认存在出院带药/出院用药药品条目且字段疑似缺失时保留候选。",
+            "无出院带药、非药品出院医嘱或字段完整时不应输出 confirmed 候选。",
         ],
     ),
 }
@@ -279,12 +313,13 @@ def rule_criteria_prompt_block(rule_id: Any, *, compact: bool = False) -> str:
     if compact:
         return (
             f"【规则专属判定标准 {RULE_CRITERIA_VERSION}】"
+            " 一审用于候选召回，不得把 confirmed 条件当作提前消灭候选的硬过滤；"
             f" required_document={criteria['required_document']}；"
             f" required_section={criteria['required_section']}；"
             f" required_fields={','.join(criteria['required_fields'])}；"
-            f" confirmed_conditions={_join(criteria['confirmed_conditions'])}；"
-            f" not_confirmed_conditions={_join(criteria['not_confirmed_conditions'])}；"
-            f" data_quality_gap_conditions={_join(criteria['data_quality_gap_conditions'])}"
+            f" first_pass_guidance={_join(criteria.get('first_pass_guidance') or [])}；"
+            "若命中对应文书/段落且存在疑似缺项，请输出 qc_review_candidate 供二审字段矩阵裁决；"
+            f" hard_not_candidate={_join(criteria['not_confirmed_conditions'])}"
         )
     return (
         f"【规则专属判定标准 {RULE_CRITERIA_VERSION}】\n"

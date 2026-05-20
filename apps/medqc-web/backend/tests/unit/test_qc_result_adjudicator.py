@@ -833,6 +833,61 @@ async def test_adjudicator_should_retry_only_missing_rules_and_merge_recovered_o
 
 
 @pytest.mark.asyncio
+async def test_adjudicator_should_retry_missing_rules_in_small_chunks():
+    prompts: list[str] = []
+    rule_ids = [f"SC-{index:03d}" for index in range(1, 14)]
+
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        prompts.append(prompt)
+        if len(prompts) == 1:
+            return _llm_response([])
+        chunk_start = (len(prompts) - 2) * 5
+        chunk_rule_ids = rule_ids[chunk_start : chunk_start + 5]
+        assert "缺失补裁请求" in prompt
+        return _llm_response([_adjudication(index, rule_id) for index, rule_id in enumerate(chunk_rule_ids)])
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [_candidate(rule_id) for rule_id in rule_ids],
+        llm_generate=_fake_generate,
+    )
+
+    assert len(prompts) == 4
+    assert {row["display_status"] for row in rows} == {"rejected_by_system"}
+    assert rows[0]["adjudicator_initial_missing_rule_count"] == 13
+    assert rows[0]["adjudicator_missing_rule_count"] == 0
+    assert rows[0]["adjudicator_retry_recovered_count"] == 13
+    assert rows[0]["adjudicator_retry_failed_count"] == 0
+    assert rows[-1]["recovered_by_adjudicator_missing_rule_retry"] is True
+
+
+@pytest.mark.asyncio
+async def test_adjudicator_should_chunk_retry_when_initial_response_is_unparseable():
+    prompts: list[str] = []
+    rule_ids = [f"SC-{index:03d}" for index in range(1, 8)]
+
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        prompts.append(prompt)
+        if len(prompts) == 1:
+            return {"choices": [{"message": {"content": "不是 JSON"}}]}
+        chunk_start = (len(prompts) - 2) * 5
+        chunk_rule_ids = rule_ids[chunk_start : chunk_start + 5]
+        assert "缺失补裁请求" in prompt
+        return _llm_response([_adjudication(index, rule_id) for index, rule_id in enumerate(chunk_rule_ids)])
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [_candidate(rule_id) for rule_id in rule_ids],
+        llm_generate=_fake_generate,
+    )
+
+    assert len(prompts) == 3
+    assert {row["display_status"] for row in rows} == {"rejected_by_system"}
+    assert rows[0]["adjudicator_initial_missing_rule_count"] == 7
+    assert rows[0]["adjudicator_missing_rule_count"] == 0
+    assert rows[0]["adjudicator_retry_recovered_count"] == 7
+    assert rows[0]["adjudicator_retry_failed_count"] == 0
+
+
+@pytest.mark.asyncio
 async def test_adjudicator_should_mark_only_still_missing_rules_as_technical_after_retry():
     prompts: list[str] = []
 
@@ -1328,6 +1383,71 @@ async def test_adjudicator_prompt_should_include_rule_specific_criteria():
     assert rows[0]["rule_criteria_version"] == "formal_high_false_positive_rule_criteria_v1"
     assert rows[0]["required_document"] == "admission_record/入院记录"
     assert rows[0]["data_gap_reason"] == "无法确认证据来自入院记录现病史。"
+
+
+@pytest.mark.asyncio
+async def test_adjudicator_prompt_should_include_near_full_discharge_context_hint():
+    captured: dict[str, str] = {}
+    discharge_text = (
+        "诊疗经过：" + "患者入院后完善血常规、凝血功能、CTA等检查，予以抗感染、平喘、利尿治疗。" * 20
+        + "出院医嘱：转上级医院继续治疗，门诊随访。"
+    )
+
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        captured["prompt"] = prompt
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "items": [
+                                    {
+                                        "index": 0,
+                                        "rule_id": "SC-121",
+                                        "adjudicated_display_status": "data_quality_gap",
+                                        "adjudicator_reason": "测试返回。",
+                                        "adjudicator_supporting_quote": "",
+                                        "adjudicator_confidence": 0.5,
+                                        "rule_requirement_match": "data_gap",
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        )
+                    }
+                }
+            ]
+        }
+
+    await adjudicate_postprocessed_qc_results(
+        [
+            {
+                "rule_id": "SC-121",
+                "rule_name": "诊疗经过不全面、不详细",
+                "status": "non_compliant",
+                "display_status": "qc_review_candidate",
+                "findings": "诊疗经过不全面。",
+                "evidence": "予以抗感染、平喘治疗。",
+                "metadata": {
+                    "targeted_evidence_context": {
+                        "discharge_record_evidence": [
+                            {
+                                "source_table": "discharge_record",
+                                "document_type": "出院记录",
+                                "evidence_text": discharge_text,
+                            }
+                        ]
+                    }
+                },
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert "rule_context_coverage_hint" in captured["prompt"]
+    assert '"discharge_record_context_near_full": true' in captured["prompt"]
+    assert "不能只因 item.evidence/supporting_quote 较短就转 data_quality_gap" in captured["prompt"]
 
 
 @pytest.mark.asyncio

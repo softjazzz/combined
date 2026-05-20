@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 from collections import Counter
 from datetime import datetime
@@ -48,6 +49,27 @@ ISSUE_JSON = DOCS_DIR / "formal_qc_rule_prompt_criteria_ab_issue_review.json"
 QUALITY_CSV = DOCS_DIR / "formal_qc_rule_prompt_criteria_ab_quality_review.csv"
 QUALITY_JSON = DOCS_DIR / "formal_qc_rule_prompt_criteria_ab_quality_review.json"
 REPORT_MD = DOCS_DIR / "正式质控高误报规则专属判定Prompt回归报告.md"
+
+
+def _read_runtime_env_value(key: str, default: str = "") -> str:
+    env_value = os.getenv(key)
+    if env_value:
+        return env_value
+    env_path = BACKEND_ROOT / ".env"
+    if not env_path.exists():
+        return default
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, value = stripped.split("=", 1)
+        if name.strip() == key:
+            return value.strip().strip('"').strip("'")
+    return default
+
+
+MODEL_NAME = _read_runtime_env_value("LLM_MODEL", "qwen3.5-35b-a3b")
+PROVIDER_NAME = _read_runtime_env_value("LLM_DEFAULT_PROVIDER", "alibaba")
 
 
 def _read_json(path: Path) -> Any:
@@ -216,16 +238,22 @@ def _write_report(
     criteria_counter = Counter(row["rule_id"] for row in criteria_rows)
     shrink_rate = 1 - (after["confirmed_defect"] / baseline["confirmed_defect"]) if baseline["confirmed_defect"] else 0.0
     over_conservative = baseline["confirmed_defect"] >= 4 and after["confirmed_defect"] <= max(1, baseline["confirmed_defect"] // 3)
+    focus_rows = [
+        row
+        for row in suppressed_confirmed
+        if (str(row.get("visit_id")), str(row.get("rule_id"))) in {("2262370", "SC-118"), ("2328501", "SC-121")}
+    ]
     lines = [
         "# 正式质控高误报规则专属判定Prompt回归报告",
         "",
         f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"运行模型：provider=`{PROVIDER_NAME}`，model=`{MODEL_NAME}`。",
         "",
         "## 改动范围",
         "",
         f"- 新增规则级判定标准版本：`{RULE_CRITERIA_VERSION}`。",
         "- 覆盖规则：SC-012、SC-013、SC-034、SC-118、SC-121、SC-122、SC-123。",
-        "- 一审 fast_screen_full 规则卡片注入 required_document / required_section / required_fields / confirmed / not_confirmed / data_gap 条件。",
+        "- 一审 fast_screen_full 规则卡片注入 required_document / required_section / required_fields 与候选召回 guidance，避免把 confirmed 条件当作提前消灭候选的硬过滤。",
         "- 二审 adjudicator payload 同步携带 rule_specific_criteria，并要求优先遵守规则专属判定标准。",
         "- 保留 SC-083 / SC-099 / SC-123 applicability gate，不开放程序化 confirmed。",
         "",
@@ -273,6 +301,28 @@ def _write_report(
                 )
             )
         lines.append("")
+    lines.extend(
+        [
+            "## 重点样本",
+            "",
+        ]
+    )
+    if focus_rows:
+        lines.extend(
+            [
+                "| visit_id | 规则 | after状态 | baseline复核 | 说明 |",
+                "| --- | --- | --- | --- | --- |",
+            ]
+        )
+        for row in focus_rows:
+            lines.append(
+                "| {visit_id} | {rule_id} | {after_status} | {baseline_review_decision} | {risk_note} |".format(
+                    **row
+                )
+            )
+    else:
+        lines.append("- 2262370/SC-118 与 2328501/SC-121 未出现在“baseline keep 被压掉”清单中，说明对应 confirmed 通路未被本轮 criteria 继续压制。")
+    lines.append("")
     lines.extend(
         [
         "## 结论",
@@ -327,6 +377,8 @@ async def _run(args: argparse.Namespace) -> None:
     payload["ab_compare"] = [baseline, after]
     payload["rule_criteria_version"] = RULE_CRITERIA_VERSION
     payload["rule_criteria_covered_rules"] = sorted(RULE_SPECIFIC_CRITERIA)
+    payload["runtime_model"] = MODEL_NAME
+    payload["runtime_provider"] = PROVIDER_NAME
     payload["rule_criteria_rows"] = _criteria_rows(after_issue)
     payload["suppressed_confirmed_review"] = _suppressed_confirmed_rows(baseline_issue, baseline_quality, after_issue)
     audit._write_json(SUMMARY_JSON, payload)
@@ -357,6 +409,8 @@ def _refresh_report_only() -> None:
     payload["ab_compare"] = [baseline, after]
     payload["rule_criteria_version"] = RULE_CRITERIA_VERSION
     payload["rule_criteria_covered_rules"] = sorted(RULE_SPECIFIC_CRITERIA)
+    payload["runtime_model"] = MODEL_NAME
+    payload["runtime_provider"] = PROVIDER_NAME
     payload["rule_criteria_rows"] = _criteria_rows(after_issue)
     payload["suppressed_confirmed_review"] = suppressed
     audit._write_json(SUMMARY_JSON, payload)

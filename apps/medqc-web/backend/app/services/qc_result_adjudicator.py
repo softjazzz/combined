@@ -34,6 +34,7 @@ LABEL_BY_STATUS = {
     "technical_error_internal": "technical_error",
 }
 CONFIRMED_QUOTE_MIN_LEN = 18
+ADJUDICATOR_MISSING_RETRY_CHUNK_SIZE = 5
 TARGETED_COVERAGE_GUARDRAIL_RULES = {"SC-019", "SC-083", "SC-099", "SC-100", "SC-101"}
 CONTEXT_MATRIX_GUARDRAIL_RULES = {"SC-012", "SC-013", "SC-034", "SC-118", "SC-121", "SC-122"}
 NEGATIVE_ONLY_TERMS = ("未见", "缺失", "未提供", "未记录", "没有")
@@ -316,6 +317,58 @@ def _rule_requirement(rule: dict[str, Any]) -> str:
     return "\n".join(_safe_text(item) for item in parts if _safe_text(item))
 
 
+def _collect_context_text_stats(targeted_context: Any) -> dict[str, Any]:
+    if not isinstance(targeted_context, dict):
+        return {}
+
+    def _extract_texts(value: Any) -> list[str]:
+        if isinstance(value, str):
+            return [_safe_text(value)]
+        if isinstance(value, dict):
+            return [
+                _safe_text(
+                    value.get("evidence_text")
+                    or value.get("content")
+                    or value.get("text")
+                    or value.get("quote")
+                    or ""
+                )
+            ]
+        if isinstance(value, list):
+            texts: list[str] = []
+            for item in value:
+                texts.extend(_extract_texts(item))
+            return texts
+        return []
+
+    discharge_text = "\n".join(_extract_texts(targeted_context.get("discharge_record_evidence")))
+    admission_text = "\n".join(_extract_texts(targeted_context.get("admission_record_evidence")))
+    present_illness_text = "\n".join(_extract_texts(targeted_context.get("present_illness_evidence")))
+    past_history_text = "\n".join(_extract_texts(targeted_context.get("past_history_evidence")))
+    discharge_compact = re.sub(r"\s+", "", discharge_text)
+    admission_compact = re.sub(r"\s+", "", admission_text or present_illness_text or past_history_text)
+    return {
+        "discharge_record_context_char_count": len(discharge_compact),
+        "discharge_record_context_near_full": len(discharge_compact) >= 500,
+        "discharge_record_has_treatment_course_marker": any(
+            term in discharge_text for term in ("诊疗经过", "治疗经过", "治疗上", "予以", "给予")
+        ),
+        "discharge_record_has_advice_marker": any(term in discharge_text for term in ("出院医嘱", "出院指导", "随访", "复查")),
+        "admission_context_char_count": len(admission_compact),
+        "admission_context_near_full": len(admission_compact) >= 400,
+        "context_hint_note": (
+            "targeted_evidence_context contains near-full source context; "
+            "do not treat short item.evidence/supporting_quote as truncated if it can link back to this context."
+        ),
+    }
+
+
+def _chunked(values: list[int], size: int) -> list[list[int]]:
+    if size <= 0:
+        return [values]
+    return [values[index : index + size] for index in range(0, len(values), size)]
+
+
 def _candidate_payload(item: dict[str, Any], rule: dict[str, Any] | None, index: int) -> dict[str, Any]:
     metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
     targeted_context = metadata.get("targeted_evidence_context")
@@ -338,6 +391,7 @@ def _candidate_payload(item: dict[str, Any], rule: dict[str, Any] | None, index:
         "pack_id": _safe_text(item.get("pack_id") or metadata.get("pack_id")),
         "formal_evidence_coverage": _truncate_jsonable(coverage, limit=1200) if isinstance(coverage, dict) else {},
         "rule_specific_criteria": _truncate_jsonable(criteria, limit=2600) if criteria else {},
+        "rule_context_coverage_hint": _collect_context_text_stats(targeted_context),
         "targeted_evidence_context": (
             _truncate_jsonable(targeted_context, limit=3200) if isinstance(targeted_context, dict) else {}
         ),
@@ -393,7 +447,8 @@ def _build_adjudicator_prompt(
 - 若 item.rule_specific_criteria 非空，必须优先遵守其中 required_document、required_section、required_fields、confirmed_conditions、not_confirmed_conditions、data_quality_gap_conditions。
 - SC-012/SC-013 只评价入院记录对应段落；缺完整入院记录上下文时 data_quality_gap。
 - SC-034 confirmed 必须同时有病情/治疗/医嘱变化事件与缺少分析/处理依据的证据；仅症状 + 对症处理不得 confirmed。
-- SC-118/SC-121 必须基于完整出院记录字段矩阵；文书头、记录时间或短片段不得 confirmed。
+- SC-118/SC-121 必须基于完整或近完整出院记录字段矩阵；若 item.rule_context_coverage_hint.discharge_record_context_near_full=true，不能只因 item.evidence/supporting_quote 较短就转 data_quality_gap，必须结合 targeted_evidence_context.discharge_record_evidence 判断具体缺失字段。
+- SC-121 若缺陷并非“主要药品名称缺失”，has_discharge_medication_text=false 不得一票否决 confirmed。
 - SC-122 必须基于完整出院医嘱段；只有随访/复查/局部建议片段时 data_quality_gap。
 - SC-123 必须先确认存在出院带药/出院用药；非药品出院医嘱不得当出院带药，字段完整时 rejected_by_system。
 
@@ -1361,62 +1416,69 @@ async def adjudicate_postprocessed_qc_results(
         )
         for candidate_index, (_, item) in enumerate(candidates)
     ]
+    initial_call_error = ""
     try:
         response = await llm_generate(_build_adjudicator_prompt(prompt_items))
         payload = _extract_json_object(_extract_llm_content(response))
         adjudicated_items = payload.get("items") if isinstance(payload.get("items"), list) else []
     except Exception as exc:
-        for index, item in candidates:
-            next_rows[index] = _technical_error_for_candidate(item, f"正式质控二审 LLM 调用失败：{exc}")
-        return apply_confirmed_guardrails(next_rows)
+        initial_call_error = f"正式质控二审 LLM 调用失败：{exc}"
+        adjudicated_items = []
 
     by_candidate_index, initial_diagnostics = _collect_adjudications(adjudicated_items, prompt_items)
     expected_codes = initial_diagnostics["expected_rule_codes"]
-    initial_missing_indexes = list(initial_diagnostics["missing_rule_indexes"])
+    initial_missing_indexes = list(range(len(candidates))) if initial_call_error else list(initial_diagnostics["missing_rule_indexes"])
     initial_missing_codes = list(initial_diagnostics["missing_rule_codes"])
+    if initial_call_error:
+        initial_missing_codes = list(initial_diagnostics["expected_rule_codes"])
     extra_rule_codes = list(initial_diagnostics["extra_rule_codes"])
     duplicate_rule_codes = list(initial_diagnostics["duplicate_rule_codes"])
     retry_attempted = bool(initial_missing_indexes)
     retry_recovered_count = 0
 
     if initial_missing_indexes:
-        retry_candidates = [candidates[index] for index in initial_missing_indexes]
-        retry_prompt_items = [
-            _candidate_payload(
-                item,
-                rules.get(_safe_text(item.get("rule_id")).upper()),
-                retry_index,
-            )
-            for retry_index, (_, item) in enumerate(retry_candidates)
-        ]
-        retry_expected_codes = [_normalize_rule_code(item.get("rule_id")) for item in retry_prompt_items]
-        try:
-            retry_response = await llm_generate(
-                _build_adjudicator_prompt(
-                    retry_prompt_items,
-                    retry_missing_rule_ids=retry_expected_codes,
+        recovered_original_indexes: set[int] = set()
+        for missing_chunk in _chunked(initial_missing_indexes, ADJUDICATOR_MISSING_RETRY_CHUNK_SIZE):
+            retry_candidates = [candidates[index] for index in missing_chunk]
+            retry_prompt_items = [
+                _candidate_payload(
+                    item,
+                    rules.get(_safe_text(item.get("rule_id")).upper()),
+                    retry_index,
                 )
-            )
-            retry_payload = _extract_json_object(_extract_llm_content(retry_response))
-            retry_items = retry_payload.get("items") if isinstance(retry_payload.get("items"), list) else []
-            retry_by_index, retry_diagnostics = _collect_adjudications(retry_items, retry_prompt_items)
-            extra_rule_codes = sorted(set(extra_rule_codes + list(retry_diagnostics["extra_rule_codes"])))
-            duplicate_rule_codes = sorted(set(duplicate_rule_codes + list(retry_diagnostics["duplicate_rule_codes"])))
-            for retry_index, adjudication in retry_by_index.items():
-                if retry_index >= len(initial_missing_indexes):
-                    continue
-                original_candidate_index = initial_missing_indexes[retry_index]
-                recovered = dict(adjudication)
-                recovered["recovered_by_adjudicator_missing_rule_retry"] = True
-                by_candidate_index[original_candidate_index] = recovered
-            retry_recovered_count = len(retry_by_index)
-        except Exception as exc:
-            for original_candidate_index in initial_missing_indexes:
-                row_index, original_item = candidates[original_candidate_index]
-                next_rows[row_index] = _technical_error_for_candidate(
-                    original_item,
-                    f"正式质控二审缺失补裁调用失败：{exc}",
+                for retry_index, (_, item) in enumerate(retry_candidates)
+            ]
+            retry_expected_codes = [_normalize_rule_code(item.get("rule_id")) for item in retry_prompt_items]
+            try:
+                retry_response = await llm_generate(
+                    _build_adjudicator_prompt(
+                        retry_prompt_items,
+                        retry_missing_rule_ids=retry_expected_codes,
+                    )
                 )
+                retry_payload = _extract_json_object(_extract_llm_content(retry_response))
+                retry_items = retry_payload.get("items") if isinstance(retry_payload.get("items"), list) else []
+                retry_by_index, retry_diagnostics = _collect_adjudications(retry_items, retry_prompt_items)
+                extra_rule_codes = sorted(set(extra_rule_codes + list(retry_diagnostics["extra_rule_codes"])))
+                duplicate_rule_codes = sorted(
+                    set(duplicate_rule_codes + list(retry_diagnostics["duplicate_rule_codes"]))
+                )
+                for retry_index, adjudication in retry_by_index.items():
+                    if retry_index >= len(missing_chunk):
+                        continue
+                    original_candidate_index = missing_chunk[retry_index]
+                    recovered = dict(adjudication)
+                    recovered["recovered_by_adjudicator_missing_rule_retry"] = True
+                    by_candidate_index[original_candidate_index] = recovered
+                    recovered_original_indexes.add(original_candidate_index)
+            except Exception as exc:
+                for original_candidate_index in missing_chunk:
+                    row_index, original_item = candidates[original_candidate_index]
+                    next_rows[row_index] = _technical_error_for_candidate(
+                        original_item,
+                        f"正式质控二审缺失补裁调用失败：{exc}",
+                    )
+        retry_recovered_count = len(recovered_original_indexes)
 
     final_missing_indexes = [index for index in range(len(candidates)) if index not in by_candidate_index]
     final_missing_codes = [expected_codes[index] for index in final_missing_indexes]

@@ -68,8 +68,24 @@ def test_high_false_positive_rule_should_be_enriched_with_specific_criteria():
     assert enriched["rule_criteria_version"] == RULE_CRITERIA_VERSION
     assert RULE_CRITERIA_VERSION in enriched["prompt_version"]
     assert "required_document=discharge_record/出院记录" in enriched["custom_prompt"]
-    assert "完整诊疗经过段" in enriched["custom_prompt"]
+    assert "一审用于候选召回" in enriched["custom_prompt"]
+    assert "has_discharge_medication_text=false" in enriched["custom_prompt"]
     assert "检查诊疗经过是否完整" in enriched["custom_prompt"]
+
+
+def test_sc118_first_pass_criteria_should_keep_discharge_candidates_for_second_pass():
+    rule = {
+        "rule_id": "SC-118",
+        "name": "出院记录缺项或内容错误",
+        "custom_prompt": "检查出院记录字段是否完整。",
+    }
+
+    enriched = enrich_rule_with_specific_criteria(rule)
+
+    prompt = enriched["custom_prompt"]
+    assert "required_section=完整出院记录字段矩阵" in prompt
+    assert "不要把 confirmed 条件当作一审硬过滤" in prompt
+    assert "保留 qc_review_candidate" in prompt
 
 
 def test_rule_criteria_metadata_should_expose_required_document_and_fields():
@@ -459,7 +475,7 @@ async def test_run_final_fast_screen_pack_failure_should_only_mark_that_pack_unc
     assert by_rule["SC-032"]["status"] == "compliant"
     assert by_rule["SC-121"]["status"] == "compliant"
     assert result["pack_metrics"]["provider_error_count"] == 1
-    assert result["pack_metrics"]["retry_count"] == 1
+    assert result["pack_metrics"]["retry_count"] == 2
     assert by_rule["SC-023"]["metadata"]["technical_error_internal"] is True
     assert by_rule["SC-023"]["metadata"]["final_decision_source"] == "technical_error_fallback"
 
@@ -512,7 +528,30 @@ async def test_run_final_fast_screen_majority_missing_rule_items_should_retry_on
 
 
 @pytest.mark.asyncio
-async def test_run_final_fast_screen_missing_rule_item_should_be_uncertain_without_dropping_rule(monkeypatch: pytest.MonkeyPatch):
+async def test_run_final_fast_screen_single_missing_rule_item_should_retry_once(monkeypatch: pytest.MonkeyPatch):
+    _patch_fast_screen_bundle(monkeypatch)
+    engine = _FakeFastScreenRuleEngine(omit_once_rule_ids={"SC-024"})
+    service = _FakeFastScreenService(engine)
+
+    result = await fast_screen_qc.run_final_fast_screen(
+        qc_service=service,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        rule_ids=["SC-023", "SC-024"],
+        pack_concurrency=3,
+    )
+
+    by_rule = {item["rule_id"]: item for item in result["evaluation_results"]}
+    assert by_rule["SC-023"]["status"] == "compliant"
+    assert by_rule["SC-024"]["status"] == "compliant"
+    assert engine.call_counts["first_course_features"] == 2
+    assert result["pack_metrics"]["retry_count"] == 1
+    assert by_rule["SC-024"]["metadata"]["pack_retry_success"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_final_fast_screen_missing_rule_item_after_retry_should_be_uncertain_without_dropping_rule(monkeypatch: pytest.MonkeyPatch):
     _patch_fast_screen_bundle(monkeypatch)
     engine = _FakeFastScreenRuleEngine(omit_rule_id="SC-024")
     service = _FakeFastScreenService(engine)
@@ -528,11 +567,13 @@ async def test_run_final_fast_screen_missing_rule_item_should_be_uncertain_witho
 
     by_rule = {item["rule_id"]: item for item in result["evaluation_results"]}
     assert set(by_rule) == {"SC-023", "SC-024"}
-    assert by_rule["SC-023"]["status"] == "compliant"
+    assert by_rule["SC-023"]["status"] == "uncertain"
     assert by_rule["SC-024"]["status"] == "uncertain"
-    assert engine.call_counts["first_course_features"] == 1
-    assert result["pack_metrics"]["provider_error_count"] == 0
-    assert result["pack_metrics"]["retry_count"] == 0
+    assert engine.call_counts["first_course_features"] == 3
+    assert result["pack_metrics"]["provider_error_count"] == 1
+    assert result["pack_metrics"]["retry_count"] == 2
+    assert by_rule["SC-023"]["metadata"]["pack_retry_reason"] == "missing_rule_items"
+    assert by_rule["SC-024"]["metadata"]["pack_retry_reason"] == "missing_rule_items"
 
 
 @pytest.mark.asyncio

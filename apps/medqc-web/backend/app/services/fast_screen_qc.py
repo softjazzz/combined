@@ -1035,7 +1035,7 @@ async def run_final_fast_screen(
     context_token_budget: int = FAST_SCREEN_DEFAULT_CONTEXT_TOKEN_BUDGET,
     low_confidence_threshold: float = FAST_SCREEN_DEFAULT_LOW_CONFIDENCE_THRESHOLD,
     pack_concurrency: int = 3,
-    max_pack_retries: int = 1,
+    max_pack_retries: int = 2,
     cancellation_check: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     raise_if_cancelled(cancellation_check)
@@ -1239,6 +1239,8 @@ async def run_final_fast_screen(
             missing_count = len(missing_rule_ids)
             if missing_count >= max(2, (len(pack_rules) + 1) // 2):
                 return True, "majority_missing_rule_items"
+            if missing_count:
+                return True, "missing_rule_items"
             if rows and len(rows) >= max(1, len(pack_rules) // 2):
                 all_zero_empty_batch_error = all(
                     float(item.get("confidence") or 0.0) == 0.0
