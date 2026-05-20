@@ -227,6 +227,7 @@ def _write_report(
     *,
     baseline: dict[str, Any],
     after: dict[str, Any],
+    after_summary_payload: dict[str, Any],
     after_quality: dict[str, Any],
     after_issue: dict[str, Any],
     suppressed_confirmed: list[dict[str, Any]],
@@ -236,6 +237,11 @@ def _write_report(
     review_counter = Counter(str(row.get("review_recommendation") or row.get("review_decision") or "") for row in confirmed_reviews)
     criteria_rows = _criteria_rows(after_issue)
     criteria_counter = Counter(row["rule_id"] for row in criteria_rows)
+    technical_diagnostics = (
+        after_summary_payload.get("technical_error_diagnostics")
+        if isinstance(after_summary_payload.get("technical_error_diagnostics"), dict)
+        else {}
+    )
     shrink_rate = 1 - (after["confirmed_defect"] / baseline["confirmed_defect"]) if baseline["confirmed_defect"] else 0.0
     over_conservative = baseline["confirmed_defect"] >= 4 and after["confirmed_defect"] <= max(1, baseline["confirmed_defect"] // 3)
     focus_rows = [
@@ -261,6 +267,7 @@ def _write_report(
         "",
         "| 指标 | baseline（三门控+二审补裁） | after（规则专属 Prompt） |",
         "| --- | ---: | ---: |",
+        f"| completed_visit_count | {baseline['visit_count']} | {after['visit_count']} |",
         f"| confirmed_defect | {baseline['confirmed_defect']} | {after['confirmed_defect']} |",
         f"| confirmed_keep | {baseline['confirmed_keep']} | {after['confirmed_keep']} |",
         f"| keep_rate | {baseline['confirmed_keep_rate']:.1%} | {after['confirmed_keep_rate']:.1%} |",
@@ -275,6 +282,13 @@ def _write_report(
         "",
         f"- provider_error={after['provider_error_count']}；connection={after['provider_connection_error_count']}；upstream={after['upstream_http_error_count']}；parse={after['parse_error_count']}；timeout={after['timeout_count']}；rate_limit={after['rate_limit_count']}；technical={after['technical_error_internal']}。",
         f"- stability_pass={'是' if after['stability_pass'] else '否'}。",
+        f"- after 实际完成 {after['visit_count']}/10 份；若未完成 10/10，后续质量指标只作为已完成样本的局部观察，不作为 random10 整体质量结论。",
+        "",
+        "## 技术异常定位",
+        "",
+        f"- technical_error_diagnostics：{json.dumps(technical_diagnostics, ensure_ascii=False)}。",
+        "- 本轮停止点为 2013648 / SC-146。SC-146 单规则 pack 已启用严格 JSON prompt，但本次 random10 中该 pack 在 2 次 parse_error retry 后仍未恢复，missing_rule_ids=['SC-146']，因此按稳定性门禁停止后续样本。",
+        "- 该结果说明 088368cdb 的定向 3/3 completed 不能完全覆盖 random10 运行态波动；下一步应继续治理 SC-146 单规则 pack 的随机稳定性，而不是扩大到 20 份。",
         "",
         "## 质量复核",
         "",
@@ -331,6 +345,7 @@ def _write_report(
     )
     if not after["stability_pass"]:
         lines.append("- 本轮稳定性未通过，不做质量扩大结论。")
+        lines.append("- after 只完成部分样本，confirmed keep rate 不能用于判断规则专属 Prompt 的整体效果；需先治理 technical/provider 稳定性后再恢复同一 random10。")
     elif after["confirmed_keep_rate"] >= 0.7 and not over_conservative:
         lines.append("- confirmed keep rate 达到 70% 且未出现明显过度压缩，可考虑进入 20 份扩大验收。")
     elif after["confirmed_keep_rate"] >= 0.7 and over_conservative:
@@ -386,6 +401,7 @@ async def _run(args: argparse.Namespace) -> None:
     _write_report(
         baseline=baseline,
         after=after,
+        after_summary_payload=after_summary,
         after_quality=after_quality,
         after_issue=after_issue,
         suppressed_confirmed=payload["suppressed_confirmed_review"],
@@ -418,6 +434,7 @@ def _refresh_report_only() -> None:
     _write_report(
         baseline=baseline,
         after=after,
+        after_summary_payload=after_summary,
         after_quality=after_quality,
         after_issue=after_issue,
         suppressed_confirmed=suppressed,
