@@ -831,3 +831,242 @@ async def test_gate_terminal_results_should_not_enter_adjudicator_retry():
 
     assert rows[0]["display_status"] == "qc_review_candidate"
     assert "adjudicator_retry_attempted" not in rows[0]
+
+
+def _confirmed_item(
+    rule_id: str,
+    *,
+    quote: str,
+    reason: str = "二审认为规则核心要件成立。",
+    evidence: str = "",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "rule_id": rule_id,
+        "status": "non_compliant",
+        "display_status": "confirmed_defect",
+        "adjudicated_display_status": "confirmed_defect",
+        "adjudicator_reason": reason,
+        "adjudicator_supporting_quote": quote,
+        "findings": reason,
+        "evidence": evidence or quote,
+        "can_show_as_defect": True,
+        "metadata": metadata or {},
+    }
+
+
+def _admission_context(text: str) -> dict[str, Any]:
+    return {
+        "targeted_evidence_context": {
+            "rule_id": "ADMISSION-STRUCTURED-CONTEXT",
+            "admission_record_evidence": [
+                {
+                    "source_table": "admission_record",
+                    "document_type": "入院记录",
+                    "evidence_text": text,
+                }
+            ],
+            "coverage_flags": {"has_admission_record_source": True, "has_history_sections_text": True},
+        }
+    }
+
+
+def _discharge_context(text: str, *, contrast_quote: str = "") -> dict[str, Any]:
+    return {
+        "targeted_evidence_context": {
+            "rule_id": "DISCHARGE-STRUCTURED-CONTEXT",
+            "discharge_record_evidence": [
+                {
+                    "source_table": "discharge_record",
+                    "document_type": "出院记录",
+                    "evidence_text": text,
+                }
+            ],
+            "contrast_quote": contrast_quote,
+            "coverage_flags": {"has_discharge_record_source": True},
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_keep_sc012_short_quote_from_present_illness():
+    admission_text = (
+        "患者于10小时前晕厥，醒后于玉蟾社区卫生院输液治疗（具体不详）。"
+        "3小时前解黑便，为进一步检查及治疗至我院急诊，发病以来精神一般。"
+    )
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-012",
+                quote="于玉蟾社区卫生院输液治疗（具体不详）。",
+                reason="现病史明确记载院外治疗具体不详，缺治疗细节和效果。",
+                metadata=_admission_context(admission_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-012"
+    assert rows[0]["confirmed_context_document_type"] == "admission_record"
+    assert rows[0].get("adjudicator_guardrail_failed") is not True
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc012_short_quote_without_admission_context():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-012",
+                quote="于玉蟾社区卫生院输液治疗（具体不详）。",
+                reason="治疗具体不详。",
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-012"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_keep_sc013_when_complete_past_history_missing_required_field():
+    admission_text = (
+        "一般情况良好。既往有高血压病史。否认传染病史。否认手术史，否认外伤史，"
+        "否认过敏史。否认特殊病史。"
+    )
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-013",
+                quote="既往有高血压病史。否认传染病史。否认手术史，否认外伤史，否认过敏史。",
+                reason="既往史段落缺输血史和预防接种史。",
+                metadata=_admission_context(admission_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    matrix = rows[0]["confirmed_context_matrix"]
+    assert matrix["transfusion_history"] is False
+    assert matrix["vaccination_history"] is False
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_mark_sc013_vaccination_unknown_as_policy_pending():
+    admission_text = (
+        "一般情况良好。否认慢病病史。否认传染病史。否认外伤史，否认手术史，"
+        "否认输血史，不详预防接种史，否认过敏史。"
+    )
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-013",
+                quote="否认输血史，不详预防接种史，否认过敏史。",
+                reason="预防接种史不详。",
+                metadata=_admission_context(admission_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["policy_pending_flags"] == ["policy_pending_vaccination_unknown"]
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_keep_sc118_when_full_discharge_matrix_has_missing_fields():
+    discharge_text = (
+        "患者以左膝关节反复疼痛10+年为主诉于入院。入院查体左膝关节压痛明显。"
+        "入院完善相关辅助检查MRI提示左膝关节退行性变。诊疗经过：给予保守治疗。"
+        "住院期间复查血常规、凝血功能及肝肾功能，结合患者症状调整止痛和康复治疗方案。"
+        "病情好转，予以出院。出院医嘱：门诊随访，每1个月复查，坚持功能锻炼。"
+    )
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-118",
+                quote="出院记录未见明确入院日期和出院日期字段。",
+                reason="完整出院记录字段矩阵缺入院日期、出院日期和医师签名。",
+                metadata=_discharge_context(discharge_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    matrix = rows[0]["confirmed_context_matrix"]
+    assert matrix["admission_date"] is False
+    assert matrix["discharge_date"] is False
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc118_short_discharge_fragment():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-118",
+                quote="患者李某，性别男，年龄75岁，以左膝疼痛入院。",
+                reason="出院记录缺项。",
+                metadata=_discharge_context("患者李某，性别男，年龄75岁，以左膝疼痛入院。"),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_keep_sc121_with_treatment_course_and_contrast():
+    discharge_text = (
+        "患者因肺栓塞入院，入院完善CTA提示肺动脉栓塞。诊疗经过：予以多索茶碱、甲泼尼龙抗炎平喘，"
+        "哌拉西林他唑巴坦抗感染，呋塞米及螺内酯利尿，并持续监测血气分析、凝血功能和氧合情况。"
+        "患者病情仍危重，家属要求转院，出院时已告知继续治疗风险。"
+    )
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-121",
+                quote="予以多索茶碱、甲泼尼龙抗炎平喘，哌拉西林他唑巴坦抗感染，呋塞米及螺内酯利尿。",
+                reason="诊疗经过缺少抗凝治疗方案和相关重要辅助检查结果分析。",
+                metadata=_discharge_context(discharge_text, contrast_quote="医嘱提示低分子肝素抗凝治疗。"),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-121"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc121_short_treatment_sentence_without_contrast():
+    discharge_text = (
+        "患者陈某以黑便入院。入院完善腹部CT等检查。治疗上予以护胃、补液等对症支持治疗。"
+        "病情稳定后出院，嘱门诊随访。"
+    )
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-121",
+                quote="治疗上予以护胃、补液等对症支持治疗。",
+                reason="无主要药品名称。",
+                metadata=_discharge_context(discharge_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True

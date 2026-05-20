@@ -30,6 +30,7 @@ LABEL_BY_STATUS = {
 }
 CONFIRMED_QUOTE_MIN_LEN = 18
 TARGETED_COVERAGE_GUARDRAIL_RULES = {"SC-019", "SC-083", "SC-099", "SC-100", "SC-101"}
+CONTEXT_MATRIX_GUARDRAIL_RULES = {"SC-012", "SC-013", "SC-118", "SC-121"}
 NEGATIVE_ONLY_TERMS = ("未见", "缺失", "未提供", "未记录", "没有")
 HEADER_ONLY_TERMS = (
     "记录时间",
@@ -167,6 +168,57 @@ def _gate_metadata(item: dict[str, Any]) -> dict[str, Any]:
     metadata = _metadata(item)
     nested = metadata.get("applicability_gate_metadata")
     return dict(nested) if isinstance(nested, dict) else {}
+
+
+def _targeted_evidence_context(item: dict[str, Any]) -> dict[str, Any]:
+    metadata = _metadata(item)
+    context = metadata.get("targeted_evidence_context")
+    return dict(context) if isinstance(context, dict) else {}
+
+
+def _context_evidence_texts(context: dict[str, Any], key: str) -> list[str]:
+    value = context.get(key)
+    if not isinstance(value, list):
+        return []
+    texts: list[str] = []
+    for row in value:
+        if not isinstance(row, dict):
+            continue
+        text = _safe_text(row.get("evidence_text") or row.get("source_quote") or row.get("text"))
+        if text:
+            texts.append(text)
+    return texts
+
+
+def _has_any_term(text: str, terms: tuple[str, ...] | list[str] | set[str]) -> bool:
+    compact = _safe_text(text)
+    return any(term and term in compact for term in terms)
+
+
+def _matrix_terms(text: str, terms: tuple[str, ...] | list[str] | set[str]) -> bool:
+    return _has_any_term(text, terms)
+
+
+def _matrix_missing_fields(matrix: dict[str, bool]) -> list[str]:
+    return [key for key, value in matrix.items() if not value]
+
+
+def _apply_context_matrix_metadata(item: dict[str, Any], result: dict[str, Any]) -> None:
+    payload = {
+        "confirmed_context_matrix_rule": result.get("rule"),
+        "confirmed_context_document_type": result.get("document_type"),
+        "confirmed_context_section": result.get("section"),
+        "confirmed_context_matrix": result.get("matrix") or {},
+        "confirmed_context_matrix_complete": bool(result.get("matrix_complete")),
+        "confirmed_blocked_reason": result.get("blocked_reason") or "",
+        "policy_pending_flags": result.get("policy_pending_flags") or [],
+    }
+    item.update(payload)
+    metadata = item.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        item["metadata"] = metadata
+    metadata.update(payload)
 
 
 def _truncate(value: Any, limit: int = 900) -> str:
@@ -503,6 +555,260 @@ def _guardrail_targeted_rule(
     return None
 
 
+def _context_matrix_result(
+    *,
+    rule: str,
+    document_type: str,
+    section: str,
+    matrix: dict[str, bool],
+    failure_status: str = "",
+    failure_reason: str = "",
+    policy_pending_flags: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "rule": rule,
+        "document_type": document_type,
+        "section": section,
+        "matrix": matrix,
+        "matrix_complete": not _matrix_missing_fields(matrix),
+        "failure_status": failure_status,
+        "failure_reason": failure_reason,
+        "blocked_reason": failure_reason,
+        "policy_pending_flags": policy_pending_flags or [],
+    }
+
+
+def _guardrail_admission_present_illness_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    admission_text = "\n".join(_context_evidence_texts(context, "admission_record_evidence"))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    combined = f"{admission_text}\n{quote}\n{evidence}"
+    source_ok = bool(admission_text) and (
+        _matrix_terms(admission_text, ("现病史", "发病以来", "发病后", "入院前", "门诊", "急诊", "收入"))
+        or _safe_text(context.get("rule_id")) == "ADMISSION-STRUCTURED-CONTEXT"
+    )
+    matrix = {
+        "onset_course": _matrix_terms(combined, ("起病", "发病", "出现", "诉", "主诉")),
+        "preadmission_visit": _matrix_terms(combined, ("院外", "外院", "门诊", "急诊", "卫生院", "社区医院", "我院")),
+        "preadmission_exam": _matrix_terms(combined, ("检查", "检验", "CT", "MRI", "彩超", "腹部彩超", "辅助检查")),
+        "preadmission_treatment": _matrix_terms(combined, ("治疗", "输液", "用药", "服药", "口服", "针灸", "理疗")),
+        "treatment_effect": _matrix_terms(combined, ("无好转", "好转", "缓解", "改善", "无明显改善", "效果欠佳", "加重")),
+    }
+    if not source_ok:
+        return _context_matrix_result(
+            rule="SC-012",
+            document_type="admission_record",
+            section="present_illness",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-012 confirmed 需要证明证据来自入院记录现病史/发病后至入院前段落；当前来源或段落不足。",
+        )
+    if "具体不详" in combined and matrix["preadmission_treatment"]:
+        return _context_matrix_result(
+            rule="SC-012",
+            document_type="admission_record",
+            section="present_illness",
+            matrix=matrix,
+        )
+    if not (matrix["preadmission_visit"] and matrix["preadmission_treatment"]):
+        return _context_matrix_result(
+            rule="SC-012",
+            document_type="admission_record",
+            section="present_illness",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-012 confirmed 需要院前就诊/治疗触发和现病史字段矩阵支撑；当前只能证明片段存在，不能确认缺陷。",
+        )
+    return _context_matrix_result(
+        rule="SC-012",
+        document_type="admission_record",
+        section="present_illness",
+        matrix=matrix,
+    )
+
+
+def _guardrail_admission_past_history_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    admission_text = "\n".join(_context_evidence_texts(context, "admission_record_evidence"))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    combined = f"{admission_text}\n{quote}\n{evidence}"
+    source_ok = bool(admission_text) and (
+        _matrix_terms(admission_text, ("既往", "一般情况", "慢病", "传染病史", "手术史", "输血史", "过敏史", "预防接种史"))
+        or _safe_text(context.get("rule_id")) == "ADMISSION-STRUCTURED-CONTEXT"
+    )
+    matrix = {
+        "prior_disease_history": _matrix_terms(combined, ("慢病", "既往", "疾病史", "高血压", "糖尿病", "冠心病")),
+        "infectious_disease_history": _matrix_terms(combined, ("传染病史", "肝炎", "结核")),
+        "surgery_trauma_history": _matrix_terms(combined, ("手术史", "外伤史", "手术外伤")),
+        "transfusion_history": _matrix_terms(combined, ("输血史", "输血")),
+        "allergy_history": _matrix_terms(combined, ("过敏史", "过敏")),
+        "vaccination_history": _matrix_terms(combined, ("预防接种史", "接种史")),
+    }
+    if not source_ok:
+        return _context_matrix_result(
+            rule="SC-013",
+            document_type="admission_record",
+            section="past_history",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-013 confirmed 需要证明证据来自入院记录既往史完整段落；当前来源或段落不足。",
+        )
+    if "不详预防接种史" in combined:
+        return _context_matrix_result(
+            rule="SC-013",
+            document_type="admission_record",
+            section="past_history",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-013 中“不详预防接种史”属于客户口径敏感项；未确认必须明确记录前不直接 confirmed。",
+            policy_pending_flags=["policy_pending_vaccination_unknown"],
+        )
+    if _matrix_missing_fields(matrix):
+        return _context_matrix_result(
+            rule="SC-013",
+            document_type="admission_record",
+            section="past_history",
+            matrix=matrix,
+        )
+    return _context_matrix_result(
+        rule="SC-013",
+        document_type="admission_record",
+        section="past_history",
+        matrix=matrix,
+        failure_status="rejected_by_system",
+        failure_reason="SC-013 既往史字段矩阵已覆盖主要规定字段，不支持 confirmed。",
+    )
+
+
+def _guardrail_discharge_record_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    discharge_text = "\n".join(_context_evidence_texts(context, "discharge_record_evidence"))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    source_text = discharge_text or evidence
+    source_ok = len(re.sub(r"\s+", "", discharge_text)) >= 120
+    matrix = {
+        "admission_date": bool(re.search(r"(入院日期|入院时间|于\d{4}[-年]\d{1,2}[-月]\d{1,2}.{0,8}入院)", source_text)),
+        "discharge_date": bool(re.search(r"(出院日期|出院时间|于\d{4}[-年]\d{1,2}[-月]\d{1,2}.{0,8}出院)", source_text)),
+        "admission_condition": _matrix_terms(source_text, ("入院情况", "入院查体", "查体", "主诉")),
+        "admission_diagnosis": _matrix_terms(source_text, ("入院诊断",)),
+        "treatment_course": _matrix_terms(source_text, ("诊疗经过", "治疗经过", "给予", "完善", "治疗")),
+        "discharge_condition": _matrix_terms(source_text, ("出院情况", "病情好转", "予以出院", "转院", "出院时")),
+        "discharge_advice": _matrix_terms(source_text, ("出院医嘱", "出院带药", "门诊随访", "随访", "复查")),
+        "doctor_signature": _matrix_terms(source_text, ("医师签名", "医生签名", "签名医师", "签名")),
+    }
+    if not source_ok:
+        return _context_matrix_result(
+            rule="SC-118",
+            document_type="discharge_record",
+            section="discharge_record_fields",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-118 confirmed 需要完整出院记录或结构化字段矩阵；当前仅见短片段，不能确认缺项。",
+        )
+    if _matrix_missing_fields(matrix):
+        return _context_matrix_result(
+            rule="SC-118",
+            document_type="discharge_record",
+            section="discharge_record_fields",
+            matrix=matrix,
+        )
+    return _context_matrix_result(
+        rule="SC-118",
+        document_type="discharge_record",
+        section="discharge_record_fields",
+        matrix=matrix,
+        failure_status="rejected_by_system",
+        failure_reason="SC-118 出院记录字段矩阵未见明确缺项，不支持 confirmed。",
+    )
+
+
+def _guardrail_discharge_treatment_course_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    discharge_text = "\n".join(_context_evidence_texts(context, "discharge_record_evidence"))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    reason = _safe_text(item.get("adjudicator_reason"))
+    contrast_quote = _safe_text(context.get("contrast_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    combined = f"{discharge_text}\n{quote}\n{reason}\n{contrast_quote}\n{evidence}"
+    source_len = len(re.sub(r"\s+", "", discharge_text))
+    source_ok = source_len >= 120 or (source_len >= 80 and "诊疗经过" in discharge_text)
+    claims_missing_drug = _matrix_terms(reason, ("主要药品", "药品名称", "主要药物", "用药", "抗凝", "治疗方案"))
+    contrast_compact = re.sub(r"\s+", "", contrast_quote)
+    has_contrast = bool(contrast_compact) and len(contrast_compact) >= 8 and not _quote_is_record_time_only(contrast_quote)
+    matrix = {
+        "main_treatment_measures": _matrix_terms(combined, ("治疗", "给予", "予以", "手术", "补液", "护胃", "抗感染", "平喘", "利尿")),
+        "main_drug_names_or_treatment_plan": _matrix_terms(combined, ("多索茶碱", "甲泼尼龙", "哌拉西林", "他唑巴坦", "呋塞米", "螺内酯", "艾司奥美拉唑", "抗凝", "抗感染", "药")),
+        "important_auxiliary_exam_results_related_to_diagnosis": _matrix_terms(combined, ("CT", "MRI", "CTA", "血常规", "检验", "检查", "辅助检查", "诊断")),
+        "treatment_response_or_outcome": _matrix_terms(combined, ("好转", "缓解", "稳定", "转院", "出院", "效果", "症状")),
+        "contrast_order_or_consultation_if_claiming_missing_drug": (not claims_missing_drug) or has_contrast,
+    }
+    if not source_ok:
+        return _context_matrix_result(
+            rule="SC-121",
+            document_type="discharge_record",
+            section="treatment_course",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-121 confirmed 需要完整出院记录诊疗经过段；当前仅见短句或片段，不能确认诊疗经过不全面。",
+        )
+    if claims_missing_drug and not has_contrast:
+        return _context_matrix_result(
+            rule="SC-121",
+            document_type="discharge_record",
+            section="treatment_course",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-121 若判“无主要药品名称”，必须有医嘱、会诊建议或治疗方案对照；当前缺少跨文书对照。",
+        )
+    if claims_missing_drug and has_contrast:
+        return _context_matrix_result(
+            rule="SC-121",
+            document_type="discharge_record",
+            section="treatment_course",
+            matrix=matrix,
+        )
+    quote_compact = re.sub(r"\s+", "", quote)
+    if quote_compact in {"治疗上予以护胃、补液等对症支持治疗。", "治疗上予以护胃、补液等对症支持治疗"} and not has_contrast:
+        return _context_matrix_result(
+            rule="SC-121",
+            document_type="discharge_record",
+            section="treatment_course",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-121 不能仅凭“护胃、补液”等短句确认诊疗经过不详细，需要完整诊疗经过或跨文书对照。",
+        )
+    if _matrix_missing_fields(matrix):
+        return _context_matrix_result(
+            rule="SC-121",
+            document_type="discharge_record",
+            section="treatment_course",
+            matrix=matrix,
+        )
+    return _context_matrix_result(
+        rule="SC-121",
+        document_type="discharge_record",
+        section="treatment_course",
+        matrix=matrix,
+        failure_status="rejected_by_system",
+        failure_reason="SC-121 诊疗经过字段矩阵未见明确缺项，不支持 confirmed。",
+    )
+
+
+def _guardrail_context_matrix(item: dict[str, Any], rule_id: str) -> dict[str, Any] | None:
+    if rule_id == "SC-012":
+        return _guardrail_admission_present_illness_matrix(item)
+    if rule_id == "SC-013":
+        return _guardrail_admission_past_history_matrix(item)
+    if rule_id == "SC-118":
+        return _guardrail_discharge_record_matrix(item)
+    if rule_id == "SC-121":
+        return _guardrail_discharge_treatment_course_matrix(item)
+    return None
+
+
 def _guardrail_sc099_gate_context(item: dict[str, Any]) -> tuple[str, str] | None:
     gate_meta = _gate_metadata(item)
     linkage = gate_meta.get("pathology_linkage_context")
@@ -598,6 +904,9 @@ def _confirmed_guardrail(item: dict[str, Any]) -> dict[str, Any]:
     findings = _safe_text(next_item.get("findings"))
     problem_type = _safe_text(next_item.get("evidence_problem_type"))
     combined = f"{findings}\n{evidence}\n{quote}\n{reason}\n{problem_type}"
+    context_matrix = _guardrail_context_matrix(next_item, rule_id)
+    if context_matrix:
+        _apply_context_matrix_metadata(next_item, context_matrix)
 
     failure_status = ""
     failure_reason = ""
@@ -619,6 +928,10 @@ def _confirmed_guardrail(item: dict[str, Any]) -> dict[str, Any]:
         gate_failure = _guardrail_sc123_gate_matrix(next_item)
         if gate_failure:
             failure_status, failure_reason = gate_failure
+    elif context_matrix is not None:
+        if context_matrix.get("failure_status"):
+            failure_status = _safe_text(context_matrix.get("failure_status"))
+            failure_reason = _safe_text(context_matrix.get("failure_reason"))
     elif rule_id in TARGETED_COVERAGE_GUARDRAIL_RULES:
         targeted_failure = _guardrail_targeted_rule(
             rule_id=rule_id,
@@ -675,6 +988,8 @@ def _confirmed_guardrail(item: dict[str, Any]) -> dict[str, Any]:
         metadata["original_adjudicated_display_status"] = "confirmed_defect"
         metadata["adjudicator_guardrail_failed"] = True
         metadata["adjudicator_guardrail_reason"] = failure_reason
+        if context_matrix:
+            metadata["confirmed_blocked_reason"] = failure_reason
     return next_item
 
 
