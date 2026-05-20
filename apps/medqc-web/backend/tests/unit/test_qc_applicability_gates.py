@@ -58,6 +58,45 @@ def _sc099_context(
     }
 
 
+def _sc083_result(*, visit_id: str = "v-sc083") -> dict[str, Any]:
+    return {
+        "rule_id": "SC-083",
+        "rule_name": "四级手术术前讨论未多学科讨论",
+        "status": "non_compliant",
+        "findings": "四级手术术前讨论未体现 MDT。",
+        "evidence": "术前讨论记录片段。",
+        "record_id": visit_id,
+        "confidence": 0.8,
+        "metadata": {},
+    }
+
+
+def _sc083_code_context(*, level4: bool = True) -> dict[str, Any]:
+    if level4:
+        return {
+            "visit_id": "v-sc083",
+            "visit_max_level": "4",
+            "visit_level4_evidence_code": "00.8000x001",
+            "visit_level4_evidence_name": "四级测试手术",
+            "visit_level4_evidence_source_table": "mr_surgery",
+            "strong_match_type": "code_exact",
+            "sc083_applicability": "applicable_level4_by_code",
+        }
+    return {
+        "visit_id": "v-sc083",
+        "visit_max_level": "<=3",
+        "strong_match_type": "code_exact",
+        "sc083_applicability": "not_applicable_level3_by_code",
+    }
+
+
+def _sc083_context(*, code_level4: bool = True, documents: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    return {
+        "sc083_code_gate_context": _sc083_code_context(level4=code_level4),
+        "source_documents": documents or [],
+    }
+
+
 def test_non_sc123_rule_should_return_no_action() -> None:
     gate = run_applicability_gate({"rule_id": "SC-036", "evidence": "异常结果已记录。"})
 
@@ -239,6 +278,74 @@ def test_sc099_gate_should_never_allow_direct_confirmed() -> None:
         assert gate.confirmed_allowed is False
 
 
+def test_sc083_level3_code_should_reject() -> None:
+    gate = run_applicability_gate(
+        _sc083_result(),
+        _sc083_context(code_level4=False, documents=[]),
+    )
+
+    assert gate.gate_decision == GateDecision.REJECTED_BY_SYSTEM
+    assert gate.confirmed_allowed is False
+    assert gate.metadata["mdt_evidence_status"] == "level4_not_applicable_by_code"
+
+
+def test_sc083_level4_with_multidisciplinary_consult_should_reject_not_confirm() -> None:
+    gate = run_applicability_gate(
+        _sc083_result(),
+        _sc083_context(
+            documents=[
+                {
+                    "source_table": "consultation_record",
+                    "document_title": "多学科会诊记录",
+                    "text": "主持人：张主任。会诊原因：四级手术术前评估。讨论结论：完善准备后手术。",
+                }
+            ]
+        ),
+    )
+
+    assert gate.gate_decision == GateDecision.REJECTED_BY_SYSTEM
+    assert gate.confirmed_allowed is False
+    assert gate.metadata["mdt_equivalent_by_customer_policy"] is True
+
+
+def test_sc083_level4_with_multi_department_consults_should_reject_not_confirm() -> None:
+    gate = run_applicability_gate(
+        _sc083_result(),
+        _sc083_context(
+            documents=[
+                {"source_table": "consultation_record", "text": "麻醉科意见：完善术前麻醉评估。"},
+                {"source_table": "consultation_record", "text": "呼吸内科意见：加强肺功能评估。"},
+            ]
+        ),
+    )
+
+    assert gate.gate_decision == GateDecision.REJECTED_BY_SYSTEM
+    assert gate.confirmed_allowed is False
+    assert set(gate.metadata["departments_detected"]) >= {"麻醉科", "呼吸内科"}
+
+
+def test_sc083_level4_with_single_department_consult_should_pass_to_second_gate() -> None:
+    gate = run_applicability_gate(
+        _sc083_result(),
+        _sc083_context(
+            documents=[
+                {"source_table": "consultation_record", "text": "麻醉科意见：完善术前麻醉评估。"},
+            ]
+        ),
+    )
+
+    assert gate.gate_decision == GateDecision.PASS_TO_SECOND_GATE
+    assert gate.needs_second_pass_gate is True
+    assert gate.confirmed_allowed is False
+
+
+def test_sc083_level4_without_mdt_documents_should_be_data_gap() -> None:
+    gate = run_applicability_gate(_sc083_result(), _sc083_context(documents=[]))
+
+    assert gate.gate_decision == GateDecision.DATA_QUALITY_GAP
+    assert gate.confirmed_allowed is False
+
+
 @pytest.mark.asyncio
 async def test_terminal_gate_result_should_not_be_promoted_by_adjudicator() -> None:
     processed = postprocess_qc_result(
@@ -298,6 +405,36 @@ async def test_sc099_terminal_gate_result_should_not_be_promoted_by_adjudicator(
     assert called is False
     assert rows[0]["display_status"] == "rejected_by_system"
     assert rows[0]["can_show_as_defect"] is False
+
+
+@pytest.mark.asyncio
+async def test_sc083_mdt_equivalent_terminal_result_should_not_be_promoted_by_adjudicator() -> None:
+    processed = postprocess_qc_result(
+        _sc083_result(),
+        bundle_metadata=_sc083_context(
+            documents=[
+                {
+                    "source_table": "consultation_record",
+                    "document_title": "多科会诊记录",
+                    "text": "麻醉科意见：评估麻醉风险。心血管内科意见：控制血压后手术。",
+                }
+            ]
+        ),
+        mode="formal_final_online",
+    )
+    called = False
+
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        nonlocal called
+        called = True
+        return {"choices": [{"message": {"content": '{"items":[]}'}}]}
+
+    rows = await adjudicate_postprocessed_qc_results([processed], llm_generate=_fake_generate)
+
+    assert called is False
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["can_show_as_defect"] is False
+    assert rows[0]["applicability_gate_confirmed_allowed"] is False
 
 
 @pytest.mark.asyncio

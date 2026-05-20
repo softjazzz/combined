@@ -40,7 +40,7 @@ def test_single_ordinary_consultation_should_not_be_mdt() -> None:
     assert result.ordinary_consultation_substitute_mdt == ""
 
 
-def test_single_consultation_with_multiple_departments_should_be_policy_pending() -> None:
+def test_single_consultation_with_multiple_departments_should_be_mdt_equivalent() -> None:
     result = aggregate_sc083_mdt_evidence(
         _level4_context(),
         [
@@ -56,9 +56,10 @@ def test_single_consultation_with_multiple_departments_should_be_policy_pending(
     assert result.has_multi_department_participants is True
     assert "麻醉科" in result.departments_detected
     assert "心血管内科" in result.departments_detected
-    assert result.mdt_evidence_status == "level4_applicable_multidept_consult_policy_pending"
-    assert result.suggested_gate_decision == "data_quality_gap"
-    assert result.ordinary_consultation_substitute_mdt == "policy_pending"
+    assert result.mdt_evidence_status == "level4_applicable_mdt_equivalent_evidence_accepted"
+    assert result.suggested_gate_decision == "rejected_by_system"
+    assert result.mdt_equivalent_by_customer_policy is True
+    assert result.ordinary_consultation_substitute_mdt == "accepted_by_customer_policy"
 
 
 def test_explicit_mdt_with_host_reason_and_conclusion_should_be_strong() -> None:
@@ -81,11 +82,30 @@ def test_explicit_mdt_with_host_reason_and_conclusion_should_be_strong() -> None
     assert result.has_host_or_moderator is True
     assert result.has_discussion_reason is True
     assert result.has_discussion_conclusion is True
-    assert result.mdt_evidence_status == "level4_applicable_mdt_evidence_strong"
+    assert result.mdt_evidence_status == "level4_applicable_mdt_equivalent_evidence_accepted"
+    assert result.suggested_gate_decision == "rejected_by_system"
+    assert result.mdt_equivalent_by_customer_policy is True
+
+
+def test_multi_department_consultation_keywords_should_be_mdt_equivalent() -> None:
+    result = aggregate_sc083_mdt_evidence(
+        _level4_context(),
+        [
+            MdtEvidenceDocument(
+                visit_id="v1",
+                source_table="consultation_record",
+                document_title="多科联合会诊记录",
+                record_content="多科会诊意见：麻醉科、心血管内科共同评估后建议完善术前准备。",
+            )
+        ],
+    )
+
+    assert result.has_multidisciplinary_keyword is True
+    assert result.mdt_evidence_status == "level4_applicable_mdt_equivalent_evidence_accepted"
     assert result.suggested_gate_decision == "rejected_by_system"
 
 
-def test_multiple_ordinary_consultations_by_visit_should_be_policy_pending() -> None:
+def test_multiple_ordinary_consultations_by_visit_should_be_mdt_equivalent() -> None:
     result = aggregate_sc083_mdt_evidence(
         _level4_context(),
         [
@@ -106,7 +126,8 @@ def test_multiple_ordinary_consultations_by_visit_should_be_policy_pending() -> 
 
     assert result.consultation_record_count == 2
     assert result.has_multi_department_participants is True
-    assert result.mdt_evidence_status == "level4_applicable_multidept_consult_policy_pending"
+    assert result.mdt_evidence_status == "level4_applicable_mdt_equivalent_evidence_accepted"
+    assert result.suggested_gate_decision == "rejected_by_system"
 
 
 def test_missing_level4_code_should_not_confirm() -> None:

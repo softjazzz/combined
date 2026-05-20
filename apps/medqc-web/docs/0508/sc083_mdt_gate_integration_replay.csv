@@ -1,0 +1,63 @@
+visit_id,patient_name,department,visit_max_level,visit_level4_evidence_code,visit_level4_evidence_name,visit_level4_evidence_source_table,code_gate_passed,mdt_evidence_status,suggested_gate_decision,has_mdt_keyword,has_multidisciplinary_keyword,has_multi_department_participants,departments_detected,participant_count,has_host_or_moderator,has_discussion_reason,has_discussion_conclusion,has_preoperative_timing,mdt_equivalent_by_customer_policy,evidence_time_relation_to_surgery,evidence_source_tables,strongest_quote,contrast_quote,evidence_quality_flags,ordinary_consultation_substitute_mdt,document_count,consultation_record_count,presurg_discussion_count,reason,source_document_count,code_probe_row_count
+1870471,,,,,,,false,level4_applicability_data_gap,data_quality_gap,false,false,false,"[""特请贵科""]",3,false,false,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""senior_course_record""]","患者蒲云鹏,性别男,年龄39岁,以“转移性右下腹疼痛1天”为主诉于2025年06月29日 21:01入院。入院诊断:1,急性阑尾炎2,局限性腹膜炎3,脂肪肝4,社区获得性肺炎5,电解质紊乱6,双肾结石 。患者由康复医院转我科治疗,诉有精神分裂症病史,因继续口服药物控制精神分裂症,特请贵科会诊。
+ 心身医学科门诊欧勇住院医师会诊考虑:
+ 39岁男性患者,患精神分裂症多年,长期于“泸县康复医院”住院治疗,目前规律服用利培酮片2mg/bid,奥氮平片5mg/bid,拉莫三嗪片25mg/bid控制精神病情,病情稳定,查看患",,[],,7,1,,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,7,
+1966656,,,,,,,false,level4_applicability_data_gap,data_quality_gap,false,false,true,"[""康复科"", ""心血管内科"", ""特请中医科""]",13,true,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]","射以促进伤口愈合等康复治疗。   
+                                                              医生签名:
+术前讨论记录
+陈龙
+王飞副主任医师讨论地点：:外二科办公室
+王飞副主任医师、钟开伦副主任医师、张云海主任医师、孙治庆主治医师、付启虹主治医师、杜忠宜主治医师、李方健主治医师、刘杰主治医师、王标主治医师、陈龙住院医师、冯军住院医师、康毛吉住院医师；护士长高利萍主管护师等。病史汇报：:患者周光容，性别女，年龄55岁，以“便时肛门疼痛10+月”为主诉于",康复科；心血管内科；特请中医科,"[""ordinary_multidept_consult_accepted_by_customer_policy""]",accepted_by_customer_policy,9,2,1,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,9,
+2142472,张泽芳,骨科烧伤科,4,00.8000x001,全膝关节假体翻修术,mr_surgery,true,level4_applicable_mdt_equivalent_evidence_accepted,rejected_by_system,false,true,true,"[""内分泌科"", ""康复科"", ""心内科"", ""神经内科"", ""骨科""]",13,true,true,true,true,true,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]","2、2型糖尿病 3、高血压 4、陈旧性脑梗死  5、心律失常 6、低钾血症 7、腔隙性脑梗死 8、颈动脉斑块 9、肾功能异常，患者血压低,心率快,给予补液,完善检查，邀请相关科室术前评估.患者心电图异常，给予完善心肌酶谱检查，低钾，给予补钾治疗。已完善颅脑cta检查，再次邀请神经内科、心内科会诊。                                                                    医生签名：段超 周雨
+周雨
+张北南副主任医师查房记录
+:张北南副主任医师今日查房， 患",内分泌科；康复科；心内科；神经内科；骨科,"[""ordinary_multidept_consult_accepted_by_customer_policy""]",accepted_by_customer_policy,14,4,1,已取得四级手术编码证据，并聚合到客户认可的 MDT/多学科会诊/多科会诊等价证据，SC-083 暂不构成未 MDT 缺陷。,14,7
+2172686,胡启华,眼科,unknown,09.6x01,右眼泪囊切除术,mr_surgery,false,level4_applicability_data_gap,data_quality_gap,false,false,true,"[""五官科"", ""眼科""]",10,true,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]","医生签名:
+术前讨论记录
+刘诗琪
+曾亚丽主治医师讨论地点：:五官科医师办公室
+曾发平副主任医师、周凤霞主治医师、陈法君住院医师、罗新明住院医师、雷建住院医师、刘诗琪住院医师、胡容主管护师、先桂芝主管护师。病史汇报：:患者胡启华，性别女，年龄83岁，以“右眼视物模糊5年，伴胀痛2天。”为主诉于2026年01月11日 11:54入院。现病史：患者于5年前，无明显诱因起",五官科；眼科,"[""ordinary_multidept_consult_accepted_by_customer_policy""]",accepted_by_customer_policy,21,1,2,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,21,10
+2191573,廖小平,泌尿血管外科,<=3,38.0300x003,上肢血管切开探查术,mr_surgery,false,level4_not_applicable_by_code,rejected_by_system,false,false,false,"[""肾病内科""]",8,false,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""presurg_discussion"", ""senior_course_record""]","脉充盈差，右前臂束臂后可见右侧浅表静脉充盈良好。双下肢不肿，Neuhof征阴性，Homans征阴性，肢端循环感觉良好。唐远君副主任医师查房示：患者诊断慢性肾脏病5期，今日行术前讨论，拟明日行手术建立透析通路，观察患者病情变化。                                                                   医生签名：唐远君 雷成
+雷成
+术后第一天李杰副主任医师查房记录
+:今日患者术后第一天，李杰副主任医师查房：患者一般情况可，未诉特殊不适，查体：体温:36.6℃,",,[],,13,1,3,手术编码精确/规范化匹配显示最高等级为三级或以下，SC-083 四级手术 MDT 规则不适用。,13,9
+2200664,朱泰廷,泌尿血管外科,unknown,56.0x00x005,经尿道输尿管镜输尿管激光碎石术,mr_surgery,false,level4_applicability_data_gap,data_quality_gap,true,true,true,"[""呼吸内科"", ""心血管内科"", ""泌尿外科"", ""病理科"", ""病理科多学科"", ""皮肤科"", ""肿瘤科"", ""重症医学科"", ""麻醉科""]",9,false,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""presurg_discussion"", ""senior_course_record""]","医生签名:
+患者因下腹疼痛5小时入院。患者行经尿道前列腺等离子电切术,术后病检提示前列腺腺泡性腺癌,特此请多科联合会诊,病理科刘志秀副主任医师会诊意见:患者病情已悉,临床考虑前列腺增生,行电切,电切标本送检,病理诊断:前列腺增生症,灶性区域见前列腺腺体增生密集、有异型性,考虑为前列腺腺泡性腺癌,Gleason评分:3+3=6(WHO分级分组1组),待免疫组化协助明确诊断。遵会诊意见予以等待免疫组化协助明确诊断。",,"[""mdt_keyword_without_host""]",,19,8,1,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,19,10
+2214679,田正群,妇科,4,68.4100,腹腔镜经腹全子宫切除术,mr_surgery,true,level4_applicable_mdt_equivalent_evidence_accepted,rejected_by_system,false,false,true,"[""妇科"", ""康复科"", ""胸外科"", ""麻醉科""]",8,true,true,true,true,true,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]","助治疗。胸外科医师会诊意见:   
+                                                              医生签名:
+术前讨论记录
+魏欣
+申威科主任讨论地点：:妇科医生办公室
+银娟副主任医师，杨晶主治医师、魏欣主治医师，刘敏住院医师，麻醉科李世元主任医师，刘隆平护士长，王燕护士病史汇报：:魏欣主管医师汇报病史：患者为61岁女性，主诉发现外阴肿物脱出半年。查体嘱患者用力屏气时见宫颈位于处女膜内约0.5cm，阴道前壁膨出于处女膜外阴道内见较多黄色分泌物，阴道壁充血。",妇科；康复科；胸外科；麻醉科,"[""ordinary_multidept_consult_accepted_by_customer_policy""]",accepted_by_customer_policy,12,2,1,已取得四级手术编码证据，并聚合到客户认可的 MDT/多学科会诊/多科会诊等价证据，SC-083 暂不构成未 MDT 缺陷。,12,10
+2218469,刘光蓉,骨科烧伤科,unknown,17.972E0,桡骨下端骨折手法整复术,mr_surgery,false,level4_applicability_data_gap,data_quality_gap,false,false,true,"[""康复科"", ""病情康复科"", ""胸外科"", ""骨科""]",11,true,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]","膝关节运动功能等康复治疗。遵执。   
+                                                            医生签名:
+术前讨论记录
+刘强
+胡定祥主任医师讨论地点：:骨科办公室
+胡定祥主任医师 马晨曦副主任医师 黄河副主任医师 邓腾孝主治医师 段超主治医师 周雨医师 刘强医师 杨欢护士长病史汇报：:患者刘光蓉，性别女，年龄53岁，以“车祸伤致全身多处疼痛伴活动受限2小时。”为主诉于2026年02月08日 01:17入院。入院时情况：患者神志清楚，对答切题，右前臂、",康复科；病情康复科；胸外科；骨科,"[""ordinary_multidept_consult_accepted_by_customer_policy""]",accepted_by_customer_policy,18,2,2,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,18,21
+2246915,,,,,,,false,level4_applicability_data_gap,data_quality_gap,true,true,true,"[""妇科"", ""并泌尿外科"", ""康复科"", ""心内科"", ""心血管内科"", ""术前请多学科"", ""泌尿外科"", ""特请贵科"", ""申威科"", ""神经内科"", ""胸外科"", ""麻醉科""]",14,true,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]","、阴道前壁脱垂伴膀胱膨出II度;3、阴道后壁脱垂I度;4、会阴陈旧性裂伤I度;5、左侧卵巢囊肿;6、高血压2级;7、腔隙性脑梗塞;8、肺结节;9、脂肪肝。有手术指征,术前请多学科会诊后,无绝经手术禁忌症,患者及家属要求手术,拟明日行经阴道子宫全切术+左侧附件切除术+阴道前后壁修补术+膀胱膨出修补术+尿道折叠术。已告知家属手术风险并签字,现积极术前准备,明日手术。
+                                                    医师签名:邹红缨/刘敏
+患者黄金莲,女 ,71岁。",,[],,23,4,1,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,23,
+2268187,,,,,,,false,level4_applicability_data_gap,data_quality_gap,false,false,true,"[""康复科"", ""泌尿血管外科"", ""特请康复科"", ""特请神经内科"", ""神经内科""]",5,false,true,true,false,false,unknown_from_available_documents,"[""consultation_record"", ""daily_course_record"", ""senior_course_record""]",：神志清、精神一般，生命体征平稳，左膝关节前方见皮肤挫伤，黑色血痂形成，周围皮肤红肿，皮温稍高，压痛，膝关节屈伸活动受限，浮髌试验阳性，磨髌试验阳性，膝关节韧带及半月板查体因患者疼痛难以完成，左踝关节石膏外固定，左踝部稍肿胀，远端感觉、血循一般。 查体无补充。4.院内辅助检查：2026-02-14 左踝关节螺旋CT平扫 左侧外踝撕脱性骨折，周围软组织肿胀、少许积气。左踝关节退变。扫及左侧跟骨膨胀性骨质破坏，必要时请结合MRI；左侧跟骨骨刺。左膝关节退变，周围软组织肿胀；左下肢静脉曲张。建议随诊排除隐匿性骨折。诊断：,康复科；泌尿血管外科；特请康复科；特请神经内科；神经内科,"[""ordinary_multidept_consult_accepted_by_customer_policy""]",accepted_by_customer_policy,10,3,,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,10,
+2270715,马建倡,普通外科,unknown,45.2302,电子结肠镜检查,mr_surgery,false,level4_applicability_data_gap,data_quality_gap,false,false,true,"[""康复科"", ""检验科"", ""特请康复科"", ""特请疼痛科"", ""特请肿瘤科"", ""肿瘤科""]",12,true,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]","患者拟行无痛肠镜,特请疼痛科会诊术前评估
+    疼痛科贺超主治医师会诊意见:病史敬悉,患者否认高血压、糖尿病病史,中度呼吸功能障碍,心功能2级。查体:双肺呼吸音清,未闻及干湿罗音,心律齐,未闻及明显杂音。麻醉耐受可,拟全身麻醉下行胃肠镜检查,术前禁食8小时,禁饮4小时
+    执行情况:经与患者及家属沟通后,按会诊意见予以术前准备",康复科；检验科；特请康复科；特请疼痛科；特请肿瘤科；肿瘤科,"[""ordinary_multidept_consult_accepted_by_customer_policy""]",accepted_by_customer_policy,18,4,1,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,18,17
+2278814,,,,,,,false,level4_applicability_data_gap,data_quality_gap,true,true,true,"[""ICU"", ""再请我科"", ""康复科"", ""心血管内科"", ""拟请康复科"", ""普外科"", ""特请贵科"", ""肿瘤科"", ""贵科"", ""重症医学科"", ""麻醉科""]",11,false,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]",",加重1月余”为主诉于2026年03月11日 08:49入院。入院后依据病史特点及辅助检查结果,诊断胃恶性肿瘤(腺癌),拟行腹腔镜胃大部切除夹胃空肠吻合术,肿瘤四级手术需要多学科会诊讨论,特请贵科会诊协助术前评估,谢谢!李世元主任医师会诊查房后指示:病史已悉:患者任刚,性别男,年龄59岁,以“反复上腹部疼痛 1年余,加重1月余”为主诉于2026年03月11日 08:49入院,诊断:胃恶性肿瘤,拟行手术治疗,查体:神志清醒,对答切题,吸烟,诉两次全麻下肾结石手术,无药物过敏史,有高血压病史,自服药治疗,血压控制平稳,",,"[""mdt_keyword_without_host""]",,19,6,1,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,19,
+2287309,,,,,,,false,level4_applicability_data_gap,data_quality_gap,true,true,true,"[""ICU"", ""呼吸内科"", ""呼吸科"", ""建议胸外科"", ""术前已行多学科"", ""经呼吸内科"", ""经胸外科"", ""胸外科"", ""行术前多学科"", ""贵科"", ""重症医学科"", ""麻醉科""]",12,true,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]","医生签名:
+医生签名:
+患者因发现左肺占位转入我科,现患者拟行肺手术,故请贵科会诊行术前多学科会诊,谢谢!,麻醉科医师会诊后指示:患者既往慢性咳嗽约50余年,近年来开始出现痰较多,不粘,胸部CT提示:慢支炎、肺气肿改变;气管变窄,听诊双肺未闻及干湿啰音。有高血压病史,规律服药控制,自诉平时收缩压控制在120-140mmHg,舒张压在70+-mmHg,入院后血压控制在120-160/62-92mmHg。有烟酒嗜好,每日饮酒约250ml,吸烟2",,[],,16,5,1,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,16,
+2298532,,,,,,,false,level4_applicability_data_gap,data_quality_gap,true,true,true,"[""ICU"", ""今请康复科"", ""内分泌科"", ""呼吸内科"", ""康复科"", ""心血管内科"", ""拟今日请康复科"", ""拟止血多学科"", ""拟请多学科"", ""普外科"", ""疼痛科"", ""肿瘤科"", ""贵科"", ""重症医学科"", ""麻醉科""]",15,true,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]","肿瘤科徐洪医师、心血管内肖萍副主任医师、呼吸内科余佳主治医师
+讨论原因:患者王德怀,性别男,年龄72岁,以“发现直肠肿物5+月。”为主诉入院。患者基础疾病多,病情复杂,拟请多学科会诊,评估术前病情情况。
+   王飞副主任医师总结:患者病史据悉,结合患者病史及目前相关辅查,目前诊断:1、直肠腺癌(ycT3N1M0);2、2型糖尿病伴血糖控制不佳;3、2型糖尿病性周围神经病;4、冠状动脉粥样硬化性心脏病;5、冠状动脉支架植入后状态;6、结肠多发管状腺瘤;7、直肠管状腺瘤;8、结肠多发息肉;9、低钠血症;10、肺气肿;1",,[],,29,3,1,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,29,
+2311318,,,,,,,false,level4_applicability_data_gap,data_quality_gap,false,false,true,"[""内分泌科"", ""康复科"", ""心血管内科"", ""心身医学科"", ""泌尿外科"", ""泌尿血管外科"", ""神经内科""]",8,true,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""daily_course_record"", ""presurg_discussion"", ""senior_course_record""]","查双下肢静脉彩超。遵执。   
+                                                              医生签名:刘强
+术前讨论记录
+刘强
+胡定祥主任医师讨论地点：:脊柱外科办公室
+胡定祥主任医师 黄河副主任医师 邓腾孝主治医师 张波住院医师 刘强医师 杨欢护士长病史汇报：:患者范永勤，性别女，年龄58岁，以“摔倒致左踝关节疼痛伴活动受限3+小时。”为主诉于2026年03月27日 15:41入院。入院时情况：患者神志清楚，对答切题，左踝关节肿胀、触痛明显，伴活动受",内分泌科；康复科；心血管内科；心身医学科；泌尿外科；泌尿血管外科；神经内科,"[""ordinary_multidept_consult_accepted_by_customer_policy""]",accepted_by_customer_policy,16,4,1,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,16,
+2327691,邹世科,疼痛科,unknown,04.4900x042,周围神经松解术,mr_surgery,false,level4_applicability_data_gap,data_quality_gap,false,false,true,"[""今日科"", ""后再次请血液内科"", ""肿瘤科"", ""血液内科"", ""血液科"", ""贵科""]",7,true,true,true,true,false,preoperative_or_presurg_documented,"[""consultation_record"", ""presurg_discussion"", ""senior_course_record""]","善相关辅助检查,患者考虑中。   
+                                                              医生签名:
+术前讨论记录
+贺超
+梁军副主任医师讨论地点：:疼痛科办公室
+梁军副主任医师、贺超主治医师、余向前主治医师、万俊良住院医师、林霞住院医师病史汇报：:因“左侧胸锁关节及左侧颈部头颞部疼痛1+天”入院，入院查体：右肩关节未见红肿，右关节功能活动受限，上举90°，后伸10°，外展30°，胸锁关节局部肿胀，压痛，疼痛VAS评分6-7分，静息时4分。 神清语",今日科；后再次请血液内科；肿瘤科；血液内科；血液科；贵科,"[""ordinary_multidept_consult_accepted_by_customer_policy""]",accepted_by_customer_policy,8,1,1,未取得 code_exact/code_normalized 四级手术编码证据，不能进入 SC-083 缺陷裁决。,8,6

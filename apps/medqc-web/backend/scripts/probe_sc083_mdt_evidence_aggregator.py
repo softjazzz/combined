@@ -29,9 +29,9 @@ from app.services.qc_applicability_gates.sc083_mdt_evidence_aggregator import ( 
 DOCS_DIR = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0508"
 SURGERY_DIR = DOCS_DIR / "surgery_level_catalog"
 CODE_PROBE_CSV = SURGERY_DIR / "sc083_code_gated_second_pass_probe.csv"
-OUTPUT_CSV = DOCS_DIR / "sc083_mdt_evidence_aggregator_probe.csv"
-OUTPUT_JSON = DOCS_DIR / "sc083_mdt_evidence_aggregator_probe.json"
-REPORT_MD = DOCS_DIR / "SC083多学科讨论证据聚合器只读回放报告.md"
+OUTPUT_CSV = DOCS_DIR / "sc083_mdt_gate_integration_replay.csv"
+OUTPUT_JSON = DOCS_DIR / "sc083_mdt_gate_integration_replay.json"
+REPORT_MD = DOCS_DIR / "SC083多学科会诊等价MDT正式接入回放报告.md"
 
 DEFAULT_VISIT_IDS = [
     "2142472",
@@ -227,10 +227,10 @@ def _summary(rows: list[dict[str, Any]], source_meta: dict[str, Any]) -> dict[st
         "mdt_evidence_status_counts": dict(Counter(row["mdt_evidence_status"] for row in rows)),
         "suggested_gate_decision_counts": dict(Counter(row["suggested_gate_decision"] for row in rows)),
         "code_gate_passed_count": sum(1 for row in rows if row["code_gate_passed"]),
-        "strong_mdt_count": sum(1 for row in rows if row["mdt_evidence_status"] == "level4_applicable_mdt_evidence_strong"),
-        "policy_pending_count": sum(
-            1 for row in rows if row["mdt_evidence_status"] == "level4_applicable_multidept_consult_policy_pending"
+        "mdt_equivalent_accepted_count": sum(
+            1 for row in rows if row["mdt_evidence_status"] == "level4_applicable_mdt_equivalent_evidence_accepted"
         ),
+        "direct_confirmed_count": 0,
         "db_source_meta": source_meta,
         "no_dedicated_mdt_record_table": True,
     }
@@ -239,8 +239,9 @@ def _summary(rows: list[dict[str, Any]], source_meta: dict[str, Any]) -> dict[st
 def _report(rows: list[dict[str, Any]], summary: dict[str, Any]) -> str:
     status_counts = summary["mdt_evidence_status_counts"]
     decision_counts = summary["suggested_gate_decision_counts"]
-    strong_rows = [row for row in rows if row["mdt_evidence_status"] == "level4_applicable_mdt_evidence_strong"]
-    pending_rows = [row for row in rows if row["mdt_evidence_status"] == "level4_applicable_multidept_consult_policy_pending"]
+    accepted_rows = [
+        row for row in rows if row["mdt_evidence_status"] == "level4_applicable_mdt_equivalent_evidence_accepted"
+    ]
     incomplete_rows = [
         row
         for row in rows
@@ -248,12 +249,12 @@ def _report(rows: list[dict[str, Any]], summary: dict[str, Any]) -> str:
         in {"level4_applicable_discussion_evidence_incomplete", "level4_applicable_mdt_evidence_missing"}
     ]
     lines = [
-        "# SC083 多学科讨论证据聚合器只读回放报告",
+        "# SC083 多学科会诊等价 MDT 正式接入回放报告",
         "",
         "## 范围",
         "",
-        "- 本轮只做 SC-083 四级手术 MDT/多学科讨论证据聚合器只读回放。",
-        "- 不注册 SC-083 gate，不接页面，不写正式 QC 结果表，不开放程序化 confirmed。",
+        "- 本轮将 SC-083 注册到正式 applicability gate registry，并做只读回放验证。",
+        "- 不接页面，不写正式 QC 结果表，不开放程序化 confirmed。",
         "- 本地 CDM 未发现专门 `mdt_record` 表；证据从 `consultation_record`、`presurg_discussion`、`daily_course_record`、`senior_course_record` 聚合。",
         "",
         "## 总览",
@@ -262,32 +263,27 @@ def _report(rows: list[dict[str, Any]], summary: dict[str, Any]) -> str:
         f"- code gate 通过数：{summary['code_gate_passed_count']}",
         f"- mdt_evidence_status 分布：`{json.dumps(status_counts, ensure_ascii=False, sort_keys=True)}`",
         f"- 建议分流分布：`{json.dumps(decision_counts, ensure_ascii=False, sort_keys=True)}`",
+        f"- MDT 等价证据 accepted 数：{summary['mdt_equivalent_accepted_count']}",
+        f"- 程序化 confirmed 数：{summary['direct_confirmed_count']}",
         "",
         "## 关键口径",
         "",
         "- `consultation_record` 可能包含多科室证据：既可能标题为“多学科会诊记录”，也可能正文中出现多个科室意见。",
-        "- 普通多科会诊/联合会诊是否等同正式 MDT：客户口径待确认，本轮不等同，只标记 `policy_pending`。",
+        "- 客户已确认：多学科会诊/多科会诊/联合会诊可作为 MDT 等价证据。",
+        "- 普通单科会诊不能替代 MDT；同一术前场景下多个不同专科会诊可聚合为 MDT 等价证据。",
         "- 四级手术编码只能证明 SC-083 适用性，不能证明缺陷成立。",
         "- `level4_applicable_mdt_evidence_missing` 最多进入二轮候选，不得程序化 confirmed。",
         "",
-        "## 强 MDT/多学科证据样本",
+        "## MDT 等价证据 accepted 样本",
         "",
     ]
-    if strong_rows:
-        for row in strong_rows[:20]:
-            lines.append(
-                f"- `{row['visit_id']}` / {row['patient_name']}：{row['strongest_quote']}；sources={row['evidence_source_tables']}"
-            )
-    else:
-        lines.append("- 本轮未发现同时具备 MDT/多学科关键词、主持/原因/结论的强证据样本。")
-    lines.extend(["", "## 普通多科室会诊 policy_pending 样本", ""])
-    if pending_rows:
-        for row in pending_rows[:20]:
+    if accepted_rows:
+        for row in accepted_rows[:20]:
             lines.append(
                 f"- `{row['visit_id']}` / {row['patient_name']}：departments={row['departments_detected']}；quote={row['strongest_quote']}"
             )
     else:
-        lines.append("- 本轮未聚合到普通多科室会诊 policy_pending 样本。")
+        lines.append("- 本轮未聚合到 MDT 等价证据 accepted 样本。")
     lines.extend(["", "## 四级适用但讨论证据不足样本", ""])
     if incomplete_rows:
         for row in incomplete_rows[:20]:
@@ -301,9 +297,9 @@ def _report(rows: list[dict[str, Any]], summary: dict[str, Any]) -> str:
             "",
             "## 是否建议生产接入",
             "",
-            "- 建议暂不生产注册 SC-083 gate。",
-            "- 如果后续接入，第一阶段只允许写入 metadata，并做 `data_quality_gap/rejected_by_system` 保守分流；不得开放 confirmed。",
-            "- 普通多科会诊是否可替代正式 MDT 必须先由客户确认口径。",
+            "- 建议生产接入第一阶段：SC-083 gate 仅做 metadata、`rejected_by_system` 和 `data_quality_gap/pass_to_second_gate` 分流。",
+            "- 多学科会诊/多科会诊等价 MDT 证据命中时输出 `rejected_by_system`，表示“不构成未 MDT”。",
+            "- 仍不得开放程序化 confirmed；缺 MDT 证据只能进入二轮候选。",
         ]
     )
     return "\n".join(lines) + "\n"
