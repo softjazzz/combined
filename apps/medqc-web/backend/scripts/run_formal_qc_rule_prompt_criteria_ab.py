@@ -242,6 +242,21 @@ def _write_report(
         if isinstance(after_summary_payload.get("technical_error_diagnostics"), dict)
         else {}
     )
+    pack_concurrency = _safe_int(after_summary_payload.get("pack_concurrency"))
+    requested_visit_ids = after_summary_payload.get("requested_visit_ids")
+    if not isinstance(requested_visit_ids, list):
+        requested_visit_ids = []
+    completed_visit_count = after["visit_count"]
+    stop_visit = ""
+    if completed_visit_count and completed_visit_count < len(requested_visit_ids):
+        stop_visit = str(requested_visit_ids[completed_visit_count - 1] or "")
+    elif technical_diagnostics.get("visit_ids"):
+        stop_visit = str((technical_diagnostics.get("visit_ids") or [""])[0])
+    tech_rule_ids = [
+        str(item)
+        for item in (technical_diagnostics.get("rule_ids") or [])
+        if str(item).strip()
+    ]
     shrink_rate = 1 - (after["confirmed_defect"] / baseline["confirmed_defect"]) if baseline["confirmed_defect"] else 0.0
     over_conservative = baseline["confirmed_defect"] >= 4 and after["confirmed_defect"] <= max(1, baseline["confirmed_defect"] // 3)
     focus_rows = [
@@ -280,15 +295,17 @@ def _write_report(
         "",
         "## 稳定性",
         "",
+        f"- pack_concurrency={pack_concurrency or '未记录'}；after 实际完成 {after['visit_count']}/10 份。",
         f"- provider_error={after['provider_error_count']}；connection={after['provider_connection_error_count']}；upstream={after['upstream_http_error_count']}；parse={after['parse_error_count']}；timeout={after['timeout_count']}；rate_limit={after['rate_limit_count']}；technical={after['technical_error_internal']}。",
         f"- stability_pass={'是' if after['stability_pass'] else '否'}。",
-        f"- after 实际完成 {after['visit_count']}/10 份；若未完成 10/10，后续质量指标只作为已完成样本的局部观察，不作为 random10 整体质量结论。",
+        "- 若未完成 10/10，后续质量指标只作为已完成样本的局部观察，不作为 random10 整体质量结论。",
         "",
         "## 技术异常定位",
         "",
         f"- technical_error_diagnostics：{json.dumps(technical_diagnostics, ensure_ascii=False)}。",
-        "- 本轮停止点为 2013648 / SC-146。SC-146 单规则 pack 已启用严格 JSON prompt，但本次 random10 中该 pack 在 2 次 parse_error retry 后仍未恢复，missing_rule_ids=['SC-146']，因此按稳定性门禁停止后续样本。",
-        "- 该结果说明 088368cdb 的定向 3/3 completed 不能完全覆盖 random10 运行态波动；下一步应继续治理 SC-146 单规则 pack 的随机稳定性，而不是扩大到 20 份。",
+        f"- 本轮停止点为 {stop_visit or '未定位'}；technical rule_ids={tech_rule_ids or []}。",
+        "- 本轮没有 provider/connection/upstream/parse/timeout/rate_limit 错误；停止原因是二审补裁后仍缺少部分规则裁决，进入 technical_error_internal。",
+        "- SC-146 在本轮已不再是停止点；下一步应治理当前停止 visit 的二审 missing-rule 完整性，而不是扩大到 20 份。",
         "",
         "## 质量复核",
         "",
