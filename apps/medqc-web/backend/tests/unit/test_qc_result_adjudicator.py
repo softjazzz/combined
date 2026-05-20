@@ -695,3 +695,139 @@ async def test_adjudicator_prompt_should_include_targeted_evidence_context():
     assert "targeted_evidence_context" in captured_prompt
     assert "CRP 80mg/L" in captured_prompt
     assert "formal_evidence_coverage" in captured_prompt
+
+
+def _llm_response(items: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps({"items": items}, ensure_ascii=False),
+                }
+            }
+        ]
+    }
+
+
+def _candidate(rule_id: str) -> dict[str, Any]:
+    return {
+        "rule_id": rule_id,
+        "rule_name": f"{rule_id} 测试规则",
+        "status": "non_compliant",
+        "display_status": "qc_review_candidate",
+        "findings": f"{rule_id} 一审候选问题。",
+        "evidence": f"{rule_id} 可审计证据片段，长度足够用于二审裁决。",
+    }
+
+
+def _adjudication(index: int, rule_id: str, status: str = "rejected_by_system") -> dict[str, Any]:
+    return {
+        "index": index,
+        "rule_id": rule_id,
+        "adjudicated_display_status": status,
+        "adjudicator_reason": f"{rule_id} 二审裁决。",
+        "adjudicator_supporting_quote": f"{rule_id} 原文证据足够支持裁决。",
+        "adjudicator_confidence": 0.8,
+        "rule_requirement_match": "not_matched" if status == "rejected_by_system" else "data_gap",
+    }
+
+
+@pytest.mark.asyncio
+async def test_adjudicator_should_not_retry_when_all_expected_rules_returned():
+    call_count = 0
+
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        nonlocal call_count
+        call_count += 1
+        assert "expected_rule_ids" in prompt
+        return _llm_response([_adjudication(0, "SC-010"), _adjudication(1, "SC-013")])
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [_candidate("SC-010"), _candidate("SC-013")],
+        llm_generate=_fake_generate,
+    )
+
+    assert call_count == 1
+    assert [row["display_status"] for row in rows] == ["rejected_by_system", "rejected_by_system"]
+    assert rows[0]["adjudicator_expected_rule_count"] == 2
+    assert rows[0]["adjudicator_missing_rule_count"] == 0
+    assert rows[0]["adjudicator_retry_attempted"] is False
+
+
+@pytest.mark.asyncio
+async def test_adjudicator_should_retry_only_missing_rules_and_merge_recovered_outputs():
+    prompts: list[str] = []
+
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        prompts.append(prompt)
+        if len(prompts) == 1:
+            return _llm_response([_adjudication(0, "SC-010"), _adjudication(99, "SC-999")])
+        assert "缺失补裁请求" in prompt
+        assert "SC-013" in prompt and "SC-015" in prompt
+        assert "SC-010" not in prompt
+        return _llm_response([_adjudication(0, "SC-013"), _adjudication(1, "SC-015")])
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [_candidate("SC-010"), _candidate("SC-013"), _candidate("SC-015")],
+        llm_generate=_fake_generate,
+    )
+
+    assert len(prompts) == 2
+    assert [row["display_status"] for row in rows] == [
+        "rejected_by_system",
+        "rejected_by_system",
+        "rejected_by_system",
+    ]
+    assert rows[0]["adjudicator_initial_missing_rule_count"] == 2
+    assert rows[0]["adjudicator_missing_rule_count"] == 0
+    assert rows[0]["adjudicator_retry_recovered_count"] == 2
+    assert rows[0]["adjudicator_retry_failed_count"] == 0
+    assert rows[1]["recovered_by_adjudicator_missing_rule_retry"] is True
+    assert "SC-999" in rows[0]["adjudicator_extra_rule_codes"]
+
+
+@pytest.mark.asyncio
+async def test_adjudicator_should_mark_only_still_missing_rules_as_technical_after_retry():
+    prompts: list[str] = []
+
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        prompts.append(prompt)
+        if len(prompts) == 1:
+            return _llm_response([])
+        return _llm_response([_adjudication(0, "SC-010")])
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [_candidate("SC-010"), _candidate("SC-013")],
+        llm_generate=_fake_generate,
+    )
+
+    assert len(prompts) == 2
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[1]["display_status"] == "technical_error_internal"
+    assert rows[1]["adjudicator_missing_rule_count"] == 1
+    assert rows[1]["adjudicator_retry_recovered_count"] == 1
+    assert rows[1]["adjudicator_retry_failed_count"] == 1
+    assert rows[1]["adjudicator_missing_rule_output_count"] == 1
+    assert rows[1]["can_show_as_defect"] is False
+    assert "adjudicator_missing_rule_output_after_retry" in rows[1]["adjudicator_reason"]
+
+
+@pytest.mark.asyncio
+async def test_gate_terminal_results_should_not_enter_adjudicator_retry():
+    async def _fake_generate(prompt: str) -> dict[str, Any]:
+        raise AssertionError("gate terminal result should not call adjudicator")
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            {
+                **_candidate("SC-123"),
+                "display_status": "qc_review_candidate",
+                "applicability_gate_decision": "data_quality_gap",
+                "applicability_gate_terminal": True,
+            }
+        ],
+        llm_generate=_fake_generate,
+    )
+
+    assert rows[0]["display_status"] == "qc_review_candidate"
+    assert "adjudicator_retry_attempted" not in rows[0]

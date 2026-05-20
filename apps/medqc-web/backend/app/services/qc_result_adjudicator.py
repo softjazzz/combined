@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -87,6 +88,16 @@ def _safe_bool(value: Any) -> bool:
 
 def _normalize_rule_id(value: Any) -> str:
     return _safe_text(value).upper()
+
+
+def _normalize_rule_code(value: Any) -> str:
+    text = _safe_text(value).upper()
+    text = text.replace("－", "-").replace("—", "-").replace("–", "-").replace("_", "-")
+    text = re.sub(r"\s+", "", text)
+    match = re.search(r"(SC)-?0*([0-9]{1,3})", text)
+    if match:
+        return f"{match.group(1)}-{int(match.group(2)):03d}"
+    return text
 
 
 def _contains_any(text: str, terms: tuple[str, ...] | list[str] | set[str]) -> bool:
@@ -271,11 +282,31 @@ def _candidate_payload(item: dict[str, Any], rule: dict[str, Any] | None, index:
     }
 
 
-def _build_adjudicator_prompt(candidates: list[dict[str, Any]]) -> str:
-    payload = json.dumps({"items": candidates}, ensure_ascii=False, indent=2)
+def _build_adjudicator_prompt(
+    candidates: list[dict[str, Any]],
+    *,
+    retry_missing_rule_ids: list[str] | None = None,
+) -> str:
+    expected_rule_ids = [_normalize_rule_code(item.get("rule_id")) for item in candidates]
+    payload = json.dumps(
+        {
+            "expected_rule_ids": expected_rule_ids,
+            "items": candidates,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+    retry_note = ""
+    if retry_missing_rule_ids:
+        retry_note = (
+            "\n这是缺失补裁请求。上一轮二审响应遗漏了部分 expected_rule_ids。"
+            f"本轮只允许返回这些缺失规则：{json.dumps(retry_missing_rule_ids, ensure_ascii=False)}。"
+            "不要返回其他规则。"
+        )
     return f"""你是正式病历质控结果二审裁决器。请基于规则要求、第一轮 LLM 输出和证据片段独立裁决，不要把边界项推给人工。
 
 只能输出 JSON，不要输出 Markdown。
+必须逐一返回 expected_rule_ids 中每个 rule_id 的裁决，不允许省略，不允许只返回异常项。{retry_note}
 终态只允许：
 - confirmed_defect：规则核心要件成立，evidence 可直接支撑缺陷。
 - data_quality_gap：缺少必要源文书、检查检验、医嘱、会诊、执行记录等，不能归咎医生。
@@ -660,6 +691,108 @@ def _technical_error_for_candidate(item: dict[str, Any], reason: str) -> dict[st
     )
 
 
+def _with_adjudicator_diagnostics(
+    item: dict[str, Any],
+    diagnostics: dict[str, Any],
+    *,
+    recovered_by_retry: bool = False,
+) -> dict[str, Any]:
+    next_item = dict(item)
+    next_item.update(diagnostics)
+    if recovered_by_retry:
+        next_item["recovered_by_adjudicator_missing_rule_retry"] = True
+    metadata = next_item.get("metadata")
+    if isinstance(metadata, dict):
+        metadata.update(diagnostics)
+        if recovered_by_retry:
+            metadata["recovered_by_adjudicator_missing_rule_retry"] = True
+    return next_item
+
+
+def _collect_adjudications(
+    adjudicated_items: list[Any],
+    prompt_items: list[dict[str, Any]],
+) -> tuple[dict[int, dict[str, Any]], dict[str, Any]]:
+    expected_codes = [_normalize_rule_code(item.get("rule_id")) for item in prompt_items]
+    expected_code_to_indexes: dict[str, list[int]] = defaultdict(list)
+    for index, code in enumerate(expected_codes):
+        expected_code_to_indexes[code].append(index)
+
+    by_candidate_index: dict[int, dict[str, Any]] = {}
+    actual_codes: list[str] = []
+    extra_rule_codes: list[str] = []
+    duplicate_rule_codes: list[str] = []
+
+    for item in adjudicated_items:
+        if not isinstance(item, dict):
+            continue
+        code = _normalize_rule_code(item.get("rule_id"))
+        target_index: int | None = None
+        try:
+            raw_index = int(item.get("index"))
+        except Exception:
+            raw_index = -1
+        if 0 <= raw_index < len(prompt_items):
+            expected_at_index = expected_codes[raw_index]
+            if not code or code == expected_at_index:
+                target_index = raw_index
+        if target_index is None and code in expected_code_to_indexes and len(expected_code_to_indexes[code]) == 1:
+            target_index = expected_code_to_indexes[code][0]
+        if target_index is None:
+            if code:
+                extra_rule_codes.append(code)
+            continue
+
+        actual_code = expected_codes[target_index]
+        actual_codes.append(actual_code)
+        if target_index in by_candidate_index:
+            duplicate_rule_codes.append(actual_code)
+            continue
+        by_candidate_index[target_index] = item
+
+    missing_indexes = [index for index in range(len(prompt_items)) if index not in by_candidate_index]
+    missing_codes = [expected_codes[index] for index in missing_indexes]
+    diagnostics = {
+        "expected_rule_codes": expected_codes,
+        "actual_rule_codes": sorted(set(actual_codes)),
+        "missing_rule_indexes": missing_indexes,
+        "missing_rule_codes": missing_codes,
+        "extra_rule_codes": sorted(set(extra_rule_codes)),
+        "duplicate_rule_codes": sorted(set(duplicate_rule_codes)),
+    }
+    return by_candidate_index, diagnostics
+
+
+def _adjudicator_stats(
+    *,
+    expected_codes: list[str],
+    final_missing_codes: list[str],
+    initial_missing_codes: list[str],
+    extra_rule_codes: list[str],
+    duplicate_rule_codes: list[str],
+    retry_attempted: bool,
+    retry_recovered_count: int,
+    retry_failed_count: int,
+) -> dict[str, Any]:
+    actual_codes = [code for code in expected_codes if code not in set(final_missing_codes)]
+    return {
+        "adjudicator_expected_rule_count": len(expected_codes),
+        "adjudicator_expected_rule_codes": expected_codes,
+        "adjudicator_actual_rule_count": len(actual_codes),
+        "adjudicator_actual_rule_codes": actual_codes,
+        "adjudicator_initial_missing_rule_count": len(initial_missing_codes),
+        "adjudicator_initial_missing_rule_codes": initial_missing_codes,
+        "adjudicator_missing_rule_count": len(final_missing_codes),
+        "adjudicator_missing_rule_codes": final_missing_codes,
+        "adjudicator_retry_attempted": retry_attempted,
+        "adjudicator_retry_recovered_count": retry_recovered_count,
+        "adjudicator_retry_failed_count": retry_failed_count,
+        "adjudicator_missing_rule_output_count": len(final_missing_codes),
+        "adjudicator_extra_rule_codes": extra_rule_codes,
+        "adjudicator_duplicate_rule_codes": duplicate_rule_codes,
+    }
+
+
 def needs_llm_adjudication(item: dict[str, Any]) -> bool:
     display_status = _safe_text(item.get("display_status"))
     if display_status not in BOUNDARY_DISPLAY_STATUSES:
@@ -719,25 +852,86 @@ async def adjudicate_postprocessed_qc_results(
             next_rows[index] = _technical_error_for_candidate(item, f"正式质控二审 LLM 调用失败：{exc}")
         return apply_confirmed_guardrails(next_rows)
 
-    by_candidate_index: dict[int, dict[str, Any]] = {}
-    for item in adjudicated_items:
-        if not isinstance(item, dict):
-            continue
+    by_candidate_index, initial_diagnostics = _collect_adjudications(adjudicated_items, prompt_items)
+    expected_codes = initial_diagnostics["expected_rule_codes"]
+    initial_missing_indexes = list(initial_diagnostics["missing_rule_indexes"])
+    initial_missing_codes = list(initial_diagnostics["missing_rule_codes"])
+    extra_rule_codes = list(initial_diagnostics["extra_rule_codes"])
+    duplicate_rule_codes = list(initial_diagnostics["duplicate_rule_codes"])
+    retry_attempted = bool(initial_missing_indexes)
+    retry_recovered_count = 0
+
+    if initial_missing_indexes:
+        retry_candidates = [candidates[index] for index in initial_missing_indexes]
+        retry_prompt_items = [
+            _candidate_payload(
+                item,
+                rules.get(_safe_text(item.get("rule_id")).upper()),
+                retry_index,
+            )
+            for retry_index, (_, item) in enumerate(retry_candidates)
+        ]
+        retry_expected_codes = [_normalize_rule_code(item.get("rule_id")) for item in retry_prompt_items]
         try:
-            candidate_index = int(item.get("index"))
-        except Exception:
-            continue
-        by_candidate_index[candidate_index] = item
+            retry_response = await llm_generate(
+                _build_adjudicator_prompt(
+                    retry_prompt_items,
+                    retry_missing_rule_ids=retry_expected_codes,
+                )
+            )
+            retry_payload = _extract_json_object(_extract_llm_content(retry_response))
+            retry_items = retry_payload.get("items") if isinstance(retry_payload.get("items"), list) else []
+            retry_by_index, retry_diagnostics = _collect_adjudications(retry_items, retry_prompt_items)
+            extra_rule_codes = sorted(set(extra_rule_codes + list(retry_diagnostics["extra_rule_codes"])))
+            duplicate_rule_codes = sorted(set(duplicate_rule_codes + list(retry_diagnostics["duplicate_rule_codes"])))
+            for retry_index, adjudication in retry_by_index.items():
+                if retry_index >= len(initial_missing_indexes):
+                    continue
+                original_candidate_index = initial_missing_indexes[retry_index]
+                recovered = dict(adjudication)
+                recovered["recovered_by_adjudicator_missing_rule_retry"] = True
+                by_candidate_index[original_candidate_index] = recovered
+            retry_recovered_count = len(retry_by_index)
+        except Exception as exc:
+            for original_candidate_index in initial_missing_indexes:
+                row_index, original_item = candidates[original_candidate_index]
+                next_rows[row_index] = _technical_error_for_candidate(
+                    original_item,
+                    f"正式质控二审缺失补裁调用失败：{exc}",
+                )
+
+    final_missing_indexes = [index for index in range(len(candidates)) if index not in by_candidate_index]
+    final_missing_codes = [expected_codes[index] for index in final_missing_indexes]
+    retry_failed_count = len(final_missing_indexes) if retry_attempted else 0
+    diagnostics = _adjudicator_stats(
+        expected_codes=expected_codes,
+        final_missing_codes=final_missing_codes,
+        initial_missing_codes=initial_missing_codes,
+        extra_rule_codes=extra_rule_codes,
+        duplicate_rule_codes=duplicate_rule_codes,
+        retry_attempted=retry_attempted,
+        retry_recovered_count=retry_recovered_count,
+        retry_failed_count=retry_failed_count,
+    )
 
     for candidate_index, (row_index, original_item) in enumerate(candidates):
+        if next_rows[row_index].get("display_status") == "technical_error_internal" and candidate_index in final_missing_indexes:
+            next_rows[row_index] = _with_adjudicator_diagnostics(next_rows[row_index], diagnostics)
+            continue
         adjudication = by_candidate_index.get(candidate_index)
         if adjudication is None:
-            next_rows[row_index] = _technical_error_for_candidate(
+            final_item = _technical_error_for_candidate(
                 original_item,
-                "正式质控二审 LLM 响应缺少该规则裁决，进入内部技术异常。",
+                "adjudicator_missing_rule_output_after_retry: 正式质控二审补裁后仍缺少该规则裁决，进入内部技术异常。",
             )
+            next_rows[row_index] = _with_adjudicator_diagnostics(final_item, diagnostics)
             continue
         final_item = _apply_adjudication(original_item, adjudication)
         final_item["postprocess_mode"] = mode
+        final_item = _with_adjudicator_diagnostics(
+            final_item,
+            diagnostics,
+            recovered_by_retry=_safe_bool(adjudication.get("recovered_by_adjudicator_missing_rule_retry")),
+        )
         next_rows[row_index] = final_item
     return apply_confirmed_guardrails(next_rows)
