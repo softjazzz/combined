@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Any
 
 import pytest
@@ -138,6 +139,12 @@ def test_fast_screen_pack_definitions_should_expand_to_full_intrinsic_buckets_wh
     ]
 
 
+def test_fast_screen_rule_id_normalizer_should_accept_sc146_variants():
+    assert fast_screen_qc._normalize_fast_screen_rule_id("SC146") == "SC-146"
+    assert fast_screen_qc._normalize_fast_screen_rule_id("sc－146") == "SC-146"
+    assert fast_screen_qc._normalize_fast_screen_rule_id(" SC_146 ") == "SC-146"
+
+
 def test_fast_screen_full_buckets_should_cover_all_rules_without_overlap():
     rule_to_pack: dict[str, str] = {}
 
@@ -246,21 +253,25 @@ class _FakeFastScreenRuleEngine:
         fail_once_pack_id: str = "",
         omit_rule_id: str = "",
         omit_once_rule_ids: set[str] | None = None,
+        rule_id_aliases: dict[str, str] | None = None,
     ) -> None:
         self.fail_pack_id = fail_pack_id
         self.fail_once_pack_id = fail_once_pack_id
         self.omit_rule_id = omit_rule_id
         self.omit_once_rule_ids = omit_once_rule_ids or set()
+        self.rule_id_aliases = rule_id_aliases or {}
         self.running = 0
         self.max_running = 0
         self.call_order: list[str] = []
         self.call_counts: dict[str, int] = {}
+        self.last_rules_by_pack: dict[str, list[dict[str, Any]]] = {}
 
     async def evaluate_batch_compact(self, *, rules: list[dict[str, Any]], pack_id: str, **kwargs: Any) -> dict[str, Any]:
         self.running += 1
         self.max_running = max(self.max_running, self.running)
         self.call_order.append(pack_id)
         self.call_counts[pack_id] = int(self.call_counts.get(pack_id) or 0) + 1
+        self.last_rules_by_pack[pack_id] = [dict(rule) for rule in rules]
         await asyncio.sleep(0.01)
         self.running -= 1
         if pack_id == self.fail_once_pack_id and self.call_counts[pack_id] == 1:
@@ -273,7 +284,7 @@ class _FakeFastScreenRuleEngine:
         return {
             "results": [
                 {
-                    "rule_id": rule["rule_id"],
+                    "rule_id": self.rule_id_aliases.get(rule["rule_id"], rule["rule_id"]),
                     "rule_name": rule["name"],
                     "status": "compliant",
                     "is_compliant": True,
@@ -302,6 +313,19 @@ class _FakeFastScreenRuleEngine:
             "first_result_latency": 0.01,
             "context_tokens_estimate": 100,
             "cot_observation": {},
+            "raw_output": json.dumps(
+                {
+                    "results": [
+                        {
+                            "rule_id": self.rule_id_aliases.get(rule["rule_id"], rule["rule_id"]),
+                            "status": "compliant",
+                        }
+                        for rule in rules
+                        if rule["rule_id"] not in omit_rule_ids
+                    ]
+                },
+                ensure_ascii=False,
+            ),
         }
 
 
@@ -574,6 +598,58 @@ async def test_run_final_fast_screen_missing_rule_item_after_retry_should_be_unc
     assert result["pack_metrics"]["retry_count"] == 2
     assert by_rule["SC-023"]["metadata"]["pack_retry_reason"] == "missing_rule_items"
     assert by_rule["SC-024"]["metadata"]["pack_retry_reason"] == "missing_rule_items"
+
+
+@pytest.mark.asyncio
+async def test_run_final_fast_screen_sc146_single_rule_should_accept_rule_id_alias_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _patch_fast_screen_bundle(monkeypatch)
+    engine = _FakeFastScreenRuleEngine(rule_id_aliases={"SC-146": "SC146"})
+    service = _FakeFastScreenService(engine)
+
+    result = await fast_screen_qc.run_final_fast_screen(
+        qc_service=service,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        rule_ids=["SC-146"],
+        pack_concurrency=1,
+    )
+
+    by_rule = {item["rule_id"]: item for item in result["evaluation_results"]}
+    metadata = by_rule["SC-146"]["metadata"]
+    diagnostic = result["pack_metrics"]["pack_diagnostics"][0]
+    assert by_rule["SC-146"]["status"] == "compliant"
+    assert engine.call_counts["daily_order_consistency"] == 1
+    assert result["pack_metrics"]["retry_count"] == 0
+    assert metadata["actual_rule_ids"] == ["SC146"]
+    assert metadata["missing_rule_ids"] == []
+    assert metadata["sc146_single_rule_strict_json_prompt"] is True
+    assert diagnostic["raw_output_summary"]
+
+
+@pytest.mark.asyncio
+async def test_run_final_fast_screen_sc146_single_rule_should_inject_strict_json_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    _patch_fast_screen_bundle(monkeypatch)
+    engine = _FakeFastScreenRuleEngine()
+    service = _FakeFastScreenService(engine)
+
+    await fast_screen_qc.run_final_fast_screen(
+        qc_service=service,
+        institute_id="i",
+        patient_id="p",
+        visit_id="v",
+        rule_ids=["SC-146"],
+        pack_concurrency=1,
+    )
+
+    rules = engine.last_rules_by_pack["daily_order_consistency"]
+    assert rules[0]["sc146_single_rule_strict_json_prompt"] is True
+    assert "只评估 rule_id=SC-146" in rules[0]["custom_prompt"]
+    assert "不得输出 Markdown" in rules[0]["custom_prompt"]
 
 
 @pytest.mark.asyncio

@@ -35,6 +35,19 @@ EXECUTION_STRATEGY_FAST_SCREEN = "fast_screen"
 FAST_SCREEN_BUCKET_STRATEGY = "fixed_packs"
 FAST_SCREEN_DEFAULT_LOW_CONFIDENCE_THRESHOLD = 0.45
 FAST_SCREEN_DEFAULT_CONTEXT_TOKEN_BUDGET = 7000
+SC146_SINGLE_RULE_PACK_ID = "daily_order_consistency"
+SC146_SINGLE_RULE_ID = "SC-146"
+SC146_SINGLE_RULE_STRICT_PROMPT = (
+    "SC-146/qwen3.5 单规则稳定输出要求："
+    "只评估 rule_id=SC-146；输出必须是一个 JSON object，格式为 "
+    "{\"results\":[{\"rule_id\":\"SC-146\",\"is_compliant\":true/false,"
+    "\"status\":\"compliant|non_compliant|uncertain|not_applicable\","
+    "\"findings\":\"...\",\"evidence\":\"...\",\"suggestion\":\"...\","
+    "\"confidence\":0.0,\"issues\":[]}]}。"
+    "不得输出 Markdown、解释文字、多个对象或遗漏 rule_id。"
+    "confirmed/non_compliant 必须同时具备病程诊疗行为、相关医嘱/执行/检查对照和明确缺口；"
+    "证据不足时 status=uncertain，不要臆断。"
+)
 
 SPECIMEN_PATHOLOGY_TRIGGER_TERMS = (
     "术中取材",
@@ -365,6 +378,58 @@ def get_fast_screen_pack_definitions(
             )
         )
     return packs
+
+
+def _normalize_fast_screen_rule_id(value: Any) -> str:
+    text = str(value or "").strip().upper()
+    text = text.replace("－", "-").replace("—", "-").replace("–", "-").replace("_", "-")
+    text = "".join(ch for ch in text if ch.isalnum() or ch == "-")
+    if text.startswith("SC") and "-" not in text and len(text) > 2:
+        suffix = text[2:]
+        if suffix.isdigit():
+            return f"SC-{suffix.zfill(3)}"
+    if text.startswith("SC-"):
+        suffix = text[3:]
+        if suffix.isdigit():
+            return f"SC-{suffix.zfill(3)}"
+    return text
+
+
+def _is_sc146_single_rule_pack(pack_id: str, rule_ids: Iterable[str]) -> bool:
+    normalized_ids = [_normalize_fast_screen_rule_id(item) for item in rule_ids]
+    return str(pack_id or "") == SC146_SINGLE_RULE_PACK_ID and normalized_ids == [SC146_SINGLE_RULE_ID]
+
+
+def _enrich_sc146_single_rule_prompt(rule: dict[str, Any]) -> dict[str, Any]:
+    normalized_rule_id = _normalize_fast_screen_rule_id(rule.get("rule_id") or rule.get("rule_code"))
+    if normalized_rule_id != SC146_SINGLE_RULE_ID:
+        return rule
+    enriched = dict(rule)
+    custom_prompt = str(enriched.get("custom_prompt") or enriched.get("prompt_template") or "").strip()
+    if SC146_SINGLE_RULE_STRICT_PROMPT not in custom_prompt:
+        custom_prompt = f"{custom_prompt}\n{SC146_SINGLE_RULE_STRICT_PROMPT}".strip()
+    enriched["custom_prompt"] = custom_prompt
+    enriched["sc146_single_rule_strict_json_prompt"] = True
+    return enriched
+
+
+def _summarize_raw_llm_output(raw_output: Any, limit: int = 1200) -> str:
+    text = str(raw_output or "")
+    text = " ".join(text.split())
+    if len(text) > limit:
+        return text[:limit].rstrip() + "..."
+    return text
+
+
+def _categorize_pack_parse_failure(*, raw_output: Any, parse_error: bool, missing_rule_ids: list[str]) -> str:
+    raw_text = str(raw_output or "").strip()
+    if not raw_text:
+        return "empty_response"
+    if parse_error:
+        return "parse_error"
+    if missing_rule_ids:
+        return "missing_rule"
+    return ""
 
 
 def _build_pack_uncertain_result_item(
@@ -1111,12 +1176,21 @@ async def run_final_fast_screen(
         raise_if_cancelled(cancellation_check)
         pack_rules = [rules_by_id[rule_id] for rule_id in pack.rule_ids if rule_id in rules_by_id]
         configured_rule_ids = [rule_id for rule_id in pack.rule_ids if rule_id in rules_by_id]
+        configured_rule_id_map = {
+            _normalize_fast_screen_rule_id(rule_id): rule_id
+            for rule_id in configured_rule_ids
+        }
+        sc146_single_rule_pack = _is_sc146_single_rule_pack(pack.pack_id, configured_rule_ids)
+        if sc146_single_rule_pack:
+            pack_rules = [_enrich_sc146_single_rule_prompt(rule) for rule in pack_rules]
         diagnostic: dict[str, Any] = {
             "pack_index": index,
             "pack_id": pack.pack_id,
             "document_type": pack.document_type,
             "rule_family": pack.rule_family,
             "rule_ids": list(configured_rule_ids),
+            "expected_rule_ids": list(configured_rule_ids),
+            "actual_rule_ids": [],
             "pack_size": len(pack_rules),
             "started_at": "",
             "finished_at": "",
@@ -1134,13 +1208,16 @@ async def run_final_fast_screen(
             "timeout_count": 0,
             "rate_limit_count": 0,
             "parse_error": False,
+            "parse_error_reason": "",
             "missing_rule_ids": [],
+            "raw_output_summary": "",
             "low_confidence_rule_ids": [],
             "pack_retry_attempts": 0,
             "pack_retry_success": False,
             "pack_retry_reason": "",
             "technical_error_internal": False,
             "final_decision_source": "batch",
+            "sc146_single_rule_strict_json_prompt": sc146_single_rule_pack,
         }
         if not pack_rules:
             return {
@@ -1312,11 +1389,19 @@ async def run_final_fast_screen(
                     continue
                 break
 
-            pack_result_map = {
-                str(item.get("rule_id") or "").strip().upper(): item
+            raw_rule_id_map = {
+                _normalize_fast_screen_rule_id(item.get("rule_id")): str(item.get("rule_id") or "").strip()
                 for item in pack_results
                 if str(item.get("rule_id") or "").strip()
             }
+            pack_result_map: dict[str, dict[str, Any]] = {}
+            for item in pack_results:
+                normalized_item_rule_id = _normalize_fast_screen_rule_id(item.get("rule_id"))
+                configured_rule_id = configured_rule_id_map.get(normalized_item_rule_id)
+                if configured_rule_id and configured_rule_id not in pack_result_map:
+                    normalized_item = dict(item)
+                    normalized_item["rule_id"] = configured_rule_id
+                    pack_result_map[configured_rule_id] = normalized_item
             normalized_pack_results: list[dict[str, Any]] = []
             for rule in pack_rules:
                 rule_id = str(rule.get("rule_id") or "").strip().upper()
@@ -1357,6 +1442,11 @@ async def run_final_fast_screen(
                 for rule_id in configured_rule_ids
                 if rule_id not in pack_result_map
             ]
+            parse_error_reason = _categorize_pack_parse_failure(
+                raw_output=last_evaluated.get("raw_output"),
+                parse_error=bool(last_evaluated.get("parse_error")),
+                missing_rule_ids=missing_rule_ids,
+            )
             should_retry, detected_retry_reason = _should_retry_pack(
                 evaluated=last_evaluated,
                 rows=pack_results,
@@ -1387,9 +1477,16 @@ async def run_final_fast_screen(
                     "completion_tokens": int(last_evaluated.get("completion_tokens") or 0),
                     "context_tokens_estimate": int(last_evaluated.get("context_tokens_estimate") or 0),
                     "status_count": status_counts,
+                    "expected_rule_ids": list(configured_rule_ids),
+                    "actual_rule_ids": [
+                        raw_rule_id_map.get(_normalize_fast_screen_rule_id(rule_id), rule_id)
+                        for rule_id in pack_result_map
+                    ],
                     "missing_rule_ids": missing_rule_ids,
                     "low_confidence_rule_ids": low_confidence_rule_ids,
                     "parse_error": bool(missing_rule_ids),
+                    "parse_error_reason": parse_error_reason,
+                    "raw_output_summary": _summarize_raw_llm_output(last_evaluated.get("raw_output")),
                     "pack_retry_attempts": retry_attempts,
                     "pack_retry_success": retry_attempts > 0 and not should_retry,
                     "pack_retry_reason": retry_reason,
@@ -1407,6 +1504,11 @@ async def run_final_fast_screen(
                     metadata["pack_retry_attempts"] = retry_attempts
                     metadata["pack_retry_success"] = retry_attempts > 0 and not should_retry
                     metadata["pack_retry_reason"] = retry_reason
+                    metadata["expected_rule_ids"] = list(configured_rule_ids)
+                    metadata["actual_rule_ids"] = list(diagnostic.get("actual_rule_ids") or [])
+                    metadata["missing_rule_ids"] = list(missing_rule_ids)
+                    metadata["parse_error_reason"] = parse_error_reason
+                    metadata["sc146_single_rule_strict_json_prompt"] = sc146_single_rule_pack
                     metadata["provider_error_count"] = 0 if not should_retry else int(last_evaluated.get("provider_error_count") or 0)
                     metadata["timeout_count"] = 0 if not should_retry else int(last_evaluated.get("timeout_count") or 0)
                     metadata["rate_limit_count"] = 0 if not should_retry else int(last_evaluated.get("rate_limit_count") or 0)
@@ -1440,6 +1542,14 @@ async def run_final_fast_screen(
         diagnostic["retry_count"] = retry_attempts
         diagnostic["technical_error_internal"] = True
         diagnostic["final_decision_source"] = "technical_error_fallback"
+        diagnostic["expected_rule_ids"] = list(configured_rule_ids)
+        diagnostic["actual_rule_ids"] = []
+        diagnostic["raw_output_summary"] = _summarize_raw_llm_output(last_evaluated.get("raw_output"))
+        diagnostic["parse_error_reason"] = _categorize_pack_parse_failure(
+            raw_output=last_evaluated.get("raw_output"),
+            parse_error=bool(last_evaluated.get("parse_error")),
+            missing_rule_ids=list(last_evaluated.get("missing_rule_ids") or []),
+        ) or retry_reason or "pack_exception"
         diagnostic["finished_at"] = datetime.now(timezone.utc).isoformat()
         for rule in pack_rules:
             item = _build_pack_uncertain_result_item(
@@ -1456,6 +1566,11 @@ async def run_final_fast_screen(
                 metadata["pack_retry_attempts"] = retry_attempts
                 metadata["pack_retry_success"] = False
                 metadata["pack_retry_reason"] = diagnostic["pack_retry_reason"]
+                metadata["expected_rule_ids"] = list(configured_rule_ids)
+                metadata["actual_rule_ids"] = []
+                metadata["missing_rule_ids"] = list(configured_rule_ids)
+                metadata["parse_error_reason"] = diagnostic["parse_error_reason"]
+                metadata["sc146_single_rule_strict_json_prompt"] = sc146_single_rule_pack
                 metadata["provider_error_count"] = provider_error
                 metadata["timeout_count"] = timeout_error
                 metadata["rate_limit_count"] = rate_limit_error
