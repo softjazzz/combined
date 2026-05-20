@@ -9,6 +9,7 @@ LLM_ENV_KEYS = [
     "LLM_API_ENDPOINT",
     "LLM_API_KEY",
     "LLM_MODEL",
+    "LLM_DEFAULT_PROVIDER",
     "LLM_TIMEOUT_SECONDS",
     "SICHUAN_API_ENDPOINT",
     "SICHUAN_API_KEY",
@@ -37,6 +38,18 @@ def test_settings_reads_llm_env_keys(monkeypatch):
     assert settings.LLM_MODEL == "qwen-turbo"
     assert settings.LLM_TIMEOUT_SECONDS == 30
     assert settings.llm_env_source() == "LLM_*"
+
+
+def test_formal_qc_default_llm_model_should_use_qwen35(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-secret")
+
+    settings = Settings(_env_file=None)
+
+    assert str(settings.LLM_API_ENDPOINT) == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    assert settings.LLM_DEFAULT_PROVIDER == "alibaba"
+    assert settings.LLM_MODEL == "qwen3.5-35b-a3b"
+    assert settings.LLM_MODEL != "qwen3.6-35b-a3b"
 
 
 def test_settings_reads_legacy_sichuan_alias(monkeypatch):

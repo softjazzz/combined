@@ -107,7 +107,7 @@ class Settings(BaseSettings):
 
     # LLM API Configuration (unified naming; compatible with legacy SICHUAN_* env vars)
     LLM_API_ENDPOINT: Optional[AnyHttpUrl] = Field(
-        default=None,
+        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
         validation_alias=AliasChoices("LLM_API_ENDPOINT", "SICHUAN_API_ENDPOINT"),
     )
     LLM_API_KEY: Optional[str] = Field(
@@ -137,7 +137,7 @@ class Settings(BaseSettings):
             "SICHUAN_ALLOW_MOCK_WHEN_UNCONFIGURED",
         ),
     )
-    LLM_DEFAULT_PROVIDER: Optional[str] = None
+    LLM_DEFAULT_PROVIDER: Optional[str] = "alibaba"
     LLM_VISIBLE_PROVIDERS: List[str] = Field(default_factory=list)
     DEEPSEEK_API_ENDPOINT: str = "https://api.deepseek.com"
     DEEPSEEK_API_KEY: Optional[str] = None

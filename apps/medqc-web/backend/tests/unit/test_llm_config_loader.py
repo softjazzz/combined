@@ -15,7 +15,7 @@ async def test_load_config_should_prefer_memory_config_over_env(monkeypatch):
             "config_name": "default",
             "user_id": None,
             "provider_code": "alibaba",
-            "model_code": "qwen3.6-35b-a3b",
+            "model_code": "qwen3.5-35b-a3b",
             "custom_parameters": {
                 "temperature": 0.3,
                 "top_p": 0.8,
@@ -29,7 +29,7 @@ async def test_load_config_should_prefer_memory_config_over_env(monkeypatch):
         assert config is not None
         assert config["source"] == "memory+env"
         assert config["provider_code"] == "alibaba"
-        assert config["model"] == "qwen3.6-35b-a3b"
+        assert config["model"] == "qwen3.5-35b-a3b"
         assert config["custom_parameters"]["temperature"] == 0.3
         assert config["custom_parameters"]["top_p"] == 0.8
         assert config["custom_parameters"]["max_tokens"] == 8192
@@ -61,7 +61,7 @@ def test_build_provider_runtime_config_should_use_env_model_for_siliconflow(monk
     monkeypatch.setenv("SILICONFLOW_API_ENDPOINT", "https://api.siliconflow.cn/v1")
     monkeypatch.setenv("SILICONFLOW_API_KEY", "sk-siliconflow")
     monkeypatch.setenv("LLM_VISIBLE_PROVIDERS", "siliconflow,deepseek,alibaba")
-    monkeypatch.setenv("LLM_MODEL", "Qwen/Qwen3.6-35B-A3B")
+    monkeypatch.setenv("LLM_MODEL", "Qwen/Qwen3.5-35B-A3B")
 
     config = llm_config_loader.build_provider_runtime_config(
         provider_code="siliconflow",
@@ -73,4 +73,21 @@ def test_build_provider_runtime_config_should_use_env_model_for_siliconflow(monk
     assert config["provider_name"] == "SiliconFlow"
     assert config["api_endpoint"] == "https://api.siliconflow.cn/v1"
     assert config["api_key"] == "sk-siliconflow"
-    assert config["model"] == "Qwen/Qwen3.6-35B-A3B"
+    assert config["model"] == "Qwen/Qwen3.5-35B-A3B"
+
+
+def test_build_provider_runtime_config_should_default_formal_qc_to_alibaba_qwen35(monkeypatch):
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("LLM_DEFAULT_PROVIDER", raising=False)
+    monkeypatch.delenv("LLM_VISIBLE_PROVIDERS", raising=False)
+
+    config = llm_config_loader.build_provider_runtime_config(
+        provider_code="",
+        model_code=None,
+        custom_parameters={},
+    )
+
+    assert config["provider_code"] == "alibaba"
+    assert config["api_endpoint"] == "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    assert config["model"] == "qwen3.5-35b-a3b"
+    assert config["model"] != "qwen3.6-35b-a3b"
