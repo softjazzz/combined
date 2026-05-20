@@ -42,7 +42,7 @@ from run_formal_qc_three_visit_adjudicated_audit import (  # noqa: E402
 
 
 DOCS_DIR = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0508"
-REGISTERED_GATE_RULE_IDS = {"SC-099", "SC-123"}
+REGISTERED_GATE_RULE_IDS = {"SC-083", "SC-099", "SC-123"}
 PREVIOUS_FIXED_VISIT_IDS = {
     "1915580",
     "2024757",
@@ -59,6 +59,9 @@ PREVIOUS_RANDOM_SUMMARY_FILES = [
     DOCS_DIR / "formal_qc_random10_original_chain_run_summary.json",
     DOCS_DIR / "formal_qc_random10_batch2_original_chain_run_summary.json",
     DOCS_DIR / "formal_qc_random10_batch3_original_chain_run_summary.json",
+    DOCS_DIR / "formal_qc_gate_integrated_random10_run_summary.json",
+    DOCS_DIR / "formal_qc_gate_integrated_random10_rerun_summary.json",
+    DOCS_DIR / "formal_qc_gate_integrated_p0_quality_regression_summary.json",
 ]
 SHEET2_MATRIX = REPO_ROOT / "apps" / "medqc-web" / "docs" / "0418" / "QC" / "sheet2_exact_review_matrix.csv"
 
@@ -539,30 +542,38 @@ def _review_confirmed(row: dict[str, Any]) -> dict[str, Any]:
         decision = "downgrade_to_data_gap"
         reason = "确认缺陷依赖缺源文书/跨文书/结构化来源补证，当前不宜直接展示。"
         strength = "weak"
+        root_cause = "missing_cross_document_evidence"
     elif flags["evidence_too_short"] or flags["quote_missing"]:
         decision = "downgrade_to_data_gap"
         reason = "证据或 supporting_quote 过短，不能支撑确认缺陷。"
         strength = "weak"
+        root_cause = "short_or_truncated_evidence"
     elif flags["possible_false_positive"]:
         decision = "downgrade_to_rejected_by_system"
         reason = "证据中存在合规/已有记录语义或结论过度推断风险。"
         strength = "medium"
+        root_cause = "semantic_overreach"
     elif flags["rule_applicability_risk"]:
         decision = "keep"
         reason = "证据可读但属于适用性/跨文书敏感规则，建议演示前人工复核。"
         strength = "medium"
+        root_cause = "rule_applicability_gap"
     else:
         decision = "keep"
         reason = "证据、quote 与二审 reason 基本完整，可作为确认缺陷候选。"
         strength = "strong"
+        root_cause = "other"
     reviewed = dict(row)
     reviewed.update(
         {
             "review_scope": "confirmed_full",
+            "review_decision": decision,
             "review_recommendation": decision,
             "review_reason": reason,
+            "root_cause": root_cause,
             "evidence_strength": strength,
             "needs_manual_review_reason": reason,
+            "gate_metadata_summary": _truncate(row.get("applicability_gate_metadata_json"), 900),
             **flags,
         }
     )
@@ -603,10 +614,13 @@ def _review_rejected(row: dict[str, Any]) -> dict[str, Any]:
     reviewed.update(
         {
             "review_scope": "rejected_sample",
+            "review_decision": recommendation,
             "review_recommendation": recommendation,
             "review_reason": reason,
+            "root_cause": "other",
             "evidence_strength": "weak" if flags["evidence_too_short"] or flags["quote_missing"] else "medium",
             "needs_manual_review_reason": reason,
+            "gate_metadata_summary": _truncate(row.get("applicability_gate_metadata_json"), 900),
             **flags,
         }
     )
@@ -750,6 +764,27 @@ def _totals(summaries: list[dict[str, Any]], issue_rows: list[dict[str, Any]]) -
     return total
 
 
+def _technical_error_diagnostics(issue_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    technical_rows = [row for row in issue_rows if row.get("display_status") == "technical_error_internal"]
+    if not technical_rows:
+        return {
+            "technical_error_internal_count": 0,
+            "reason_counts": {},
+            "rule_ids": [],
+            "visit_ids": [],
+        }
+    reason_counts = Counter(
+        _safe_text(row.get("postprocess_reason") or row.get("adjudicator_reason") or "unknown")
+        for row in technical_rows
+    )
+    return {
+        "technical_error_internal_count": len(technical_rows),
+        "reason_counts": dict(reason_counts),
+        "rule_ids": sorted({_normalize_rule_id(row.get("rule_id")) for row in technical_rows}),
+        "visit_ids": sorted({_safe_text(row.get("visit_id")) for row in technical_rows}),
+    }
+
+
 def _write_report(
     path: Path,
     *,
@@ -767,24 +802,25 @@ def _write_report(
     confirmed_reviews = quality_summary.get("confirmed_review_counts") or {}
     rejected_reviews = quality_summary.get("rejected_sample_review_counts") or {}
     stability_pass = bool(total.get("stability_pass"))
+    technical_diagnostics = _technical_error_diagnostics(issue_rows)
 
     lines = [
-        "# 正式质控 gate 接入后随机 10 病历重跑验收报告",
+        "# 正式质控 SC083/SC099/SC123 门控接入后随机 10 病历回归报告",
         "",
         f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         "",
         "## 执行范围",
         "",
         "- 链路：正式原链路 `final fast_screen_full / sc_content_full_v1`，一审后走正式后处理与二轮裁决。",
-        "- 本轮已启用生产 gate：SC-099、SC-123；SC-100/101、SC-083 未注册。",
+        "- 本轮已启用生产 gate：SC-083、SC-099、SC-123；SC-100/101 暂缓。",
         "- 运行方式：只读审计脚本，不写正式 QC 结果表，不接页面，不使用 structured evidence POC。",
-        "- 失败版随机 10 的问题是 provider 运行环境失败（tokens=0），不作为质量结论；本轮在 minimal probe 与 2122521 c1/c3 门禁通过后复用同一批 visit_id 重跑。",
+        "- 本轮先执行 provider minimal probe；门禁通过后才运行随机 10 正式原链路回归。",
         f"- 完成病历：{len(summaries)} 份；失败：{len(failures)} 份。",
-        f"- 与历史固定/前三批随机样本重复：{', '.join(duplicate_visit_ids) if duplicate_visit_ids else '无'}；与上一轮失败版随机 10 完全一致，便于对比。",
+        f"- 与历史固定/前三批随机/近期 gate 回归样本重复：{', '.join(duplicate_visit_ids) if duplicate_visit_ids else '无'}。",
         "",
         "## 抽样清单",
         "",
-        "| visit_id | patient_name | department | 手术 | 会诊 | pathology | SC-099/SC-123触发 | bundle |",
+        "| visit_id | patient_name | department | 手术 | 会诊 | pathology | SC-083/099/123触发 | bundle |",
         "| --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     trigger_by_visit = defaultdict(list)
@@ -832,7 +868,7 @@ def _write_report(
         lines.append(
             f"- {rule_id}: 触发 {item.get('gate_trigger_count', 0)} 条；decision={_json_dumps(item.get('gate_decision_counts') or {})}；终态={_json_dumps(item.get('display_status_counts') or {})}；pass_to_second_gate={item.get('pass_to_second_gate_count', 0)}；programmatic_confirmed={item.get('programmatic_confirmed_count', 0)}。"
         )
-    lines.append(f"- 非 SC-099/SC-123 gate metadata 异常：{gate_summary.get('unexpected_gate_metadata_count', 0)}。")
+    lines.append(f"- 非 SC-083/099/123 gate metadata 异常：{gate_summary.get('unexpected_gate_metadata_count', 0)}。")
     lines.extend(
         [
             "",
@@ -849,7 +885,13 @@ def _write_report(
         ]
     )
     if not stability_pass:
-        lines.append("- 稳定性未通过，本轮不做质量可演示结论，也不建议扩大到 20 份；应先处理 provider/parse/timeout/technical_error。")
+        lines.append("- 稳定性未通过，本轮不做质量可演示结论，也不建议扩大到 20 份。")
+        if _safe_int(total.get("technical_error_internal_count")):
+            lines.append(
+                "- 本轮 provider/http/parse/timeout 均为 0；失败来自 internal technical_error，当前归因为二审 LLM 响应缺少部分规则裁决，需优先修复二审完整性/补裁逻辑。"
+            )
+        else:
+            lines.append("- 需先处理 provider/parse/timeout/rate_limit 等稳定性问题。")
     else:
         lines.append("- 稳定性通过，可以进入 20 份扩展验收，但仍建议保持只读审计模式。")
         bad_confirmed = _safe_int(confirmed_reviews.get("downgrade_to_data_gap")) + _safe_int(
@@ -861,8 +903,15 @@ def _write_report(
             lines.append(f"- confirmed 仍有 {bad_confirmed} 条建议降级，暂不宜把全部 confirmed 作为质量可交付演示。")
         else:
             lines.append("- 本轮无 confirmed 样例，适合演示四层分流与 gate 自我保护，不适合演示确认缺陷质量。")
-    lines.append("- SC-099/SC-123 gate 未出现程序化 confirmed；terminal gate 能把不适用/证据不足分流到 rejected/data_gap，pass_to_second_gate 仍交给二轮 LLM。")
-    lines.append("- 下一步：若 confirmed 误报仍多，优先补对应规则 gate/evidence；若 data_gap 高，优先补同步、bundle、结构化字段；若稳定性失败，先处理 provider 稳定性。")
+    lines.append("- SC-083/SC-099/SC-123 gate 未出现程序化 confirmed；terminal gate 能把不适用/证据不足分流到 rejected/data_gap，pass_to_second_gate 仍交给二轮 LLM。")
+    lines.append("- 下一步：若 confirmed 误报仍多，优先补对应规则 gate/evidence；若 data_gap 高，优先补同步、bundle、结构化字段；若稳定性失败，先按诊断归因处理二审完整性或 provider 稳定性。")
+    if technical_diagnostics.get("technical_error_internal_count"):
+        lines.extend(["", "## technical_error_internal 归因", ""])
+        lines.append(
+            f"- technical_error_internal_count={technical_diagnostics.get('technical_error_internal_count')}；visit_ids={';'.join(technical_diagnostics.get('visit_ids') or [])}。"
+        )
+        lines.append(f"- 规则：{';'.join(technical_diagnostics.get('rule_ids') or [])}。")
+        lines.append(f"- 原因分布：{_json_dumps(technical_diagnostics.get('reason_counts') or {})}。")
     if failures:
         lines.extend(["", "## 失败样本", ""])
         for failure in failures:
@@ -1165,6 +1214,7 @@ async def _run(args: argparse.Namespace) -> None:
     quality_rows, quality_summary = _build_quality_review(issue_rows)
     gate_summary = _gate_metrics(issue_rows)
     total = _totals(summaries, issue_rows)
+    technical_error_diagnostics = _technical_error_diagnostics(issue_rows)
     report_status = "completed" if total.get("stability_pass") else "failed_provider_or_parse_unstable"
 
     for profile in selected_profiles:
@@ -1193,6 +1243,7 @@ async def _run(args: argparse.Namespace) -> None:
             "selected_profiles": selected_profiles,
             "duplicate_visit_ids": duplicate_visit_ids,
             "totals": total,
+            "technical_error_diagnostics": technical_error_diagnostics,
             "gate_summary": gate_summary,
             "quality_summary": quality_summary,
             "summaries": summaries,
