@@ -171,9 +171,10 @@ def test_targeted_evidence_payload_should_include_sc083_sc019_sc100_contexts():
         {"id": "1:surg", "document_type": "手术记录", "source_table": "surgery_record", "content": "手术名称：腰椎内固定术，植入椎弓根螺钉。"},
         {"id": "1:disc", "document_type": "术前讨论", "source_table": "presurg_discussion", "content": "参与人员：外科医师讨论。"},
         {"id": "1:bill", "document_type": "费用清单", "source_table": "inpat_bill_item", "content": "一次性内固定材料。"},
-        {"id": "1:daily", "document_type": "日常病程记录", "source_table": "daily_course_record", "content": "炎症指标稍高，继续观察。"},
-        {"id": "1:order", "document_type": "长期医嘱", "source_table": "inpat_drug_order", "content": "头孢呋辛 静滴 bid。"},
-        {"id": "1:discharge", "document_type": "出院记录", "source_table": "discharge_record", "content": "出院诊断：肺部结节。出院带药：阿莫西林胶囊 口服 bid*3天。"},
+        {"id": "1:daily", "document_type": "日常病程记录", "source_table": "daily_course_record", "content": "患者咳嗽气促，调整治疗方案，继续观察。"},
+        {"id": "1:order", "document_type": "长期医嘱", "source_table": "inpat_drug_order", "content": "头孢呋辛 静滴 bid 抗感染治疗。"},
+        {"id": "1:lab", "document_type": "检验报告", "source_table": "labtest_item_report", "content": "CRP明显升高，提示感染。"},
+        {"id": "1:discharge", "document_type": "出院记录", "source_table": "discharge_record", "content": "出院诊断：肺部结节。诊疗经过：治疗上予以护胃、补液等对症支持治疗。出院带药：阿莫西林胶囊 口服 bid*3天。"},
     ]
     payload = fast_screen_qc._build_evidence_payload(
         primary_document=docs[0],
@@ -187,11 +188,12 @@ def test_targeted_evidence_payload_should_include_sc083_sc019_sc100_contexts():
                 "inpat_bill_item": True,
                 "daily_course_record": True,
                 "inpat_drug_order": True,
+                "labtest_item_report": True,
                 "discharge_record": True,
             }
         },
         pack_id="surgery_procedure",
-        rule_ids=("SC-013", "SC-019", "SC-036", "SC-083", "SC-100", "SC-118"),
+        rule_ids=("SC-013", "SC-019", "SC-036", "SC-083", "SC-100", "SC-118", "SC-121"),
     )
 
     by_rule = {item["rule_id"]: item for item in payload["targeted_evidence_context"]}
@@ -201,6 +203,13 @@ def test_targeted_evidence_payload_should_include_sc083_sc019_sc100_contexts():
     assert by_applied_rule["SC-013"]["coverage_flags"]["has_admission_record_source"] is True
     assert by_applied_rule["SC-036"]["coverage_flags"]["has_daily_course_source"] is True
     assert by_applied_rule["SC-118"]["coverage_flags"]["has_discharge_record_source"] is True
+    sc121_context = by_applied_rule["SC-121"]
+    sc121_matrix = sc121_context["sc121_treatment_course_matrix"]
+    assert sc121_context["coverage_flags"]["sc121_cross_document_contrast_present"] is True
+    assert sc121_matrix["discharge_treatment_course_context"] == "fragment_only"
+    assert sc121_matrix["key_drug_categories"] == ["抗感染"]
+    assert "important_exam_or_lab_results" in sc121_matrix["missing_from_discharge_candidates"]
+    assert {"discharge_record", "inpat_drug_order", "labtest_item_report"} <= set(sc121_matrix["matrix_source_tables"])
     assert by_rule["SC-019"]["coverage_flags"]["has_source_report"] is True
     assert by_rule["SC-019"]["coverage_flags"]["has_admission_record_source"] is True
     assert by_rule["SC-083"]["coverage_flags"]["has_presurg_discussion"] is True

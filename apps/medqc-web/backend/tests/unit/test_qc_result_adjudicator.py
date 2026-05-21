@@ -982,7 +982,12 @@ def _admission_context(text: str) -> dict[str, Any]:
     }
 
 
-def _discharge_context(text: str, *, contrast_quote: str = "") -> dict[str, Any]:
+def _discharge_context(
+    text: str,
+    *,
+    contrast_quote: str = "",
+    sc121_matrix: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "targeted_evidence_context": {
             "rule_id": "DISCHARGE-STRUCTURED-CONTEXT",
@@ -994,6 +999,7 @@ def _discharge_context(text: str, *, contrast_quote: str = "") -> dict[str, Any]
                 }
             ],
             "contrast_quote": contrast_quote,
+            "sc121_treatment_course_matrix": sc121_matrix or {},
             "coverage_flags": {"has_discharge_record_source": True},
         }
     }
@@ -1265,6 +1271,29 @@ async def test_context_matrix_should_keep_sc121_with_treatment_course_and_contra
         "哌拉西林他唑巴坦抗感染，呋塞米及螺内酯利尿，并持续监测血气分析、凝血功能和氧合情况。"
         "患者病情仍危重，家属要求转院，出院时已告知继续治疗风险。"
     )
+    sc121_matrix = {
+        "discharge_treatment_course_context": "near_full",
+        "discharge_has_specific_treatment_summary": True,
+        "key_drug_categories": ["抗凝"],
+        "key_treatment_orders": [
+            {
+                "source_table": "inpat_drug_order",
+                "document_type": "医嘱",
+                "evidence_text": "低分子肝素抗凝治疗。",
+            }
+        ],
+        "important_abnormal_exam_or_lab_results": [
+            {
+                "source_table": "exam_item_report",
+                "document_type": "检查报告",
+                "evidence_text": "CTA提示肺动脉栓塞。",
+            }
+        ],
+        "course_change_or_treatment_adjustment_quotes": [],
+        "cross_document_contrast_present": True,
+        "missing_from_discharge_candidates": ["抗凝"],
+        "matrix_source_tables": ["discharge_record", "exam_item_report", "inpat_drug_order"],
+    }
 
     rows = await adjudicate_postprocessed_qc_results(
         [
@@ -1272,7 +1301,11 @@ async def test_context_matrix_should_keep_sc121_with_treatment_course_and_contra
                 "SC-121",
                 quote="予以多索茶碱、甲泼尼龙抗炎平喘，哌拉西林他唑巴坦抗感染，呋塞米及螺内酯利尿。",
                 reason="诊疗经过缺少抗凝治疗方案和相关重要辅助检查结果分析。",
-                metadata=_discharge_context(discharge_text, contrast_quote="医嘱提示低分子肝素抗凝治疗。"),
+                metadata=_discharge_context(
+                    discharge_text,
+                    contrast_quote="医嘱提示低分子肝素抗凝治疗。",
+                    sc121_matrix=sc121_matrix,
+                ),
             )
         ],
         llm_generate=None,
@@ -1280,6 +1313,8 @@ async def test_context_matrix_should_keep_sc121_with_treatment_course_and_contra
 
     assert rows[0]["display_status"] == "confirmed_defect"
     assert rows[0]["confirmed_context_matrix_rule"] == "SC-121"
+    assert rows[0]["confirmed_context_matrix"]["cross_document_contrast_present"] is True
+    assert rows[0]["sc121_treatment_course_evidence_matrix"]["missing_from_discharge_candidates"] == ["抗凝"]
 
 
 @pytest.mark.asyncio
@@ -1303,6 +1338,44 @@ async def test_context_matrix_should_downgrade_sc121_short_treatment_sentence_wi
 
     assert rows[0]["display_status"] == "data_quality_gap"
     assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["confirmed_context_matrix"]["cross_document_contrast_present"] is False
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_reject_sc121_when_discharge_course_reasonably_summarized():
+    discharge_text = (
+        "出院记录：诊疗经过：入院后完善胸部CT、血常规等检查，予抗感染、平喘、护胃及补液治疗，"
+        "根据病情调整治疗方案，患者咳嗽气促较前缓解，病情稳定后出院。"
+    )
+    sc121_matrix = {
+        "discharge_treatment_course_context": "near_full",
+        "discharge_has_specific_treatment_summary": True,
+        "key_drug_categories": ["抗感染", "平喘", "护胃", "补液"],
+        "key_treatment_orders": [
+            {"source_table": "inpat_drug_order", "document_type": "医嘱", "evidence_text": "抗感染、平喘、护胃及补液治疗。"}
+        ],
+        "important_abnormal_exam_or_lab_results": [],
+        "course_change_or_treatment_adjustment_quotes": [],
+        "cross_document_contrast_present": True,
+        "missing_from_discharge_candidates": [],
+        "matrix_source_tables": ["discharge_record", "inpat_drug_order"],
+    }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-121",
+                quote="予抗感染、平喘、护胃及补液治疗，患者病情稳定后出院。",
+                reason="诊疗经过不够详细。",
+                metadata=_discharge_context(discharge_text, sc121_matrix=sc121_matrix),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-121"
+    assert rows[0]["sc121_cross_document_contrast_present"] is True
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,3 @@
+label,provider,model,model_role,model_source,provider_error,upstream_http_error,parse_error,timeout,rate_limit,usage_total_tokens,has_choices,passed,wall_clock_time
+first_pass,alibaba,qwen3.5-35b-a3b,first_pass,env,0,0,0,0,0,35,True,True,0.751
+adjudicator,alibaba,qwen3.6-35b-a3b,adjudicator,env_adjudicator_model,0,0,0,0,0,35,True,True,0.661

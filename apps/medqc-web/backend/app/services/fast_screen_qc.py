@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import re
 import time
 from typing import TYPE_CHECKING, Any, Callable, Iterable
 
@@ -703,6 +704,182 @@ def _any_excerpt_contains(rows: list[dict[str, Any]], terms: tuple[str, ...] | l
     return any(term and term in combined for term in terms)
 
 
+SC121_TREATMENT_CATEGORY_TERMS: dict[str, tuple[str, ...]] = {
+    "抗感染": ("抗感染", "抗菌", "头孢", "哌拉西林", "他唑巴坦", "左氧", "莫西", "阿莫西林", "美罗培南"),
+    "抗凝": ("抗凝", "低分子肝素", "华法林", "利伐沙班", "阿哌沙班"),
+    "激素": ("激素", "甲泼尼龙", "地塞米松", "泼尼松"),
+    "利尿": ("利尿", "呋塞米", "螺内酯", "托拉塞米"),
+    "降糖": ("降糖", "胰岛素", "二甲双胍", "阿卡波糖"),
+    "降压": ("降压", "硝苯地平", "氨氯地平", "厄贝沙坦", "缬沙坦", "贝那普利"),
+    "止血": ("止血", "氨甲环酸", "酚磺乙胺", "止血敏"),
+    "输血": ("输血", "红细胞", "血浆", "血小板"),
+    "营养支持": ("营养", "白蛋白", "肠内营养", "肠外营养", "脂肪乳", "氨基酸"),
+    "镇痛": ("镇痛", "止痛", "曲马多", "布洛芬", "塞来昔布", "地佐辛"),
+    "化痰": ("化痰", "氨溴索", "乙酰半胱氨酸"),
+    "平喘": ("平喘", "多索茶碱", "沙丁胺醇", "异丙托溴铵"),
+    "护胃": ("护胃", "奥美拉唑", "泮托拉唑", "艾司奥美拉唑", "替普瑞酮", "胶体果胶铋"),
+    "补液": ("补液", "葡萄糖", "氯化钠", "林格", "平衡液"),
+}
+
+SC121_COURSE_CHANGE_TERMS: tuple[str, ...] = (
+    "病情变化",
+    "调整治疗",
+    "继续治疗",
+    "好转",
+    "缓解",
+    "恶化",
+    "转院",
+    "抢救",
+    "会诊建议",
+    "治疗方案",
+    "复查",
+    "观察",
+)
+
+SC121_IMPORTANT_REPORT_TERMS: tuple[str, ...] = (
+    "异常",
+    "阳性",
+    "升高",
+    "降低",
+    "高于",
+    "低于",
+    "危急",
+    "提示",
+    "诊断",
+    "明显",
+    "重度",
+    "中度",
+    "CT",
+    "MRI",
+    "CTA",
+    "血常规",
+    "CRP",
+    "D-二聚体",
+    "肌酐",
+    "血钾",
+    "血红蛋白",
+)
+
+
+def _source_tables_from_rows(rows: list[dict[str, Any]]) -> list[str]:
+    return sorted({_safe_text(row.get("source_table")) for row in rows if _safe_text(row.get("source_table"))})
+
+
+def _sc121_detect_treatment_categories(text: str) -> list[str]:
+    return [category for category, terms in SC121_TREATMENT_CATEGORY_TERMS.items() if any(term and term in text for term in terms)]
+
+
+def _sc121_rows_matching_categories(rows: list[dict[str, Any]], *, limit: int = 6) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    for row in rows:
+        text = _safe_text(row.get("evidence_text"))
+        categories = _sc121_detect_treatment_categories(text)
+        if not categories:
+            continue
+        item = dict(row)
+        item["treatment_categories"] = categories
+        selected.append(item)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def _sc121_rows_matching_terms(
+    rows: list[dict[str, Any]],
+    terms: tuple[str, ...] | list[str] | set[str],
+    *,
+    limit: int = 6,
+) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    for row in rows:
+        text = _safe_text(row.get("evidence_text"))
+        if text and any(term and term in text for term in terms):
+            selected.append(dict(row))
+            if len(selected) >= limit:
+                break
+    return selected
+
+
+def _build_sc121_treatment_course_matrix(
+    *,
+    all_documents: list[dict[str, Any]],
+    discharge_docs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    discharge_quote = _matching_excerpt(discharge_docs, ("诊疗经过", "治疗上", "给予", "予以", "住院期间"), limit=1400)
+    if not discharge_quote:
+        discharge_quote = _compact_join_excerpts(discharge_docs[:3], limit=1000)
+    discharge_compact = re.sub(r"\s+", "", discharge_quote)
+    discharge_len = len(discharge_compact)
+    discharge_categories = _sc121_detect_treatment_categories(discharge_quote)
+    generic_only = bool(discharge_compact) and discharge_len <= 90 and any(
+        term and term in discharge_compact
+        for term in ("护胃", "补液", "对症支持治疗", "抗感染治疗", "继续治疗")
+    )
+    if not discharge_compact:
+        discharge_context = "missing"
+    elif generic_only:
+        discharge_context = "fragment_only"
+    elif discharge_len >= 140 or "诊疗经过" in discharge_quote:
+        discharge_context = "near_full"
+    else:
+        discharge_context = "fragment_only"
+
+    order_docs = _document_excerpt(
+        all_documents,
+        {"inpat_drug_order", "inpat_nondrug_order", "inpat_prescription", "inpat_prescription_item"},
+        limit=700,
+    )
+    report_docs = _document_excerpt(
+        all_documents,
+        {"labtest_item_report", "exam_item_report", "exam_master", "labtest_master"},
+        limit=700,
+    )
+    course_docs = _document_excerpt(
+        all_documents,
+        {"daily_course_record", "senior_course_record", "consultation_record"},
+        limit=700,
+    )
+    key_treatment_orders = _sc121_rows_matching_categories(order_docs, limit=8)
+    important_reports = _sc121_rows_matching_terms(report_docs, SC121_IMPORTANT_REPORT_TERMS, limit=8)
+    course_changes = _sc121_rows_matching_terms(course_docs, SC121_COURSE_CHANGE_TERMS, limit=8)
+    key_categories = sorted(
+        {
+            category
+            for row in key_treatment_orders
+            for category in _safe_list(row.get("treatment_categories"))
+            if _safe_text(category)
+        }
+    )
+    missing_candidates = [category for category in key_categories if category not in discharge_categories]
+    if important_reports and not any(
+        term and term in discharge_quote for term in ("检查", "检验", "CT", "MRI", "CTA", "血常规", "辅助检查")
+    ):
+        missing_candidates.append("important_exam_or_lab_results")
+    if course_changes and not any(
+        term and term in discharge_quote for term in ("好转", "缓解", "转院", "出院", "效果", "稳定", "继续治疗")
+    ):
+        missing_candidates.append("course_change_or_treatment_adjustment")
+    source_rows = discharge_docs + key_treatment_orders + important_reports + course_changes
+    return {
+        "discharge_treatment_course_quote": discharge_quote,
+        "discharge_treatment_course_len": discharge_len,
+        "discharge_treatment_course_context": discharge_context,
+        "discharge_has_specific_treatment_summary": bool(
+            discharge_categories
+            or any(term and term in discharge_quote for term in ("手术", "治疗方案", "治疗后", "病情好转", "转院", "抢救", "会诊"))
+        ),
+        "discharge_treatment_categories": discharge_categories,
+        "key_drug_categories": key_categories,
+        "key_treatment_orders": key_treatment_orders,
+        "important_abnormal_exam_or_lab_results": important_reports,
+        "important_exam_lab_candidates": important_reports,
+        "course_change_or_treatment_adjustment_quotes": course_changes,
+        "cross_document_contrast_present": bool(key_treatment_orders or important_reports or course_changes),
+        "missing_from_discharge_candidates": sorted(set(missing_candidates)),
+        "matrix_source_tables": _source_tables_from_rows(source_rows),
+    }
+
+
 def _matching_excerpt(
     rows: list[dict[str, Any]],
     terms: tuple[str, ...] | list[str] | set[str],
@@ -962,6 +1139,10 @@ def _build_discharge_evidence_context(
     bundle: dict[str, Any],
 ) -> dict[str, Any]:
     discharge_docs = _document_excerpt(all_documents, {"discharge_record"}, limit=1000)
+    sc121_matrix = _build_sc121_treatment_course_matrix(
+        all_documents=all_documents,
+        discharge_docs=discharge_docs,
+    )
     diagnosis_docs = _document_excerpt(
         all_documents,
         {"admission_record_diagnosis", "admission_record", "first_course_record"},
@@ -973,9 +1154,18 @@ def _build_discharge_evidence_context(
         "applies_to_rule_ids": ["SC-118", "SC-121", "SC-123", "SC-125"],
         "purpose": "出院记录和诊断类规则需要出院记录字段矩阵、出院诊断列表和诊疗经过/出院带药原文。",
         "discharge_record_evidence": discharge_docs,
+        "sc121_treatment_course_matrix": sc121_matrix,
         "diagnosis_reference": diagnosis_docs[:5],
         "supporting_quote": _compact_join_excerpts(discharge_docs[:4], limit=1200),
         "contrast_quote": _compact_join_excerpts(diagnosis_docs[:5], limit=900),
+        "sc121_cross_document_contrast_quote": _compact_join_excerpts(
+            (
+                sc121_matrix.get("key_treatment_orders", [])
+                + sc121_matrix.get("important_abnormal_exam_or_lab_results", [])
+                + sc121_matrix.get("course_change_or_treatment_adjustment_quotes", [])
+            )[:8],
+            limit=1200,
+        ),
         "coverage_flags": {
             "has_discharge_record_source": bool(hits.get("discharge_record") or discharge_docs),
             "has_discharge_structure_text": _any_excerpt_contains(
@@ -984,6 +1174,11 @@ def _build_discharge_evidence_context(
             ),
             "has_discharge_medication_text": _any_excerpt_contains(discharge_docs, ("出院带药", "用法", "bid", "tid", "口服", "外用")),
             "has_diagnosis_reference": bool(hits.get("admission_record_diagnosis") or diagnosis_docs),
+            "sc121_cross_document_contrast_present": bool(sc121_matrix.get("cross_document_contrast_present")),
+            "sc121_discharge_treatment_course_context": _safe_text(sc121_matrix.get("discharge_treatment_course_context")),
+            "sc121_has_specific_treatment_summary": bool(sc121_matrix.get("discharge_has_specific_treatment_summary")),
+            "sc121_has_key_treatment_orders": bool(sc121_matrix.get("key_treatment_orders")),
+            "sc121_has_important_exam_lab_candidates": bool(sc121_matrix.get("important_abnormal_exam_or_lab_results")),
         },
     }
 

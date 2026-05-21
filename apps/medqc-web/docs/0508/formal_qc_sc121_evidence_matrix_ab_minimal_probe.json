@@ -1,0 +1,36 @@
+{
+  "probes": [
+    {
+      "label": "first_pass",
+      "provider": "alibaba",
+      "model": "qwen3.5-35b-a3b",
+      "model_role": "first_pass",
+      "model_source": "env",
+      "provider_error": 0,
+      "upstream_http_error": 0,
+      "parse_error": 0,
+      "timeout": 0,
+      "rate_limit": 0,
+      "usage_total_tokens": 35,
+      "has_choices": true,
+      "passed": true,
+      "wall_clock_time": 0.751
+    },
+    {
+      "label": "adjudicator",
+      "provider": "alibaba",
+      "model": "qwen3.6-35b-a3b",
+      "model_role": "adjudicator",
+      "model_source": "env_adjudicator_model",
+      "provider_error": 0,
+      "upstream_http_error": 0,
+      "parse_error": 0,
+      "timeout": 0,
+      "rate_limit": 0,
+      "usage_total_tokens": 35,
+      "has_choices": true,
+      "passed": true,
+      "wall_clock_time": 0.661
+    }
+  ]
+}

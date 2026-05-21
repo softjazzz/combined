@@ -242,6 +242,9 @@ def _apply_context_matrix_metadata(item: dict[str, Any], result: dict[str, Any])
         "confirmed_blocked_reason": result.get("blocked_reason") or "",
         "policy_pending_flags": result.get("policy_pending_flags") or [],
     }
+    extra_metadata = result.get("extra_metadata")
+    if isinstance(extra_metadata, dict):
+        payload.update(extra_metadata)
     item.update(payload)
     metadata = item.get("metadata")
     if not isinstance(metadata, dict):
@@ -707,6 +710,7 @@ def _context_matrix_result(
     failure_status: str = "",
     failure_reason: str = "",
     policy_pending_flags: list[str] | None = None,
+    extra_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "rule": rule,
@@ -718,6 +722,7 @@ def _context_matrix_result(
         "failure_reason": failure_reason,
         "blocked_reason": failure_reason,
         "policy_pending_flags": policy_pending_flags or [],
+        "extra_metadata": extra_metadata or {},
     }
 
 
@@ -1033,22 +1038,64 @@ def _guardrail_discharge_record_matrix(item: dict[str, Any]) -> dict[str, Any]:
 def _guardrail_discharge_treatment_course_matrix(item: dict[str, Any]) -> dict[str, Any]:
     context = _targeted_evidence_context(item)
     discharge_text = "\n".join(_context_evidence_texts(context, "discharge_record_evidence"))
+    sc121_matrix_raw = context.get("sc121_treatment_course_matrix")
+    sc121_matrix = sc121_matrix_raw if isinstance(sc121_matrix_raw, dict) else {}
     quote = _safe_text(item.get("adjudicator_supporting_quote"))
     reason = _safe_text(item.get("adjudicator_reason"))
-    contrast_quote = _safe_text(context.get("contrast_quote"))
+    contrast_quote = _safe_text(context.get("sc121_cross_document_contrast_quote") or context.get("contrast_quote"))
     evidence = _safe_text(item.get("evidence"))
     combined = f"{discharge_text}\n{quote}\n{reason}\n{contrast_quote}\n{evidence}"
+    discharge_context = _safe_text(sc121_matrix.get("discharge_treatment_course_context"))
     source_len = len(re.sub(r"\s+", "", discharge_text))
-    source_ok = source_len >= 120 or (source_len >= 80 and "诊疗经过" in discharge_text)
+    source_ok = discharge_context == "near_full" or source_len >= 120 or (source_len >= 80 and "诊疗经过" in discharge_text)
     claims_missing_drug = _matrix_terms(reason, ("主要药品", "药品名称", "主要药物", "用药", "抗凝", "治疗方案"))
+    claims_missing_exam = _matrix_terms(reason, ("辅助检查", "检查结果", "检验结果", "重要检查", "异常检查", "检查分析"))
     contrast_compact = re.sub(r"\s+", "", contrast_quote)
-    has_contrast = bool(contrast_compact) and len(contrast_compact) >= 8 and not _quote_is_record_time_only(contrast_quote)
+    matrix_cross_contrast = bool(sc121_matrix.get("cross_document_contrast_present"))
+    has_contrast = (
+        matrix_cross_contrast
+        or (bool(contrast_compact) and len(contrast_compact) >= 8 and not _quote_is_record_time_only(contrast_quote))
+    )
+    key_drug_categories = sc121_matrix.get("key_drug_categories")
+    if not isinstance(key_drug_categories, list):
+        key_drug_categories = []
+    key_treatment_orders = sc121_matrix.get("key_treatment_orders")
+    if not isinstance(key_treatment_orders, list):
+        key_treatment_orders = []
+    important_reports = sc121_matrix.get("important_abnormal_exam_or_lab_results")
+    if not isinstance(important_reports, list):
+        important_reports = []
+    fallback_drug_contrast_present = _matrix_terms(
+        contrast_quote,
+        ("低分子肝素", "抗凝", "抗感染", "平喘", "利尿", "医嘱", "用药", "药品", "治疗方案"),
+    )
+    fallback_exam_contrast_present = _matrix_terms(
+        contrast_quote,
+        ("CT", "MRI", "CTA", "血常规", "检验", "检查", "辅助检查", "异常", "提示"),
+    )
+    missing_candidates = sc121_matrix.get("missing_from_discharge_candidates")
+    if not isinstance(missing_candidates, list):
+        missing_candidates = []
+    discharge_has_specific_summary = bool(sc121_matrix.get("discharge_has_specific_treatment_summary"))
+    matrix_source_tables = sc121_matrix.get("matrix_source_tables")
+    if not isinstance(matrix_source_tables, list):
+        matrix_source_tables = []
     matrix = {
         "main_treatment_measures": _matrix_terms(combined, ("治疗", "给予", "予以", "手术", "补液", "护胃", "抗感染", "平喘", "利尿")),
         "main_drug_names_or_treatment_plan": _matrix_terms(combined, ("多索茶碱", "甲泼尼龙", "哌拉西林", "他唑巴坦", "呋塞米", "螺内酯", "艾司奥美拉唑", "抗凝", "抗感染", "药")),
         "important_auxiliary_exam_results_related_to_diagnosis": _matrix_terms(combined, ("CT", "MRI", "CTA", "血常规", "检验", "检查", "辅助检查", "诊断")),
         "treatment_response_or_outcome": _matrix_terms(combined, ("好转", "缓解", "稳定", "转院", "出院", "效果", "症状")),
-        "contrast_order_or_consultation_if_claiming_missing_drug": (not claims_missing_drug) or has_contrast,
+        "cross_document_contrast_present": has_contrast,
+        "key_drug_or_order_contrast_present": bool(key_drug_categories or key_treatment_orders or fallback_drug_contrast_present),
+        "important_exam_or_lab_contrast_present": bool(important_reports or fallback_exam_contrast_present),
+        "missing_from_discharge_candidates_present": bool(missing_candidates),
+        "discharge_fragment_only": discharge_context == "fragment_only",
+        "contrast_order_or_consultation_if_claiming_missing_drug": (not claims_missing_drug) or bool(key_drug_categories or key_treatment_orders),
+    }
+    extra_metadata = {
+        "sc121_treatment_course_evidence_matrix": sc121_matrix,
+        "sc121_cross_document_contrast_present": has_contrast,
+        "sc121_matrix_source_tables": matrix_source_tables,
     }
     if not source_ok:
         return _context_matrix_result(
@@ -1058,32 +1105,73 @@ def _guardrail_discharge_treatment_course_matrix(item: dict[str, Any]) -> dict[s
             matrix=matrix,
             failure_status="data_quality_gap",
             failure_reason="SC-121 confirmed 需要完整出院记录诊疗经过段；当前仅见短句或片段，不能确认诊疗经过不全面。",
-        )
-    if claims_missing_drug and not has_contrast:
-        return _context_matrix_result(
-            rule="SC-121",
-            document_type="discharge_record",
-            section="treatment_course",
-            matrix=matrix,
-            failure_status="data_quality_gap",
-            failure_reason="SC-121 若判“无主要药品名称”，必须有医嘱、会诊建议或治疗方案对照；当前缺少跨文书对照。",
-        )
-    if claims_missing_drug and has_contrast:
-        return _context_matrix_result(
-            rule="SC-121",
-            document_type="discharge_record",
-            section="treatment_course",
-            matrix=matrix,
+            extra_metadata=extra_metadata,
         )
     quote_compact = re.sub(r"\s+", "", quote)
-    if quote_compact in {"治疗上予以护胃、补液等对症支持治疗。", "治疗上予以护胃、补液等对症支持治疗"} and not has_contrast:
+    generic_short_quote = (
+        quote_compact in {"治疗上予以护胃、补液等对症支持治疗。", "治疗上予以护胃、补液等对症支持治疗"}
+        or (
+            0 < len(quote_compact) <= 60
+            and _matrix_terms(quote_compact, ("护胃", "补液", "对症支持治疗", "抗感染治疗", "继续治疗"))
+        )
+    )
+    if not has_contrast:
         return _context_matrix_result(
             rule="SC-121",
             document_type="discharge_record",
             section="treatment_course",
             matrix=matrix,
             failure_status="data_quality_gap",
-            failure_reason="SC-121 不能仅凭“护胃、补液”等短句确认诊疗经过不详细，需要完整诊疗经过或跨文书对照。",
+            failure_reason="SC-121 confirmed 必须用住院医嘱、检查检验或病程变化等跨文书事实对照证明出院记录漏写关键诊疗内容；当前缺对照来源。",
+            extra_metadata=extra_metadata,
+        )
+    if claims_missing_drug and not (key_drug_categories or key_treatment_orders or fallback_drug_contrast_present):
+        return _context_matrix_result(
+            rule="SC-121",
+            document_type="discharge_record",
+            section="treatment_course",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-121 若判“无主要药品名称”，必须有关键医嘱/药品类别对照；当前缺少可核对的住院用药事实。",
+            extra_metadata=extra_metadata,
+        )
+    if claims_missing_exam and not (important_reports or fallback_exam_contrast_present):
+        return _context_matrix_result(
+            rule="SC-121",
+            document_type="discharge_record",
+            section="treatment_course",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-121 若判“重要辅助检查结果缺失”，必须有明确异常或重要检查检验对照；当前缺少可核对的检查检验事实。",
+            extra_metadata=extra_metadata,
+        )
+    if discharge_has_specific_summary and not missing_candidates:
+        return _context_matrix_result(
+            rule="SC-121",
+            document_type="discharge_record",
+            section="treatment_course",
+            matrix=matrix,
+            failure_status="rejected_by_system",
+            failure_reason="SC-121 出院记录诊疗经过已有主要治疗或转归概括，且跨文书矩阵未发现明确漏写候选，不支持 confirmed。",
+            extra_metadata=extra_metadata,
+        )
+    if generic_short_quote and not missing_candidates:
+        return _context_matrix_result(
+            rule="SC-121",
+            document_type="discharge_record",
+            section="treatment_course",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-121 不能仅凭“护胃、补液、对症支持治疗”等泛化短句确认诊疗经过不详细；需要明确漏写项和跨文书对照。",
+            extra_metadata=extra_metadata,
+        )
+    if missing_candidates:
+        return _context_matrix_result(
+            rule="SC-121",
+            document_type="discharge_record",
+            section="treatment_course",
+            matrix=matrix,
+            extra_metadata=extra_metadata,
         )
     if _matrix_missing_fields(matrix):
         return _context_matrix_result(
@@ -1091,6 +1179,9 @@ def _guardrail_discharge_treatment_course_matrix(item: dict[str, Any]) -> dict[s
             document_type="discharge_record",
             section="treatment_course",
             matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-121 诊疗经过字段矩阵或跨文书对照不完整，不能确认缺陷。",
+            extra_metadata=extra_metadata,
         )
     return _context_matrix_result(
         rule="SC-121",
@@ -1099,6 +1190,7 @@ def _guardrail_discharge_treatment_course_matrix(item: dict[str, Any]) -> dict[s
         matrix=matrix,
         failure_status="rejected_by_system",
         failure_reason="SC-121 诊疗经过字段矩阵未见明确缺项，不支持 confirmed。",
+        extra_metadata=extra_metadata,
     )
 
 
