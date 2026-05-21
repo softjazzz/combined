@@ -928,7 +928,7 @@ def _build_daily_cross_doc_evidence_context(
     hits = dict(bundle.get("document_hits") or {})
     return {
         "rule_id": "DAILY-CROSS-DOC-CONTEXT",
-        "applies_to_rule_ids": ["SC-036", "SC-038", "SC-044", "SC-143", "SC-146"],
+        "applies_to_rule_ids": ["SC-036", "SC-038", "SC-044", "SC-047", "SC-050", "SC-143", "SC-146"],
         "purpose": "病程、异常检查检验、医嘱/执行/会诊之间的对照证据，避免只凭单一病程片段确认缺陷。",
         "daily_course_evidence": daily_docs[:6],
         "abnormal_report_evidence": report_docs[:8],
@@ -995,9 +995,18 @@ def _build_surgery_evidence_context(
 ) -> dict[str, Any]:
     surgery_docs = _document_excerpt(
         all_documents,
-        {"surgery_record", "mr_surgery", "surgery_safecheck_record", "presurg_summary", "presurg_discussion"},
+        {
+            "surgery_record",
+            "mr_surgery",
+            "surgery_safecheck_record",
+            "presurg_summary",
+            "presurg_discussion",
+            "postsurg_firstcourse_record",
+            "anesthesia_record",
+        },
         limit=900,
     )
+    postsurg_docs = _document_excerpt(all_documents, {"postsurg_firstcourse_record"}, limit=900)
     pathology_docs = _document_excerpt(all_documents, {"pathology_exam_master", "pathology_exam_report"}, limit=700)
     hits = dict(bundle.get("document_hits") or {})
     combined_docs = surgery_docs + pathology_docs
@@ -1027,9 +1036,10 @@ def _build_surgery_evidence_context(
     implant_quote = _matching_excerpt(surgery_docs, IMPLANT_TRIGGER_TERMS, limit=900)
     return {
         "rule_id": "SURGERY-STRUCTURED-CONTEXT",
-        "applies_to_rule_ids": ["SC-099", "SC-100", "SC-101", "SC-108", "SC-110"],
+        "applies_to_rule_ids": ["SC-099", "SC-100", "SC-101", "SC-105", "SC-108", "SC-110"],
         "purpose": "手术记录类规则需要完整手术正文、取材/病理、手术等级/急诊属性和签名字段对照。",
         "surgery_record_evidence": surgery_docs,
+        "postsurg_firstcourse_evidence": postsurg_docs,
         "pathology_reference": pathology_docs[:5],
         "specimen_pathology_quote": specimen_quote,
         "implant_detail_quote": implant_quote,
@@ -1037,6 +1047,7 @@ def _build_surgery_evidence_context(
         "contrast_quote": _compact_join_excerpts(pathology_docs[:5], limit=900),
         "coverage_flags": {
             "has_surgery_record_source": bool(hits.get("surgery_record") or hits.get("mr_surgery") or surgery_docs),
+            "has_postsurg_firstcourse_source": bool(hits.get("postsurg_firstcourse_record") or postsurg_docs),
             "has_pathology_source": has_pathology_source,
             "has_surgery_grade_or_emergency_text": _any_excerpt_contains(surgery_docs, ("手术等级", "急诊", "择期", "四级", "三级")),
             "has_operator_or_signature_text": _any_excerpt_contains(surgery_docs, ("手术医师", "主刀", "签名", "助手")),
@@ -1062,15 +1073,20 @@ def _build_targeted_evidence_context(
     contexts: list[dict[str, Any]] = []
     if selected & {"SC-010", "SC-013", "SC-015", "SC-018", "SC-020"} or pack_id.startswith("admission_"):
         contexts.append(_build_admission_record_evidence_context(all_documents=all_documents, bundle=bundle))
-    if selected & {"SC-036", "SC-038", "SC-044", "SC-143", "SC-146"} or pack_id in {
+    if selected & {"SC-036", "SC-038", "SC-044", "SC-047", "SC-050", "SC-143", "SC-146"} or pack_id in {
         "daily_abnormal_results",
         "daily_order_consistency",
         "daily_course_core",
+        "daily_course_content_core",
+        "senior_course_content",
     }:
         contexts.append(_build_daily_cross_doc_evidence_context(all_documents=all_documents, bundle=bundle))
     if selected & {"SC-118", "SC-121", "SC-123", "SC-125"} or pack_id.startswith("discharge_"):
         contexts.append(_build_discharge_evidence_context(all_documents=all_documents, bundle=bundle))
-    if selected & {"SC-099", "SC-100", "SC-101", "SC-108", "SC-110"} or pack_id == "surgery_procedure":
+    if selected & {"SC-099", "SC-100", "SC-101", "SC-105", "SC-108", "SC-110"} or pack_id in {
+        "surgery_procedure",
+        "postsurg_firstcourse_procedure",
+    }:
         contexts.append(_build_surgery_evidence_context(all_documents=all_documents, bundle=bundle))
     if "SC-083" in selected or pack_id == "presurg_discussion_procedure":
         contexts.append(_build_sc083_evidence_context(all_documents=all_documents, bundle=bundle))

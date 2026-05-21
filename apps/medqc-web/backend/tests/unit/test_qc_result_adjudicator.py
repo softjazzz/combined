@@ -46,6 +46,7 @@ async def test_adjudicator_should_remove_qc_review_candidate_terminal_state():
                 "findings": "异常检验未分析。",
                 "evidence": "血钾2.9mmol/L；后续病程未见低钾处理。",
                 "can_show_as_defect": False,
+                "metadata": _daily_context("病程记录：患者一般情况可。", report_text="检验报告：血钾2.9mmol/L 降低。"),
             }
         ],
         llm_generate=_fake_generate,
@@ -1028,6 +1029,98 @@ def _course_order_context(
     }
 
 
+def _daily_context(
+    course_text: str,
+    *,
+    report_text: str = "",
+    order_text: str = "",
+) -> dict[str, Any]:
+    return {
+        "targeted_evidence_context": {
+            "rule_id": "DAILY-CROSS-DOC-CONTEXT",
+            "daily_course_evidence": [
+                {
+                    "source_table": "daily_course_record",
+                    "document_type": "病程记录",
+                    "evidence_text": course_text,
+                }
+            ]
+            if course_text
+            else [],
+            "abnormal_report_evidence": [
+                {
+                    "source_table": "labtest_item_report",
+                    "document_type": "检验报告",
+                    "evidence_text": report_text,
+                }
+            ]
+            if report_text
+            else [],
+            "order_or_consult_evidence": [
+                {
+                    "source_table": "inpat_drug_order",
+                    "document_type": "医嘱",
+                    "evidence_text": order_text,
+                }
+            ]
+            if order_text
+            else [],
+        }
+    }
+
+
+def _surgery_context(
+    *,
+    postsurg_text: str = "",
+    surgery_text: str = "",
+) -> dict[str, Any]:
+    return {
+        "targeted_evidence_context": {
+            "rule_id": "SURGERY-STRUCTURED-CONTEXT",
+            "postsurg_firstcourse_evidence": [
+                {
+                    "source_table": "postsurg_firstcourse_record",
+                    "document_type": "术后首次病程记录",
+                    "evidence_text": postsurg_text,
+                }
+            ]
+            if postsurg_text
+            else [],
+            "surgery_record_evidence": [
+                {
+                    "source_table": "surgery_record",
+                    "document_type": "手术记录",
+                    "evidence_text": surgery_text,
+                }
+            ]
+            if surgery_text
+            else [],
+        }
+    }
+
+
+def _discharge_diagnosis_context(discharge_text: str, diagnosis_text: str) -> dict[str, Any]:
+    return {
+        "targeted_evidence_context": {
+            "rule_id": "DISCHARGE-STRUCTURED-CONTEXT",
+            "discharge_record_evidence": [
+                {
+                    "source_table": "discharge_record",
+                    "document_type": "出院记录",
+                    "evidence_text": discharge_text,
+                }
+            ],
+            "diagnosis_reference": [
+                {
+                    "source_table": "admission_record_diagnosis",
+                    "document_type": "诊断",
+                    "evidence_text": diagnosis_text,
+                }
+            ],
+        }
+    }
+
+
 @pytest.mark.asyncio
 async def test_context_matrix_should_keep_sc012_short_quote_from_present_illness():
     admission_text = (
@@ -1338,6 +1431,273 @@ async def test_context_matrix_should_downgrade_sc034_missing_order_change_source
 
     assert rows[0]["display_status"] == "data_quality_gap"
     assert rows[0]["confirmed_context_matrix_rule"] == "SC-034"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_reject_sc015_male_menstrual_claim():
+    admission_text = "患者性别：男，年龄45岁。个人史：否认吸烟饮酒。婚育史：已婚已育。家族史：否认遗传病史。"
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-015",
+                quote="个人史：否认吸烟饮酒。婚育史：已婚已育。家族史：否认遗传病史。",
+                reason="月经史未记录。",
+                metadata=_admission_context(admission_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-015"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc015_unknown_history_policy_pending():
+    admission_text = "患者性别：女，年龄32岁。个人史：具体不详。婚育史：不详。月经史：具体不详。家族史：否认。"
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-015",
+                quote="个人史：具体不详。婚育史：不详。月经史：具体不详。",
+                reason="个人史、婚育史、月经史记录不详。",
+                metadata=_admission_context(admission_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["policy_pending_flags"] == ["policy_pending_history_unknown"]
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc018_specialty_exam_pointer_only():
+    admission_text = "主诉：左膝疼痛。体格检查：T36.5℃，心肺腹未见异常。专科检查：详见专科检查。"
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-018",
+                quote="专科检查：详见专科检查。",
+                reason="专科查体缺少左膝阳性体征。",
+                metadata=_admission_context(admission_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-018"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_reject_sc036_when_followup_treatment_exists():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-036",
+                quote="CRP 80mg/L，白细胞升高。后续病程考虑感染，给予抗感染治疗并复查血常规。",
+                reason="异常炎症指标未分析处理。",
+                metadata=_daily_context(
+                    "后续病程：考虑感染可能，给予抗感染治疗并复查血常规。",
+                    report_text="检验报告：CRP 80mg/L 升高，白细胞 15*10^9/L 升高。",
+                    order_text="医嘱：抗感染治疗，复查血常规。",
+                ),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-036"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc036_same_as_before_without_report():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-036",
+                quote="辅助检查同前。",
+                reason="无异常检查分析。",
+                metadata=_daily_context("病程记录：辅助检查同前。"),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-036"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_reject_sc047_pathology_result_without_revision_trigger():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-047",
+                quote="病理报告提示腺癌。",
+                reason="病理结果提示诊断变化但未记录理由。",
+                metadata=_daily_context("病程记录：病理报告提示腺癌，继续当前治疗方案。"),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-047"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_keep_sc047_revision_without_basis():
+    course_text = "2026年01月02日病程：补充诊断：肺部感染。原诊断为慢阻肺急性加重，目前诊断增加肺部感染。"
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-047",
+                quote="补充诊断：肺部感染。原诊断为慢阻肺急性加重，目前诊断增加肺部感染。",
+                reason="存在补充诊断动作，但邻近病程未记录补充理由及诊断依据。",
+                metadata=_daily_context(course_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-047"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_reject_sc050_with_analysis_and_opinion():
+    course_text = (
+        "2026年01月03日主任医师查房：患者病情较前稳定，结合检查考虑感染控制中。"
+        "诊疗意见：继续抗感染治疗，复查血常规及CRP，观察体温变化。"
+    )
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-050",
+                quote="主任医师查房：患者病情较前稳定。诊疗意见：继续抗感染治疗。",
+                reason="上级医师查房无病情分析和诊疗意见。",
+                metadata=_daily_context(course_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-050"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc050_short_round_fragment():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-050",
+                quote="上级医师查房。",
+                reason="上级医师查房记录短，缺分析。",
+                metadata=_daily_context("上级医师查房。"),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-050"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc105_short_postsurg_fragment():
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-105",
+                quote="术毕安返病房。",
+                reason="术后首次病程记录缺项。",
+                metadata=_surgery_context(postsurg_text="术毕安返病房。", surgery_text="手术记录：行胆囊切除术。"),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-105"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_keep_sc105_full_postsurg_record_missing_fields():
+    postsurg_text = (
+        "术后首次病程记录：患者今日在全麻下行腹腔镜胆囊切除术，术中过程顺利，出血少。"
+        "术后予抗感染、补液、镇痛等治疗，注意观察腹痛、发热及切口渗血情况。"
+        "返回病房后生命体征平稳。本记录未见术后诊断和医师签名字段。"
+    )
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-105",
+                quote="本记录未见术后诊断和医师签名字段。",
+                reason="术后首次病程字段矩阵缺术后诊断和医师签名。",
+                metadata=_surgery_context(postsurg_text=postsurg_text, surgery_text="手术记录：行腹腔镜胆囊切除术。"),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-105"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_reject_sc125_subjective_order_without_marker():
+    discharge_text = "出院诊断：肺部感染；慢性阻塞性肺疾病急性加重。诊疗经过：予抗感染、平喘治疗后好转。"
+    diagnosis_text = "入院诊断：慢性阻塞性肺疾病急性加重；肺部感染。"
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-125",
+                quote="出院诊断：肺部感染；慢性阻塞性肺疾病急性加重。",
+                reason="诊断顺序应调整，主要诊断应排第一。",
+                metadata=_discharge_diagnosis_context(discharge_text, diagnosis_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-125"
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_keep_sc125_objective_omission_with_diagnosis_matrix():
+    discharge_text = (
+        "入院诊断：胃恶性肿瘤。诊疗经过：行胃癌根治术，术后病理提示胃腺癌伴淋巴结转移。"
+        "出院诊断：胃恶性肿瘤。"
+    )
+    diagnosis_text = "入院诊断：胃恶性肿瘤。病理诊断：胃腺癌伴淋巴结转移。"
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-125",
+                quote="术后病理提示胃腺癌伴淋巴结转移。出院诊断：胃恶性肿瘤。",
+                reason="出院诊断漏填术后病理明确的淋巴结转移诊断。",
+                metadata=_discharge_diagnosis_context(discharge_text, diagnosis_text),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "confirmed_defect"
+    assert rows[0]["confirmed_context_matrix_rule"] == "SC-125"
 
 
 @pytest.mark.asyncio

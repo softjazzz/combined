@@ -36,7 +36,21 @@ LABEL_BY_STATUS = {
 CONFIRMED_QUOTE_MIN_LEN = 18
 ADJUDICATOR_MISSING_RETRY_CHUNK_SIZE = 5
 TARGETED_COVERAGE_GUARDRAIL_RULES = {"SC-019", "SC-083", "SC-099", "SC-100", "SC-101"}
-CONTEXT_MATRIX_GUARDRAIL_RULES = {"SC-012", "SC-013", "SC-034", "SC-118", "SC-121", "SC-122"}
+CONTEXT_MATRIX_GUARDRAIL_RULES = {
+    "SC-012",
+    "SC-013",
+    "SC-015",
+    "SC-018",
+    "SC-034",
+    "SC-036",
+    "SC-047",
+    "SC-050",
+    "SC-105",
+    "SC-118",
+    "SC-121",
+    "SC-122",
+    "SC-125",
+}
 NEGATIVE_ONLY_TERMS = ("未见", "缺失", "未提供", "未记录", "没有")
 HEADER_ONLY_TERMS = (
     "记录时间",
@@ -521,7 +535,10 @@ def _apply_adjudication(
         next_item["technical_error_internal"] = True
     criteria_metadata = rule_criteria_metadata(next_item.get("rule_id") or next_item.get("rule_code"))
     if criteria_metadata:
+        existing_policy_pending_flags = next_item.get("policy_pending_flags")
         next_item.update(criteria_metadata)
+        if existing_policy_pending_flags:
+            next_item["policy_pending_flags"] = existing_policy_pending_flags
         if status == "data_quality_gap":
             next_item["data_gap_reason"] = reason
         elif status == "rejected_by_system":
@@ -534,7 +551,10 @@ def _apply_adjudication(
         metadata["adjudicated_display_status"] = status
         metadata["adjudicator_confidence"] = confidence
         if criteria_metadata:
+            existing_metadata_policy_pending_flags = metadata.get("policy_pending_flags")
             metadata.update(criteria_metadata)
+            if existing_metadata_policy_pending_flags:
+                metadata["policy_pending_flags"] = existing_metadata_policy_pending_flags
             if status == "data_quality_gap":
                 metadata["data_gap_reason"] = reason
             elif status == "rejected_by_system":
@@ -561,7 +581,10 @@ def _set_display_status(item: dict[str, Any], status: str, *, reason: str) -> di
         next_item["technical_error_internal"] = True
     criteria_metadata = rule_criteria_metadata(next_item.get("rule_id") or next_item.get("rule_code"))
     if criteria_metadata:
+        existing_policy_pending_flags = next_item.get("policy_pending_flags")
         next_item.update(criteria_metadata)
+        if existing_policy_pending_flags:
+            next_item["policy_pending_flags"] = existing_policy_pending_flags
         if status == "data_quality_gap":
             next_item["data_gap_reason"] = reason
         elif status == "rejected_by_system":
@@ -572,7 +595,10 @@ def _set_display_status(item: dict[str, Any], status: str, *, reason: str) -> di
         if not isinstance(metadata, dict):
             metadata = {}
             next_item["metadata"] = metadata
+        existing_metadata_policy_pending_flags = metadata.get("policy_pending_flags")
         metadata.update(criteria_metadata)
+        if existing_metadata_policy_pending_flags:
+            metadata["policy_pending_flags"] = existing_metadata_policy_pending_flags
         if status == "data_quality_gap":
             metadata["data_gap_reason"] = reason
         elif status == "rejected_by_system":
@@ -796,6 +822,168 @@ def _guardrail_admission_past_history_matrix(item: dict[str, Any]) -> dict[str, 
         matrix=matrix,
         failure_status="rejected_by_system",
         failure_reason="SC-013 既往史字段矩阵已覆盖主要规定字段，不支持 confirmed。",
+    )
+
+
+def _guardrail_admission_personal_family_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    admission_text = "\n".join(_context_evidence_texts(context, "admission_record_evidence"))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    reason = _safe_text(item.get("adjudicator_reason"))
+    combined = f"{admission_text}\n{quote}\n{evidence}\n{reason}"
+    source_ok = bool(admission_text) and (
+        _matrix_terms(admission_text, ("个人史", "婚育史", "月经史", "家族史", "生育史"))
+        or _safe_text(context.get("rule_id")) == "ADMISSION-STRUCTURED-CONTEXT"
+    )
+    male = bool(re.search(r"(性别[:：]?\s*男|男性|男，|男,)", combined))
+    female = bool(re.search(r"(性别[:：]?\s*女|女性|女，|女,)", combined))
+    adult_or_reproductive_age = bool(re.search(r"([2-5]\d)岁", combined))
+    claims_menstrual = _matrix_terms(reason + quote + evidence, ("月经史", "初潮", "经期", "末次月经"))
+    policy_pending = bool(
+        re.search(r"(具体不详|不详).{0,8}(个人史|婚育史|月经史|家族史|预防接种史)", combined)
+        or re.search(r"(个人史|婚育史|月经史|家族史|预防接种史).{0,8}(具体不详|不详)", combined)
+    )
+    matrix = {
+        "sex_available": male or female,
+        "age_or_applicability_available": bool(re.search(r"\d{1,3}岁", combined)) or adult_or_reproductive_age,
+        "personal_history": _matrix_terms(combined, ("个人史", "吸烟史", "饮酒史", "职业", "疫区", "冶游史")),
+        "marital_childbearing_history_applicable": (female and adult_or_reproductive_age) or _matrix_terms(combined, ("婚育史", "生育史")),
+        "marital_childbearing_history": (not female and not _matrix_terms(reason, ("婚育史", "生育史"))) or _matrix_terms(
+            combined, ("婚育史", "生育史", "已婚", "未婚", "育有", "孕", "产")
+        ),
+        "menstrual_history_applicable": female and adult_or_reproductive_age,
+        "menstrual_history": (not (female and adult_or_reproductive_age)) or _matrix_terms(
+            combined, ("月经史", "初潮", "经期", "末次月经", "绝经")
+        ),
+        "family_history": _matrix_terms(combined, ("家族史", "遗传病史", "父", "母", "兄弟", "姐妹")),
+    }
+    if not source_ok:
+        return _context_matrix_result(
+            rule="SC-015",
+            document_type="admission_record",
+            section="personal_marital_menstrual_family_history",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-015 confirmed 需要入院记录个人史/婚育史/月经史/家族史完整上下文；当前来源或段落不足。",
+        )
+    if male and claims_menstrual:
+        return _context_matrix_result(
+            rule="SC-015",
+            document_type="admission_record",
+            section="personal_marital_menstrual_family_history",
+            matrix=matrix,
+            failure_status="rejected_by_system",
+            failure_reason="SC-015 男性病历不适用月经史要求，不能 confirmed。",
+        )
+    if claims_menstrual and not matrix["sex_available"]:
+        return _context_matrix_result(
+            rule="SC-015",
+            document_type="admission_record",
+            section="personal_marital_menstrual_family_history",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-015 涉及月经史/婚育史适用性时必须有性别和年龄证据；当前适用性不足。",
+        )
+    if policy_pending:
+        return _context_matrix_result(
+            rule="SC-015",
+            document_type="admission_record",
+            section="personal_marital_menstrual_family_history",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-015 中“具体不详/不详”类记录属于客户口径敏感项；未确认扣分阈值前不直接 confirmed。",
+            policy_pending_flags=["policy_pending_history_unknown"],
+        )
+    missing = _matrix_missing_fields(matrix)
+    ignorable = {"marital_childbearing_history_applicable", "menstrual_history_applicable"}
+    if [field for field in missing if field not in ignorable]:
+        return _context_matrix_result(
+            rule="SC-015",
+            document_type="admission_record",
+            section="personal_marital_menstrual_family_history",
+            matrix=matrix,
+        )
+    return _context_matrix_result(
+        rule="SC-015",
+        document_type="admission_record",
+        section="personal_marital_menstrual_family_history",
+        matrix=matrix,
+        failure_status="rejected_by_system",
+        failure_reason="SC-015 性别/年龄/个人史/婚育史/月经史/家族史矩阵未见明确缺项，不支持 confirmed。",
+    )
+
+
+def _guardrail_admission_physical_exam_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    admission_text = "\n".join(_context_evidence_texts(context, "admission_record_evidence"))
+    first_course_text = "\n".join(_context_evidence_texts(context, "first_course_reference"))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    reason = _safe_text(item.get("adjudicator_reason"))
+    combined = f"{admission_text}\n{first_course_text}\n{quote}\n{evidence}\n{reason}"
+    specialty_context_without_pointer = admission_text.replace("详见专科检查", "")
+    specialty_only_pointer = "详见专科检查" in combined and not _matrix_terms(
+        specialty_context_without_pointer,
+        ("局部查体", "专科情况", "四肢", "关节", "脊柱", "腹部", "神经系统", "压痛", "活动受限"),
+    )
+    body_site_or_diagnosis = _matrix_terms(
+        combined,
+        ("主诉", "诊断", "骨折", "疼痛", "外伤", "肿物", "包块", "腹痛", "咳嗽", "胸闷", "头晕", "查体"),
+    )
+    matrix = {
+        "chief_complaint_or_diagnosis": body_site_or_diagnosis,
+        "general_physical_exam": _matrix_terms(admission_text, ("体格检查", "T", "P", "R", "BP", "心", "肺", "腹", "神志")),
+        "specialty_or_local_exam": _matrix_terms(
+            admission_text,
+            ("专科检查", "局部查体", "专科情况", "压痛", "肿胀", "活动受限", "肌力", "感觉", "反射"),
+        ),
+        "relevant_positive_or_negative_sign": _matrix_terms(
+            admission_text,
+            ("阳性", "阴性", "压痛", "叩痛", "反跳痛", "肿胀", "畸形", "活动受限", "感觉", "肌力"),
+        ),
+    }
+    if not admission_text:
+        return _context_matrix_result(
+            rule="SC-018",
+            document_type="admission_record",
+            section="physical_exam",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-018 confirmed 需要入院记录查体全文，当前缺少入院记录上下文。",
+        )
+    if specialty_only_pointer:
+        return _context_matrix_result(
+            rule="SC-018",
+            document_type="admission_record",
+            section="physical_exam",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-018 只看到“详见专科检查”不能 confirmed，必须取得专科检查/局部查体全文。",
+        )
+    if not matrix["chief_complaint_or_diagnosis"] or not matrix["general_physical_exam"]:
+        return _context_matrix_result(
+            rule="SC-018",
+            document_type="admission_record",
+            section="physical_exam",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-018 需要主诉/诊断/受伤部位与一般查体共同支撑；当前证据矩阵不足。",
+        )
+    if not matrix["specialty_or_local_exam"] or not matrix["relevant_positive_or_negative_sign"]:
+        return _context_matrix_result(
+            rule="SC-018",
+            document_type="admission_record",
+            section="physical_exam",
+            matrix=matrix,
+        )
+    return _context_matrix_result(
+        rule="SC-018",
+        document_type="admission_record",
+        section="physical_exam",
+        matrix=matrix,
+        failure_status="rejected_by_system",
+        failure_reason="SC-018 已见一般查体和专科/局部查体及相关体征，不支持 confirmed。",
     )
 
 
@@ -1046,19 +1234,356 @@ def _guardrail_course_order_change_matrix(item: dict[str, Any]) -> dict[str, Any
     )
 
 
+def _guardrail_abnormal_result_followup_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    report_text = "\n".join(_context_texts_by_keys(context, ("abnormal_report_evidence", "report_evidence")))
+    course_text = "\n".join(_context_texts_by_keys(context, ("daily_course_evidence", "senior_course_evidence")))
+    order_text = "\n".join(_context_texts_by_keys(context, ("order_or_consult_evidence", "order_evidence")))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    reason = _safe_text(item.get("adjudicator_reason"))
+    combined = f"{report_text}\n{course_text}\n{order_text}\n{quote}\n{evidence}\n{reason}"
+    abnormal_terms = (
+        "异常",
+        "升高",
+        "降低",
+        "阳性",
+        "危急",
+        "高于",
+        "低于",
+        "CRP",
+        "白细胞",
+        "血钾",
+        "血红蛋白",
+        "D-二聚体",
+        "肌酐",
+        "CT",
+        "MRI",
+    )
+    analysis_or_plan_terms = (
+        "考虑",
+        "分析",
+        "评估",
+        "复查",
+        "继续观察",
+        "调整",
+        "予以",
+        "给予",
+        "处理",
+        "治疗",
+        "会诊",
+        "完善",
+    )
+    matrix = {
+        "abnormal_result_present": bool(report_text) and _matrix_terms(report_text, abnormal_terms),
+        "abnormal_result_quote": bool(report_text),
+        "course_followup_present": bool(course_text),
+        "analysis_or_treatment_present": _matrix_terms(course_text + "\n" + order_text, analysis_or_plan_terms),
+        "timeline_linked": bool(report_text and course_text),
+    }
+    if "辅助检查同前" in combined and not report_text:
+        return _context_matrix_result(
+            rule="SC-036",
+            document_type="daily_course_record + exam/lab_report",
+            section="abnormal_result_followup",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-036 不能仅凭“辅助检查同前”确认异常检查未分析；需检查/检验异常原文和后续病程对照。",
+        )
+    if not matrix["abnormal_result_present"]:
+        return _context_matrix_result(
+            rule="SC-036",
+            document_type="daily_course_record + exam/lab_report",
+            section="abnormal_result_followup",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-036 confirmed 需要明确异常检查/检验结果；当前缺少异常报告原文。",
+        )
+    if not matrix["course_followup_present"] or not matrix["timeline_linked"]:
+        return _context_matrix_result(
+            rule="SC-036",
+            document_type="daily_course_record + exam/lab_report",
+            section="abnormal_result_followup",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-036 confirmed 需要异常结果后的病程记录时间线对照；当前病程覆盖不足。",
+        )
+    if matrix["analysis_or_treatment_present"]:
+        return _context_matrix_result(
+            rule="SC-036",
+            document_type="daily_course_record + exam/lab_report",
+            section="abnormal_result_followup",
+            matrix=matrix,
+            failure_status="rejected_by_system",
+            failure_reason="SC-036 已见后续病程/医嘱存在分析、复查、观察或处理意见，不支持 confirmed。",
+        )
+    return _context_matrix_result(
+        rule="SC-036",
+        document_type="daily_course_record + exam/lab_report",
+        section="abnormal_result_followup",
+        matrix=matrix,
+    )
+
+
+def _guardrail_diagnosis_revision_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    course_text = "\n".join(_context_texts_by_keys(context, ("daily_course_evidence", "senior_course_evidence")))
+    diagnosis_text = "\n".join(_context_texts_by_keys(context, ("diagnosis_reference", "admission_record_evidence")))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    reason = _safe_text(item.get("adjudicator_reason"))
+    combined = f"{course_text}\n{diagnosis_text}\n{quote}\n{evidence}\n{reason}"
+    trigger_terms = ("修正诊断", "补充诊断", "更正诊断", "诊断调整", "诊断改为", "目前诊断改为", "新增诊断")
+    basis_terms = ("依据", "理由", "考虑", "因", "病理", "检查", "检验", "会诊", "结合", "诊断依据")
+    pathology_only = _matrix_terms(combined, ("病理", "镜下", "报告")) and not _matrix_terms(combined, trigger_terms)
+    has_reason_or_basis = _matrix_terms(combined, basis_terms)
+    if re.search(r"(未见|未记录|缺少|缺乏|无).{0,12}(理由|依据|诊断依据|原因)", combined):
+        has_reason_or_basis = False
+    matrix = {
+        "diagnosis_revision_trigger": _matrix_terms(combined, trigger_terms),
+        "revision_time_or_context": bool(re.search(r"\d{4}[-年]\d{1,2}|今日|目前|现|入院后|术后", combined)),
+        "before_after_diagnosis_available": _matrix_terms(combined, ("原诊断", "目前诊断", "诊断改为", "补充诊断", "修正诊断", "新增诊断")),
+        "reason_or_basis_present": has_reason_or_basis,
+        "source_course_context_present": bool(course_text),
+    }
+    if not matrix["diagnosis_revision_trigger"]:
+        return _context_matrix_result(
+            rule="SC-047",
+            document_type="daily_course_record + diagnosis_matrix",
+            section="diagnosis_revision_basis",
+            matrix=matrix,
+            failure_status="rejected_by_system" if pathology_only or combined.strip() else "data_quality_gap",
+            failure_reason="SC-047 仅适用于已发生修正/补充/调整诊断动作的场景；当前未证明存在诊断变更动作。",
+        )
+    if not (matrix["revision_time_or_context"] and matrix["before_after_diagnosis_available"] and matrix["source_course_context_present"]):
+        return _context_matrix_result(
+            rule="SC-047",
+            document_type="daily_course_record + diagnosis_matrix",
+            section="diagnosis_revision_basis",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-047 confirmed 需要诊断变更时间、变更前后诊断和邻近病程上下文；当前证据矩阵不足。",
+        )
+    if matrix["reason_or_basis_present"]:
+        return _context_matrix_result(
+            rule="SC-047",
+            document_type="daily_course_record + diagnosis_matrix",
+            section="diagnosis_revision_basis",
+            matrix=matrix,
+            failure_status="rejected_by_system",
+            failure_reason="SC-047 已见诊断修正/补充的理由或依据，不支持 confirmed。",
+        )
+    return _context_matrix_result(
+        rule="SC-047",
+        document_type="daily_course_record + diagnosis_matrix",
+        section="diagnosis_revision_basis",
+        matrix=matrix,
+    )
+
+
+def _guardrail_senior_round_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    course_text = "\n".join(_context_texts_by_keys(context, ("daily_course_evidence", "senior_course_evidence")))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    reason = _safe_text(item.get("adjudicator_reason"))
+    combined = f"{course_text}\n{quote}\n{evidence}\n{reason}"
+    senior_terms = ("主任医师", "副主任医师", "主治医师", "上级医师", "查房", "主任查房")
+    analysis_terms = ("分析", "考虑", "评估", "病情", "诊断", "鉴别", "原因")
+    opinion_terms = ("诊疗意见", "医嘱", "建议", "继续", "调整", "完善", "治疗", "复查")
+    matrix = {
+        "round_time": bool(re.search(r"\d{4}[-年]\d{1,2}|今日|上午|下午|查房", combined)),
+        "senior_doctor_role": _matrix_terms(combined, senior_terms),
+        "condition_analysis": _matrix_terms(combined, analysis_terms),
+        "treatment_opinion": _matrix_terms(combined, opinion_terms),
+        "round_context_present": bool(course_text) and len(re.sub(r"\s+", "", course_text)) >= 60,
+    }
+    if not matrix["round_context_present"]:
+        return _context_matrix_result(
+            rule="SC-050",
+            document_type="senior_course_record",
+            section="senior_round_analysis_opinion",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-050 confirmed 需要上级医师查房记录全文或近完整上下文；当前仅见短片段或证据不足。",
+        )
+    if not matrix["senior_doctor_role"]:
+        return _context_matrix_result(
+            rule="SC-050",
+            document_type="senior_course_record",
+            section="senior_round_analysis_opinion",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-050 需要医师级别/职称或上级查房来源证据；当前无法确认适用性。",
+        )
+    if matrix["condition_analysis"] and matrix["treatment_opinion"]:
+        return _context_matrix_result(
+            rule="SC-050",
+            document_type="senior_course_record",
+            section="senior_round_analysis_opinion",
+            matrix=matrix,
+            failure_status="rejected_by_system",
+            failure_reason="SC-050 上级查房记录已包含病情分析和诊疗意见，不支持 confirmed。",
+        )
+    return _context_matrix_result(
+        rule="SC-050",
+        document_type="senior_course_record",
+        section="senior_round_analysis_opinion",
+        matrix=matrix,
+    )
+
+
+def _guardrail_postsurg_firstcourse_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    postsurg_text = "\n".join(_context_texts_by_keys(context, ("postsurg_firstcourse_evidence", "daily_course_evidence")))
+    surgery_text = "\n".join(_context_texts_by_keys(context, ("surgery_record_evidence", "surgery_reference")))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    combined = f"{postsurg_text}\n{surgery_text}\n{quote}\n{evidence}"
+    surgery_trigger = _matrix_terms(combined, ("手术", "术后", "麻醉", "术毕", "切口", "返回病房", "安返"))
+    source_ok = bool(postsurg_text) and len(re.sub(r"\s+", "", postsurg_text)) >= 80
+    matrix = {
+        "surgery_trigger": surgery_trigger,
+        "postsurg_firstcourse_present": bool(postsurg_text),
+        "surgery_name": _matrix_terms(combined, ("手术名称", "行", "术", "切除", "修复", "内固定")),
+        "postoperative_diagnosis": _matrix_terms(combined, ("术后诊断", "诊断")),
+        "intraoperative_condition": _matrix_terms(combined, ("术中", "出血", "麻醉", "过程", "顺利")),
+        "postoperative_treatment": _matrix_terms(combined, ("术后处理", "处理", "治疗", "抗感染", "止血", "镇痛", "补液")),
+        "postoperative_precautions": _matrix_terms(combined, ("注意事项", "观察", "监测", "复查", "禁食", "卧床")),
+        "doctor_signature": _matrix_terms(combined, ("医师签名", "签名", "记录医师", "医生")),
+    }
+    if re.search(r"(未见|无|缺少|缺).{0,8}术后诊断", combined):
+        matrix["postoperative_diagnosis"] = False
+    if re.search(r"(未见|无|缺少|缺).{0,8}(医师签名|签名)", combined):
+        matrix["doctor_signature"] = False
+    if not surgery_trigger:
+        return _context_matrix_result(
+            rule="SC-105",
+            document_type="postsurg_firstcourse_record",
+            section="postsurg_firstcourse_fields",
+            matrix=matrix,
+            failure_status="rejected_by_system",
+            failure_reason="SC-105 仅适用于存在手术及术后首次病程记录要求的场景；当前未见手术触发证据。",
+        )
+    if not source_ok:
+        return _context_matrix_result(
+            rule="SC-105",
+            document_type="postsurg_firstcourse_record",
+            section="postsurg_firstcourse_fields",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-105 confirmed 需要术后首次病程记录完整文本；当前仅见短片段或缺少完整正文。",
+        )
+    if _matrix_missing_fields(matrix):
+        return _context_matrix_result(
+            rule="SC-105",
+            document_type="postsurg_firstcourse_record",
+            section="postsurg_firstcourse_fields",
+            matrix=matrix,
+        )
+    return _context_matrix_result(
+        rule="SC-105",
+        document_type="postsurg_firstcourse_record",
+        section="postsurg_firstcourse_fields",
+        matrix=matrix,
+        failure_status="rejected_by_system",
+        failure_reason="SC-105 术后首次病程字段矩阵未见明确缺项，不支持 confirmed。",
+    )
+
+
+def _guardrail_discharge_diagnosis_matrix(item: dict[str, Any]) -> dict[str, Any]:
+    context = _targeted_evidence_context(item)
+    discharge_text = "\n".join(_context_evidence_texts(context, "discharge_record_evidence"))
+    diagnosis_text = "\n".join(_context_texts_by_keys(context, ("diagnosis_reference", "discharge_diagnosis_reference")))
+    quote = _safe_text(item.get("adjudicator_supporting_quote"))
+    evidence = _safe_text(item.get("evidence"))
+    reason = _safe_text(item.get("adjudicator_reason"))
+    source_combined = f"{discharge_text}\n{diagnosis_text}\n{quote}\n{evidence}"
+    combined = f"{source_combined}\n{reason}"
+    objective_conflict = _matrix_terms(reason + quote + evidence, ("漏填", "错填", "遗漏", "不一致", "与病理不符", "与手术不符"))
+    order_claim = _matrix_terms(reason + quote + evidence, ("顺序", "主次", "主要诊断", "应排", "第一诊断"))
+    has_order_marker = _matrix_terms(source_combined, ("主要诊断", "次要诊断", "诊断序号", "诊断顺序", "出院诊断1", "出院诊断：1"))
+    matrix = {
+        "admission_diagnosis": _matrix_terms(combined, ("入院诊断",)),
+        "discharge_or_death_diagnosis": _matrix_terms(combined, ("出院诊断", "死亡诊断")),
+        "primary_diagnosis_marker": has_order_marker,
+        "diagnosis_sequence": has_order_marker,
+        "surgery_pathology_or_treatment_contrast": _matrix_terms(
+            combined, ("手术", "病理", "主要治疗", "诊疗经过", "入院诊断", "出院诊断")
+        ),
+        "objective_conflict_or_omission": objective_conflict or (order_claim and has_order_marker),
+    }
+    if not diagnosis_text and not _matrix_terms(discharge_text, ("入院诊断", "出院诊断", "死亡诊断")):
+        return _context_matrix_result(
+            rule="SC-125",
+            document_type="discharge_record + diagnosis_matrix",
+            section="diagnosis_consistency",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-125 confirmed 需要入院/出院/死亡诊断矩阵和对照证据；当前诊断矩阵不全。",
+        )
+    if order_claim and not has_order_marker:
+        return _context_matrix_result(
+            rule="SC-125",
+            document_type="discharge_record + diagnosis_matrix",
+            section="diagnosis_consistency",
+            matrix=matrix,
+            failure_status="rejected_by_system",
+            failure_reason="SC-125 不能仅凭 LLM 主观认为诊断顺序应调整来 confirmed；缺少主要诊断/诊断序号等客观字段。",
+        )
+    if not matrix["objective_conflict_or_omission"]:
+        return _context_matrix_result(
+            rule="SC-125",
+            document_type="discharge_record + diagnosis_matrix",
+            section="diagnosis_consistency",
+            matrix=matrix,
+            failure_status="rejected_by_system",
+            failure_reason="SC-125 未见结构化诊断错填、漏填或顺序错误的客观对照证据，不支持 confirmed。",
+        )
+    if not matrix["surgery_pathology_or_treatment_contrast"]:
+        return _context_matrix_result(
+            rule="SC-125",
+            document_type="discharge_record + diagnosis_matrix",
+            section="diagnosis_consistency",
+            matrix=matrix,
+            failure_status="data_quality_gap",
+            failure_reason="SC-125 需要手术/病理/主要治疗或入出院诊断对照支撑；当前对照不足。",
+        )
+    return _context_matrix_result(
+        rule="SC-125",
+        document_type="discharge_record + diagnosis_matrix",
+        section="diagnosis_consistency",
+        matrix=matrix,
+    )
+
+
 def _guardrail_context_matrix(item: dict[str, Any], rule_id: str) -> dict[str, Any] | None:
     if rule_id == "SC-012":
         return _guardrail_admission_present_illness_matrix(item)
     if rule_id == "SC-013":
         return _guardrail_admission_past_history_matrix(item)
+    if rule_id == "SC-015":
+        return _guardrail_admission_personal_family_matrix(item)
+    if rule_id == "SC-018":
+        return _guardrail_admission_physical_exam_matrix(item)
     if rule_id == "SC-034":
         return _guardrail_course_order_change_matrix(item)
+    if rule_id == "SC-036":
+        return _guardrail_abnormal_result_followup_matrix(item)
+    if rule_id == "SC-047":
+        return _guardrail_diagnosis_revision_matrix(item)
+    if rule_id == "SC-050":
+        return _guardrail_senior_round_matrix(item)
+    if rule_id == "SC-105":
+        return _guardrail_postsurg_firstcourse_matrix(item)
     if rule_id == "SC-118":
         return _guardrail_discharge_record_matrix(item)
     if rule_id == "SC-121":
         return _guardrail_discharge_treatment_course_matrix(item)
     if rule_id == "SC-122":
         return _guardrail_discharge_advice_matrix(item)
+    if rule_id == "SC-125":
+        return _guardrail_discharge_diagnosis_matrix(item)
     return None
 
 
