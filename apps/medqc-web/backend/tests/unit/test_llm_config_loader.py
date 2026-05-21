@@ -78,6 +78,7 @@ def test_build_provider_runtime_config_should_use_env_model_for_siliconflow(monk
 
 def test_build_provider_runtime_config_should_default_formal_qc_to_alibaba_qwen35(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("LLM_ADJUDICATOR_MODEL", raising=False)
     monkeypatch.delenv("LLM_DEFAULT_PROVIDER", raising=False)
     monkeypatch.delenv("LLM_VISIBLE_PROVIDERS", raising=False)
 
@@ -91,3 +92,39 @@ def test_build_provider_runtime_config_should_default_formal_qc_to_alibaba_qwen3
     assert config["api_endpoint"] == "https://dashscope.aliyuncs.com/compatible-mode/v1"
     assert config["model"] == "qwen3.5-35b-a3b"
     assert config["model"] != "qwen3.6-35b-a3b"
+
+
+def test_build_adjudicator_runtime_config_should_use_adjudicator_model(monkeypatch):
+    monkeypatch.setenv("LLM_VISIBLE_PROVIDERS", "alibaba")
+    monkeypatch.setenv("LLM_MODEL", "qwen3.5-35b-a3b")
+    monkeypatch.setenv("LLM_ADJUDICATOR_MODEL", "qwen3.6-35b-a3b")
+
+    base = llm_config_loader.build_provider_runtime_config(
+        provider_code="alibaba",
+        model_code=None,
+        custom_parameters={"temperature": 0.2},
+    )
+    config = llm_config_loader.build_adjudicator_runtime_config(base)
+
+    assert base["model"] == "qwen3.5-35b-a3b"
+    assert config["provider_code"] == "alibaba"
+    assert config["model"] == "qwen3.6-35b-a3b"
+    assert config["first_pass_model"] == "qwen3.5-35b-a3b"
+    assert config["model_role"] == "adjudicator"
+    assert config["adjudicator_model_source"] == "env_adjudicator_model"
+
+
+def test_build_adjudicator_runtime_config_should_fallback_to_first_pass_model(monkeypatch):
+    monkeypatch.setenv("LLM_VISIBLE_PROVIDERS", "alibaba")
+    monkeypatch.setenv("LLM_MODEL", "qwen3.5-35b-a3b")
+    monkeypatch.delenv("LLM_ADJUDICATOR_MODEL", raising=False)
+
+    base = llm_config_loader.build_provider_runtime_config(
+        provider_code="alibaba",
+        model_code=None,
+        custom_parameters={},
+    )
+    config = llm_config_loader.build_adjudicator_runtime_config(base)
+
+    assert config["model"] == "qwen3.5-35b-a3b"
+    assert config["adjudicator_model_source"] == "fallback_first_pass_model"

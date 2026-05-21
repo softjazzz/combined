@@ -1616,6 +1616,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         record_issue_items.append(issue_item)
 
                 if should_postprocess_formal_results and record_issue_items:
+                    adjudicator_client = getattr(qc_service, "adjudicator_client", None) or getattr(qc_service, "client", None)
                     record_issue_items = await adjudicate_postprocessed_qc_results(
                         record_issue_items,
                         rules_by_id={
@@ -1623,7 +1624,14 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                             for rule_id in active_rule_ids
                             if isinstance(rule_states[rule_id].get("rule"), dict)
                         },
-                        llm_generate=getattr(getattr(qc_service, "client", None), "generate", None),
+                        llm_generate=getattr(adjudicator_client, "generate", None),
+                        adjudicator_model_metadata={
+                            "first_pass_model": getattr(getattr(qc_service, "client", None), "model", ""),
+                            "adjudicator_model": getattr(adjudicator_client, "model", ""),
+                            "model_role": "adjudicator",
+                            "adjudicator_model_source": getattr(adjudicator_client, "adjudicator_model_source", "")
+                            or getattr(adjudicator_client, "config_source", ""),
+                        },
                         mode="formal_final_online",
                     )
 

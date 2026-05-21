@@ -467,6 +467,7 @@ def _augment_issue_row(row: dict[str, Any], summary: dict[str, Any], profile: di
     gate_scope = "registered_gate" if rule_id in REGISTERED_GATE_RULE_IDS and gate["gate_decision"] else "no_gate"
     if rule_id not in REGISTERED_GATE_RULE_IDS and gate["gate_decision"]:
         gate_scope = "unexpected_gate_metadata"
+    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
     next_row = dict(row)
     next_row.update(
         {
@@ -486,6 +487,29 @@ def _augment_issue_row(row: dict[str, Any], summary: dict[str, Any], profile: di
             "rate_limit": summary.get("rate_limit_count", 0),
             "model_tokens": summary.get("total_tokens", 0),
             "wall_clock_time": summary.get("wall_clock_time", 0),
+            "first_pass_model": row.get("first_pass_model") or summary.get("first_pass_model", ""),
+            "adjudicator_model": row.get("adjudicator_model") or summary.get("adjudicator_model", ""),
+            "adjudicator_model_source": row.get("adjudicator_model_source")
+            or summary.get("adjudicator_model_source", ""),
+            "model_role": row.get("model_role") or metadata.get("model_role") or "adjudicator",
+            "expected_rule_ids": _json_dumps(
+                row.get("expected_rule_ids")
+                or metadata.get("expected_rule_ids")
+                or metadata.get("adjudicator_expected_rule_codes")
+                or []
+            ),
+            "actual_rule_ids": _json_dumps(
+                row.get("actual_rule_ids")
+                or metadata.get("actual_rule_ids")
+                or metadata.get("adjudicator_actual_rule_codes")
+                or []
+            ),
+            "missing_rule_ids_after_retry": _json_dumps(
+                row.get("missing_rule_ids")
+                or metadata.get("missing_rule_ids")
+                or metadata.get("adjudicator_missing_rule_codes")
+                or []
+            ),
             "sample_is_surgery": profile.get("is_surgery", ""),
             "sample_has_consultation": profile.get("has_consultation", ""),
             "sample_has_pathology": profile.get("has_pathology", ""),
@@ -732,6 +756,10 @@ def _totals(summaries: list[dict[str, Any]], issue_rows: list[dict[str, Any]]) -
         "max_wall_clock_time": max((_safe_float(row.get("wall_clock_time")) for row in summaries), default=0),
         "llm_call_count": sum(_safe_int(row.get("llm_call_count")) for row in summaries),
         "total_tokens": sum(_safe_int(row.get("total_tokens")) for row in summaries),
+        "first_pass_llm_call_count": sum(_safe_int(row.get("first_pass_llm_call_count")) for row in summaries),
+        "adjudicator_llm_call_count": sum(_safe_int(row.get("adjudicator_llm_call_count")) for row in summaries),
+        "first_pass_total_tokens": sum(_safe_int(row.get("first_pass_total_tokens")) for row in summaries),
+        "adjudicator_total_tokens": sum(_safe_int(row.get("adjudicator_total_tokens")) for row in summaries),
         "average_tokens": (
             sum(_safe_int(row.get("total_tokens")) for row in summaries) / len(summaries)
             if summaries
@@ -1019,6 +1047,14 @@ async def _run_one_visit_full(
     qc_service = SichuanQCService()
     if not await qc_service.reload_config():
         raise RuntimeError("无法加载 LLM 运行时配置")
+    adjudicator_client = getattr(qc_service, "adjudicator_client", None) or getattr(qc_service, "client", None)
+    first_pass_model = str(getattr(qc_service.client, "model", "") or "")
+    adjudicator_model = str(getattr(adjudicator_client, "model", "") or "")
+    adjudicator_model_source = str(
+        getattr(adjudicator_client, "adjudicator_model_source", "")
+        or getattr(adjudicator_client, "config_source", "")
+        or ""
+    )
 
     result = await run_final_fast_screen(
         qc_service=qc_service,
@@ -1040,6 +1076,12 @@ async def _run_one_visit_full(
         item.setdefault("visit_id", visit_id)
         item.setdefault("patient_id", patient_id)
         item.setdefault("institute_id", institute_id)
+        item.setdefault("first_pass_model", first_pass_model)
+        item.setdefault("model_role", "first_pass")
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        metadata.setdefault("first_pass_model", first_pass_model)
+        metadata.setdefault("model_role", "first_pass")
+        item["metadata"] = metadata
     first_pass = postprocess_qc_results(
         raw_results,
         bundle_metadata=bundle,
@@ -1048,7 +1090,13 @@ async def _run_one_visit_full(
     adjudicated = await adjudicate_postprocessed_qc_results(
         first_pass,
         rules_by_id=rules_by_id,
-        llm_generate=getattr(qc_service.client, "generate", None),
+        llm_generate=getattr(adjudicator_client, "generate", None),
+        adjudicator_model_metadata={
+            "first_pass_model": first_pass_model,
+            "adjudicator_model": adjudicator_model,
+            "model_role": "adjudicator",
+            "adjudicator_model_source": adjudicator_model_source,
+        },
         mode="formal_final_gate_integrated_random10_audit",
     )
     post_summary = summarize_postprocessed_results(adjudicated)
@@ -1078,7 +1126,15 @@ async def _run_one_visit_full(
         "source_document_with_text_count": profile["source_document_with_text_count"],
         "rule_count": len(rule_set.rule_ids),
         "pack_count": _safe_int(pack_metrics.get("total_packs")),
-        "llm_call_count": _safe_int(getattr(qc_service.client, "call_count", 0))
+        "first_pass_model": first_pass_model,
+        "adjudicator_model": adjudicator_model,
+        "adjudicator_model_source": adjudicator_model_source,
+        "first_pass_llm_call_count": _safe_int(getattr(qc_service.client, "call_count", 0)),
+        "adjudicator_llm_call_count": _safe_int(getattr(adjudicator_client, "call_count", 0)),
+        "llm_call_count": (
+            _safe_int(getattr(qc_service.client, "call_count", 0))
+            + _safe_int(getattr(adjudicator_client, "call_count", 0))
+        )
         or (
             _safe_int(pack_metrics.get("total_packs"))
             + _safe_int(pack_metrics.get("single_rule_retries"))
@@ -1091,8 +1147,14 @@ async def _run_one_visit_full(
             or pack_metrics.get("sum_pack_api_time")
             or result.get("api_time")
         ),
-        "total_tokens": _safe_int(getattr(qc_service.client, "total_tokens", 0))
+        "first_pass_total_tokens": _safe_int(getattr(qc_service.client, "total_tokens", 0))
         or _safe_int(token_usage.get("total_tokens")),
+        "adjudicator_total_tokens": _safe_int(getattr(adjudicator_client, "total_tokens", 0)),
+        "total_tokens": (
+            _safe_int(getattr(qc_service.client, "total_tokens", 0))
+            or _safe_int(token_usage.get("total_tokens"))
+        )
+        + _safe_int(getattr(adjudicator_client, "total_tokens", 0)),
         "prompt_tokens": _safe_int(token_usage.get("prompt_tokens")),
         "completion_tokens": _safe_int(token_usage.get("completion_tokens")),
         "provider_error_count": _safe_int(pack_metrics.get("provider_error_count")),

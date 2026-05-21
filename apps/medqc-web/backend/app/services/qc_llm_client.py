@@ -32,6 +32,8 @@ class SichuanQCLLMClient:
             self.allow_mock_when_unconfigured: bool = bool(config.get("allow_mock_when_unconfigured", False))
             self.config_source = config.get("source", "unknown")
             self.provider_code: str = str(config.get("provider_code") or "").strip().lower()
+            self.model_role: str = str(config.get("model_role") or "first_pass").strip() or "first_pass"
+            self.adjudicator_model_source: str = str(config.get("adjudicator_model_source") or "").strip()
 
             custom_params = config.get("custom_parameters", {})
             self.temperature: float = custom_params.get("temperature", 0.2)
@@ -57,6 +59,8 @@ class SichuanQCLLMClient:
             self.allow_mock_when_unconfigured = s.LLM_ALLOW_MOCK_WHEN_UNCONFIGURED
             self.config_source = "env"
             self.provider_code = str(s.LLM_DEFAULT_PROVIDER or "").strip().lower()
+            self.model_role = "first_pass"
+            self.adjudicator_model_source = ""
 
             self.temperature = 0.2
             self.top_p = 0.9

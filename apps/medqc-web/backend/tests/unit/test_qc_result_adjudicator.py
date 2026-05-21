@@ -49,6 +49,12 @@ async def test_adjudicator_should_remove_qc_review_candidate_terminal_state():
             }
         ],
         llm_generate=_fake_generate,
+        adjudicator_model_metadata={
+            "first_pass_model": "qwen3.5-35b-a3b",
+            "adjudicator_model": "qwen3.6-35b-a3b",
+            "model_role": "adjudicator",
+            "adjudicator_model_source": "env_adjudicator_model",
+        },
     )
 
     assert rows[0]["first_pass_display_status"] == "qc_review_candidate"
@@ -56,6 +62,9 @@ async def test_adjudicator_should_remove_qc_review_candidate_terminal_state():
     assert rows[0]["display_status"] == "confirmed_defect"
     assert rows[0]["can_show_as_defect"] is True
     assert rows[0]["display_bucket"] == "确认缺陷"
+    assert rows[0]["first_pass_model"] == "qwen3.5-35b-a3b"
+    assert rows[0]["adjudicator_model"] == "qwen3.6-35b-a3b"
+    assert rows[0]["metadata"]["adjudicator_model"] == "qwen3.6-35b-a3b"
 
 
 @pytest.mark.asyncio

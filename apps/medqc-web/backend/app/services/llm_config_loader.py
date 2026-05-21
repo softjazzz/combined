@@ -96,6 +96,37 @@ def build_provider_runtime_config(
     }
 
 
+def build_adjudicator_runtime_config(
+    base_config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """生成正式质控二审运行时配置。
+
+    二审默认可通过 LLM_ADJUDICATOR_MODEL 指向更稳的裁决模型；未配置时回退一审模型，
+    保持既有部署兼容。
+    """
+    settings = get_settings()
+    base = dict(base_config or build_provider_runtime_config(get_default_provider_code()))
+    provider_code = str(base.get("provider_code") or get_default_provider_code()).strip().lower()
+    adjudicator_model = str(settings.LLM_ADJUDICATOR_MODEL or "").strip()
+    model_code = adjudicator_model or str(base.get("model") or settings.LLM_MODEL or "qwen3.5-35b-a3b").strip()
+    runtime = build_provider_runtime_config(
+        provider_code=provider_code,
+        model_code=model_code,
+        custom_parameters=base.get("custom_parameters", {}) or {},
+    )
+    source = "env_adjudicator_model" if adjudicator_model else "fallback_first_pass_model"
+    runtime.update(
+        {
+            "source": source,
+            "config_name": "adjudicator",
+            "model_role": "adjudicator",
+            "adjudicator_model_source": source,
+            "first_pass_model": str(base.get("model") or ""),
+        }
+    )
+    return runtime
+
+
 class LLMConfigLoader:
     """LLM 配置加载器，支持数据库配置 + env 注入敏感参数。"""
 

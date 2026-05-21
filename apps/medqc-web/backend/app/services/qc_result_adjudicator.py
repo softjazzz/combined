@@ -1282,6 +1282,26 @@ def _with_adjudicator_diagnostics(
     return next_item
 
 
+def _with_model_metadata(item: dict[str, Any], model_metadata: dict[str, Any] | None) -> dict[str, Any]:
+    if not model_metadata:
+        return item
+    payload = {
+        key: value
+        for key, value in model_metadata.items()
+        if value not in (None, "")
+    }
+    if not payload:
+        return item
+    next_item = dict(item)
+    next_item.update(payload)
+    metadata = next_item.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+        next_item["metadata"] = metadata
+    metadata.update(payload)
+    return next_item
+
+
 def _collect_adjudications(
     adjudicated_items: list[Any],
     prompt_items: list[dict[str, Any]],
@@ -1391,6 +1411,7 @@ async def adjudicate_postprocessed_qc_results(
     *,
     rules_by_id: dict[str, dict[str, Any]] | None = None,
     llm_generate: AdjudicatorGenerateFn | None = None,
+    adjudicator_model_metadata: dict[str, Any] | None = None,
     mode: str = "formal_final_online",
 ) -> list[dict[str, Any]]:
     candidates = [
@@ -1405,7 +1426,10 @@ async def adjudicate_postprocessed_qc_results(
     next_rows = [dict(item) for item in rows]
     if llm_generate is None:
         for index, item in candidates:
-            next_rows[index] = _technical_error_for_candidate(item, "未配置正式质控二审 LLM，边界项进入内部技术异常。")
+            next_rows[index] = _with_model_metadata(
+                _technical_error_for_candidate(item, "未配置正式质控二审 LLM，边界项进入内部技术异常。"),
+                adjudicator_model_metadata,
+            )
         return apply_confirmed_guardrails(next_rows)
 
     prompt_items = [
@@ -1478,6 +1502,7 @@ async def adjudicate_postprocessed_qc_results(
                         original_item,
                         f"正式质控二审缺失补裁调用失败：{exc}",
                     )
+                    next_rows[row_index] = _with_model_metadata(next_rows[row_index], adjudicator_model_metadata)
         retry_recovered_count = len(recovered_original_indexes)
 
     final_missing_indexes = [index for index in range(len(candidates)) if index not in by_candidate_index]
@@ -1505,6 +1530,7 @@ async def adjudicate_postprocessed_qc_results(
                 "adjudicator_missing_rule_output_after_retry: 正式质控二审补裁后仍缺少该规则裁决，进入内部技术异常。",
             )
             next_rows[row_index] = _with_adjudicator_diagnostics(final_item, diagnostics)
+            next_rows[row_index] = _with_model_metadata(next_rows[row_index], adjudicator_model_metadata)
             continue
         final_item = _apply_adjudication(original_item, adjudication)
         final_item["postprocess_mode"] = mode
@@ -1513,5 +1539,6 @@ async def adjudicate_postprocessed_qc_results(
             diagnostics,
             recovered_by_retry=_safe_bool(adjudication.get("recovered_by_adjudicator_missing_rule_retry")),
         )
+        final_item = _with_model_metadata(final_item, adjudicator_model_metadata)
         next_rows[row_index] = final_item
     return apply_confirmed_guardrails(next_rows)

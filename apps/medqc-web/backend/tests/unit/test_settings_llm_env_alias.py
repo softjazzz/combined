@@ -9,6 +9,7 @@ LLM_ENV_KEYS = [
     "LLM_API_ENDPOINT",
     "LLM_API_KEY",
     "LLM_MODEL",
+    "LLM_ADJUDICATOR_MODEL",
     "LLM_DEFAULT_PROVIDER",
     "LLM_TIMEOUT_SECONDS",
     "SICHUAN_API_ENDPOINT",
@@ -29,6 +30,7 @@ def test_settings_reads_llm_env_keys(monkeypatch):
     monkeypatch.setenv("LLM_API_ENDPOINT", "https://dashscope.aliyuncs.com/compatible-mode/v1")
     monkeypatch.setenv("LLM_API_KEY", "llm-key")
     monkeypatch.setenv("LLM_MODEL", "qwen-turbo")
+    monkeypatch.setenv("LLM_ADJUDICATOR_MODEL", "qwen-plus")
     monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "30")
 
     settings = Settings(_env_file=None)
@@ -36,6 +38,7 @@ def test_settings_reads_llm_env_keys(monkeypatch):
     assert str(settings.LLM_API_ENDPOINT) == "https://dashscope.aliyuncs.com/compatible-mode/v1"
     assert settings.LLM_API_KEY == "llm-key"
     assert settings.LLM_MODEL == "qwen-turbo"
+    assert settings.LLM_ADJUDICATOR_MODEL == "qwen-plus"
     assert settings.LLM_TIMEOUT_SECONDS == 30
     assert settings.llm_env_source() == "LLM_*"
 
@@ -49,6 +52,7 @@ def test_formal_qc_default_llm_model_should_use_qwen35(monkeypatch):
     assert str(settings.LLM_API_ENDPOINT) == "https://dashscope.aliyuncs.com/compatible-mode/v1"
     assert settings.LLM_DEFAULT_PROVIDER == "alibaba"
     assert settings.LLM_MODEL == "qwen3.5-35b-a3b"
+    assert settings.LLM_ADJUDICATOR_MODEL is None
     assert settings.LLM_MODEL != "qwen3.6-35b-a3b"
 
 

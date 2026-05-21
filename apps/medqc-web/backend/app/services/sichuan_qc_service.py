@@ -28,7 +28,7 @@ from .copy_content_similarity import (
     split_sentences,
 )
 from .unified_rule_engine import UnifiedRuleEngine
-from .llm_config_loader import LLMConfigLoader
+from .llm_config_loader import LLMConfigLoader, build_adjudicator_runtime_config
 from .qc_llm_client_runtime import SichuanQCLLMClient  # 拆分出的 LLM 客户端（runtime 源码版）
 from .qc_prompt_builder import QCPromptBuilder  # 拆分出的 Prompt 构建器
 from .bundles import load_or_assemble_domain_bundle
@@ -246,6 +246,27 @@ class SichuanQCService:
         """
         # LLM 客户端（config 为 None 时，SichuanQCLLMClient 自动从 .env 加载）
         self.client = SichuanQCLLMClient(config)
+        self.adjudicator_client = SichuanQCLLMClient(
+            build_adjudicator_runtime_config(
+                config
+                or {
+                    "provider_code": self.client.provider_code,
+                    "api_endpoint": self.client.api_endpoint,
+                    "api_key": self.client.api_key,
+                    "model": self.client.model,
+                    "timeout_seconds": self.client.timeout_seconds,
+                    "allow_mock_when_unconfigured": self.client.allow_mock_when_unconfigured,
+                    "source": self.client.config_source,
+                    "custom_parameters": {
+                        "temperature": self.client.temperature,
+                        "top_p": self.client.top_p,
+                        "max_tokens": self.client.max_tokens,
+                        "enable_thinking": self.client.enable_thinking,
+                        "reasoning_effort": self.client.reasoning_effort,
+                    },
+                }
+            )
+        )
 
         # 规则缓存
         self._rules_cache: Optional[List[Dict[str, Any]]] = None
@@ -406,6 +427,23 @@ class SichuanQCService:
         """
         success = await LLMConfigLoader.reload_config_for_service(self, config_name, user_id)
         if success:
+            first_pass_config = {
+                "provider_code": self.client.provider_code,
+                "api_endpoint": self.client.api_endpoint,
+                "api_key": self.client.api_key,
+                "model": self.client.model,
+                "timeout_seconds": self.client.timeout_seconds,
+                "allow_mock_when_unconfigured": self.client.allow_mock_when_unconfigured,
+                "source": self.client.config_source,
+                "custom_parameters": {
+                    "temperature": self.client.temperature,
+                    "top_p": self.client.top_p,
+                    "max_tokens": self.client.max_tokens,
+                    "enable_thinking": self.client.enable_thinking,
+                    "reasoning_effort": self.client.reasoning_effort,
+                },
+            }
+            self.adjudicator_client = SichuanQCLLMClient(build_adjudicator_runtime_config(first_pass_config))
             # 同步最新截断配置到 service 与 prompt_builder
             settings = get_settings()
             self.enable_truncate = settings.LLM_ENABLE_TRUNCATE

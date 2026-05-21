@@ -17,6 +17,22 @@ def test_thinking_model_resolve_max_tokens():
     assert client._resolve_max_tokens(prompt) >= 24576
 
 
+def test_client_should_record_model_role_metadata():
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "http://localhost:9999",
+            "api_key": "dummy",
+            "model": "qwen3.6-35b-a3b",
+            "model_role": "adjudicator",
+            "adjudicator_model_source": "env_adjudicator_model",
+        }
+    )
+
+    assert client.model == "qwen3.6-35b-a3b"
+    assert client.model_role == "adjudicator"
+    assert client.adjudicator_model_source == "env_adjudicator_model"
+
+
 def test_strip_think_tags():
     raw = "<think>reasoning...</think>\n[{\"rule_id\":\"SC-001\"}]"
     cleaned = SichuanQCLLMClient._strip_think_tags(raw)

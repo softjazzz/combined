@@ -118,6 +118,10 @@ class Settings(BaseSettings):
         default="qwen3.5-35b-a3b",
         validation_alias=AliasChoices("LLM_MODEL", "SICHUAN_MODEL"),
     )
+    LLM_ADJUDICATOR_MODEL: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("LLM_ADJUDICATOR_MODEL", "SICHUAN_ADJUDICATOR_MODEL"),
+    )
     LLM_TIMEOUT_SECONDS: int = Field(
         default=120,
         validation_alias=AliasChoices("LLM_TIMEOUT_SECONDS", "SICHUAN_TIMEOUT_SECONDS"),
