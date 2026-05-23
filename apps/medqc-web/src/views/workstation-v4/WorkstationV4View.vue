@@ -280,6 +280,11 @@ import { useFrontpageDraft } from './composables/useFrontpageDraft'
 import { useQcPipeline } from './composables/useQcPipeline'
 import { usePatientRecords } from './composables/usePatientRecords'
 import { useNotifications } from './composables/useNotifications'
+import {
+  canGenerateFrontpageDraft,
+  canGenerateSettlementDraft,
+  getFrontpageDraftDisabledReason,
+} from './frontpageAvailability'
 import { normalizeWorklistItem } from './normalize'
 import { parseDocSortTime, resolveDocDisplayTitle } from './utils/documentDisplay'
 import type {
@@ -1014,14 +1019,19 @@ async function loadFrontpageSheet(patientId: string, visitId: string) {
 const settlementQcFailed = computed(() => settlementQcReport.value?.summary?.failed || 0)
 
 // ========== 鍔熻兘鍙敤鎬у垽鏂紙PRD 6锛?==========
-// AI 鐢熸垚棣栭〉锛氫粎瑕佹眰宸插嚭闄紝宸叉湁棣栭〉鏁版嵁鏃跺脊纭妗嗚鐩?
+// AI 鐢熸垚棣栭〉锛氬湪闄㈡偅鑰呬篃鍏佽鐢熸垚鍙傝€冭崏绋匡紝宸叉湁棣栭〉鏁版嵁鏃跺脊纭妗?
 const isDischarged = computed(() => !!selectedRecord.value?.dischargeDate)
 const hasExistingFrontpage = computed(() => !!frontpageSheetData.value)
-const canGenerateFrontpage = computed(() => isDischarged.value)
-const frontpageDisabledReason = computed(() => {
-  if (!isDischarged.value) return '在院患者暂不支持生成首页'
-  return ''
-})
+const canGenerateFrontpage = computed(() =>
+  canGenerateFrontpageDraft(selectedRecord.value, documentsList.value, combinedMedicalText.value),
+)
+const frontpageDisabledReason = computed(() =>
+  getFrontpageDraftDisabledReason(
+    selectedRecord.value,
+    documentsList.value,
+    combinedMedicalText.value,
+  ),
+)
 function handleGenerateFrontpage() {
   if (hasExistingFrontpage.value) {
     Modal.confirm({
@@ -1043,7 +1053,9 @@ function handleGenerateFrontpage() {
 const hasExistingSettlement = computed(
   () => !!settlementData.value && settlementData.value?.data_source !== 'generated_from_frontpage',
 )
-const canGenerateSettlement = computed(() => isDischarged.value && !hasExistingSettlement.value)
+const canGenerateSettlement = computed(() =>
+  canGenerateSettlementDraft(selectedRecord.value, hasExistingSettlement.value),
+)
 
 const costColumns = [
   { title: '收费类别', dataIndex: 'type', width: 120 },
