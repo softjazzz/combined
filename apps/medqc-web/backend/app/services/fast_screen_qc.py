@@ -1905,6 +1905,21 @@ async def run_final_fast_screen(
             for item in pack_results:
                 metadata = item.setdefault("metadata", {})
                 if isinstance(metadata, dict):
+                    cot_observation = dict(last_evaluated.get("cot_observation") or {})
+                    requested_enable_thinking = bool(cot_observation.get("requested_enable_thinking") is True)
+                    requested_disable_thinking = bool(cot_observation.get("requested_disable_thinking") is True)
+                    try:
+                        is_deepseek_client = bool(qc_service.client._is_deepseek_provider())
+                    except Exception:
+                        is_deepseek_client = False
+                    if is_deepseek_client and not requested_enable_thinking:
+                        requested_disable_thinking = True
+                    metadata["cot_mode"] = str(cot_observation.get("cot_mode") or "disabled")
+                    metadata["requested_enable_thinking"] = requested_enable_thinking
+                    metadata["requested_disable_thinking"] = requested_disable_thinking
+                    metadata["thinking_heuristic_applied"] = bool(cot_observation.get("thinking_heuristic_applied") is True)
+                    metadata["response_has_think_tags"] = bool(cot_observation.get("response_has_think_tags") is True)
+                    metadata["response_has_reasoning_content"] = bool(cot_observation.get("response_has_reasoning_content") is True)
                     metadata["pack_retry_attempts"] = retry_attempts
                     metadata["pack_retry_success"] = retry_attempts > 0 and not should_retry
                     metadata["pack_retry_reason"] = retry_reason

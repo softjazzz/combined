@@ -83,19 +83,36 @@ def test_detect_cot_observation_should_mark_implicit_when_reasoning_appears():
     assert observed["response_has_reasoning_content"] is True
 
 
-def test_deepseek_chat_should_not_send_enable_thinking():
+def test_deepseek_v4_flash_should_disable_thinking_by_default():
     client = SichuanQCLLMClient(
         config={
             "api_endpoint": "https://api.deepseek.com",
             "api_key": "sk-test",
-            "model": "deepseek-chat",
+            "model": "deepseek-v4-flash",
             "provider_code": "deepseek",
         }
     )
 
     payload = client._build_provider_specific_payload()
 
-    assert payload == {}
+    assert payload == {"thinking": {"type": "disabled"}}
+    assert "reasoning_effort" not in payload
+
+
+def test_deepseek_v4_pro_should_disable_thinking_by_default():
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-v4-pro",
+            "provider_code": "deepseek",
+        }
+    )
+
+    payload = client._build_provider_specific_payload()
+
+    assert payload == {"thinking": {"type": "disabled"}}
+    assert "reasoning_effort" not in payload
 
 
 def test_deepseek_reasoner_should_send_thinking_and_reasoning_effort():
@@ -113,6 +130,49 @@ def test_deepseek_reasoner_should_send_thinking_and_reasoning_effort():
 
     assert payload["thinking"] == {"type": "enabled"}
     assert payload["reasoning_effort"] == "high"
+
+
+def test_deepseek_should_send_thinking_enabled_when_requested():
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-v4-flash",
+            "provider_code": "deepseek",
+            "custom_parameters": {"enable_thinking": True},
+        }
+    )
+
+    payload = client._build_provider_specific_payload()
+
+    assert payload == {"thinking": {"type": "enabled"}}
+
+
+def test_detect_cot_observation_should_mark_deepseek_thinking_disabled():
+    client = SichuanQCLLMClient(
+        config={
+            "api_endpoint": "https://api.deepseek.com",
+            "api_key": "sk-test",
+            "model": "deepseek-v4-flash",
+            "provider_code": "deepseek",
+        }
+    )
+    result = {
+        "choices": [
+            {
+                "message": {
+                    "content": "{\"ok\":true}",
+                }
+            }
+        ]
+    }
+
+    observed = client._detect_cot_observation(result, payload={"thinking": {"type": "disabled"}})
+
+    assert observed["requested_enable_thinking"] is False
+    assert observed["requested_disable_thinking"] is True
+    assert observed["response_has_reasoning_content"] is False
+    assert observed["cot_mode"] == "disabled"
 
 
 @pytest.mark.asyncio

@@ -448,6 +448,7 @@ class QCRuleOrchestrator:
                 metadata.setdefault("first_result_latency", response_first_result_latency)
                 metadata.setdefault("cot_mode", str(response_cot.get("cot_mode") or "disabled"))
                 metadata.setdefault("requested_enable_thinking", bool(response_cot.get("requested_enable_thinking") is True))
+                metadata.setdefault("requested_disable_thinking", bool(response_cot.get("requested_disable_thinking") is True))
                 metadata.setdefault("thinking_heuristic_applied", bool(response_cot.get("thinking_heuristic_applied") is True))
                 metadata.setdefault("response_has_think_tags", bool(response_cot.get("response_has_think_tags") is True))
                 metadata.setdefault("response_has_reasoning_content", bool(response_cot.get("response_has_reasoning_content") is True))

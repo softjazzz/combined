@@ -227,12 +227,12 @@ class SichuanQCLLMClient:
 
     def _build_provider_specific_payload(self) -> Dict[str, Any]:
         if self._is_deepseek_provider():
-            extra: Dict[str, Any] = {}
             if self.model == "deepseek-reasoner" or self.enable_thinking:
-                extra["thinking"] = {"type": "enabled"}
-                if self.reasoning_effort in {"low", "medium", "high"}:
+                extra: Dict[str, Any] = {"thinking": {"type": "enabled"}}
+                if self.reasoning_effort in {"high", "max"}:
                     extra["reasoning_effort"] = self.reasoning_effort
-            return extra
+                return extra
+            return {"thinking": {"type": "disabled"}}
         return {"enable_thinking": False}
 
     @staticmethod
@@ -268,7 +268,18 @@ class SichuanQCLLMClient:
         reasoning_content = message.get("reasoning_content")
         has_think_tags = bool(re.search(r"<think>[\s\S]*?</think>", content, flags=re.IGNORECASE))
         has_reasoning_content = bool(reasoning_content)
-        requested_enable_thinking = bool(payload.get("enable_thinking") is True)
+        thinking = payload.get("thinking")
+        requested_enable_thinking = bool(
+            payload.get("enable_thinking") is True
+            or (
+                isinstance(thinking, dict)
+                and thinking.get("type") == "enabled"
+            )
+        )
+        requested_disable_thinking = bool(
+            isinstance(thinking, dict)
+            and thinking.get("type") == "disabled"
+        )
         cot_mode = "disabled"
         if requested_enable_thinking:
             cot_mode = "explicit"
@@ -277,6 +288,7 @@ class SichuanQCLLMClient:
         return {
             "cot_mode": cot_mode,
             "requested_enable_thinking": requested_enable_thinking,
+            "requested_disable_thinking": requested_disable_thinking,
             "thinking_heuristic_applied": bool(self._is_thinking_model()),
             "response_has_think_tags": has_think_tags,
             "response_has_reasoning_content": has_reasoning_content,
