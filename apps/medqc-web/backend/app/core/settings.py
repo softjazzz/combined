@@ -107,7 +107,7 @@ class Settings(BaseSettings):
 
     # LLM API Configuration (unified naming; compatible with legacy SICHUAN_* env vars)
     LLM_API_ENDPOINT: Optional[AnyHttpUrl] = Field(
-        default="https://api.deepseek.com",
+        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
         validation_alias=AliasChoices("LLM_API_ENDPOINT", "SICHUAN_API_ENDPOINT"),
     )
     LLM_API_KEY: Optional[str] = Field(
@@ -115,11 +115,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LLM_API_KEY", "SICHUAN_API_KEY"),
     )
     LLM_MODEL: str = Field(
-        default="deepseek-v4-flash",
+        default="qwen3.5-35b-a3b",
         validation_alias=AliasChoices("LLM_MODEL", "SICHUAN_MODEL"),
     )
     LLM_ADJUDICATOR_MODEL: Optional[str] = Field(
-        default=None,
+        default="qwen3.6-35b-a3b",
         validation_alias=AliasChoices("LLM_ADJUDICATOR_MODEL", "SICHUAN_ADJUDICATOR_MODEL"),
     )
     LLM_TIMEOUT_SECONDS: int = Field(
@@ -141,7 +141,7 @@ class Settings(BaseSettings):
             "SICHUAN_ALLOW_MOCK_WHEN_UNCONFIGURED",
         ),
     )
-    LLM_DEFAULT_PROVIDER: Optional[str] = "deepseek"
+    LLM_DEFAULT_PROVIDER: Optional[str] = "alibaba"
     LLM_VISIBLE_PROVIDERS: List[str] = Field(default_factory=list)
     DEEPSEEK_API_ENDPOINT: str = "https://api.deepseek.com"
     DEEPSEEK_API_KEY: Optional[str] = None

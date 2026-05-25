@@ -25,7 +25,7 @@ def get_enabled_provider_codes() -> tuple[str, ...]:
 
     env_name = str(settings.ENV or os.getenv("ENV") or "development").strip().lower()
     if env_name == "production":
-        return ("deepseek", "ollama")
+        return ("alibaba", "deepseek", "ollama")
     return SUPPORTED_PROVIDER_CODES
 
 
