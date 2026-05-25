@@ -1,0 +1,19 @@
+{
+  "probe": {
+    "probe_type": "minimal_chat",
+    "provider": "deepseek",
+    "endpoint_host": "api.deepseek.com",
+    "model": "deepseek-v4-flash",
+    "key_present": true,
+    "usage_total_tokens": 74,
+    "has_choices": true,
+    "provider_error": 0,
+    "upstream_http_error": 0,
+    "parse_error": 0,
+    "timeout": 0,
+    "rate_limit": 0,
+    "passed": true,
+    "error_summary": "",
+    "wall_clock_time": 1.906
+  }
+}
