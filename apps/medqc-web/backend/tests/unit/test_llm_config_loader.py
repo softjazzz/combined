@@ -1,5 +1,6 @@
 import pytest
 
+from app.core.settings import Settings
 from app.services import llm_config_loader
 
 
@@ -57,6 +58,66 @@ def test_build_provider_runtime_config_should_support_deepseek(monkeypatch):
     assert config["custom_parameters"]["reasoning_effort"] == "high"
 
 
+def _default_test_settings(**overrides):
+    values = {
+        "JWT_SECRET": "test-secret",
+        "LLM_API_ENDPOINT": "https://api.deepseek.com",
+        "LLM_MODEL": "deepseek-v4-flash",
+        "LLM_DEFAULT_PROVIDER": "deepseek",
+        "LLM_VISIBLE_PROVIDERS": [],
+        "_env_file": None,
+    }
+    values.update(overrides)
+    return Settings(**values)
+
+
+def test_build_provider_runtime_config_should_default_deepseek_to_v4_flash(monkeypatch):
+    monkeypatch.setattr(
+        llm_config_loader,
+        "get_settings",
+        lambda: _default_test_settings(
+            LLM_DEFAULT_PROVIDER="deepseek",
+            LLM_VISIBLE_PROVIDERS=["deepseek", "alibaba"],
+            DEEPSEEK_API_KEY="sk-test",
+        ),
+    )
+
+    config = llm_config_loader.build_provider_runtime_config(
+        provider_code="deepseek",
+        model_code=None,
+        custom_parameters={},
+    )
+
+    assert config["provider_code"] == "deepseek"
+    assert config["api_endpoint"] == "https://api.deepseek.com"
+    assert config["model"] == "deepseek-v4-flash"
+    assert config["model"] != "qwen3.6-35b-a3b"
+
+
+def test_deepseek_default_provider_should_accept_unified_llm_api_key(monkeypatch):
+    monkeypatch.setattr(
+        llm_config_loader,
+        "get_settings",
+        lambda: _default_test_settings(
+            LLM_DEFAULT_PROVIDER="deepseek",
+            LLM_VISIBLE_PROVIDERS=["deepseek"],
+            LLM_API_ENDPOINT="https://api.deepseek.com",
+            LLM_API_KEY="sk-unified",
+            DEEPSEEK_API_KEY=None,
+        ),
+    )
+
+    config = llm_config_loader.build_provider_runtime_config(
+        provider_code="deepseek",
+        model_code=None,
+        custom_parameters={},
+    )
+
+    assert config["api_endpoint"] == "https://api.deepseek.com"
+    assert config["api_key"] == "sk-unified"
+    assert config["model"] == "deepseek-v4-flash"
+
+
 def test_build_provider_runtime_config_should_use_env_model_for_siliconflow(monkeypatch):
     monkeypatch.setenv("SILICONFLOW_API_ENDPOINT", "https://api.siliconflow.cn/v1")
     monkeypatch.setenv("SILICONFLOW_API_KEY", "sk-siliconflow")
@@ -76,11 +137,12 @@ def test_build_provider_runtime_config_should_use_env_model_for_siliconflow(monk
     assert config["model"] == "Qwen/Qwen3.5-35B-A3B"
 
 
-def test_build_provider_runtime_config_should_default_formal_qc_to_alibaba_qwen35(monkeypatch):
-    monkeypatch.delenv("LLM_MODEL", raising=False)
-    monkeypatch.delenv("LLM_ADJUDICATOR_MODEL", raising=False)
-    monkeypatch.delenv("LLM_DEFAULT_PROVIDER", raising=False)
-    monkeypatch.delenv("LLM_VISIBLE_PROVIDERS", raising=False)
+def test_build_provider_runtime_config_should_default_formal_qc_to_deepseek_v4_flash(monkeypatch):
+    monkeypatch.setattr(
+        llm_config_loader,
+        "get_settings",
+        lambda: _default_test_settings(),
+    )
 
     config = llm_config_loader.build_provider_runtime_config(
         provider_code="",
@@ -88,10 +150,24 @@ def test_build_provider_runtime_config_should_default_formal_qc_to_alibaba_qwen3
         custom_parameters={},
     )
 
-    assert config["provider_code"] == "alibaba"
-    assert config["api_endpoint"] == "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    assert config["model"] == "qwen3.5-35b-a3b"
+    assert config["provider_code"] == "deepseek"
+    assert config["api_endpoint"] == "https://api.deepseek.com"
+    assert config["model"] == "deepseek-v4-flash"
+    assert config["model"] != "qwen3.5-35b-a3b"
     assert config["model"] != "qwen3.6-35b-a3b"
+
+
+def test_production_default_provider_should_allow_deepseek(monkeypatch):
+    monkeypatch.setattr(
+        llm_config_loader,
+        "get_settings",
+        lambda: _default_test_settings(ENV="production"),
+    )
+
+    enabled = llm_config_loader.get_enabled_provider_codes()
+
+    assert "deepseek" in enabled
+    assert llm_config_loader.get_default_provider_code() == "deepseek"
 
 
 def test_build_adjudicator_runtime_config_should_use_adjudicator_model(monkeypatch):

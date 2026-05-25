@@ -25,7 +25,7 @@ def get_enabled_provider_codes() -> tuple[str, ...]:
 
     env_name = str(settings.ENV or os.getenv("ENV") or "development").strip().lower()
     if env_name == "production":
-        return ("ollama",)
+        return ("deepseek", "ollama")
     return SUPPORTED_PROVIDER_CODES
 
 
@@ -63,9 +63,30 @@ def build_provider_runtime_config(
         code = fallback
 
     if code == "deepseek":
-        endpoint = str(settings.DEEPSEEK_API_ENDPOINT or "").strip()
-        api_key = str(settings.DEEPSEEK_API_KEY or "").strip() or None
-        model = str(model_code or "deepseek-chat").strip()
+        endpoint = str(
+            settings.DEEPSEEK_API_ENDPOINT
+            or (
+                settings.LLM_API_ENDPOINT
+                if str(settings.LLM_DEFAULT_PROVIDER or "").strip().lower() == "deepseek"
+                else ""
+            )
+            or ""
+        ).strip()
+        api_key = str(
+            settings.DEEPSEEK_API_KEY
+            or (
+                settings.LLM_API_KEY
+                if str(settings.LLM_DEFAULT_PROVIDER or "").strip().lower() == "deepseek"
+                else None
+            )
+            or ""
+        ).strip() or None
+        default_model = (
+            settings.LLM_MODEL
+            if str(settings.LLM_DEFAULT_PROVIDER or "").strip().lower() == "deepseek"
+            else "deepseek-v4-flash"
+        )
+        model = str(model_code or default_model or "deepseek-v4-flash").strip()
         provider_name = "DeepSeek"
     elif code == "siliconflow":
         endpoint = str(settings.SILICONFLOW_API_ENDPOINT or "").strip()

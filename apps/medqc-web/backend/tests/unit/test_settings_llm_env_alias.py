@@ -12,6 +12,8 @@ LLM_ENV_KEYS = [
     "LLM_ADJUDICATOR_MODEL",
     "LLM_DEFAULT_PROVIDER",
     "LLM_TIMEOUT_SECONDS",
+    "DEEPSEEK_API_ENDPOINT",
+    "DEEPSEEK_API_KEY",
     "SICHUAN_API_ENDPOINT",
     "SICHUAN_API_KEY",
     "SICHUAN_MODEL",
@@ -43,16 +45,17 @@ def test_settings_reads_llm_env_keys(monkeypatch):
     assert settings.llm_env_source() == "LLM_*"
 
 
-def test_formal_qc_default_llm_model_should_use_qwen35(monkeypatch):
+def test_formal_qc_default_llm_model_should_use_deepseek_v4_flash(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("JWT_SECRET", "test-secret")
 
     settings = Settings(_env_file=None)
 
-    assert str(settings.LLM_API_ENDPOINT) == "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    assert settings.LLM_DEFAULT_PROVIDER == "alibaba"
-    assert settings.LLM_MODEL == "qwen3.5-35b-a3b"
+    assert str(settings.LLM_API_ENDPOINT).rstrip("/") == "https://api.deepseek.com"
+    assert settings.LLM_DEFAULT_PROVIDER == "deepseek"
+    assert settings.LLM_MODEL == "deepseek-v4-flash"
     assert settings.LLM_ADJUDICATOR_MODEL is None
+    assert settings.LLM_MODEL != "qwen3.5-35b-a3b"
     assert settings.LLM_MODEL != "qwen3.6-35b-a3b"
 
 
