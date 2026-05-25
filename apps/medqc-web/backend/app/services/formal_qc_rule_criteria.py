@@ -364,18 +364,20 @@ RULE_SPECIFIC_CRITERIA: dict[str, dict[str, Any]] = {
             "doctor_signature",
         ],
         confirmed_conditions=[
-            "必须看到完整或近完整出院记录正文，或结构化字段矩阵。",
-            "必须明确列出具体 missing_fields。",
-            "supporting_quote 可以较短，但必须能回连到完整出院记录上下文，并支撑对应字段缺失或内容错误。",
+            "必须看到结构化字段矩阵，且 missing_fields 来自出院记录 source_fields/sections 的显式空值。",
+            "不得把完整/近完整正文中没有出现某个字段标题，直接当作该字段缺失。",
+            "supporting_quote 必须回连到字段矩阵中的具体缺失字段；仅引用正文片段不足以 confirmed。",
         ],
         not_confirmed_conditions=[
             "只有患者姓名、性别、年龄、主诉、记录时间等文书头片段。",
             "只笼统说关键要素缺失但没有字段矩阵。",
+            "只根据文本片段或正文未出现字段标题推断缺项。",
             "字段存在但表述简略。",
         ],
         data_quality_gap_conditions=[
             "只看到出院记录片段。",
             "缺完整出院记录上下文。",
+            "缺出院记录结构化 source_fields/sections，无法判断日期、诊断、签名等字段是否为空。",
             "无法判断具体字段是否在后文补充。",
         ],
         first_pass_guidance=[

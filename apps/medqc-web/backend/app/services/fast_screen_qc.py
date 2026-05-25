@@ -684,6 +684,9 @@ def _document_excerpt(
                 "document_type": _safe_text(item.get("document_type")),
                 "evidence_text": _compact_text(excerpt, limit=limit),
                 "hit": bool(item.get("hit")),
+                "sections": _safe_list(item.get("sections"))[:12],
+                "source_fields": _safe_list(item.get("source_fields"))[:24],
+                "data_quality_flags": _safe_list(item.get("data_quality_flags"))[:12],
             }
         )
     return rows
@@ -735,6 +738,178 @@ SC121_COURSE_CHANGE_TERMS: tuple[str, ...] = (
     "复查",
     "观察",
 )
+
+
+SC118_DISCHARGE_FIELD_SPECS: dict[str, dict[str, Any]] = {
+    "admission_date": {
+        "labels": ("入院日期", "入院时间"),
+        "source_fields": ("admission_date", "admission_datetime", "admission_time"),
+        "text_terms": ("入院日期", "入院时间"),
+    },
+    "discharge_date": {
+        "labels": ("出院日期", "出院时间"),
+        "source_fields": ("discharge_date", "discharge_datetime", "discharge_time"),
+        "text_terms": ("出院日期", "出院时间"),
+    },
+    "admission_condition": {
+        "labels": ("入院情况",),
+        "source_fields": ("admission_condition",),
+        "text_terms": ("入院情况", "入院查体", "查体", "主诉"),
+    },
+    "admission_diagnosis": {
+        "labels": ("入院诊断",),
+        "source_fields": ("admission_diagnosis",),
+        "text_terms": ("入院诊断",),
+    },
+    "treatment_course": {
+        "labels": ("诊疗经过", "治疗经过"),
+        "source_fields": ("treatment_course",),
+        "text_terms": ("诊疗经过", "治疗经过"),
+    },
+    "discharge_condition": {
+        "labels": ("出院情况",),
+        "source_fields": ("discharge_condition",),
+        "text_terms": ("出院情况", "出院时", "病情好转", "予以出院"),
+    },
+    "discharge_advice": {
+        "labels": ("出院医嘱", "出院指导"),
+        "source_fields": ("discharge_order", "discharge_advice"),
+        "text_terms": ("出院医嘱", "出院带药", "门诊随访", "随访", "复查"),
+    },
+    "doctor_signature": {
+        "labels": ("医师签名", "医生签名"),
+        "source_fields": (
+            "resident_physician_sign",
+            "attending_physician_sign",
+            "chief_physician_sign",
+            "doctor_signature",
+        ),
+        "text_terms": ("医师签名", "医生签名", "签名医师", "签名"),
+    },
+}
+
+
+def _source_field_values(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    values: dict[str, dict[str, Any]] = {}
+    for field in _safe_list(row.get("source_fields")):
+        if not isinstance(field, dict):
+            continue
+        name = _safe_text(field.get("source_field"))
+        if not name:
+            continue
+        values[name] = {
+            "used": bool(field.get("used")),
+            "raw_value_preview": _safe_text(field.get("raw_value_preview")),
+        }
+    return values
+
+
+def _section_values(row: dict[str, Any]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for section in _safe_list(row.get("sections")):
+        if not isinstance(section, dict):
+            continue
+        key = _safe_text(section.get("section_key") or section.get("source_field"))
+        label = _safe_text(section.get("section_label"))
+        text = _safe_text(section.get("text"))
+        if key:
+            values[key] = text
+        if label:
+            values[label] = text
+    return values
+
+
+def _build_sc118_discharge_record_matrix(discharge_docs: list[dict[str, Any]]) -> dict[str, Any]:
+    if not discharge_docs:
+        return {
+            "source_status": "missing",
+            "matrix_source": "none",
+            "fields": {},
+            "present_fields": [],
+            "missing_fields": [],
+            "unknown_fields": list(SC118_DISCHARGE_FIELD_SPECS),
+            "text_hint_present_fields": [],
+            "can_confirm_missing": False,
+            "reason": "未取得出院记录来源，不能判断 SC-118 字段缺项。",
+        }
+
+    combined_text = "\n".join(_safe_text(row.get("evidence_text")) for row in discharge_docs)
+    compact_len = len(re.sub(r"\s+", "", combined_text))
+    source_status = "near_full" if compact_len >= 220 else "fragment_only"
+    fields: dict[str, dict[str, Any]] = {}
+    present_fields: list[str] = []
+    missing_fields: list[str] = []
+    unknown_fields: list[str] = []
+    text_hint_present_fields: list[str] = []
+
+    for field_name, spec in SC118_DISCHARGE_FIELD_SPECS.items():
+        source_names = tuple(spec.get("source_fields") or ())
+        source_hit = False
+        explicit_missing = False
+        source_quote = ""
+        source_name = ""
+        for row in discharge_docs:
+            source_values = _source_field_values(row)
+            section_values = _section_values(row)
+            for candidate in source_names:
+                if candidate in source_values:
+                    source_hit = True
+                    source_name = candidate
+                    source_quote = _safe_text(source_values[candidate].get("raw_value_preview"))
+                    if source_values[candidate].get("used") and source_quote:
+                        break
+                    explicit_missing = True
+                if candidate in section_values:
+                    source_hit = True
+                    source_name = candidate
+                    source_quote = _safe_text(section_values[candidate])
+                    if source_quote:
+                        break
+            if source_hit and source_quote:
+                break
+
+        text_hint = any(term and term in combined_text for term in spec.get("text_terms") or ())
+        if text_hint:
+            text_hint_present_fields.append(field_name)
+
+        if source_hit and source_quote:
+            status = "present"
+            present_fields.append(field_name)
+        elif source_hit and explicit_missing:
+            status = "missing"
+            missing_fields.append(field_name)
+        else:
+            # 只在全文足够完整、且正文明确包含字段标题时把文本作为弱存在证据；
+            # 不把“文本里没看到”反推为缺项，避免片段证据误报。
+            status = "present_by_text_hint" if source_status == "near_full" and text_hint else "unknown"
+            if status == "present_by_text_hint":
+                present_fields.append(field_name)
+            else:
+                unknown_fields.append(field_name)
+
+        fields[field_name] = {
+            "status": status,
+            "source_field": source_name,
+            "source_quote": _compact_text(source_quote, limit=160),
+            "text_hint": text_hint,
+        }
+
+    can_confirm_missing = bool(missing_fields) and not unknown_fields and source_status == "near_full"
+    return {
+        "source_status": source_status,
+        "matrix_source": "source_fields_and_sections",
+        "fields": fields,
+        "present_fields": present_fields,
+        "missing_fields": missing_fields,
+        "unknown_fields": unknown_fields,
+        "text_hint_present_fields": text_hint_present_fields,
+        "can_confirm_missing": can_confirm_missing,
+        "reason": (
+            "存在结构化字段明确缺失。"
+            if can_confirm_missing
+            else "缺少完整结构化字段覆盖；不得用片段证据反推出院记录缺项。"
+        ),
+    }
 
 SC121_IMPORTANT_REPORT_TERMS: tuple[str, ...] = (
     "异常",
@@ -1139,6 +1314,7 @@ def _build_discharge_evidence_context(
     bundle: dict[str, Any],
 ) -> dict[str, Any]:
     discharge_docs = _document_excerpt(all_documents, {"discharge_record"}, limit=1000)
+    sc118_matrix = _build_sc118_discharge_record_matrix(discharge_docs)
     sc121_matrix = _build_sc121_treatment_course_matrix(
         all_documents=all_documents,
         discharge_docs=discharge_docs,
@@ -1154,6 +1330,7 @@ def _build_discharge_evidence_context(
         "applies_to_rule_ids": ["SC-118", "SC-121", "SC-123", "SC-125"],
         "purpose": "出院记录和诊断类规则需要出院记录字段矩阵、出院诊断列表和诊疗经过/出院带药原文。",
         "discharge_record_evidence": discharge_docs,
+        "sc118_discharge_record_matrix": sc118_matrix,
         "sc121_treatment_course_matrix": sc121_matrix,
         "diagnosis_reference": diagnosis_docs[:5],
         "supporting_quote": _compact_join_excerpts(discharge_docs[:4], limit=1200),
@@ -1172,6 +1349,10 @@ def _build_discharge_evidence_context(
                 discharge_docs,
                 ("入院日期", "出院日期", "入院情况", "出院情况", "诊疗经过", "出院医嘱", "出院诊断"),
             ),
+            "sc118_discharge_matrix_source_status": _safe_text(sc118_matrix.get("source_status")),
+            "sc118_discharge_matrix_can_confirm_missing": bool(sc118_matrix.get("can_confirm_missing")),
+            "sc118_discharge_matrix_unknown_field_count": len(_safe_list(sc118_matrix.get("unknown_fields"))),
+            "sc118_discharge_matrix_missing_field_count": len(_safe_list(sc118_matrix.get("missing_fields"))),
             "has_discharge_medication_text": _any_excerpt_contains(discharge_docs, ("出院带药", "用法", "bid", "tid", "口服", "外用")),
             "has_diagnosis_reference": bool(hits.get("admission_record_diagnosis") or diagnosis_docs),
             "sc121_cross_document_contrast_present": bool(sc121_matrix.get("cross_document_contrast_present")),

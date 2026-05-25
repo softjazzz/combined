@@ -109,6 +109,14 @@ def _safe_bool(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "y", "是"}
 
 
+def _safe_list(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, list) else []
+
+
+def _safe_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
 def _normalize_rule_id(value: Any) -> str:
     return _safe_text(value).upper()
 
@@ -994,20 +1002,65 @@ def _guardrail_admission_physical_exam_matrix(item: dict[str, Any]) -> dict[str,
 
 def _guardrail_discharge_record_matrix(item: dict[str, Any]) -> dict[str, Any]:
     context = _targeted_evidence_context(item)
+    sc118_matrix = _safe_dict(context.get("sc118_discharge_record_matrix"))
+    field_rows = _safe_dict(sc118_matrix.get("fields"))
+    if field_rows:
+        bool_matrix = {
+            field: _safe_text(_safe_dict(detail).get("status")) in {"present", "present_by_text_hint"}
+            for field, detail in field_rows.items()
+        }
+        missing_fields = [field for field in _safe_list(sc118_matrix.get("missing_fields")) if _safe_text(field)]
+        unknown_fields = [field for field in _safe_list(sc118_matrix.get("unknown_fields")) if _safe_text(field)]
+        source_status = _safe_text(sc118_matrix.get("source_status"))
+        extra = {
+            "sc118_missing_fields": missing_fields,
+            "sc118_unknown_fields": unknown_fields,
+            "sc118_source_status": source_status,
+            "sc118_matrix_source": _safe_text(sc118_matrix.get("matrix_source")),
+            "sc118_matrix_reason": _safe_text(sc118_matrix.get("reason")),
+        }
+        if missing_fields and bool(sc118_matrix.get("can_confirm_missing")):
+            return _context_matrix_result(
+                rule="SC-118",
+                document_type="discharge_record",
+                section="discharge_record_fields",
+                matrix=bool_matrix,
+                extra_metadata=extra,
+            )
+        if not missing_fields and not unknown_fields and bool_matrix:
+            return _context_matrix_result(
+                rule="SC-118",
+                document_type="discharge_record",
+                section="discharge_record_fields",
+                matrix=bool_matrix,
+                failure_status="rejected_by_system",
+                failure_reason="SC-118 出院记录字段矩阵未见明确缺项，不支持 confirmed。",
+                extra_metadata=extra,
+            )
+        return _context_matrix_result(
+            rule="SC-118",
+            document_type="discharge_record",
+            section="discharge_record_fields",
+            matrix=bool_matrix,
+            failure_status="data_quality_gap",
+            failure_reason=(
+                "SC-118 confirmed 必须来自完整出院记录结构化字段矩阵；"
+                "当前仍有字段未知或仅为文本片段，不能用“未看到”反推缺项。"
+            ),
+            extra_metadata=extra,
+        )
+
     discharge_text = "\n".join(_context_evidence_texts(context, "discharge_record_evidence"))
-    quote = _safe_text(item.get("adjudicator_supporting_quote"))
-    evidence = _safe_text(item.get("evidence"))
-    source_text = discharge_text or evidence
     source_ok = len(re.sub(r"\s+", "", discharge_text)) >= 120
     matrix = {
-        "admission_date": bool(re.search(r"(入院日期|入院时间|于\d{4}[-年]\d{1,2}[-月]\d{1,2}.{0,8}入院)", source_text)),
-        "discharge_date": bool(re.search(r"(出院日期|出院时间|于\d{4}[-年]\d{1,2}[-月]\d{1,2}.{0,8}出院)", source_text)),
-        "admission_condition": _matrix_terms(source_text, ("入院情况", "入院查体", "查体", "主诉")),
-        "admission_diagnosis": _matrix_terms(source_text, ("入院诊断",)),
-        "treatment_course": _matrix_terms(source_text, ("诊疗经过", "治疗经过", "给予", "完善", "治疗")),
-        "discharge_condition": _matrix_terms(source_text, ("出院情况", "病情好转", "予以出院", "转院", "出院时")),
-        "discharge_advice": _matrix_terms(source_text, ("出院医嘱", "出院带药", "门诊随访", "随访", "复查")),
-        "doctor_signature": _matrix_terms(source_text, ("医师签名", "医生签名", "签名医师", "签名")),
+        "admission_date": False,
+        "discharge_date": False,
+        "admission_condition": False,
+        "admission_diagnosis": False,
+        "treatment_course": False,
+        "discharge_condition": False,
+        "discharge_advice": False,
+        "doctor_signature": False,
     }
     if not source_ok:
         return _context_matrix_result(
@@ -1018,20 +1071,13 @@ def _guardrail_discharge_record_matrix(item: dict[str, Any]) -> dict[str, Any]:
             failure_status="data_quality_gap",
             failure_reason="SC-118 confirmed 需要完整出院记录或结构化字段矩阵；当前仅见短片段，不能确认缺项。",
         )
-    if _matrix_missing_fields(matrix):
-        return _context_matrix_result(
-            rule="SC-118",
-            document_type="discharge_record",
-            section="discharge_record_fields",
-            matrix=matrix,
-        )
     return _context_matrix_result(
         rule="SC-118",
         document_type="discharge_record",
         section="discharge_record_fields",
         matrix=matrix,
-        failure_status="rejected_by_system",
-        failure_reason="SC-118 出院记录字段矩阵未见明确缺项，不支持 confirmed。",
+        failure_status="data_quality_gap",
+        failure_reason="SC-118 缺少结构化字段矩阵；不得仅凭出院记录文本未出现字段标题确认缺项。",
     )
 
 

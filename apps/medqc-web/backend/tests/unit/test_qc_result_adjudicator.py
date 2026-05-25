@@ -986,6 +986,7 @@ def _discharge_context(
     text: str,
     *,
     contrast_quote: str = "",
+    sc118_matrix: dict[str, Any] | None = None,
     sc121_matrix: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
@@ -999,6 +1000,7 @@ def _discharge_context(
                 }
             ],
             "contrast_quote": contrast_quote,
+            "sc118_discharge_record_matrix": sc118_matrix or {},
             "sc121_treatment_course_matrix": sc121_matrix or {},
             "coverage_flags": {"has_discharge_record_source": True},
         }
@@ -1227,6 +1229,16 @@ async def test_context_matrix_should_keep_sc118_when_full_discharge_matrix_has_m
         "住院期间复查血常规、凝血功能及肝肾功能，结合患者症状调整止痛和康复治疗方案。"
         "病情好转，予以出院。出院医嘱：门诊随访，每1个月复查，坚持功能锻炼。"
     )
+    fields = {
+        "admission_date": {"status": "missing"},
+        "discharge_date": {"status": "missing"},
+        "admission_condition": {"status": "present", "source_quote": "入院查体左膝关节压痛明显。"},
+        "admission_diagnosis": {"status": "present", "source_quote": "入院诊断：左膝骨关节炎。"},
+        "treatment_course": {"status": "present", "source_quote": "诊疗经过：给予保守治疗。"},
+        "discharge_condition": {"status": "present", "source_quote": "病情好转。"},
+        "discharge_advice": {"status": "present", "source_quote": "出院医嘱：门诊随访。"},
+        "doctor_signature": {"status": "missing"},
+    }
 
     rows = await adjudicate_postprocessed_qc_results(
         [
@@ -1234,7 +1246,17 @@ async def test_context_matrix_should_keep_sc118_when_full_discharge_matrix_has_m
                 "SC-118",
                 quote="出院记录未见明确入院日期和出院日期字段。",
                 reason="完整出院记录字段矩阵缺入院日期、出院日期和医师签名。",
-                metadata=_discharge_context(discharge_text),
+                metadata=_discharge_context(
+                    discharge_text,
+                    sc118_matrix={
+                        "source_status": "near_full",
+                        "matrix_source": "source_fields_and_sections",
+                        "fields": fields,
+                        "missing_fields": ["admission_date", "discharge_date", "doctor_signature"],
+                        "unknown_fields": [],
+                        "can_confirm_missing": True,
+                    },
+                ),
             )
         ],
         llm_generate=None,
@@ -1244,6 +1266,93 @@ async def test_context_matrix_should_keep_sc118_when_full_discharge_matrix_has_m
     matrix = rows[0]["confirmed_context_matrix"]
     assert matrix["admission_date"] is False
     assert matrix["discharge_date"] is False
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_downgrade_sc118_when_fields_are_unknown_not_missing():
+    discharge_text = (
+        "患者以外伤入院。入院后完善相关辅助检查，行清创治疗。"
+        "术后抗感染、换药治疗，病情好转予以出院。出院医嘱：门诊随访。"
+    )
+    fields = {
+        "admission_date": {"status": "unknown"},
+        "discharge_date": {"status": "unknown"},
+        "admission_condition": {"status": "present_by_text_hint"},
+        "admission_diagnosis": {"status": "unknown"},
+        "treatment_course": {"status": "present"},
+        "discharge_condition": {"status": "present_by_text_hint"},
+        "discharge_advice": {"status": "present"},
+        "doctor_signature": {"status": "unknown"},
+    }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-118",
+                quote="患者以外伤入院。",
+                reason="出院记录缺入院日期、出院日期和医师签名。",
+                metadata=_discharge_context(
+                    discharge_text,
+                    sc118_matrix={
+                        "source_status": "near_full",
+                        "matrix_source": "source_fields_and_sections",
+                        "fields": fields,
+                        "missing_fields": [],
+                        "unknown_fields": ["admission_date", "discharge_date", "admission_diagnosis", "doctor_signature"],
+                        "can_confirm_missing": False,
+                    },
+                ),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "data_quality_gap"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
+    assert rows[0]["confirmed_context_matrix"]["admission_date"] is False
+    assert rows[0]["sc118_unknown_fields"] == ["admission_date", "discharge_date", "admission_diagnosis", "doctor_signature"]
+
+
+@pytest.mark.asyncio
+async def test_context_matrix_should_reject_sc118_when_structured_matrix_is_complete():
+    fields = {
+        field: {"status": "present", "source_quote": "已记录"}
+        for field in (
+            "admission_date",
+            "discharge_date",
+            "admission_condition",
+            "admission_diagnosis",
+            "treatment_course",
+            "discharge_condition",
+            "discharge_advice",
+            "doctor_signature",
+        )
+    }
+
+    rows = await adjudicate_postprocessed_qc_results(
+        [
+            _confirmed_item(
+                "SC-118",
+                quote="出院记录字段完整。",
+                reason="误称出院记录缺项。",
+                metadata=_discharge_context(
+                    "完整出院记录。",
+                    sc118_matrix={
+                        "source_status": "near_full",
+                        "matrix_source": "source_fields_and_sections",
+                        "fields": fields,
+                        "missing_fields": [],
+                        "unknown_fields": [],
+                        "can_confirm_missing": False,
+                    },
+                ),
+            )
+        ],
+        llm_generate=None,
+    )
+
+    assert rows[0]["display_status"] == "rejected_by_system"
+    assert rows[0]["adjudicator_guardrail_failed"] is True
 
 
 @pytest.mark.asyncio
