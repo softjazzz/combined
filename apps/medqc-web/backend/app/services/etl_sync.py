@@ -2299,6 +2299,15 @@ def _emit_sync_progress(
     except Exception as exc:
         logger.debug("sync progress callback failed (ignored): %s", exc)
 
+
+def _visit_id_set_from_rows(rows: List[Dict[str, Any]]) -> set[str]:
+    return {
+        str((row or {}).get("visit_id") or "").strip()
+        for row in rows or []
+        if str((row or {}).get("visit_id") or "").strip()
+    }
+
+
 def run_sync(
     sync_date: str = None,
     tables: List[str] = None,
@@ -2385,6 +2394,13 @@ def run_sync(
                 "error": f"场景 {resolved_scene} 当前无可执行锚点表",
                 "scene": resolved_scene,
             }
+        if sync_mode == "table" and "mr" not in {str(item.get("name") or "") for item in target_tables}:
+            # mr 是病历池主记录。即使调用方只选明细表，也必须按 eligible visit_ids 补拉 mr，
+            # 否则会出现“明细同步成功但病历池不可见”的静默成功。
+            mr_tables, mr_missing = _resolve_target_tables(["mr"])
+            if mr_missing:
+                return {"success": False, "error": "同步表配置缺少 mr，无法补拉病历主记录"}
+            target_tables = [*mr_tables, *target_tables]
         _emit_sync_progress(
             progress_callback,
             {
@@ -2511,6 +2527,14 @@ def run_sync(
         failed_tables = 0
         tracking_write_failed = False
         run_warnings: List[str] = []
+        eligible_visit_ids = {visit_id for _patient_id, visit_id in scoped_visit_keys if str(visit_id).strip()}
+        mr_visit_ids: set[str] = set()
+        detail_visit_ids: set[str] = set()
+        detail_tables_with_rows: set[str] = set()
+        mr_rows_pulled = 0
+        mr_rows_upserted = 0
+        visit_index_upserted_count = 0
+        visit_index_failed_count = 0
 
         for table_config in target_tables:
             table_name = str(table_config["name"])
@@ -2574,12 +2598,20 @@ def run_sync(
                     records=rows,
                     primary_keys=[str(pk) for pk in validation.get("local_primary_keys", [])],
                 )
+                row_visit_ids = _visit_id_set_from_rows(rows)
+                if table_name == "mr":
+                    mr_visit_ids.update(row_visit_ids)
+                    mr_rows_pulled += len(rows)
+                    mr_rows_upserted += count
+                elif row_visit_ids:
+                    detail_visit_ids.update(row_visit_ids)
+                    detail_tables_with_rows.add(table_name)
 
                 # Maintain visit_index state machine only on real anchor tables.
                 # Non-critical: failures are logged but should not block the core table sync.
                 if table_name in _VISIT_INDEX_ANCHOR_TABLES:
                     try:
-                        ingest_sync_rows(
+                        visit_index_result = ingest_sync_rows(
                             table_name=table_name,
                             rows=rows,
                             policy_version=str(policy_version or "").strip() or None,
@@ -2589,7 +2621,20 @@ def run_sync(
                             mirror_delay_base_minutes=policy_mirror_delay_base_minutes,
                             sync_interval_minutes=policy_sync_interval_minutes,
                         )
+                        visit_index_processed = int(visit_index_result.get("processed") or 0)
+                        visit_index_upserted = int(visit_index_result.get("upserted") or 0)
+                        visit_index_skipped = int(visit_index_result.get("skipped") or 0)
+                        visit_index_upserted_count += visit_index_upserted
+                        if (
+                            visit_index_processed > 0
+                            and visit_index_upserted == 0
+                            and visit_index_skipped >= visit_index_processed
+                        ):
+                            visit_index_failed_count += visit_index_processed
+                            run_warnings.append(f"{table_name}: visit_index 写入失败或全部跳过")
                     except Exception as visit_index_exc:
+                        visit_index_failed_count += len(rows or [])
+                        run_warnings.append(f"{table_name}: visit_index 写入失败")
                         logger.warning("visit_index 更新失败（不阻断主同步）: %s", visit_index_exc)
                     try:
                         if resolved_scene in {"running", "final", "frontpage", "coding"}:
@@ -2700,12 +2745,20 @@ def run_sync(
             )
 
         # 更新全局状态
+        missing_mr_visit_ids = sorted(eligible_visit_ids - mr_visit_ids)
+        detail_only_visit_ids = sorted(detail_visit_ids - mr_visit_ids)
+        detail_only_visit_count = len(detail_only_visit_ids)
+        visit_index_skipped_missing_mr_count = detail_only_visit_count
+        if detail_only_visit_count > 0:
+            run_warnings.append(
+                "同步部分完成：部分病历缺少 mr 主记录，病历池暂不可见"
+            )
         _sync_state.last_sync_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         final_status = (
             "failed"
             if has_error and total_synced == 0
             else "partial"
-            if has_error or tracking_write_failed
+            if has_error or tracking_write_failed or detail_only_visit_count > 0
             else "success"
         )
         _sync_state.last_sync_status = final_status
@@ -2739,6 +2792,16 @@ def run_sync(
             "date_window": {"start": start_date.isoformat(), "end": end_date.isoformat()},
             "target_departments": dept_filters or ["*"],
             "eligible_visits": len(scoped_visit_keys),
+            "eligible_visit_count": len(scoped_visit_keys),
+            "mr_rows_pulled": mr_rows_pulled,
+            "mr_rows_upserted": mr_rows_upserted,
+            "missing_mr_visit_ids": missing_mr_visit_ids,
+            "detail_only_visit_count": detail_only_visit_count,
+            "detail_only_visit_ids": detail_only_visit_ids,
+            "detail_tables_with_rows": sorted(detail_tables_with_rows),
+            "visit_index_upserted_count": visit_index_upserted_count,
+            "visit_index_failed_count": visit_index_failed_count,
+            "visit_index_skipped_missing_mr_count": visit_index_skipped_missing_mr_count,
             "tables": results,
             "warnings": list(dict.fromkeys([item for item in run_warnings if str(item).strip()])),
         }

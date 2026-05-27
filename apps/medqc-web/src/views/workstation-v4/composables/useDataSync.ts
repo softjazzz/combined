@@ -711,8 +711,16 @@ async function executeSync(source: SyncSource = 'pg') {
         source === 'pg' ? globalSyncState.policyForm.policy_version || undefined : undefined,
       table_groups: source === 'pg' ? resolveTableGroups() : undefined,
     })
-    if (result.success) {
-      pushLog('info', '同步任务已启动，进入状态轮询')
+    if (result.success || result.status === 'partial') {
+      const warnings = Array.isArray(result.warnings) ? result.warnings.filter(Boolean) : []
+      if (result.idempotent_reused) {
+        pushLog('info', '检测到重复触发，已返回已有同步结果')
+      }
+      if (result.status === 'partial') {
+        pushLog('warn', warnings[0] || '同步部分完成：部分病历缺少 mr 主记录，病历池暂不可见')
+      } else {
+        pushLog('info', '同步任务已启动，进入状态轮询')
+      }
       await loadStatusAndStats()
       startPolling()
     } else {

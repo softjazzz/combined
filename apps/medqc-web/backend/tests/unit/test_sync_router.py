@@ -8,6 +8,7 @@ import pytest
 
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
+from app.routers import sync as sync_router_module
 from app.services.sync_idempotency import SyncTriggerReservation
 
 
@@ -303,6 +304,68 @@ class TestSyncRouter:
         assert second_data["idempotent_reused"] is True
         assert calls["run"] == 1
         assert calls["append"] == 1
+
+    def test_idempotency_key_includes_policy_scope_inputs(self):
+        base = {
+            "source": "pg",
+            "tier": "all",
+            "sync_date": "2026-05-25",
+            "operator": "admin@example.com",
+            "scene": "both",
+            "date_window": {"start": "2026-05-25", "end": "2026-05-25"},
+            "target_departments": ["普通外科"],
+            "tables": ["mr", "discharge_record"],
+            "table_groups": ["sample_full_domain"],
+            "policy_version": "policy-a",
+        }
+
+        key_a = sync_router_module._build_idempotency_key(**base)
+        key_b = sync_router_module._build_idempotency_key(
+            **{
+                **base,
+                "target_departments": ["骨科"],
+            }
+        )
+        key_c = sync_router_module._build_idempotency_key(
+            **{
+                **base,
+                "date_window": {"start": "2026-05-26", "end": "2026-05-26"},
+            }
+        )
+        key_d = sync_router_module._build_idempotency_key(
+            **{
+                **base,
+                "table_groups": ["core_8"],
+            }
+        )
+
+        assert key_a != key_b
+        assert key_a != key_c
+        assert key_a != key_d
+
+    def test_trigger_idempotency_reuse_partial_result_is_success_shell(self, client, monkeypatch):
+        _override_user(client, ["admin"])
+        monkeypatch.setattr(
+            "app.services.sync_idempotency.reserve_sync_trigger",
+            lambda **_kwargs: SyncTriggerReservation(
+                created=False,
+                run_id="syncrun-partial-id",
+                status="partial",
+                result={
+                    "success": True,
+                    "status": "partial",
+                    "warnings": ["同步部分完成：部分病历缺少 mr 主记录，病历池暂不可见"],
+                },
+            ),
+        )
+
+        resp = client.post("/api/v1/sync/trigger", json={"source": "pg", "tier": "all"})
+        assert resp.status_code == 200
+        data = _assert_success_shell(resp.json())
+        assert data["success"] is True
+        assert data["status"] == "partial"
+        assert data["idempotent_reused"] is True
+        assert data["warnings"] == ["同步部分完成：部分病历缺少 mr 主记录，病历池暂不可见"]
 
     def test_get_runs(self, client, monkeypatch):
         _override_user(client, ["qc_manager"])

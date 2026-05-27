@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
@@ -172,6 +174,9 @@ def _utc_iso(dt: datetime) -> str:
 
 def _infer_trigger_status(source: str, result: dict) -> str:
     if source == "pg":
+        explicit_status = str(result.get("status") or "").strip().lower()
+        if explicit_status in {"success", "partial", "failed", "rejected"}:
+            return explicit_status
         table_rows = result.get("tables")
         if isinstance(table_rows, list) and table_rows:
             has_success = any(str(item.get("status")) == "success" for item in table_rows if isinstance(item, dict))
@@ -230,8 +235,34 @@ def _resolve_effective_sync_date(source: str, sync_date: Optional[str]) -> str:
     return datetime.now(timezone.utc).date().isoformat()
 
 
-def _build_idempotency_key(*, source: str, tier: str, sync_date: str, operator: str) -> str:
-    return f"{source}:{tier}:{sync_date}:{operator}"
+def _build_idempotency_key(
+    *,
+    source: str,
+    tier: str,
+    sync_date: str,
+    operator: str,
+    scene: str = "",
+    date_window: Optional[dict[str, str]] = None,
+    target_departments: Optional[list[str]] = None,
+    tables: Optional[list[str]] = None,
+    table_groups: Optional[list[str]] = None,
+    policy_version: str = "",
+) -> str:
+    fingerprint_payload = {
+        "source": source,
+        "tier": tier,
+        "sync_date": sync_date,
+        "scene": scene,
+        "date_window": date_window or {},
+        "target_departments": sorted([str(item) for item in (target_departments or []) if str(item).strip()]),
+        "tables": sorted([str(item) for item in (tables or []) if str(item).strip()]),
+        "table_groups": sorted([str(item) for item in (table_groups or []) if str(item).strip()]),
+        "policy_version": str(policy_version or ""),
+        "operator": operator,
+    }
+    payload = json.dumps(fingerprint_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+    return f"{source}:{tier}:{sync_date}:{operator}:{digest}"
 
 
 def _resolve_selected_tables(
@@ -677,11 +708,28 @@ async def trigger_sync(
     effective_tier = "all"
     effective_sync_date = _resolve_effective_sync_date(req.source, req.sync_date)
     operator_email = str(current_user.get("email") or current_user.get("id") or "unknown").strip().lower()
+    selected_tables, missing_groups = _resolve_selected_tables(req.tables, req.table_groups)
+    if missing_groups:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"未知同步分组: {', '.join(missing_groups)}",
+        )
+
+    date_window_payload = _normalize_date_window_payload(req.date_window)
+    target_departments = _normalize_target_departments(req.target_departments)
+    policy_version = str(req.policy_version or "").strip()
+    scene = str(req.scene or "both")
     idempotency_key = _build_idempotency_key(
         source=req.source,
         tier=effective_tier,
         sync_date=effective_sync_date,
         operator=operator_email,
+        scene=scene,
+        date_window=date_window_payload,
+        target_departments=target_departments,
+        tables=selected_tables,
+        table_groups=req.table_groups,
+        policy_version=policy_version,
     )
 
     reservation = reserve_sync_trigger(
@@ -692,14 +740,20 @@ async def trigger_sync(
         operator_email=operator_email,
     )
     if not reservation.created:
+        reused_success = reservation.status in {"success", "partial"}
+        if isinstance(reservation.result, dict) and "success" in reservation.result:
+            reused_success = bool(reservation.result.get("success")) or reservation.status == "partial"
         reused_payload: dict[str, object] = {
             "run_id": reservation.run_id,
             "status": reservation.status,
+            "success": reused_success,
             "idempotency_key": idempotency_key,
             "idempotent_reused": True,
         }
         if reservation.result is not None:
             reused_payload["result"] = reservation.result
+            if isinstance(reservation.result.get("warnings"), list):
+                reused_payload["warnings"] = reservation.result.get("warnings")
         if reservation.error:
             reused_payload["error"] = reservation.error
         audit_event(
@@ -721,18 +775,6 @@ async def trigger_sync(
 
     run_id = reservation.run_id
     started_at = datetime.now(timezone.utc)
-
-    selected_tables, missing_groups = _resolve_selected_tables(req.tables, req.table_groups)
-    if missing_groups:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"未知同步分组: {', '.join(missing_groups)}",
-        )
-
-    date_window_payload = _normalize_date_window_payload(req.date_window)
-    target_departments = _normalize_target_departments(req.target_departments)
-    policy_version = str(req.policy_version or "").strip()
-    scene = str(req.scene or "both")
 
     try:
         from ..services.etl_sync import run_sync

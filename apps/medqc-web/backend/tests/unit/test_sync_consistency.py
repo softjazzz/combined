@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 from sqlalchemy import create_engine
 
@@ -147,6 +149,142 @@ def test_run_sync_updates_state_and_unlocks(monkeypatch):
     assert state_snapshots[-1]["is_running"] is False
     assert state_snapshots[-1]["last_sync_status"] == "success"
     assert state_snapshots[-1]["total_records_synced"] == 3
+
+
+def test_run_sync_marks_partial_when_detail_rows_exist_without_mr(monkeypatch):
+    class _FakeConn:
+        def execute(self, stmt, params=None):
+            sql = str(stmt)
+            if "pg_try_advisory_lock" in sql or "pg_advisory_unlock" in sql:
+                return _ScalarResult(True)
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+        def close(self):
+            return None
+
+    class _FakeEngine:
+        def connect(self):
+            return _FakeConn()
+
+    visit_keys = [(f"p{idx}", f"v{idx}") for idx in range(1, 5)]
+    rows_by_table = {
+        "mr": [],
+        "admission_record": [
+            {"institute_id": "A", "patient_id": patient_id, "visit_id": visit_id}
+            for patient_id, visit_id in visit_keys
+        ],
+        "discharge_record": [
+            {"institute_id": "A", "patient_id": patient_id, "visit_id": visit_id}
+            for patient_id, visit_id in visit_keys
+        ],
+    }
+
+    monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
+    monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", lambda _state: None)
+    monkeypatch.setattr(
+        etl_sync,
+        "validate_pg_sync_plan",
+        lambda **_kwargs: {
+            "executable": True,
+            "remote_schema": "public",
+            "table_validations": [
+                {"table": "mr", "source_table": "mr", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
+                {"table": "admission_record", "source_table": "admission_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
+                {"table": "discharge_record", "source_table": "discharge_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
+            ],
+        },
+    )
+    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {"schedule": {"minutes": 30}, "mirror_delay_base_minutes": 30})
+    monkeypatch.setattr(etl_sync, "_resolve_pg_extract_window", lambda **_kwargs: (date(2026, 5, 25), date(2026, 5, 25), ["普通外科"], ""))
+    monkeypatch.setattr(etl_sync, "collect_visit_keys_by_policy", lambda **_kwargs: list(visit_keys))
+    monkeypatch.setattr(etl_sync, "fetch_remote_rows_by_visit_keys", lambda **kwargs: list(rows_by_table.get(kwargs["source_table"], [])))
+    monkeypatch.setattr(etl_sync, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
+    monkeypatch.setattr(etl_sync, "ingest_sync_rows", lambda **kwargs: {"processed": len(kwargs["rows"]), "upserted": len(kwargs["rows"]), "skipped": 0})
+    monkeypatch.setattr(etl_sync, "refresh_scene_bundles_for_rows", lambda **_kwargs: None)
+
+    result = etl_sync.run_sync(
+        sync_date="2026-05-25",
+        tables=["mr", "admission_record", "discharge_record"],
+        scene="both",
+        date_window={"start": "2026-05-25", "end": "2026-05-25"},
+        target_departments=["普通外科"],
+    )
+
+    assert result["success"] is True
+    assert result["status"] == "partial"
+    assert result["eligible_visit_count"] == 4
+    assert result["mr_rows_pulled"] == 0
+    assert result["mr_rows_upserted"] == 0
+    assert result["detail_only_visit_count"] == 4
+    assert result["missing_mr_visit_ids"] == ["v1", "v2", "v3", "v4"]
+    assert result["detail_only_visit_ids"] == ["v1", "v2", "v3", "v4"]
+    assert result["detail_tables_with_rows"] == ["admission_record", "discharge_record"]
+    assert result["visit_index_skipped_missing_mr_count"] == 4
+    assert any("缺少 mr 主记录" in warning for warning in result["warnings"])
+
+
+def test_run_sync_success_when_mr_covers_eligible_visits(monkeypatch):
+    class _FakeConn:
+        def execute(self, stmt, params=None):
+            sql = str(stmt)
+            if "pg_try_advisory_lock" in sql or "pg_advisory_unlock" in sql:
+                return _ScalarResult(True)
+            raise AssertionError(f"unexpected SQL: {sql}")
+
+        def close(self):
+            return None
+
+    class _FakeEngine:
+        def connect(self):
+            return _FakeConn()
+
+    visit_keys = [(f"p{idx}", f"v{idx}") for idx in range(1, 5)]
+    rows_by_table = {
+        table: [
+            {"institute_id": "A", "patient_id": patient_id, "visit_id": visit_id}
+            for patient_id, visit_id in visit_keys
+        ]
+        for table in ["mr", "admission_record", "discharge_record"]
+    }
+
+    monkeypatch.setattr(etl_sync, "engine", _FakeEngine())
+    monkeypatch.setattr(etl_sync, "_upsert_sync_job_state", lambda _state: None)
+    monkeypatch.setattr(
+        etl_sync,
+        "validate_pg_sync_plan",
+        lambda **_kwargs: {
+            "executable": True,
+            "remote_schema": "public",
+            "table_validations": [
+                {"table": "mr", "source_table": "mr", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
+                {"table": "admission_record", "source_table": "admission_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
+                {"table": "discharge_record", "source_table": "discharge_record", "local_primary_keys": ["institute_id", "patient_id", "visit_id"]},
+            ],
+        },
+    )
+    monkeypatch.setattr(etl_sync, "load_sync_policy", lambda: {"schedule": {"minutes": 30}, "mirror_delay_base_minutes": 30})
+    monkeypatch.setattr(etl_sync, "_resolve_pg_extract_window", lambda **_kwargs: (date(2026, 5, 25), date(2026, 5, 25), ["普通外科"], ""))
+    monkeypatch.setattr(etl_sync, "collect_visit_keys_by_policy", lambda **_kwargs: list(visit_keys))
+    monkeypatch.setattr(etl_sync, "fetch_remote_rows_by_visit_keys", lambda **kwargs: list(rows_by_table.get(kwargs["source_table"], [])))
+    monkeypatch.setattr(etl_sync, "upsert_to_local", lambda **kwargs: len(kwargs["records"]))
+    monkeypatch.setattr(etl_sync, "ingest_sync_rows", lambda **kwargs: {"processed": len(kwargs["rows"]), "upserted": len(kwargs["rows"]), "skipped": 0})
+    monkeypatch.setattr(etl_sync, "refresh_scene_bundles_for_rows", lambda **_kwargs: None)
+
+    result = etl_sync.run_sync(
+        sync_date="2026-05-25",
+        tables=["mr", "admission_record", "discharge_record"],
+        scene="both",
+        date_window={"start": "2026-05-25", "end": "2026-05-25"},
+        target_departments=["普通外科"],
+    )
+
+    assert result["success"] is True
+    assert result["status"] == "success"
+    assert result["mr_rows_pulled"] == 4
+    assert result["mr_rows_upserted"] == 4
+    assert result["missing_mr_visit_ids"] == []
+    assert result["detail_only_visit_count"] == 0
+    assert result["warnings"] == []
 
 
 def test_upsert_to_local_uses_real_local_primary_keys(monkeypatch):
