@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 
 from ...database.connection import engine
 from ...database.repository import get_repository
-from ...database.models.cdm import AdmissionRecord, MedicalRecordFrontpage, QCResult
+from ...database.models.cdm import (
+    AdmissionRecord,
+    DischargeRecord,
+    MedicalRecordFrontpage,
+    QCResult,
+)
 from ...services.workflow_queue_state_service import default_workflow_queue_state_service
 from ...services.frontpage_settings import (
     load_frontpage_settings,
@@ -61,8 +66,20 @@ def _serialize_real_workstation_record(
     bed_map: dict[tuple[str, str], str],
     status_map: dict[str, dict],
     frontpage_generate_state_map: dict[str, dict[str, Any]],
+    discharge_summary_map: dict[tuple[str, str], dict[str, Any]],
 ) -> dict[str, Any]:
     key = (record.patient_id, record.visit_id)
+    discharge_summary = discharge_summary_map.get(key) or {}
+    resolved_discharge_datetime = (
+        discharge_summary.get("discharge_time")
+        or record.discharge_datetime
+    )
+    resolved_dept_name = (
+        discharge_summary.get("dept_name")
+        or record.discharge_dept_name
+        or record.admission_dept_name
+        or ""
+    )
     qc_info = status_map.get(record.visit_id)
     if qc_info is None:
         record_status = "pending"
@@ -71,7 +88,6 @@ def _serialize_real_workstation_record(
     else:
         record_status = "completed"
 
-    dept_name = record.discharge_dept_name or record.admission_dept_name or ""
     cdm_frontpage_empty = not any([
         record.name,
         record.mr_no,
@@ -88,7 +104,18 @@ def _serialize_real_workstation_record(
     if queue_status_source not in {"backfill", "runtime"}:
         queue_status_source = "backfill"
 
-    sort_time = record.update_time or record.discharge_datetime or record.admission_datetime
+    sort_time = record.update_time or resolved_discharge_datetime or record.admission_datetime
+    hospital_days = 0
+    if record.hospital_duration:
+        try:
+            hospital_days = int(record.hospital_duration)
+        except (TypeError, ValueError):
+            hospital_days = 0
+    elif record.admission_datetime and resolved_discharge_datetime:
+        hospital_days = max(
+            (resolved_discharge_datetime.date() - record.admission_datetime.date()).days,
+            0,
+        )
 
     return {
         "id": record.visit_id,
@@ -99,14 +126,14 @@ def _serialize_real_workstation_record(
         "sex": record.sex or "",
         "age": int(record.age_year) if record.age_year else 0,
         "insurance": record.insurance_type or "",
-        "department": dept_name,
+        "department": resolved_dept_name,
         "admissionDate": record.admission_datetime.strftime("%Y-%m-%d") if record.admission_datetime else "",
-        "dischargeDate": record.discharge_datetime.strftime("%Y-%m-%d") if record.discharge_datetime else "",
+        "dischargeDate": resolved_discharge_datetime.strftime("%Y-%m-%d") if resolved_discharge_datetime else "",
         "admissionDateDisplay": record.admission_datetime.strftime("%m-%d") if record.admission_datetime else "",
-        "dischargeDateDisplay": record.discharge_datetime.strftime("%m-%d") if record.discharge_datetime else "",
+        "dischargeDateDisplay": resolved_discharge_datetime.strftime("%m-%d") if resolved_discharge_datetime else "",
         "updateTime": record.update_time.strftime("%Y-%m-%d %H:%M:%S") if record.update_time else "",
         "sortTime": sort_time.strftime("%Y-%m-%d %H:%M:%S") if sort_time else "",
-        "days": int(record.hospital_duration) if record.hospital_duration else 0,
+        "days": hospital_days,
         "doctor": record.attending_physician_sign or "",
         "status": record_status,
         "cdmFrontpageEmpty": cdm_frontpage_empty,
@@ -135,11 +162,70 @@ def _apply_frontpage_generate_state(
     return next_record
 
 
-def _workstation_department_expr():
-    return func.coalesce(
+def _workstation_discharge_summary_subquery(session):
+    ranked_discharge_records = (
+        session.query(
+            DischargeRecord.institute_id.label("institute_id"),
+            DischargeRecord.patient_id.label("patient_id"),
+            DischargeRecord.visit_id.label("visit_id"),
+            DischargeRecord.discharge_time.label("discharge_time"),
+            DischargeRecord.dept_name.label("dept_name"),
+            func.row_number().over(
+                partition_by=(
+                    DischargeRecord.institute_id,
+                    DischargeRecord.patient_id,
+                    DischargeRecord.visit_id,
+                ),
+                order_by=(
+                    DischargeRecord.discharge_time.desc(),
+                    DischargeRecord.update_time.desc(),
+                    DischargeRecord.document_id.desc(),
+                ),
+            ).label("row_number"),
+        )
+        .subquery("ranked_discharge_records")
+    )
+    return (
+        session.query(
+            ranked_discharge_records.c.institute_id,
+            ranked_discharge_records.c.patient_id,
+            ranked_discharge_records.c.visit_id,
+            ranked_discharge_records.c.discharge_time,
+            ranked_discharge_records.c.dept_name,
+        )
+        .filter(ranked_discharge_records.c.row_number == 1)
+        .subquery("workstation_discharge_record_summary")
+    )
+
+
+def _workstation_discharge_join_condition(discharge_summary):
+    return and_(
+        discharge_summary.c.institute_id == MedicalRecordFrontpage.institute_id,
+        discharge_summary.c.patient_id == MedicalRecordFrontpage.patient_id,
+        discharge_summary.c.visit_id == MedicalRecordFrontpage.visit_id,
+    )
+
+
+def _workstation_department_expr(discharge_summary=None):
+    department_candidates = []
+    if discharge_summary is not None:
+        department_candidates.append(discharge_summary.c.dept_name)
+    department_candidates.extend([
         MedicalRecordFrontpage.discharge_dept_name,
         MedicalRecordFrontpage.admission_dept_name,
         "",
+    ])
+    return func.coalesce(
+        *department_candidates,
+    )
+
+
+def _workstation_resolved_discharge_expr(discharge_summary=None):
+    if discharge_summary is None:
+        return MedicalRecordFrontpage.discharge_datetime
+    return func.coalesce(
+        discharge_summary.c.discharge_time,
+        MedicalRecordFrontpage.discharge_datetime,
     )
 
 
@@ -159,6 +245,7 @@ def _workstation_date_condition(
     start_date: Optional[date],
     end_date: Optional[date],
     date_field: Optional[str],
+    discharge_summary=None,
 ):
     if not start_date and not end_date:
         return None
@@ -170,7 +257,7 @@ def _workstation_date_condition(
     if normalized_field == "admission":
         return _date_range_condition(MedicalRecordFrontpage.admission_datetime, start_date, end_date)
     if normalized_field == "discharge":
-        return _date_range_condition(MedicalRecordFrontpage.discharge_datetime, start_date, end_date)
+        return _date_range_condition(_workstation_resolved_discharge_expr(discharge_summary), start_date, end_date)
     if normalized_field == "updated":
         return _date_range_condition(MedicalRecordFrontpage.update_time, start_date, end_date)
 
@@ -180,7 +267,7 @@ def _workstation_date_condition(
         end_date,
     )
     discharge_condition = _date_range_condition(
-        MedicalRecordFrontpage.discharge_datetime,
+        _workstation_resolved_discharge_expr(discharge_summary),
         start_date,
         end_date,
     )
@@ -196,9 +283,10 @@ def _apply_workstation_filters(
     end_date: Optional[date],
     date_field: Optional[str],
     include_department: bool,
+    discharge_summary=None,
 ):
     if include_department and dept:
-        query = query.filter(_workstation_department_expr() == dept)
+        query = query.filter(_workstation_department_expr(discharge_summary) == dept)
     if keyword:
         kw = f"%{keyword}%"
         query = query.filter(
@@ -206,20 +294,21 @@ def _apply_workstation_filters(
             MedicalRecordFrontpage.mr_no.like(kw) |
             MedicalRecordFrontpage.inpat_no.like(kw)
         )
-    date_condition = _workstation_date_condition(start_date, end_date, date_field)
+    date_condition = _workstation_date_condition(start_date, end_date, date_field, discharge_summary)
     if date_condition is not None:
         query = query.filter(date_condition)
     return query
 
 
-def _workstation_default_order_by():
+def _workstation_default_order_by(discharge_summary=None):
+    resolved_discharge_datetime = _workstation_resolved_discharge_expr(discharge_summary)
     sort_time = func.coalesce(
         MedicalRecordFrontpage.update_time,
-        MedicalRecordFrontpage.discharge_datetime,
+        resolved_discharge_datetime,
         MedicalRecordFrontpage.admission_datetime,
     )
     visit_time = func.coalesce(
-        MedicalRecordFrontpage.discharge_datetime,
+        resolved_discharge_datetime,
         MedicalRecordFrontpage.admission_datetime,
     )
     return (
@@ -252,15 +341,20 @@ def get_workstation_data(
         demo_filtered = demo_filter(demo_candidates, dept=dept, keyword=keyword)
         include_demo = demo_policy(settings, int(real_total_count))
         visible_demos = demo_filtered if include_demo and not (start_date or end_date) else []
+        discharge_summary = _workstation_discharge_summary_subquery(session)
 
         q = _apply_workstation_filters(
-            session.query(MedicalRecordFrontpage),
+            session.query(MedicalRecordFrontpage).outerjoin(
+                discharge_summary,
+                _workstation_discharge_join_condition(discharge_summary),
+            ),
             dept=dept,
             keyword=keyword,
             start_date=start_date,
             end_date=end_date,
             date_field=date_field,
             include_department=True,
+            discharge_summary=discharge_summary,
         )
 
         total_real_filtered = q.count()
@@ -282,11 +376,27 @@ def get_workstation_data(
         records = []
         if real_limit > 0:
             records = (
-                q.order_by(*_workstation_default_order_by())
+                q.order_by(*_workstation_default_order_by(discharge_summary))
                 .offset(real_offset)
                 .limit(real_limit)
                 .all()
             )
+
+        discharge_summary_map: dict[tuple[str, str], dict[str, Any]] = {}
+        if records:
+            discharge_rows = session.query(
+                discharge_summary.c.patient_id,
+                discharge_summary.c.visit_id,
+                discharge_summary.c.discharge_time,
+                discharge_summary.c.dept_name,
+            ).filter(
+                discharge_summary.c.visit_id.in_([r.visit_id for r in records])
+            ).all()
+            for row in discharge_rows:
+                discharge_summary_map[(row.patient_id, row.visit_id)] = {
+                    "discharge_time": row.discharge_time,
+                    "dept_name": row.dept_name,
+                }
 
         bed_map: dict[tuple[str, str], str] = {}
         if records:
@@ -300,22 +410,29 @@ def get_workstation_data(
             for b in beds:
                 bed_map[(b.patient_id, b.visit_id)] = b.bed_no
 
-        dept_expr = _workstation_department_expr().label("dept_name")
+        dept_expr = _workstation_department_expr(discharge_summary).label("dept_name")
         dept_stats_query = _apply_workstation_filters(
             session.query(
                 dept_expr,
                 func.count().label("total"),
-            ).select_from(MedicalRecordFrontpage),
+            ).select_from(MedicalRecordFrontpage).outerjoin(
+                discharge_summary,
+                _workstation_discharge_join_condition(discharge_summary),
+            ),
             dept=None,
             keyword=keyword,
             start_date=start_date,
             end_date=end_date,
             date_field=date_field,
             include_department=False,
+            discharge_summary=discharge_summary,
         )
         dept_stats = dept_stats_query.group_by(dept_expr).all()
 
-        dept_total_count = session.query(func.count()).select_from(MedicalRecordFrontpage)
+        dept_total_count = session.query(func.count()).select_from(MedicalRecordFrontpage).outerjoin(
+            discharge_summary,
+            _workstation_discharge_join_condition(discharge_summary),
+        )
         dept_total_count = _apply_workstation_filters(
             dept_total_count,
             dept=None,
@@ -324,6 +441,7 @@ def get_workstation_data(
             end_date=end_date,
             date_field=date_field,
             include_department=False,
+            discharge_summary=discharge_summary,
         ).scalar() or 0
 
         real_visit_ids = [r.visit_id for r in records]
@@ -375,6 +493,7 @@ def get_workstation_data(
                 bed_map,
                 status_map,
                 frontpage_generate_state_map,
+                discharge_summary_map,
             )
             dept_name = item["department"]
             if item["status"] == "has_defects":

@@ -422,6 +422,7 @@ class DischargeRecord(AuditMixin, DocumentMixin, PatientBasicMixin, Base):
     ward_name = Column(String(100), comment="病区名称")
     admission_date = Column(Date, comment="入院日期")
     discharge_date = Column(Date, comment="出院日期")
+    discharge_time = Column(DateTime, comment="出院时间")
     inpatient_duration = Column(String(100), comment="住院天数")
 
     admission_condition = Column(Text, comment="入院情况")
