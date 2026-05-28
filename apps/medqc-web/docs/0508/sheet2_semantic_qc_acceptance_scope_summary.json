@@ -1,0 +1,36 @@
+{
+  "raw_total": 20,
+  "formal84_rule_scope_count": 11,
+  "formal84_eligible_count": 2,
+  "customer_extension_needed_count": 9,
+  "mapping_review_count": 7,
+  "gate_policy_review_count": 2,
+  "evidence_gap_count": 0,
+  "excluded_from_formal84_accuracy_count": 0,
+  "formal84_exact_hit_count": 2,
+  "formal84_effective_hit_count": 2,
+  "true_miss_count": 0,
+  "formal84_effective_recall_rate": 1.0,
+  "formal84_effective_recall_rate_percent": 100.0,
+  "acceptance_group_counts": {
+    "mapping_review": 7,
+    "formal84_validated": 2,
+    "gate_policy_review": 2,
+    "customer_extension_needed": 9
+  },
+  "recommended_smoke_samples": [
+    {
+      "visit_id": "2104927",
+      "rule": "SC-146",
+      "sheet_row_id": "Sheet2-R0123",
+      "reason": "目标规则返回可审计终态 confirmed_defect，可进入正式 84 条质量复核母集。"
+    },
+    {
+      "visit_id": "1888334",
+      "rule": "SC-097",
+      "sheet_row_id": "Sheet2-R0017",
+      "reason": "目标规则返回可审计终态 confirmed_defect，可进入正式 84 条质量复核母集。"
+    }
+  ],
+  "customer_smoke_recommendation": "not_recommend_3_5"
+}
