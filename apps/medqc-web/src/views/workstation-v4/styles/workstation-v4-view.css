@@ -183,7 +183,6 @@
 }
 
 .wv4-filter-actions {
-  margin-left: var(--workstation-space-3);
   display: inline-flex;
   align-items: center;
   gap: var(--workstation-space-2);
@@ -364,39 +363,76 @@
   box-shadow: var(--workstation-shadow-panel);
 }
 
-.workbench-controls-search-row {
+.workbench-controls-search-row,
+.workbench-filter-toolbar {
   display: flex;
   align-items: center;
 }
 
-.workbench-controls__search-input {
-  min-width: 0;
-  width: min(50%, 520px);
-}
-
-.workbench-date-row {
-  display: flex;
-  align-items: center;
+.workbench-filter-toolbar {
   gap: 10px;
   flex-wrap: wrap;
 }
 
+.workbench-controls__search-input {
+  min-width: 0;
+  width: min(32%, 420px);
+}
+
+.workbench-dept-select {
+  min-width: 210px;
+}
+
+.workbench-dept-select__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.workbench-dept-select__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #334155;
+}
+
+.workbench-dept-select__count {
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.96);
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+}
+
 .workbench-date-row__field {
-  width: 148px;
+  width: 142px;
 }
 
 .workbench-date-row__range {
   width: 280px;
 }
 
-.workbench-date-row__hint {
-  font-size: 12px;
-  font-weight: 500;
-  color: #64748b;
+.workbench-dept-row {
+  display: grid;
+  gap: 10px;
 }
 
-.workbench-dept-row {
-  display: block;
+.workbench-filter-summary {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.72);
+  background: rgba(239, 246, 255, 0.78);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e40af;
 }
 
 .workbench-dept-row__list {
@@ -520,7 +556,6 @@
   }
 
   .wv4-filter-actions {
-    margin-left: 0;
     margin-top: var(--workstation-space-2);
   }
 
@@ -534,6 +569,12 @@
     align-items: stretch;
   }
 
+  .workbench-filter-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workbench-dept-select,
   .workbench-date-row__field,
   .workbench-date-row__range {
     width: 100%;

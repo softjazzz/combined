@@ -94,16 +94,9 @@
 
         <div class="workstation-surface-enter workstation-surface-enter--delay-1 mb-4">
           <div class="workstation-panel workstation-panel--filters">
-            <div
-              class="pointer-events-none absolute right-[-48px] top-[-72px] h-[220px] w-[220px] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.68),rgba(255,255,255,0))]"
-            />
-            <div
-              class="pointer-events-none absolute bottom-[-120px] left-[18%] h-[220px] w-[260px] rounded-full bg-[radial-gradient(circle,rgba(226,232,240,0.8),rgba(226,232,240,0))]"
-            />
-
             <div class="relative workbench-hero">
               <div class="workbench-controls-panel">
-                <div class="workbench-controls-search-row">
+                <div class="workbench-filter-toolbar">
                   <a-input
                     :value="searchText"
                     class="workbench-controls__search-input"
@@ -116,6 +109,58 @@
                       <SearchOutlined class="text-slate-400" />
                     </template>
                   </a-input>
+
+                  <a-select
+                    :value="activeDept"
+                    class="workbench-dept-select"
+                    size="large"
+                    show-search
+                    :filter-option="filterDepartmentSelectOption"
+                    @update:value="emit('selectDept', normalizeDepartmentValue($event))"
+                  >
+                    <a-select-option
+                      v-for="dept in departmentSelectOptions"
+                      :key="dept.name"
+                      :value="dept.name"
+                    >
+                      <span class="workbench-dept-select__option">
+                        <span class="workbench-dept-select__name">{{ dept.name }}</span>
+                        <span class="workbench-dept-select__count">{{ dept.total }}</span>
+                      </span>
+                    </a-select-option>
+                  </a-select>
+
+                  <a-select
+                    v-if="!isStageQueueMode"
+                    :value="dateField"
+                    class="workbench-date-row__field"
+                    size="large"
+                    @update:value="emit('update:dateField', normalizeDateField($event))"
+                  >
+                    <a-select-option value="visit">
+                      入/出院日期
+                    </a-select-option>
+                    <a-select-option value="admission">
+                      入院日期
+                    </a-select-option>
+                    <a-select-option value="discharge">
+                      出院日期
+                    </a-select-option>
+                    <a-select-option value="updated">
+                      更新时间
+                    </a-select-option>
+                  </a-select>
+                  <a-range-picker
+                    v-if="!isStageQueueMode"
+                    :value="dateRange || undefined"
+                    class="workbench-date-row__range"
+                    size="large"
+                    allow-clear
+                    value-format="YYYY-MM-DD"
+                    format="YYYY-MM-DD"
+                    @update:value="emit('update:dateRange', normalizeDateRange($event))"
+                  />
+
                   <div class="wv4-filter-actions">
                     <a-button
                       type="primary"
@@ -142,47 +187,13 @@
                   </div>
                 </div>
 
-                <div
-                  v-if="!isStageQueueMode"
-                  class="workbench-date-row"
-                >
-                  <a-select
-                    :value="dateField"
-                    class="workbench-date-row__field"
-                    size="large"
-                    @update:value="emit('update:dateField', normalizeDateField($event))"
-                  >
-                    <a-select-option value="visit">
-                      入/出院日期
-                    </a-select-option>
-                    <a-select-option value="admission">
-                      入院日期
-                    </a-select-option>
-                    <a-select-option value="discharge">
-                      出院日期
-                    </a-select-option>
-                    <a-select-option value="updated">
-                      更新时间
-                    </a-select-option>
-                  </a-select>
-                  <a-range-picker
-                    :value="dateRange || undefined"
-                    class="workbench-date-row__range"
-                    size="large"
-                    allow-clear
-                    value-format="YYYY-MM-DD"
-                    format="YYYY-MM-DD"
-                    @update:value="emit('update:dateRange', normalizeDateRange($event))"
-                  />
-                  <span class="workbench-date-row__hint">
-                    按后端全量病历池筛选，不受当前页限制
-                  </span>
-                </div>
-
                 <div class="workbench-dept-row">
+                  <div class="workbench-filter-summary">
+                    {{ tableSummaryText }}
+                  </div>
                   <div class="workbench-dept-row__list">
                     <button
-                      v-for="dept in visibleDepartments"
+                      v-for="dept in quickDepartments"
                       :key="dept.name"
                       type="button"
                       :class="[
@@ -196,44 +207,6 @@
                       <span>{{ dept.name }}</span>
                       <span class="workbench-dept-chip__count">{{ dept.total }}</span>
                     </button>
-
-                    <a-dropdown
-                      v-if="overflowDepartments.length > 0"
-                      trigger="click"
-                      placement="bottomRight"
-                    >
-                      <button
-                        type="button"
-                        class="workbench-dept-chip workbench-dept-chip--idle"
-                      >
-                        <span>更多科室</span>
-                        <span class="workbench-dept-chip__count">{{
-                          overflowDepartments.length
-                        }}</span>
-                        <DownOutlined class="text-[10px]" />
-                      </button>
-                      <template #overlay>
-                        <a-menu
-                          class="max-h-[320px] w-[220px] overflow-y-auto rounded-xl p-1.5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]"
-                        >
-                          <a-menu-item
-                            v-for="dept in overflowDepartments"
-                            :key="`overflow-${dept.name}`"
-                            class="rounded-lg py-2"
-                            @click="emit('selectDept', dept.name)"
-                          >
-                            <div class="flex items-center justify-between gap-3">
-                              <span class="truncate font-medium text-slate-700">{{
-                                dept.name
-                              }}</span>
-                              <span
-                                class="rounded bg-slate-50 px-1.5 text-[11px] font-bold text-slate-400"
-                              >{{ dept.total }}</span>
-                            </div>
-                          </a-menu-item>
-                        </a-menu>
-                      </template>
-                    </a-dropdown>
                   </div>
                 </div>
               </div>
@@ -388,13 +361,14 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { DownOutlined, InboxOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import { InboxOutlined, SearchOutlined } from '@ant-design/icons-vue'
 
 import PriorityLane, { type PriorityCard, type PriorityGroup } from './workbench/PriorityLane.vue'
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import type { DeptInfo } from '../types'
 import type { WorkflowStageKey } from '@/types/workflow'
 import type { WorkstationDateField, WorkstationDateRange } from '../composables/usePatientRecords'
+import { filterDepartmentOption } from '../utils/workstationFilterPresentation'
 
 interface StageMetaLike {
   pageTitle?: string
@@ -412,8 +386,8 @@ const props = defineProps<{
   searchText: string
   dateRange: WorkstationDateRange
   dateField: WorkstationDateField
-  visibleDepartments: DeptInfo[]
-  overflowDepartments: DeptInfo[]
+  departmentSelectOptions: DeptInfo[]
+  quickDepartments: DeptInfo[]
   activeDept: string
   workbenchRows: WorkbenchRow[]
   selectedWorkbenchKeys: string[]
@@ -462,6 +436,17 @@ function normalizeDateField(value: unknown): WorkstationDateField {
     return value
   }
   return 'visit'
+}
+
+function normalizeDepartmentValue(value: unknown): string {
+  return String(value || '全部科室').trim() || '全部科室'
+}
+
+function filterDepartmentSelectOption(
+  input: string,
+  option?: { value?: unknown; label?: unknown },
+) {
+  return filterDepartmentOption(input, option)
 }
 
 const analysisTab = ref<'stage' | 'workflow'>('stage')

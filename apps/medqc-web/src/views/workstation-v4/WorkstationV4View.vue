@@ -12,8 +12,8 @@
         :search-text="searchText"
         :date-range="dateRange"
         :date-field="dateField"
-        :visible-departments="visibleDepartments"
-        :overflow-departments="overflowDepartments"
+        :department-select-options="departmentSelectOptions"
+        :quick-departments="quickDepartments"
         :active-dept="activeDept"
         :workbench-rows="workbenchRows"
         :selected-workbench-keys="selectedWorkbenchKeys"
@@ -277,6 +277,11 @@ import {
   getStageMeta,
   workflowLabelMap,
 } from './workstationStageController'
+import {
+  buildDepartmentSelectOptions,
+  buildQuickDepartments,
+  buildWorkstationFilterSummary,
+} from './utils/workstationFilterPresentation'
 import { useDRGGrouping } from './composables/useDRGGrouping'
 import type { ICDCodeDetail } from './components/ICDDetailPanel.vue'
 import { useWorkstationSession } from './composables/useWorkstationSession'
@@ -345,24 +350,13 @@ const {
   selectDept,
   resetFilters,
 } = usePatientRecords()
-const PINNED_DEPARTMENT_SLOTS = 8
-const visibleDepartments = computed(() => {
-  const all = displayDepartments.value
-  if (all.length <= PINNED_DEPARTMENT_SLOTS) return all
+const departmentSelectOptions = computed(() =>
+  buildDepartmentSelectOptions(displayDepartments.value),
+)
 
-  const visibleLimit = PINNED_DEPARTMENT_SLOTS - 1
-  const head = all.slice(0, visibleLimit)
-  const active = all.find((dept) => dept.name === activeDept.value)
-  if (!active) return head
-  if (head.some((dept) => dept.name === active.name)) return head
-
-  return [head[0], ...head.slice(1, visibleLimit - 1), active]
-})
-
-const overflowDepartments = computed(() => {
-  const visibleNames = new Set(visibleDepartments.value.map((dept) => dept.name))
-  return displayDepartments.value.filter((dept) => !visibleNames.has(dept.name))
-})
+const quickDepartments = computed(() =>
+  buildQuickDepartments(displayDepartments.value, activeDept.value),
+)
 
 const stageQueues = computed(() => {
   const records = filteredRecords.value
@@ -807,7 +801,16 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
 })
 
 const tableSummaryText = computed(() => {
-  return `当前筛选：${activeDept.value} / ${activeHospLabel.value} / ${stageMeta.value.tableTitle}`
+  const baseSummary = buildWorkstationFilterSummary({
+    activeDept: activeDept.value,
+    dateField: dateField.value,
+    dateRange: dateRange.value,
+    total: displayServerTotal.value,
+    stageTitle: stageMeta.value.tableTitle,
+    isStageQueueMode: isStageQueueMode.value,
+  })
+  if (activeHospLabel.value === '全部') return baseSummary
+  return `${baseSummary} / ${activeHospLabel.value}`
 })
 
 // ========== 质控规则 Tab ==========
