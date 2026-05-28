@@ -10,6 +10,8 @@
         :priority-cards-filtered="priorityCardsFiltered"
         :is-stage-queue-mode="isStageQueueMode"
         :search-text="searchText"
+        :date-range="dateRange"
+        :date-field="dateField"
         :visible-departments="visibleDepartments"
         :overflow-departments="overflowDepartments"
         :active-dept="activeDept"
@@ -27,6 +29,8 @@
         :display-server-total="displayServerTotal"
         @update:active-priority-group="activePriorityGroup = $event"
         @update:search-text="searchText = $event"
+        @update:date-range="dateRange = $event"
+        @update:date-field="dateField = $event"
         @update:selected-row-keys="selectedWorkbenchKeys = $event"
         @priority-open="handlePriorityOpen"
         @priority-defer="handlePriorityDefer"
@@ -330,6 +334,8 @@ const {
   loading,
   activeDept,
   searchText,
+  dateRange,
+  dateField,
   hospFilter,
   hospOptions,
   filteredRecords,
@@ -337,6 +343,7 @@ const {
   handlePageChange: handleBasePageChange,
   refreshData,
   selectDept,
+  resetFilters,
 } = usePatientRecords()
 const PINNED_DEPARTMENT_SLOTS = 8
 const visibleDepartments = computed(() => {
@@ -1831,11 +1838,13 @@ function handlePageChange(page: number, nextPageSize?: number) {
 }
 
 function handleClearFilters() {
-  activeDept.value = '全部科室'
-  searchText.value = ''
-  hospFilter.value = 'all'
-  currentPage.value = 1
+  resetFilters()
   selectedWorkbenchKeys.value = []
+  if (isAggregatedStageMode.value) {
+    void fetchStageWorklist(currentStageFilter.value)
+    return
+  }
+  void fetchData(1)
 }
 
 function goToFinalRecords() {

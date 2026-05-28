@@ -142,6 +142,43 @@
                   </div>
                 </div>
 
+                <div
+                  v-if="!isStageQueueMode"
+                  class="workbench-date-row"
+                >
+                  <a-select
+                    :value="dateField"
+                    class="workbench-date-row__field"
+                    size="large"
+                    @update:value="emit('update:dateField', normalizeDateField($event))"
+                  >
+                    <a-select-option value="visit">
+                      入/出院日期
+                    </a-select-option>
+                    <a-select-option value="admission">
+                      入院日期
+                    </a-select-option>
+                    <a-select-option value="discharge">
+                      出院日期
+                    </a-select-option>
+                    <a-select-option value="updated">
+                      更新时间
+                    </a-select-option>
+                  </a-select>
+                  <a-range-picker
+                    :value="dateRange || undefined"
+                    class="workbench-date-row__range"
+                    size="large"
+                    allow-clear
+                    value-format="YYYY-MM-DD"
+                    format="YYYY-MM-DD"
+                    @update:value="emit('update:dateRange', normalizeDateRange($event))"
+                  />
+                  <span class="workbench-date-row__hint">
+                    按后端全量病历池筛选，不受当前页限制
+                  </span>
+                </div>
+
                 <div class="workbench-dept-row">
                   <div class="workbench-dept-row__list">
                     <button
@@ -357,6 +394,7 @@ import PriorityLane, { type PriorityCard, type PriorityGroup } from './workbench
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import type { DeptInfo } from '../types'
 import type { WorkflowStageKey } from '@/types/workflow'
+import type { WorkstationDateField, WorkstationDateRange } from '../composables/usePatientRecords'
 
 interface StageMetaLike {
   pageTitle?: string
@@ -372,6 +410,8 @@ const props = defineProps<{
   priorityCardsFiltered: PriorityCard[]
   isStageQueueMode: boolean
   searchText: string
+  dateRange: WorkstationDateRange
+  dateField: WorkstationDateField
   visibleDepartments: DeptInfo[]
   overflowDepartments: DeptInfo[]
   activeDept: string
@@ -392,6 +432,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:activePriorityGroup': [value: string]
   'update:searchText': [value: string]
+  'update:dateRange': [value: WorkstationDateRange]
+  'update:dateField': [value: WorkstationDateField]
   'update:selectedRowKeys': [keys: string[]]
   'priority-open': [recordId: string]
   'priority-defer': [recordId: string]
@@ -406,6 +448,20 @@ const emit = defineEmits<{
 
 function handleBatchPageChange(page: number, pageSize?: number) {
   emit('page-change', page, pageSize)
+}
+
+function normalizeDateRange(value: unknown): WorkstationDateRange {
+  if (!Array.isArray(value) || value.length < 2) return null
+  const start = typeof value[0] === 'string' ? value[0] : ''
+  const end = typeof value[1] === 'string' ? value[1] : ''
+  return start && end ? [start, end] : null
+}
+
+function normalizeDateField(value: unknown): WorkstationDateField {
+  if (value === 'admission' || value === 'discharge' || value === 'updated') {
+    return value
+  }
+  return 'visit'
 }
 
 const analysisTab = ref<'stage' | 'workflow'>('stage')

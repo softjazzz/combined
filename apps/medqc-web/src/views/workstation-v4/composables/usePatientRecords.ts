@@ -4,6 +4,8 @@ import type { DeptInfo, PatientRecord } from '../types'
 import { normalizeRecord } from '../normalize'
 
 const WORKSTATION_PAGE_SIZE = 20
+export type WorkstationDateField = 'visit' | 'admission' | 'discharge' | 'updated'
+export type WorkstationDateRange = [string, string] | null
 
 function normalizeDepartment(raw: unknown): DeptInfo {
   const source = (raw || {}) as Record<string, unknown>
@@ -51,6 +53,8 @@ export function usePatientRecords() {
 
   const activeDept = ref('\u5168\u90e8\u79d1\u5ba4')
   const searchText = ref('')
+  const dateRange = ref<WorkstationDateRange>(null)
+  const dateField = ref<WorkstationDateField>('visit')
   const hospFilter = ref<'all' | 'inpatient' | 'discharged'>('all')
 
   const hospOptions = [
@@ -62,23 +66,11 @@ export function usePatientRecords() {
   const scopedRecords = computed(() => {
     let list = allRecords.value
 
-    if (activeDept.value !== '\u5168\u90e8\u79d1\u5ba4') {
-      list = list.filter((record) => record.department === activeDept.value)
-    }
-
     if (hospFilter.value !== 'all') {
       list = list.filter((record) => {
         const hasDischargeDate = Boolean(record.dischargeDate && record.dischargeDate.trim() !== '')
         return hospFilter.value === 'inpatient' ? !hasDischargeDate : hasDischargeDate
       })
-    }
-
-    if (searchText.value.trim()) {
-      const keyword = searchText.value.trim().toLowerCase()
-      list = list.filter(
-        (record) =>
-          record.name.toLowerCase().includes(keyword) || record.id.toLowerCase().includes(keyword),
-      )
     }
 
     return list
@@ -89,8 +81,28 @@ export function usePatientRecords() {
   async function fetchData(page = 1, targetPageSize = pageSize.value) {
     loading.value = true
     try {
+      const [startDate, endDate] = dateRange.value || []
+      const params: Record<string, string | number> = {
+        page,
+        page_size: targetPageSize,
+        date_field: dateField.value,
+      }
+      if (activeDept.value !== '\u5168\u90e8\u79d1\u5ba4') {
+        params.dept = activeDept.value
+      }
+      const keyword = searchText.value.trim()
+      if (keyword) {
+        params.keyword = keyword
+      }
+      if (startDate) {
+        params.start_date = startDate
+      }
+      if (endDate) {
+        params.end_date = endDate
+      }
+
       const response = await ApiService.getRaw('/api/medical-records/workstation', {
-        params: { page, page_size: targetPageSize },
+        params,
       })
       const raw = response.data as Record<string, unknown>
       const data = (
@@ -147,6 +159,16 @@ export function usePatientRecords() {
   function selectDept(deptName: string) {
     activeDept.value = deptName
     currentPage.value = 1
+    fetchData(1)
+  }
+
+  function resetFilters() {
+    activeDept.value = '\u5168\u90e8\u79d1\u5ba4'
+    searchText.value = ''
+    dateRange.value = null
+    dateField.value = 'visit'
+    hospFilter.value = 'all'
+    currentPage.value = 1
   }
 
   return {
@@ -160,6 +182,8 @@ export function usePatientRecords() {
     loading,
     activeDept,
     searchText,
+    dateRange,
+    dateField,
     hospFilter,
     hospOptions,
     filteredRecords,
@@ -167,5 +191,6 @@ export function usePatientRecords() {
     handlePageChange,
     refreshData,
     selectDept,
+    resetFilters,
   }
 }

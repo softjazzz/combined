@@ -63,10 +63,21 @@ async def get_departments_api():
 async def get_workstation_data_api(
     dept: Optional[str] = Query(None, description="科室筛选，不传则返回全部"),
     keyword: Optional[str] = Query(None, description="搜索姓名/病案号"),
+    start_date: Optional[date] = Query(None, description="筛选开始日期"),
+    end_date: Optional[date] = Query(None, description="筛选结束日期"),
+    date_field: Optional[str] = Query("visit", description="日期字段：visit/admission/discharge/updated"),
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(default=50, max_value=HEAVY_MAX_PAGE_SIZE, description="每页条数"),
 ):
     try:
-        return get_workstation_data(dept=dept, keyword=keyword, page=page, page_size=page_size)
+        return get_workstation_data(
+            dept=dept,
+            keyword=keyword,
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
+            page=page,
+            page_size=page_size,
+        )
     except Exception as exc:
         raise_medical_records_http_error(exc)

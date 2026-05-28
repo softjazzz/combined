@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Callable, Optional
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from ...database.connection import engine
@@ -98,8 +98,10 @@ def _serialize_real_workstation_record(
         "age": int(record.age_year) if record.age_year else 0,
         "insurance": record.insurance_type or "",
         "department": dept_name,
-        "admissionDate": record.admission_datetime.strftime("%m-%d") if record.admission_datetime else "",
-        "dischargeDate": record.discharge_datetime.strftime("%m-%d") if record.discharge_datetime else "",
+        "admissionDate": record.admission_datetime.strftime("%Y-%m-%d") if record.admission_datetime else "",
+        "dischargeDate": record.discharge_datetime.strftime("%Y-%m-%d") if record.discharge_datetime else "",
+        "admissionDateDisplay": record.admission_datetime.strftime("%m-%d") if record.admission_datetime else "",
+        "dischargeDateDisplay": record.discharge_datetime.strftime("%m-%d") if record.discharge_datetime else "",
         "days": int(record.hospital_duration) if record.hospital_duration else 0,
         "doctor": record.attending_physician_sign or "",
         "status": record_status,
@@ -129,9 +131,89 @@ def _apply_frontpage_generate_state(
     return next_record
 
 
+def _workstation_department_expr():
+    return func.coalesce(
+        MedicalRecordFrontpage.discharge_dept_name,
+        MedicalRecordFrontpage.admission_dept_name,
+        "",
+    )
+
+
+def _date_range_condition(column, start_date: Optional[date], end_date: Optional[date]):
+    conditions = []
+    date_column = func.date(column)
+    if start_date:
+        conditions.append(date_column >= start_date)
+    if end_date:
+        conditions.append(date_column <= end_date)
+    if not conditions:
+        return None
+    return and_(*conditions)
+
+
+def _workstation_date_condition(
+    start_date: Optional[date],
+    end_date: Optional[date],
+    date_field: Optional[str],
+):
+    if not start_date and not end_date:
+        return None
+
+    normalized_field = (date_field or "visit").strip().lower()
+    if normalized_field not in {"visit", "admission", "discharge", "updated"}:
+        normalized_field = "visit"
+
+    if normalized_field == "admission":
+        return _date_range_condition(MedicalRecordFrontpage.admission_datetime, start_date, end_date)
+    if normalized_field == "discharge":
+        return _date_range_condition(MedicalRecordFrontpage.discharge_datetime, start_date, end_date)
+    if normalized_field == "updated":
+        return _date_range_condition(MedicalRecordFrontpage.update_time, start_date, end_date)
+
+    admission_condition = _date_range_condition(
+        MedicalRecordFrontpage.admission_datetime,
+        start_date,
+        end_date,
+    )
+    discharge_condition = _date_range_condition(
+        MedicalRecordFrontpage.discharge_datetime,
+        start_date,
+        end_date,
+    )
+    return or_(admission_condition, discharge_condition)
+
+
+def _apply_workstation_filters(
+    query,
+    *,
+    dept: Optional[str],
+    keyword: Optional[str],
+    start_date: Optional[date],
+    end_date: Optional[date],
+    date_field: Optional[str],
+    include_department: bool,
+):
+    if include_department and dept:
+        query = query.filter(_workstation_department_expr() == dept)
+    if keyword:
+        kw = f"%{keyword}%"
+        query = query.filter(
+            MedicalRecordFrontpage.name.like(kw) |
+            MedicalRecordFrontpage.mr_no.like(kw) |
+            MedicalRecordFrontpage.inpat_no.like(kw)
+        )
+    date_condition = _workstation_date_condition(start_date, end_date, date_field)
+    if date_condition is not None:
+        query = query.filter(date_condition)
+    return query
+
+
 def get_workstation_data(
     dept: Optional[str] = None,
     keyword: Optional[str] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    date_field: Optional[str] = "visit",
     page: int = 1,
     page_size: int = 50,
     session_factory: Callable[[], Any] | None = None,
@@ -148,21 +230,17 @@ def get_workstation_data(
         demo_candidates = demo_records_builder()
         demo_filtered = demo_filter(demo_candidates, dept=dept, keyword=keyword)
         include_demo = demo_policy(settings, int(real_total_count))
-        visible_demos = demo_filtered if include_demo else []
+        visible_demos = demo_filtered if include_demo and not (start_date or end_date) else []
 
-        q = session.query(MedicalRecordFrontpage)
-        if dept:
-            q = q.filter(
-                (MedicalRecordFrontpage.discharge_dept_name == dept) |
-                (MedicalRecordFrontpage.admission_dept_name == dept)
-            )
-        if keyword:
-            kw = f"%{keyword}%"
-            q = q.filter(
-                MedicalRecordFrontpage.name.like(kw) |
-                MedicalRecordFrontpage.mr_no.like(kw) |
-                MedicalRecordFrontpage.inpat_no.like(kw)
-            )
+        q = _apply_workstation_filters(
+            session.query(MedicalRecordFrontpage),
+            dept=dept,
+            keyword=keyword,
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
+            include_department=True,
+        )
 
         total_real_filtered = q.count()
         offset = (page - 1) * page_size
@@ -201,10 +279,31 @@ def get_workstation_data(
             for b in beds:
                 bed_map[(b.patient_id, b.visit_id)] = b.bed_no
 
-        dept_stats = session.query(
-            MedicalRecordFrontpage.discharge_dept_name,
-            func.count().label("total"),
-        ).group_by(MedicalRecordFrontpage.discharge_dept_name).all()
+        dept_expr = _workstation_department_expr().label("dept_name")
+        dept_stats_query = _apply_workstation_filters(
+            session.query(
+                dept_expr,
+                func.count().label("total"),
+            ).select_from(MedicalRecordFrontpage),
+            dept=None,
+            keyword=keyword,
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
+            include_department=False,
+        )
+        dept_stats = dept_stats_query.group_by(dept_expr).all()
+
+        dept_total_count = session.query(func.count()).select_from(MedicalRecordFrontpage)
+        dept_total_count = _apply_workstation_filters(
+            dept_total_count,
+            dept=None,
+            keyword=keyword,
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
+            include_department=False,
+        ).scalar() or 0
 
         real_visit_ids = [r.visit_id for r in records]
         demo_visit_ids = [str(item.get("visitId") or item.get("id") or "").strip() for item in visible_demos]
@@ -245,7 +344,7 @@ def get_workstation_data(
         dept_warning_counts: dict[str, int] = {}
         dept_total_map: dict[str, int] = {}
         for d in dept_stats:
-            dept_name = d.discharge_dept_name or ""
+            dept_name = d.dept_name or ""
             dept_total_map[dept_name] = int(d.total)
 
         real_items = []
@@ -267,7 +366,7 @@ def get_workstation_data(
             dept_total_map[dept_name] = dept_total_map.get(dept_name, 0) + 1
 
         for d in sorted(dept_stats, key=lambda x: x.total, reverse=True):
-            dept_name = d.discharge_dept_name or ""
+            dept_name = d.dept_name or ""
             departments.append({
                 "name": dept_name,
                 "total": dept_total_map.get(dept_name, d.total),
@@ -282,7 +381,7 @@ def get_workstation_data(
             departments.append({"name": dept_name, "total": total, "warningCount": 0})
 
         total_count = total_real_filtered + demo_count
-        departments[0]["total"] = total_count
+        departments[0]["total"] = int(dept_total_count) + demo_count
         demo_items = [
             _apply_frontpage_generate_state(item, frontpage_generate_state_map)
             for item in demo_page
