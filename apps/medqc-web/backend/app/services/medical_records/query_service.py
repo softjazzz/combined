@@ -88,6 +88,8 @@ def _serialize_real_workstation_record(
     if queue_status_source not in {"backfill", "runtime"}:
         queue_status_source = "backfill"
 
+    sort_time = record.update_time or record.discharge_datetime or record.admission_datetime
+
     return {
         "id": record.visit_id,
         "instituteId": record.institute_id,
@@ -102,6 +104,8 @@ def _serialize_real_workstation_record(
         "dischargeDate": record.discharge_datetime.strftime("%Y-%m-%d") if record.discharge_datetime else "",
         "admissionDateDisplay": record.admission_datetime.strftime("%m-%d") if record.admission_datetime else "",
         "dischargeDateDisplay": record.discharge_datetime.strftime("%m-%d") if record.discharge_datetime else "",
+        "updateTime": record.update_time.strftime("%Y-%m-%d %H:%M:%S") if record.update_time else "",
+        "sortTime": sort_time.strftime("%Y-%m-%d %H:%M:%S") if sort_time else "",
         "days": int(record.hospital_duration) if record.hospital_duration else 0,
         "doctor": record.attending_physician_sign or "",
         "status": record_status,
@@ -208,6 +212,23 @@ def _apply_workstation_filters(
     return query
 
 
+def _workstation_default_order_by():
+    sort_time = func.coalesce(
+        MedicalRecordFrontpage.update_time,
+        MedicalRecordFrontpage.discharge_datetime,
+        MedicalRecordFrontpage.admission_datetime,
+    )
+    visit_time = func.coalesce(
+        MedicalRecordFrontpage.discharge_datetime,
+        MedicalRecordFrontpage.admission_datetime,
+    )
+    return (
+        sort_time.desc(),
+        visit_time.desc(),
+        MedicalRecordFrontpage.visit_id.desc(),
+    )
+
+
 def get_workstation_data(
     dept: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -261,7 +282,7 @@ def get_workstation_data(
         records = []
         if real_limit > 0:
             records = (
-                q.order_by(MedicalRecordFrontpage.admission_datetime.desc())
+                q.order_by(*_workstation_default_order_by())
                 .offset(real_offset)
                 .limit(real_limit)
                 .all()

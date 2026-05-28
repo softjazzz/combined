@@ -13,6 +13,8 @@ export interface PatientRecord {
   department: string
   admissionDate: string
   dischargeDate: string
+  updateTime?: string
+  sortTime?: string
   days: number
   cdmFrontpageEmpty?: boolean
   hasAdmission?: boolean

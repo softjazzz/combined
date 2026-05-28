@@ -680,7 +680,8 @@ const priorityCards = computed<PriorityCard[]>(() => {
     riskType: riskTypeOf(record),
     riskText: priorityReason(record),
     isDemo: isDemoRecord(record),
-    updatedAt: record.dischargeDate || record.admissionDate || '',
+    updatedAt:
+      record.sortTime || record.updateTime || record.dischargeDate || record.admissionDate || '',
   }))
 })
 
@@ -795,7 +796,8 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
       record,
     }),
     riskReason: priorityReason(record),
-    updatedAt: record.dischargeDate || record.admissionDate || '-',
+    updatedAt:
+      record.sortTime || record.updateTime || record.dischargeDate || record.admissionDate || '-',
     isDemo: isDemoRecord(record),
   }))
 })

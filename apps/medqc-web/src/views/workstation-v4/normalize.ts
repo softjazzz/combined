@@ -92,6 +92,9 @@ export function normalizeRecord(raw: unknown): PatientRecord {
   const visitId = pickString(source, ['visitId', 'visit_id']) || id
   const dischargeDate = pickString(source, ['dischargeDate', 'discharge_date', 'out_date'])
   const admissionDate = pickString(source, ['admissionDate', 'admission_date', 'in_date'])
+  const updateTime = pickString(source, ['updateTime', 'update_time', 'updated_at'])
+  const sortTime =
+    pickString(source, ['sortTime', 'sort_time']) || updateTime || dischargeDate || admissionDate
   const rawCdmFrontpageEmpty = source.cdmFrontpageEmpty ?? source.cdm_frontpage_empty
   const cdmFrontpageEmpty =
     rawCdmFrontpageEmpty === undefined || rawCdmFrontpageEmpty === null
@@ -148,6 +151,8 @@ export function normalizeRecord(raw: unknown): PatientRecord {
       '未分科室',
     admissionDate,
     dischargeDate,
+    updateTime: updateTime || undefined,
+    sortTime: sortTime || undefined,
     days: asNumber(
       source.days ?? source.stay_days ?? source.length_of_stay ?? source.hospital_days,
     ),

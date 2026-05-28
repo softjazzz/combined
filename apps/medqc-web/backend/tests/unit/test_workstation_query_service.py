@@ -169,3 +169,55 @@ def test_get_workstation_data_department_stats_include_admission_only_dept(
     department_totals = {dept["name"]: dept["total"] for dept in result["departments"]}
     assert department_totals["全部科室"] == 1
     assert department_totals["中医科"] == 1
+
+
+def test_get_workstation_data_orders_newly_synced_records_first_within_department(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P1",
+            visit_id="OLD_ADMISSION",
+            name="旧同步但入院较新",
+            admission_dept_name="中医科",
+            admission_datetime=datetime(2026, 5, 28, 8, 0),
+            discharge_datetime=datetime(2026, 5, 29, 8, 0),
+            update_time=datetime(2026, 5, 26, 8, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P2",
+            visit_id="NEW_SYNC",
+            name="新同步但入院较早",
+            admission_dept_name="中医科",
+            admission_datetime=datetime(2026, 5, 20, 8, 0),
+            discharge_datetime=datetime(2026, 5, 21, 8, 0),
+            update_time=datetime(2026, 5, 30, 8, 0),
+        ),
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P3",
+            visit_id="OLDER_SYNC",
+            name="更早同步",
+            admission_dept_name="中医科",
+            admission_datetime=datetime(2026, 5, 25, 8, 0),
+            update_time=datetime(2026, 5, 25, 8, 0),
+        ),
+    )
+
+    result = get_workstation_data(
+        dept="中医科",
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert [record["id"] for record in result["records"]] == [
+        "NEW_SYNC",
+        "OLD_ADMISSION",
+        "OLDER_SYNC",
+    ]
+    assert result["records"][0]["updateTime"] == "2026-05-30 08:00:00"
+    assert result["records"][0]["sortTime"] == "2026-05-30 08:00:00"

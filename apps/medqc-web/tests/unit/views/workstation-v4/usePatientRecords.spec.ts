@@ -23,6 +23,8 @@ function mockWorkstationResponse() {
           department: '中医科',
           admissionDate: '2026-05-25',
           dischargeDate: '',
+          updateTime: '2026-05-30 09:10:11',
+          sortTime: '2026-05-30 09:10:11',
         },
       ],
       departments: [
@@ -68,6 +70,15 @@ describe('usePatientRecords workstation filters', () => {
         end_date: '2026-05-31',
       },
     })
+  })
+
+  it('keeps backend sort time metadata for displaying newest synced records first', async () => {
+    const records = usePatientRecords()
+
+    await records.fetchData()
+
+    expect(records.allRecords.value[0].updateTime).toBe('2026-05-30 09:10:11')
+    expect(records.allRecords.value[0].sortTime).toBe('2026-05-30 09:10:11')
   })
 
   it('selectDept resets page and triggers backend query', async () => {
