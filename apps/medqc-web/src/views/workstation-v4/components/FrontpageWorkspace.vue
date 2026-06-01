@@ -108,6 +108,29 @@
         @export-frontpage="emit('export-frontpage', $event)"
         @save-frontpage="emit('save-frontpage')"
       />
+      <a-alert
+        v-if="reportResult?.coverage"
+        class="mt-2"
+        :type="reportResult.coverage.status === 'complete' ? 'success' : 'warning'"
+        show-icon
+      >
+        <template #message>
+          <div class="flex flex-wrap items-center gap-2 text-[13px]">
+            <span>生成场景：{{ sceneLabel(reportResult.scene) }}</span>
+            <span>已覆盖 {{ reportResult.coverage.present }}/{{ reportResult.coverage.total }}</span>
+            <span v-if="reportResult.coverage.missing">缺失 {{ reportResult.coverage.missing }} 项</span>
+          </div>
+        </template>
+        <template #description>
+          <div class="text-[12px] leading-5">
+            {{
+              (reportResult.warnings || reportResult.coverage.warnings || [])
+                .slice(0, 3)
+                .join('；') || '字段覆盖报告已生成'
+            }}
+          </div>
+        </template>
+      </a-alert>
     </div>
   </div>
 </template>
@@ -143,6 +166,7 @@ defineProps<{
   frontpageSheetLoading: boolean
   frontpageSheetData: Record<string, any> | null
   canGenerateFrontpage: boolean
+  reportResult?: Record<string, any> | null
 }>()
 
 const emit = defineEmits<{
@@ -153,4 +177,11 @@ const emit = defineEmits<{
   'export-frontpage': [format: 'health' | 'insurance' | 'settlement']
   'save-frontpage': []
 }>()
+
+function sceneLabel(scene?: string) {
+  if (scene === 'nhc_frontpage') return '病案首页'
+  if (scene === 'insurance_settlement') return '医保结算清单'
+  if (scene === 'combined') return '联合草稿'
+  return scene || '未指定'
+}
 </script>

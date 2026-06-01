@@ -21,6 +21,11 @@ from ..services.frontpage_extraction_service import (
     FrontPageExtractionService,
     default_frontpage_service,
 )
+from ..services.frontpage_report_generation_service import (
+    FrontPageReportGenerationService,
+    FrontPageReportInputError,
+    default_frontpage_report_generation_service,
+)
 from ..services.medical_records.maintenance_service import save_ai_frontpage_draft
 from ..services.frontpage_settings import load_frontpage_settings, resolve_force_llm
 from ..services.workflow_queue_state_service import default_workflow_queue_state_service
@@ -175,6 +180,12 @@ class AutoGenerateFrontPageRequest(BaseModel):
     force_llm: bool = Field(
         default=False, description="强制使用 LLM 提取（即使 SQL 层已有数据）"
     )
+    scene: Optional[str] = Field(
+        default=None, description="兼容字段：统一报告生成场景，旧接口不使用"
+    )
+    report_scene: Optional[str] = Field(
+        default=None, description="兼容字段：统一报告生成场景，旧接口不使用"
+    )
 
     def ensure_valid(self) -> None:
         if not self.visit_id and not self.documents and not self.medical_text:
@@ -184,6 +195,82 @@ class AutoGenerateFrontPageRequest(BaseModel):
 def get_frontpage_service() -> FrontPageExtractionService:
     """依赖注入：获取首页抽取服务实例"""
     return default_frontpage_service
+
+
+def get_frontpage_report_service() -> FrontPageReportGenerationService:
+    """依赖注入：获取首页+结算清单统一生成服务实例"""
+    return default_frontpage_report_generation_service
+
+
+class GenerateFrontPageReportRequest(BaseModel):
+    """
+    病案首页/医保结算清单统一生成请求。
+
+    - scene: nhc_frontpage / insurance_settlement / combined
+    - 输入优先级：medical_text > documents > visit_id
+    """
+
+    visit_id: Optional[str] = Field(default=None, description="住院就诊 ID")
+    patient_id: Optional[str] = Field(default=None, description="患者 ID，用于结算清单 SQL 补充")
+    documents: Optional[List[FrontPageDocument]] = Field(default=None, description="直接传入文书列表")
+    medical_text: Optional[str] = Field(default=None, description="直接传入整份病历文本")
+    scene: str = Field(default="combined", description="生成场景")
+    report_scene: Optional[str] = Field(default=None, description="scene 的兼容别名")
+
+    def ensure_valid(self) -> None:
+        if not self.visit_id and not self.documents and not self.medical_text:
+            raise ValueError("visit_id、documents、medical_text 至少需要提供一个")
+
+
+@router.post("/generate-report-draft")
+async def generate_frontpage_report_draft(
+    request: Request,
+    payload: GenerateFrontPageReportRequest,
+    service: FrontPageReportGenerationService = Depends(get_frontpage_report_service),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
+):
+    """生成病案首页草稿、医保结算清单草稿和字段覆盖报告。"""
+    trace_id = get_trace_id(request)
+    try:
+        payload.ensure_valid()
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=400,
+            detail=error_response(
+                error=str(ve), code="BAD_REQUEST", trace_id=trace_id
+            )["error"],
+        )
+
+    try:
+        result = await service.generate(
+            scene=payload.report_scene or payload.scene,
+            medical_text=payload.medical_text,
+            documents=[doc.model_dump() for doc in payload.documents] if payload.documents else None,
+            visit_id=payload.visit_id,
+            patient_id=payload.patient_id,
+        )
+        return success_response(
+            data=result,
+            message="生成病案首页和医保结算清单草稿成功",
+            trace_id=trace_id,
+        )
+    except FrontPageReportInputError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=error_response(
+                error=str(exc), code="FRONTPAGE_REPORT_INPUT_ERROR", trace_id=trace_id
+            )["error"],
+        )
+    except Exception as exc:
+        logger.exception(
+            "生成病案首页和医保结算清单草稿失败 user=%s",
+            _current_user_id(current_user),
+        )
+        return error_response(
+            error=f"生成病案首页和医保结算清单草稿失败: {exc}",
+            code="FRONTPAGE_REPORT_GENERATE_ERROR",
+            trace_id=trace_id,
+        )
 
 
 @router.post("/auto-generate-draft")
@@ -527,7 +614,6 @@ async def get_export_formats(request: Request):
         message=f"支持 {len(formats)} 种导出格式",
         trace_id=get_trace_id(request),
     )
-
 
 
 

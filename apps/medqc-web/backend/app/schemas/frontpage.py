@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -100,6 +102,13 @@ class FrontPageDiagnoses(BaseModel):
     discharge_main_icd_suggestions: Optional[List[Dict[str, Any]]] = None
     discharge_other_icd_suggestions: Optional[List[Dict[str, Any]]] = None
 
+    # 招标场景结构化扩展：保留旧字段，同时提供逐条诊断承载编码、候选、入院病情与证据。
+    ed_diagnoses: List[FrontPageDiagnosisItem] = Field(default_factory=list)
+    discharge_main_diagnosis: Optional[FrontPageDiagnosisItem] = None
+    discharge_other_diagnoses: List[FrontPageDiagnosisItem] = Field(default_factory=list)
+    tcm_diagnoses: List[FrontPageDiagnosisItem] = Field(default_factory=list)
+    admission_condition_details: List[Dict[str, Any]] = Field(default_factory=list)
+
     admission_condition: Optional[str] = None
     discharge_main_outcome: Optional[str] = None
     discharge_other_outcomes: Optional[List[str]] = None
@@ -149,6 +158,8 @@ class FrontPageProcedures(BaseModel):
     other_procedures: Optional[List[Dict[str, str]]] = None
 
     main_procedure_code: Optional[str] = None
+    main_procedure: Optional[FrontPageProcedureItem] = None
+    other_procedures_structured: List[FrontPageProcedureItem] = Field(default_factory=list)
 
 
 class FrontPageOtherMedicalInfo(BaseModel):
@@ -176,6 +187,13 @@ class FrontPageOtherMedicalInfo(BaseModel):
     injury_poison_flag: Optional[str] = None
     injury_poison_cause_text: Optional[str] = None
     injury_poison_cause_icd: Optional[str] = None
+    injury_poison: Optional[FrontPageInjuryPoisonInfo] = None
+    pathology: Optional[FrontPagePathologyInfo] = None
+    allergy: Optional[Dict[str, Any]] = None
+    blood_type: Optional[Dict[str, Any]] = None
+    ventilation: Optional[Dict[str, Any]] = None
+    icu: Optional[Dict[str, Any]] = None
+    coma: Optional[Dict[str, Any]] = None
 
     brain_injury_coma_in: Optional[Dict[str, Any]] = None
     coma_before_admission: Optional[Dict[str, Any]] = None
@@ -242,6 +260,113 @@ class FrontPageCosts(BaseModel):
         return normalized
 
 
+class FrontPageFieldEvidence(BaseModel):
+    model_config = ConfigDict(coerce_numbers_to_str=True)
+
+    source_document: Optional[str] = None
+    source_text: Optional[str] = None
+    confidence: Optional[float] = None
+    reason: Optional[str] = None
+
+
+class FrontPageCodingCandidate(BaseModel):
+    model_config = ConfigDict(coerce_numbers_to_str=True)
+
+    code: Optional[str] = None
+    name: Optional[str] = None
+    score: Optional[float] = None
+    source: Optional[str] = None
+
+
+class FrontPageDiagnosisItem(BaseModel):
+    model_config = ConfigDict(coerce_numbers_to_str=True)
+
+    diagnosis_type: Optional[str] = None
+    name: Optional[str] = None
+    code: Optional[str] = None
+    candidates: List[FrontPageCodingCandidate] = Field(default_factory=list)
+    confidence: Optional[float] = None
+    admission_condition: Optional[str] = None
+    admission_condition_text: Optional[str] = None
+    admission_condition_reason: Optional[str] = None
+    outcome: Optional[str] = None
+    is_tcm: bool = False
+    evidence: List[FrontPageFieldEvidence] = Field(default_factory=list)
+
+    @field_validator("admission_condition", mode="before")
+    @classmethod
+    def coerce_admission_condition_to_str(cls, value: Any) -> Any:
+        if value is None:
+            return value
+        if isinstance(value, (int, float)):
+            return str(int(value))
+        return value
+
+
+class FrontPageProcedureItem(BaseModel):
+    model_config = ConfigDict(coerce_numbers_to_str=True)
+
+    procedure_type: Optional[str] = None
+    name: Optional[str] = None
+    code: Optional[str] = None
+    candidates: List[FrontPageCodingCandidate] = Field(default_factory=list)
+    confidence: Optional[float] = None
+    date: Optional[str] = None
+    level: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    surgeon_name: Optional[str] = None
+    surgeon_code: Optional[str] = None
+    assistant1_name: Optional[str] = None
+    assistant1_code: Optional[str] = None
+    assistant2_name: Optional[str] = None
+    assistant2_code: Optional[str] = None
+    incision_grade: Optional[str] = None
+    incision_healing_grade: Optional[str] = None
+    anesthesia_method: Optional[str] = None
+    anesthesia_grade: Optional[str] = None
+    anesthetist_name: Optional[str] = None
+    anesthetist_code: Optional[str] = None
+    evidence: List[FrontPageFieldEvidence] = Field(default_factory=list)
+
+
+class FrontPagePathologyInfo(BaseModel):
+    text: Optional[str] = None
+    code: Optional[str] = None
+    pathology_no: Optional[str] = None
+    candidates: List[FrontPageCodingCandidate] = Field(default_factory=list)
+    confidence: Optional[float] = None
+    evidence: List[FrontPageFieldEvidence] = Field(default_factory=list)
+
+
+class FrontPageInjuryPoisonInfo(BaseModel):
+    flag: Optional[str] = None
+    cause_text: Optional[str] = None
+    cause_code: Optional[str] = None
+    candidates: List[FrontPageCodingCandidate] = Field(default_factory=list)
+    confidence: Optional[float] = None
+    evidence: List[FrontPageFieldEvidence] = Field(default_factory=list)
+
+
+class FrontPageCoverageField(BaseModel):
+    group: str
+    field: str
+    path: str
+    status: str
+    message: Optional[str] = None
+
+
+class FrontPageCoverageReport(BaseModel):
+    scene: str
+    status: str
+    total: int
+    present: int
+    partial: int = 0
+    missing: int
+    fields: List[FrontPageCoverageField] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+
+
 class FrontPageDraft(BaseModel):
     basic_info: FrontPageBasicInfo
     hospitalization: FrontPageHospitalization
@@ -252,3 +377,11 @@ class FrontPageDraft(BaseModel):
     costs: FrontPageCosts
     evidence: Dict[str, Any] = Field(default_factory=dict)
     confidence: Dict[str, Any] = Field(default_factory=dict)
+
+
+class FrontPageReportDraft(BaseModel):
+    scene: str
+    frontpage: FrontPageDraft
+    settlement: Optional[Dict[str, Any]] = None
+    coverage: FrontPageCoverageReport
+    warnings: List[str] = Field(default_factory=list)

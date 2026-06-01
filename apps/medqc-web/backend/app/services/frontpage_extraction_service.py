@@ -3438,6 +3438,7 @@ class FrontPageExtractionService:
                 
                 # 可选：存储所有诊断的入院病情推理结果
                 diagnoses["_admission_condition_details"] = results_list
+                diagnoses["admission_condition_details"] = results_list
                 logger.info(f"入院病情推理完成，共处理 {len(results_list)} 个诊断")
             else:
                 logger.warning("入院病情推理结果解析失败")

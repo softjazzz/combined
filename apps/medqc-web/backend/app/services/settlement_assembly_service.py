@@ -71,10 +71,21 @@ FRONTPAGE_TO_SETTLEMENT = {
 
     # --- 其他医疗信息 ---
     "other_medical_info.ventilation_hours": "ventilator_usetime",
+    "other_medical_info.ventilation.hours": "ventilator_usetime",
     "other_medical_info.icu_type": "icu_type",
+    "other_medical_info.icu.type": "icu_type",
     "other_medical_info.icu_enter_time": "icu_enter_time",
+    "other_medical_info.icu.enter_time": "icu_enter_time",
     "other_medical_info.icu_leave_time": "icu_leave_time",
+    "other_medical_info.icu.leave_time": "icu_leave_time",
     "other_medical_info.abo_blood_type": "abo_blood_code",
+    "other_medical_info.blood_type.abo": "abo_blood_code",
+    "other_medical_info.rh_blood_type": "rh_blood_code",
+    "other_medical_info.blood_type.rh": "rh_blood_code",
+    "other_medical_info.pathology.text": "pathology_diagnosis_name",
+    "other_medical_info.pathology.code": "pathology_diagnosis_code",
+    "other_medical_info.injury_poison.cause_text": "injury_poisoning_external_cause",
+    "other_medical_info.injury_poison.cause_code": "injury_poisoning_external_cause_code",
 
     # --- 人员 ---
     "staff.attending_physician": "attending_physician",
@@ -150,6 +161,19 @@ class SettlementAssemblyService:
                 return None
         return val
 
+    def _text(self, value: Any) -> str:
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    def _code_from_candidates(self, item: dict) -> str:
+        candidates = item.get("candidates")
+        if isinstance(candidates, list):
+            for candidate in candidates:
+                if isinstance(candidate, dict) and self._text(candidate.get("code")):
+                    return self._text(candidate.get("code"))
+        return ""
+
     def _map_frontpage_fields(self, draft: dict) -> dict:
         """A 类映射：FrontPageDraft → settlement 扁平字典。"""
         result = {}
@@ -165,8 +189,14 @@ class SettlementAssemblyService:
         if not coma or not isinstance(coma, dict):
             # 尝试新结构
             result = {}
-            before = self._get_nested(draft, "other_medical_info.coma_before_admission")
-            after = self._get_nested(draft, "other_medical_info.coma_after_admission")
+            before = (
+                self._get_nested(draft, "other_medical_info.coma_before_admission")
+                or self._get_nested(draft, "other_medical_info.coma.before_admission")
+            )
+            after = (
+                self._get_nested(draft, "other_medical_info.coma_after_admission")
+                or self._get_nested(draft, "other_medical_info.coma.after_admission")
+            )
             if isinstance(before, dict):
                 result["coma_timebefadm_d"] = str(before.get("days", ""))
                 result["coma_timebefadm_h"] = str(before.get("hours", ""))
@@ -197,42 +227,82 @@ class SettlementAssemblyService:
         diagnoses_list = []
 
         # 门急诊诊断
-        ed_texts = diags.get("ed_diagnosis_texts") or []
-        ed_codes = diags.get("ed_diagnosis_codes") or []
-        for i, text in enumerate(ed_texts):
-            diagnoses_list.append({
-                "diagnosis_type": "门急诊诊断",
-                "diagnosis_name": text,
-                "diagnosis_code": ed_codes[i] if i < len(ed_codes) else "",
-                "admission_condition": "",
-            })
+        structured_ed = diags.get("ed_diagnoses") if isinstance(diags.get("ed_diagnoses"), list) else []
+        if structured_ed:
+            for item in structured_ed:
+                if not isinstance(item, dict) or not self._text(item.get("name")):
+                    continue
+                diagnoses_list.append({
+                    "diagnosis_type": item.get("diagnosis_type") or "门急诊诊断",
+                    "diagnosis_name": self._text(item.get("name")),
+                    "diagnosis_code": self._text(item.get("code")) or self._code_from_candidates(item),
+                    "admission_condition": self._text(item.get("admission_condition")),
+                    "discharge_condition": self._text(item.get("outcome")),
+                })
+        else:
+            ed_texts = diags.get("ed_diagnosis_texts") or []
+            ed_codes = diags.get("ed_diagnosis_codes") or []
+            for i, text in enumerate(ed_texts):
+                diagnoses_list.append({
+                    "diagnosis_type": "门急诊诊断",
+                    "diagnosis_name": text,
+                    "diagnosis_code": ed_codes[i] if i < len(ed_codes) else "",
+                    "admission_condition": "",
+                })
 
         # 出院主诊断
-        main_text = diags.get("discharge_main_diagnosis_text") or ""
-        main_code = diags.get("discharge_main_icd") or ""
-        main_outcome = diags.get("discharge_main_outcome") or ""
         admission_cond = diags.get("admission_condition") or ""
-        if main_text:
+        main_structured = diags.get("discharge_main_diagnosis")
+        if isinstance(main_structured, dict) and self._text(main_structured.get("name")):
             diagnoses_list.append({
-                "diagnosis_type": "出院主要诊断",
-                "diagnosis_name": main_text,
-                "diagnosis_code": main_code,
-                "admission_condition": admission_cond,
-                "discharge_condition": main_outcome,
+                "diagnosis_type": main_structured.get("diagnosis_type") or "出院主要诊断",
+                "diagnosis_name": self._text(main_structured.get("name")),
+                "diagnosis_code": self._text(main_structured.get("code")) or self._code_from_candidates(main_structured),
+                "admission_condition": self._text(main_structured.get("admission_condition")) or admission_cond,
+                "discharge_condition": self._text(main_structured.get("outcome")),
             })
+        else:
+            main_text = diags.get("discharge_main_diagnosis_text") or ""
+            main_code = diags.get("discharge_main_icd") or ""
+            main_outcome = diags.get("discharge_main_outcome") or ""
+            if main_text:
+                diagnoses_list.append({
+                    "diagnosis_type": "出院主要诊断",
+                    "diagnosis_name": main_text,
+                    "diagnosis_code": main_code,
+                    "admission_condition": admission_cond,
+                    "discharge_condition": main_outcome,
+                })
 
         # 出院其他诊断
-        other_texts = diags.get("discharge_other_diagnoses_texts") or []
-        other_codes = diags.get("discharge_other_icds") or []
-        other_outcomes = diags.get("discharge_other_outcomes") or []
-        for i, text in enumerate(other_texts):
-            diagnoses_list.append({
-                "diagnosis_type": "出院其他诊断",
-                "diagnosis_name": text,
-                "diagnosis_code": other_codes[i] if i < len(other_codes) else "",
-                "admission_condition": admission_cond,
-                "discharge_condition": other_outcomes[i] if i < len(other_outcomes) else "",
-            })
+        structured_others = (
+            diags.get("discharge_other_diagnoses")
+            if isinstance(diags.get("discharge_other_diagnoses"), list)
+            else []
+        )
+        if structured_others:
+            for item in structured_others:
+                if not isinstance(item, dict) or not self._text(item.get("name")):
+                    continue
+                diagnoses_list.append({
+                    "diagnosis_type": item.get("diagnosis_type") or "出院其他诊断",
+                    "diagnosis_name": self._text(item.get("name")),
+                    "diagnosis_code": self._text(item.get("code")) or self._code_from_candidates(item),
+                    "admission_condition": self._text(item.get("admission_condition")),
+                    "discharge_condition": self._text(item.get("outcome")),
+                })
+        else:
+            other_texts = diags.get("discharge_other_diagnoses_texts") or []
+            other_codes = diags.get("discharge_other_icds") or []
+            other_outcomes = diags.get("discharge_other_outcomes") or []
+            for i, text in enumerate(other_texts):
+                diagnoses_list.append({
+                    "diagnosis_type": "出院其他诊断",
+                    "diagnosis_name": text,
+                    "diagnosis_code": other_codes[i] if i < len(other_codes) else "",
+                    "admission_condition": admission_cond,
+                    "discharge_condition": other_outcomes[i] if i < len(other_outcomes) else "",
+                })
 
         return {
             "diagnoses": diagnoses_list,
@@ -244,33 +314,67 @@ class SettlementAssemblyService:
         procs = self._get_nested(draft, "procedures") or {}
         surgeries_list = []
 
-        main_text = procs.get("main_procedure_text") or ""
-        if main_text:
+        main_structured = procs.get("main_procedure")
+        if isinstance(main_structured, dict) and self._text(main_structured.get("name")):
             surgeries_list.append({
-                "surgery_name": main_text,
-                "surgery_code": procs.get("main_procedure_code") or "",
-                "surgery_date": procs.get("main_procedure_date") or "",
-                "surgery_level": procs.get("main_procedure_level") or "",
-                "surgeon": procs.get("surgeon_name") or "",
-                "first_assistant": procs.get("assistant1_name") or "",
-                "second_assistant": procs.get("assistant2_name") or "",
-                "anesthesia_method": procs.get("anesthesia_method") or "",
-                "anesthesiologist": procs.get("anesthetist_name") or "",
-                "incision_grade": procs.get("incision_grade") or "",
-                "incision_healing": procs.get("incision_healing_grade") or "",
+                "surgery_name": self._text(main_structured.get("name")),
+                "surgery_code": self._text(main_structured.get("code")) or self._code_from_candidates(main_structured),
+                "surgery_date": self._text(main_structured.get("date")),
+                "surgery_level": self._text(main_structured.get("level")),
+                "surgeon": self._text(main_structured.get("surgeon_name")),
+                "surgeon_code": self._text(main_structured.get("surgeon_code")),
+                "first_assistant": self._text(main_structured.get("assistant1_name")),
+                "first_assistant_code": self._text(main_structured.get("assistant1_code")),
+                "second_assistant": self._text(main_structured.get("assistant2_name")),
+                "second_assistant_code": self._text(main_structured.get("assistant2_code")),
+                "anesthesia_method": self._text(main_structured.get("anesthesia_method")),
+                "anesthesiologist": self._text(main_structured.get("anesthetist_name")),
+                "anesthesiologist_code": self._text(main_structured.get("anesthetist_code")),
+                "incision_grade": self._text(main_structured.get("incision_grade")),
+                "incision_healing": self._text(main_structured.get("incision_healing_grade")),
                 "main_surgery_sign": "1",
             })
+        else:
+            main_text = procs.get("main_procedure_text") or ""
+            if main_text:
+                surgeries_list.append({
+                    "surgery_name": main_text,
+                    "surgery_code": procs.get("main_procedure_code") or "",
+                    "surgery_date": procs.get("main_procedure_date") or "",
+                    "surgery_level": procs.get("main_procedure_level") or "",
+                    "surgeon": procs.get("surgeon_name") or "",
+                    "surgeon_code": procs.get("surgeon_code") or "",
+                    "first_assistant": procs.get("assistant1_name") or "",
+                    "first_assistant_code": procs.get("assistant1_code") or "",
+                    "second_assistant": procs.get("assistant2_name") or "",
+                    "second_assistant_code": procs.get("assistant2_code") or "",
+                    "anesthesia_method": procs.get("anesthesia_method") or "",
+                    "anesthesiologist": procs.get("anesthetist_name") or "",
+                    "anesthesiologist_code": procs.get("anesthetist_code") or "",
+                    "incision_grade": procs.get("incision_grade") or "",
+                    "incision_healing": procs.get("incision_healing_grade") or "",
+                    "main_surgery_sign": "1",
+                })
 
-        other = procs.get("other_procedures") or []
+        other = procs.get("other_procedures_structured") or procs.get("other_procedures") or []
         for op in other:
             if isinstance(op, dict):
                 surgeries_list.append({
                     "surgery_name": op.get("text") or op.get("name") or "",
-                    "surgery_code": op.get("code") or "",
+                    "surgery_code": op.get("code") or self._code_from_candidates(op),
                     "surgery_date": op.get("date") or "",
                     "surgery_level": op.get("level") or "",
-                    "surgeon": op.get("surgeon") or "",
+                    "surgeon": op.get("surgeon_name") or op.get("surgeon") or "",
+                    "surgeon_code": op.get("surgeon_code") or "",
+                    "first_assistant": op.get("assistant1_name") or "",
+                    "first_assistant_code": op.get("assistant1_code") or "",
+                    "second_assistant": op.get("assistant2_name") or "",
+                    "second_assistant_code": op.get("assistant2_code") or "",
                     "anesthesia_method": op.get("anesthesia_method") or "",
+                    "anesthesiologist": op.get("anesthetist_name") or "",
+                    "anesthesiologist_code": op.get("anesthetist_code") or "",
+                    "incision_grade": op.get("incision_grade") or "",
+                    "incision_healing": op.get("incision_healing_grade") or "",
                     "main_surgery_sign": "0",
                 })
 

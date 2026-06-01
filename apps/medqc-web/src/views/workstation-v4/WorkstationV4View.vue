@@ -102,6 +102,7 @@
               :frontpage-sheet-loading="frontpageSheetLoading"
               :frontpage-sheet-data="frontpageSheetData"
               :can-generate-frontpage="canGenerateFrontpage"
+              :report-result="frontpageReportResult"
               @generate-frontpage="handleGenerateFrontpage"
               @paste-frontpage="openPasteFrontpageModal"
               @reload-frontpage-sheet="
@@ -237,6 +238,11 @@
       @cancel="handlePasteFrontpageCancel"
     >
       <div class="space-y-3">
+        <a-segmented
+          v-model:value="pasteFrontpageScene"
+          :options="pasteFrontpageSceneOptions"
+          :disabled="frontpageGenerating"
+        />
         <a-textarea
           v-model:value="pastedMedicalText"
           placeholder="粘贴完整病历原文..."
@@ -352,6 +358,7 @@ import type {
 import type { PriorityCard, PriorityGroup } from './components/workbench/PriorityLane.vue'
 import type { WorkbenchRow } from './components/workbench/BatchTablePanel.vue'
 import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
+import type { FrontpageReportScene } from '@/api/frontpage'
 
 const {
   viewMode,
@@ -1055,6 +1062,12 @@ const frontpageSheetData = ref<any>(null)
 const frontpageSheetLoading = ref(false)
 const pasteFrontpageModalVisible = ref(false)
 const pastedMedicalText = ref('')
+const pasteFrontpageScene = ref<FrontpageReportScene>('combined')
+const pasteFrontpageSceneOptions = [
+  { label: '联合草稿', value: 'combined' },
+  { label: '病案首页', value: 'nhc_frontpage' },
+  { label: '医保清单', value: 'insurance_settlement' },
+]
 
 async function loadFrontpageSheet(patientId: string, visitId: string) {
   frontpageSheetLoading.value = true
@@ -1123,7 +1136,10 @@ async function handleGenerateFrontpageFromText() {
   }
 
   detailMainTab.value = 'frontpage'
-  const generated = await generateFrontpageFromText(pastedMedicalText.value)
+  const generated = await generateFrontpageFromText(
+    pastedMedicalText.value,
+    pasteFrontpageScene.value,
+  )
   if (!generated) return
 
   frontpageTab.value = defaultPreviewTab.value
@@ -1557,6 +1573,7 @@ const {
   frontpageGenerating,
   frontpagePostProcessing,
   frontpageDraft,
+  frontpageReportResult,
   frontpageModule,
   frontpageFocusTarget,
   frontpageFields,
