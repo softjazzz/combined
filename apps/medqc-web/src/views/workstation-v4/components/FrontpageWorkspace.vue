@@ -5,6 +5,43 @@
     >
       <div
         v-if="
+          frontpageGenerating ||
+            frontpagePostProcessing ||
+            draft ||
+            frontpageSheetLoading ||
+            frontpageSheetData
+        "
+        class="mb-2 flex flex-wrap items-center justify-end gap-2 px-1"
+      >
+        <a-tooltip title="基于当前已选病历/同步文书">
+          <a-button
+            type="primary"
+            class="!h-9 !rounded-full !border-0 !px-4 !text-sm !font-bold !shadow-[0_8px_18px_rgba(37,99,235,0.16)]"
+            :loading="frontpageGenerating"
+            :disabled="!canGenerateFrontpage"
+            @click="emit('generate-frontpage')"
+          >
+            <template #icon>
+              <ThunderboltOutlined />
+            </template>
+            AI 生成首页
+          </a-button>
+        </a-tooltip>
+        <a-tooltip title="直接粘贴完整病历原文抽取">
+          <a-button
+            class="!h-9 !rounded-full !border-blue-100 !bg-blue-50/70 !px-4 !text-sm !font-semibold !text-blue-700 hover:!border-blue-200 hover:!bg-blue-50"
+            :disabled="frontpageGenerating || frontpagePostProcessing"
+            @click="emit('paste-frontpage')"
+          >
+            <template #icon>
+              <FileTextOutlined />
+            </template>
+            粘贴病历生成首页
+          </a-button>
+        </a-tooltip>
+      </div>
+      <div
+        v-if="
           !frontpageGenerating &&
             !frontpagePostProcessing &&
             !draft &&
@@ -34,7 +71,16 @@
             <template #icon>
               <ThunderboltOutlined />
             </template>
-            生成首页草稿
+            AI 生成首页
+          </a-button>
+          <a-button
+            class="!h-10 !rounded-full !border-blue-100 !bg-blue-50/70 !px-5 !text-sm !font-semibold !text-blue-700"
+            @click="emit('paste-frontpage')"
+          >
+            <template #icon>
+              <FileTextOutlined />
+            </template>
+            粘贴病历生成首页
           </a-button>
           <a-button
             class="!h-10 !rounded-full !border-slate-200/90 !bg-white/85 !px-5 !text-sm !font-semibold !text-slate-600"
@@ -67,7 +113,12 @@
 </template>
 
 <script setup lang="ts">
-import { FileSearchOutlined, SyncOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
+import {
+  FileSearchOutlined,
+  FileTextOutlined,
+  SyncOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons-vue'
 import FrontpageWorkspacePanel from './FrontpageWorkspacePanel.vue'
 
 type FrontpageTabKey = 'fields' | 'preview' | 'official'
@@ -96,6 +147,7 @@ defineProps<{
 
 const emit = defineEmits<{
   'generate-frontpage': []
+  'paste-frontpage': []
   'reload-frontpage-sheet': []
   'update:frontpage-tab': [tab: FrontpageTabKey]
   'export-frontpage': [format: 'health' | 'insurance' | 'settlement']

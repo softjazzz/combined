@@ -103,6 +103,7 @@
               :frontpage-sheet-data="frontpageSheetData"
               :can-generate-frontpage="canGenerateFrontpage"
               @generate-frontpage="handleGenerateFrontpage"
+              @paste-frontpage="openPasteFrontpageModal"
               @reload-frontpage-sheet="
                 selectedRecord?.patientId && selectedRecord?.visitId
                   ? loadFrontpageSheet(selectedRecord.patientId, selectedRecord.visitId)
@@ -226,6 +227,47 @@
         @back="viewMode = 'list'"
       />
     </template>
+
+    <a-modal
+      v-model:open="pasteFrontpageModalVisible"
+      title="粘贴病历生成首页"
+      width="760px"
+      :confirm-loading="frontpageGenerating"
+      :mask-closable="!frontpageGenerating"
+      @cancel="handlePasteFrontpageCancel"
+    >
+      <div class="space-y-3">
+        <a-textarea
+          v-model:value="pastedMedicalText"
+          placeholder="粘贴完整病历原文..."
+          :auto-size="{ minRows: 12, maxRows: 18 }"
+          :maxlength="50000"
+          show-count
+          :disabled="frontpageGenerating"
+        />
+      </div>
+
+      <template #footer>
+        <div class="flex items-center justify-end gap-2">
+          <a-button
+            :disabled="frontpageGenerating || !pastedMedicalText"
+            @click="pastedMedicalText = ''"
+          >
+            清空
+          </a-button>
+          <a-button @click="handlePasteFrontpageCancel">
+            取消
+          </a-button>
+          <a-button
+            type="primary"
+            :loading="frontpageGenerating"
+            @click="handleGenerateFrontpageFromText"
+          >
+            生成首页草稿
+          </a-button>
+        </div>
+      </template>
+    </a-modal>
   </div>
 </template>
 
@@ -1011,6 +1053,8 @@ const settlementQcLoading = ref(false)
 // ========== 鐥呮棣栭〉瀹樻柟鏍煎紡鏁版嵁 ==========
 const frontpageSheetData = ref<any>(null)
 const frontpageSheetLoading = ref(false)
+const pasteFrontpageModalVisible = ref(false)
+const pastedMedicalText = ref('')
 
 async function loadFrontpageSheet(patientId: string, visitId: string) {
   frontpageSheetLoading.value = true
@@ -1060,6 +1104,31 @@ function handleGenerateFrontpage() {
     detailMainTab.value = 'frontpage'
     generateFrontpage()
   }
+}
+
+function openPasteFrontpageModal() {
+  detailMainTab.value = 'frontpage'
+  pasteFrontpageModalVisible.value = true
+}
+
+function handlePasteFrontpageCancel() {
+  if (frontpageGenerating.value) return
+  pasteFrontpageModalVisible.value = false
+}
+
+async function handleGenerateFrontpageFromText() {
+  if (!pastedMedicalText.value.trim()) {
+    message.warning('请先粘贴病历原文')
+    return
+  }
+
+  detailMainTab.value = 'frontpage'
+  const generated = await generateFrontpageFromText(pastedMedicalText.value)
+  if (!generated) return
+
+  frontpageTab.value = defaultPreviewTab.value
+  pasteFrontpageModalVisible.value = false
+  pastedMedicalText.value = ''
 }
 // 缁撶畻娓呭崟鐢熸垚锛氫粎瀵瑰凡鍑洪櫌涓旀棤缁撶畻鏁版嵁鐨勭梾鍘嗗彲鐢?
 const hasExistingSettlement = computed(
@@ -1496,6 +1565,7 @@ const {
   setDraftEmpty,
   ensureExtractionSettingsLoaded,
   generateFrontpage,
+  generateFrontpageFromText,
   handleExportFrontpage,
   handleSaveFrontpage,
   focusFrontpageSection,

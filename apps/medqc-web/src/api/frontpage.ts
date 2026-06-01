@@ -124,6 +124,8 @@ export interface ProfileAnalyzeResponse {
 
 export interface AutoGenerateRequest {
   visit_id?: string
+  medical_text?: string
+  force_llm?: boolean
   documents?: Array<{
     type: string
     content: string
