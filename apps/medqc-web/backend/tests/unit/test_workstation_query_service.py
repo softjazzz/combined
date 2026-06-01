@@ -57,6 +57,28 @@ def workstation_session_factory(monkeypatch):
     return factory
 
 
+@pytest.fixture()
+def workstation_session_factory_without_discharge_record(monkeypatch):
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            MedicalRecordFrontpage.__table__,
+            AdmissionRecord.__table__,
+            QCResult.__table__,
+        ],
+    )
+    monkeypatch.setattr(
+        "app.services.medical_records.query_service.default_workflow_queue_state_service",
+        DummyWorkflowQueueStateService(),
+    )
+
+    def factory():
+        return Session(engine)
+
+    return factory
+
+
 def _insert_workstation_records(session_factory, *records: MedicalRecordFrontpage) -> None:
     with session_factory() as session:
         session.add_all(records)
@@ -188,6 +210,83 @@ def test_get_workstation_data_date_field_filters_admission_discharge_and_visit(
     assert [record["id"] for record in discharge_result["records"]] == ["V2"]
     assert {record["id"] for record in visit_result["records"]} == {"V1", "V2"}
     assert [record["id"] for record in updated_result["records"]] == ["V3"]
+
+
+def test_get_workstation_data_visit_field_accepts_text_discharge_time(
+    workstation_session_factory,
+):
+    _insert_workstation_records(
+        workstation_session_factory,
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P1",
+            visit_id="V1",
+            name="字符串出院时间",
+            admission_dept_name="内科",
+            admission_datetime=datetime(2026, 4, 1, 8, 0),
+            discharge_datetime=None,
+            update_time=datetime(2026, 4, 2, 8, 0),
+        ),
+    )
+    _insert_discharge_records(
+        workstation_session_factory,
+        {
+            "institute_id": "I",
+            "patient_id": "P1",
+            "visit_id": "V1",
+            "document_id": "DR1",
+            "dept_name": "中医科",
+            "discharge_time": "2026-04-05 10:00:00",
+            "update_time": datetime(2026, 4, 5, 11, 0),
+        },
+    )
+
+    result = get_workstation_data(
+        start_date=datetime(2026, 4, 1).date(),
+        end_date=datetime(2026, 4, 5).date(),
+        date_field="visit",
+        session_factory=workstation_session_factory,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert result["total"] == 1
+    assert result["records"][0]["id"] == "V1"
+    assert result["records"][0]["department"] == "中医科"
+    assert result["records"][0]["dischargeDate"] == "2026-04-05"
+
+
+def test_get_workstation_data_falls_back_when_discharge_summary_unavailable(
+    workstation_session_factory_without_discharge_record,
+):
+    _insert_workstation_records(
+        workstation_session_factory_without_discharge_record,
+        MedicalRecordFrontpage(
+            institute_id="I",
+            patient_id="P1",
+            visit_id="V1",
+            name="无出院记录表",
+            admission_dept_name="外一科",
+            discharge_dept_name=None,
+            admission_datetime=datetime(2026, 4, 1, 8, 0),
+            discharge_datetime=datetime(2026, 4, 8, 9, 0),
+        ),
+    )
+
+    result = get_workstation_data(
+        dept="外一科",
+        start_date=datetime(2026, 4, 1).date(),
+        end_date=datetime(2026, 4, 10).date(),
+        date_field="discharge",
+        session_factory=workstation_session_factory_without_discharge_record,
+        settings_loader=_workstation_settings_loader,
+        demo_policy=_no_demo_policy,
+    )
+
+    assert result["total"] == 1
+    assert result["records"][0]["id"] == "V1"
+    assert result["records"][0]["department"] == "外一科"
+    assert result["records"][0]["dischargeDate"] == "2026-04-08"
 
 
 def test_get_workstation_data_discharge_field_uses_discharge_record_time_and_dept(

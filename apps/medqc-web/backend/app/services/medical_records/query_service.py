@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Callable, Optional
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import DateTime, String, and_, case, cast, func, inspect as sa_inspect, or_, text
 from sqlalchemy.orm import Session
 
 from ...database.connection import engine
@@ -71,7 +71,7 @@ def _serialize_real_workstation_record(
     key = (record.patient_id, record.visit_id)
     discharge_summary = discharge_summary_map.get(key) or {}
     resolved_discharge_datetime = (
-        discharge_summary.get("discharge_time")
+        _parse_datetime_value(discharge_summary.get("discharge_time"))
         or record.discharge_datetime
     )
     resolved_dept_name = (
@@ -162,13 +162,92 @@ def _apply_frontpage_generate_state(
     return next_record
 
 
+def _parse_datetime_value(value: Any) -> datetime | None:
+    if value is None or isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M",
+        ):
+            try:
+                return datetime.strptime(normalized[:len(fmt)], fmt)
+            except ValueError:
+                continue
+    return None
+
+
+def _workstation_discharge_record_columns(session) -> dict[str, dict[str, Any]] | None:
+    bind = session.get_bind()
+    table_name = DischargeRecord.__table__.name
+    required_columns = {
+        "institute_id",
+        "patient_id",
+        "visit_id",
+        "document_id",
+        "dept_name",
+        "discharge_time",
+        "update_time",
+    }
+
+    if bind.dialect.name == "postgresql":
+        rows = session.execute(
+            text("""
+                SELECT table_schema, column_name, data_type, udt_name
+                FROM information_schema.columns
+                WHERE table_name = :table_name
+                  AND table_schema = ANY (current_schemas(false))
+                ORDER BY array_position(current_schemas(false), table_schema)
+            """),
+            {"table_name": table_name},
+        ).mappings().all()
+        columns = {row["column_name"]: dict(row) for row in rows}
+        return columns if required_columns.issubset(columns) else None
+
+    inspector = sa_inspect(bind)
+    if not inspector.has_table(table_name):
+        return None
+    columns = {column["name"]: column for column in inspector.get_columns(table_name)}
+    return columns if required_columns.issubset(columns) else None
+
+
+def _workstation_discharge_time_expr(columns: dict[str, dict[str, Any]]):
+    if columns.get("discharge_time", {}).get("data_type") in {
+        "text",
+        "character varying",
+        "character",
+    } or columns.get("discharge_time", {}).get("udt_name") in {"text", "varchar", "bpchar"}:
+        normalized_text = func.nullif(func.btrim(cast(DischargeRecord.discharge_time, String)), "")
+        return case(
+            (
+                normalized_text.op("~")(r"^\d{4}-\d{2}-\d{2}"),
+                cast(normalized_text, DateTime),
+            ),
+            else_=None,
+        )
+    return DischargeRecord.discharge_time
+
+
 def _workstation_discharge_summary_subquery(session):
+    columns = _workstation_discharge_record_columns(session)
+    if columns is None:
+        return None
+
+    discharge_time_expr = _workstation_discharge_time_expr(columns)
     ranked_discharge_records = (
         session.query(
             DischargeRecord.institute_id.label("institute_id"),
             DischargeRecord.patient_id.label("patient_id"),
             DischargeRecord.visit_id.label("visit_id"),
-            DischargeRecord.discharge_time.label("discharge_time"),
+            discharge_time_expr.label("discharge_time"),
             DischargeRecord.dept_name.label("dept_name"),
             func.row_number().over(
                 partition_by=(
@@ -177,7 +256,7 @@ def _workstation_discharge_summary_subquery(session):
                     DischargeRecord.visit_id,
                 ),
                 order_by=(
-                    DischargeRecord.discharge_time.desc(),
+                    discharge_time_expr.desc(),
                     DischargeRecord.update_time.desc(),
                     DischargeRecord.document_id.desc(),
                 ),
@@ -343,11 +422,14 @@ def get_workstation_data(
         visible_demos = demo_filtered if include_demo and not (start_date or end_date) else []
         discharge_summary = _workstation_discharge_summary_subquery(session)
 
-        q = _apply_workstation_filters(
-            session.query(MedicalRecordFrontpage).outerjoin(
+        base_query = session.query(MedicalRecordFrontpage)
+        if discharge_summary is not None:
+            base_query = base_query.outerjoin(
                 discharge_summary,
                 _workstation_discharge_join_condition(discharge_summary),
-            ),
+            )
+        q = _apply_workstation_filters(
+            base_query,
             dept=dept,
             keyword=keyword,
             start_date=start_date,
@@ -383,7 +465,7 @@ def get_workstation_data(
             )
 
         discharge_summary_map: dict[tuple[str, str], dict[str, Any]] = {}
-        if records:
+        if records and discharge_summary is not None:
             discharge_rows = session.query(
                 discharge_summary.c.patient_id,
                 discharge_summary.c.visit_id,
@@ -394,7 +476,7 @@ def get_workstation_data(
             ).all()
             for row in discharge_rows:
                 discharge_summary_map[(row.patient_id, row.visit_id)] = {
-                    "discharge_time": row.discharge_time,
+                    "discharge_time": _parse_datetime_value(row.discharge_time),
                     "dept_name": row.dept_name,
                 }
 
@@ -411,14 +493,17 @@ def get_workstation_data(
                 bed_map[(b.patient_id, b.visit_id)] = b.bed_no
 
         dept_expr = _workstation_department_expr(discharge_summary).label("dept_name")
-        dept_stats_query = _apply_workstation_filters(
-            session.query(
-                dept_expr,
-                func.count().label("total"),
-            ).select_from(MedicalRecordFrontpage).outerjoin(
+        dept_stats_base_query = session.query(
+            dept_expr,
+            func.count().label("total"),
+        ).select_from(MedicalRecordFrontpage)
+        if discharge_summary is not None:
+            dept_stats_base_query = dept_stats_base_query.outerjoin(
                 discharge_summary,
                 _workstation_discharge_join_condition(discharge_summary),
-            ),
+            )
+        dept_stats_query = _apply_workstation_filters(
+            dept_stats_base_query,
             dept=None,
             keyword=keyword,
             start_date=start_date,
@@ -429,10 +514,12 @@ def get_workstation_data(
         )
         dept_stats = dept_stats_query.group_by(dept_expr).all()
 
-        dept_total_count = session.query(func.count()).select_from(MedicalRecordFrontpage).outerjoin(
-            discharge_summary,
-            _workstation_discharge_join_condition(discharge_summary),
-        )
+        dept_total_count = session.query(func.count()).select_from(MedicalRecordFrontpage)
+        if discharge_summary is not None:
+            dept_total_count = dept_total_count.outerjoin(
+                discharge_summary,
+                _workstation_discharge_join_condition(discharge_summary),
+            )
         dept_total_count = _apply_workstation_filters(
             dept_total_count,
             dept=None,
