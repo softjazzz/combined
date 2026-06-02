@@ -313,6 +313,43 @@ class TestFrontPageExtractionService:
         assert isinstance(other_icds, list)
         assert len(other_icds) == len(others)
 
+    def test_extract_discharge_diagnoses_prefers_last_inline_section(self):
+        """出院记录内句中出院诊断应优先于入院记录引用的外院诊断。"""
+        service = FrontPageExtractionService()
+        medical_text = """
+【入院记录】
+患者外院治疗后转入，外院出院诊断：1、外院肺炎 2、便秘。
+
+【出院记录】
+患者目前症状好转，予以带药出院。出院诊断：1、化脓性脑炎（金黄色葡萄球菌感染）2、药物性肝损害 3、化脓性脊柱炎合并周围软组织广泛感染新建S章节:出院医嘱：低盐低脂饮食。
+"""
+
+        diagnoses = service._extract_discharge_diagnoses_from_text(medical_text)
+
+        assert diagnoses[0] == "化脓性脑炎（金黄色葡萄球菌感染）"
+        assert "药物性肝损害" in diagnoses
+        assert "化脓性脊柱炎合并周围软组织广泛感染" in diagnoses
+        assert "外院肺炎" not in diagnoses
+        assert all("出院医嘱" not in item for item in diagnoses)
+
+    def test_build_diag_proc_context_keeps_late_discharge_diagnosis(self):
+        """诊断精选上下文超长时，应保留后段最终出院诊断。"""
+        service = FrontPageExtractionService()
+        head = "【入院记录】\n外院出院诊断：1、外院肺炎 2、便秘。\n" + "病程记录。" * 900
+        tail = (
+            "【出院记录】\n"
+            "患者目前症状好转，予以带药出院。"
+            "出院诊断：1、化脓性脑炎（金黄色葡萄球菌感染）"
+            "2、药物性肝损害 3、化脓性脊柱炎合并周围软组织广泛感染"
+            "新建S章节:出院医嘱：低盐低脂饮食。"
+        )
+
+        compact = service._build_diag_proc_context_text(f"{head}\n{tail}", max_chars=4200)
+
+        assert "药物性肝损害" in compact
+        assert "化脓性脊柱炎合并周围软组织广泛感染" in compact
+        assert compact.find("出院诊断") >= 0
+
     def test_build_diagnosis_evidence_marks_system_recommendation_when_differs(self):
         """医生主诊断与系统推荐不一致时，应输出差异标注与推荐理由。"""
         service = FrontPageExtractionService()

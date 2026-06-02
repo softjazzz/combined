@@ -2042,7 +2042,22 @@ class FrontPageExtractionService:
         if len(compact) < 240:
             compact = text[:max_chars]
         elif len(compact) > max_chars:
-            compact = compact[:max_chars]
+            priority_pos = max(
+                text.rfind("出院诊断"),
+                text.rfind("出院记录"),
+                text.rfind("出院小结"),
+            )
+            if priority_pos >= 0:
+                priority = text[
+                    max(0, priority_pos - 240) : min(len(text), priority_pos + 1800)
+                ].strip()
+                if len(priority) >= max_chars:
+                    compact = priority[:max_chars]
+                else:
+                    rest_budget = max_chars - len(priority) - 2
+                    compact = f"{priority}\n\n{compact[:rest_budget]}".strip()
+            else:
+                compact = compact[:max_chars]
 
         logger.info(
             "diag_proc context trimmed: raw=%d trimmed=%d segments=%d",
@@ -2506,6 +2521,7 @@ class FrontPageExtractionService:
         if not text:
             return ""
         key = text.lower()
+        key = key.replace("冠状动脉", "冠脉")
         key = re.sub(r"[（(].*$", "", key)
         key = re.sub(r"[\s\-\u2022•·,，;；:：()（）\[\]【】]+", "", key)
         return key
@@ -2535,6 +2551,26 @@ class FrontPageExtractionService:
         if not cleaned:
             return []
 
+        numbered_matches = list(re.finditer(r"(?<!\d)\d{1,2}[\.、\)]\s*", cleaned))
+        if numbered_matches:
+            parts = []
+            if numbered_matches[0].start() > 0:
+                prefix = cleaned[: numbered_matches[0].start()].strip()
+                if prefix:
+                    parts.append(prefix)
+            for index, match in enumerate(numbered_matches):
+                start = match.end()
+                end = (
+                    numbered_matches[index + 1].start()
+                    if index + 1 < len(numbered_matches)
+                    else len(cleaned)
+                )
+                item = cleaned[start:end].strip()
+                if item:
+                    parts.append(item)
+            if parts:
+                return self._unique_texts(parts)
+
         # Strong delimiters first.
         parts = [p.strip() for p in re.split(r"[；;、，,]+", cleaned) if p and p.strip()]
 
@@ -2557,31 +2593,49 @@ class FrontPageExtractionService:
 
         text = medical_text.replace("\r\n", "\n").replace("\r", "\n")
         lines = text.split("\n")
+        stop_header = re.compile(
+            r"^(入院诊断|诊疗经过|出院情况|出院医嘱|医师签名|记录时间|主诉|现病史|既往史|体格检查|辅助检查)\s*[：:]?"
+        )
+        inline_stop_header = re.compile(
+            r"(新建\S*章节\s*[：:]?\s*)?"
+            r"(入院诊断|诊疗经过|出院情况|出院医嘱|医师签名|记录时间|主诉|现病史|既往史|体格检查|辅助检查)\s*[：:]?"
+        )
+
+        def trim_inline_stop(value: str) -> Tuple[str, bool]:
+            match = inline_stop_header.search(value)
+            if not match:
+                return value, False
+            return value[: match.start()], True
 
         start_idx = -1
         inline_text = ""
-        for i, raw_line in enumerate(lines):
-            line = raw_line.strip()
-            m = re.match(r"^出院诊断\s*[：:]\s*(.*)$", line)
-            if m:
-                start_idx = i
-                inline_text = m.group(1).strip()
-                break
-            if re.match(r"^出院诊断\s*$", line):
-                start_idx = i
-                break
+        colon_matches = list(re.finditer(r"出院诊断\s*[：:]\s*", text))
+        if colon_matches:
+            # Prefer the last occurrence. Admission notes often quote outside-hospital
+            # discharge diagnoses before the real discharge record.
+            start_pos = colon_matches[-1].end()
+            start_idx = text[:start_pos].count("\n")
+            inline_text = text[start_pos:].split("\n", 1)[0].strip()
+        else:
+            for i, raw_line in enumerate(lines):
+                line = raw_line.strip()
+                if re.match(r"^出院诊断\s*$", line):
+                    start_idx = i
+                    break
 
         if start_idx < 0:
             return []
 
         section_lines: List[str] = []
         if inline_text:
-            section_lines.append(inline_text)
+            trimmed_inline, inline_stopped = trim_inline_stop(inline_text)
+            if trimmed_inline.strip():
+                section_lines.append(trimmed_inline)
+            lines_after_start = [] if inline_stopped else lines[start_idx + 1 :]
+        else:
+            lines_after_start = lines[start_idx + 1 :]
 
-        stop_header = re.compile(
-            r"^(入院诊断|诊疗经过|出院情况|出院医嘱|医师签名|记录时间|主诉|现病史|既往史|体格检查|辅助检查)\s*[：:]?"
-        )
-        for raw_line in lines[start_idx + 1 :]:
+        for raw_line in lines_after_start:
             stripped = raw_line.strip()
             if not stripped:
                 continue
@@ -2589,7 +2643,11 @@ class FrontPageExtractionService:
                 break
             if stop_header.match(stripped):
                 break
-            section_lines.append(raw_line)
+            trimmed_line, stopped = trim_inline_stop(raw_line)
+            if trimmed_line.strip():
+                section_lines.append(trimmed_line)
+            if stopped:
+                break
 
         if not section_lines:
             return []
@@ -2673,7 +2731,7 @@ class FrontPageExtractionService:
             split_main_others = llm_main_parts[1:] if len(llm_main_parts) > 1 else []
             llm_others = self._unique_texts([*split_main_others, *llm_others])
         if llm_others:
-            other_candidates = llm_others
+            other_candidates = self._unique_texts([*llm_others, *parsed_from_text])
         else:
             if llm_main:
                 other_candidates = parsed_from_text
