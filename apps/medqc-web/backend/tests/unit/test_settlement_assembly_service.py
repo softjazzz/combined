@@ -229,3 +229,78 @@ class TestSettlementPeriodFallback:
         out = svc._assemble_from_sources(sample_draft, {})
         assert out["start_date"] == "2026-01-05 10:30:00"
         assert out["end_date"] == "2026-01-12 09:00:00"
+
+
+class TestDemoSettlementCompleteness:
+    """演示清单关键字段补齐。"""
+
+    def test_costs_derive_fund_and_personal_payment(self, svc, sample_draft):
+        sample_draft["costs"] = {
+            "total_cost": "10000.00",
+            "self_paid": "1200.50",
+            "categories": {
+                "western_medicine": "1200",
+                "surgery_treatment": "3000",
+                "other": "300",
+            },
+        }
+
+        out = svc._assemble_from_sources(sample_draft, {})
+
+        assert out["total_cost"] == "10000.00"
+        assert out["self_pay"] == "1200.50"
+        assert out["insurance_fund_pay"] == "8799.50"
+        assert out["out_of_pocket_advance"] == "1200.50"
+        assert out["out_of_pocket_amount"] == "1200.50"
+        assert out["cash_payment_amount"] == "1200.50"
+        assert out["western_medicine_fee"] == "1200"
+        assert out["surgery_treatment_fee"] == "3000"
+        assert out["other_fee"] == "300"
+
+    def test_ventilator_and_icu_fields_from_frontpage(self, svc, sample_draft):
+        sample_draft["other_medical_info"].update({
+            "ventilation_hours": "49.5",
+            "icu_type": "ICU",
+            "icu_enter_time": "2026-01-05 10:30:00",
+            "icu_leave_time": "2026-01-07 12:00:00",
+        })
+
+        out = svc._assemble_from_sources(sample_draft, {})
+
+        assert out["ventilator_usetime"] == "49.5"
+        assert out["ventilator_usetime_d"] == "2"
+        assert out["ventilator_usetime_h"] == "1"
+        assert out["ventilator_usetime_min"] == "30"
+        assert out["icu_records"][0]["icu_type"] == "ICU"
+        assert out["icu_records"][0]["icu_total_hours"] == "49.5"
+
+    def test_sql_insurance_and_icu_supplements_only_empty_fields(self, svc, sample_draft):
+        sql = {
+            "medical_insurance_settlement": {
+                "business_serial_no": "YW202601050001",
+                "patient_insurance_no": "INS-001",
+                "medical_insurance_recorder": "医保办填报员",
+                "settlement_status": "结算草稿",
+                "attending_physician_code": "D001",
+                "out_of_pocket_advance": "500.00",
+                "cash_payment_amount": "200.00",
+            },
+            "mr_icu": [{
+                "icu_type": "EICU",
+                "icu_start_datetime": "2026-01-05 10:00:00",
+                "icu_end_datetime": "2026-01-06 10:00:00",
+                "icu_period": "24",
+            }],
+        }
+
+        out = svc._assemble_from_sources(sample_draft, sql)
+
+        assert out["designated_medical_institution"] == "泸县人民医院"
+        assert out["business_serial_no"] == "YW202601050001"
+        assert out["insurance_no"] == "INS-001"
+        assert out["medical_insurance_recorder"] == "医保办填报员"
+        assert out["settlement_status"] == "结算草稿"
+        assert out["attending_physician_code"] == "D001"
+        assert out["out_of_pocket_advance"] == "500.00"
+        assert out["cash_payment_amount"] == "200.00"
+        assert out["icu_records"][0]["icu_type"] == "EICU"

@@ -12,6 +12,7 @@
 """
 
 import logging
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -144,6 +145,12 @@ SETTLEMENT_DEFAULTS = {
     "start_date": "",
     "end_date": "",
     "total_cost": "",
+    "self_pay": "",
+    "insurance_fund_pay": "",
+    "out_of_pocket_advance": "",
+    "out_of_pocket_amount": "",
+    "personal_account_expend": "",
+    "cash_payment_amount": "",
 }
 
 
@@ -165,6 +172,54 @@ class SettlementAssemblyService:
         if value is None:
             return ""
         return str(value).strip()
+
+    def _num(self, value: Any) -> Optional[float]:
+        text_value = self._text(value).replace(",", "")
+        if not text_value:
+            return None
+        match = re.search(r"-?\d+(?:\.\d+)?", text_value)
+        if not match:
+            return None
+        try:
+            return float(match.group(0))
+        except ValueError:
+            return None
+
+    def _fmt_amount(self, value: float) -> str:
+        return f"{value:.2f}"
+
+    def _split_hours_to_duration(self, value: Any) -> dict:
+        hours = self._num(value)
+        if hours is None:
+            return {}
+        total_minutes = int(round(hours * 60))
+        days, rem_minutes = divmod(total_minutes, 24 * 60)
+        rem_hours, minutes = divmod(rem_minutes, 60)
+        return {
+            "ventilator_usetime_d": str(days),
+            "ventilator_usetime_h": str(rem_hours),
+            "ventilator_usetime_min": str(minutes),
+            "ventilator_usetime_total_hours": self._fmt_amount(hours).rstrip("0").rstrip("."),
+        }
+
+    def _calc_hours_between(self, start: Any, end: Any) -> str:
+        start_text = self._text(start)
+        end_text = self._text(end)
+        if not start_text or not end_text:
+            return ""
+        for fmt, length in (
+            ("%Y-%m-%d %H:%M:%S", 19),
+            ("%Y-%m-%d %H:%M", 16),
+            ("%Y-%m-%d", 10),
+        ):
+            try:
+                start_dt = datetime.strptime(start_text[:length], fmt)
+                end_dt = datetime.strptime(end_text[:length], fmt)
+                hours = (end_dt - start_dt).total_seconds() / 3600
+                return self._fmt_amount(hours).rstrip("0").rstrip(".") if hours >= 0 else ""
+            except ValueError:
+                continue
+        return ""
 
     def _code_from_candidates(self, item: dict) -> str:
         candidates = item.get("candidates")
@@ -275,6 +330,71 @@ class SettlementAssemblyService:
                     result[dst_key] = str(val).strip()
 
         return result
+
+    def _derive_cost_payment_fields(self, result: dict) -> dict:
+        """从首页费用草稿派生演示清单的基金/个人支付汇总，不伪造医保专属编号。"""
+        derived = {}
+        total_cost = self._num(result.get("total_cost"))
+        self_pay = self._num(result.get("self_pay"))
+
+        if self_pay is not None:
+            self_pay_text = self._fmt_amount(self_pay)
+            for key in ("out_of_pocket_advance", "out_of_pocket_amount"):
+                if not result.get(key):
+                    derived[key] = self_pay_text
+            if not result.get("personal_account_expend") and not result.get("cash_payment_amount"):
+                derived["cash_payment_amount"] = self_pay_text
+
+        if (
+            total_cost is not None
+            and self_pay is not None
+            and total_cost >= self_pay
+            and not result.get("insurance_fund_pay")
+        ):
+            derived["insurance_fund_pay"] = self._fmt_amount(total_cost - self_pay)
+
+        return derived
+
+    def _map_icu_records(self, result: dict, sql_data: dict) -> dict:
+        """组装重症监护明细行，优先使用已抽取首页字段，再补 CDM mr_icu。"""
+        rows: List[dict] = []
+
+        scalar_row = {
+            "icu_type": self._text(result.get("icu_type")),
+            "icu_enter_time": self._text(result.get("icu_enter_time")),
+            "icu_leave_time": self._text(result.get("icu_leave_time")),
+        }
+        if any(scalar_row.values()):
+            scalar_row["icu_total_hours"] = self._calc_hours_between(
+                scalar_row.get("icu_enter_time"),
+                scalar_row.get("icu_leave_time"),
+            )
+            rows.append(scalar_row)
+
+        for item in (sql_data or {}).get("mr_icu") or []:
+            row = {
+                "icu_type": self._text(item.get("icu_type") or item.get("icu_name")),
+                "icu_enter_time": self._text(item.get("icu_start_datetime")),
+                "icu_leave_time": self._text(item.get("icu_end_datetime")),
+                "icu_total_hours": self._text(item.get("icu_period")),
+            }
+            if not row["icu_total_hours"]:
+                row["icu_total_hours"] = self._calc_hours_between(
+                    row.get("icu_enter_time"),
+                    row.get("icu_leave_time"),
+                )
+            if any(row.values()) and row not in rows:
+                rows.append(row)
+
+        if not rows:
+            return {}
+
+        first = rows[0]
+        mapped = {"icu_records": rows}
+        for key in ("icu_type", "icu_enter_time", "icu_leave_time", "icu_total_hours"):
+            if first.get(key) and not result.get(key):
+                mapped[key] = first[key]
+        return mapped
 
     def _map_diagnoses(self, draft: dict) -> dict:
         """诊断列表映射（用于 SettlementSheet 诊断表格）。"""
@@ -441,10 +561,70 @@ class SettlementAssemblyService:
     def _map_sql_fields(self, sql_data: dict) -> dict:
         """B 类映射：CDM SQL 查询结果补充。"""
         mr = (sql_data or {}).get("mr") or {}
+        settlement = (sql_data or {}).get("medical_insurance_settlement") or {}
         result = {}
+
+        settlement_mapping = {
+            "medical_insurance_record_dept": "medical_insurance_record_dept",
+            "medical_insurance_recorder": "medical_insurance_recorder",
+            "medinsur_serial_no": "medinsur_serial_no",
+            "business_serial_no": "business_serial_no",
+            "patient_insurance_no": "insurance_no",
+            "insurance_no": "insurance_no",
+            "mr_no": "mr_no",
+            "admission_route": "admission_route",
+            "special_personnel_type": "special_personnel_type",
+            "admission_datetime": "admission_datetime",
+            "admission_dept_name": "admission_dept_name",
+            "transfer_dept_name": "transfer_dept_name",
+            "discharge_datetime": "discharge_datetime",
+            "discharge_dept_name": "discharge_dept_name",
+            "leaving_hospital_way": "leaving_hospital_way",
+            "receiving_institution_name": "receiving_institution_name",
+            "receiving_institution_code": "receiving_institution_code",
+            "rehospital_with_month": "rehospital_with_month",
+            "rehospital_with_month_purpose": "rehospital_with_month_purpose",
+            "inpat_type": "inpat_type",
+            "therapy_type": "therapy_type",
+            "diagnosis_code_cnt": "diagnosis_code_cnt",
+            "surgery_code_cnt": "surgery_code_cnt",
+            "ventilator_usetime": "ventilator_usetime",
+            "coma_timebefadm_d": "coma_timebefadm_d",
+            "coma_timebefadm_h": "coma_timebefadm_h",
+            "coma_timebefadm_min": "coma_timebefadm_min",
+            "coma_timeaftadm_d": "coma_timeaftadm_d",
+            "coma_timeaftadm_h": "coma_timeaftadm_h",
+            "coma_timeaftadm_min": "coma_timeaftadm_min",
+            "primary_care_days": "primary_care_days",
+            "secondary_care_days": "secondary_care_days",
+            "tertiary_care_days": "tertiary_care_days",
+            "intensive_care_days": "intensive_care_days",
+            "insured_place": "insured_place",
+            "out_of_pocket_advance": "out_of_pocket_advance",
+            "out_of_pocket_amount": "out_of_pocket_amount",
+            "personal_account_expend": "personal_account_expend",
+            "cash_payment_amount": "cash_payment_amount",
+            "insurance_type": "insurance_type",
+            "attending_physician_code": "attending_physician_code",
+            "responsible_nurse_code": "responsible_nurse_code",
+            "settlement_status": "settlement_status",
+            "start_date": "start_date",
+            "end_date": "end_date",
+        }
+        for src_key, out_key in settlement_mapping.items():
+            val = settlement.get(src_key)
+            if val is not None and str(val).strip():
+                result[out_key] = str(val).strip()
+
+        designated_code = settlement.get("designated_medical_institution")
+        if designated_code and str(designated_code).strip():
+            result["institution_code"] = str(designated_code).strip()
 
         # 从 mr 表补充
         B_MR_FIELDS = {
+            "institute_county_desc": "designated_medical_institution",
+            "institute_code": "institution_code",
+            "mr_no": "mr_no",
             "transfer_dept_name": "transfer_dept_name",
             "planned_transder_to": "receiving_institution_name",
             "id_card_type": "id_card_type",
@@ -465,6 +645,7 @@ class SettlementAssemblyService:
                 blood_parts.append(str(val).strip())
         if blood_parts:
             result["blood_volume"] = ", ".join(blood_parts)
+            result.setdefault("blood_unit", "mL")
 
         # 从 mr_surgery 表补充
         surgery = (sql_data or {}).get("mr_surgery") or {}
@@ -506,6 +687,21 @@ class SettlementAssemblyService:
         # 5. B 类 SQL（不覆盖已有非空值）
         sql_fields = self._map_sql_fields(sql_data)
         for k, v in sql_fields.items():
+            if not result.get(k):
+                result[k] = v
+
+        # 5.1 首页费用草稿派生基金/个人支付汇总
+        for k, v in self._derive_cost_payment_fields(result).items():
+            if not result.get(k):
+                result[k] = v
+
+        # 5.2 呼吸机总小时拆分为清单上的 天/小时/分钟
+        for k, v in self._split_hours_to_duration(result.get("ventilator_usetime")).items():
+            if not result.get(k):
+                result[k] = v
+
+        # 5.3 重症监护明细
+        for k, v in self._map_icu_records(result, sql_data).items():
             if not result.get(k):
                 result[k] = v
 
@@ -582,6 +778,22 @@ class SettlementAssemblyService:
             ), {"pid": patient_id, "vid": visit_id}).mappings().first()
             if row:
                 sql_data["mr_surgery"] = dict(row)
+
+            # 医保结算清单，同步库只读补充
+            row = db.execute(text(
+                "SELECT * FROM medical_insurance_settlement "
+                "WHERE patient_id = :pid AND visit_id = :vid LIMIT 1"
+            ), {"pid": patient_id, "vid": visit_id}).mappings().first()
+            if row:
+                sql_data["medical_insurance_settlement"] = dict(row)
+
+            # 重症监护明细
+            rows = db.execute(text(
+                "SELECT * FROM mr_icu WHERE patient_id = :pid AND visit_id = :vid "
+                "ORDER BY icu_start_datetime"
+            ), {"pid": patient_id, "vid": visit_id}).mappings().all()
+            if rows:
+                sql_data["mr_icu"] = [dict(row) for row in rows]
 
         except Exception as e:
             logger.warning(f"加载 SQL 补充数据失败: {e}")

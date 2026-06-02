@@ -19,9 +19,7 @@
           定点医疗机构名称<u class="fill">{{ v('designated_medical_institution') }}</u>
         </td>
         <td style="width: 38%; border-top: none">
-          定点医疗机构代码<u class="fill">{{
-            v('institution_code') || v('designated_medical_institution')
-          }}</u>
+          定点医疗机构代码<u class="fill">{{ v('institution_code') }}</u>
         </td>
         <td style="width: 24%; border-top: none">
           医保结算等级<u class="fill">{{ v('settlement_status') }}</u>
@@ -233,10 +231,10 @@
       </tr>
       <tr>
         <td colspan="3">
-          门（急）诊诊断（中医诊断）<u class="fill" />
+          门（急）诊诊断（中医诊断）<u class="fill">{{ firstTcmDiag }}</u>
         </td>
         <td colspan="3">
-          疾病代码<u class="fill" />
+          疾病代码<u class="fill">{{ firstTcmDiagCode }}</u>
         </td>
       </tr>
     </table>
@@ -280,18 +278,22 @@
         class="data-row"
       >
         <td class="center">
-          {{ i === 0 ? '主要' : d.name ? '其他' : '' }}
+          {{ i === 0 ? '主要' : d.western_name || d.tcm_name ? '其他' : '' }}
         </td>
-        <td>{{ d.name || '' }}</td>
+        <td>{{ d.western_name || '' }}</td>
         <td class="center mono">
-          {{ d.code || '' }}
+          {{ d.western_code || '' }}
         </td>
         <td class="center">
-          {{ d.condition || '' }}
+          {{ d.western_condition || '' }}
         </td>
-        <td />
-        <td />
-        <td />
+        <td>{{ d.tcm_name || '' }}</td>
+        <td class="center mono">
+          {{ d.tcm_code || '' }}
+        </td>
+        <td class="center">
+          {{ d.tcm_condition || '' }}
+        </td>
       </tr>
     </table>
 
@@ -373,13 +375,21 @@
         <td class="center">
           {{ s.surgeon || '' }}
         </td>
-        <td class="center" />
         <td class="center">
-          {{ s.level || '' }}
+          {{ s.surgeon_code || '' }}
         </td>
-        <td class="center" />
-        <td class="center" />
-        <td class="center" />
+        <td class="center">
+          {{ s.incision_grade || s.level || '' }}
+        </td>
+        <td class="center">
+          {{ s.anesthesia_method || '' }}
+        </td>
+        <td class="center">
+          {{ s.anesthesiologist || '' }}
+        </td>
+        <td class="center">
+          {{ s.anesthesiologist_code || '' }}
+        </td>
       </tr>
     </table>
 
@@ -394,7 +404,7 @@
       </tr>
       <tr>
         <td colspan="3">
-          呼吸机使用时间<u class="fill">{{ v('ventilator_usetime') }}</u>天<u class="fill">{{ v('ventilator_usetime_h') }}</u>小时<u class="fill">{{ v('ventilator_usetime_min') }}</u>分钟
+          呼吸机使用时间<u class="fill">{{ ventilatorDuration.days }}</u>天<u class="fill">{{ ventilatorDuration.hours }}</u>小时<u class="fill">{{ ventilatorDuration.minutes }}</u>分钟
         </td>
       </tr>
       <tr>
@@ -429,14 +439,14 @@
         </td>
       </tr>
       <tr
-        v-for="n in 3"
-        :key="'icu' + n"
+        v-for="(icu, i) in paddedIcuRows"
+        :key="'icu' + i"
         class="data-row"
       >
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
-        <td>&nbsp;</td>
+        <td>{{ icu.icu_type || '\u00A0' }}</td>
+        <td>{{ icu.icu_enter_time || '\u00A0' }}</td>
+        <td>{{ icu.icu_leave_time || '\u00A0' }}</td>
+        <td>{{ icu.icu_total_hours || '\u00A0' }}</td>
       </tr>
     </table>
 
@@ -492,7 +502,7 @@
           主诊医师姓名*<u class="fill">{{ v('attending_physician') }}</u>
         </td>
         <td colspan="3">
-          主诊医师代码*<u class="fill" />
+          主诊医师代码*<u class="fill">{{ v('attending_physician_code') }}</u>
         </td>
       </tr>
     </table>
@@ -704,9 +714,28 @@ import { computed } from 'vue'
 
 const props = defineProps<{ data: any }>()
 
+type Dict = Record<string, unknown>
+
 /** 安全取值 */
 function v(field: string): string {
   return props.data?.[field] || ''
+}
+
+function firstText(...values: unknown[]): string {
+  for (const value of values) {
+    if (value !== null && value !== undefined && String(value).trim()) {
+      return String(value).trim()
+    }
+  }
+  return ''
+}
+
+function parseNum(value: unknown): number | null {
+  const text = firstText(value).replace(/,/g, '')
+  const match = text.match(/-?\d+(?:\.\d+)?/)
+  if (!match) return null
+  const num = Number(match[0])
+  return Number.isFinite(num) ? num : null
 }
 
 /** 格式化金额 */
@@ -716,50 +745,180 @@ function fmtMoney(val: any): string {
   return isNaN(num) ? String(val) : num.toFixed(2)
 }
 
+function isTcmDiagnosis(d: Dict): boolean {
+  return firstText(d.diagnosis_type, d.type).includes('中医')
+}
+
+function isEmergencyDiagnosis(d: Dict): boolean {
+  return firstText(d.diagnosis_type, d.type).includes('门')
+}
+
+function normalizeDiagnosis(d: Dict) {
+  return {
+    type: firstText(d.diagnosis_type, d.type),
+    name: firstText(d.name, d.diagnosis_name),
+    code: firstText(d.code, d.diagnosis_code),
+    condition: firstText(d.condition, d.admission_condition),
+    isTcm: isTcmDiagnosis(d),
+    isEmergency: isEmergencyDiagnosis(d),
+  }
+}
+
+const normalizedDiagnoses = computed(() => {
+  const list = Array.isArray(props.data?.diagnoses) ? props.data.diagnoses : []
+  return list.map((item: Dict) => normalizeDiagnosis(item)).filter((item) => item.name)
+})
+
 const firstDiag = computed(() => {
-  const d = props.data?.diagnoses?.[0]
+  const d = normalizedDiagnoses.value.find((item) => item.isEmergency && !item.isTcm)
   return d?.name || ''
 })
 const firstDiagCode = computed(() => {
-  const d = props.data?.diagnoses?.[0]
+  const d = normalizedDiagnoses.value.find((item) => item.isEmergency && !item.isTcm)
+  return d?.code || ''
+})
+const firstTcmDiag = computed(() => {
+  const d = normalizedDiagnoses.value.find((item) => item.isEmergency && item.isTcm)
+  return d?.name || ''
+})
+const firstTcmDiagCode = computed(() => {
+  const d = normalizedDiagnoses.value.find((item) => item.isEmergency && item.isTcm)
   return d?.code || ''
 })
 
 /** 诊断表格（至少 6 行，最多展示实际数量+1 空行） */
 const paddedDiagnoses = computed(() => {
-  const list = props.data?.diagnoses || []
-  const rows = [...list]
-  const minRows = Math.max(6, list.length + 1)
-  while (rows.length < minRows) rows.push({ name: '', code: '', condition: '' })
+  const discharge = normalizedDiagnoses.value.filter((item) => !item.isEmergency)
+  const western = discharge.filter((item) => !item.isTcm)
+  const tcm = discharge.filter((item) => item.isTcm)
+  const rowCount = Math.max(western.length, tcm.length)
+  const rows = Array.from({ length: rowCount }, (_, index) => ({
+    western_name: western[index]?.name || '',
+    western_code: western[index]?.code || '',
+    western_condition: western[index]?.condition || '',
+    tcm_name: tcm[index]?.name || '',
+    tcm_code: tcm[index]?.code || '',
+    tcm_condition: tcm[index]?.condition || '',
+  }))
+  const minRows = Math.max(6, rows.length + 1)
+  while (rows.length < minRows) {
+    rows.push({
+      western_name: '',
+      western_code: '',
+      western_condition: '',
+      tcm_name: '',
+      tcm_code: '',
+      tcm_condition: '',
+    })
+  }
   return rows
 })
 
+function normalizeSurgery(s: Dict) {
+  return {
+    name: firstText(s.name, s.surgery_name),
+    code: firstText(s.code, s.surgery_code),
+    date: firstText(s.date, s.surgery_date),
+    surgeon: firstText(s.surgeon, s.surgeon_name),
+    surgeon_code: firstText(s.surgeon_code, s.surgeon_physician_code),
+    level: firstText(s.level, s.surgery_level),
+    incision_grade: firstText(s.incision_grade, s.incisionGrade, s.incision_healing),
+    anesthesia_method: firstText(s.anesthesia_method, s.anesthesiaMethod),
+    anesthesiologist: firstText(s.anesthesiologist, s.anesthetist_name),
+    anesthesiologist_code: firstText(s.anesthesiologist_code, s.anesthetist_code),
+  }
+}
+
 /** 手术表格（至少 4 行，最多展示实际数量+1 空行） */
 const paddedSurgeries = computed(() => {
-  const list = props.data?.surgeries || []
-  const rows = [...list]
+  const list = Array.isArray(props.data?.surgeries) ? props.data.surgeries : []
+  const rows = list.map((item: Dict) => normalizeSurgery(item))
   const minRows = Math.max(4, list.length + 1)
-  while (rows.length < minRows) rows.push({ name: '', code: '', date: '', surgeon: '', level: '' })
+  while (rows.length < minRows) {
+    rows.push({
+      name: '',
+      code: '',
+      date: '',
+      surgeon: '',
+      surgeon_code: '',
+      level: '',
+      incision_grade: '',
+      anesthesia_method: '',
+      anesthesiologist: '',
+      anesthesiologist_code: '',
+    })
+  }
+  return rows
+})
+
+const ventilatorDuration = computed(() => {
+  const explicitDays = firstText(props.data?.ventilator_usetime_d)
+  const explicitHours = firstText(props.data?.ventilator_usetime_h)
+  const explicitMinutes = firstText(props.data?.ventilator_usetime_min)
+  if (explicitDays || explicitHours || explicitMinutes) {
+    return { days: explicitDays, hours: explicitHours, minutes: explicitMinutes }
+  }
+  const totalHours = parseNum(
+    props.data?.ventilator_usetime_total_hours ?? props.data?.ventilator_usetime,
+  )
+  if (totalHours === null) return { days: '', hours: '', minutes: '' }
+  const totalMinutes = Math.round(totalHours * 60)
+  const days = Math.floor(totalMinutes / (24 * 60))
+  const remMinutes = totalMinutes % (24 * 60)
+  const hours = Math.floor(remMinutes / 60)
+  const minutes = remMinutes % 60
+  return { days: String(days), hours: String(hours), minutes: String(minutes) }
+})
+
+const paddedIcuRows = computed(() => {
+  const records = Array.isArray(props.data?.icu_records) ? props.data.icu_records : []
+  const rows = records
+    .map((item: Dict) => ({
+      icu_type: firstText(item.icu_type, item.icu_name),
+      icu_enter_time: firstText(item.icu_enter_time, item.icu_start_datetime),
+      icu_leave_time: firstText(item.icu_leave_time, item.icu_end_datetime),
+      icu_total_hours: firstText(item.icu_total_hours, item.icu_period),
+    }))
+    .filter(
+      (item) => item.icu_type || item.icu_enter_time || item.icu_leave_time || item.icu_total_hours,
+    )
+  if (
+    !rows.length &&
+    (v('icu_type') || v('icu_enter_time') || v('icu_leave_time') || v('icu_total_hours'))
+  ) {
+    rows.push({
+      icu_type: v('icu_type'),
+      icu_enter_time: v('icu_enter_time'),
+      icu_leave_time: v('icu_leave_time'),
+      icu_total_hours: v('icu_total_hours'),
+    })
+  }
+  while (rows.length < 3) {
+    rows.push({ icu_type: '', icu_enter_time: '', icu_leave_time: '', icu_total_hours: '' })
+  }
   return rows
 })
 
 // ---- 费用 ----
 // 官方 14 大类费用项（对齐医保结算清单标准）
 const COST_CATEGORIES = [
-  { key: 'general_medical_fee', label: '一般医疗服务费' },
-  { key: 'general_treatment_fee', label: '一般治疗操作费' },
-  { key: 'nursing_fee', label: '护理费' },
-  { key: 'other_service_fee', label: '其他费用' },
-  { key: 'pathology_diagnostic_fee', label: '病理诊断费' },
-  { key: 'lab_diagnostic_fee', label: '实验室诊断费' },
-  { key: 'imaging_diagnostic_fee', label: '影像学诊断费' },
-  { key: 'clinical_diagnostic_fee', label: '临床诊断项目费' },
-  { key: 'treatment_fee', label: '非手术治疗项目费' },
-  { key: 'surgery_fee', label: '手术治疗费' },
-  { key: 'rehabilitation_fee', label: '康复费' },
-  { key: 'chinese_medicine_fee', label: '中医治疗费' },
-  { key: 'western_medicine_fee', label: '西药费' },
-  { key: 'chinese_patent_medicine_fee', label: '中成药费' },
+  { keys: ['general_medical_fee', 'general_medical_service_fee'], label: '一般医疗服务费' },
+  { keys: ['general_treatment_fee'], label: '一般治疗操作费' },
+  { keys: ['nursing_fee', 'nursing_care_fee'], label: '护理费' },
+  { keys: ['other_service_fee', 'other_fee'], label: '其他费用' },
+  { keys: ['pathology_diagnostic_fee', 'pathological_diagnostic_fee'], label: '病理诊断费' },
+  { keys: ['lab_diagnostic_fee', 'laboratory_diagnostic_fee'], label: '实验室诊断费' },
+  { keys: ['imaging_diagnostic_fee'], label: '影像学诊断费' },
+  { keys: ['clinical_diagnostic_fee'], label: '临床诊断项目费' },
+  {
+    keys: ['treatment_fee', 'nonsurgical_treatment_fee', 'clinical_physical_therapy_fee'],
+    label: '非手术治疗项目费',
+  },
+  { keys: ['surgery_fee', 'surgery_treatment_fee', 'anesthesia_fee'], label: '手术治疗费' },
+  { keys: ['rehabilitation_fee'], label: '康复费' },
+  { keys: ['chinese_medicine_fee', 'chinese_medicine_treatment_fee'], label: '中医治疗费' },
+  { keys: ['western_medicine_fee'], label: '西药费' },
+  { keys: ['chinese_patent_medicine_fee', 'chinese_patent_medcine_fee'], label: '中成药费' },
 ]
 
 const costRows = computed(() => {
@@ -783,11 +942,11 @@ const costRows = computed(() => {
       }
     }
     // 从顶层字段读取（组装服务生成的草稿格式）
-    const topVal = props.data?.[cat.key]
-    if (topVal && parseFloat(topVal) > 0) {
+    const topSum = cat.keys.reduce((sum, key) => sum + (parseFloat(props.data?.[key]) || 0), 0)
+    if (topSum > 0) {
       return {
         type: cat.label,
-        charge: parseFloat(topVal).toFixed(2),
+        charge: topSum.toFixed(2),
         class_a: '',
         class_b: '',
         own_pay: '',
