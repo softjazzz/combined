@@ -79,9 +79,109 @@
           class="mt-3"
           type="warning"
           show-icon
-          message="已加载预置示例"
-          description="该示例包含用于演示的虚拟费用/医保字段，不写入正式数据表。"
+          message="已加载本机病历示例"
+          description="病历全文由后端按 visit_id 从本机读取；演示用医保费用只是补充信息，不写入正式数据表。"
         />
+
+        <a-spin :spinning="previewLoading">
+          <div
+            v-if="selectedPreset"
+            class="mt-3 space-y-3"
+            data-testid="preset-source-summary"
+          >
+            <div class="rounded border border-slate-200 bg-white p-3">
+              <div class="mb-2 text-xs font-semibold text-slate-700">
+                病历来源摘要
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-xs text-slate-600 md:grid-cols-3">
+                <div>
+                  <span class="text-slate-400">visit_id</span>
+                  <div class="mt-0.5 font-medium text-slate-900">
+                    {{ selectedPreset.visit_id }}
+                  </div>
+                </div>
+                <div>
+                  <span class="text-slate-400">patient_id</span>
+                  <div class="mt-0.5 font-medium text-slate-900">
+                    {{ presetPreview?.patient_id_masked || maskPresetPatientId(selectedPreset) }}
+                  </div>
+                </div>
+                <div>
+                  <span class="text-slate-400">患者</span>
+                  <div class="mt-0.5 font-medium text-slate-900">
+                    {{ presetPreview?.patient_name_masked || '-' }}
+                  </div>
+                </div>
+                <div>
+                  <span class="text-slate-400">科室</span>
+                  <div class="mt-0.5 font-medium text-slate-900">
+                    {{ presetPreview?.department || '-' }}
+                  </div>
+                </div>
+                <div>
+                  <span class="text-slate-400">入院</span>
+                  <div class="mt-0.5 font-medium text-slate-900">
+                    {{ presetPreview?.admission_date || '-' }}
+                  </div>
+                </div>
+                <div>
+                  <span class="text-slate-400">出院</span>
+                  <div class="mt-0.5 font-medium text-slate-900">
+                    {{ presetPreview?.discharge_date || '-' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded border border-slate-200 bg-white p-3">
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <span class="text-xs font-semibold text-slate-700">文书类型</span>
+                <span class="text-xs text-slate-500">
+                  {{ presetPreview?.document_count ?? 0 }} 份
+                </span>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-for="docType in presetPreview?.document_types || []"
+                  :key="docType"
+                  class="rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
+                >
+                  {{ docType }}
+                </span>
+                <span
+                  v-if="!(presetPreview?.document_types || []).length"
+                  class="text-xs text-slate-400"
+                >
+                  暂无可展示文书类型
+                </span>
+              </div>
+            </div>
+
+            <a-collapse>
+              <a-collapse-panel
+                key="preview"
+                header="脱敏病历预览"
+              >
+                <pre
+                  class="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-3 text-xs leading-5 text-slate-700"
+                  data-testid="preset-text-preview"
+                >{{ presetPreview?.text_preview || previewFallbackText }}</pre>
+              </a-collapse-panel>
+            </a-collapse>
+
+            <div
+              class="rounded border border-amber-100 bg-amber-50 p-3"
+              data-testid="preset-synthetic-settlement"
+            >
+              <div class="mb-2 text-xs font-semibold text-amber-900">
+                演示用医保费用补充
+              </div>
+              <pre class="m-0 whitespace-pre-wrap text-xs leading-5 text-amber-900">{{
+                selectedPreset.synthetic_settlement_text
+              }}</pre>
+            </div>
+          </div>
+        </a-spin>
       </section>
 
       <a-form layout="vertical">
@@ -107,14 +207,22 @@
             v-if="selectedPreset"
             class="mb-2 rounded border border-amber-100 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"
           >
-            当前文本框为预置示例的演示补充信息，将以 documents 方式追加到 visit_id
-            病历上下文后参与抽取。
+            该示例将由后端按 visit_id 读取本机病历全文；上方仅展示脱敏预览，演示费用补充会作为
+            documents 追加。
           </div>
           <a-textarea
+            v-if="!selectedPreset"
             v-model:value="medicalText"
             :auto-size="{ minRows: 10, maxRows: 18 }"
-            placeholder="请粘贴完整病历文本，或选择上方预置示例后直接生成"
+            placeholder="请粘贴完整病历文本，用于验证病案首页招标字段生成能力"
           />
+          <div
+            v-else
+            class="rounded border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-600"
+            data-testid="medical-text-preset-readonly"
+          >
+            该示例将由后端按 visit_id 读取本机病历全文；下方仅展示脱敏预览。
+          </div>
         </a-form-item>
 
         <div class="flex items-center gap-2">
@@ -265,6 +373,7 @@ import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   frontpageApi,
+  type FrontpageDemoVisitPreview,
   type FrontpageReportScene,
   type GenerateReportDraftRequest,
   type GenerateReportDraftResponse,
@@ -290,11 +399,20 @@ const validating = ref(false)
 const result = ref<ReportDraftData | null>(null)
 const selectedPresetId = ref('')
 const resultUsedSynthetic = ref(false)
+const previewLoading = ref(false)
+const presetPreview = ref<FrontpageDemoVisitPreview | null>(null)
+const previewError = ref('')
 
 const coverage = computed(() => result.value?.coverage)
 
 const selectedPreset = computed(() =>
   frontpageDemoPresets.find((preset) => preset.id === selectedPresetId.value),
+)
+
+const previewFallbackText = computed(
+  () =>
+    previewError.value ||
+    '暂未获取到脱敏病历预览，请确认本机 CDM 中存在该 visit_id。直接生成仍会按 visit_id 读取后端病历上下文。',
 )
 
 const warnings = computed(() => {
@@ -335,15 +453,41 @@ const settlementLabel = computed(() => {
   return result.value?.settlement ? '已生成' : '-'
 })
 
-function loadPreset(presetId: string) {
+function maskPresetPatientId(preset: FrontpageDemoPreset) {
+  const text = preset.patient_id || ''
+  if (!text) return '-'
+  if (text.length <= 4) return '*'.repeat(text.length)
+  return `${text.slice(0, 2)}${'*'.repeat(Math.max(2, text.length - 4))}${text.slice(-2)}`
+}
+
+async function loadPreset(presetId: string) {
   const preset = frontpageDemoPresets.find((item) => item.id === presetId)
   if (!preset) return
   selectedPresetId.value = preset.id
   scene.value = preset.scene
-  medicalText.value = preset.synthetic_settlement_text
+  medicalText.value = ''
   result.value = null
   resultUsedSynthetic.value = false
+  presetPreview.value = null
+  previewError.value = ''
   message.success('已加载预置示例')
+
+  previewLoading.value = true
+  try {
+    const response = await frontpageApi.getDemoVisitPreview({
+      visit_id: preset.visit_id,
+      patient_id: preset.patient_id,
+    })
+    if (!response.success || !response.data) {
+      throw new Error(response.error || response.message || '脱敏病历预览加载失败')
+    }
+    presetPreview.value = response.data
+  } catch (error) {
+    previewError.value = error instanceof Error ? error.message : '脱敏病历预览加载失败'
+    message.warning(previewError.value)
+  } finally {
+    previewLoading.value = false
+  }
 }
 
 function buildPresetRequest(preset: FrontpageDemoPreset): GenerateReportDraftRequest {
@@ -354,11 +498,10 @@ function buildPresetRequest(preset: FrontpageDemoPreset): GenerateReportDraftReq
   if (preset.patient_id) {
     request.patient_id = preset.patient_id
   }
-  const supplementalText = medicalText.value.trim() || preset.synthetic_settlement_text
   request.documents = [
     {
       type: '演示用医保结算补充信息',
-      content: supplementalText,
+      content: preset.synthetic_settlement_text,
       meta: {
         source: 'demo/synthetic',
         preset_id: preset.id,
@@ -410,6 +553,9 @@ function clearValidation() {
   scene.value = 'combined'
   selectedPresetId.value = ''
   resultUsedSynthetic.value = false
+  presetPreview.value = null
+  previewError.value = ''
+  previewLoading.value = false
 }
 
 function stringifyJson(value: unknown) {

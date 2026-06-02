@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
+from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Session
 
 from ..database.connection import engine
@@ -80,6 +81,51 @@ def _safe_text(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def mask_patient_identifier(value: Any) -> str:
+    text = _safe_text(value)
+    if not text:
+        return ""
+    if len(text) <= 4:
+        return "*" * len(text)
+    return f"{text[:2]}{'*' * max(2, len(text) - 4)}{text[-2:]}"
+
+
+def mask_patient_name(value: Any) -> str:
+    text = _safe_text(value)
+    if not text:
+        return ""
+    if len(text) == 1:
+        return "*"
+    return f"{text[0]}{'*' * (len(text) - 1)}"
+
+
+def mask_sensitive_medical_text(text: str, *, patient_name: str = "") -> str:
+    masked = _safe_text(text)
+    if not masked:
+        return ""
+    if patient_name:
+        masked_name = mask_patient_name(patient_name)
+        masked = masked.replace(patient_name, masked_name)
+    masked = re.sub(r"\b\d{17}[\dXx]\b", "[已脱敏身份证号]", masked)
+    masked = re.sub(r"\b\d{15}\b", "[已脱敏身份证号]", masked)
+    masked = re.sub(r"(?<!\d)1[3-9]\d{9}(?!\d)", "[已脱敏手机号]", masked)
+    address_pattern = (
+        r"((?:现住址|家庭住址|户籍地址|通讯地址|联系地址|单位地址|详细地址|地址)\s*[：:])"
+        r"[^\n\r，,；;。]{4,}"
+    )
+    masked = re.sub(address_pattern, r"\1[已脱敏地址]", masked)
+    return masked
+
+
+def _extract_document_labels(text: str) -> List[str]:
+    labels = []
+    for label in re.findall(r"【([^】]+)】", text or ""):
+        normalized = re.sub(r"\s*-\s*\d+$", "", label.strip())
+        if normalized and normalized not in labels:
+            labels.append(normalized)
+    return labels
 
 
 def _is_present(value: Any) -> bool:
@@ -484,6 +530,86 @@ class FrontPageReportGenerationService:
             return visit_text
 
         raise FrontPageReportInputError("medical_text、documents、visit_id 至少需要提供一个")
+
+    def _load_visit_preview_metadata(
+        self,
+        *,
+        visit_id: str,
+        patient_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if engine is None:
+            return {}
+
+        try:
+            with Session(engine) as db:
+                where = "visit_id = :visit_id"
+                params: Dict[str, Any] = {"visit_id": visit_id}
+                if patient_id:
+                    where += " AND patient_id = :patient_id"
+                    params["patient_id"] = patient_id
+                row = db.execute(
+                    sql_text(f"SELECT * FROM mr WHERE {where} LIMIT 1"),
+                    params,
+                ).mappings().first()
+                return dict(row) if row else {}
+        except Exception:
+            return {}
+
+    async def build_demo_visit_preview(
+        self,
+        *,
+        visit_id: str,
+        patient_id: Optional[str] = None,
+        preview_chars: int = 5000,
+    ) -> Dict[str, Any]:
+        normalized_visit_id = _safe_text(visit_id)
+        if not normalized_visit_id:
+            raise FrontPageReportInputError("visit_id 不能为空")
+
+        metadata = self._load_visit_preview_metadata(
+            visit_id=normalized_visit_id,
+            patient_id=_safe_text(patient_id) or None,
+        )
+        context_text = await self.extraction_service._get_llm_context_text(normalized_visit_id)
+        labels = _extract_document_labels(context_text)
+
+        patient_id_value = _safe_text(patient_id) or _safe_text(metadata.get("patient_id"))
+        patient_name = (
+            _safe_text(metadata.get("name"))
+            or _safe_text(metadata.get("patient_name"))
+            or _safe_text(metadata.get("patient"))
+        )
+        department = (
+            _safe_text(metadata.get("discharge_dept_name"))
+            or _safe_text(metadata.get("admission_dept_name"))
+            or _safe_text(metadata.get("dept_name"))
+        )
+        admission_date = _safe_text(
+            metadata.get("admission_datetime")
+            or metadata.get("admission_date")
+            or metadata.get("admit_date")
+        )
+        discharge_date = _safe_text(
+            metadata.get("discharge_datetime")
+            or metadata.get("discharge_date")
+            or metadata.get("leave_date")
+        )
+
+        preview = mask_sensitive_medical_text(
+            context_text[: max(2000, min(preview_chars, 5000))],
+            patient_name=patient_name,
+        )
+        return {
+            "visit_id": normalized_visit_id,
+            "patient_id_masked": mask_patient_identifier(patient_id_value),
+            "patient_name_masked": mask_patient_name(patient_name),
+            "department": department,
+            "admission_date": admission_date,
+            "discharge_date": discharge_date,
+            "document_count": len(re.findall(r"【[^】]+】", context_text or "")),
+            "document_types": labels,
+            "text_preview": preview,
+        }
 
     async def generate(
         self,

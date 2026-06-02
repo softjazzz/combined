@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.routers.frontpage import FrontPageDemoPreviewRequest, preview_frontpage_demo_visit
 from app.schemas.frontpage import FrontPageDraft
 from app.services.frontpage_report_generation_service import (
     FrontPageReportGenerationService,
@@ -122,6 +123,13 @@ class FakeSettlementService:
         )
 
 
+class FakeRequest:
+    class State:
+        trace_id = "trace-test"
+
+    state = State()
+
+
 @pytest.mark.asyncio
 async def test_medical_text_generates_frontpage_settlement_and_coverage():
     extraction = FakeExtractionService()
@@ -184,6 +192,73 @@ async def test_documents_and_visit_id_inputs_use_real_bundle_without_demo_fallba
 
     with pytest.raises(FrontPageReportInputError):
         await service.generate(scene="nhc_frontpage", visit_id="missing")
+
+
+@pytest.mark.asyncio
+async def test_demo_visit_preview_returns_masked_readonly_summary(monkeypatch):
+    extraction = FakeExtractionService()
+    extraction.contexts["V002"] = (
+        "【入院记录】\n"
+        "姓名：李四，身份证号：510000198801012222，手机号：13812345678，"
+        "现住址：四川省泸州市某某街道123号。\n"
+        "【出院记录】\n出院诊断：肺部感染"
+    )
+    service = FrontPageReportGenerationService(
+        extraction_service=extraction,
+        settlement_service=FakeSettlementService(),
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_visit_preview_metadata",
+        lambda **_kwargs: {
+            "patient_id": "P123456789",
+            "name": "李四",
+            "discharge_dept_name": "呼吸与危重症医学科",
+            "admission_datetime": "2026-04-01 09:00:00",
+            "discharge_datetime": "2026-04-08 10:00:00",
+        },
+    )
+
+    result = await service.build_demo_visit_preview(visit_id="V002", patient_id="P123456789")
+
+    assert result["visit_id"] == "V002"
+    assert result["patient_id_masked"] == "P1******89"
+    assert result["patient_name_masked"] == "李*"
+    assert result["department"] == "呼吸与危重症医学科"
+    assert result["document_count"] == 2
+    assert result["document_types"] == ["入院记录", "出院记录"]
+    assert "510000198801012222" not in result["text_preview"]
+    assert "13812345678" not in result["text_preview"]
+    assert "四川省泸州市某某街道123号" not in result["text_preview"]
+    assert "李四" not in result["text_preview"]
+    assert "[已脱敏身份证号]" in result["text_preview"]
+    assert "[已脱敏手机号]" in result["text_preview"]
+    assert "[已脱敏地址]" in result["text_preview"]
+
+
+@pytest.mark.asyncio
+async def test_demo_visit_preview_endpoint_is_readonly_service_passthrough():
+    class FakePreviewService:
+        async def build_demo_visit_preview(self, *, visit_id: str, patient_id: str | None = None):
+            return {
+                "visit_id": visit_id,
+                "patient_id_masked": "P0**01",
+                "patient_name_masked": "张*",
+                "document_count": 1,
+                "document_types": ["入院记录"],
+                "text_preview": "【入院记录】脱敏预览",
+            }
+
+    result = await preview_frontpage_demo_visit(
+        request=FakeRequest(),
+        payload=FrontPageDemoPreviewRequest(visit_id="V001", patient_id="P001"),
+        service=FakePreviewService(),
+        current_user=None,
+    )
+
+    assert result["success"] is True
+    assert result["data"]["visit_id"] == "V001"
+    assert result["data"]["patient_id_masked"] == "P0**01"
 
 
 def test_settlement_assembly_prefers_structured_report_fields():

@@ -222,6 +222,65 @@ class GenerateFrontPageReportRequest(BaseModel):
             raise ValueError("visit_id、documents、medical_text 至少需要提供一个")
 
 
+class FrontPageDemoPreviewRequest(BaseModel):
+    """预置示例病历只读预览请求。"""
+
+    visit_id: str = Field(..., description="住院就诊 ID")
+    patient_id: Optional[str] = Field(default=None, description="患者 ID，用于定位本机病历")
+
+    def ensure_valid(self) -> None:
+        if not str(self.visit_id or "").strip():
+            raise ValueError("visit_id 不能为空")
+
+
+@router.post("/demo-visit-preview")
+async def preview_frontpage_demo_visit(
+    request: Request,
+    payload: FrontPageDemoPreviewRequest,
+    service: FrontPageReportGenerationService = Depends(get_frontpage_report_service),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
+):
+    """只读返回预置示例的脱敏病历摘要，不写入业务库。"""
+    trace_id = get_trace_id(request)
+    try:
+        payload.ensure_valid()
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=400,
+            detail=error_response(
+                error=str(ve), code="BAD_REQUEST", trace_id=trace_id
+            )["error"],
+        )
+
+    try:
+        result = await service.build_demo_visit_preview(
+            visit_id=payload.visit_id,
+            patient_id=payload.patient_id,
+        )
+        return success_response(
+            data=result,
+            message="获取预置病历脱敏预览成功",
+            trace_id=trace_id,
+        )
+    except FrontPageReportInputError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=error_response(
+                error=str(exc), code="FRONTPAGE_DEMO_PREVIEW_INPUT_ERROR", trace_id=trace_id
+            )["error"],
+        )
+    except Exception as exc:
+        logger.exception(
+            "获取预置病历脱敏预览失败 user=%s",
+            _current_user_id(current_user),
+        )
+        return error_response(
+            error=f"获取预置病历脱敏预览失败: {exc}",
+            code="FRONTPAGE_DEMO_PREVIEW_ERROR",
+            trace_id=trace_id,
+        )
+
+
 @router.post("/generate-report-draft")
 async def generate_frontpage_report_draft(
     request: Request,
@@ -614,7 +673,6 @@ async def get_export_formats(request: Request):
         message=f"支持 {len(formats)} 种导出格式",
         trace_id=get_trace_id(request),
     )
-
 
 
 

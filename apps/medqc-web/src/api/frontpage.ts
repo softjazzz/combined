@@ -206,6 +206,30 @@ export interface GenerateReportDraftResponse {
   error?: string
 }
 
+export interface FrontpageDemoVisitPreviewRequest {
+  visit_id: string
+  patient_id?: string
+}
+
+export interface FrontpageDemoVisitPreview {
+  visit_id: string
+  patient_id_masked?: string
+  patient_name_masked?: string
+  department?: string
+  admission_date?: string
+  discharge_date?: string
+  document_count?: number
+  document_types?: string[]
+  text_preview?: string
+}
+
+export interface FrontpageDemoVisitPreviewResponse {
+  success: boolean
+  data?: FrontpageDemoVisitPreview
+  message?: string
+  error?: string
+}
+
 export interface FrontpageExtractionSettings {
   sql_prefill_enabled: boolean
   llm_backfill_enabled: boolean
@@ -251,6 +275,15 @@ export const frontpageApi = {
     request: GenerateReportDraftRequest,
   ): Promise<GenerateReportDraftResponse> {
     const response = await http.post('/api/v1/frontpage/generate-report-draft', request, {
+      timeout: FRONTPAGE_AUTO_GENERATE_TIMEOUT_MS,
+    })
+    return response.data
+  },
+
+  async getDemoVisitPreview(
+    request: FrontpageDemoVisitPreviewRequest,
+  ): Promise<FrontpageDemoVisitPreviewResponse> {
+    const response = await http.post('/api/v1/frontpage/demo-visit-preview', request, {
       timeout: FRONTPAGE_AUTO_GENERATE_TIMEOUT_MS,
     })
     return response.data

@@ -8,6 +8,7 @@ import { frontpageApi } from '@/api/frontpage'
 vi.mock('@/api/frontpage', () => ({
   frontpageApi: {
     generateReportDraft: vi.fn(),
+    getDemoVisitPreview: vi.fn(),
   },
 }))
 
@@ -155,6 +156,21 @@ async function clickStartValidation(wrapper: ReturnType<typeof mountDrawer>) {
 describe('FrontpageTenderValidationDrawer', () => {
   beforeEach(() => {
     vi.mocked(frontpageApi.generateReportDraft).mockReset()
+    vi.mocked(frontpageApi.getDemoVisitPreview).mockReset()
+    vi.mocked(frontpageApi.getDemoVisitPreview).mockResolvedValue({
+      success: true,
+      data: {
+        visit_id: '1870471',
+        patient_id_masked: '00******33',
+        patient_name_masked: '李*',
+        department: '外二科',
+        admission_date: '2026-04-01 09:00:00',
+        discharge_date: '2026-04-08 10:00:00',
+        document_count: 2,
+        document_types: ['入院记录', '手术记录'],
+        text_preview: '【入院记录】\n患者因腹痛入院。\n【手术记录】\n行腹腔镜手术。',
+      },
+    })
   })
 
   it('renders preset medical record examples', () => {
@@ -211,7 +227,7 @@ describe('FrontpageTenderValidationDrawer', () => {
     })
   })
 
-  it('loads preset and submits visit_id with synthetic settlement document', async () => {
+  it('loads preset, shows source summary and submits visit_id with synthetic document', async () => {
     vi.mocked(frontpageApi.generateReportDraft).mockResolvedValue({
       success: true,
       data: {
@@ -239,6 +255,26 @@ describe('FrontpageTenderValidationDrawer', () => {
     await wrapper
       .find('[data-testid="frontpage-demo-preset-demo-surgery-anesthesia"]')
       .trigger('click')
+    await flushPromises()
+
+    expect(frontpageApi.getDemoVisitPreview).toHaveBeenCalledWith({
+      visit_id: '1870471',
+      patient_id: '0000534433',
+    })
+    expect(wrapper.find('[data-testid="preset-source-summary"]').exists()).toBe(true)
+    expect(wrapper.html()).toContain('已加载本机病历示例')
+    expect(wrapper.text()).toContain('外二科')
+    expect(wrapper.text()).toContain('入院记录')
+    expect(wrapper.text()).toContain('手术记录')
+    expect(wrapper.find('[data-testid="preset-text-preview"]').text()).toContain('患者因腹痛入院')
+    expect(wrapper.find('[data-testid="preset-synthetic-settlement"]').text()).toContain(
+      'demo/synthetic 演示补充信息',
+    )
+    expect(wrapper.find('[data-testid="medical-text"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="medical-text-preset-readonly"]').text()).toContain(
+      '后端按 visit_id 读取本机病历全文',
+    )
+
     await clickStartValidation(wrapper)
     await flushPromises()
 
