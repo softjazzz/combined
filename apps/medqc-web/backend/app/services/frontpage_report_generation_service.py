@@ -460,8 +460,18 @@ class FrontPageReportGenerationService:
         if medical_text and medical_text.strip():
             return medical_text.strip()
 
+        visit_text = ""
+        if visit_id:
+            text = await self.extraction_service._get_llm_context_text(visit_id)
+            if text and text.strip():
+                visit_text = text.strip()
+            elif not documents:
+                raise FrontPageReportInputError(f"visit_id={visit_id} 缺少可用于生成的病历文书")
+
         if documents:
             parts = []
+            if visit_text:
+                parts.append(visit_text)
             for doc in documents:
                 content = _safe_text(doc.get("content"))
                 if not content:
@@ -470,11 +480,8 @@ class FrontPageReportGenerationService:
             if parts:
                 return "\n\n".join(parts)
 
-        if visit_id:
-            text = await self.extraction_service._get_llm_context_text(visit_id)
-            if text and text.strip():
-                return text.strip()
-            raise FrontPageReportInputError(f"visit_id={visit_id} 缺少可用于生成的病历文书")
+        if visit_text:
+            return visit_text
 
         raise FrontPageReportInputError("medical_text、documents、visit_id 至少需要提供一个")
 

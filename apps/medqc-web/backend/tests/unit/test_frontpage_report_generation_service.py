@@ -167,6 +167,21 @@ async def test_documents_and_visit_id_inputs_use_real_bundle_without_demo_fallba
     await service.generate(scene="nhc_frontpage", visit_id="V001")
     assert extraction.last_text == "真实 CDM 文书 bundle"
 
+    await service.generate(
+        scene="combined",
+        visit_id="V001",
+        patient_id="P001",
+        documents=[
+            {
+                "type": "演示用医保结算补充信息",
+                "content": "本段为 demo/synthetic。总费用：12345.67 元。",
+            }
+        ],
+    )
+    assert extraction.last_text.startswith("真实 CDM 文书 bundle")
+    assert "【演示用医保结算补充信息】" in extraction.last_text
+    assert "总费用：12345.67 元" in extraction.last_text
+
     with pytest.raises(FrontPageReportInputError):
         await service.generate(scene="nhc_frontpage", visit_id="missing")
 

@@ -157,6 +157,17 @@ describe('FrontpageTenderValidationDrawer', () => {
     vi.mocked(frontpageApi.generateReportDraft).mockReset()
   })
 
+  it('renders preset medical record examples', () => {
+    const wrapper = mountDrawer()
+
+    expect(wrapper.find('[data-testid="frontpage-demo-presets"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('预置病历示例')
+    expect(wrapper.text()).toContain('示例一：内科出院病例')
+    expect(wrapper.text()).toContain('示例二：外科手术病例')
+    expect(wrapper.text()).toContain('示例三：ICU 呼吸机病例')
+    expect(wrapper.text()).toContain('示例四：中医诊断病例')
+  })
+
   it('submits selected scene and medical_text to generate-report-draft', async () => {
     vi.mocked(frontpageApi.generateReportDraft).mockResolvedValue({
       success: true,
@@ -198,6 +209,62 @@ describe('FrontpageTenderValidationDrawer', () => {
       scene: 'insurance_settlement',
       medical_text: '完整病历文本',
     })
+  })
+
+  it('loads preset and submits visit_id with synthetic settlement document', async () => {
+    vi.mocked(frontpageApi.generateReportDraft).mockResolvedValue({
+      success: true,
+      data: {
+        scene: 'combined',
+        frontpage: baseFrontpageDraft,
+        settlement: { total_cost: '52680.80' },
+        coverage: {
+          scene: 'combined',
+          status: 'complete',
+          total: 83,
+          present: 83,
+          partial: 0,
+          missing: 0,
+          text_extraction: { success: 83, total: 83 },
+          settlement_from_frontpage: { success: 70, total: 70 },
+          fields: [],
+          warnings: [],
+        },
+        warnings: [],
+      },
+    })
+    const wrapper = mountDrawer()
+
+    await wrapper.find('[data-testid="scene-select"]').setValue('nhc_frontpage')
+    await wrapper
+      .find('[data-testid="frontpage-demo-preset-demo-surgery-anesthesia"]')
+      .trigger('click')
+    await clickStartValidation(wrapper)
+    await flushPromises()
+
+    expect(frontpageApi.generateReportDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scene: 'combined',
+        visit_id: '1870471',
+        patient_id: '0000534433',
+        documents: [
+          expect.objectContaining({
+            type: '演示用医保结算补充信息',
+            content: expect.stringContaining('demo/synthetic 演示补充信息'),
+            meta: expect.objectContaining({
+              source: 'demo/synthetic',
+              preset_id: 'demo-surgery-anesthesia',
+            }),
+          }),
+        ],
+      }),
+    )
+    expect(frontpageApi.generateReportDraft).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        medical_text: expect.any(String),
+      }),
+    )
+    expect(wrapper.html()).toContain('包含演示用虚拟医保费用数据')
   })
 
   it('renders coverage metrics, warnings and missing fields from response', async () => {
