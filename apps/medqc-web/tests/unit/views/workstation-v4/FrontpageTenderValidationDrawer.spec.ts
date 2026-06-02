@@ -303,6 +303,25 @@ describe('FrontpageTenderValidationDrawer', () => {
     expect(wrapper.html()).toContain('包含演示用虚拟医保费用数据')
   })
 
+  it('shows friendly fallback when demo preview endpoint is not available', async () => {
+    vi.mocked(frontpageApi.getDemoVisitPreview).mockRejectedValue({
+      response: { status: 404 },
+    })
+    const wrapper = mountDrawer()
+
+    await wrapper
+      .find('[data-testid="frontpage-demo-preset-demo-surgery-anesthesia"]')
+      .trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="preset-source-summary"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('当前后端尚未启用脱敏病历预览接口')
+    expect(wrapper.text()).not.toContain('Request failed with status code 404')
+    expect(wrapper.find('[data-testid="medical-text-preset-readonly"]').text()).toContain(
+      '后端按 visit_id 读取本机病历全文',
+    )
+  })
+
   it('renders coverage metrics, warnings and missing fields from response', async () => {
     vi.mocked(frontpageApi.generateReportDraft).mockResolvedValue({
       success: true,

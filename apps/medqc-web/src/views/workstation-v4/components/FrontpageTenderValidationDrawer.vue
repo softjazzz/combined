@@ -483,7 +483,13 @@ async function loadPreset(presetId: string) {
     }
     presetPreview.value = response.data
   } catch (error) {
-    previewError.value = error instanceof Error ? error.message : '脱敏病历预览加载失败'
+    const status = (error as { response?: { status?: number } })?.response?.status
+    previewError.value =
+      status === 404
+        ? '当前后端尚未启用脱敏病历预览接口；该示例仍会按 visit_id 从后端读取本机病历全文，直接生成不受影响。'
+        : error instanceof Error
+          ? error.message
+          : '脱敏病历预览加载失败'
     message.warning(previewError.value)
   } finally {
     previewLoading.value = false
