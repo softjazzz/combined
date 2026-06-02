@@ -117,7 +117,9 @@
         <template #message>
           <div class="flex flex-wrap items-center gap-2 text-[13px]">
             <span>生成场景：{{ sceneLabel(reportResult.scene) }}</span>
-            <span>已覆盖 {{ reportResult.coverage.present }}/{{ reportResult.coverage.total }}</span>
+            <span>{{ textCoverageLabel(reportResult) }}</span>
+            <span>{{ settlementDraftLabel(reportResult) }}</span>
+            <span>总覆盖 {{ reportResult.coverage.present }}/{{ reportResult.coverage.total }}</span>
             <span v-if="reportResult.coverage.missing">缺失 {{ reportResult.coverage.missing }} 项</span>
           </div>
         </template>
@@ -125,7 +127,7 @@
           <div class="text-[12px] leading-5">
             {{
               (reportResult.warnings || reportResult.coverage.warnings || [])
-                .slice(0, 3)
+                .slice(0, 5)
                 .join('；') || '字段覆盖报告已生成'
             }}
           </div>
@@ -183,5 +185,24 @@ function sceneLabel(scene?: string) {
   if (scene === 'insurance_settlement') return '医保结算清单'
   if (scene === 'combined') return '联合草稿'
   return scene || '未指定'
+}
+
+function textCoverageLabel(report?: Record<string, any> | null) {
+  const textCoverage = report?.coverage?.text_extraction
+  if (textCoverage?.total) {
+    return `文本抽取覆盖率 ${textCoverage.present}/${textCoverage.total}`
+  }
+  const fields = Array.isArray(report?.coverage?.fields) ? report.coverage.fields : []
+  const textFields = fields.filter((item: any) => String(item?.path || '').startsWith('frontpage.'))
+  const present = textFields.filter((item: any) => item?.status === 'present').length
+  return `文本抽取覆盖率 ${present}/${textFields.length}`
+}
+
+function settlementDraftLabel(report?: Record<string, any> | null) {
+  const settlementCoverage = report?.coverage?.settlement_from_frontpage
+  if (settlementCoverage?.total) {
+    return `结算草稿 ${settlementCoverage.present}/${settlementCoverage.total}`
+  }
+  return report?.settlement ? '结算草稿已生成' : '结算草稿未生成'
 }
 </script>

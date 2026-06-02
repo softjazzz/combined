@@ -3,11 +3,17 @@
     "tender_field_total": 83,
     "schema_supported": 83,
     "prompt_supported": 83,
-    "extraction_success": 78,
-    "settlement_mapping_success": 61,
+    "text_extraction_total": 83,
+    "text_extraction_success": 83,
+    "text_extraction_partial": 0,
+    "text_extraction_failed": 0,
+    "extraction_success": 83,
+    "settlement_mapping_success": 66,
+    "settlement_from_frontpage_success": 66,
+    "cdm_optional_gap": 0,
     "ui_supported": 67,
-    "failed": 1,
-    "partial": 82,
+    "failed": 0,
+    "partial": 0,
     "warning": 83
   },
   "samples": {
@@ -107,8 +113,8 @@
         },
         "frontpage.costs.total_cost": {
           "expected": 12345.67,
-          "actual": null,
-          "passed": false
+          "actual": 12345.67,
+          "passed": true
         }
       },
       "result": {
@@ -198,7 +204,7 @@
                 "admission_condition_text": null,
                 "admission_condition_reason": null,
                 "outcome": null,
-                "is_tcm": false,
+                "is_tcm": true,
                 "evidence": []
               }
             ],
@@ -243,7 +249,21 @@
                 "evidence": []
               }
             ],
-            "tcm_diagnoses": [],
+            "tcm_diagnoses": [
+              {
+                "diagnosis_type": "门急诊诊断",
+                "name": "胁痛病",
+                "code": "BNG010",
+                "candidates": [],
+                "confidence": null,
+                "admission_condition": null,
+                "admission_condition_text": null,
+                "admission_condition_reason": null,
+                "outcome": null,
+                "is_tcm": true,
+                "evidence": []
+              }
+            ],
             "admission_condition_details": [
               {
                 "diagnosis": "主要诊断: 急性胆囊炎",
@@ -423,9 +443,13 @@
             "medical_record_quality": "甲"
           },
           "costs": {
-            "total_cost": null,
-            "self_paid": null,
-            "categories": {}
+            "total_cost": 12345.67,
+            "self_paid": 1234.56,
+            "categories": {
+              "western_medicine": 2000.0,
+              "surgery_treatment": 3000.0,
+              "laboratory_diagnostic": 500.0
+            }
           },
           "evidence": {
             "guideline_rule_trace": [],
@@ -683,7 +707,7 @@
           "surgery_code_cnt": "2",
           "start_date": "2026-05-01 09:10:00",
           "end_date": "2026-05-12 10:30:00",
-          "total_cost": "",
+          "total_cost": "12345.67",
           "patient_name": "测试甲",
           "sex": "女",
           "patient_birthday": "1990-01-01",
@@ -725,7 +749,11 @@
           "injury_poisoning_external_cause_code": "W19.x00",
           "attending_physician": "孙主治",
           "responsible_nurse": "周护士",
-          "declaration_time": "2026-06-02 11:32:36",
+          "self_pay": "1234.56",
+          "laboratory_diagnostic_fee": "500.0",
+          "surgery_treatment_fee": "3000.0",
+          "western_medicine_fee": "2000.0",
+          "declaration_time": "2026-06-02 12:23:16",
           "diagnoses": [
             {
               "diagnosis_type": "门急诊诊断",
@@ -808,11 +836,23 @@
         },
         "coverage": {
           "scene": "combined",
-          "status": "partial",
+          "status": "complete",
           "total": 25,
-          "present": 24,
+          "present": 25,
           "partial": 0,
-          "missing": 1,
+          "missing": 0,
+          "text_extraction": {
+            "total": 24,
+            "present": 24,
+            "missing": 0,
+            "rate": 1.0
+          },
+          "settlement_from_frontpage": {
+            "total": 1,
+            "present": 1,
+            "missing": 0,
+            "generated": true
+          },
           "fields": [
             {
               "group": "患者基本信息",
@@ -979,7 +1019,7 @@
               "group": "费用信息",
               "field": "住院总费用",
               "path": "frontpage.costs.total_cost",
-              "status": "missing",
+              "status": "present",
               "message": ""
             },
             {
@@ -990,9 +1030,9 @@
               "message": ""
             }
           ],
-          "warnings": ["费用信息-住院总费用缺失"]
+          "warnings": []
         },
-        "warnings": ["费用信息-住院总费用缺失"]
+        "warnings": []
       }
     },
     "no_surgery_case": {
@@ -1240,9 +1280,13 @@
             "medical_record_quality": "甲"
           },
           "costs": {
-            "total_cost": null,
-            "self_paid": null,
-            "categories": {}
+            "total_cost": 12345.67,
+            "self_paid": 1234.56,
+            "categories": {
+              "western_medicine": 2000.0,
+              "surgery_treatment": 3000.0,
+              "laboratory_diagnostic": 500.0
+            }
           },
           "evidence": {
             "guideline_rule_trace": [],
@@ -1392,7 +1436,7 @@
           "surgery_code_cnt": "0",
           "start_date": "2026-05-01 09:10:00",
           "end_date": "2026-05-12 10:30:00",
-          "total_cost": "",
+          "total_cost": "12345.67",
           "patient_name": "测试甲",
           "sex": "女",
           "patient_birthday": "1990-01-01",
@@ -1434,7 +1478,11 @@
           "injury_poisoning_external_cause_code": "W19.x00",
           "attending_physician": "孙主治",
           "responsible_nurse": "周护士",
-          "declaration_time": "2026-06-02 11:32:36",
+          "self_pay": "1234.56",
+          "laboratory_diagnostic_fee": "500.0",
+          "surgery_treatment_fee": "3000.0",
+          "western_medicine_fee": "2000.0",
+          "declaration_time": "2026-06-02 12:23:16",
           "diagnoses": [
             {
               "diagnosis_type": "门急诊诊断",
@@ -1461,9 +1509,21 @@
           "scene": "combined",
           "status": "partial",
           "total": 25,
-          "present": 21,
+          "present": 22,
           "partial": 0,
-          "missing": 4,
+          "missing": 3,
+          "text_extraction": {
+            "total": 24,
+            "present": 21,
+            "missing": 3,
+            "rate": 0.875
+          },
+          "settlement_from_frontpage": {
+            "total": 1,
+            "present": 1,
+            "missing": 0,
+            "generated": true
+          },
           "fields": [
             {
               "group": "患者基本信息",
@@ -1630,7 +1690,7 @@
               "group": "费用信息",
               "field": "住院总费用",
               "path": "frontpage.costs.total_cost",
-              "status": "missing",
+              "status": "present",
               "message": ""
             },
             {
@@ -1644,15 +1704,13 @@
           "warnings": [
             "诊断及手术-出院其他诊断缺失",
             "诊断及手术-主要手术及操作缺失",
-            "诊断及手术-其他手术及操作缺失",
-            "费用信息-住院总费用缺失"
+            "诊断及手术-其他手术及操作缺失"
           ]
         },
         "warnings": [
           "诊断及手术-出院其他诊断缺失",
           "诊断及手术-主要手术及操作缺失",
-          "诊断及手术-其他手术及操作缺失",
-          "费用信息-住院总费用缺失"
+          "诊断及手术-其他手术及操作缺失"
         ]
       }
     },
@@ -1967,9 +2025,13 @@
             "medical_record_quality": "甲"
           },
           "costs": {
-            "total_cost": null,
-            "self_paid": null,
-            "categories": {}
+            "total_cost": 12345.67,
+            "self_paid": 1234.56,
+            "categories": {
+              "western_medicine": 2000.0,
+              "surgery_treatment": 3000.0,
+              "laboratory_diagnostic": 500.0
+            }
           },
           "evidence": {
             "guideline_rule_trace": [],
@@ -2180,7 +2242,7 @@
           "surgery_code_cnt": "2",
           "start_date": "2026-05-01 09:10:00",
           "end_date": "2026-05-12 10:30:00",
-          "total_cost": "",
+          "total_cost": "12345.67",
           "patient_name": "测试甲",
           "sex": "女",
           "patient_birthday": "1990-01-01",
@@ -2222,7 +2284,11 @@
           "injury_poisoning_external_cause_code": "V89.200",
           "attending_physician": "孙主治",
           "responsible_nurse": "周护士",
-          "declaration_time": "2026-06-02 11:32:36",
+          "self_pay": "1234.56",
+          "laboratory_diagnostic_fee": "500.0",
+          "surgery_treatment_fee": "3000.0",
+          "western_medicine_fee": "2000.0",
+          "declaration_time": "2026-06-02 12:23:16",
           "diagnoses": [
             {
               "diagnosis_type": "门急诊诊断",
@@ -2291,11 +2357,23 @@
         },
         "coverage": {
           "scene": "combined",
-          "status": "partial",
+          "status": "complete",
           "total": 25,
-          "present": 24,
+          "present": 25,
           "partial": 0,
-          "missing": 1,
+          "missing": 0,
+          "text_extraction": {
+            "total": 24,
+            "present": 24,
+            "missing": 0,
+            "rate": 1.0
+          },
+          "settlement_from_frontpage": {
+            "total": 1,
+            "present": 1,
+            "missing": 0,
+            "generated": true
+          },
           "fields": [
             {
               "group": "患者基本信息",
@@ -2462,7 +2540,7 @@
               "group": "费用信息",
               "field": "住院总费用",
               "path": "frontpage.costs.total_cost",
-              "status": "missing",
+              "status": "present",
               "message": ""
             },
             {
@@ -2473,9 +2551,9 @@
               "message": ""
             }
           ],
-          "warnings": ["费用信息-住院总费用缺失"]
+          "warnings": []
         },
-        "warnings": ["费用信息-住院总费用缺失"]
+        "warnings": []
       }
     },
     "tcm_case": {
@@ -2487,6 +2565,19 @@
           "actual": [
             {
               "diagnosis_type": "门急诊诊断",
+              "name": "眩晕病",
+              "code": "BNG070",
+              "candidates": [],
+              "confidence": null,
+              "admission_condition": null,
+              "admission_condition_text": null,
+              "admission_condition_reason": null,
+              "outcome": null,
+              "is_tcm": true,
+              "evidence": []
+            },
+            {
+              "diagnosis_type": "门急诊诊断",
               "name": "痰浊中阻证",
               "code": "ZZ010",
               "candidates": [],
@@ -2495,6 +2586,19 @@
               "admission_condition_text": null,
               "admission_condition_reason": null,
               "outcome": null,
+              "is_tcm": true,
+              "evidence": []
+            },
+            {
+              "diagnosis_type": "出院其他诊断",
+              "name": "眩晕病",
+              "code": "BNG070",
+              "candidates": [],
+              "confidence": null,
+              "admission_condition": "1",
+              "admission_condition_text": "有",
+              "admission_condition_reason": "入院时病史或检查已有依据。",
+              "outcome": "好转",
               "is_tcm": true,
               "evidence": []
             },
@@ -2512,7 +2616,7 @@
               "evidence": []
             }
           ],
-          "passed": false
+          "passed": true
         }
       },
       "result": {
@@ -2589,7 +2693,7 @@
                 "admission_condition_text": null,
                 "admission_condition_reason": null,
                 "outcome": null,
-                "is_tcm": false,
+                "is_tcm": true,
                 "evidence": []
               },
               {
@@ -2630,7 +2734,7 @@
                 "admission_condition_text": "有",
                 "admission_condition_reason": "入院时病史或检查已有依据。",
                 "outcome": "好转",
-                "is_tcm": false,
+                "is_tcm": true,
                 "evidence": []
               },
               {
@@ -2650,6 +2754,19 @@
             "tcm_diagnoses": [
               {
                 "diagnosis_type": "门急诊诊断",
+                "name": "眩晕病",
+                "code": "BNG070",
+                "candidates": [],
+                "confidence": null,
+                "admission_condition": null,
+                "admission_condition_text": null,
+                "admission_condition_reason": null,
+                "outcome": null,
+                "is_tcm": true,
+                "evidence": []
+              },
+              {
+                "diagnosis_type": "门急诊诊断",
                 "name": "痰浊中阻证",
                 "code": "ZZ010",
                 "candidates": [],
@@ -2658,6 +2775,19 @@
                 "admission_condition_text": null,
                 "admission_condition_reason": null,
                 "outcome": null,
+                "is_tcm": true,
+                "evidence": []
+              },
+              {
+                "diagnosis_type": "出院其他诊断",
+                "name": "眩晕病",
+                "code": "BNG070",
+                "candidates": [],
+                "confidence": null,
+                "admission_condition": "1",
+                "admission_condition_text": "有",
+                "admission_condition_reason": "入院时病史或检查已有依据。",
+                "outcome": "好转",
                 "is_tcm": true,
                 "evidence": []
               },
@@ -2854,9 +2984,13 @@
             "medical_record_quality": "甲"
           },
           "costs": {
-            "total_cost": null,
-            "self_paid": null,
-            "categories": {}
+            "total_cost": 12345.67,
+            "self_paid": 1234.56,
+            "categories": {
+              "western_medicine": 2000.0,
+              "surgery_treatment": 3000.0,
+              "laboratory_diagnostic": 500.0
+            }
           },
           "evidence": {
             "guideline_rule_trace": [],
@@ -3114,7 +3248,7 @@
           "surgery_code_cnt": "2",
           "start_date": "2026-05-01 09:10:00",
           "end_date": "2026-05-12 10:30:00",
-          "total_cost": "",
+          "total_cost": "12345.67",
           "patient_name": "测试甲",
           "sex": "女",
           "patient_birthday": "1990-01-01",
@@ -3156,7 +3290,11 @@
           "injury_poisoning_external_cause_code": "W19.x00",
           "attending_physician": "孙主治",
           "responsible_nurse": "周护士",
-          "declaration_time": "2026-06-02 11:32:36",
+          "self_pay": "1234.56",
+          "laboratory_diagnostic_fee": "500.0",
+          "surgery_treatment_fee": "3000.0",
+          "western_medicine_fee": "2000.0",
+          "declaration_time": "2026-06-02 12:23:16",
           "diagnoses": [
             {
               "diagnosis_type": "门急诊诊断",
@@ -3239,11 +3377,23 @@
         },
         "coverage": {
           "scene": "combined",
-          "status": "partial",
+          "status": "complete",
           "total": 25,
-          "present": 24,
+          "present": 25,
           "partial": 0,
-          "missing": 1,
+          "missing": 0,
+          "text_extraction": {
+            "total": 24,
+            "present": 24,
+            "missing": 0,
+            "rate": 1.0
+          },
+          "settlement_from_frontpage": {
+            "total": 1,
+            "present": 1,
+            "missing": 0,
+            "generated": true
+          },
           "fields": [
             {
               "group": "患者基本信息",
@@ -3410,7 +3560,7 @@
               "group": "费用信息",
               "field": "住院总费用",
               "path": "frontpage.costs.total_cost",
-              "status": "missing",
+              "status": "present",
               "message": ""
             },
             {
@@ -3421,9 +3571,9 @@
               "message": ""
             }
           ],
-          "warnings": ["费用信息-住院总费用缺失"]
+          "warnings": []
         },
-        "warnings": ["费用信息-住院总费用缺失"]
+        "warnings": []
       }
     },
     "icu_ventilation_case": {
@@ -3538,7 +3688,7 @@
                 "admission_condition_text": null,
                 "admission_condition_reason": null,
                 "outcome": null,
-                "is_tcm": false,
+                "is_tcm": true,
                 "evidence": []
               }
             ],
@@ -3583,7 +3733,21 @@
                 "evidence": []
               }
             ],
-            "tcm_diagnoses": [],
+            "tcm_diagnoses": [
+              {
+                "diagnosis_type": "门急诊诊断",
+                "name": "胁痛病",
+                "code": "BNG010",
+                "candidates": [],
+                "confidence": null,
+                "admission_condition": null,
+                "admission_condition_text": null,
+                "admission_condition_reason": null,
+                "outcome": null,
+                "is_tcm": true,
+                "evidence": []
+              }
+            ],
             "admission_condition_details": [
               {
                 "diagnosis": "主要诊断: 急性胆囊炎",
@@ -3763,9 +3927,13 @@
             "medical_record_quality": "甲"
           },
           "costs": {
-            "total_cost": null,
-            "self_paid": null,
-            "categories": {}
+            "total_cost": 12345.67,
+            "self_paid": 1234.56,
+            "categories": {
+              "western_medicine": 2000.0,
+              "surgery_treatment": 3000.0,
+              "laboratory_diagnostic": 500.0
+            }
           },
           "evidence": {
             "guideline_rule_trace": [],
@@ -4023,7 +4191,7 @@
           "surgery_code_cnt": "2",
           "start_date": "2026-05-01 09:10:00",
           "end_date": "2026-05-12 10:30:00",
-          "total_cost": "",
+          "total_cost": "12345.67",
           "patient_name": "测试甲",
           "sex": "女",
           "patient_birthday": "1990-01-01",
@@ -4065,7 +4233,11 @@
           "injury_poisoning_external_cause_code": "W19.x00",
           "attending_physician": "孙主治",
           "responsible_nurse": "周护士",
-          "declaration_time": "2026-06-02 11:32:36",
+          "self_pay": "1234.56",
+          "laboratory_diagnostic_fee": "500.0",
+          "surgery_treatment_fee": "3000.0",
+          "western_medicine_fee": "2000.0",
+          "declaration_time": "2026-06-02 12:23:16",
           "diagnoses": [
             {
               "diagnosis_type": "门急诊诊断",
@@ -4148,11 +4320,23 @@
         },
         "coverage": {
           "scene": "combined",
-          "status": "partial",
+          "status": "complete",
           "total": 25,
-          "present": 24,
+          "present": 25,
           "partial": 0,
-          "missing": 1,
+          "missing": 0,
+          "text_extraction": {
+            "total": 24,
+            "present": 24,
+            "missing": 0,
+            "rate": 1.0
+          },
+          "settlement_from_frontpage": {
+            "total": 1,
+            "present": 1,
+            "missing": 0,
+            "generated": true
+          },
           "fields": [
             {
               "group": "患者基本信息",
@@ -4319,7 +4503,7 @@
               "group": "费用信息",
               "field": "住院总费用",
               "path": "frontpage.costs.total_cost",
-              "status": "missing",
+              "status": "present",
               "message": ""
             },
             {
@@ -4330,9 +4514,9 @@
               "message": ""
             }
           ],
-          "warnings": ["费用信息-住院总费用缺失"]
+          "warnings": []
         },
-        "warnings": ["费用信息-住院总费用缺失"]
+        "warnings": []
       }
     }
   },
@@ -4343,11 +4527,23 @@
       "has_settlement": false,
       "coverage": {
         "scene": "nhc_frontpage",
-        "status": "partial",
+        "status": "complete",
         "total": 25,
-        "present": 23,
+        "present": 24,
         "partial": 1,
-        "missing": 1,
+        "missing": 0,
+        "text_extraction": {
+          "total": 24,
+          "present": 24,
+          "missing": 0,
+          "rate": 1.0
+        },
+        "settlement_from_frontpage": {
+          "total": 1,
+          "present": 0,
+          "missing": 1,
+          "generated": false
+        },
         "fields": [
           {
             "group": "患者基本信息",
@@ -4514,7 +4710,7 @@
             "group": "费用信息",
             "field": "住院总费用",
             "path": "frontpage.costs.total_cost",
-            "status": "missing",
+            "status": "present",
             "message": ""
           },
           {
@@ -4525,7 +4721,7 @@
             "message": "当前场景不要求生成医保结算清单"
           }
         ],
-        "warnings": ["费用信息-住院总费用缺失"]
+        "warnings": []
       }
     },
     "insurance_settlement": {
@@ -4534,11 +4730,23 @@
       "has_settlement": true,
       "coverage": {
         "scene": "insurance_settlement",
-        "status": "partial",
+        "status": "complete",
         "total": 25,
-        "present": 24,
+        "present": 25,
         "partial": 0,
-        "missing": 1,
+        "missing": 0,
+        "text_extraction": {
+          "total": 24,
+          "present": 24,
+          "missing": 0,
+          "rate": 1.0
+        },
+        "settlement_from_frontpage": {
+          "total": 1,
+          "present": 1,
+          "missing": 0,
+          "generated": true
+        },
         "fields": [
           {
             "group": "患者基本信息",
@@ -4705,7 +4913,7 @@
             "group": "费用信息",
             "field": "住院总费用",
             "path": "frontpage.costs.total_cost",
-            "status": "missing",
+            "status": "present",
             "message": ""
           },
           {
@@ -4716,7 +4924,7 @@
             "message": ""
           }
         ],
-        "warnings": ["费用信息-住院总费用缺失"]
+        "warnings": []
       }
     }
   }

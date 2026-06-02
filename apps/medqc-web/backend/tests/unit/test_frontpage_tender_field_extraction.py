@@ -24,16 +24,14 @@ async def test_tender_full_coverage_case_has_path_level_outputs():
     assert result["settlement"]
     assert result["coverage"]["total"] > 0
     assert result["warnings"] == result["coverage"]["warnings"]
-    expected_without_known_gaps = {
-        path: expected
-        for path, expected in case.expected_paths.items()
-        if path != "frontpage.costs.total_cost"
-    }
-    assert_expected_paths(result, expected_without_known_gaps)
-
-    # 当前 generate-report-draft 使用 extract_from_text，费用 prompt 未进入该组装路径。
-    assert result["frontpage"]["costs"]["total_cost"] is None
-    assert result["settlement"]["total_cost"] == ""
+    assert_expected_paths(result, case.expected_paths)
+    assert result["frontpage"]["costs"]["self_paid"] == 1234.56
+    assert result["frontpage"]["costs"]["categories"]["western_medicine"] == 2000.0
+    assert result["settlement"]["total_cost"] == "12345.67"
+    assert result["settlement"]["self_pay"] == "1234.56"
+    assert result["settlement"]["western_medicine_fee"] == "2000.0"
+    assert result["settlement"]["surgery_treatment_fee"] == "3000.0"
+    assert result["settlement"]["laboratory_diagnostic_fee"] == "500.0"
 
 
 @pytest.mark.asyncio
@@ -63,7 +61,7 @@ async def test_tender_special_cases_are_verified_independently():
         if isinstance(item, dict)
     ]
     assert "痰浊中阻证" in tcm_names
-    assert "眩晕病" not in tcm_names
+    assert "眩晕病" in tcm_names
 
 
 @pytest.mark.asyncio
@@ -89,6 +87,8 @@ def test_tender_field_matrix_has_required_columns_and_failure_taxonomy():
         assert field.tender_item
         assert field.expected_frontpage_path.startswith("frontpage.")
         assert field.scene in {"combined", "nhc_frontpage", "insurance_settlement"}
+        assert "medical_text_required" in field.source_requirement
+        assert "cdm_optional" in field.source_requirement
 
 
 def test_tender_generate_report_draft_api_layer(client):

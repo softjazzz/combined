@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -86,8 +87,10 @@ def _is_present(value: Any) -> bool:
         return False
     if isinstance(value, str):
         return bool(value.strip())
-    if isinstance(value, (list, tuple, set, dict)):
-        return bool(value)
+    if isinstance(value, dict):
+        return any(_is_present(item) for item in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return any(_is_present(item) for item in value)
     return True
 
 
@@ -154,7 +157,11 @@ def _diagnosis_item(
         "admission_condition_text": ADMISSION_CONDITION_TEXT.get(condition_code or ""),
         "admission_condition_reason": (condition_detail or {}).get("reasoning"),
         "outcome": outcome or None,
-        "is_tcm": "中医" in diagnosis_type or "证" in name,
+        "is_tcm": (
+            "中医" in diagnosis_type
+            or "证" in name
+            or _safe_text(code).upper().startswith(("BNG", "ZZ"))
+        ),
         "evidence": [],
     }
 
@@ -379,6 +386,11 @@ def build_frontpage_coverage(
 
     total = len(fields)
     missing = len([item for item in fields if item["status"] == "missing"])
+    text_fields = [item for item in fields if item["path"].startswith("frontpage.")]
+    text_present = len([item for item in text_fields if item["status"] == "present"])
+    text_missing = len([item for item in text_fields if item["status"] == "missing"])
+    settlement_fields = [item for item in fields if item["path"].startswith("settlement")]
+    settlement_present = len([item for item in settlement_fields if item["status"] == "present"])
     overall_status = "complete" if missing == 0 else "partial"
     return {
         "scene": scene,
@@ -387,9 +399,45 @@ def build_frontpage_coverage(
         "present": present,
         "partial": partial,
         "missing": missing,
+        "text_extraction": {
+            "total": len(text_fields),
+            "present": text_present,
+            "missing": text_missing,
+            "rate": round(text_present / len(text_fields), 4) if text_fields else 0,
+        },
+        "settlement_from_frontpage": {
+            "total": len(settlement_fields),
+            "present": settlement_present,
+            "missing": len(settlement_fields) - settlement_present,
+            "generated": _is_present(settlement),
+        },
         "fields": fields,
         "warnings": list(dict.fromkeys(warnings)),
     }
+
+
+TEXT_SIGNAL_REQUIREMENTS = [
+    ("费用信息", [r"总费用", r"自付费用", r"西药费", r"手术治疗费", r"实验室诊断费"], "frontpage.costs.total_cost"),
+    ("ICU信息", [r"ICU", r"EICU", r"重症监护"], "frontpage.other_medical_info.icu"),
+    ("呼吸机使用时间", [r"呼吸机", r"机械通气", r"辅助通气"], "frontpage.other_medical_info.ventilation.hours"),
+    ("颅脑损伤昏迷时间", [r"昏迷", r"颅脑损伤"], "frontpage.other_medical_info.coma"),
+    ("病理诊断", [r"病理诊断", r"病理号"], "frontpage.other_medical_info.pathology"),
+    ("损伤中毒外部原因", [r"外伤中毒", r"损伤", r"中毒", r"外部原因", r"交通事故"], "frontpage.other_medical_info.injury_poison"),
+    ("药物过敏", [r"药物过敏", r"过敏"], "frontpage.other_medical_info.allergy"),
+    ("血型", [r"血型", r"ABO", r"Rh"], "frontpage.other_medical_info.blood_type"),
+]
+
+
+def _text_signal_warnings(medical_text: str, frontpage: Dict[str, Any]) -> List[str]:
+    text = medical_text or ""
+    payload = {"frontpage": frontpage}
+    warnings: List[str] = []
+    for label, patterns, path in TEXT_SIGNAL_REQUIREMENTS:
+        if not any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns):
+            continue
+        if not _is_present(_get_path(payload, path)):
+            warnings.append(f"病历文本出现{label}线索，但未抽取到 {path}")
+    return warnings
 
 
 class FrontPageReportGenerationService:
@@ -466,6 +514,7 @@ class FrontPageReportGenerationService:
             warnings.append("未抽取到出院主要诊断，结果为 partial")
         if normalized_scene in {"insurance_settlement", "combined"} and not settlement:
             warnings.append("未生成医保结算清单")
+        warnings.extend(_text_signal_warnings(text, frontpage))
 
         coverage = build_frontpage_coverage(
             scene=normalized_scene,

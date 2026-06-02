@@ -221,6 +221,61 @@ class SettlementAssemblyService:
             result["coma_timeaftadm_min"] = str(after.get("minutes", ""))
         return result
 
+    def _map_costs(self, draft: dict) -> dict:
+        """费用字段：优先从 FrontPageDraft.costs 进入结算清单草稿。"""
+        costs = self._get_nested(draft, "costs")
+        if not isinstance(costs, dict):
+            return {}
+
+        result = {}
+        scalar_mapping = {
+            "total_cost": "total_cost",
+            "self_paid": "self_pay",
+        }
+        for src_key, dst_key in scalar_mapping.items():
+            val = costs.get(src_key)
+            if val is not None and str(val).strip():
+                result[dst_key] = str(val).strip()
+
+        category_mapping = {
+            "general_medical_service": "general_medical_service_fee",
+            "general_treatment": "general_treatment_fee",
+            "nursing_care": "nursing_care_fee",
+            "other_service": "other_service_fee",
+            "pathological_diagnostic": "pathological_diagnostic_fee",
+            "laboratory_diagnostic": "laboratory_diagnostic_fee",
+            "imaging_diagnostic": "imaging_diagnostic_fee",
+            "clinical_diagnostic": "clinical_diagnostic_fee",
+            "nonsurgical_treatment": "nonsurgical_treatment_fee",
+            "clinical_physical_therapy": "clinical_physical_therapy_fee",
+            "surgery_treatment": "surgery_treatment_fee",
+            "anesthesia": "anesthesia_fee",
+            "surgery": "surgery_fee",
+            "rehabilitation": "rehabilitation_fee",
+            "chinese_medicine_treatment": "chinese_medicine_treatment_fee",
+            "western_medicine": "western_medicine_fee",
+            "antibacterial_drug": "antibacterial_drug_fee",
+            "chinese_patent_medicine": "chinese_patent_medcine_fee",
+            "chinese_herbal_medicine": "chinese_herbal_medicine_fee",
+            "blood": "blood_fee",
+            "albumin": "albumin_fee",
+            "globulin": "globulin_fee",
+            "coagulation_factor": "coagulation_factor_fee",
+            "cytokine": "cytokine_fee",
+            "exam_disposable_material": "exam_disposable_mat_fee",
+            "treat_disposable_material": "treat_disposable_mat_fee",
+            "surgery_disposable_material": "surgery_disposable_mat_fee",
+            "other": "other_fee",
+        }
+        categories = costs.get("categories")
+        if isinstance(categories, dict):
+            for src_key, dst_key in category_mapping.items():
+                val = categories.get(src_key)
+                if val is not None and str(val).strip():
+                    result[dst_key] = str(val).strip()
+
+        return result
+
     def _map_diagnoses(self, draft: dict) -> dict:
         """诊断列表映射（用于 SettlementSheet 诊断表格）。"""
         diags = self._get_nested(draft, "diagnoses") or {}
@@ -444,16 +499,20 @@ class SettlementAssemblyService:
         coma_fields = self._map_coma_fields(draft)
         result.update({k: v for k, v in coma_fields.items() if v})
 
-        # 4. B 类 SQL（不覆盖已有非空值）
+        # 4. A 类费用
+        cost_fields = self._map_costs(draft)
+        result.update({k: v for k, v in cost_fields.items() if v})
+
+        # 5. B 类 SQL（不覆盖已有非空值）
         sql_fields = self._map_sql_fields(sql_data)
         for k, v in sql_fields.items():
             if not result.get(k):
                 result[k] = v
 
-        # 5. D 类自动生成
+        # 6. D 类自动生成
         result["declaration_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # 6. 诊断/手术列表
+        # 7. 诊断/手术列表
         diag_data = self._map_diagnoses(draft)
         surg_data = self._map_surgeries(draft)
         result.update(diag_data)

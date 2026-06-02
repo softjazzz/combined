@@ -2070,6 +2070,7 @@ class FrontPageExtractionService:
             ),
             "other_medical": self._extract_json(OTHER_MEDICAL_INFO_PROMPT.format(medical_text=medical_text)),
             "staff": self._extract_json(STAFF_PROMPT.format(medical_text=medical_text)),
+            "costs": self._extract_json(COSTS_PROMPT.format(medical_text=medical_text)),
             "coding_result": ext_coding_service.extract_coding(medical_text, patient_context)
         }
         
@@ -2087,6 +2088,7 @@ class FrontPageExtractionService:
             procedures = results.get("procedures") if not isinstance(results.get("procedures"), Exception) else {}
             other_medical = results.get("other_medical") if not isinstance(results.get("other_medical"), Exception) else {}
             staff = results.get("staff") if not isinstance(results.get("staff"), Exception) else {}
+            costs = results.get("costs") if not isinstance(results.get("costs"), Exception) else {}
             coding_result = results.get("coding_result") if not isinstance(results.get("coding_result"), Exception) else None
             
             if isinstance(results.get("coding_result"), Exception):
@@ -2115,9 +2117,11 @@ class FrontPageExtractionService:
 
             other_medical = other_medical or {}
             staff = staff or {}
+            costs = costs or {}
             diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
             procedures = self._normalize_procedures_structure(procedures)
             other_medical = self._normalize_other_medical_info_structure(other_medical)
+            costs = self._normalize_costs_structure(costs)
 
         except Exception as e:
             logger.error(f"并行抽取发生严重错误: {e}")
@@ -2224,7 +2228,7 @@ class FrontPageExtractionService:
             "procedures": procedures,
             "other_medical_info": other_medical,
             "staff": staff,
-            "costs": {"total_cost": None, "self_paid": None, "categories": {}},
+            "costs": costs,
             "evidence": {
                 "guideline_rule_trace": _rule_trace_llm,
                 "clinician_main_diagnosis": clinician_main_before_rules,
@@ -4262,6 +4266,25 @@ class FrontPageExtractionService:
             return float(text)
         except Exception:
             return None
+
+    @staticmethod
+    def _normalize_costs_structure(costs: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        raw = costs if isinstance(costs, dict) else {}
+        categories_raw = raw.get("categories")
+        categories: Dict[str, float] = {}
+        if isinstance(categories_raw, dict):
+            for key, value in categories_raw.items():
+                if not key:
+                    continue
+                numeric = FrontPageExtractionService._coerce_optional_float(value)
+                if numeric is not None:
+                    categories[str(key)] = numeric
+
+        return {
+            "total_cost": FrontPageExtractionService._coerce_optional_float(raw.get("total_cost")),
+            "self_paid": FrontPageExtractionService._coerce_optional_float(raw.get("self_paid")),
+            "categories": categories,
+        }
 
     @staticmethod
     def _append_validation_warning(validation_info: Dict[str, Any], message: str) -> None:
