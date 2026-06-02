@@ -50,7 +50,7 @@ const passthroughStub = (name: string, tag = 'div') =>
     },
   })
 
-function mountListView() {
+function mountListView(overrides: Record<string, unknown> = {}) {
   return shallowMount(WorkstationV4ListView, {
     props: {
       activePriorityGroup: 'all',
@@ -85,6 +85,7 @@ function mountListView() {
       currentPage: 1,
       pageSize: 20,
       displayServerTotal: 19,
+      ...overrides,
     },
     global: {
       stubs: {
@@ -99,6 +100,18 @@ function mountListView() {
         ATabPane: passthroughStub('ATabPane'),
         ASelect: SelectStub,
         ASelectOption: SelectOptionStub,
+        FrontpageTenderValidationDrawer: defineComponent({
+          name: 'FrontpageTenderValidationDrawer',
+          props: {
+            open: {
+              type: Boolean,
+              default: false,
+            },
+          },
+          setup(props) {
+            return () => h('div', { 'data-testid': 'frontpage-tender-drawer', open: props.open })
+          },
+        }),
         InboxOutlined: true,
         SearchOutlined: true,
       },
@@ -120,5 +133,21 @@ describe('WorkstationV4ListView filters', () => {
     await wrapper.find('select.workbench-dept-select').setValue('中医科')
 
     expect(wrapper.emitted('selectDept')?.[0]).toEqual(['中医科'])
+  })
+
+  it('opens tender field validation drawer from frontpage generate queue', async () => {
+    const wrapper = mountListView({
+      currentStageFilter: 'frontpage_generate',
+      stageMeta: {
+        batchActionText: '批量生成',
+        singleActionText: '生成',
+        tableTitle: '参考首页生成队列',
+        pageTitle: '参考首页生成队列',
+      },
+    })
+
+    await wrapper.find('[data-testid="frontpage-tender-validation-entry"]').trigger('click')
+
+    expect(wrapper.find('[data-testid="frontpage-tender-drawer"]').attributes('open')).toBe('true')
   })
 })

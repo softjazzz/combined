@@ -175,6 +175,20 @@ export interface FrontpageCoverageReport {
   present: number
   partial: number
   missing: number
+  text_extraction?: {
+    total?: number
+    present?: number
+    success?: number
+    missing?: number
+    rate?: number
+  }
+  settlement_from_frontpage?: {
+    total?: number
+    present?: number
+    success?: number
+    missing?: number
+    generated?: boolean
+  }
   fields: FrontpageCoverageField[]
   warnings: string[]
 }

@@ -32,6 +32,15 @@
                   重置
                 </a-button>
                 <a-button
+                  v-if="isFrontpageGenerateStage"
+                  size="small"
+                  class="wv4-analysis-overview__action"
+                  data-testid="frontpage-tender-validation-entry"
+                  @click="tenderValidationOpen = true"
+                >
+                  招标字段验证
+                </a-button>
+                <a-button
                   size="small"
                   class="wv4-analysis-overview__action"
                   @click="emit('page-change', currentPage)"
@@ -356,6 +365,7 @@
         </div>
       </div>
     </div>
+    <FrontpageTenderValidationDrawer v-model:open="tenderValidationOpen" />
   </main>
 </template>
 
@@ -365,6 +375,7 @@ import { InboxOutlined, SearchOutlined } from '@ant-design/icons-vue'
 
 import PriorityLane, { type PriorityCard, type PriorityGroup } from './workbench/PriorityLane.vue'
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
+import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
 import type { DeptInfo } from '../types'
 import type { WorkflowStageKey } from '@/types/workflow'
 import type { WorkstationDateField, WorkstationDateRange } from '../composables/usePatientRecords'
@@ -450,6 +461,7 @@ function filterDepartmentSelectOption(
 }
 
 const analysisTab = ref<'stage' | 'workflow'>('stage')
+const tenderValidationOpen = ref(false)
 
 const isFrontpageGenerateStage = computed(() => props.currentStageFilter === 'frontpage_generate')
 
