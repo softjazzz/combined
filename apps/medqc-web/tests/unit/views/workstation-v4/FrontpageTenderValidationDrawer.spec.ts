@@ -288,6 +288,14 @@ describe('FrontpageTenderValidationDrawer', () => {
           warnings: ['费用信息-自付费用缺失'],
         },
         warnings: ['费用信息-自付费用缺失'],
+        input_context: {
+          mode: 'medical_text',
+          text_length: 6,
+          has_visit_id: false,
+          has_patient_id: false,
+          document_count: 0,
+          manual_text_too_short: true,
+        },
       },
     })
     const wrapper = mountDrawer()
@@ -301,6 +309,11 @@ describe('FrontpageTenderValidationDrawer', () => {
       scene: 'insurance_settlement',
       medical_text: '完整病历文本',
     })
+    expect(wrapper.find('[data-testid="input-context-summary"]').text()).toContain(
+      '手动粘贴 medical_text',
+    )
+    expect(wrapper.find('[data-testid="input-context-summary"]').text()).toContain('6 字')
+    expect(wrapper.find('[data-testid="short-medical-text-warning"]').exists()).toBe(true)
   })
 
   it('loads preset, shows source summary and submits visit_id with synthetic document', async () => {
@@ -323,6 +336,14 @@ describe('FrontpageTenderValidationDrawer', () => {
           warnings: [],
         },
         warnings: [],
+        input_context: {
+          mode: 'visit_id_with_documents',
+          text_length: 8420,
+          has_visit_id: true,
+          has_patient_id: true,
+          document_count: 1,
+          manual_text_too_short: false,
+        },
       },
     })
     const wrapper = mountDrawer()
@@ -377,6 +398,10 @@ describe('FrontpageTenderValidationDrawer', () => {
       }),
     )
     expect(wrapper.html()).toContain('包含演示用虚拟医保费用数据')
+    expect(wrapper.find('[data-testid="input-context-summary"]').text()).toContain(
+      '本机 visit_id + 补充 documents',
+    )
+    expect(wrapper.find('[data-testid="input-context-summary"]').text()).toContain('8420 字')
   })
 
   it('shows friendly fallback when demo preview endpoint is not available', async () => {

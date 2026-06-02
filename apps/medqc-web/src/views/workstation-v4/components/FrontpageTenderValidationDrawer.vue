@@ -255,6 +255,46 @@
             description="该数据仅用于本次生成草稿验证，不写入正式首页表、结算表或业务库。"
           />
 
+          <a-alert
+            v-if="inputContext?.manual_text_too_short"
+            type="warning"
+            show-icon
+            message="当前粘贴文本偏短"
+            description="本次 medical_text 少于 500 字，可能不是完整病历。建议粘贴完整入院记录、出院记录、手术记录等文书后再验证。"
+            data-testid="short-medical-text-warning"
+          />
+
+          <div
+            v-if="inputContext"
+            class="grid grid-cols-2 gap-2 rounded border border-slate-200 bg-white p-3 text-xs text-slate-600 md:grid-cols-4"
+            data-testid="input-context-summary"
+          >
+            <div>
+              <span class="text-slate-400">输入来源</span>
+              <div class="mt-0.5 font-semibold text-slate-900">
+                {{ inputModeLabel }}
+              </div>
+            </div>
+            <div>
+              <span class="text-slate-400">抽取文本长度</span>
+              <div class="mt-0.5 font-semibold text-slate-900">
+                {{ inputContext.text_length }} 字
+              </div>
+            </div>
+            <div>
+              <span class="text-slate-400">visit_id</span>
+              <div class="mt-0.5 font-semibold text-slate-900">
+                {{ inputContext.has_visit_id ? '已提供' : '未提供' }}
+              </div>
+            </div>
+            <div>
+              <span class="text-slate-400">补充 documents</span>
+              <div class="mt-0.5 font-semibold text-slate-900">
+                {{ inputContext.document_count ?? 0 }} 份
+              </div>
+            </div>
+          </div>
+
           <div
             class="flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 px-3 py-2"
           >
@@ -517,6 +557,16 @@ const formattedPreviewOpen = ref(false)
 const formattedPreviewTab = ref<'frontpage' | 'settlement' | 'json'>('frontpage')
 
 const coverage = computed(() => result.value?.coverage)
+const inputContext = computed(() => result.value?.input_context)
+
+const inputModeLabel = computed(() => {
+  const mode = inputContext.value?.mode
+  if (mode === 'medical_text') return '手动粘贴 medical_text'
+  if (mode === 'visit_id_with_documents') return '本机 visit_id + 补充 documents'
+  if (mode === 'visit_id') return '本机 visit_id'
+  if (mode === 'documents') return '补充 documents'
+  return mode || '-'
+})
 
 const selectedPreset = computed(() =>
   frontpageDemoPresets.find((preset) => preset.id === selectedPresetId.value),

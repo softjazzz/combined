@@ -531,6 +531,35 @@ class FrontPageReportGenerationService:
 
         raise FrontPageReportInputError("medical_text、documents、visit_id 至少需要提供一个")
 
+    def build_input_context(
+        self,
+        *,
+        medical_text: Optional[str],
+        documents: Optional[List[Dict[str, Any]]],
+        visit_id: Optional[str],
+        patient_id: Optional[str],
+        text: str,
+    ) -> Dict[str, Any]:
+        if medical_text and medical_text.strip():
+            mode = "medical_text"
+        elif visit_id and documents:
+            mode = "visit_id_with_documents"
+        elif visit_id:
+            mode = "visit_id"
+        elif documents:
+            mode = "documents"
+        else:
+            mode = "unknown"
+
+        return {
+            "mode": mode,
+            "text_length": len(text or ""),
+            "has_visit_id": bool(_safe_text(visit_id)),
+            "has_patient_id": bool(_safe_text(patient_id)),
+            "document_count": len(documents or []),
+            "manual_text_too_short": mode == "medical_text" and len(text or "") < 500,
+        }
+
     def _load_visit_preview_metadata(
         self,
         *,
@@ -626,6 +655,13 @@ class FrontPageReportGenerationService:
             documents=documents,
             visit_id=visit_id,
         )
+        input_context = self.build_input_context(
+            medical_text=medical_text,
+            documents=documents,
+            visit_id=visit_id,
+            patient_id=patient_id,
+            text=text,
+        )
         draft: FrontPageDraft = await self.extraction_service.extract_from_text(
             text,
             context_strategy="full",
@@ -661,6 +697,7 @@ class FrontPageReportGenerationService:
             "settlement": settlement,
             "coverage": coverage,
             "warnings": coverage.get("warnings") or warnings,
+            "input_context": input_context,
         }
 
 

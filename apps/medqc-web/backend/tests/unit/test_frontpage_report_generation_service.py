@@ -156,6 +156,14 @@ async def test_medical_text_generates_frontpage_settlement_and_coverage():
     assert result["settlement"]["diagnoses"][2]["admission_condition"] == "4"
     assert result["coverage"]["scene"] == "combined"
     assert result["coverage"]["total"] > 0
+    assert result["input_context"] == {
+        "mode": "medical_text",
+        "text_length": len("入院记录\n出院诊断：急性胃黏膜病变"),
+        "has_visit_id": True,
+        "has_patient_id": True,
+        "document_count": 0,
+        "manual_text_too_short": True,
+    }
 
 
 @pytest.mark.asyncio
@@ -189,6 +197,23 @@ async def test_documents_and_visit_id_inputs_use_real_bundle_without_demo_fallba
     assert extraction.last_text.startswith("真实 CDM 文书 bundle")
     assert "【演示用医保结算补充信息】" in extraction.last_text
     assert "总费用：12345.67 元" in extraction.last_text
+    result = await service.generate(
+        scene="combined",
+        visit_id="V001",
+        patient_id="P001",
+        documents=[
+            {
+                "type": "演示用医保结算补充信息",
+                "content": "本段为 demo/synthetic。总费用：12345.67 元。",
+            }
+        ],
+    )
+    assert result["input_context"]["mode"] == "visit_id_with_documents"
+    assert result["input_context"]["has_visit_id"] is True
+    assert result["input_context"]["has_patient_id"] is True
+    assert result["input_context"]["document_count"] == 1
+    assert result["input_context"]["text_length"] == len(extraction.last_text)
+    assert result["input_context"]["manual_text_too_short"] is False
 
     with pytest.raises(FrontPageReportInputError):
         await service.generate(scene="nhc_frontpage", visit_id="missing")

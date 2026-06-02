@@ -193,6 +193,15 @@ export interface FrontpageCoverageReport {
   warnings: string[]
 }
 
+export interface FrontpageReportInputContext {
+  mode: 'medical_text' | 'visit_id' | 'visit_id_with_documents' | 'documents' | 'unknown' | string
+  text_length: number
+  has_visit_id?: boolean
+  has_patient_id?: boolean
+  document_count?: number
+  manual_text_too_short?: boolean
+}
+
 export interface GenerateReportDraftResponse {
   success: boolean
   data?: {
@@ -201,6 +210,7 @@ export interface GenerateReportDraftResponse {
     settlement?: Record<string, unknown> | null
     coverage?: FrontpageCoverageReport
     warnings?: string[]
+    input_context?: FrontpageReportInputContext
   }
   message?: string
   error?: string
