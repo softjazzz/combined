@@ -163,6 +163,36 @@ class TestFrontPageLLMClient:
 class TestFrontPageExtractionService:
     """病案首页抽取服务测试"""
 
+    def test_compose_structured_document_text_for_empty_record_content(self):
+        """record_content 为空时应能用结构化列组装入院/出院记录预览。"""
+        row = {
+            "record_content": "",
+            "chief_complaint": "反复腹痛3天",
+            "history_of_present_illness": "患者3天前出现腹痛。",
+            "treatment_course": "完善检查后行手术治疗。",
+            "discharge_order": "门诊随访。",
+        }
+
+        admission_text = FrontPageExtractionService._compose_structured_document_text(
+            row,
+            [
+                ("chief_complaint", "主诉"),
+                ("history_of_present_illness", "现病史"),
+            ],
+        )
+        discharge_text = FrontPageExtractionService._compose_structured_document_text(
+            row,
+            [
+                ("treatment_course", "诊疗经过"),
+                ("discharge_order", "出院医嘱"),
+            ],
+        )
+
+        assert "主诉：反复腹痛3天" in admission_text
+        assert "现病史：患者3天前出现腹痛。" in admission_text
+        assert "诊疗经过：完善检查后行手术治疗。" in discharge_text
+        assert "出院医嘱：门诊随访。" in discharge_text
+
     def test_init_without_llm(self, monkeypatch):
         """测试无 LLM 配置时的初始化"""
         # Mock 环境变量使 LLM 不可用

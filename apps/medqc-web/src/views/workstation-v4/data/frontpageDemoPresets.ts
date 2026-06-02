@@ -84,8 +84,8 @@ ${syntheticNotice}
     id: 'demo-tcm-diagnosis',
     title: '示例四：中医诊断病例',
     description: '用于演示门急诊中医诊断、中医治疗费用和联合 coverage。',
-    visit_id: 'V-P017',
-    patient_id: 'P017',
+    visit_id: '2073320',
+    patient_id: '0000237455',
     tags: ['中医诊断', '本机候选', '费用演示'],
     scene: 'combined',
     synthetic_settlement_text: `【演示用医保结算补充信息】

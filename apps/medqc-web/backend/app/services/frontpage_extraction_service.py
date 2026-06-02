@@ -1691,6 +1691,16 @@ class FrontPageExtractionService:
         logger.info(f"_prefill_from_cdm 完成: 已从源头表填充首页草稿")
         return fp_data
 
+    @staticmethod
+    def _compose_structured_document_text(row: dict, fields: list[tuple[str, str]]) -> str:
+        parts = []
+        for column, label in fields:
+            value = row.get(column)
+            text = str(value).strip() if value is not None else ""
+            if text:
+                parts.append(f"{label}：{text}")
+        return "\n".join(parts)
+
     async def _get_llm_context_text(self, visit_id: str) -> str:
         """
         三层架构 - 第三层辅助：
@@ -1708,10 +1718,34 @@ class FrontPageExtractionService:
                 # 入院记录全文
                 try:
                     adm = session.execute(sql_text(
-                        "SELECT record_content FROM admission_record WHERE visit_id = :vid LIMIT 1"
+                        "SELECT * FROM admission_record WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
                     if adm:
                         content = adm.get("record_content") or ""
+                        if not str(content).strip():
+                            content = self._compose_structured_document_text(
+                                dict(adm),
+                                [
+                                    ("admission_datetime", "入院时间"),
+                                    ("admission_route", "入院途径"),
+                                    ("dept_name", "入院科室"),
+                                    ("ward_name", "病区"),
+                                    ("ward_no", "病区号"),
+                                    ("bed_no", "床号"),
+                                    ("admission_reason", "入院原因"),
+                                    ("chief_complaint", "主诉"),
+                                    ("history_of_present_illness", "现病史"),
+                                    ("past_history", "既往史"),
+                                    ("allergy_history", "过敏史"),
+                                    ("personal_history", "个人史"),
+                                    ("family_history", "家族史"),
+                                    ("checkup", "体格检查"),
+                                    ("assist_exam", "辅助检查"),
+                                    ("resident_physician_sign", "住院医师"),
+                                    ("attending_physician_sign", "主治医师"),
+                                    ("chief_physician_sign", "主任医师"),
+                                ],
+                            )
                         if content.strip():
                             sections.append(f"【入院记录】\n{content}")
                 except Exception:
@@ -1720,10 +1754,30 @@ class FrontPageExtractionService:
                 # 出院记录全文
                 try:
                     dis = session.execute(sql_text(
-                        "SELECT record_content FROM discharge_record WHERE visit_id = :vid LIMIT 1"
+                        "SELECT * FROM discharge_record WHERE visit_id = :vid LIMIT 1"
                     ), {"vid": visit_id}).mappings().first()
                     if dis:
                         content = dis.get("record_content") or ""
+                        if not str(content).strip():
+                            content = self._compose_structured_document_text(
+                                dict(dis),
+                                [
+                                    ("dept_name", "出院科室"),
+                                    ("ward_name", "出院病区"),
+                                    ("admission_date", "入院日期"),
+                                    ("discharge_date", "出院日期"),
+                                    ("inpatient_duration", "住院天数"),
+                                    ("admission_condition", "入院情况"),
+                                    ("positive_assist_exam", "阳性辅助检查"),
+                                    ("treatment_course", "诊疗经过"),
+                                    ("discharge_condition", "出院情况"),
+                                    ("discharge_order", "出院医嘱"),
+                                    ("condition_transform", "转归"),
+                                    ("resident_physician_sign", "住院医师"),
+                                    ("attending_physician_sign", "主治医师"),
+                                    ("chief_physician_sign", "主任医师"),
+                                ],
+                            )
                         if content.strip():
                             sections.append(f"【出院记录】\n{content}")
                 except Exception:
