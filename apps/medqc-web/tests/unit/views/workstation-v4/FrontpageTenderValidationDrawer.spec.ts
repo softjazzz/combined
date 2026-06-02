@@ -109,6 +109,77 @@ const ButtonStub = defineComponent({
   },
 })
 
+const ModalStub = defineComponent({
+  name: 'AModal',
+  props: {
+    open: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  setup(props, { attrs, slots }) {
+    return () =>
+      props.open
+        ? h(
+            'section',
+            {
+              ...attrs,
+              'data-testid': 'formatted-preview-modal',
+            },
+            slots.default?.(),
+          )
+        : null
+  },
+})
+
+const TabsStub = defineComponent({
+  name: 'ATabs',
+  setup(_props, { attrs, slots }) {
+    return () => h('div', attrs, slots.default?.())
+  },
+})
+
+const TabPaneStub = defineComponent({
+  name: 'ATabPane',
+  setup(_props, { attrs, slots }) {
+    return () => h('div', attrs, slots.default?.())
+  },
+})
+
+const FrontpageSheetStub = defineComponent({
+  name: 'FrontpageSheet',
+  props: {
+    data: {
+      type: Object,
+      default: () => ({}),
+    },
+  },
+  setup(props) {
+    return () =>
+      h('div', { 'data-testid': 'frontpage-sheet-stub' }, [
+        h('span', String((props.data as any)?.basic?.name || '')),
+        h('span', String((props.data as any)?.diagnoses?.[0]?.diagnosis_name || '')),
+      ])
+  },
+})
+
+const SettlementSheetStub = defineComponent({
+  name: 'SettlementSheet',
+  props: {
+    data: {
+      type: Object,
+      default: () => ({}),
+    },
+  },
+  setup(props) {
+    return () =>
+      h('div', { 'data-testid': 'settlement-sheet-stub' }, [
+        h('span', String((props.data as any)?.patient_name || '')),
+        h('span', String((props.data as any)?.total_cost || '')),
+      ])
+  },
+})
+
 function mountDrawer() {
   return mount(FrontpageTenderValidationDrawer, {
     props: {
@@ -128,6 +199,11 @@ function mountDrawer() {
         AEmpty: passthroughStub('AEmpty'),
         ACollapse: passthroughStub('ACollapse'),
         ACollapsePanel: passthroughStub('ACollapsePanel'),
+        AModal: ModalStub,
+        ATabs: TabsStub,
+        ATabPane: TabPaneStub,
+        FrontpageSheet: FrontpageSheetStub,
+        SettlementSheet: SettlementSheetStub,
       },
     },
   })
@@ -362,5 +438,60 @@ describe('FrontpageTenderValidationDrawer', () => {
     expect(wrapper.text()).toContain('66/70')
     expect(wrapper.text()).toContain('其他住院医疗信息-ICU类型缺失')
     expect(wrapper.text()).toContain('frontpage.other_medical_info.icu.type')
+  })
+
+  it('opens formatted preview modal with official sheet components', async () => {
+    vi.mocked(frontpageApi.generateReportDraft).mockResolvedValue({
+      success: true,
+      data: {
+        scene: 'combined',
+        frontpage: {
+          ...baseFrontpageDraft,
+          basic_info: {
+            patient_name: '测试患者',
+            gender_text: '男',
+          },
+          hospitalization: {
+            hospital_name: '测试医院',
+            medical_record_no: 'MR001',
+          },
+          diagnoses: {
+            discharge_main_diagnosis_text: '蛛网膜下腔出血',
+            discharge_main_icd: 'I60.900',
+          },
+        },
+        settlement: {
+          patient_name: '测试患者',
+          total_cost: '100.00',
+        },
+        coverage: {
+          scene: 'combined',
+          status: 'complete',
+          total: 83,
+          present: 83,
+          partial: 0,
+          missing: 0,
+          fields: [],
+          warnings: [],
+        },
+        warnings: [],
+      },
+    })
+    const wrapper = mountDrawer()
+
+    await wrapper.find('[data-testid="medical-text"]').setValue('完整病历文本')
+    await clickStartValidation(wrapper)
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="open-formatted-preview"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="open-formatted-preview"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="formatted-preview-modal"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="formatted-frontpage-preview"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="formatted-settlement-preview"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="frontpage-sheet-stub"]').text()).toContain('测试患者')
+    expect(wrapper.find('[data-testid="frontpage-sheet-stub"]').text()).toContain('蛛网膜下腔出血')
+    expect(wrapper.find('[data-testid="settlement-sheet-stub"]').text()).toContain('100.00')
   })
 })

@@ -255,6 +255,27 @@
             description="该数据仅用于本次生成草稿验证，不写入正式首页表、结算表或业务库。"
           />
 
+          <div
+            class="flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 px-3 py-2"
+          >
+            <div>
+              <div class="text-sm font-semibold text-slate-900">
+                格式化生成结果
+              </div>
+              <div class="mt-0.5 text-xs text-slate-600">
+                使用现有病案首页和医保结算清单官方表格样式预览本次草稿。
+              </div>
+            </div>
+            <a-button
+              type="primary"
+              ghost
+              data-testid="open-formatted-preview"
+              @click="openFormattedPreview"
+            >
+              查看格式化结果
+            </a-button>
+          </div>
+
           <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div class="rounded border border-slate-200 bg-white p-3">
               <div class="text-xs font-medium text-slate-500">
@@ -366,11 +387,101 @@
       </a-spin>
     </div>
   </a-drawer>
+
+  <a-modal
+    v-model:open="formattedPreviewOpen"
+    title="格式化生成结果"
+    :width="'96vw'"
+    :footer="null"
+    :body-style="{
+      maxHeight: 'calc(100vh - 150px)',
+      overflowY: 'auto',
+      background: '#f8fafc',
+      padding: '16px',
+    }"
+    destroy-on-close
+  >
+    <a-alert
+      v-if="resultUsedSynthetic"
+      class="mb-3"
+      type="warning"
+      show-icon
+      message="包含演示用虚拟医保费用数据"
+      description="该数据仅用于本次生成草稿验证，不写入正式首页表、结算表或业务库。"
+    />
+    <a-tabs v-model:active-key="formattedPreviewTab">
+      <a-tab-pane
+        key="frontpage"
+        tab="病案首页"
+      >
+        <div
+          class="rounded border border-slate-200 bg-white p-3"
+          data-testid="formatted-frontpage-preview"
+        >
+          <FrontpageSheet
+            v-if="formattedFrontpageData"
+            :data="formattedFrontpageData"
+            :post-processing="false"
+          />
+          <a-empty
+            v-else
+            description="暂无病案首页草稿"
+          />
+        </div>
+      </a-tab-pane>
+      <a-tab-pane
+        key="settlement"
+        tab="医保结算清单"
+      >
+        <div
+          class="rounded border border-slate-200 bg-white p-3"
+          data-testid="formatted-settlement-preview"
+        >
+          <SettlementSheet
+            v-if="formattedSettlementData"
+            :data="formattedSettlementData"
+          />
+          <a-empty
+            v-else
+            description="当前场景未返回医保结算清单草稿"
+          />
+        </div>
+      </a-tab-pane>
+      <a-tab-pane
+        key="json"
+        tab="原始 JSON"
+      >
+        <div
+          class="grid grid-cols-1 gap-3 lg:grid-cols-2"
+          data-testid="formatted-json-preview"
+        >
+          <div class="rounded border border-slate-200 bg-white p-3">
+            <div class="mb-2 text-sm font-semibold text-slate-800">
+              病案首页草稿
+            </div>
+            <pre
+              class="max-h-[60vh] overflow-auto rounded bg-slate-50 p-3 text-xs text-slate-700"
+            >{{ stringifyJson(result?.frontpage) }}</pre>
+          </div>
+          <div class="rounded border border-slate-200 bg-white p-3">
+            <div class="mb-2 text-sm font-semibold text-slate-800">
+              医保结算清单草稿
+            </div>
+            <pre
+              class="max-h-[60vh] overflow-auto rounded bg-slate-50 p-3 text-xs text-slate-700"
+            >{{ stringifyJson(result?.settlement) }}</pre>
+          </div>
+        </div>
+      </a-tab-pane>
+    </a-tabs>
+  </a-modal>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
+import FrontpageSheet from './FrontpageSheet.vue'
+import SettlementSheet from './SettlementSheet.vue'
 import {
   frontpageApi,
   type FrontpageDemoVisitPreview,
@@ -402,6 +513,8 @@ const resultUsedSynthetic = ref(false)
 const previewLoading = ref(false)
 const presetPreview = ref<FrontpageDemoVisitPreview | null>(null)
 const previewError = ref('')
+const formattedPreviewOpen = ref(false)
+const formattedPreviewTab = ref<'frontpage' | 'settlement' | 'json'>('frontpage')
 
 const coverage = computed(() => result.value?.coverage)
 
@@ -452,6 +565,197 @@ const settlementLabel = computed(() => {
   }
   return result.value?.settlement ? '已生成' : '-'
 })
+
+const formattedFrontpageData = computed(() => {
+  if (!result.value?.frontpage) return null
+  return adaptFrontpageDraftToSheetData(result.value.frontpage)
+})
+
+const formattedSettlementData = computed(() => {
+  if (!result.value?.settlement) return null
+  return result.value.settlement
+})
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function asRecords(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object',
+      )
+    : []
+}
+
+function textValue(...values: unknown[]): string {
+  for (const value of values) {
+    if (value === undefined || value === null) continue
+    const text = String(value).trim()
+    if (text) return text
+  }
+  return ''
+}
+
+function textArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => textValue(item)).filter((item) => item.length > 0)
+    : []
+}
+
+function pairRows(names: string[], codes: string[]) {
+  return names.map((name, index) => ({
+    name,
+    code: codes[index] || '',
+  }))
+}
+
+function adaptFrontpageDraftToSheetData(frontpage: ReportDraftData['frontpage']) {
+  const basicInfo = asRecord(frontpage.basic_info)
+  const hospitalization = asRecord(frontpage.hospitalization)
+  const diagnoses = asRecord(frontpage.diagnoses)
+  const procedures = asRecord(frontpage.procedures)
+  const otherMedicalInfo = asRecord(frontpage.other_medical_info)
+  const staff = asRecord(frontpage.staff)
+  const costs = asRecord(frontpage.costs)
+
+  const diagnosisRows = []
+  const mainDiagnosis = textValue(
+    diagnoses.discharge_main_diagnosis_text,
+    diagnoses.discharge_main_diagnosis,
+  )
+  if (mainDiagnosis) {
+    diagnosisRows.push({
+      diagnosis_type: '主要诊断',
+      diagnosis_name: mainDiagnosis,
+      diagnosis_code: textValue(diagnoses.discharge_main_icd),
+      admission_condition: textValue(diagnoses.admission_condition),
+    })
+  }
+  const otherDiagnosisRows = pairRows(
+    textArray(diagnoses.discharge_other_diagnoses_texts),
+    textArray(diagnoses.discharge_other_icds),
+  )
+  otherDiagnosisRows.forEach((item) => {
+    diagnosisRows.push({
+      diagnosis_type: '其他诊断',
+      diagnosis_name: item.name,
+      diagnosis_code: item.code,
+      admission_condition: '',
+    })
+  })
+
+  const surgeryRows = []
+  const mainProcedure = textValue(procedures.main_procedure_text)
+  if (mainProcedure) {
+    surgeryRows.push({
+      surgery_name: mainProcedure,
+      surgery_code: textValue(procedures.main_procedure_code),
+      surgery_begin_datetime: textValue(procedures.main_procedure_date),
+      surgical_level: textValue(procedures.main_procedure_level),
+      surgeon: textValue(procedures.surgeon_name),
+      surgeon_code: textValue(procedures.surgeon_code),
+      first_assistant: textValue(procedures.assistant1_name),
+      first_assistant_code: textValue(procedures.assistant1_code),
+      second_assistant: textValue(procedures.assistant2_name),
+      second_assistant_code: textValue(procedures.assistant2_code),
+      surgical_incisionheal_level: textValue(procedures.incision_healing_grade),
+      anesthesia_method: textValue(procedures.anesthesia_method),
+      anesthesiologist: textValue(procedures.anesthetist_name),
+      anesthesiologist_code: textValue(procedures.anesthetist_code),
+    })
+  }
+  const structuredOthers = asRecords(procedures.other_procedures_structured)
+  const otherProcedureNames = textArray(procedures.other_procedures_texts)
+  const otherProcedureCodes = textArray(procedures.other_procedures_codes)
+  const otherProcedures = structuredOthers.length
+    ? structuredOthers
+    : pairRows(otherProcedureNames, otherProcedureCodes)
+  otherProcedures.forEach((item) => {
+    const name = textValue(item.text, item.name, item.surgery_name)
+    if (!name) return
+    surgeryRows.push({
+      surgery_name: name,
+      surgery_code: textValue(item.code, item.surgery_code),
+      surgery_begin_datetime: textValue(item.date, item.surgery_begin_datetime),
+      surgical_level: textValue(item.level, item.surgical_level),
+      surgeon: textValue(item.surgeon, item.surgeon_name),
+      surgeon_code: textValue(item.surgeon_code),
+      first_assistant: textValue(item.first_assistant, item.assistant1_name),
+      first_assistant_code: textValue(item.first_assistant_code, item.assistant1_code),
+      second_assistant: textValue(item.second_assistant, item.assistant2_name),
+      second_assistant_code: textValue(item.second_assistant_code, item.assistant2_code),
+      surgical_incisionheal_level: textValue(
+        item.surgical_incisionheal_level,
+        item.incision_healing_grade,
+      ),
+      anesthesia_method: textValue(item.anesthesia_method),
+      anesthesiologist: textValue(item.anesthesiologist, item.anesthetist_name),
+      anesthesiologist_code: textValue(item.anesthesiologist_code, item.anesthetist_code),
+    })
+  })
+
+  return {
+    basic: {
+      institute_county_desc: textValue(hospitalization.hospital_name),
+      institute_code: textValue(hospitalization.organization_code),
+      medical_payment_method: textValue(
+        hospitalization.payment_method_text,
+        hospitalization.payment_method,
+      ),
+      mr_no: textValue(hospitalization.medical_record_no),
+      visit_cnt: textValue(hospitalization.admission_times_in_hospital),
+      name: textValue(basicInfo.patient_name),
+      sex: textValue(basicInfo.gender_text, basicInfo.gender),
+      birthday: textValue(basicInfo.birth_date),
+      age: textValue(basicInfo.age_years),
+      nationality: textValue(basicInfo.nationality),
+      ethnicity: textValue(basicInfo.ethnicity),
+      id_card_no: textValue(basicInfo.id_number),
+      occupation_category: textValue(basicInfo.occupation),
+      marital_status: textValue(basicInfo.marital_status_text, basicInfo.marital_status),
+      currentaddress: textValue(basicInfo.current_address),
+      work_unit: textValue(basicInfo.work_unit, basicInfo.work_unit_address),
+      nativeplace: textValue(basicInfo.nativeplace, basicInfo.birthplace),
+      contact_name: textValue(basicInfo.contact_name),
+      contact_relationship: textValue(basicInfo.contact_relation),
+      contact_address: textValue(basicInfo.contact_address),
+      contact_telephone: textValue(basicInfo.contact_phone),
+      admission_route: textValue(hospitalization.admission_way_text, hospitalization.admission_way),
+      admission_dept_name: textValue(hospitalization.admission_dept),
+      admission_ward_name: textValue(hospitalization.admission_ward),
+      discharge_dept_name: textValue(hospitalization.discharge_dept),
+      discharge_ward_name: textValue(hospitalization.discharge_ward),
+      transfer_dept_name: textValue(hospitalization.transfer_dept),
+      admission_datetime: textValue(hospitalization.admission_datetime),
+      discharge_datetime: textValue(hospitalization.discharge_datetime),
+      hospital_duration: textValue(hospitalization.actual_hospital_days),
+      leaving_hospital_way: textValue(hospitalization.leaving_hospital_way),
+      rehospital_with_month: textValue(hospitalization.rehospital_within_month),
+      pathology_id: textValue(otherMedicalInfo.pathology_no),
+      allergy_sign: textValue(otherMedicalInfo.drug_allergy_flag, otherMedicalInfo.drug_allergy),
+      abo_blood_code: textValue(otherMedicalInfo.abo_blood_type),
+      rh_blood_code: textValue(otherMedicalInfo.rh_blood_type),
+      deptdirector_sign: textValue(staff.dept_director),
+      chief_physician_sign: textValue(staff.chief_physician),
+      attending_physician_sign: textValue(staff.attending_physician),
+      resident_physician_sign: textValue(staff.resident_physician),
+      responsible_nurse_sign: textValue(staff.responsible_nurse),
+      coder_sign: textValue(staff.coder),
+      medicalrecord_quality: textValue(staff.medical_record_quality),
+    },
+    diagnoses: diagnosisRows,
+    surgeries: surgeryRows,
+    cost: {
+      total_cost: textValue(costs.total_cost, costs.total),
+      self_pay: textValue(costs.self_paid, costs.self_pay),
+    },
+    other_medical_info: otherMedicalInfo,
+    evidence: frontpage.evidence || {},
+  }
+}
 
 function maskPresetPatientId(preset: FrontpageDemoPreset) {
   const text = preset.patient_id || ''
@@ -543,6 +847,8 @@ async function startValidation() {
       throw new Error(response.error || response.message || '招标字段验证失败')
     }
     result.value = response.data
+    formattedPreviewOpen.value = false
+    formattedPreviewTab.value = response.data.frontpage ? 'frontpage' : 'json'
     resultUsedSynthetic.value = Boolean(preset)
     message.success('招标字段验证完成')
   } catch (error) {
@@ -562,10 +868,17 @@ function clearValidation() {
   presetPreview.value = null
   previewError.value = ''
   previewLoading.value = false
+  formattedPreviewOpen.value = false
+  formattedPreviewTab.value = 'frontpage'
 }
 
 function stringifyJson(value: unknown) {
   if (value === undefined || value === null) return 'null'
   return JSON.stringify(value, null, 2)
+}
+
+function openFormattedPreview() {
+  formattedPreviewTab.value = result.value?.frontpage ? 'frontpage' : 'json'
+  formattedPreviewOpen.value = true
 }
 </script>
