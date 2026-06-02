@@ -205,12 +205,36 @@ class TestSqlMapping:
         draft = {"basic_info": {"patient_name": "张三"}}
         sql = {
             "mr": {
+                "name": "张三",
+                "sex": "男",
+                "birthday": "1990-05-15",
+                "age_year": "35",
+                "ethnicity": "汉族",
+                "id_card_type": "居民身份证",
+                "id_card_no": "510123199005151234",
+                "occupation_category": "工人",
+                "currentaddress": "四川省泸州市泸县",
+                "work_unit": "泸县人民医院",
+                "contact_name": "李四",
+                "contact_relationship": "配偶",
+                "contact_telephone": "13800138000",
                 "transfer_dept_name": "外科→骨科",
                 "planned_transder_to": "华西医院",
-                "id_card_type": "居民身份证",
             }
         }
         out = svc._assemble_from_sources(draft, sql)
+        assert out["patient_name"] == "张三"
+        assert out["sex"] == "男"
+        assert out["patient_birthday"] == "1990-05-15"
+        assert out["patient_age"] == "35"
+        assert out["patient_ethnicity"] == "汉族"
+        assert out["patient_id_card"] == "510123199005151234"
+        assert out["occupation_category"] == "工人"
+        assert out["currentaddress"] == "四川省泸州市泸县"
+        assert out["work_unit"] == "泸县人民医院"
+        assert out["contact_name"] == "李四"
+        assert out["contact_relationship"] == "配偶"
+        assert out["contact_telephone"] == "13800138000"
         assert out["transfer_dept_name"] == "外科→骨科"
         assert out["receiving_institution_name"] == "华西医院"
         assert out["id_card_type"] == "居民身份证"

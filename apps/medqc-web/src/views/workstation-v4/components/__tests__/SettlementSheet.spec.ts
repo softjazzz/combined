@@ -13,6 +13,10 @@ describe('SettlementSheet', () => {
           settlement_status: '结算草稿',
           insurance_no: 'INS-001',
           mr_no: 'MR-001',
+          sex: '男',
+          id_card_type: '居民身份证',
+          patient_birthday: '1990-05-15',
+          patient_id_card: '510123199005151234',
           hospital_duration: '24',
           diagnoses: [
             {
@@ -77,6 +81,10 @@ describe('SettlementSheet', () => {
     expect(text).toContain('定点医疗机构代码HOSP001')
     expect(text).toContain('医保编号INS-001')
     expect(text).toContain('病案号MR-001')
+    expect(text).toContain('性别□ 1.男 2.女 男')
+    expect(text).toContain('出生日期1990-05-15')
+    expect(text).toContain('患者证件类别居民身份证')
+    expect(text).toContain('患者证件号码510123199005151234')
     expect(text).toContain('实际住院24天')
     expect(text).toContain('疾病代码J20.9')
     expect(text).toContain('肺炎')

@@ -48,7 +48,7 @@
           姓名<u class="fill">{{ v('patient_name') }}</u>
         </td>
         <td style="width: 16%">
-          性别□ 1.男 2.女
+          性别□ 1.男 2.女 <span class="bold">{{ v('sex') }}</span>
         </td>
         <td style="width: 20%">
           出生日期<u class="fill">{{ v('patient_birthday') }}</u>
@@ -65,7 +65,9 @@
       </tr>
       <tr>
         <td colspan="3">
-          （年龄不足1周岁）年龄<u class="fill" />天 &nbsp; 患者证件类别<u class="fill" />
+          （年龄不足1周岁）年龄<u class="fill" />天 &nbsp; 患者证件类别<u class="fill">{{
+            v('id_card_type')
+          }}</u>
         </td>
         <td colspan="3">
           患者证件号码<u class="fill">{{ v('patient_id_card') }}</u>
