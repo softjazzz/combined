@@ -59,6 +59,7 @@ from .routers import sync as sync_router
 from .routers import workstation as workstation_router
 from .routers import custom_qc as custom_qc_router
 from .routers import qc_sample_pools as qc_sample_pools_router
+from .routers import qc_agent as qc_agent_router
 # Mount legacy routes to preserve all routes during migration
 try:
     from ..main_api import app as legacy_app  # type: ignore
@@ -302,6 +303,8 @@ def create_app() -> FastAPI:
     app.include_router(custom_qc_router.router)
     # 客户人工问题样本池
     app.include_router(qc_sample_pools_router.router)
+    # 受控质控 Agent 工具层
+    app.include_router(qc_agent_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))
