@@ -5,9 +5,14 @@ import pytest
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 from app.routers.qc_agent import get_qc_agent_registry
-from app.services.qc_agent.schemas import GetRecordContextInput, SearchRecordsInput
+from app.services.qc_agent.schemas import GetRecordContextInput, RunFrontpageQCInput, SearchRecordsInput
 from app.services.qc_agent.tool_registry import AgentToolRegistry
-from app.services.qc_agent.tools import get_record_context, register_default_tools, search_records
+from app.services.qc_agent.tools import (
+    get_record_context,
+    register_default_tools,
+    run_frontpage_qc,
+    search_records,
+)
 
 
 class FakeWorkspace:
@@ -63,6 +68,16 @@ class FakeWorkspace:
                 "admission_date": "2026-05-02",
                 "discharge_date": "2026-05-09",
             },
+            {
+                "visit_id": "V003",
+                "patient_id": "P003",
+                "patient_name": "王五",
+                "department": "消化内科",
+                "doctor": "赵医生",
+                "admission_date": "2026-05-10",
+                "discharge_date": "2026-05-11",
+                "medical_text": "",
+            },
         ]
         if record_ids:
             return [record for record in records if record.get("visit_id") in record_ids]
@@ -70,32 +85,42 @@ class FakeWorkspace:
 
     def hydrate_records_with_medical_text(self, records):
         self.hydrate_calls.append(records)
-        return [
-            {
-                **record,
-                "mr_no": "MR001",
-                "medical_text": (
-                    "姓名张三，身份证号110101198001011234，手机号13812345678，"
-                    "现住址：北京市朝阳区示例路99号。"
-                    + "入院记录显示患者头痛头晕，诊断考虑脑梗死。" * 80
-                ),
-                "documents": [
-                    {
-                        "document_type": "入院记录",
-                        "content": "入院记录原文不允许直接返回",
-                        "record_time": "2026-05-01 09:00:00",
-                    },
-                    {
-                        "document_type": "出院记录",
-                        "content": "出院记录原文不允许直接返回",
-                        "updated_at": "2026-05-08 10:00:00",
-                    },
-                ],
-                "bundle": {"full": "bundle 全量不允许返回"},
-                "structured_context": {"full": "structured_context 全量不允许返回"},
-            }
-            for record in records
-        ]
+        hydrated = []
+        for record in records:
+            if record.get("visit_id") == "V003":
+                hydrated.append({**record, "mr_no": "MR003", "documents": []})
+                continue
+            hydrated.append(
+                {
+                    **record,
+                    "mr_no": "MR001",
+                    "medical_text": (
+                        "姓名：张三\n性别：男\n年龄：46岁\n身份证号：110101198001011234\n"
+                        "入院时间：2026-05-01 09:00:00\n出院时间：2026-05-08 10:00:00\n"
+                        "入院科别：神经内科\n出院科别：神经内科\n入院途径：2\n离院方式：1\n"
+                        "实际住院天数：7天\n主治医师：李医生\n"
+                        "出院主要诊断：脑梗死\n主要诊断编码：I63.900\n"
+                        "其他诊断：高血压 I10\n总费用：12345.67\n"
+                        "手机号13812345678，现住址：北京市朝阳区示例路99号。"
+                        + "入院记录显示患者头痛头晕，诊断考虑脑梗死。" * 80
+                    ),
+                    "documents": [
+                        {
+                            "document_type": "入院记录",
+                            "content": "入院记录原文不允许直接返回",
+                            "record_time": "2026-05-01 09:00:00",
+                        },
+                        {
+                            "document_type": "出院记录",
+                            "content": "出院记录原文不允许直接返回",
+                            "updated_at": "2026-05-08 10:00:00",
+                        },
+                    ],
+                    "bundle": {"full": "bundle 全量不允许返回"},
+                    "structured_context": {"full": "structured_context 全量不允许返回"},
+                }
+            )
+        return hydrated
 
     def load_or_assemble_scene_bundle(self, *args, **kwargs):
         self.persist_called = True
@@ -114,6 +139,9 @@ def _assert_no_sensitive_keys(value):
         assert "bundle" not in value
         assert "structured_context" not in value
         assert "text_preview" not in value
+        assert "frontpage_draft" not in value
+        assert "raw_draft" not in value
+        assert "draft_json" not in value
         for item in value.values():
             _assert_no_sensitive_keys(item)
     elif isinstance(value, list):
@@ -149,7 +177,7 @@ def test_search_records_returns_public_record_summaries_only():
             "record_ids": None,
         }
     ]
-    assert observation.public_data["total"] == 2
+    assert observation.public_data["total"] == 3
     assert observation.public_data["page_size"] == 20
     assert observation.public_data["records"][0] == {
         "visit_id": "V001",
@@ -171,7 +199,7 @@ def test_search_records_applies_page_and_page_size():
         workspace=workspace,  # type: ignore[arg-type]
     )
 
-    assert observation.public_data["total"] == 2
+    assert observation.public_data["total"] == 3
     assert observation.public_data["page"] == 2
     assert observation.public_data["page_size"] == 1
     assert observation.public_data["records"][0]["visit_id"] == "V002"
@@ -242,6 +270,126 @@ def test_get_record_context_rejects_missing_record():
     assert workspace.persist_called is False
 
 
+def test_run_frontpage_qc_returns_summary_and_issues():
+    workspace = FakeWorkspace()
+    observation = run_frontpage_qc(
+        RunFrontpageQCInput(visit_id="V001", patient_id="P001"),
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    assert workspace.persist_called is False
+    public_data = observation.public_data
+    assert public_data["record_summary"]["visit_id"] == "V001"
+    assert public_data["generation_status"]["draft_generated"] is True
+    assert public_data["generation_status"]["text_length"] > 0
+    assert public_data["qc_summary"]["total_rules"] > 0
+    assert public_data["qc_summary"]["issue_count"] == public_data["qc_summary"]["failed"]
+    assert all(issue["message"] for issue in public_data["issues"])
+    assert all(issue["rule_id"] for issue in public_data["issues"])
+    assert observation.internal_data is not None
+    assert observation.internal_data["frontpage_draft"]
+    _assert_no_sensitive_keys(public_data)
+
+
+def test_run_frontpage_qc_rejects_patient_id_mismatch():
+    workspace = FakeWorkspace()
+
+    with pytest.raises(Exception) as exc_info:
+        run_frontpage_qc(
+            {"visit_id": "V001", "patient_id": "P999"},
+            workspace=workspace,  # type: ignore[arg-type]
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 409
+    assert workspace.persist_called is False
+
+
+def test_run_frontpage_qc_rejects_batch_visit_ids():
+    workspace = FakeWorkspace()
+
+    with pytest.raises(Exception) as exc_info:
+        run_frontpage_qc(
+            {"visit_id": "V001,V002"},
+            workspace=workspace,  # type: ignore[arg-type]
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 422
+    assert workspace.calls == []
+    assert workspace.persist_called is False
+
+
+def test_run_frontpage_qc_rejects_missing_or_empty_context():
+    workspace = FakeWorkspace()
+
+    with pytest.raises(Exception) as exc_info:
+        run_frontpage_qc(
+            {"visit_id": "V003", "patient_id": "P003"},
+            workspace=workspace,  # type: ignore[arg-type]
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 422
+    assert "medical_text" in str(exc_info.value.detail)
+    assert workspace.persist_called is False
+
+
+def test_run_frontpage_qc_include_passed_flag_controls_results():
+    workspace = FakeWorkspace()
+    failed_only = run_frontpage_qc(
+        {"visit_id": "V001", "patient_id": "P001", "include_passed": False},
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+    with_passed = run_frontpage_qc(
+        {"visit_id": "V001", "patient_id": "P001", "include_passed": True},
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert len(failed_only.public_data["issues"]) == failed_only.public_data["qc_summary"]["failed"]
+    assert len(with_passed.public_data["issues"]) == with_passed.public_data["qc_summary"]["total_rules"]
+    assert any(issue["message"] == "" for issue in with_passed.public_data["issues"])
+    _assert_no_sensitive_keys(with_passed.public_data)
+
+
+def test_run_frontpage_qc_does_not_call_persistence_paths(monkeypatch):
+    workspace = FakeWorkspace()
+
+    def _forbidden(*_args, **_kwargs):
+        raise AssertionError("不允许调用持久化路径")
+
+    monkeypatch.setattr(
+        "app.services.medical_records.maintenance_service.save_ai_frontpage_draft",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "app.services.qc_persistence_service.default_qc_persistence_service.persist_analysis",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "app.services.workflow_queue_state_service.default_workflow_queue_state_service.start_run",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "app.services.workflow_queue_state_service.default_workflow_queue_state_service.finish_success",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "app.services.workflow_queue_state_service.default_workflow_queue_state_service.finish_failed",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "app.services.workflow_queue_state_service.default_workflow_queue_state_service.backfill_frontpage_generate",
+        _forbidden,
+    )
+
+    observation = run_frontpage_qc(
+        {"visit_id": "V001", "patient_id": "P001"},
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    assert workspace.persist_called is False
+
+
 @pytest.fixture
 def qc_agent_auth(client):
     async def _noop_auth_gate():
@@ -287,6 +435,17 @@ def _registry_with_fake_workspace() -> AgentToolRegistry:
         timeout_ms=5000,
         max_records=1,
     )
+    registry.register(
+        name="run_frontpage_qc",
+        description="对单份病历生成瞬态首页草稿并执行首页形式质控；不保存草稿或质控结果。",
+        input_model=RunFrontpageQCInput,
+        handler=lambda payload: run_frontpage_qc(payload, workspace=workspace),
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=30000,
+        max_records=1,
+    )
     return registry
 
 
@@ -308,6 +467,11 @@ def test_api_list_tools_returns_search_records_schema(client, qc_agent_auth):
     assert by_name["get_record_context"]["requires_confirmation"] is False
     assert by_name["get_record_context"]["max_records"] == 1
     assert "input_schema" in by_name["get_record_context"]
+    assert by_name["run_frontpage_qc"]["risk_level"] == "medium"
+    assert by_name["run_frontpage_qc"]["writes_db"] is False
+    assert by_name["run_frontpage_qc"]["requires_confirmation"] is False
+    assert by_name["run_frontpage_qc"]["max_records"] == 1
+    assert "input_schema" in by_name["run_frontpage_qc"]
 
 
 def test_api_requires_login(client):
@@ -366,6 +530,29 @@ def test_api_get_record_context_strips_internal_data_and_raw_context(client, qc_
     _assert_no_sensitive_keys(body)
 
 
+def test_api_run_frontpage_qc_strips_internal_data_and_raw_draft(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/tools/run_frontpage_qc/run",
+        json={"visit_id": "V001", "patient_id": "P001", "include_passed": True},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tool_call"]["tool_name"] == "run_frontpage_qc"
+    assert "internal_data" not in body["observation"]
+    public_data = body["observation"]["public_data"]
+    assert public_data["qc_summary"]["total_rules"] > 0
+    assert public_data["generation_status"]["draft_generated"] is True
+    assert "完整病历正文不允许返回" not in str(body)
+    assert "入院记录原文不允许直接返回" not in str(body)
+    assert "bundle 全量不允许返回" not in str(body)
+    assert "frontpage_draft" not in str(body)
+    assert "raw_draft" not in str(body)
+    _assert_no_sensitive_keys(body)
+
+
 def test_api_rejects_page_size_overflow(client, qc_agent_auth):
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
@@ -382,8 +569,10 @@ def test_default_registry_contains_only_safe_search_tool():
     specs = registry.list_specs()
 
     by_name = {spec.name: spec for spec in specs}
-    assert set(by_name) == {"search_records", "get_record_context"}
+    assert set(by_name) == {"search_records", "get_record_context", "run_frontpage_qc"}
     assert by_name["search_records"].writes_db is False
     assert by_name["search_records"].requires_confirmation is False
     assert by_name["get_record_context"].writes_db is False
     assert by_name["get_record_context"].requires_confirmation is False
+    assert by_name["run_frontpage_qc"].writes_db is False
+    assert by_name["run_frontpage_qc"].requires_confirmation is False

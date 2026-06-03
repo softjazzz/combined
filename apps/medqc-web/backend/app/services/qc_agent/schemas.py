@@ -58,6 +58,18 @@ class GetRecordContextInput(BaseModel):
     include_preview: bool = True
 
 
+class RunFrontpageQCRuleScope(BaseModel):
+    categories: Optional[List[Literal["required", "format", "logic", "consistency"]]] = None
+    severities: Optional[List[Literal["error", "warning", "info"]]] = None
+
+
+class RunFrontpageQCInput(BaseModel):
+    visit_id: str = Field(..., min_length=1)
+    patient_id: Optional[str] = None
+    rule_scope: Optional[RunFrontpageQCRuleScope] = None
+    include_passed: bool = False
+
+
 class RecordSummary(BaseModel):
     visit_id: str = ""
     patient_id: str = ""

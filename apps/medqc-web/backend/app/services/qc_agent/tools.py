@@ -7,11 +7,13 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel
 
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
+from app.services.frontpage_formal_qc import Category, FrontpageFormalQC, QCResult, Severity
 
 from .schemas import (
     AgentToolObservation,
     GetRecordContextInput,
     RecordSummary,
+    RunFrontpageQCInput,
     SearchRecordsInput,
     SearchRecordsPublicData,
 )
@@ -25,6 +27,9 @@ SENSITIVE_OUTPUT_KEYS = {
     "bundle",
     "structured_context",
     "text_preview",
+    "frontpage_draft",
+    "raw_draft",
+    "draft_json",
 }
 
 
@@ -163,6 +168,223 @@ def _extract_medical_text(record: Dict[str, Any]) -> str:
         parts = [_extract_document_text(document) for document in documents if isinstance(document, dict)]
         return "\n".join(part for part in parts if part)
     return ""
+
+
+def _first_match(text: str, patterns: Iterable[str]) -> str:
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return _text(match.group(1))
+    return ""
+
+
+def _parse_int(value: str) -> int | None:
+    if not value:
+        return None
+    match = re.search(r"\d+", value)
+    if not match:
+        return None
+    try:
+        return int(match.group(0))
+    except ValueError:
+        return None
+
+
+def _parse_float(value: str) -> float | None:
+    if not value:
+        return None
+    match = re.search(r"\d+(?:\.\d+)?", value)
+    if not match:
+        return None
+    try:
+        return float(match.group(0))
+    except ValueError:
+        return None
+
+
+def _normalize_datetime(value: str) -> str:
+    if not value:
+        return ""
+    normalized = value.replace("年", "-").replace("月", "-").replace("日", "")
+    normalized = re.sub(r"[/.]", "-", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if re.fullmatch(r"\d{4}-\d{1,2}-\d{1,2}", normalized):
+        parts = normalized.split("-")
+        return f"{parts[0]}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+    return normalized
+
+
+def _sex_code(value: str) -> int | None:
+    if value == "男":
+        return 1
+    if value == "女":
+        return 2
+    return None
+
+
+def _extract_diagnoses(text: str) -> List[Dict[str, Any]]:
+    main_name = _first_match(
+        text,
+        [
+            r"出院主要诊断[:：]?\s*([^\n\r；;，,]+)",
+            r"主要诊断[:：]?\s*([^\n\r；;，,]+)",
+            r"出院诊断[:：]?\s*([^\n\r；;，,]+)",
+        ],
+    )
+    main_code = _first_match(
+        text,
+        [
+            r"主要诊断编码[:：]?\s*([A-Z]\d{2}(?:\.\d{1,4})?)",
+            r"出院主要诊断.*?([A-Z]\d{2}(?:\.\d{1,4})?)",
+            r"出院诊断编码[:：]?\s*([A-Z]\d{2}(?:\.\d{1,4})?)",
+        ],
+    )
+    diagnoses: List[Dict[str, Any]] = []
+    if main_name or main_code:
+        diagnoses.append(
+            {
+                "diagnosis_name": main_name,
+                "diagnosis_code": main_code,
+                "diagnosis_type": "main",
+                "admission_condition": _first_match(text, [r"入院病情[:：]?\s*([^\n\r；;，,]+)"]),
+            }
+        )
+
+    other_line = _first_match(
+        text,
+        [
+            r"出院其他诊断[:：]?\s*([^\n\r]+)",
+            r"其他诊断[:：]?\s*([^\n\r]+)",
+        ],
+    )
+    if other_line:
+        names = [item.strip() for item in re.split(r"[；;、,，]", other_line) if item.strip()]
+        codes = re.findall(r"[A-Z]\d{2}(?:\.\d{1,4})?", other_line, flags=re.IGNORECASE)
+        for index, name in enumerate(names[:8]):
+            clean_name = re.sub(r"[A-Z]\d{2}(?:\.\d{1,4})?", "", name, flags=re.IGNORECASE).strip(" ：:")
+            diagnoses.append(
+                {
+                    "diagnosis_name": clean_name or name,
+                    "diagnosis_code": codes[index] if index < len(codes) else "",
+                    "diagnosis_type": "other",
+                    "admission_condition": "",
+                }
+            )
+    return diagnoses
+
+
+def _extract_surgeries(text: str) -> List[Dict[str, Any]]:
+    surgery_name = _first_match(
+        text,
+        [
+            r"主要手术及操作[:：]?\s*([^\n\r；;，,]+)",
+            r"手术名称[:：]?\s*([^\n\r；;，,]+)",
+            r"手术及操作名称[:：]?\s*([^\n\r；;，,]+)",
+        ],
+    )
+    surgery_code = _first_match(
+        text,
+        [
+            r"主要手术及操作编码[:：]?\s*(\d{2}\.\d{2,4})",
+            r"手术及操作代码[:：]?\s*(\d{2}\.\d{2,4})",
+            r"手术编码[:：]?\s*(\d{2}\.\d{2,4})",
+        ],
+    )
+    if not surgery_name and not surgery_code:
+        return []
+    return [
+        {
+            "surgery_name": surgery_name,
+            "surgery_code": surgery_code,
+            "surgery_date": _normalize_datetime(
+                _first_match(text, [r"手术日期[:：]?\s*([0-9年月日\-/. :]+)"])
+            ),
+            "surgeon_name": _first_match(text, [r"术者[:：]?\s*([^\n\r；;，,]+)"]),
+            "anesthesia_method": _first_match(text, [r"麻醉方式[:：]?\s*([^\n\r；;，,]+)"]),
+        }
+    ]
+
+
+def _build_transient_frontpage_from_text(
+    medical_text: str,
+    record_summary: Dict[str, Any],
+) -> tuple[Dict[str, Any], List[str]]:
+    """构造仅供首页形式质控使用的内存首页字典，不持久化也不对外返回。"""
+    warnings: List[str] = []
+    patient_name = _first_match(medical_text, [r"姓名[:：]?\s*([\u4e00-\u9fa5A-Za-z·]{2,20})"])
+    gender = _first_match(medical_text, [r"性别[:：]?\s*(男|女)"])
+    age = _parse_int(_first_match(medical_text, [r"年龄[:：]?\s*(\d{1,3})\s*岁?"]))
+    id_card = _first_match(
+        medical_text,
+        [
+            r"身份证号(?:码)?[:：]?\s*([1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx])",
+            r"患者证件号码[:：]?\s*([1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx])",
+        ],
+    )
+    admission_datetime = _normalize_datetime(
+        _first_match(medical_text, [r"入院时间[:：]?\s*([0-9年月日\-/. :]+)"])
+    )
+    discharge_datetime = _normalize_datetime(
+        _first_match(medical_text, [r"出院时间[:：]?\s*([0-9年月日\-/. :]+)"])
+    )
+    diagnoses = _extract_diagnoses(medical_text)
+    surgeries = _extract_surgeries(medical_text)
+    if not diagnoses:
+        warnings.append("未从病历文本识别到出院诊断，首页形式质控将按缺失处理")
+
+    frontpage = {
+        "visit_id": record_summary.get("visit_id", ""),
+        "patient_id": record_summary.get("patient_id", ""),
+        "patient_name": patient_name or record_summary.get("patient_name", ""),
+        "sex": _sex_code(gender),
+        "sex_text": gender,
+        "age": age,
+        "id_card": id_card,
+        "admission_datetime": admission_datetime,
+        "discharge_datetime": discharge_datetime,
+        "admission_dept": _first_match(medical_text, [r"入院科(?:别|室)?[:：]?\s*([^\n\r；;，,]+)"]),
+        "discharge_dept": _first_match(medical_text, [r"出院科(?:别|室)?[:：]?\s*([^\n\r；;，,]+)"]),
+        "admission_route": _parse_int(_first_match(medical_text, [r"入院途径[:：]?\s*(\d)"])),
+        "discharge_method": _parse_int(_first_match(medical_text, [r"离院方式[:：]?\s*(\d)"])),
+        "los_days": _parse_int(_first_match(medical_text, [r"实际住院(?:天数)?[:：]?\s*(\d{1,4})\s*天"])),
+        "attending_physician": _first_match(
+            medical_text,
+            [r"主诊医师[:：]?\s*([^\n\r；;，,]+)", r"主治医师[:：]?\s*([^\n\r；;，,]+)"],
+        ) or record_summary.get("doctor", ""),
+        "total_cost": _parse_float(_first_match(medical_text, [r"总费用[:：]?\s*([0-9]+(?:\.[0-9]+)?)"])),
+        "coma_hours_before": _parse_int(_first_match(medical_text, [r"入院前昏迷(?:时间)?[:：]?\s*(\d+)\s*小时"])),
+        "coma_hours_after": _parse_int(_first_match(medical_text, [r"入院后昏迷(?:时间)?[:：]?\s*(\d+)\s*小时"])),
+        "diagnoses": diagnoses,
+        "surgeries": surgeries,
+    }
+    return frontpage, warnings
+
+
+def _normalize_rule_scope(params: RunFrontpageQCInput) -> tuple[List[Category] | None, List[Severity] | None]:
+    if not params.rule_scope:
+        return None, None
+    categories = None
+    severities = None
+    if params.rule_scope.categories:
+        categories = [Category(item) for item in params.rule_scope.categories]
+    if params.rule_scope.severities:
+        severities = [Severity(item) for item in params.rule_scope.severities]
+    return categories, severities
+
+
+def _qc_issue(result: QCResult) -> Dict[str, Any]:
+    status_text = "通过" if result.passed else "未通过"
+    suggestion = "" if result.passed else f"请核对或补充 {result.field_name}"
+    return {
+        "rule_id": result.rule_id,
+        "rule_name": result.rule_name,
+        "field_name": result.field_name,
+        "severity": result.severity.value,
+        "category": result.category.value,
+        "message": result.message,
+        "evidence_summary": f"规则 {result.rule_id} 对字段 {result.field_name} 的形式质控结果为{status_text}",
+        "suggestion": suggestion,
+    }
 
 
 def _read_context_record(
@@ -330,6 +552,86 @@ def get_record_context(
     )
 
 
+def run_frontpage_qc(
+    payload: BaseModel | Dict[str, Any],
+    workspace: CustomQCWorkspaceService | None = None,
+    qc_engine: FrontpageFormalQC | None = None,
+) -> AgentToolObservation:
+    if isinstance(payload, RunFrontpageQCInput):
+        params = payload
+    elif isinstance(payload, dict):
+        params = RunFrontpageQCInput(**payload)
+    else:
+        params = RunFrontpageQCInput(**payload.model_dump())
+    if re.search(r"[,，;；|\s]+", params.visit_id.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="run_frontpage_qc 只支持单个 visit_id",
+        )
+
+    context = get_record_context(
+        GetRecordContextInput(
+            visit_id=params.visit_id,
+            patient_id=params.patient_id,
+            scene="frontpage",
+            include_preview=False,
+        ),
+        workspace=workspace,
+    )
+    internal_context = context.internal_data or {}
+    medical_text = _text(internal_context.get("medical_text"))
+    record_summary = dict(internal_context.get("record_summary") or {})
+    if not medical_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"病历上下文缺少 medical_text: visit_id={params.visit_id}",
+        )
+
+    frontpage_draft, generation_warnings = _build_transient_frontpage_from_text(
+        medical_text,
+        record_summary,
+    )
+    categories, severities = _normalize_rule_scope(params)
+    engine = qc_engine or FrontpageFormalQC()
+    report = engine.validate(frontpage_draft, categories=categories, severities=severities)
+    selected_results = report.results if params.include_passed else [item for item in report.results if not item.passed]
+    issues = [_qc_issue(item) for item in selected_results]
+    pass_rate = round(report.passed / report.total_rules, 4) if report.total_rules else 1.0
+    warnings = list(context.public_data.get("warnings") or []) + generation_warnings
+    public = {
+        "record_summary": record_summary,
+        "qc_summary": {
+            "total_rules": report.total_rules,
+            "passed": report.passed,
+            "failed": report.failed,
+            "pass_rate": pass_rate,
+            "issue_count": report.failed,
+        },
+        "issues": issues,
+        "generation_status": {
+            "draft_generated": True,
+            "text_length": len(medical_text),
+            "warnings": generation_warnings,
+        },
+        "warnings": warnings,
+    }
+    public = _drop_sensitive_keys(public)
+    assert_no_sensitive_output(public)
+    return AgentToolObservation(
+        tool_name="run_frontpage_qc",
+        status="success",
+        public_data=public,
+        internal_data={
+            "frontpage_draft": frontpage_draft,
+            "text_length": len(medical_text),
+            "record_ref": {
+                "visit_id": record_summary.get("visit_id", ""),
+                "patient_id": record_summary.get("patient_id", ""),
+            },
+        },
+    )
+
+
 def register_default_tools(registry: AgentToolRegistry) -> AgentToolRegistry:
     registry.register(
         name="search_records",
@@ -351,6 +653,17 @@ def register_default_tools(registry: AgentToolRegistry) -> AgentToolRegistry:
         writes_db=False,
         requires_confirmation=False,
         timeout_ms=5000,
+        max_records=1,
+    )
+    registry.register(
+        name="run_frontpage_qc",
+        description="对单份病历生成瞬态首页草稿并执行首页形式质控；不保存草稿或质控结果。",
+        input_model=RunFrontpageQCInput,
+        handler=run_frontpage_qc,
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=30000,
         max_records=1,
     )
     return registry
