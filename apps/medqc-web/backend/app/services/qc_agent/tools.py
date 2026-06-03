@@ -11,6 +11,7 @@ from app.services.frontpage_formal_qc import Category, FrontpageFormalQC, QCResu
 
 from .schemas import (
     AgentToolObservation,
+    DocumentScope,
     GetRecordContextInput,
     ListQCRulesInput,
     RecordSummary,
@@ -22,7 +23,7 @@ from .schemas import (
     SearchRecordsPublicData,
 )
 from .tool_registry import AgentToolRegistry
-from .rule_catalog import filter_rule_catalog, get_rule_catalog
+from .rule_catalog import RuleSummary, filter_rule_catalog, get_rule_catalog, get_rules_by_ids
 
 
 SENSITIVE_OUTPUT_KEYS = {
@@ -982,6 +983,192 @@ def _run_document_general_rules(
     ]
 
 
+_AGENT_BUILTIN_RULE_FAMILIES = {
+    "WR-001": "ward_round",
+    "WR-002": "ward_round",
+    "WR-003": "ward_round",
+    "WR-004": "ward_round",
+    "DG-001": "document_general",
+    "DG-002": "document_general",
+}
+
+
+def _rule_summary_public(rule: RuleSummary) -> Dict[str, Any]:
+    return rule.to_public_dict()
+
+
+def _skipped_rule(
+    *,
+    rule_id: str,
+    reason: str,
+    message: str,
+    rule: RuleSummary | None = None,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "rule_id": rule_id,
+        "reason": reason,
+        "message": message,
+    }
+    if rule:
+        payload["rule"] = _rule_summary_public(rule)
+    return payload
+
+
+def _document_scope_for_document_qc(params: RunDocumentQCInput) -> DocumentScope:
+    scope = params.document_scope.model_copy(deep=True)
+    if params.document_alias and params.document_alias in {"ward_round", "discharge", "course", "consultation"}:
+        scope.alias = params.document_alias
+    if params.document_type:
+        document_terms = list(scope.document_types or [])
+        if params.document_type not in document_terms:
+            document_terms.append(params.document_type)
+        scope.document_types = document_terms
+    return scope
+
+
+def _requested_document_filters(params: RunDocumentQCInput) -> tuple[str | None, str | None]:
+    document_alias = params.document_alias or params.document_scope.alias
+    document_type = params.document_type
+    if not document_type and params.document_scope.document_types:
+        document_type = params.document_scope.document_types[0]
+    return document_alias, document_type
+
+
+def _resolve_document_qc_rules(params: RunDocumentQCInput) -> tuple[list[RuleSummary], list[Dict[str, Any]], list[str]]:
+    explicit_rule_ids = list(params.rule_ids or params.qc_scope.rule_ids or [])
+    warnings: List[str] = []
+    skipped: List[Dict[str, Any]] = []
+    if explicit_rule_ids:
+        limited_rule_ids = explicit_rule_ids[: params.max_rules]
+        if len(explicit_rule_ids) > params.max_rules:
+            warnings.append(f"规则数量超过 max_rules={params.max_rules}，仅处理前 {params.max_rules} 条")
+        rules, missing = get_rules_by_ids(limited_rule_ids)
+        for rule_id in missing:
+            skipped.append(
+                _skipped_rule(
+                    rule_id=rule_id,
+                    reason="unknown_rule",
+                    message=f"规则目录中未找到 rule_id={rule_id}",
+                )
+            )
+        return rules, skipped, warnings
+
+    has_new_scope = bool(params.document_alias or params.document_type or params.qc_point_type)
+    if has_new_scope:
+        rules, scope_warnings = filter_rule_catalog(
+            document_alias=params.document_alias,
+            document_type=params.document_type,
+            qc_point_type=params.qc_point_type,
+            limit=params.max_rules,
+        )
+        warnings.extend(scope_warnings)
+        if not rules and not scope_warnings:
+            warnings.append("未根据文书类型或质控点类型匹配到规则")
+        return rules, skipped, warnings
+
+    rule_family = params.qc_scope.rule_family or "document_general"
+    if rule_family == "document_general" and params.document_scope.alias == "ward_round":
+        rule_family = "ward_round"
+    default_rule_ids = ["WR-001", "WR-002", "WR-003", "WR-004"] if rule_family == "ward_round" else ["DG-001", "DG-002"]
+    rules, missing = get_rules_by_ids(default_rule_ids[: params.max_rules])
+    for rule_id in missing:
+        skipped.append(
+            _skipped_rule(
+                rule_id=rule_id,
+                reason="unknown_rule",
+                message=f"默认规则未在规则目录中找到: {rule_id}",
+            )
+        )
+    warnings.append("未传入 rule_ids 或可解析规则范围，已使用默认文书规则集")
+    return rules, skipped, warnings
+
+
+def _rule_applicable_to_document(
+    rule: RuleSummary,
+    *,
+    document_alias: str | None,
+    document_type: str | None,
+) -> bool:
+    if document_alias and document_alias in {"ward_round", "discharge", "course", "consultation"}:
+        return document_alias in rule.document_aliases
+    if document_type:
+        return document_type in rule.document_types or document_type in rule.document_aliases
+    return True
+
+
+def _execute_agent_builtin_rules(
+    rules: List[RuleSummary],
+    selected_documents: List[Dict[str, Any]],
+    *,
+    include_evidence: bool,
+    document_alias: str | None,
+    document_type: str | None,
+) -> tuple[List[Dict[str, Any]], List[RuleSummary], List[Dict[str, Any]]]:
+    ward_round_results = {
+        item["rule_id"]: item
+        for item in _run_ward_round_rules(
+            selected_documents,
+            include_evidence=include_evidence,
+        )
+    }
+    general_results = {
+        item["rule_id"]: item
+        for item in _run_document_general_rules(
+            selected_documents,
+            include_evidence=include_evidence,
+        )
+    }
+    results_by_id = {**general_results, **ward_round_results}
+    executed_results: List[Dict[str, Any]] = []
+    executed_rules: List[RuleSummary] = []
+    skipped_rules: List[Dict[str, Any]] = []
+    for rule in rules:
+        rule_id = rule.rule_id
+        if not _rule_applicable_to_document(rule, document_alias=document_alias, document_type=document_type):
+            skipped_rules.append(
+                _skipped_rule(
+                    rule_id=rule_id,
+                    reason="not_applicable_document",
+                    message="规则不适用于当前文书类型或文书别名",
+                    rule=rule,
+                )
+            )
+            continue
+        if rule.requires_llm:
+            skipped_rules.append(
+                _skipped_rule(
+                    rule_id=rule_id,
+                    reason="requires_llm",
+                    message="本阶段不执行需要 LLM 的规则",
+                    rule=rule,
+                )
+            )
+            continue
+        if rule.source != "agent_builtin" or rule.execution_mode != "programmatic":
+            skipped_rules.append(
+                _skipped_rule(
+                    rule_id=rule_id,
+                    reason="unsupported_execution_mode",
+                    message="本阶段仅执行 Agent 内置只读程序化文书规则",
+                    rule=rule,
+                )
+            )
+            continue
+        if rule_id not in _AGENT_BUILTIN_RULE_FAMILIES or rule_id not in results_by_id:
+            skipped_rules.append(
+                _skipped_rule(
+                    rule_id=rule_id,
+                    reason="unsupported_execution_mode",
+                    message="未找到该内置规则的程序化 evaluator",
+                    rule=rule,
+                )
+            )
+            continue
+        executed_rules.append(rule)
+        executed_results.append(results_by_id[rule_id])
+    return executed_results, executed_rules, skipped_rules
+
+
 def run_document_qc(
     payload: BaseModel | Dict[str, Any],
     workspace: CustomQCWorkspaceService | None = None,
@@ -994,46 +1181,51 @@ def run_document_qc(
         params = RunDocumentQCInput(**payload.model_dump())
     _ensure_single_visit_id(params.visit_id, "run_document_qc")
 
+    document_scope = _document_scope_for_document_qc(params)
     selection = select_record_documents(
         SelectRecordDocumentsInput(
             visit_id=params.visit_id,
             patient_id=params.patient_id,
-            document_scope=params.document_scope,
+            document_scope=document_scope,
         ),
         workspace=workspace,
     )
     selected_documents = list((selection.internal_data or {}).get("selected_documents") or [])
-    rule_family = params.qc_scope.rule_family or "document_general"
-    if rule_family == "document_general" and params.document_scope.alias == "ward_round":
-        rule_family = "ward_round"
-    if rule_family == "ward_round":
-        results = _run_ward_round_rules(
-            selected_documents,
-            include_evidence=params.qc_scope.include_evidence,
-        )
-    else:
-        results = _run_document_general_rules(
-            selected_documents,
-            include_evidence=params.qc_scope.include_evidence,
-        )
-    if params.qc_scope.rule_ids:
-        rule_ids = set(params.qc_scope.rule_ids)
-        results = [item for item in results if item["rule_id"] in rule_ids]
-    results = results[: params.max_rules]
-    selected_results = results if params.qc_scope.include_passed else [item for item in results if not item["passed"]]
+    selected_rules, skipped_rules, rule_warnings = _resolve_document_qc_rules(params)
+    document_alias, document_type = _requested_document_filters(params)
+    results, executed_rules, execution_skipped = _execute_agent_builtin_rules(
+        selected_rules,
+        selected_documents,
+        include_evidence=params.qc_scope.include_evidence,
+        document_alias=document_alias,
+        document_type=document_type,
+    )
+    skipped_rules.extend(execution_skipped)
+    include_passed = params.include_passed if params.include_passed is not None else params.qc_scope.include_passed
+    selected_results = results if include_passed else [item for item in results if not item["passed"]]
     passed = sum(1 for item in results if item["passed"])
     failed = sum(1 for item in results if not item["passed"])
     total = len(results)
     warnings = list(selection.public_data.get("warnings") or [])
+    warnings.extend(rule_warnings)
     if not selected_documents:
         warnings.append("未命中可质控文书")
+    if skipped_rules:
+        warnings.append(f"{len(skipped_rules)} 条规则因执行边界限制被跳过")
     public = {
         "record_summary": selection.public_data.get("record_summary", {}),
+        "document_summary": selection.public_data.get("selection_summary", {}),
         "document_selection_summary": selection.public_data.get("selection_summary", {}),
+        "selected_rules": [_rule_summary_public(rule) for rule in selected_rules],
+        "executed_rules": [_rule_summary_public(rule) for rule in executed_rules],
+        "skipped_rules": skipped_rules,
         "qc_summary": {
+            "rule_count": len(selected_rules) + len([item for item in skipped_rules if item.get("reason") == "unknown_rule"]),
             "total_rules": total,
             "passed": passed,
             "failed": failed,
+            "passed_count": passed,
+            "skipped_count": len(skipped_rules),
             "issue_count": failed,
             "pass_rate": round(passed / total, 4) if total else 1.0,
         },

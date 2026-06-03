@@ -534,11 +534,99 @@ def test_run_document_qc_ward_round_returns_summary_and_failures_only():
     public_data = observation.public_data
     assert public_data["document_selection_summary"]["matched_document_count"] == 1
     assert public_data["qc_summary"]["total_rules"] == 4
+    assert public_data["qc_summary"]["rule_count"] == 4
     assert public_data["qc_summary"]["issue_count"] == public_data["qc_summary"]["failed"]
+    assert "未传入 rule_ids 或可解析规则范围，已使用默认文书规则集" in public_data["warnings"]
     assert all(issue["passed"] is False for issue in public_data["issues"])
     assert observation.internal_data is not None
     assert observation.internal_data["selected_documents"][0]["text"]
     _assert_no_raw_context(public_data)
+
+
+def test_run_document_qc_executes_selected_agent_builtin_rule_ids():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_alias": "ward_round",
+            "rule_ids": ["WR-001", "WR-004"],
+            "include_passed": True,
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    public_data = observation.public_data
+    assert {rule["rule_id"] for rule in public_data["selected_rules"]} == {"WR-001", "WR-004"}
+    assert {rule["rule_id"] for rule in public_data["executed_rules"]} == {"WR-001", "WR-004"}
+    assert public_data["skipped_rules"] == []
+    assert public_data["qc_summary"]["rule_count"] == 2
+    assert public_data["qc_summary"]["total_rules"] == 2
+    assert len(public_data["issues"]) == 2
+    _assert_no_raw_context(public_data)
+
+
+def test_run_document_qc_resolves_scope_and_skips_non_executable_rules():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_alias": "ward_round",
+            "qc_point_type": "timeliness",
+            "include_passed": True,
+            "max_rules": 5,
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    public_data = observation.public_data
+    assert public_data["selected_rules"]
+    assert all(rule["qc_point_type"] == "timeliness" for rule in public_data["selected_rules"])
+    assert public_data["qc_summary"]["skipped_count"] > 0
+    assert any(
+        item["reason"] in {"requires_llm", "unsupported_execution_mode"}
+        for item in public_data["skipped_rules"]
+    )
+    _assert_no_raw_context(public_data)
+
+
+def test_run_document_qc_skips_requires_llm_and_unknown_rule_ids():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_alias": "ward_round",
+            "rule_ids": ["CL-001", "UNKNOWN-RULE"],
+            "include_passed": True,
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    skipped = observation.public_data["skipped_rules"]
+    assert any(item["rule_id"] == "CL-001" and item["reason"] == "requires_llm" for item in skipped)
+    assert any(item["rule_id"] == "UNKNOWN-RULE" and item["reason"] == "unknown_rule" for item in skipped)
+    assert observation.public_data["executed_rules"] == []
+    assert observation.public_data["qc_summary"]["skipped_count"] == 2
+    _assert_no_raw_context(observation.public_data)
+
+
+def test_run_document_qc_skips_not_applicable_document_rule():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_alias": "ward_round",
+            "rule_ids": ["DG-001"],
+            "include_passed": True,
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.public_data["executed_rules"] == []
+    assert observation.public_data["skipped_rules"][0]["reason"] == "not_applicable_document"
 
 
 def test_run_document_qc_include_passed_returns_all_rules():
@@ -556,6 +644,11 @@ def test_run_document_qc_include_passed_returns_all_rules():
     assert len(observation.public_data["issues"]) == 4
     assert any(issue["passed"] is True for issue in observation.public_data["issues"])
     _assert_no_raw_context(observation.public_data)
+
+
+def test_run_document_qc_rejects_max_rules_overflow():
+    with pytest.raises(Exception):
+        RunDocumentQCInput(visit_id="V001", max_rules=51)
 
 
 def test_run_document_qc_no_ward_round_document_returns_warning_and_errors():

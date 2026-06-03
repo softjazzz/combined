@@ -101,7 +101,12 @@ class RunDocumentQCInput(BaseModel):
     patient_id: Optional[str] = None
     document_scope: DocumentScope = Field(default_factory=DocumentScope)
     qc_scope: DocumentQCScope = Field(default_factory=DocumentQCScope)
-    max_rules: int = Field(default=10, ge=1, le=20)
+    document_alias: Optional[str] = None
+    document_type: Optional[str] = None
+    qc_point_type: Optional[str] = None
+    rule_ids: Optional[List[str]] = None
+    include_passed: Optional[bool] = None
+    max_rules: int = Field(default=20, ge=1, le=50)
 
 
 class ListQCRulesInput(BaseModel):

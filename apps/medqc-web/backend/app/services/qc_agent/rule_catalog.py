@@ -469,6 +469,38 @@ def get_rule_catalog() -> tuple[RuleSummary, ...]:
     return tuple(deduped.values())
 
 
+def get_rules_by_ids(rule_ids: Iterable[str]) -> tuple[list[RuleSummary], list[str]]:
+    catalog = sorted(
+        get_rule_catalog(),
+        key=lambda rule: (
+            _SOURCE_ORDER.get(rule.source, 99),
+            rule.launch_tier == "unknown",
+            rule.launch_tier,
+            rule.rule_id,
+        ),
+    )
+    by_id: dict[str, RuleSummary] = {}
+    for rule in catalog:
+        by_id.setdefault(rule.rule_id.upper(), rule)
+    selected: list[RuleSummary] = []
+    missing: list[str] = []
+    seen: set[str] = set()
+    for raw_rule_id in rule_ids:
+        rule_id = str(raw_rule_id or "").strip()
+        if not rule_id:
+            continue
+        key = rule_id.upper()
+        if key in seen:
+            continue
+        seen.add(key)
+        rule = by_id.get(key)
+        if rule:
+            selected.append(rule)
+        else:
+            missing.append(rule_id)
+    return selected, missing
+
+
 def normalize_rule_filter_value(field: str, value: str | None) -> tuple[str | None, list[str]]:
     if value is None or str(value).strip() == "":
         return None, []
