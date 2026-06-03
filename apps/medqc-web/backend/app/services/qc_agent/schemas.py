@@ -39,6 +39,25 @@ class AgentToolRunResponse(BaseModel):
     trace: List[Dict[str, Any]] = Field(default_factory=list)
 
 
+class QCAgentChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+    session_id: Optional[str] = None
+    user_context: Optional[Dict[str, Any]] = None
+    confirm_selection: Optional[Dict[str, Any]] = None
+    dry_run: bool = False
+
+
+class QCAgentChatResponse(BaseModel):
+    status: Literal["completed", "needs_clarification", "needs_confirmation", "unsupported"]
+    parsed_intent: Dict[str, Any] = Field(default_factory=dict)
+    plan: List[Dict[str, Any]] = Field(default_factory=list)
+    candidates: List[Dict[str, Any]] = Field(default_factory=list)
+    result: Optional[Dict[str, Any]] = None
+    warnings: List[str] = Field(default_factory=list)
+    run_id: str
+    session_id: Optional[str] = None
+
+
 class SearchRecordsInput(BaseModel):
     scope: Literal["all", "running", "final"] = "all"
     department: Optional[str] = None

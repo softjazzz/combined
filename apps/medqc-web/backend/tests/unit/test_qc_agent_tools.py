@@ -172,6 +172,49 @@ class FakeWorkspace:
         raise AssertionError("不允许调用持久化函数")
 
 
+class SearchResultWorkspace(FakeWorkspace):
+    def __init__(self, search_records):
+        super().__init__()
+        self._search_records = search_records
+
+    def collect_records(
+        self,
+        *,
+        scope,
+        department,
+        doctor,
+        date_field,
+        start_date,
+        end_date,
+        keyword,
+        record_ids=None,
+    ):
+        if record_ids:
+            return super().collect_records(
+                scope=scope,
+                department=department,
+                doctor=doctor,
+                date_field=date_field,
+                start_date=start_date,
+                end_date=end_date,
+                keyword=keyword,
+                record_ids=record_ids,
+            )
+        self.calls.append(
+            {
+                "scope": scope,
+                "department": department,
+                "doctor": doctor,
+                "date_field": date_field,
+                "start_date": start_date,
+                "end_date": end_date,
+                "keyword": keyword,
+                "record_ids": record_ids,
+            }
+        )
+        return self._search_records
+
+
 def _assert_no_sensitive_keys(value):
     if isinstance(value, dict):
         assert "medical_text" not in value
@@ -837,9 +880,8 @@ def qc_agent_auth(client):
     client.app.dependency_overrides.pop(get_qc_agent_registry, None)
 
 
-def _registry_with_fake_workspace() -> AgentToolRegistry:
+def _registry_with_workspace(workspace) -> AgentToolRegistry:
     registry = AgentToolRegistry()
-    workspace = FakeWorkspace()
 
     def _handler(payload):
         return search_records(payload, workspace=workspace)
@@ -922,6 +964,10 @@ def _registry_with_fake_workspace() -> AgentToolRegistry:
         max_records=1,
     )
     return registry
+
+
+def _registry_with_fake_workspace() -> AgentToolRegistry:
+    return _registry_with_workspace(FakeWorkspace())
 
 
 def test_api_list_tools_returns_search_records_schema(client, qc_agent_auth):
@@ -1132,6 +1178,177 @@ def test_api_resolve_rule_scope_returns_rule_ids_and_unknown_warnings(client, qc
     warnings = unknown_response.json()["observation"]["public_data"]["warnings"]
     assert any("未知文书" in item for item in warnings)
     assert any("未知质控点" in item for item in warnings)
+
+
+def test_api_chat_direct_visit_id_completes_document_qc(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "对 visit_id=V001 的查房记录做完整性质控"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["visit_id"] == "V001"
+    assert body["parsed_intent"]["document_alias"] == "ward_round"
+    assert body["parsed_intent"]["qc_point_type"] == "completeness"
+    assert [item["tool_name"] for item in body["plan"]] == [
+        "get_record_context",
+        "select_record_documents",
+        "resolve_rule_scope",
+        "run_document_qc",
+    ]
+    assert body["result"]["record_summary"]["visit_id"] == "V001"
+    assert "WR-001" in {rule["rule_id"] for rule in body["result"]["selected_rules"]}
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_explicit_rule_ids_take_priority(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "对 visit_id=V001 的查房记录按 WR-001 和 DG-001 做质控"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["rule_ids"] == ["WR-001", "DG-001"]
+    assert body["plan"][2]["tool_name"] == "resolve_rule_scope"
+    assert body["plan"][2]["status"] == "skipped"
+    result = body["result"]
+    assert "WR-001" in {rule["rule_id"] for rule in result["executed_rules"]}
+    assert any(item["rule_id"] == "DG-001" for item in result["skipped_rules"])
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_search_no_candidate_needs_clarification(client, qc_agent_auth):
+    workspace = SearchResultWorkspace([])
+    client.app.dependency_overrides[get_qc_agent_registry] = lambda: _registry_with_workspace(workspace)
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "查一下患者赵六的病程记录有没有时效性问题"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "needs_clarification"
+    assert body["plan"][0]["tool_name"] == "search_records"
+    assert body["candidates"] == []
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_search_multi_candidate_needs_confirmation(client, qc_agent_auth):
+    workspace = SearchResultWorkspace(
+        [
+            {
+                "visit_id": "V001",
+                "patient_id": "P001",
+                "patient_name": "张三",
+                "department": "神经内科",
+                "doctor": "李医生",
+                "admission_date": "2026-05-01",
+                "discharge_date": "2026-05-08",
+            },
+            {
+                "visit_id": "V002",
+                "patient_id": "P002",
+                "patient_name": "张三",
+                "department": "中医科",
+                "doctor": "王医生",
+                "admission_date": "2026-05-02",
+                "discharge_date": "2026-05-09",
+            },
+        ]
+    )
+    client.app.dependency_overrides[get_qc_agent_registry] = lambda: _registry_with_workspace(workspace)
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "对中医科张三的查房记录做完整性和时效性质控"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "needs_confirmation"
+    assert len(body["candidates"]) == 2
+    assert all("medical_text" not in str(item) for item in body["candidates"])
+    assert [item["tool_name"] for item in body["plan"]] == ["search_records"]
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_search_single_candidate_continues(client, qc_agent_auth):
+    workspace = SearchResultWorkspace(
+        [
+            {
+                "visit_id": "V001",
+                "patient_id": "P001",
+                "patient_name": "张三",
+                "department": "神经内科",
+                "doctor": "李医生",
+                "admission_date": "2026-05-01",
+                "discharge_date": "2026-05-08",
+            }
+        ]
+    )
+    client.app.dependency_overrides[get_qc_agent_registry] = lambda: _registry_with_workspace(workspace)
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "查一下患者张三的病程记录有没有时效性问题"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["visit_id"] == "V001"
+    assert body["parsed_intent"]["document_alias"] == "course"
+    assert body["parsed_intent"]["qc_point_type"] == "timeliness"
+    assert [item["tool_name"] for item in body["plan"]][0] == "search_records"
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_document_alias_mapping_and_ambiguous_message(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    discharge = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "质控 visit_id=V001 的出院记录"},
+    )
+    consultation = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "质控 visit_id=V001 的会诊记录"},
+    )
+    ambiguous = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "对 visit_id=V001 做质控"},
+    )
+
+    assert discharge.status_code == 200
+    assert discharge.json()["parsed_intent"]["document_alias"] == "discharge"
+    assert consultation.status_code == 200
+    assert consultation.json()["parsed_intent"]["document_alias"] == "consultation"
+    assert ambiguous.status_code == 200
+    assert ambiguous.json()["status"] == "needs_clarification"
+
+
+def test_api_chat_unsupported_write_intent(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "删除 visit_id=V001 的质控结果并写入正式表"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "unsupported"
+    assert body["plan"] == []
+    assert any("不支持写入" in item for item in body["warnings"])
 
 
 def test_api_rejects_page_size_overflow(client, qc_agent_auth):
