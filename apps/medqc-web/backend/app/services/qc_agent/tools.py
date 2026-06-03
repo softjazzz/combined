@@ -13,7 +13,9 @@ from .schemas import (
     AgentToolObservation,
     GetRecordContextInput,
     RecordSummary,
+    RunDocumentQCInput,
     RunFrontpageQCInput,
+    SelectRecordDocumentsInput,
     SearchRecordsInput,
     SearchRecordsPublicData,
 )
@@ -23,13 +25,17 @@ from .tool_registry import AgentToolRegistry
 SENSITIVE_OUTPUT_KEYS = {
     "medical_text",
     "record_content",
-    "documents",
     "bundle",
     "structured_context",
     "text_preview",
     "frontpage_draft",
     "raw_draft",
     "draft_json",
+    "raw_documents",
+    "raw_document_text",
+    "selected_document_texts",
+    "raw_llm_output",
+    "rule_prompt",
 }
 
 
@@ -133,6 +139,14 @@ def _document_time(document: Dict[str, Any]) -> str:
     )
 
 
+def _document_update_time(document: Dict[str, Any]) -> str:
+    return _text(document.get("updated_at") or document.get("modified_at") or document.get("update_time"))
+
+
+def _document_title(document: Dict[str, Any]) -> str:
+    return _text(document.get("title") or document.get("name") or document.get("document_name") or _document_type(document))
+
+
 def _summarize_documents(documents: Any) -> List[Dict[str, Any]]:
     if not isinstance(documents, list):
         return []
@@ -168,6 +182,156 @@ def _extract_medical_text(record: Dict[str, Any]) -> str:
         parts = [_extract_document_text(document) for document in documents if isinstance(document, dict)]
         return "\n".join(part for part in parts if part)
     return ""
+
+
+def _ensure_single_visit_id(visit_id: str, tool_name: str) -> None:
+    if re.search(r"[,，;；|\s]+", visit_id.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"{tool_name} 只支持单个 visit_id",
+        )
+
+
+def _alias_keywords(alias: str | None) -> List[str]:
+    aliases = {
+        "ward_round": ["查房", "上级医师查房", "主任医师查房", "主治医师查房"],
+        "discharge": ["出院记录", "出院小结"],
+        "course": ["首次病程", "日常病程", "病程记录", "上级医师查房", "阶段小结"],
+        "consultation": ["会诊记录", "多学科会诊", "MDT", "会诊"],
+    }
+    return aliases.get(alias or "", [])
+
+
+def _alias_document_types(alias: str | None) -> List[str]:
+    aliases = {
+        "ward_round": ["查房", "上级医师查房", "主任医师查房", "主治医师查房", "病程记录"],
+        "discharge": ["出院记录", "出院小结"],
+        "course": ["首次病程", "日常病程", "病程记录", "阶段小结", "上级医师查房"],
+        "consultation": ["会诊记录", "多学科会诊", "MDT"],
+    }
+    return aliases.get(alias or "", [])
+
+
+def _contains_any(text: str, keywords: Iterable[str]) -> List[str]:
+    hits: List[str] = []
+    lowered = text.lower()
+    for keyword in keywords:
+        term = _text(keyword)
+        if term and term.lower() in lowered and term not in hits:
+            hits.append(term)
+    return hits
+
+
+def _in_date_range(record_time: str, update_time: str, date_range: Any) -> bool:
+    if not date_range:
+        return True
+    current = (record_time or update_time)[:10]
+    if not current:
+        return True
+    start = _text(getattr(date_range, "start", "") or "")
+    end = _text(getattr(date_range, "end", "") or "")
+    if start and current < start[:10]:
+        return False
+    if end and current > end[:10]:
+        return False
+    return True
+
+
+def _candidate_documents(internal_context: Dict[str, Any]) -> List[Dict[str, Any]]:
+    documents = internal_context.get("documents")
+    candidates: List[Dict[str, Any]] = []
+    if isinstance(documents, list):
+        for index, document in enumerate(documents, start=1):
+            if not isinstance(document, dict):
+                continue
+            text = _extract_document_text(document)
+            if not text:
+                continue
+            candidates.append(
+                {
+                    "document_ref": _text(document.get("document_ref") or document.get("id") or f"doc-{index}"),
+                    "document_type": _document_type(document),
+                    "title": _document_title(document),
+                    "record_time": _document_time(document),
+                    "update_time": _document_update_time(document),
+                    "text": text,
+                }
+            )
+    if not candidates:
+        medical_text = _text(internal_context.get("medical_text"))
+        if medical_text:
+            candidates.append(
+                {
+                    "document_ref": "merged-medical-text",
+                    "document_type": "合并病历文本",
+                    "title": "合并病历文本",
+                    "record_time": "",
+                    "update_time": "",
+                    "text": medical_text,
+                }
+            )
+    return candidates
+
+
+def _select_documents_from_context(
+    internal_context: Dict[str, Any],
+    document_scope: Any,
+) -> tuple[List[Dict[str, Any]], List[str]]:
+    warnings: List[str] = []
+    alias = getattr(document_scope, "alias", None)
+    explicit_types = list(getattr(document_scope, "document_types", None) or [])
+    explicit_keywords = list(getattr(document_scope, "keywords", None) or [])
+    type_terms = explicit_types + _alias_document_types(alias)
+    keyword_terms = explicit_keywords + _alias_keywords(alias)
+    candidates = _candidate_documents(internal_context)
+    selected: List[Dict[str, Any]] = []
+    for document in candidates:
+        searchable = "\n".join(
+            [
+                document.get("document_type", ""),
+                document.get("title", ""),
+                document.get("text", ""),
+            ]
+        )
+        type_hits = _contains_any(
+            f"{document.get('document_type', '')}\n{document.get('title', '')}",
+            type_terms,
+        )
+        keyword_hits = _contains_any(searchable, keyword_terms)
+        if type_terms and not type_hits:
+            continue
+        if keyword_terms and not keyword_hits:
+            continue
+        if not _in_date_range(
+            document.get("record_time", ""),
+            document.get("update_time", ""),
+            getattr(document_scope, "date_range", None),
+        ):
+            continue
+        selected.append({**document, "matched_keywords": sorted(set(type_hits + keyword_hits))})
+    if not type_terms and not keyword_terms:
+        selected = [{**document, "matched_keywords": []} for document in candidates]
+
+    max_documents = getattr(document_scope, "max_documents", 10)
+    selected = selected[:max_documents]
+    if not selected:
+        warnings.append("未命中文书")
+    return selected, warnings
+
+
+def _public_document(document: Dict[str, Any]) -> Dict[str, Any]:
+    text = _text(document.get("text"))
+    return {
+        "document_ref": document.get("document_ref", ""),
+        "document_type": document.get("document_type", ""),
+        "title": document.get("title", ""),
+        "name": document.get("title", ""),
+        "record_time": document.get("record_time", ""),
+        "update_time": document.get("update_time", ""),
+        "text_length": len(text),
+        "matched_keywords": list(document.get("matched_keywords", [])),
+        "preview": _mask_sensitive_text(text)[:300],
+    }
 
 
 def _first_match(text: str, patterns: Iterable[str]) -> str:
@@ -563,11 +727,7 @@ def run_frontpage_qc(
         params = RunFrontpageQCInput(**payload)
     else:
         params = RunFrontpageQCInput(**payload.model_dump())
-    if re.search(r"[,，;；|\s]+", params.visit_id.strip()):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="run_frontpage_qc 只支持单个 visit_id",
-        )
+    _ensure_single_visit_id(params.visit_id, "run_frontpage_qc")
 
     context = get_record_context(
         GetRecordContextInput(
@@ -632,6 +792,257 @@ def run_frontpage_qc(
     )
 
 
+def select_record_documents(
+    payload: BaseModel | Dict[str, Any],
+    workspace: CustomQCWorkspaceService | None = None,
+) -> AgentToolObservation:
+    if isinstance(payload, SelectRecordDocumentsInput):
+        params = payload
+    elif isinstance(payload, dict):
+        params = SelectRecordDocumentsInput(**payload)
+    else:
+        params = SelectRecordDocumentsInput(**payload.model_dump())
+    _ensure_single_visit_id(params.visit_id, "select_record_documents")
+
+    context = get_record_context(
+        GetRecordContextInput(
+            visit_id=params.visit_id,
+            patient_id=params.patient_id,
+            scene="final",
+            include_preview=False,
+        ),
+        workspace=workspace,
+    )
+    internal_context = context.internal_data or {}
+    medical_text = _text(internal_context.get("medical_text"))
+    candidates = _candidate_documents(internal_context)
+    if not medical_text and not candidates:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"病历上下文缺少可用文书文本: visit_id={params.visit_id}",
+        )
+
+    selected, warnings = _select_documents_from_context(internal_context, params.document_scope)
+    requested_scope = params.document_scope.model_dump()
+    alias_keywords = _alias_keywords(params.document_scope.alias)
+    keywords = sorted(set((params.document_scope.keywords or []) + alias_keywords))
+    public = {
+        "record_summary": internal_context.get("record_summary") or context.public_data.get("record_summary", {}),
+        "selection_summary": {
+            "requested_scope": requested_scope,
+            "matched_document_count": len(selected),
+            "matched_document_types": sorted({document.get("document_type", "") for document in selected if document.get("document_type")}),
+            "keywords": keywords,
+        },
+        "documents": [_public_document(document) for document in selected],
+        "warnings": warnings,
+    }
+    public = _drop_sensitive_keys(public)
+    assert_no_sensitive_output(public)
+    return AgentToolObservation(
+        tool_name="select_record_documents",
+        status="success",
+        public_data=public,
+        internal_data={
+            "record_summary": public["record_summary"],
+            "selected_documents": selected,
+            "requested_scope": requested_scope,
+            "warnings": warnings,
+        },
+    )
+
+
+def _document_qc_rule(
+    *,
+    rule_id: str,
+    rule_name: str,
+    passed: bool,
+    severity: str,
+    category: str,
+    document_ref: str,
+    evidence_summary: str,
+    suggestion: str,
+) -> Dict[str, Any]:
+    return {
+        "rule_id": rule_id,
+        "rule_name": rule_name,
+        "passed": passed,
+        "severity": severity,
+        "category": category,
+        "document_ref": document_ref,
+        "evidence_summary": evidence_summary,
+        "suggestion": "" if passed else suggestion,
+    }
+
+
+def _run_ward_round_rules(
+    selected_documents: List[Dict[str, Any]],
+    *,
+    include_evidence: bool,
+) -> List[Dict[str, Any]]:
+    joined_text = "\n".join(_text(document.get("text")) for document in selected_documents)
+    document_ref = selected_documents[0].get("document_ref", "") if selected_documents else ""
+    has_document = bool(selected_documents)
+    has_superior_opinion = bool(re.search(r"上级医师|主任医师|副主任医师|主治医师|主任查房|上级查房", joined_text))
+    has_plan = bool(re.search(r"病情变化|诊疗计划|治疗计划|处理意见|继续|调整|完善检查|下一步", joined_text))
+    has_time = bool(re.search(r"(?:19|20)\d{2}[-年/]\d{1,2}[-月/]\d{1,2}", joined_text))
+    has_signature = bool(re.search(r"医师签名|医生签名|签名|记录医师|医师[:：]", joined_text))
+    evidence = {
+        "exists": "命中查房相关文书" if has_document else "未命中查房相关文书",
+        "superior": "文本包含上级/主任/主治医师查房线索" if has_superior_opinion else "未见上级医师查房意见线索",
+        "plan": "文本包含病情变化、诊疗计划或处理意见线索" if has_plan else "未见病情变化、诊疗计划或处理意见线索",
+        "time_signature": "文本包含记录时间和医师签名线索" if has_time and has_signature else "记录时间或医师签名线索不足",
+    }
+    if not include_evidence:
+        evidence = {key: "" for key in evidence}
+    return [
+        _document_qc_rule(
+            rule_id="WR-001",
+            rule_name="查房记录是否存在",
+            passed=has_document,
+            severity="error",
+            category="ward_round",
+            document_ref=document_ref,
+            evidence_summary=evidence["exists"],
+            suggestion="请补充查房记录或确认文书类型。",
+        ),
+        _document_qc_rule(
+            rule_id="WR-002",
+            rule_name="是否体现上级医师/主任医师查房意见",
+            passed=has_superior_opinion,
+            severity="warning",
+            category="ward_round",
+            document_ref=document_ref,
+            evidence_summary=evidence["superior"],
+            suggestion="请在查房记录中补充上级医师或主任医师查房意见。",
+        ),
+        _document_qc_rule(
+            rule_id="WR-003",
+            rule_name="是否包含病情变化、诊疗计划或处理意见",
+            passed=has_plan,
+            severity="warning",
+            category="ward_round",
+            document_ref=document_ref,
+            evidence_summary=evidence["plan"],
+            suggestion="请补充病情变化、诊疗计划或处理意见。",
+        ),
+        _document_qc_rule(
+            rule_id="WR-004",
+            rule_name="是否有记录时间和医师签名线索",
+            passed=has_time and has_signature,
+            severity="warning",
+            category="ward_round",
+            document_ref=document_ref,
+            evidence_summary=evidence["time_signature"],
+            suggestion="请补充记录时间和医师签名线索。",
+        ),
+    ]
+
+
+def _run_document_general_rules(
+    selected_documents: List[Dict[str, Any]],
+    *,
+    include_evidence: bool,
+) -> List[Dict[str, Any]]:
+    document_ref = selected_documents[0].get("document_ref", "") if selected_documents else ""
+    has_document = bool(selected_documents)
+    has_time = any(_text(document.get("record_time") or document.get("update_time")) for document in selected_documents)
+    return [
+        _document_qc_rule(
+            rule_id="DG-001",
+            rule_name="目标文书是否存在",
+            passed=has_document,
+            severity="error",
+            category="document_general",
+            document_ref=document_ref,
+            evidence_summary=("命中文书" if has_document else "未命中文书") if include_evidence else "",
+            suggestion="请补充目标文书或调整文书筛选条件。",
+        ),
+        _document_qc_rule(
+            rule_id="DG-002",
+            rule_name="目标文书是否有记录时间",
+            passed=has_time,
+            severity="warning",
+            category="document_general",
+            document_ref=document_ref,
+            evidence_summary=("文书元数据包含记录时间" if has_time else "未见记录时间元数据") if include_evidence else "",
+            suggestion="请补充文书记录时间。",
+        ),
+    ]
+
+
+def run_document_qc(
+    payload: BaseModel | Dict[str, Any],
+    workspace: CustomQCWorkspaceService | None = None,
+) -> AgentToolObservation:
+    if isinstance(payload, RunDocumentQCInput):
+        params = payload
+    elif isinstance(payload, dict):
+        params = RunDocumentQCInput(**payload)
+    else:
+        params = RunDocumentQCInput(**payload.model_dump())
+    _ensure_single_visit_id(params.visit_id, "run_document_qc")
+
+    selection = select_record_documents(
+        SelectRecordDocumentsInput(
+            visit_id=params.visit_id,
+            patient_id=params.patient_id,
+            document_scope=params.document_scope,
+        ),
+        workspace=workspace,
+    )
+    selected_documents = list((selection.internal_data or {}).get("selected_documents") or [])
+    rule_family = params.qc_scope.rule_family or "document_general"
+    if rule_family == "document_general" and params.document_scope.alias == "ward_round":
+        rule_family = "ward_round"
+    if rule_family == "ward_round":
+        results = _run_ward_round_rules(
+            selected_documents,
+            include_evidence=params.qc_scope.include_evidence,
+        )
+    else:
+        results = _run_document_general_rules(
+            selected_documents,
+            include_evidence=params.qc_scope.include_evidence,
+        )
+    if params.qc_scope.rule_ids:
+        rule_ids = set(params.qc_scope.rule_ids)
+        results = [item for item in results if item["rule_id"] in rule_ids]
+    results = results[: params.max_rules]
+    selected_results = results if params.qc_scope.include_passed else [item for item in results if not item["passed"]]
+    passed = sum(1 for item in results if item["passed"])
+    failed = sum(1 for item in results if not item["passed"])
+    total = len(results)
+    warnings = list(selection.public_data.get("warnings") or [])
+    if not selected_documents:
+        warnings.append("未命中可质控文书")
+    public = {
+        "record_summary": selection.public_data.get("record_summary", {}),
+        "document_selection_summary": selection.public_data.get("selection_summary", {}),
+        "qc_summary": {
+            "total_rules": total,
+            "passed": passed,
+            "failed": failed,
+            "issue_count": failed,
+            "pass_rate": round(passed / total, 4) if total else 1.0,
+        },
+        "issues": selected_results,
+        "warnings": warnings,
+    }
+    public = _drop_sensitive_keys(public)
+    assert_no_sensitive_output(public)
+    return AgentToolObservation(
+        tool_name="run_document_qc",
+        status="success",
+        public_data=public,
+        internal_data={
+            "record_summary": public["record_summary"],
+            "selected_documents": selected_documents,
+            "rule_results": results,
+        },
+    )
+
+
 def register_default_tools(registry: AgentToolRegistry) -> AgentToolRegistry:
     registry.register(
         name="search_records",
@@ -660,6 +1071,28 @@ def register_default_tools(registry: AgentToolRegistry) -> AgentToolRegistry:
         description="对单份病历生成瞬态首页草稿并执行首页形式质控；不保存草稿或质控结果。",
         input_model=RunFrontpageQCInput,
         handler=run_frontpage_qc,
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=30000,
+        max_records=1,
+    )
+    registry.register(
+        name="select_record_documents",
+        description="按 visit_id 只读选择单份病历的目标文书；API 仅返回摘要和脱敏预览。",
+        input_model=SelectRecordDocumentsInput,
+        handler=select_record_documents,
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=5000,
+        max_records=1,
+    )
+    registry.register(
+        name="run_document_qc",
+        description="对单份病历目标文书执行内置只读文书质控；不保存质控结果。",
+        input_model=RunDocumentQCInput,
+        handler=run_document_qc,
         risk_level="medium",
         writes_db=False,
         requires_confirmation=False,

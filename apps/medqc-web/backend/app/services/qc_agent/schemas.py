@@ -70,6 +70,40 @@ class RunFrontpageQCInput(BaseModel):
     include_passed: bool = False
 
 
+class DocumentDateRange(BaseModel):
+    start: Optional[str] = None
+    end: Optional[str] = None
+
+
+class DocumentScope(BaseModel):
+    document_types: Optional[List[str]] = None
+    keywords: Optional[List[str]] = None
+    date_range: Optional[DocumentDateRange] = None
+    max_documents: int = Field(default=10, ge=1, le=20)
+    alias: Optional[Literal["ward_round", "discharge", "course", "consultation"]] = None
+
+
+class SelectRecordDocumentsInput(BaseModel):
+    visit_id: str = Field(..., min_length=1)
+    patient_id: Optional[str] = None
+    document_scope: DocumentScope = Field(default_factory=DocumentScope)
+
+
+class DocumentQCScope(BaseModel):
+    rule_ids: Optional[List[str]] = None
+    rule_family: str = "document_general"
+    include_evidence: bool = True
+    include_passed: bool = False
+
+
+class RunDocumentQCInput(BaseModel):
+    visit_id: str = Field(..., min_length=1)
+    patient_id: Optional[str] = None
+    document_scope: DocumentScope = Field(default_factory=DocumentScope)
+    qc_scope: DocumentQCScope = Field(default_factory=DocumentQCScope)
+    max_rules: int = Field(default=10, ge=1, le=20)
+
+
 class RecordSummary(BaseModel):
     visit_id: str = ""
     patient_id: str = ""

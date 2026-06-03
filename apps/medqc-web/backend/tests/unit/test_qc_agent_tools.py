@@ -5,12 +5,20 @@ import pytest
 from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 from app.routers.qc_agent import get_qc_agent_registry
-from app.services.qc_agent.schemas import GetRecordContextInput, RunFrontpageQCInput, SearchRecordsInput
+from app.services.qc_agent.schemas import (
+    GetRecordContextInput,
+    RunDocumentQCInput,
+    RunFrontpageQCInput,
+    SearchRecordsInput,
+    SelectRecordDocumentsInput,
+)
 from app.services.qc_agent.tool_registry import AgentToolRegistry
 from app.services.qc_agent.tools import (
     get_record_context,
     register_default_tools,
+    run_document_qc,
     run_frontpage_qc,
+    select_record_documents,
     search_records,
 )
 
@@ -90,6 +98,24 @@ class FakeWorkspace:
             if record.get("visit_id") == "V003":
                 hydrated.append({**record, "mr_no": "MR003", "documents": []})
                 continue
+            if record.get("visit_id") == "V002":
+                hydrated.append(
+                    {
+                        **record,
+                        "mr_no": "MR002",
+                        "medical_text": "姓名：李四\n出院记录：患者好转出院，无查房相关内容。",
+                        "documents": [
+                            {
+                                "document_ref": "DOC-DIS-1",
+                                "document_type": "出院记录",
+                                "title": "出院记录",
+                                "content": "2026-05-09 出院记录：患者好转出院。",
+                                "record_time": "2026-05-09 10:00:00",
+                            }
+                        ],
+                    }
+                )
+                continue
             hydrated.append(
                 {
                     **record,
@@ -109,6 +135,17 @@ class FakeWorkspace:
                             "document_type": "入院记录",
                             "content": "入院记录原文不允许直接返回",
                             "record_time": "2026-05-01 09:00:00",
+                        },
+                        {
+                            "document_ref": "DOC-WR-1",
+                            "document_type": "日常病程记录",
+                            "title": "上级医师查房记录",
+                            "content": (
+                                "2026-05-03 主任医师查房：患者头痛较前改善，病情变化平稳。"
+                                "处理意见：继续抗血小板治疗，完善头颅影像复查。"
+                                "医师签名：李医生。身份证号110101198001011234，手机号13812345678。"
+                            ),
+                            "record_time": "2026-05-03 08:30:00",
                         },
                         {
                             "document_type": "出院记录",
@@ -147,6 +184,22 @@ def _assert_no_sensitive_keys(value):
     elif isinstance(value, list):
         for item in value:
             _assert_no_sensitive_keys(item)
+
+
+def _assert_no_raw_context(value):
+    raw_text = str(value)
+    assert "完整病历正文不允许返回" not in raw_text
+    assert "入院记录原文不允许直接返回" not in raw_text
+    assert "出院记录原文不允许直接返回" not in raw_text
+    assert "bundle 全量不允许返回" not in raw_text
+    assert "structured_context 全量不允许返回" not in raw_text
+    assert "110101198001011234" not in raw_text
+    assert "13812345678" not in raw_text
+    assert "medical_text" not in raw_text
+    assert "record_content" not in raw_text
+    assert "internal_data" not in raw_text
+    assert "raw_llm_output" not in raw_text
+    assert "rule_prompt" not in raw_text
 
 
 def test_search_records_returns_public_record_summaries_only():
@@ -390,6 +443,199 @@ def test_run_frontpage_qc_does_not_call_persistence_paths(monkeypatch):
     assert workspace.persist_called is False
 
 
+def test_select_record_documents_matches_ward_round_from_course_document():
+    workspace = FakeWorkspace()
+    observation = select_record_documents(
+        SelectRecordDocumentsInput(
+            visit_id="V001",
+            patient_id="P001",
+            document_scope={"alias": "ward_round"},
+        ),
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    assert workspace.persist_called is False
+    public_data = observation.public_data
+    assert public_data["record_summary"]["visit_id"] == "V001"
+    assert public_data["selection_summary"]["matched_document_count"] == 1
+    assert public_data["documents"][0]["document_ref"] == "DOC-WR-1"
+    assert public_data["documents"][0]["document_type"] == "日常病程记录"
+    assert len(public_data["documents"][0]["preview"]) <= 300
+    assert "110101198001011234" not in public_data["documents"][0]["preview"]
+    assert "13812345678" not in public_data["documents"][0]["preview"]
+    assert observation.internal_data is not None
+    assert observation.internal_data["selected_documents"][0]["text"]
+    _assert_no_raw_context(public_data)
+
+
+def test_select_record_documents_rejects_patient_id_mismatch():
+    workspace = FakeWorkspace()
+
+    with pytest.raises(Exception) as exc_info:
+        select_record_documents(
+            {"visit_id": "V001", "patient_id": "P999", "document_scope": {"alias": "ward_round"}},
+            workspace=workspace,  # type: ignore[arg-type]
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 409
+    assert workspace.persist_called is False
+
+
+def test_select_record_documents_rejects_missing_or_empty_context():
+    workspace = FakeWorkspace()
+
+    with pytest.raises(Exception) as exc_info:
+        select_record_documents(
+            {"visit_id": "V003", "patient_id": "P003", "document_scope": {"alias": "ward_round"}},
+            workspace=workspace,  # type: ignore[arg-type]
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 422
+    assert "文书文本" in str(exc_info.value.detail)
+    assert workspace.persist_called is False
+
+
+def test_select_record_documents_no_match_returns_success_with_warning():
+    workspace = FakeWorkspace()
+    observation = select_record_documents(
+        {"visit_id": "V002", "patient_id": "P002", "document_scope": {"alias": "ward_round"}},
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    assert observation.public_data["selection_summary"]["matched_document_count"] == 0
+    assert "未命中文书" in observation.public_data["warnings"]
+    _assert_no_raw_context(observation.public_data)
+
+
+def test_run_document_qc_ward_round_returns_summary_and_failures_only():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        RunDocumentQCInput(
+            visit_id="V001",
+            patient_id="P001",
+            document_scope={"alias": "ward_round"},
+            qc_scope={"rule_family": "ward_round", "include_passed": False},
+        ),
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    assert workspace.persist_called is False
+    public_data = observation.public_data
+    assert public_data["document_selection_summary"]["matched_document_count"] == 1
+    assert public_data["qc_summary"]["total_rules"] == 4
+    assert public_data["qc_summary"]["issue_count"] == public_data["qc_summary"]["failed"]
+    assert all(issue["passed"] is False for issue in public_data["issues"])
+    assert observation.internal_data is not None
+    assert observation.internal_data["selected_documents"][0]["text"]
+    _assert_no_raw_context(public_data)
+
+
+def test_run_document_qc_include_passed_returns_all_rules():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_scope": {"alias": "ward_round"},
+            "qc_scope": {"rule_family": "ward_round", "include_passed": True},
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert len(observation.public_data["issues"]) == 4
+    assert any(issue["passed"] is True for issue in observation.public_data["issues"])
+    _assert_no_raw_context(observation.public_data)
+
+
+def test_run_document_qc_no_ward_round_document_returns_warning_and_errors():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V002",
+            "patient_id": "P002",
+            "document_scope": {"alias": "ward_round"},
+            "qc_scope": {"rule_family": "ward_round", "include_passed": False},
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    assert observation.public_data["document_selection_summary"]["matched_document_count"] == 0
+    assert "未命中可质控文书" in observation.public_data["warnings"]
+    assert observation.public_data["qc_summary"]["failed"] == 4
+    assert all(issue["passed"] is False for issue in observation.public_data["issues"])
+
+
+def test_run_document_qc_rejects_patient_id_mismatch():
+    workspace = FakeWorkspace()
+
+    with pytest.raises(Exception) as exc_info:
+        run_document_qc(
+            {"visit_id": "V001", "patient_id": "P999", "document_scope": {"alias": "ward_round"}},
+            workspace=workspace,  # type: ignore[arg-type]
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 409
+    assert workspace.persist_called is False
+
+
+def test_run_document_qc_rejects_batch_visit_ids():
+    workspace = FakeWorkspace()
+
+    with pytest.raises(Exception) as exc_info:
+        run_document_qc(
+            {"visit_id": "V001,V002", "document_scope": {"alias": "ward_round"}},
+            workspace=workspace,  # type: ignore[arg-type]
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 422
+    assert workspace.calls == []
+    assert workspace.persist_called is False
+
+
+def test_run_document_qc_does_not_call_persistence_paths(monkeypatch):
+    workspace = FakeWorkspace()
+
+    def _forbidden(*_args, **_kwargs):
+        raise AssertionError("不允许调用持久化路径")
+
+    monkeypatch.setattr(
+        "app.services.medical_records.maintenance_service.save_ai_frontpage_draft",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "app.services.qc_persistence_service.default_qc_persistence_service.persist_analysis",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "app.services.workflow_queue_state_service.default_workflow_queue_state_service.start_run",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "app.services.workflow_queue_state_service.default_workflow_queue_state_service.finish_success",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "app.services.workflow_queue_state_service.default_workflow_queue_state_service.finish_failed",
+        _forbidden,
+    )
+    monkeypatch.setattr(
+        "app.services.workflow_queue_state_service.default_workflow_queue_state_service.backfill_frontpage_generate",
+        _forbidden,
+    )
+
+    observation = run_document_qc(
+        {"visit_id": "V001", "patient_id": "P001", "document_scope": {"alias": "ward_round"}},
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    assert workspace.persist_called is False
+
+
 @pytest.fixture
 def qc_agent_auth(client):
     async def _noop_auth_gate():
@@ -446,6 +692,28 @@ def _registry_with_fake_workspace() -> AgentToolRegistry:
         timeout_ms=30000,
         max_records=1,
     )
+    registry.register(
+        name="select_record_documents",
+        description="按 visit_id 只读选择单份病历的目标文书；API 仅返回摘要和脱敏预览。",
+        input_model=SelectRecordDocumentsInput,
+        handler=lambda payload: select_record_documents(payload, workspace=workspace),
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=5000,
+        max_records=1,
+    )
+    registry.register(
+        name="run_document_qc",
+        description="对单份病历目标文书执行内置只读文书质控；不保存质控结果。",
+        input_model=RunDocumentQCInput,
+        handler=lambda payload: run_document_qc(payload, workspace=workspace),
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=30000,
+        max_records=1,
+    )
     return registry
 
 
@@ -472,6 +740,16 @@ def test_api_list_tools_returns_search_records_schema(client, qc_agent_auth):
     assert by_name["run_frontpage_qc"]["requires_confirmation"] is False
     assert by_name["run_frontpage_qc"]["max_records"] == 1
     assert "input_schema" in by_name["run_frontpage_qc"]
+    assert by_name["select_record_documents"]["risk_level"] == "medium"
+    assert by_name["select_record_documents"]["writes_db"] is False
+    assert by_name["select_record_documents"]["requires_confirmation"] is False
+    assert by_name["select_record_documents"]["max_records"] == 1
+    assert "input_schema" in by_name["select_record_documents"]
+    assert by_name["run_document_qc"]["risk_level"] == "medium"
+    assert by_name["run_document_qc"]["writes_db"] is False
+    assert by_name["run_document_qc"]["requires_confirmation"] is False
+    assert by_name["run_document_qc"]["max_records"] == 1
+    assert "input_schema" in by_name["run_document_qc"]
 
 
 def test_api_requires_login(client):
@@ -553,6 +831,48 @@ def test_api_run_frontpage_qc_strips_internal_data_and_raw_draft(client, qc_agen
     _assert_no_sensitive_keys(body)
 
 
+def test_api_select_record_documents_strips_internal_data_and_raw_documents(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/tools/select_record_documents/run",
+        json={"visit_id": "V001", "patient_id": "P001", "document_scope": {"alias": "ward_round"}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tool_call"]["tool_name"] == "select_record_documents"
+    assert "internal_data" not in body["observation"]
+    public_data = body["observation"]["public_data"]
+    assert public_data["selection_summary"]["matched_document_count"] == 1
+    assert public_data["documents"][0]["document_ref"] == "DOC-WR-1"
+    assert len(public_data["documents"][0]["preview"]) <= 300
+    _assert_no_raw_context(body)
+
+
+def test_api_run_document_qc_strips_internal_data_and_raw_documents(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/tools/run_document_qc/run",
+        json={
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_scope": {"alias": "ward_round"},
+            "qc_scope": {"rule_family": "ward_round", "include_passed": True},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tool_call"]["tool_name"] == "run_document_qc"
+    assert "internal_data" not in body["observation"]
+    public_data = body["observation"]["public_data"]
+    assert public_data["qc_summary"]["total_rules"] == 4
+    assert len(public_data["issues"]) == 4
+    _assert_no_raw_context(body)
+
+
 def test_api_rejects_page_size_overflow(client, qc_agent_auth):
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
@@ -569,10 +889,20 @@ def test_default_registry_contains_only_safe_search_tool():
     specs = registry.list_specs()
 
     by_name = {spec.name: spec for spec in specs}
-    assert set(by_name) == {"search_records", "get_record_context", "run_frontpage_qc"}
+    assert set(by_name) == {
+        "search_records",
+        "get_record_context",
+        "run_frontpage_qc",
+        "select_record_documents",
+        "run_document_qc",
+    }
     assert by_name["search_records"].writes_db is False
     assert by_name["search_records"].requires_confirmation is False
     assert by_name["get_record_context"].writes_db is False
     assert by_name["get_record_context"].requires_confirmation is False
     assert by_name["run_frontpage_qc"].writes_db is False
     assert by_name["run_frontpage_qc"].requires_confirmation is False
+    assert by_name["select_record_documents"].writes_db is False
+    assert by_name["select_record_documents"].requires_confirmation is False
+    assert by_name["run_document_qc"].writes_db is False
+    assert by_name["run_document_qc"].requires_confirmation is False
