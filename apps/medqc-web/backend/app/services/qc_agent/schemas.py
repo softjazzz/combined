@@ -51,6 +51,13 @@ class SearchRecordsInput(BaseModel):
     page_size: int = Field(default=20, ge=1, le=50)
 
 
+class GetRecordContextInput(BaseModel):
+    visit_id: str = Field(..., min_length=1)
+    patient_id: Optional[str] = None
+    scene: Literal["running", "final", "frontpage", "coding", "settlement"] = "final"
+    include_preview: bool = True
+
+
 class RecordSummary(BaseModel):
     visit_id: str = ""
     patient_id: str = ""
@@ -67,4 +74,3 @@ class SearchRecordsPublicData(BaseModel):
     page: int
     page_size: int
     capped: bool = False
-

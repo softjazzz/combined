@@ -27,7 +27,11 @@ async def list_qc_agent_tools(
     return registry.list_specs()
 
 
-@router.post("/tools/{tool_name}/run", response_model=AgentToolRunResponse)
+@router.post(
+    "/tools/{tool_name}/run",
+    response_model=AgentToolRunResponse,
+    response_model_exclude_none=True,
+)
 async def run_qc_agent_tool(
     tool_name: str,
     payload: Dict[str, Any],
@@ -36,7 +40,5 @@ async def run_qc_agent_tool(
 ) -> AgentToolRunResponse:
     result = registry.execute(tool_name, payload)
     assert_no_sensitive_output(result.observation.public_data)
-    if result.observation.internal_data is not None:
-        assert_no_sensitive_output(result.observation.internal_data)
+    result.observation.internal_data = None
     return result
-
