@@ -12,7 +12,9 @@ from app.services.frontpage_formal_qc import Category, FrontpageFormalQC, QCResu
 from .schemas import (
     AgentToolObservation,
     GetRecordContextInput,
+    ListQCRulesInput,
     RecordSummary,
+    ResolveRuleScopeInput,
     RunDocumentQCInput,
     RunFrontpageQCInput,
     SelectRecordDocumentsInput,
@@ -20,6 +22,7 @@ from .schemas import (
     SearchRecordsPublicData,
 )
 from .tool_registry import AgentToolRegistry
+from .rule_catalog import filter_rule_catalog, get_rule_catalog
 
 
 SENSITIVE_OUTPUT_KEYS = {
@@ -36,6 +39,14 @@ SENSITIVE_OUTPUT_KEYS = {
     "selected_document_texts",
     "raw_llm_output",
     "rule_prompt",
+    "prompt",
+    "custom_prompt",
+    "positive_example",
+    "negative_example",
+    "few_shot_examples",
+    "examples",
+    "raw_rule",
+    "raw_rule_text",
 }
 
 
@@ -1043,6 +1054,59 @@ def run_document_qc(
     )
 
 
+def list_qc_rules(payload: BaseModel | Dict[str, Any]) -> AgentToolObservation:
+    if isinstance(payload, ListQCRulesInput):
+        params = payload
+    elif isinstance(payload, dict):
+        params = ListQCRulesInput(**payload)
+    else:
+        params = ListQCRulesInput(**payload.model_dump())
+    rules, warnings = filter_rule_catalog(**params.model_dump())
+    public = {
+        "total": len(get_rule_catalog()),
+        "returned": len(rules),
+        "filters": params.model_dump(),
+        "rules": [rule.to_public_dict() for rule in rules],
+        "warnings": warnings,
+    }
+    public = _drop_sensitive_keys(public)
+    assert_no_sensitive_output(public)
+    return AgentToolObservation(
+        tool_name="list_qc_rules",
+        status="success",
+        public_data=public,
+        internal_data={"candidate_rule_ids": [rule.rule_id for rule in rules]},
+    )
+
+
+def resolve_rule_scope(payload: BaseModel | Dict[str, Any]) -> AgentToolObservation:
+    if isinstance(payload, ResolveRuleScopeInput):
+        params = payload
+    elif isinstance(payload, dict):
+        params = ResolveRuleScopeInput(**payload)
+    else:
+        params = ResolveRuleScopeInput(**payload.model_dump())
+    rules, warnings = filter_rule_catalog(**params.model_dump())
+    rule_ids = [rule.rule_id for rule in rules]
+    if not rule_ids and not warnings:
+        warnings.append("未匹配到可用质控规则")
+    public = {
+        "rule_ids": rule_ids,
+        "rule_count": len(rule_ids),
+        "rules": [rule.to_public_dict() for rule in rules],
+        "filters": params.model_dump(),
+        "warnings": warnings,
+    }
+    public = _drop_sensitive_keys(public)
+    assert_no_sensitive_output(public)
+    return AgentToolObservation(
+        tool_name="resolve_rule_scope",
+        status="success",
+        public_data=public,
+        internal_data={"rule_ids": rule_ids},
+    )
+
+
 def register_default_tools(registry: AgentToolRegistry) -> AgentToolRegistry:
     registry.register(
         name="search_records",
@@ -1097,6 +1161,28 @@ def register_default_tools(registry: AgentToolRegistry) -> AgentToolRegistry:
         writes_db=False,
         requires_confirmation=False,
         timeout_ms=30000,
+        max_records=1,
+    )
+    registry.register(
+        name="list_qc_rules",
+        description="只读查询可用于 Agent 的质控规则目录；仅返回规则摘要，不返回 prompt 或示例。",
+        input_model=ListQCRulesInput,
+        handler=list_qc_rules,
+        risk_level="low",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=5000,
+        max_records=1,
+    )
+    registry.register(
+        name="resolve_rule_scope",
+        description="按结构化条件解析可选 rule_ids，供后续单病历质控工具消费。",
+        input_model=ResolveRuleScopeInput,
+        handler=resolve_rule_scope,
+        risk_level="low",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=5000,
         max_records=1,
     )
     return registry

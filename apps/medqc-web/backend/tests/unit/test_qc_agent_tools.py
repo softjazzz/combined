@@ -7,6 +7,8 @@ from app.core.security import get_current_user
 from app.routers.qc_agent import get_qc_agent_registry
 from app.services.qc_agent.schemas import (
     GetRecordContextInput,
+    ListQCRulesInput,
+    ResolveRuleScopeInput,
     RunDocumentQCInput,
     RunFrontpageQCInput,
     SearchRecordsInput,
@@ -15,7 +17,9 @@ from app.services.qc_agent.schemas import (
 from app.services.qc_agent.tool_registry import AgentToolRegistry
 from app.services.qc_agent.tools import (
     get_record_context,
+    list_qc_rules,
     register_default_tools,
+    resolve_rule_scope,
     run_document_qc,
     run_frontpage_qc,
     select_record_documents,
@@ -200,6 +204,10 @@ def _assert_no_raw_context(value):
     assert "internal_data" not in raw_text
     assert "raw_llm_output" not in raw_text
     assert "rule_prompt" not in raw_text
+    assert "custom_prompt" not in raw_text
+    assert "positive_example" not in raw_text
+    assert "negative_example" not in raw_text
+    assert "few_shot_examples" not in raw_text
 
 
 def test_search_records_returns_public_record_summaries_only():
@@ -636,6 +644,90 @@ def test_run_document_qc_does_not_call_persistence_paths(monkeypatch):
     assert workspace.persist_called is False
 
 
+def _assert_rule_public_summary(rule):
+    assert rule["rule_id"]
+    assert rule["rule_name"]
+    assert rule["source"] in {
+        "sc146",
+        "custom33",
+        "customer_luxian",
+        "frontpage_formal",
+        "agent_builtin",
+    }
+    assert "custom_prompt" not in rule
+    assert "positive_example" not in rule
+    assert "negative_example" not in rule
+    assert "prompt" not in rule
+    assert "examples" not in rule
+
+
+def test_list_qc_rules_returns_catalog_without_sensitive_rule_fields():
+    observation = list_qc_rules(ListQCRulesInput(limit=20))
+
+    assert observation.status == "success"
+    public_data = observation.public_data
+    assert public_data["total"] > 0
+    assert public_data["returned"] <= 20
+    assert public_data["rules"]
+    for rule in public_data["rules"]:
+        _assert_rule_public_summary(rule)
+    _assert_no_raw_context(public_data)
+
+
+def test_list_qc_rules_filters_ward_round_and_discharge_aliases():
+    ward_round = list_qc_rules({"document_alias": "ward_round", "limit": 100})
+    discharge = list_qc_rules({"document_alias": "discharge", "limit": 100})
+
+    ward_round_ids = {rule["rule_id"] for rule in ward_round.public_data["rules"]}
+    assert "WR-001" in ward_round_ids
+    assert all("ward_round" in rule["document_aliases"] for rule in ward_round.public_data["rules"])
+    assert discharge.public_data["returned"] > 0
+    assert all("discharge" in rule["document_aliases"] for rule in discharge.public_data["rules"])
+
+
+def test_list_qc_rules_filters_qc_point_types():
+    for qc_point_type in ("timeliness", "completeness", "consistency"):
+        observation = list_qc_rules({"qc_point_type": qc_point_type, "limit": 50})
+
+        assert observation.public_data["returned"] > 0
+        assert all(rule["qc_point_type"] == qc_point_type for rule in observation.public_data["rules"])
+
+
+def test_list_qc_rules_covers_rule_sources():
+    for source in ("sc146", "custom33", "customer_luxian", "frontpage_formal", "agent_builtin"):
+        observation = list_qc_rules({"source": source, "limit": 5})
+
+        assert observation.public_data["returned"] > 0
+        assert all(rule["source"] == source for rule in observation.public_data["rules"])
+
+
+def test_resolve_rule_scope_returns_stable_rule_ids_and_warnings():
+    observation = resolve_rule_scope(
+        ResolveRuleScopeInput(
+            document_alias="ward_round",
+            qc_point_type="completeness",
+            source="agent_builtin",
+            limit=10,
+        )
+    )
+
+    assert observation.status == "success"
+    assert "WR-001" in observation.public_data["rule_ids"]
+    assert observation.public_data["warnings"] == []
+    assert observation.internal_data == {"rule_ids": observation.public_data["rule_ids"]}
+
+    unknown = resolve_rule_scope({"document_alias": "unknown_doc", "qc_point_type": "unknown_qc"})
+    assert unknown.status == "success"
+    assert unknown.public_data["rule_count"] == 0
+    assert any("未知文书" in item for item in unknown.public_data["warnings"])
+    assert any("未知质控点" in item for item in unknown.public_data["warnings"])
+
+
+def test_list_qc_rules_limit_upper_bound():
+    with pytest.raises(Exception):
+        ListQCRulesInput(limit=201)
+
+
 @pytest.fixture
 def qc_agent_auth(client):
     async def _noop_auth_gate():
@@ -714,6 +806,28 @@ def _registry_with_fake_workspace() -> AgentToolRegistry:
         timeout_ms=30000,
         max_records=1,
     )
+    registry.register(
+        name="list_qc_rules",
+        description="只读查询可用于 Agent 的质控规则目录；仅返回规则摘要，不返回 prompt 或示例。",
+        input_model=ListQCRulesInput,
+        handler=list_qc_rules,
+        risk_level="low",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=5000,
+        max_records=1,
+    )
+    registry.register(
+        name="resolve_rule_scope",
+        description="按结构化条件解析可选 rule_ids，供后续单病历质控工具消费。",
+        input_model=ResolveRuleScopeInput,
+        handler=resolve_rule_scope,
+        risk_level="low",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=5000,
+        max_records=1,
+    )
     return registry
 
 
@@ -750,6 +864,16 @@ def test_api_list_tools_returns_search_records_schema(client, qc_agent_auth):
     assert by_name["run_document_qc"]["requires_confirmation"] is False
     assert by_name["run_document_qc"]["max_records"] == 1
     assert "input_schema" in by_name["run_document_qc"]
+    assert by_name["list_qc_rules"]["risk_level"] == "low"
+    assert by_name["list_qc_rules"]["writes_db"] is False
+    assert by_name["list_qc_rules"]["requires_confirmation"] is False
+    assert by_name["list_qc_rules"]["max_records"] == 1
+    assert "input_schema" in by_name["list_qc_rules"]
+    assert by_name["resolve_rule_scope"]["risk_level"] == "low"
+    assert by_name["resolve_rule_scope"]["writes_db"] is False
+    assert by_name["resolve_rule_scope"]["requires_confirmation"] is False
+    assert by_name["resolve_rule_scope"]["max_records"] == 1
+    assert "input_schema" in by_name["resolve_rule_scope"]
 
 
 def test_api_requires_login(client):
@@ -873,6 +997,50 @@ def test_api_run_document_qc_strips_internal_data_and_raw_documents(client, qc_a
     _assert_no_raw_context(body)
 
 
+def test_api_list_qc_rules_returns_public_catalog(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/tools/list_qc_rules/run",
+        json={"document_alias": "ward_round", "limit": 10},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tool_call"]["tool_name"] == "list_qc_rules"
+    assert "internal_data" not in body["observation"]
+    public_data = body["observation"]["public_data"]
+    assert public_data["returned"] > 0
+    assert "WR-001" in {rule["rule_id"] for rule in public_data["rules"]}
+    _assert_no_raw_context(body)
+
+
+def test_api_resolve_rule_scope_returns_rule_ids_and_unknown_warnings(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/tools/resolve_rule_scope/run",
+        json={"document_alias": "ward_round", "qc_point_type": "completeness", "source": "agent_builtin"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tool_call"]["tool_name"] == "resolve_rule_scope"
+    assert "internal_data" not in body["observation"]
+    assert "WR-001" in body["observation"]["public_data"]["rule_ids"]
+    _assert_no_raw_context(body)
+
+    unknown_response = client.post(
+        "/api/v1/qc-agent/tools/resolve_rule_scope/run",
+        json={"document_alias": "unknown_doc", "qc_point_type": "unknown_qc"},
+    )
+
+    assert unknown_response.status_code == 200
+    warnings = unknown_response.json()["observation"]["public_data"]["warnings"]
+    assert any("未知文书" in item for item in warnings)
+    assert any("未知质控点" in item for item in warnings)
+
+
 def test_api_rejects_page_size_overflow(client, qc_agent_auth):
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
@@ -895,6 +1063,8 @@ def test_default_registry_contains_only_safe_search_tool():
         "run_frontpage_qc",
         "select_record_documents",
         "run_document_qc",
+        "list_qc_rules",
+        "resolve_rule_scope",
     }
     assert by_name["search_records"].writes_db is False
     assert by_name["search_records"].requires_confirmation is False
@@ -906,3 +1076,9 @@ def test_default_registry_contains_only_safe_search_tool():
     assert by_name["select_record_documents"].requires_confirmation is False
     assert by_name["run_document_qc"].writes_db is False
     assert by_name["run_document_qc"].requires_confirmation is False
+    assert by_name["list_qc_rules"].writes_db is False
+    assert by_name["list_qc_rules"].requires_confirmation is False
+    assert by_name["list_qc_rules"].max_records == 1
+    assert by_name["resolve_rule_scope"].writes_db is False
+    assert by_name["resolve_rule_scope"].requires_confirmation is False
+    assert by_name["resolve_rule_scope"].max_records == 1

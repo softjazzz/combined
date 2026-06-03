@@ -104,6 +104,28 @@ class RunDocumentQCInput(BaseModel):
     max_rules: int = Field(default=10, ge=1, le=20)
 
 
+class ListQCRulesInput(BaseModel):
+    document_alias: Optional[str] = None
+    document_type: Optional[str] = None
+    qc_point_type: Optional[str] = None
+    source: Optional[str] = None
+    severity: Optional[str] = None
+    launch_tier: Optional[str] = None
+    keyword: Optional[str] = None
+    limit: int = Field(default=50, ge=1, le=200)
+
+
+class ResolveRuleScopeInput(BaseModel):
+    document_alias: Optional[str] = None
+    document_type: Optional[str] = None
+    qc_point_type: Optional[str] = None
+    source: Optional[str] = None
+    severity: Optional[str] = None
+    launch_tier: Optional[str] = None
+    keyword: Optional[str] = None
+    limit: int = Field(default=50, ge=1, le=200)
+
+
 class RecordSummary(BaseModel):
     visit_id: str = ""
     patient_id: str = ""
