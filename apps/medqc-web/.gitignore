@@ -73,6 +73,7 @@ MANIFEST
 # Virtual environments
 backend/venv/
 backend/.venv/
+.venv-pi-agent-test/
 env/
 .env/
 ENV/
