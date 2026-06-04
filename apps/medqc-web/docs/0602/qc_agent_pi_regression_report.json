@@ -1,0 +1,49 @@
+{
+  "generated_at": "2026-06-04T02:59:58+00:00",
+  "python_version": "3.11.9",
+  "pi_agent_installed": "0.1.0",
+  "pi_agent_core_installed": "0.1.1",
+  "requests_installed": "2.34.2",
+  "orchestration_mode": "requests_fallback",
+  "base_url": "http://127.0.0.1:8001",
+  "visit_id": "2361619",
+  "patient_name_provided": false,
+  "department_provided": false,
+  "case_results": [
+    {
+      "case_id": "env_check",
+      "message": "",
+      "status": "skipped",
+      "passed": true,
+      "skipped": true,
+      "warnings": ["Python/Pi/request 环境检查已通过，未调用 API。"],
+      "plan_tools": [],
+      "sensitive_leak_found": false,
+      "sensitive_paths": [],
+      "error": null,
+      "response_summary": null
+    },
+    {
+      "case_id": "api_auth",
+      "message": "",
+      "status": "skipped",
+      "passed": false,
+      "skipped": true,
+      "warnings": [
+        "未设置 MEDQC_ACCESS_TOKEN，API 回归测试已跳过。",
+        "请先登录获取 token 后运行：$env:MEDQC_ACCESS_TOKEN = '<access_token>'"
+      ],
+      "plan_tools": [],
+      "sensitive_leak_found": false,
+      "sensitive_paths": [],
+      "error": "missing MEDQC_ACCESS_TOKEN",
+      "response_summary": null
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 2
+  }
+}
