@@ -112,32 +112,6 @@ function mountListView(overrides: Record<string, unknown> = {}) {
             return () => h('div', { 'data-testid': 'frontpage-tender-drawer', open: props.open })
           },
         }),
-        QCAgentChatDrawer: defineComponent({
-          name: 'QCAgentChatDrawer',
-          props: {
-            open: {
-              type: Boolean,
-              default: false,
-            },
-            userContext: {
-              type: Object,
-              default: () => ({}),
-            },
-            contextLabel: {
-              type: String,
-              default: '',
-            },
-          },
-          setup(props) {
-            return () =>
-              h('div', {
-                'data-testid': 'qc-agent-drawer',
-                open: props.open,
-                'data-context-label': props.contextLabel,
-                'data-visit-id': (props.userContext as Record<string, unknown>).visit_id || '',
-              })
-          },
-        }),
         InboxOutlined: true,
         SearchOutlined: true,
       },
@@ -151,6 +125,12 @@ describe('WorkstationV4ListView filters', () => {
 
     expect(wrapper.text()).toContain('当前筛选：中医科')
     expect(wrapper.text()).toContain('共 19 份')
+  })
+
+  it('does not render qc agent entry on list view', () => {
+    const wrapper = mountListView()
+
+    expect(wrapper.find('[data-testid="qc-agent-entry"]').exists()).toBe(false)
   })
 
   it('emits selectDept when searchable department select changes', async () => {
@@ -175,30 +155,6 @@ describe('WorkstationV4ListView filters', () => {
     await wrapper.find('[data-testid="frontpage-tender-validation-entry"]').trigger('click')
 
     expect(wrapper.find('[data-testid="frontpage-tender-drawer"]').attributes('open')).toBe('true')
-  })
-
-  it('opens qc agent drawer from top action area with selected record context', async () => {
-    const wrapper = mountListView({
-      selectedWorkbenchKeys: ['row-1'],
-      workbenchRows: [
-        {
-          id: 'row-1',
-          patientName: '张三',
-          visitId: '2298532',
-          department: '神经内科',
-          stageStatus: '待质控',
-          riskReason: '查房记录待复核',
-          updatedAt: '2026-06-04',
-          isDemo: false,
-        },
-      ],
-    })
-
-    await wrapper.find('[data-testid="qc-agent-entry"]').trigger('click')
-
-    const drawer = wrapper.find('[data-testid="qc-agent-drawer"]')
-    expect(drawer.attributes('open')).toBe('true')
-    expect(drawer.attributes('data-visit-id')).toBe('2298532')
-    expect(drawer.attributes('data-context-label')).toContain('张三')
+    expect(wrapper.find('[data-testid="qc-agent-entry"]').exists()).toBe(false)
   })
 })
