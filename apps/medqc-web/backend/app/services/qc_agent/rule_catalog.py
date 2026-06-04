@@ -396,34 +396,171 @@ def _frontpage_formal_rules() -> list[RuleSummary]:
 
 def _agent_builtin_rules() -> list[RuleSummary]:
     rules = [
-        ("WR-001", "查房记录是否存在", "检查目标病历是否存在查房相关文书。", "ward_round", "completeness", "error"),
-        ("WR-002", "上级医师查房意见", "检查查房记录是否体现上级医师或主任医师查房意见。", "ward_round", "clinical_reasoning", "warning"),
-        ("WR-003", "病情变化和诊疗计划", "检查查房记录是否包含病情变化、诊疗计划或处理意见。", "ward_round", "treatment_rationality", "warning"),
-        ("WR-004", "记录时间和签名线索", "检查查房记录是否有记录时间和医师签名线索。", "ward_round", "signature", "warning"),
-        ("DG-001", "目标文书是否存在", "检查所选文书范围内是否存在可质控文书。", "daily_course", "completeness", "error"),
-        ("DG-002", "文书基本记录线索", "检查文书是否包含时间、诊疗信息和签名等基本线索。", "daily_course", "documentation_quality", "warning"),
+        {
+            "rule_id": "WR-001",
+            "name": "查房记录是否存在",
+            "description": "检查目标病历是否存在查房相关文书。",
+            "document_type": "ward_round",
+            "qc_point": "completeness",
+            "severity": "error",
+        },
+        {
+            "rule_id": "WR-002",
+            "name": "上级医师查房意见",
+            "description": "检查查房记录是否体现上级医师或主任医师查房意见。",
+            "document_type": "ward_round",
+            "qc_point": "clinical_reasoning",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "WR-003",
+            "name": "病情变化和诊疗计划",
+            "description": "检查查房记录是否包含病情变化、诊疗计划或处理意见。",
+            "document_type": "ward_round",
+            "qc_point": "treatment_rationality",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "WR-004",
+            "name": "记录时间和签名线索",
+            "description": "检查查房记录是否有记录时间和医师签名线索。",
+            "document_type": "ward_round",
+            "qc_point": "signature",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "WR-005",
+            "name": "查房关键词线索",
+            "description": "检查选中文书是否包含查房、上级医师查房、主任医师查房等明确线索。",
+            "document_type": "ward_round",
+            "qc_point": "completeness",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "WR-006",
+            "name": "查房文书内容长度",
+            "description": "检查查房相关文书内容是否过短，避免仅有标题或极简记录。",
+            "document_type": "ward_round",
+            "qc_point": "documentation_quality",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "WR-007",
+            "name": "查房记录时间基础校验",
+            "description": "检查查房记录是否有基础时间线索，且元数据时间未明显晚于出院日期。",
+            "document_type": "ward_round",
+            "qc_point": "timeliness",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "CR-001",
+            "name": "病程记录是否存在",
+            "description": "检查所选范围内是否存在病程类文书。",
+            "document_type": "daily_course",
+            "aliases": ["course"],
+            "qc_point": "completeness",
+            "severity": "error",
+        },
+        {
+            "rule_id": "CR-002",
+            "name": "病程记录内容长度",
+            "description": "检查病程类文书内容是否过短。",
+            "document_type": "daily_course",
+            "aliases": ["course"],
+            "qc_point": "documentation_quality",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "CR-003",
+            "name": "病程诊疗内容线索",
+            "description": "检查病程记录是否包含病情变化、处理意见、诊疗计划等基础线索。",
+            "document_type": "daily_course",
+            "aliases": ["course"],
+            "qc_point": "treatment_rationality",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "DIS-001",
+            "name": "出院记录是否存在",
+            "description": "检查目标病历是否存在出院记录或出院小结。",
+            "document_type": "discharge",
+            "qc_point": "completeness",
+            "severity": "error",
+        },
+        {
+            "rule_id": "DIS-002",
+            "name": "出院记录内容长度",
+            "description": "检查出院记录正文是否过短。",
+            "document_type": "discharge",
+            "qc_point": "documentation_quality",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "DIS-003",
+            "name": "出院记录核心栏目线索",
+            "description": "检查出院记录是否包含出院诊断、出院情况、出院医嘱或随访等基础线索。",
+            "document_type": "discharge",
+            "qc_point": "completeness",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "CON-001",
+            "name": "会诊记录是否存在",
+            "description": "检查目标病历是否存在会诊或 MDT 相关文书。",
+            "document_type": "consultation",
+            "aliases": ["mdt"],
+            "qc_point": "completeness",
+            "severity": "error",
+        },
+        {
+            "rule_id": "CON-002",
+            "name": "会诊意见线索",
+            "description": "检查会诊或 MDT 文书是否包含会诊意见、处理建议等基础线索。",
+            "document_type": "consultation",
+            "aliases": ["mdt"],
+            "qc_point": "documentation_quality",
+            "severity": "warning",
+        },
+        {
+            "rule_id": "DG-001",
+            "name": "目标文书是否存在",
+            "description": "检查所选文书范围内是否存在可质控文书。",
+            "document_type": "daily_course",
+            "qc_point": "completeness",
+            "severity": "error",
+        },
+        {
+            "rule_id": "DG-002",
+            "name": "文书基本记录线索",
+            "description": "检查文书是否包含时间、诊疗信息和签名等基本线索。",
+            "document_type": "daily_course",
+            "qc_point": "documentation_quality",
+            "severity": "warning",
+        },
     ]
     result: list[RuleSummary] = []
-    for rule_id, name, description, document_type, qc_point, severity in rules:
+    for rule in rules:
+        rule_id = rule["rule_id"]
+        document_type = rule["document_type"]
         document_types = [document_type]
-        aliases = [document_type]
+        aliases = [document_type, *rule.get("aliases", [])]
         if document_type in {"ward_round", "daily_course"}:
             aliases.append("course")
         result.append(
             RuleSummary(
                 rule_id=rule_id,
-                rule_name=name,
-                description=description,
+                rule_name=rule["name"],
+                description=rule["description"],
                 source="agent_builtin",
                 document_types=document_types,
                 document_aliases=_unique(aliases),
-                qc_point_type=qc_point,
-                severity=severity,
+                qc_point_type=rule["qc_point"],
+                severity=rule["severity"],
                 launch_tier="unknown",
                 execution_mode="programmatic",
                 requires_llm=False,
                 enabled=True,
-                risk_level=_risk_level(severity, False),
+                risk_level=_risk_level(rule["severity"], False),
             )
         )
     return result

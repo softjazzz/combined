@@ -1,6 +1,6 @@
 # QC Agent Pi 回归测试报告
 
-- 生成时间：2026-06-04T06:47:29+00:00
+- 生成时间：2026-06-04T14:58:15+00:00
 - Python：3.11.9
 - pi-agent：0.1.0
 - pi-agent-core：0.1.1
@@ -23,7 +23,7 @@
 
 | case_id                  | status              | passed | plan_tools                                                                       | warnings                                                                                                                     | error |
 | ------------------------ | ------------------- | ------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----- |
-| direct_ward_round_qc     | completed           | 是     | get_record_context, select_record_documents, resolve_rule_scope, run_document_qc | 16 条规则因执行边界限制被跳过                                                                                                |       |
+| direct_ward_round_qc     | completed           | 是     | get_record_context, select_record_documents, resolve_rule_scope, run_document_qc | 10 条规则因执行边界限制被跳过                                                                                                |       |
 | explicit_rule_id_qc      | completed           | 是     | get_record_context, select_record_documents, resolve_rule_scope, run_document_qc | 已识别显式 rule_ids，将优先按 rule_ids 执行或跳过                                                                            |       |
 | unsupported_write_intent | unsupported         | 是     |                                                                                  | 当前受控 Agent 不支持写入、删除、导出或持久化类操作                                                                          |       |
 | discharge_record_qc      | completed           | 是     | get_record_context, select_record_documents, resolve_rule_scope, run_document_qc | 11 条规则因执行边界限制被跳过                                                                                                |       |

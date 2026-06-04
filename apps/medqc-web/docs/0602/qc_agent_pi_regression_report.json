@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-04T06:47:29+00:00",
+  "generated_at": "2026-06-04T14:58:15+00:00",
   "python_version": "3.11.9",
   "pi_agent_installed": "0.1.0",
   "pi_agent_core_installed": "0.1.1",
@@ -19,7 +19,7 @@
       "status": "completed",
       "passed": true,
       "skipped": false,
-      "warnings": ["16 条规则因执行边界限制被跳过"],
+      "warnings": ["10 条规则因执行边界限制被跳过"],
       "plan_tools": [
         "get_record_context",
         "select_record_documents",
@@ -34,7 +34,7 @@
         "http_status": null,
         "code": null,
         "message": "",
-        "trace_id": "2c928a1b-2a2c-4019-9c46-4bf069d09448",
+        "trace_id": "a825099a-fb49-459c-b8f8-06edd55a47de",
         "parsed_intent_summary": {
           "document_alias": "ward_round",
           "document_type": null,
@@ -47,16 +47,16 @@
         },
         "qc_summary": {
           "rule_count": 20,
-          "total_rules": 4,
-          "passed": 4,
-          "failed": 0,
-          "passed_count": 4,
-          "skipped_count": 16,
-          "issue_count": 0,
-          "pass_rate": 1.0
+          "total_rules": 10,
+          "passed": 9,
+          "failed": 1,
+          "passed_count": 9,
+          "skipped_count": 10,
+          "issue_count": 1,
+          "pass_rate": 0.9
         },
         "selected_rule_count": 20,
-        "skipped_rule_count": 16,
+        "skipped_rule_count": 10,
         "candidate_count": 0
       }
     },
@@ -81,7 +81,7 @@
         "http_status": null,
         "code": null,
         "message": "",
-        "trace_id": "ef620422-4208-4b28-9f85-2736af3bbdee",
+        "trace_id": "9e0c04b6-c531-4aa6-bbf1-d0687f14fd23",
         "parsed_intent_summary": {
           "document_alias": "ward_round",
           "document_type": null,
@@ -123,7 +123,7 @@
         "http_status": null,
         "code": null,
         "message": "",
-        "trace_id": "171b2132-309a-4258-a97f-4f83f7f53d57",
+        "trace_id": "ce12e555-7174-45fa-aff3-d7a61f3464a3",
         "parsed_intent_summary": {
           "document_alias": null,
           "document_type": null,
@@ -161,7 +161,7 @@
         "http_status": null,
         "code": null,
         "message": "",
-        "trace_id": "3b0d30bc-28f3-4f86-b118-0bc5c973fe74",
+        "trace_id": "e33ebd3c-d623-4f93-86f9-3d01b69ef6fe",
         "parsed_intent_summary": {
           "document_alias": "discharge",
           "document_type": null,
@@ -173,16 +173,16 @@
           "has_department": false
         },
         "qc_summary": {
-          "rule_count": 11,
-          "total_rules": 0,
-          "passed": 0,
+          "rule_count": 13,
+          "total_rules": 2,
+          "passed": 2,
           "failed": 0,
-          "passed_count": 0,
+          "passed_count": 2,
           "skipped_count": 11,
           "issue_count": 0,
           "pass_rate": 1.0
         },
-        "selected_rule_count": 11,
+        "selected_rule_count": 13,
         "skipped_rule_count": 11,
         "candidate_count": 0
       }
@@ -206,7 +206,7 @@
         "http_status": null,
         "code": null,
         "message": "",
-        "trace_id": "3ff5a0ae-2f22-4c6d-bc8a-81c0fbe4fcfb",
+        "trace_id": "0864e0e5-6ea8-4138-8a93-faafc75e6b6f",
         "parsed_intent_summary": {
           "document_alias": null,
           "document_type": null,

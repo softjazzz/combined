@@ -99,7 +99,7 @@ class DocumentScope(BaseModel):
     keywords: Optional[List[str]] = None
     date_range: Optional[DocumentDateRange] = None
     max_documents: int = Field(default=10, ge=1, le=20)
-    alias: Optional[Literal["ward_round", "discharge", "course", "consultation"]] = None
+    alias: Optional[Literal["ward_round", "discharge", "course", "consultation", "mdt"]] = None
 
 
 class SelectRecordDocumentsInput(BaseModel):

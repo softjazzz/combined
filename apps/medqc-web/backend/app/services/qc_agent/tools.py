@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List
 
 from fastapi import HTTPException, status
@@ -389,6 +390,7 @@ def _alias_keywords(alias: str | None) -> List[str]:
         "discharge": ["出院记录", "出院小结"],
         "course": ["首次病程", "日常病程", "病程记录", "上级医师查房", "阶段小结"],
         "consultation": ["会诊记录", "多学科会诊", "MDT", "会诊"],
+        "mdt": ["多学科会诊", "MDT", "会诊"],
     }
     return aliases.get(alias or "", [])
 
@@ -419,6 +421,7 @@ def _alias_document_types(alias: str | None) -> List[str]:
             "senior_course_record",
         ],
         "consultation": ["会诊记录", "多学科会诊", "MDT"],
+        "mdt": ["会诊记录", "多学科会诊", "MDT", "mdt_record"],
     }
     return aliases.get(alias or "", [])
 
@@ -1098,23 +1101,97 @@ def _document_qc_rule(
     }
 
 
+def _parse_datetime(value: Any) -> datetime | None:
+    text = _text(value)
+    if not text:
+        return None
+    normalized = text.replace("T", " ").replace("/", "-").replace("年", "-").replace("月", "-").replace("日", " ")
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    for fmt, length in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d %H:%M", 16), ("%Y-%m-%d", 10)):
+        try:
+            return datetime.strptime(normalized[:length], fmt)
+        except ValueError:
+            continue
+    match = re.search(r"((?:19|20)\d{2})[-.](\d{1,2})[-.](\d{1,2})", normalized)
+    if not match:
+        return None
+    try:
+        return datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    except ValueError:
+        return None
+
+
+def _selected_text(selected_documents: List[Dict[str, Any]]) -> str:
+    return "\n".join(_text(document.get("text")) for document in selected_documents)
+
+
+def _document_refs(selected_documents: List[Dict[str, Any]]) -> str:
+    return ",".join(_text(document.get("document_ref")) for document in selected_documents if document.get("document_ref"))
+
+
+def _total_text_length(selected_documents: List[Dict[str, Any]]) -> int:
+    return sum(len(_text(document.get("text"))) for document in selected_documents)
+
+
+def _first_document_ref(selected_documents: List[Dict[str, Any]]) -> str:
+    return selected_documents[0].get("document_ref", "") if selected_documents else ""
+
+
+def _has_record_time(selected_documents: List[Dict[str, Any]]) -> bool:
+    return any(_text(document.get("record_time") or document.get("update_time")) for document in selected_documents)
+
+
+def _has_late_document_after_discharge(
+    selected_documents: List[Dict[str, Any]],
+    record_summary: Dict[str, Any] | None,
+) -> bool:
+    discharge_time = _parse_datetime((record_summary or {}).get("discharge_date"))
+    if not discharge_time:
+        return False
+    threshold = discharge_time + timedelta(days=1)
+    for document in selected_documents:
+        document_time = _parse_datetime(document.get("record_time") or document.get("update_time"))
+        if document_time and document_time > threshold:
+            return True
+    return False
+
+
+def _has_document_text_min_length(selected_documents: List[Dict[str, Any]], min_length: int) -> bool:
+    return _total_text_length(selected_documents) >= min_length
+
+
 def _run_ward_round_rules(
     selected_documents: List[Dict[str, Any]],
     *,
     include_evidence: bool,
+    record_summary: Dict[str, Any] | None = None,
 ) -> List[Dict[str, Any]]:
-    joined_text = "\n".join(_text(document.get("text")) for document in selected_documents)
-    document_ref = selected_documents[0].get("document_ref", "") if selected_documents else ""
+    joined_text = _selected_text(selected_documents)
+    document_ref = _first_document_ref(selected_documents)
+    document_refs = _document_refs(selected_documents)
     has_document = bool(selected_documents)
+    total_length = _total_text_length(selected_documents)
+    has_ward_round_keyword = bool(re.search(r"上级医师查房|主任医师查房|主治医师查房|副主任医师查房|主任查房|上级查房|查房", joined_text))
     has_superior_opinion = bool(re.search(r"上级医师|主任医师|副主任医师|主治医师|主任查房|上级查房", joined_text))
-    has_plan = bool(re.search(r"病情变化|诊疗计划|治疗计划|处理意见|继续|调整|完善检查|下一步", joined_text))
-    has_time = bool(re.search(r"(?:19|20)\d{2}[-年/]\d{1,2}[-月/]\d{1,2}", joined_text))
+    has_plan = bool(re.search(r"病情变化|诊疗计划|治疗计划|处理意见|继续|调整|完善检查|下一步|复查|医嘱", joined_text))
+    has_time = bool(re.search(r"(?:19|20)\d{2}[-年/]\d{1,2}[-月/]\d{1,2}", joined_text)) or _has_record_time(selected_documents)
     has_signature = bool(re.search(r"医师签名|医生签名|签名|记录医师|医师[:：]", joined_text))
+    time_is_acceptable = has_time and not _has_late_document_after_discharge(selected_documents, record_summary)
+    first_ward_round_timely = _has_first_ward_round_within_days(
+        selected_documents,
+        record_summary,
+        max_days=2,
+        senior_keywords=r"主治医师|上级医师|主任医师|副主任医师|主任查房|上级查房|查房",
+    )
     evidence = {
         "exists": "命中查房相关文书" if has_document else "未命中查房相关文书",
         "superior": "文本包含上级/主任/主治医师查房线索" if has_superior_opinion else "未见上级医师查房意见线索",
         "plan": "文本包含病情变化、诊疗计划或处理意见线索" if has_plan else "未见病情变化、诊疗计划或处理意见线索",
         "time_signature": "文本包含记录时间和医师签名线索" if has_time and has_signature else "记录时间或医师签名线索不足",
+        "keyword": "文本包含查房关键词线索" if has_ward_round_keyword else "未见查房关键词线索",
+        "length": f"选中文书总长度 {total_length} 字" if has_document else "未命中文书",
+        "time": "记录时间基础校验通过" if time_is_acceptable else "记录时间缺失或晚于出院后 1 天",
+        "first_round": "入院 48 小时内存在查房时间线索" if first_ward_round_timely else "未见入院 48 小时内查房时间线索",
     }
     if not include_evidence:
         evidence = {key: "" for key in evidence}
@@ -1159,6 +1236,239 @@ def _run_ward_round_rules(
             evidence_summary=evidence["time_signature"],
             suggestion="请补充记录时间和医师签名线索。",
         ),
+        _document_qc_rule(
+            rule_id="WR-005",
+            rule_name="是否包含查房关键词线索",
+            passed=has_ward_round_keyword,
+            severity="warning",
+            category="ward_round",
+            document_ref=document_refs or document_ref,
+            evidence_summary=evidence["keyword"],
+            suggestion="请确认文书类型或在查房记录中补充明确查房标题/段落。",
+        ),
+        _document_qc_rule(
+            rule_id="WR-006",
+            rule_name="查房相关文书内容是否过短",
+            passed=_has_document_text_min_length(selected_documents, 80),
+            severity="warning",
+            category="ward_round",
+            document_ref=document_refs or document_ref,
+            evidence_summary=evidence["length"],
+            suggestion="请补充查房记录的病情分析、诊疗意见和处理计划。",
+        ),
+        _document_qc_rule(
+            rule_id="WR-007",
+            rule_name="查房记录时间基础校验",
+            passed=time_is_acceptable,
+            severity="warning",
+            category="ward_round",
+            document_ref=document_refs or document_ref,
+            evidence_summary=evidence["time"],
+            suggestion="请补充查房记录时间，或核对记录时间是否晚于出院后 1 天。",
+        ),
+        _document_qc_rule(
+            rule_id="SC-048",
+            rule_name="入院48小时内主治医师首次查房记录",
+            passed=first_ward_round_timely,
+            severity="error",
+            category="ward_round",
+            document_ref=document_refs or document_ref,
+            evidence_summary=evidence["first_round"],
+            suggestion="请补充入院 48 小时内主治医师或上级医师首次查房记录。",
+        ),
+        _document_qc_rule(
+            rule_id="SC-050",
+            rule_name="上级医师查房病情分析或诊疗意见",
+            passed=has_plan and has_superior_opinion,
+            severity="warning",
+            category="ward_round",
+            document_ref=document_refs or document_ref,
+            evidence_summary=evidence["plan"] if has_superior_opinion else evidence["superior"],
+            suggestion="请在上级医师查房记录中补充病情分析和诊疗意见。",
+        ),
+        _document_qc_rule(
+            rule_id="SC-052",
+            rule_name="上级医师查房记录审阅及签名",
+            passed=has_signature,
+            severity="warning",
+            category="ward_round",
+            document_ref=document_refs or document_ref,
+            evidence_summary=evidence["time_signature"],
+            suggestion="请补充上级医师审阅或签名线索。",
+        ),
+    ]
+
+
+def _has_first_ward_round_within_days(
+    selected_documents: List[Dict[str, Any]],
+    record_summary: Dict[str, Any] | None,
+    *,
+    max_days: int,
+    senior_keywords: str,
+) -> bool:
+    raw_admission_date = _text((record_summary or {}).get("admission_date"))
+    admission_time = _parse_datetime(raw_admission_date)
+    if not admission_time:
+        return False
+    threshold = admission_time + timedelta(days=max_days)
+    if len(raw_admission_date) <= 10:
+        threshold = threshold + timedelta(hours=23, minutes=59, seconds=59)
+    for document in selected_documents:
+        text_value = _text(document.get("text"))
+        searchable = "\n".join(
+            [
+                _text(document.get("document_type")),
+                _text(document.get("title")),
+                _text(document.get("source_table")),
+                text_value,
+            ]
+        )
+        if not re.search(senior_keywords, searchable):
+            continue
+        document_time = _parse_datetime(document.get("record_time") or document.get("update_time")) or _parse_datetime(text_value)
+        if document_time and admission_time <= document_time <= threshold:
+            return True
+    return False
+
+
+def _run_course_rules(
+    selected_documents: List[Dict[str, Any]],
+    *,
+    include_evidence: bool,
+) -> List[Dict[str, Any]]:
+    joined_text = _selected_text(selected_documents)
+    document_ref = _document_refs(selected_documents) or _first_document_ref(selected_documents)
+    has_document = bool(selected_documents)
+    total_length = _total_text_length(selected_documents)
+    has_care_content = bool(re.search(r"病情|诊疗计划|治疗计划|处理意见|继续|调整|完善检查|复查|医嘱", joined_text))
+    evidence = {
+        "exists": "命中病程类文书" if has_document else "未命中病程类文书",
+        "length": f"选中文书总长度 {total_length} 字" if has_document else "未命中文书",
+        "content": "文本包含病情或诊疗处理线索" if has_care_content else "未见病情或诊疗处理线索",
+    }
+    if not include_evidence:
+        evidence = {key: "" for key in evidence}
+    return [
+        _document_qc_rule(
+            rule_id="CR-001",
+            rule_name="病程记录是否存在",
+            passed=has_document,
+            severity="error",
+            category="course",
+            document_ref=document_ref,
+            evidence_summary=evidence["exists"],
+            suggestion="请补充病程记录或调整文书筛选条件。",
+        ),
+        _document_qc_rule(
+            rule_id="CR-002",
+            rule_name="病程记录内容是否过短",
+            passed=_has_document_text_min_length(selected_documents, 80),
+            severity="warning",
+            category="course",
+            document_ref=document_ref,
+            evidence_summary=evidence["length"],
+            suggestion="请补充病程记录正文内容。",
+        ),
+        _document_qc_rule(
+            rule_id="CR-003",
+            rule_name="病程记录诊疗内容线索",
+            passed=has_care_content,
+            severity="warning",
+            category="course",
+            document_ref=document_ref,
+            evidence_summary=evidence["content"],
+            suggestion="请补充病情变化、处理意见或诊疗计划。",
+        ),
+    ]
+
+
+def _run_discharge_rules(
+    selected_documents: List[Dict[str, Any]],
+    *,
+    include_evidence: bool,
+) -> List[Dict[str, Any]]:
+    joined_text = _selected_text(selected_documents)
+    document_ref = _document_refs(selected_documents) or _first_document_ref(selected_documents)
+    has_document = bool(selected_documents)
+    total_length = _total_text_length(selected_documents)
+    has_core_sections = bool(re.search(r"出院诊断|出院情况|出院医嘱|出院带药|随访|治疗经过|住院经过", joined_text))
+    evidence = {
+        "exists": "命中出院记录或出院小结" if has_document else "未命中出院记录或出院小结",
+        "length": f"出院文书总长度 {total_length} 字" if has_document else "未命中文书",
+        "sections": "文本包含出院诊断/出院情况/医嘱/随访等线索" if has_core_sections else "未见出院记录核心栏目线索",
+    }
+    if not include_evidence:
+        evidence = {key: "" for key in evidence}
+    return [
+        _document_qc_rule(
+            rule_id="DIS-001",
+            rule_name="出院记录是否存在",
+            passed=has_document,
+            severity="error",
+            category="discharge",
+            document_ref=document_ref,
+            evidence_summary=evidence["exists"],
+            suggestion="请补充出院记录或出院小结。",
+        ),
+        _document_qc_rule(
+            rule_id="DIS-002",
+            rule_name="出院记录正文是否过短",
+            passed=_has_document_text_min_length(selected_documents, 120),
+            severity="warning",
+            category="discharge",
+            document_ref=document_ref,
+            evidence_summary=evidence["length"],
+            suggestion="请补充出院记录正文、诊疗经过、出院情况和医嘱。",
+        ),
+        _document_qc_rule(
+            rule_id="DIS-003",
+            rule_name="出院记录核心栏目线索",
+            passed=has_core_sections,
+            severity="warning",
+            category="discharge",
+            document_ref=document_ref,
+            evidence_summary=evidence["sections"],
+            suggestion="请补充出院诊断、出院情况、出院医嘱或随访安排。",
+        ),
+    ]
+
+
+def _run_consultation_rules(
+    selected_documents: List[Dict[str, Any]],
+    *,
+    include_evidence: bool,
+) -> List[Dict[str, Any]]:
+    joined_text = _selected_text(selected_documents)
+    document_ref = _document_refs(selected_documents) or _first_document_ref(selected_documents)
+    has_document = bool(selected_documents)
+    has_opinion = bool(re.search(r"会诊意见|会诊建议|处理意见|诊疗建议|MDT|多学科", joined_text, re.IGNORECASE))
+    evidence = {
+        "exists": "命中会诊或 MDT 文书" if has_document else "未命中会诊或 MDT 文书",
+        "opinion": "文本包含会诊意见或处理建议线索" if has_opinion else "未见会诊意见或处理建议线索",
+    }
+    if not include_evidence:
+        evidence = {key: "" for key in evidence}
+    return [
+        _document_qc_rule(
+            rule_id="CON-001",
+            rule_name="会诊记录是否存在",
+            passed=has_document,
+            severity="error",
+            category="consultation",
+            document_ref=document_ref,
+            evidence_summary=evidence["exists"],
+            suggestion="请补充会诊记录或 MDT 记录。",
+        ),
+        _document_qc_rule(
+            rule_id="CON-002",
+            rule_name="会诊意见线索",
+            passed=has_opinion,
+            severity="warning",
+            category="consultation",
+            document_ref=document_ref,
+            evidence_summary=evidence["opinion"],
+            suggestion="请补充会诊意见、处理建议或诊疗建议。",
+        ),
     ]
 
 
@@ -1199,8 +1509,28 @@ _AGENT_BUILTIN_RULE_FAMILIES = {
     "WR-002": "ward_round",
     "WR-003": "ward_round",
     "WR-004": "ward_round",
+    "WR-005": "ward_round",
+    "WR-006": "ward_round",
+    "WR-007": "ward_round",
+    "SC-048": "ward_round",
+    "SC-050": "ward_round",
+    "SC-052": "ward_round",
+    "CR-001": "course",
+    "CR-002": "course",
+    "CR-003": "course",
+    "DIS-001": "discharge",
+    "DIS-002": "discharge",
+    "DIS-003": "discharge",
+    "CON-001": "consultation",
+    "CON-002": "consultation",
     "DG-001": "document_general",
     "DG-002": "document_general",
+}
+
+_SAFE_PROGRAMMATIC_RULE_IDS = {
+    "SC-048": "ward_round",
+    "SC-050": "ward_round",
+    "SC-052": "ward_round",
 }
 
 
@@ -1227,7 +1557,7 @@ def _skipped_rule(
 
 def _document_scope_for_document_qc(params: RunDocumentQCInput) -> DocumentScope:
     scope = params.document_scope.model_copy(deep=True)
-    if params.document_alias and params.document_alias in {"ward_round", "discharge", "course", "consultation"}:
+    if params.document_alias and params.document_alias in {"ward_round", "discharge", "course", "consultation", "mdt"}:
         scope.alias = params.document_alias
     if params.document_type:
         document_terms = list(scope.document_types or [])
@@ -1300,7 +1630,7 @@ def _rule_applicable_to_document(
     document_alias: str | None,
     document_type: str | None,
 ) -> bool:
-    if document_alias and document_alias in {"ward_round", "discharge", "course", "consultation"}:
+    if document_alias and document_alias in {"ward_round", "discharge", "course", "consultation", "mdt"}:
         return document_alias in rule.document_aliases
     if document_type:
         return document_type in rule.document_types or document_type in rule.document_aliases
@@ -1314,10 +1644,33 @@ def _execute_agent_builtin_rules(
     include_evidence: bool,
     document_alias: str | None,
     document_type: str | None,
+    record_summary: Dict[str, Any] | None = None,
 ) -> tuple[List[Dict[str, Any]], List[RuleSummary], List[Dict[str, Any]]]:
     ward_round_results = {
         item["rule_id"]: item
         for item in _run_ward_round_rules(
+            selected_documents,
+            include_evidence=include_evidence,
+            record_summary=record_summary,
+        )
+    }
+    course_results = {
+        item["rule_id"]: item
+        for item in _run_course_rules(
+            selected_documents,
+            include_evidence=include_evidence,
+        )
+    }
+    discharge_results = {
+        item["rule_id"]: item
+        for item in _run_discharge_rules(
+            selected_documents,
+            include_evidence=include_evidence,
+        )
+    }
+    consultation_results = {
+        item["rule_id"]: item
+        for item in _run_consultation_rules(
             selected_documents,
             include_evidence=include_evidence,
         )
@@ -1329,7 +1682,13 @@ def _execute_agent_builtin_rules(
             include_evidence=include_evidence,
         )
     }
-    results_by_id = {**general_results, **ward_round_results}
+    results_by_id = {
+        **general_results,
+        **ward_round_results,
+        **course_results,
+        **discharge_results,
+        **consultation_results,
+    }
     executed_results: List[Dict[str, Any]] = []
     executed_rules: List[RuleSummary] = []
     skipped_rules: List[Dict[str, Any]] = []
@@ -1345,7 +1704,8 @@ def _execute_agent_builtin_rules(
                 )
             )
             continue
-        if rule.requires_llm:
+        is_safe_programmatic = rule.source == "agent_builtin" or rule_id in _SAFE_PROGRAMMATIC_RULE_IDS
+        if rule.requires_llm and not is_safe_programmatic:
             skipped_rules.append(
                 _skipped_rule(
                     rule_id=rule_id,
@@ -1355,12 +1715,12 @@ def _execute_agent_builtin_rules(
                 )
             )
             continue
-        if rule.source != "agent_builtin" or rule.execution_mode != "programmatic":
+        if not is_safe_programmatic:
             skipped_rules.append(
                 _skipped_rule(
                     rule_id=rule_id,
                     reason="unsupported_execution_mode",
-                    message="本阶段仅执行 Agent 内置只读程序化文书规则",
+                    message="本阶段仅执行 Agent 内置或已安全映射的只读程序化文书规则",
                     rule=rule,
                 )
             )
@@ -1410,6 +1770,7 @@ def run_document_qc(
         include_evidence=params.qc_scope.include_evidence,
         document_alias=document_alias,
         document_type=document_type,
+        record_summary=selection.public_data.get("record_summary", {}),
     )
     skipped_rules.extend(execution_skipped)
     include_passed = params.include_passed if params.include_passed is not None else params.qc_scope.include_passed

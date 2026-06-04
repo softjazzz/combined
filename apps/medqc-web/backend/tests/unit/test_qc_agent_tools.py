@@ -282,6 +282,45 @@ def _cdm_course_documents(*_args, **_kwargs):
     ], []
 
 
+class WeakWardRoundWorkspace(FakeWorkspace):
+    def __init__(self, content: str, *, title: str = "日常病程记录") -> None:
+        super().__init__()
+        self.content = content
+        self.title = title
+
+    def hydrate_records_with_medical_text(self, records):
+        hydrated = super().hydrate_records_with_medical_text(records)
+        for record in hydrated:
+            if record.get("visit_id") == "V001":
+                record["documents"] = [
+                    {
+                        "document_ref": "DOC-WEAK-WR",
+                        "document_type": "日常病程记录",
+                        "title": self.title,
+                        "content": self.content,
+                        "record_time": "2026-05-03 08:30:00",
+                    }
+                ]
+        return hydrated
+
+
+class ConsultationWorkspace(FakeWorkspace):
+    def hydrate_records_with_medical_text(self, records):
+        hydrated = super().hydrate_records_with_medical_text(records)
+        for record in hydrated:
+            if record.get("visit_id") == "V001":
+                record["documents"] = [
+                    {
+                        "document_ref": "DOC-CON-1",
+                        "document_type": "会诊记录",
+                        "title": "多学科会诊记录",
+                        "content": "2026-05-04 MDT 会诊记录：会诊意见为继续完善检查，调整治疗方案。医师签名：王医生。",
+                        "record_time": "2026-05-04 10:00:00",
+                    }
+                ]
+        return hydrated
+
+
 def test_search_records_returns_public_record_summaries_only():
     workspace = FakeWorkspace()
     observation = search_records(
@@ -748,6 +787,125 @@ def test_run_document_qc_resolves_scope_and_skips_non_executable_rules():
         for item in public_data["skipped_rules"]
     )
     _assert_no_raw_context(public_data)
+
+
+def test_run_document_qc_ward_round_scope_executes_more_programmatic_rules():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_alias": "ward_round",
+            "include_passed": True,
+            "max_rules": 20,
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    public_data = observation.public_data
+    executed_ids = {rule["rule_id"] for rule in public_data["executed_rules"]}
+    assert {"WR-001", "WR-005", "WR-006", "WR-007", "SC-048", "SC-050", "SC-052"}.issubset(executed_ids)
+    assert public_data["qc_summary"]["total_rules"] >= 7
+    assert public_data["qc_summary"]["skipped_count"] < len(public_data["selected_rules"])
+    _assert_no_raw_context(public_data)
+
+
+def test_run_document_qc_ward_round_missing_keyword_returns_issue():
+    workspace = WeakWardRoundWorkspace("2026-05-03 病程记录：患者一般。医师签名：李医生。")
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_scope": {"alias": "ward_round"},
+            "qc_scope": {"rule_ids": ["WR-005"], "include_passed": False},
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    issues = observation.public_data["issues"]
+    assert any(issue["rule_id"] == "WR-005" and issue["passed"] is False for issue in issues)
+    assert "未命中文书" in observation.public_data["warnings"]
+    _assert_no_raw_context(observation.public_data)
+
+
+def test_run_document_qc_ward_round_short_document_returns_issue():
+    workspace = WeakWardRoundWorkspace("2026-05-03 查房。签名：李。", title="上级医师查房记录")
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_alias": "ward_round",
+            "rule_ids": ["WR-006"],
+            "include_passed": False,
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    issues = observation.public_data["issues"]
+    assert any(issue["rule_id"] == "WR-006" and issue["passed"] is False for issue in issues)
+    assert "选中文书总长度" in issues[0]["evidence_summary"]
+    _assert_no_raw_context(observation.public_data)
+
+
+def test_run_document_qc_discharge_short_body_has_explicit_issue_not_all_skipped():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V002",
+            "patient_id": "P002",
+            "document_alias": "discharge",
+            "include_passed": False,
+            "max_rules": 10,
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    public_data = observation.public_data
+    executed_ids = {rule["rule_id"] for rule in public_data["executed_rules"]}
+    issue_ids = {issue["rule_id"] for issue in public_data["issues"]}
+    assert {"DIS-001", "DIS-002", "DIS-003"}.issubset(executed_ids)
+    assert {"DIS-002", "DIS-003"}.intersection(issue_ids)
+    assert public_data["qc_summary"]["total_rules"] >= 3
+    _assert_no_raw_context(public_data)
+
+
+def test_run_document_qc_consultation_rules_are_programmatic():
+    workspace = ConsultationWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_alias": "consultation",
+            "include_passed": True,
+            "max_rules": 5,
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    executed_ids = {rule["rule_id"] for rule in observation.public_data["executed_rules"]}
+    assert {"CON-001", "CON-002"}.issubset(executed_ids)
+    assert observation.public_data["qc_summary"]["failed"] == 0
+    _assert_no_raw_context(observation.public_data)
+
+
+def test_run_document_qc_unsupported_llm_rules_still_skipped():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_alias": "ward_round",
+            "rule_ids": ["SC-084", "SC-086", "SC-107"],
+            "include_passed": True,
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    skipped = observation.public_data["skipped_rules"]
+    assert {item["rule_id"] for item in skipped} == {"SC-084", "SC-086", "SC-107"}
+    assert all(item["reason"] in {"requires_llm", "unsupported_execution_mode"} for item in skipped)
+    assert observation.public_data["executed_rules"] == []
+    _assert_no_raw_context(observation.public_data)
 
 
 def test_run_document_qc_skips_requires_llm_and_unknown_rule_ids():
