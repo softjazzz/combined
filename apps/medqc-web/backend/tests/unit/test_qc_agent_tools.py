@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
+import sys
+from pathlib import Path
+
 import pytest
 
 from app.core.access_control import enforce_default_auth
@@ -1223,6 +1227,75 @@ def test_api_chat_explicit_rule_ids_take_priority(client, qc_agent_auth):
     assert "WR-001" in {rule["rule_id"] for rule in result["executed_rules"]}
     assert any(item["rule_id"] == "DG-001" for item in result["skipped_rules"])
     _assert_no_raw_context(body)
+
+
+def test_api_chat_empty_record_context_needs_clarification(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "对 visit_id=V003 的查房记录做质控"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "needs_clarification"
+    assert body["parsed_intent"]["visit_id"] == "V003"
+    assert [item["tool_name"] for item in body["plan"]] == ["get_record_context"]
+    assert any("缺少可用文书文本" in item for item in body["warnings"])
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_missing_target_document_needs_clarification(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "对 visit_id=V001 的会诊记录做质控"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "needs_clarification"
+    assert body["parsed_intent"]["document_alias"] == "consultation"
+    assert [item["tool_name"] for item in body["plan"]] == [
+        "get_record_context",
+        "select_record_documents",
+    ]
+    assert any("未找到目标文书" in item for item in body["warnings"])
+    _assert_no_raw_context(body)
+
+
+def test_qc_agent_pi_harness_summarizes_http_error_envelope():
+    script_path = Path(__file__).resolve().parents[2] / "scripts" / "run_qc_agent_pi_smoke_test.py"
+    spec = importlib.util.spec_from_file_location("run_qc_agent_pi_smoke_test", script_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
+    case = module.RegressionCase(
+        case_id="direct_ward_round_qc",
+        message="对 visit_id=V003 的查房记录做质控",
+        expected_statuses={"completed", "needs_clarification"},
+    )
+    response_data = {
+        "success": False,
+        "detail": "病历上下文缺少可用文书文本: visit_id=V003",
+        "trace_id": "trace-001",
+        "code": "CONTEXT_TEXT_MISSING",
+        "_http_status": 422,
+    }
+
+    result = module.evaluate_case(case, response_data)
+
+    assert result["passed"] is False
+    assert result["response_summary"]["http_status"] == 422
+    assert result["response_summary"]["code"] == "CONTEXT_TEXT_MISSING"
+    assert result["response_summary"]["trace_id"] == "trace-001"
+    assert "缺少可用文书文本" in result["response_summary"]["message"]
+    assert "http_status=422" in result["error"]
+    assert result["sensitive_leak_found"] is False
 
 
 def test_api_chat_search_no_candidate_needs_clarification(client, qc_agent_auth):

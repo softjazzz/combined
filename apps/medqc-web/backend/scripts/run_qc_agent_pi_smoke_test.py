@@ -158,6 +158,10 @@ def sanitize_auth_message(message: str, account: str | None = None, password: st
     return sanitized[:300]
 
 
+def sanitize_report_message(message: Any) -> str:
+    return str(message).replace("\r", " ").replace("\n", " ")[:300]
+
+
 def extract_access_token(response_data: dict[str, Any]) -> str | None:
     for key in ("access_token", "token"):
         value = response_data.get(key)
@@ -325,6 +329,14 @@ def summarize_response(response_data: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "status": response_data.get("status"),
+        "http_status": response_data.get("_http_status"),
+        "code": response_data.get("code") or response_data.get("error_code"),
+        "message": sanitize_report_message(
+            response_data.get("message")
+            or response_data.get("error")
+            or response_data.get("detail")
+            or ""
+        ),
         "trace_id": response_data.get("trace_id") or response_data.get("run_id"),
         "parsed_intent_summary": intent_summary,
         "qc_summary": qc_summary if isinstance(qc_summary, dict) else None,
@@ -416,6 +428,7 @@ def evaluate_case(case: RegressionCase, response_data: dict[str, Any]) -> dict[s
     plan_tools = extract_plan_tools(response_data)
     warnings = extract_warnings(response_data)
     sensitive_paths = find_sensitive_paths(response_data)
+    response_summary = summarize_response(response_data)
     errors: list[str] = []
 
     result.update(
@@ -425,14 +438,24 @@ def evaluate_case(case: RegressionCase, response_data: dict[str, Any]) -> dict[s
             "plan_tools": plan_tools,
             "sensitive_leak_found": bool(sensitive_paths),
             "sensitive_paths": sensitive_paths,
-            "response_summary": summarize_response(response_data),
+            "response_summary": response_summary,
         }
     )
 
     if sensitive_paths:
         errors.append(f"响应包含敏感字段：{', '.join(sensitive_paths)}")
     if status not in case.expected_statuses:
-        errors.append(f"status={status!r} 不在预期范围 {sorted(case.expected_statuses)!r}")
+        http_hint = ""
+        if response_summary.get("http_status") or response_summary.get("code") or response_summary.get("trace_id"):
+            http_hint = (
+                f"，http_status={response_summary.get('http_status')!r}"
+                f"，code={response_summary.get('code')!r}"
+                f"，trace_id={response_summary.get('trace_id')!r}"
+            )
+        message = response_summary.get("message")
+        if message:
+            http_hint += f"，message={message!r}"
+        errors.append(f"status={status!r} 不在预期范围 {sorted(case.expected_statuses)!r}{http_hint}")
     if case.case_id == "unsupported_write_intent" and status != "unsupported":
         errors.append("写入/删除意图未被拒绝为 unsupported")
     if case.case_id == "vague_request" and status == "completed" and "run_document_qc" in plan_tools:
@@ -468,13 +491,11 @@ def call_chat(base_url: str, token: str, timeout: float, message: str, visit_id:
 
     if response.status_code == 401:
         raise PermissionError("HTTP 401：请设置有效的 MEDQC_ACCESS_TOKEN。")
-    if response.status_code >= 500:
-        raise RuntimeError(f"HTTP {response.status_code}: {response.text[:500]}")
     if response.status_code >= 400:
         try:
             data = response.json()
         except ValueError:
-            data = {"status": "http_error", "detail": response.text[:500]}
+            data = {"status": "http_error", "message": sanitize_report_message(response.text)}
         data["_http_status"] = response.status_code
         return data
     return response.json()

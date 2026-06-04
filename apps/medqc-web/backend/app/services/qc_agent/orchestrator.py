@@ -4,6 +4,8 @@ import re
 import uuid
 from typing import Any, Dict, List
 
+from fastapi import HTTPException
+
 from app.services.qc_agent.schemas import QCAgentChatRequest, QCAgentChatResponse
 from app.services.qc_agent.tool_registry import AgentToolRegistry
 from app.services.qc_agent.tools import assert_no_sensitive_output
@@ -139,6 +141,48 @@ def _plan_item(tool_name: str, status: str, arguments: Dict[str, Any], public_da
     return item
 
 
+def _needs_clarification_response(
+    *,
+    request: QCAgentChatRequest,
+    run_id: str,
+    intent: Dict[str, Any],
+    plan: List[Dict[str, Any]],
+    warnings: List[str],
+) -> QCAgentChatResponse:
+    response = QCAgentChatResponse(
+        status="needs_clarification",
+        parsed_intent=intent,
+        plan=plan,
+        warnings=warnings,
+        run_id=run_id,
+        session_id=request.session_id,
+    )
+    assert_no_sensitive_output(response.model_dump())
+    return response
+
+
+def _http_detail_text(exc: HTTPException) -> str:
+    detail = getattr(exc, "detail", "")
+    if isinstance(detail, str):
+        return detail
+    return str(detail)
+
+
+def _is_missing_document_context_error(exc: HTTPException) -> bool:
+    detail = _http_detail_text(exc)
+    if getattr(exc, "status_code", None) not in {404, 422}:
+        return False
+    patterns = (
+        "缺少可用文书文本",
+        "缺少 medical_text",
+        "未命中文书",
+        "未找到目标文书",
+        "文书为空",
+        "无可用文书",
+    )
+    return any(pattern in detail for pattern in patterns)
+
+
 def _execute_tool(
     registry: AgentToolRegistry,
     tool_name: str,
@@ -261,7 +305,17 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
         "scene": "final",
         "include_preview": False,
     }
-    _execute_tool(registry, "get_record_context", context_args, plan)
+    context_public = _execute_tool(registry, "get_record_context", context_args, plan)
+    context_status = context_public.get("context_status") if isinstance(context_public, dict) else {}
+    if isinstance(context_status, dict) and not context_status.get("text_available"):
+        context_warnings = list(context_public.get("warnings") or [])
+        return _needs_clarification_response(
+            request=request,
+            run_id=run_id,
+            intent={**intent, "visit_id": visit_id, "patient_id": patient_id or ""},
+            plan=plan,
+            warnings=warnings + context_warnings + ["病历上下文缺少可用文书文本，无法执行文书质控"],
+        )
 
     document_scope: Dict[str, Any] = {"max_documents": 10}
     if intent.get("document_alias") in {"ward_round", "discharge", "course", "consultation"}:
@@ -273,7 +327,29 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
         "patient_id": patient_id or None,
         "document_scope": document_scope,
     }
-    _execute_tool(registry, "select_record_documents", select_args, plan)
+    try:
+        selection_public = _execute_tool(registry, "select_record_documents", select_args, plan)
+    except HTTPException as exc:
+        if _is_missing_document_context_error(exc):
+            return _needs_clarification_response(
+                request=request,
+                run_id=run_id,
+                intent={**intent, "visit_id": visit_id, "patient_id": patient_id or ""},
+                plan=plan,
+                warnings=warnings + [_http_detail_text(exc)],
+            )
+        raise
+    selection_summary = selection_public.get("selection_summary") if isinstance(selection_public, dict) else {}
+    matched_count = selection_summary.get("matched_document_count") if isinstance(selection_summary, dict) else None
+    if matched_count == 0:
+        selection_warnings = list(selection_public.get("warnings") or [])
+        return _needs_clarification_response(
+            request=request,
+            run_id=run_id,
+            intent={**intent, "visit_id": visit_id, "patient_id": patient_id or ""},
+            plan=plan,
+            warnings=warnings + selection_warnings + ["未找到目标文书，无法执行文书质控"],
+        )
 
     if intent.get("rule_ids"):
         plan.append(
@@ -303,7 +379,18 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
         "include_passed": False,
         "max_rules": 20,
     }
-    result = _execute_tool(registry, "run_document_qc", run_args, plan)
+    try:
+        result = _execute_tool(registry, "run_document_qc", run_args, plan)
+    except HTTPException as exc:
+        if _is_missing_document_context_error(exc):
+            return _needs_clarification_response(
+                request=request,
+                run_id=run_id,
+                intent={**intent, "visit_id": visit_id, "patient_id": patient_id or ""},
+                plan=plan,
+                warnings=warnings + [_http_detail_text(exc)],
+            )
+        raise
     response_warnings = warnings + list(result.get("warnings") or [])
     response = QCAgentChatResponse(
         status="completed",

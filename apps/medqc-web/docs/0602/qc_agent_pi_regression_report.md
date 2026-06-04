@@ -1,30 +1,34 @@
 # QC Agent Pi 回归测试报告
 
-- 生成时间：2026-06-04T05:01:53+00:00
+- 生成时间：2026-06-04T06:09:40+00:00
 - Python：3.11.9
 - pi-agent：0.1.0
 - pi-agent-core：0.1.1
 - requests：2.34.2
 - 编排模式：requests_fallback
-- 认证模式：missing
-- 已尝试登录：否
-- 登录账号：未记录
+- 认证模式：auto_login_args
+- 已尝试登录：是
+- 登录账号：a\*\*\*@medqc.com
 - API：http://127.0.0.1:8001/api/v1/qc-agent/chat
-- visit_id：2361619
+- visit_id：2341278
 
 ## 汇总
 
-- 总数：2
-- 通过：0
+- 总数：6
+- 通过：5
 - 失败：0
-- 跳过：2
+- 跳过：1
 
 ## 用例结果
 
-| case_id   | status  | passed | plan_tools | warnings                                                                                                                    | error                      |
-| --------- | ------- | ------ | ---------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| env_check | skipped | 是     |            | Python/Pi/request 环境检查已通过，未调用 API。                                                                              |                            |
-| api_auth  | skipped | 否     |            | 未设置 MEDQC_ACCESS_TOKEN，API 回归测试已跳过。<br>可通过 MEDQC_ACCESS_TOKEN 或 --login-account/--login-password 提供认证。 | missing MEDQC_ACCESS_TOKEN |
+| case_id                  | status              | passed | plan_tools         | warnings                                                                                                                                                                        | error |
+| ------------------------ | ------------------- | ------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| direct_ward_round_qc     | needs_clarification | 是     | get_record_context | 未读取到病历文本<br>病历上下文缺少可用文书文本，无法执行文书质控<br>needs_clarification 在病历不明确或文书缺失时允许通过。                                                      |       |
+| explicit_rule_id_qc      | needs_clarification | 是     | get_record_context | 已识别显式 rule_ids，将优先按 rule_ids 执行或跳过<br>未读取到病历文本<br>病历上下文缺少可用文书文本，无法执行文书质控<br>needs_clarification 在病历不明确或文书缺失时允许通过。 |       |
+| unsupported_write_intent | unsupported         | 是     |                    | 当前受控 Agent 不支持写入、删除、导出或持久化类操作                                                                                                                             |       |
+| discharge_record_qc      | needs_clarification | 是     | get_record_context | 未读取到病历文本<br>病历上下文缺少可用文书文本，无法执行文书质控<br>needs_clarification 在病历不明确或文书缺失时允许通过。                                                      |       |
+| vague_request            | needs_clarification | 是     |                    | 未识别到明确文书类型，请说明查房记录、病程记录、出院记录或会诊记录<br>needs_clarification 在病历不明确或文书缺失时允许通过。                                                    |       |
+| patient_search_qc        | skipped             | 是     |                    | 未提供 --patient-name 和 --department，跳过搜索类测试。                                                                                                                         |       |
 
 ## 安全说明
 
