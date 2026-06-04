@@ -25,6 +25,7 @@ import requests
 APP_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT_DIR = APP_ROOT / "docs" / "0602"
 CHAT_PATH = "/api/v1/qc-agent/chat"
+LOGIN_PATH = "/api/v1/auth/login"
 VALID_STATUSES = {"completed", "needs_clarification", "needs_confirmation", "unsupported"}
 SENSITIVE_KEYS = {
     "medical_text",
@@ -57,6 +58,15 @@ class HarnessEnvironment:
     orchestration_mode: str
 
 
+@dataclass
+class AuthContext:
+    token: str | None
+    auth_mode: str
+    login_attempted: bool = False
+    masked_account: str | None = None
+    error: str | None = None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run QC Agent regression cases from the isolated Pi Agent test venv."
@@ -76,6 +86,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--env-check", action="store_true", help="Only check Python/Pi/request environment.")
     parser.add_argument("--case", help="Run only one case id.")
+    parser.add_argument("--login-account", help="Optional login account used when MEDQC_ACCESS_TOKEN is absent.")
+    parser.add_argument("--login-password", help="Optional login password used when MEDQC_ACCESS_TOKEN is absent.")
+    parser.add_argument("--no-auto-login", action="store_true", help="Disable login fallback when MEDQC_ACCESS_TOKEN is absent.")
     parser.add_argument("--timeout", type=float, default=30.0, help="HTTP timeout seconds.")
     return parser.parse_args()
 
@@ -118,6 +131,117 @@ def print_environment(environment: HarnessEnvironment) -> None:
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def mask_account(account: str | None) -> str | None:
+    if not account:
+        return None
+    account = account.strip()
+    if not account:
+        return None
+    if "@" in account:
+        name, domain = account.split("@", 1)
+        if not name:
+            return f"***@{domain}"
+        return f"{name[0]}***@{domain}"
+    if len(account) <= 2:
+        return account[0] + "***"
+    return f"{account[0]}***{account[-1]}"
+
+
+def sanitize_auth_message(message: str, account: str | None = None, password: str | None = None) -> str:
+    sanitized = str(message)
+    if password:
+        sanitized = sanitized.replace(password, "***")
+    if account:
+        sanitized = sanitized.replace(account, mask_account(account) or "***")
+    return sanitized[:300]
+
+
+def extract_access_token(response_data: dict[str, Any]) -> str | None:
+    for key in ("access_token", "token"):
+        value = response_data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+    data = response_data.get("data")
+    if isinstance(data, dict):
+        for key in ("access_token", "token"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
+def login_for_token(base_url: str, account: str, password: str, timeout: float) -> str:
+    response = requests.post(
+        f"{base_url.rstrip('/')}{LOGIN_PATH}",
+        json={"account": account, "password": password},
+        timeout=timeout,
+    )
+    if response.status_code >= 400:
+        try:
+            response_data = response.json()
+            message = response_data.get("message") or response_data.get("detail") or response_data.get("error") or ""
+        except ValueError:
+            message = response.text
+        safe_message = sanitize_auth_message(str(message), account=account, password=password)
+        raise RuntimeError(f"login HTTP {response.status_code}: {safe_message}")
+
+    try:
+        response_data = response.json()
+    except ValueError as exc:
+        raise RuntimeError("login response is not JSON") from exc
+
+    token = extract_access_token(response_data)
+    if not token:
+        raise RuntimeError("login response does not contain a supported token field")
+    return token
+
+
+def resolve_auth(args: argparse.Namespace, *, allow_login: bool) -> AuthContext:
+    env_token = os.getenv("MEDQC_ACCESS_TOKEN", "").strip()
+    if env_token:
+        return AuthContext(token=env_token, auth_mode="env_token")
+
+    if args.no_auto_login or not allow_login:
+        return AuthContext(token=None, auth_mode="missing")
+
+    credential_source = None
+    account = None
+    password = None
+    if args.login_account and args.login_password:
+        credential_source = "auto_login_args"
+        account = args.login_account
+        password = args.login_password
+    else:
+        env_account = os.getenv("MEDQC_LOGIN_ACCOUNT", "").strip()
+        env_password = os.getenv("MEDQC_LOGIN_PASSWORD", "")
+        if env_account and env_password:
+            credential_source = "auto_login_env"
+            account = env_account
+            password = env_password
+
+    if not credential_source or not account or not password:
+        return AuthContext(token=None, auth_mode="missing")
+
+    masked = mask_account(account)
+    try:
+        token = login_for_token(args.base_url, account, password, args.timeout)
+    except Exception as exc:  # noqa: BLE001 - report sanitized auth failure.
+        return AuthContext(
+            token=None,
+            auth_mode="failed",
+            login_attempted=True,
+            masked_account=masked,
+            error=sanitize_auth_message(str(exc), account=account, password=password),
+        )
+    return AuthContext(
+        token=token,
+        auth_mode=credential_source,
+        login_attempted=True,
+        masked_account=masked,
+    )
 
 
 def find_sensitive_paths(value: Any, path: str = "$") -> list[str]:
@@ -356,7 +480,7 @@ def call_chat(base_url: str, token: str, timeout: float, message: str, visit_id:
     return response.json()
 
 
-def run_cases(args: argparse.Namespace, cases: list[RegressionCase]) -> list[dict[str, Any]]:
+def run_cases(args: argparse.Namespace, cases: list[RegressionCase], auth: AuthContext) -> list[dict[str, Any]]:
     if args.env_check:
         return [
             {
@@ -377,8 +501,12 @@ def run_cases(args: argparse.Namespace, cases: list[RegressionCase]) -> list[dic
     if not args.visit_id:
         raise SystemExit("错误：除非使用 --env-check，否则必须提供 --visit-id。")
 
-    token = os.getenv("MEDQC_ACCESS_TOKEN", "").strip()
-    if not token:
+    if not auth.token:
+        auth_warning = "未设置 MEDQC_ACCESS_TOKEN，API 回归测试已跳过。"
+        auth_error = "missing MEDQC_ACCESS_TOKEN"
+        if auth.auth_mode == "failed":
+            auth_warning = "自动登录失败，API 回归测试已跳过。"
+            auth_error = auth.error or "auto login failed"
         return [
             {
                 "case_id": "env_check",
@@ -400,13 +528,13 @@ def run_cases(args: argparse.Namespace, cases: list[RegressionCase]) -> list[dic
                 "passed": False,
                 "skipped": True,
                 "warnings": [
-                    "未设置 MEDQC_ACCESS_TOKEN，API 回归测试已跳过。",
-                    "请先登录获取 token 后运行：$env:MEDQC_ACCESS_TOKEN = '<access_token>'",
+                    auth_warning,
+                    "可通过 MEDQC_ACCESS_TOKEN 或 --login-account/--login-password 提供认证。",
                 ],
                 "plan_tools": [],
                 "sensitive_leak_found": False,
                 "sensitive_paths": [],
-                "error": "missing MEDQC_ACCESS_TOKEN",
+                "error": auth_error,
                 "response_summary": None,
             }
         ]
@@ -423,7 +551,7 @@ def run_cases(args: argparse.Namespace, cases: list[RegressionCase]) -> list[dic
         try:
             response_data = call_chat(
                 base_url=args.base_url,
-                token=token,
+                token=auth.token,
                 timeout=args.timeout,
                 message=case.message,
                 visit_id=args.visit_id,
@@ -460,7 +588,12 @@ def build_summary(case_results: list[dict[str, Any]]) -> dict[str, int]:
     return {"total": total, "passed": passed, "failed": failed, "skipped": skipped}
 
 
-def build_report(args: argparse.Namespace, environment: HarnessEnvironment, case_results: list[dict[str, Any]]) -> dict[str, Any]:
+def build_report(
+    args: argparse.Namespace,
+    environment: HarnessEnvironment,
+    auth: AuthContext,
+    case_results: list[dict[str, Any]],
+) -> dict[str, Any]:
     return {
         "generated_at": utc_now_iso(),
         "python_version": environment.python_version,
@@ -470,6 +603,9 @@ def build_report(args: argparse.Namespace, environment: HarnessEnvironment, case
         "orchestration_mode": environment.orchestration_mode,
         "base_url": args.base_url,
         "visit_id": args.visit_id,
+        "auth_mode": auth.auth_mode,
+        "login_attempted": auth.login_attempted,
+        "masked_account": auth.masked_account,
         "patient_name_provided": bool(args.patient_name),
         "department_provided": bool(args.department),
         "case_results": case_results,
@@ -496,6 +632,9 @@ def write_markdown_report(report: dict[str, Any], output_dir: Path) -> Path:
         f"- pi-agent-core：{report['pi_agent_core_installed'] or '未安装'}",
         f"- requests：{report['requests_installed'] or '未安装'}",
         f"- 编排模式：{report['orchestration_mode']}",
+        f"- 认证模式：{report['auth_mode']}",
+        f"- 已尝试登录：{'是' if report['login_attempted'] else '否'}",
+        f"- 登录账号：{report['masked_account'] or '未记录'}",
         f"- API：{report['base_url']}{CHAT_PATH}",
         f"- visit_id：{report['visit_id'] or '未提供'}",
         "",
@@ -554,9 +693,13 @@ def main() -> int:
         print(f"错误：未知 case id：{args.case}", file=sys.stderr)
         return 2
 
-    case_results = run_cases(args, cases)
+    auth = resolve_auth(args, allow_login=not args.env_check)
+    print(f"auth_mode: {auth.auth_mode}")
+    if auth.login_attempted:
+        print(f"login_attempted: true, account: {auth.masked_account or 'masked'}")
+    case_results = run_cases(args, cases, auth)
     output_dir = Path(args.output_dir).resolve()
-    report = build_report(args, environment, case_results)
+    report = build_report(args, environment, auth, case_results)
     json_path = write_json_report(report, output_dir)
     markdown_path = write_markdown_report(report, output_dir)
 

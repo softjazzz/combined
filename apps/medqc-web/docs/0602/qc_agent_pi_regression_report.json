@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-04T02:59:58+00:00",
+  "generated_at": "2026-06-04T05:01:53+00:00",
   "python_version": "3.11.9",
   "pi_agent_installed": "0.1.0",
   "pi_agent_core_installed": "0.1.1",
@@ -7,6 +7,9 @@
   "orchestration_mode": "requests_fallback",
   "base_url": "http://127.0.0.1:8001",
   "visit_id": "2361619",
+  "auth_mode": "missing",
+  "login_attempted": false,
+  "masked_account": null,
   "patient_name_provided": false,
   "department_provided": false,
   "case_results": [
@@ -31,7 +34,7 @@
       "skipped": true,
       "warnings": [
         "未设置 MEDQC_ACCESS_TOKEN，API 回归测试已跳过。",
-        "请先登录获取 token 后运行：$env:MEDQC_ACCESS_TOKEN = '<access_token>'"
+        "可通过 MEDQC_ACCESS_TOKEN 或 --login-account/--login-password 提供认证。"
       ],
       "plan_tools": [],
       "sensitive_leak_found": false,
