@@ -32,6 +32,14 @@
                   重置
                 </a-button>
                 <a-button
+                  size="small"
+                  class="wv4-analysis-overview__action"
+                  data-testid="qc-agent-entry"
+                  @click="qcAgentOpen = true"
+                >
+                  质控助手
+                </a-button>
+                <a-button
                   v-if="isFrontpageGenerateStage"
                   size="small"
                   class="wv4-analysis-overview__action"
@@ -366,6 +374,11 @@
       </div>
     </div>
     <FrontpageTenderValidationDrawer v-model:open="tenderValidationOpen" />
+    <QCAgentChatDrawer
+      v-model:open="qcAgentOpen"
+      :user-context="qcAgentUserContext"
+      :context-label="qcAgentContextLabel"
+    />
   </main>
 </template>
 
@@ -376,6 +389,8 @@ import { InboxOutlined, SearchOutlined } from '@ant-design/icons-vue'
 import PriorityLane, { type PriorityCard, type PriorityGroup } from './workbench/PriorityLane.vue'
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
+import QCAgentChatDrawer from './QCAgentChatDrawer.vue'
+import type { QCAgentUserContext } from '@/api/qcAgent'
 import type { DeptInfo } from '../types'
 import type { WorkflowStageKey } from '@/types/workflow'
 import type { WorkstationDateField, WorkstationDateRange } from '../composables/usePatientRecords'
@@ -462,8 +477,34 @@ function filterDepartmentSelectOption(
 
 const analysisTab = ref<'stage' | 'workflow'>('stage')
 const tenderValidationOpen = ref(false)
+const qcAgentOpen = ref(false)
 
 const isFrontpageGenerateStage = computed(() => props.currentStageFilter === 'frontpage_generate')
+
+const selectedSingleWorkbenchRow = computed(() => {
+  if (props.selectedWorkbenchKeys.length !== 1) return null
+  const selectedId = props.selectedWorkbenchKeys[0]
+  return props.workbenchRows.find((row) => row.id === selectedId) || null
+})
+
+const qcAgentUserContext = computed<QCAgentUserContext>(() => {
+  const row = selectedSingleWorkbenchRow.value
+  if (!row) return {}
+  return {
+    visit_id: row.visitId,
+    name: row.patientName,
+    patient_name: row.patientName,
+    department: row.department,
+  }
+})
+
+const qcAgentContextLabel = computed(() => {
+  const row = selectedSingleWorkbenchRow.value
+  if (row) return `${row.patientName} / ${row.department} / visit_id=${row.visitId}`
+  if (props.selectedWorkbenchKeys.length > 1)
+    return '已选择多份病历；质控助手本轮仅支持单病历，请输入明确 visit_id'
+  return '请输入 visit_id、住院号、姓名或科室'
+})
 
 const overviewEyebrow = computed(() =>
   isFrontpageGenerateStage.value ? 'Workstation / Frontpage Generate' : 'Workstation / Analysis',
