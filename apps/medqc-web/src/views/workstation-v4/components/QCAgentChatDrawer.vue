@@ -216,6 +216,50 @@ function issueMessage(issue: QCAgentRuleIssue) {
   return issue.message || issue.description || issue.evidence_summary || '未返回问题描述'
 }
 
+function numberValue(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function uniqueTextItems(items: Array<string | undefined>) {
+  const seen = new Set<string>()
+  return items.filter((item): item is string => {
+    const text = String(item || '').trim()
+    if (!text || seen.has(text)) return false
+    seen.add(text)
+    return true
+  })
+}
+
+function executionStats(result: QCAgentChatResponse['result'] | undefined) {
+  const qcSummary = result?.qc_summary || {}
+  const skippedRules = safeArray(result?.skipped_rules)
+  const skippedCount = numberValue(qcSummary.skipped_count, skippedRules.length)
+  const issueCount = numberValue(qcSummary.issue_count)
+  const passedCount = numberValue(qcSummary.passed_count, numberValue(qcSummary.passed))
+  const selectedRuleCount = numberValue(
+    qcSummary.rule_count,
+    safeArray(result?.selected_rules).length || passedCount + issueCount + skippedCount,
+  )
+  const executedRuleCount = numberValue(qcSummary.total_rules, passedCount + issueCount)
+  return {
+    issueCount,
+    passedCount,
+    skippedCount,
+    selectedRuleCount,
+    executedRuleCount,
+    isPartial: skippedCount > 0 || selectedRuleCount > executedRuleCount,
+  }
+}
+
+function conclusionText(result: QCAgentChatResponse['result'] | undefined) {
+  const stats = executionStats(result)
+  if (stats.issueCount > 0) return `发现 ${stats.issueCount} 条问题，需复核处理。`
+  if (stats.skippedCount > 0) {
+    return `已执行 ${stats.passedCount} 条规则，暂未发现问题；另有 ${stats.skippedCount} 条规则因当前只读执行边界未执行。`
+  }
+  return `已执行 ${stats.passedCount} 条规则，未发现问题。`
+}
+
 function rawSummary(response: QCAgentChatResponse) {
   return JSON.stringify(
     sanitizeQcAgentPayload({
@@ -250,20 +294,39 @@ const AgentResponseCard = defineComponent({
     return () => {
       const response = componentProps.response
       const result = response.result || {}
-      const qcSummary = result.qc_summary || {}
       const issues = safeArray(result.issues?.length ? result.issues : result.results)
       const skippedRules = safeArray(result.skipped_rules)
-      const warnings = [...safeArray(response.warnings), ...safeArray(result.warnings)]
+      const warnings = uniqueTextItems([
+        ...safeArray(response.warnings),
+        ...safeArray(result.warnings),
+      ])
       const plan = safeArray(response.plan)
       const candidates = safeArray(response.candidates)
+      const stats = executionStats(result)
 
       return h('div', { class: 'qc-agent-result-card' }, [
         h('div', { class: 'qc-agent-result-card__header' }, [
-          h(
-            'span',
-            { class: `qc-agent-status qc-agent-status--${response.status}` },
-            statusLabel(response.status),
-          ),
+          h('div', { class: 'qc-agent-result-card__badges' }, [
+            h(
+              'span',
+              { class: `qc-agent-status qc-agent-status--${response.status}` },
+              statusLabel(response.status),
+            ),
+            response.status === 'completed'
+              ? h(
+                  'span',
+                  {
+                    class: [
+                      'qc-agent-execution-tag',
+                      stats.isPartial
+                        ? 'qc-agent-execution-tag--partial'
+                        : 'qc-agent-execution-tag--complete',
+                    ],
+                  },
+                  stats.isPartial ? '部分执行' : '完整执行',
+                )
+              : null,
+          ]),
           h(
             'span',
             { class: 'qc-agent-result-card__run' },
@@ -271,24 +334,30 @@ const AgentResponseCard = defineComponent({
           ),
         ]),
         response.status === 'completed'
-          ? h('div', { class: 'qc-agent-summary-grid' }, [
-              h('div', { class: 'qc-agent-summary-item' }, [
-                h('span', '问题数'),
-                h('strong', String(qcSummary.issue_count ?? 0)),
+          ? [
+              h('div', { class: 'qc-agent-conclusion' }, [
+                h('div', { class: 'qc-agent-conclusion__label' }, '本次结论'),
+                h('div', { class: 'qc-agent-conclusion__text' }, conclusionText(result)),
               ]),
-              h('div', { class: 'qc-agent-summary-item' }, [
-                h('span', '通过数'),
-                h('strong', String(qcSummary.passed_count ?? qcSummary.passed ?? 0)),
+              h('div', { class: 'qc-agent-summary-grid' }, [
+                h('div', { class: 'qc-agent-summary-item' }, [
+                  h('span', '已发现问题'),
+                  h('strong', String(stats.issueCount)),
+                ]),
+                h('div', { class: 'qc-agent-summary-item' }, [
+                  h('span', '已执行通过'),
+                  h('strong', String(stats.passedCount)),
+                ]),
+                h('div', { class: 'qc-agent-summary-item' }, [
+                  h('span', '未执行规则'),
+                  h('strong', String(stats.skippedCount)),
+                ]),
+                h('div', { class: 'qc-agent-summary-item' }, [
+                  h('span', '选中规则'),
+                  h('strong', String(stats.selectedRuleCount)),
+                ]),
               ]),
-              h('div', { class: 'qc-agent-summary-item' }, [
-                h('span', '跳过数'),
-                h('strong', String(qcSummary.skipped_count ?? skippedRules.length)),
-              ]),
-              h('div', { class: 'qc-agent-summary-item' }, [
-                h('span', '规则数'),
-                h('strong', String(qcSummary.rule_count ?? qcSummary.total_rules ?? 0)),
-              ]),
-            ])
+            ]
           : null,
         plan.length
           ? h('div', { class: 'qc-agent-block' }, [
@@ -376,7 +445,11 @@ const AgentResponseCard = defineComponent({
         skippedRules.length
           ? h('div', { class: 'qc-agent-block' }, [
               h('div', { class: 'qc-agent-block__title' }, '跳过规则'),
-              h('div', { class: 'qc-agent-skipped-note' }, '当前只读 Agent 仅执行安全程序化规则。'),
+              h(
+                'div',
+                { class: 'qc-agent-skipped-note' },
+                '这些规则已被选中，但当前即时质控模式未执行；需要正式规则引擎或 LLM 能力后才能判断。',
+              ),
               h(
                 'div',
                 { class: 'qc-agent-skipped-rules' },
@@ -399,7 +472,7 @@ const AgentResponseCard = defineComponent({
             )
           : null,
         h('details', { class: 'qc-agent-raw' }, [
-          h('summary', '查看原始摘要'),
+          h('summary', '查看脱敏响应摘要'),
           h('pre', rawSummary(response)),
         ]),
       ])
@@ -564,6 +637,13 @@ const AgentResponseCard = defineComponent({
   gap: 8px;
 }
 
+.qc-agent-result-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .qc-agent-status {
   display: inline-flex;
   align-items: center;
@@ -589,10 +669,51 @@ const AgentResponseCard = defineComponent({
   color: #991b1b;
 }
 
+.qc-agent-execution-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-agent-execution-tag--partial {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.qc-agent-execution-tag--complete {
+  background: #e0f2fe;
+  color: #075985;
+}
+
 .qc-agent-result-card__run {
   color: #94a3b8;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
+}
+
+.qc-agent-conclusion {
+  margin-top: 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  background: #fff7ed;
+  padding: 10px;
+}
+
+.qc-agent-conclusion__label {
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-agent-conclusion__text {
+  margin-top: 4px;
+  color: #431407;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
 }
 
 .qc-agent-summary-grid {

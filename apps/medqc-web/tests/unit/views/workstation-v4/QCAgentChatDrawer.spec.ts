@@ -95,12 +95,18 @@ describe('QCAgentChatDrawer', () => {
       result: {
         qc_summary: {
           issue_count: 0,
-          passed_count: 1,
-          skipped_count: 0,
-          rule_count: 1,
+          passed_count: 4,
+          skipped_count: 16,
+          rule_count: 20,
+          total_rules: 4,
         },
+        skipped_rules: [
+          { rule_id: 'SC-050', reason: 'unsupported_execution_mode' },
+          { rule_id: 'SC-051', reason: 'requires_llm' },
+        ],
+        warnings: ['16 条规则因执行边界限制被跳过'],
       },
-      warnings: ['已完成'],
+      warnings: ['16 条规则因执行边界限制被跳过'],
     })
     const wrapper = mountDrawer({
       userContext: {
@@ -125,9 +131,20 @@ describe('QCAgentChatDrawer', () => {
         department: '神经内科',
       },
     })
-    expect(wrapper.text()).toContain('问题数')
+    expect(wrapper.text()).toContain(
+      '已执行 4 条规则，暂未发现问题；另有 16 条规则因当前只读执行边界未执行。',
+    )
+    expect(wrapper.text()).toContain('已发现问题')
+    expect(wrapper.text()).toContain('已执行通过')
+    expect(wrapper.text()).toContain('未执行规则')
+    expect(wrapper.text()).toContain('选中规则')
+    expect(wrapper.text()).toContain('部分执行')
     expect(wrapper.text()).toContain('get_record_context')
-    expect(wrapper.text()).toContain('已完成')
+    expect(wrapper.findAll('.qc-agent-warnings li')).toHaveLength(1)
+    expect(wrapper.text()).toContain(
+      '这些规则已被选中，但当前即时质控模式未执行；需要正式规则引擎或 LLM 能力后才能判断。',
+    )
+    expect(wrapper.text()).toContain('查看脱敏响应摘要')
     expect(wrapper.text()).not.toContain('不应进入请求')
   })
 
@@ -172,6 +189,7 @@ describe('QCAgentChatDrawer', () => {
       user_context: {},
     })
     expect(wrapper.text()).toContain('run_document_qc')
+    expect(wrapper.text()).toContain('完整执行')
   })
 
   it('renders needs_clarification and unsupported without confirmation action', async () => {
