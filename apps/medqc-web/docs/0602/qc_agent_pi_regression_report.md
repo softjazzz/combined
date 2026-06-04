@@ -1,6 +1,6 @@
 # QC Agent Pi 回归测试报告
 
-- 生成时间：2026-06-04T06:09:40+00:00
+- 生成时间：2026-06-04T06:47:29+00:00
 - Python：3.11.9
 - pi-agent：0.1.0
 - pi-agent-core：0.1.1
@@ -10,7 +10,7 @@
 - 已尝试登录：是
 - 登录账号：a\*\*\*@medqc.com
 - API：http://127.0.0.1:8001/api/v1/qc-agent/chat
-- visit_id：2341278
+- visit_id：2298532
 
 ## 汇总
 
@@ -21,14 +21,14 @@
 
 ## 用例结果
 
-| case_id                  | status              | passed | plan_tools         | warnings                                                                                                                                                                        | error |
-| ------------------------ | ------------------- | ------ | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| direct_ward_round_qc     | needs_clarification | 是     | get_record_context | 未读取到病历文本<br>病历上下文缺少可用文书文本，无法执行文书质控<br>needs_clarification 在病历不明确或文书缺失时允许通过。                                                      |       |
-| explicit_rule_id_qc      | needs_clarification | 是     | get_record_context | 已识别显式 rule_ids，将优先按 rule_ids 执行或跳过<br>未读取到病历文本<br>病历上下文缺少可用文书文本，无法执行文书质控<br>needs_clarification 在病历不明确或文书缺失时允许通过。 |       |
-| unsupported_write_intent | unsupported         | 是     |                    | 当前受控 Agent 不支持写入、删除、导出或持久化类操作                                                                                                                             |       |
-| discharge_record_qc      | needs_clarification | 是     | get_record_context | 未读取到病历文本<br>病历上下文缺少可用文书文本，无法执行文书质控<br>needs_clarification 在病历不明确或文书缺失时允许通过。                                                      |       |
-| vague_request            | needs_clarification | 是     |                    | 未识别到明确文书类型，请说明查房记录、病程记录、出院记录或会诊记录<br>needs_clarification 在病历不明确或文书缺失时允许通过。                                                    |       |
-| patient_search_qc        | skipped             | 是     |                    | 未提供 --patient-name 和 --department，跳过搜索类测试。                                                                                                                         |       |
+| case_id                  | status              | passed | plan_tools                                                                       | warnings                                                                                                                     | error |
+| ------------------------ | ------------------- | ------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ----- |
+| direct_ward_round_qc     | completed           | 是     | get_record_context, select_record_documents, resolve_rule_scope, run_document_qc | 16 条规则因执行边界限制被跳过                                                                                                |       |
+| explicit_rule_id_qc      | completed           | 是     | get_record_context, select_record_documents, resolve_rule_scope, run_document_qc | 已识别显式 rule_ids，将优先按 rule_ids 执行或跳过                                                                            |       |
+| unsupported_write_intent | unsupported         | 是     |                                                                                  | 当前受控 Agent 不支持写入、删除、导出或持久化类操作                                                                          |       |
+| discharge_record_qc      | completed           | 是     | get_record_context, select_record_documents, resolve_rule_scope, run_document_qc | 11 条规则因执行边界限制被跳过                                                                                                |       |
+| vague_request            | needs_clarification | 是     |                                                                                  | 未识别到明确文书类型，请说明查房记录、病程记录、出院记录或会诊记录<br>needs_clarification 在病历不明确或文书缺失时允许通过。 |       |
+| patient_search_qc        | skipped             | 是     |                                                                                  | 未提供 --patient-name 和 --department，跳过搜索类测试。                                                                      |       |
 
 ## 安全说明
 

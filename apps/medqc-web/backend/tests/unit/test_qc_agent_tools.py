@@ -257,6 +257,31 @@ def _assert_no_raw_context(value):
     assert "few_shot_examples" not in raw_text
 
 
+def _empty_cdm_documents(*_args, **_kwargs):
+    return [], []
+
+
+def _cdm_course_documents(*_args, **_kwargs):
+    return [
+        {
+            "document_ref": "daily_course_record:D001",
+            "document_type": "日常病程记录",
+            "title": "日常病程记录",
+            "source_table": "daily_course_record",
+            "record_time": "2026-05-10 09:00:00",
+            "content": "2026-05-10 主治医师查房：患者腹痛减轻，病情变化平稳。处理意见：继续观察。医师签名：赵医生。",
+        },
+        {
+            "document_ref": "senior_course_record:S001",
+            "document_type": "上级查房记录",
+            "title": "上级医师查房记录",
+            "source_table": "senior_course_record",
+            "record_time": "2026-05-10 16:00:00",
+            "content": "2026-05-10 主任医师查房：同意当前诊疗计划，完善腹部影像复查。身份证号110101198001011234，手机号13812345678。",
+        },
+    ], []
+
+
 def test_search_records_returns_public_record_summaries_only():
     workspace = FakeWorkspace()
     observation = search_records(
@@ -352,6 +377,56 @@ def test_get_record_context_returns_public_summary_and_internal_context():
     _assert_no_sensitive_keys(public_data)
 
 
+def test_get_record_context_falls_back_to_cdm_detail_documents(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.qc_agent.tools._read_cdm_detail_documents",
+        _cdm_course_documents,
+    )
+    workspace = FakeWorkspace()
+
+    observation = get_record_context(
+        {"visit_id": "V003", "patient_id": "P003", "include_preview": True},
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    public_data = observation.public_data
+    assert public_data["record_summary"]["visit_id"] == "V003"
+    assert public_data["context_status"]["text_available"] is True
+    assert public_data["context_status"]["text_length"] > 0
+    assert public_data["context_status"]["source"] == "hydrate_records_with_medical_text+cdm_detail_documents"
+    assert {item["table"] for item in public_data["document_summary"]} == {
+        "daily_course_record",
+        "senior_course_record",
+    }
+    assert all(item["text_length"] > 0 for item in public_data["document_summary"])
+    assert len(public_data["preview"]) <= 500
+    assert "110101198001011234" not in public_data["preview"]
+    assert "13812345678" not in public_data["preview"]
+    assert observation.internal_data is not None
+    assert observation.internal_data["medical_text"]
+    assert len(observation.internal_data["documents"]) == 2
+    _assert_no_sensitive_keys(public_data)
+
+
+def test_get_record_context_cdm_missing_tables_skip_without_500(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.qc_agent.tools._read_cdm_detail_documents",
+        lambda *_args, **_kwargs: ([], ["跳过 CDM 文书表 missing_table: UndefinedTable"]),
+    )
+    workspace = FakeWorkspace()
+
+    observation = get_record_context(
+        {"visit_id": "V003", "patient_id": "P003"},
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    assert observation.public_data["context_status"]["text_available"] is False
+    assert "跳过 CDM 文书表 missing_table" in observation.public_data["warnings"][0]
+    assert any("未读取到病历文本" in item for item in observation.public_data["warnings"])
+
+
 def test_get_record_context_rejects_patient_id_mismatch():
     workspace = FakeWorkspace()
 
@@ -427,7 +502,11 @@ def test_run_frontpage_qc_rejects_batch_visit_ids():
     assert workspace.persist_called is False
 
 
-def test_run_frontpage_qc_rejects_missing_or_empty_context():
+def test_run_frontpage_qc_rejects_missing_or_empty_context(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.qc_agent.tools._read_cdm_detail_documents",
+        _empty_cdm_documents,
+    )
     workspace = FakeWorkspace()
 
     with pytest.raises(Exception) as exc_info:
@@ -524,6 +603,35 @@ def test_select_record_documents_matches_ward_round_from_course_document():
     _assert_no_raw_context(public_data)
 
 
+def test_select_record_documents_matches_ward_round_from_cdm_course_documents(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.qc_agent.tools._read_cdm_detail_documents",
+        _cdm_course_documents,
+    )
+    workspace = FakeWorkspace()
+
+    observation = select_record_documents(
+        SelectRecordDocumentsInput(
+            visit_id="V003",
+            patient_id="P003",
+            document_scope={"alias": "ward_round"},
+        ),
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    public_data = observation.public_data
+    assert public_data["selection_summary"]["matched_document_count"] == 2
+    assert public_data["selection_summary"]["matched_document_types"] == ["上级查房记录", "日常病程记录"]
+    assert {item["document_ref"] for item in public_data["documents"]} == {
+        "daily_course_record:D001",
+        "senior_course_record:S001",
+    }
+    assert all(len(item["preview"]) <= 300 for item in public_data["documents"])
+    assert "110101198001011234" not in str(public_data)
+    assert "13812345678" not in str(public_data)
+
+
 def test_select_record_documents_rejects_patient_id_mismatch():
     workspace = FakeWorkspace()
 
@@ -537,7 +645,11 @@ def test_select_record_documents_rejects_patient_id_mismatch():
     assert workspace.persist_called is False
 
 
-def test_select_record_documents_rejects_missing_or_empty_context():
+def test_select_record_documents_rejects_missing_or_empty_context(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.qc_agent.tools._read_cdm_detail_documents",
+        _empty_cdm_documents,
+    )
     workspace = FakeWorkspace()
 
     with pytest.raises(Exception) as exc_info:
@@ -1229,7 +1341,11 @@ def test_api_chat_explicit_rule_ids_take_priority(client, qc_agent_auth):
     _assert_no_raw_context(body)
 
 
-def test_api_chat_empty_record_context_needs_clarification(client, qc_agent_auth):
+def test_api_chat_empty_record_context_needs_clarification(client, qc_agent_auth, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.qc_agent.tools._read_cdm_detail_documents",
+        _empty_cdm_documents,
+    )
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
     response = client.post(
@@ -1243,6 +1359,33 @@ def test_api_chat_empty_record_context_needs_clarification(client, qc_agent_auth
     assert body["parsed_intent"]["visit_id"] == "V003"
     assert [item["tool_name"] for item in body["plan"]] == ["get_record_context"]
     assert any("缺少可用文书文本" in item for item in body["warnings"])
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_cdm_detail_documents_continue_to_document_qc(client, qc_agent_auth, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.qc_agent.tools._read_cdm_detail_documents",
+        _cdm_course_documents,
+    )
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "对 visit_id=V003 的查房记录做质控"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert [item["tool_name"] for item in body["plan"]] == [
+        "get_record_context",
+        "select_record_documents",
+        "resolve_rule_scope",
+        "run_document_qc",
+    ]
+    assert body["result"]["record_summary"]["visit_id"] == "V003"
+    assert body["result"]["document_selection_summary"]["matched_document_count"] == 2
+    assert not any("缺少可用文书文本" in item for item in body["warnings"])
     _assert_no_raw_context(body)
 
 

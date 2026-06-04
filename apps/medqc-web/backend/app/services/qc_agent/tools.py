@@ -5,6 +5,7 @@ from typing import Any, Dict, Iterable, List
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import text as sqlalchemy_text
 
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.frontpage_formal_qc import Category, FrontpageFormalQC, QCResult, Severity
@@ -24,6 +25,44 @@ from .schemas import (
 )
 from .tool_registry import AgentToolRegistry
 from .rule_catalog import RuleSummary, filter_rule_catalog, get_rule_catalog, get_rules_by_ids
+
+
+_CDM_DOCUMENT_TABLES = (
+    ("admission_record", "入院记录"),
+    ("first_course_record", "首次病程记录"),
+    ("daily_course_record", "日常病程记录"),
+    ("senior_course_record", "上级查房记录"),
+    ("consultation_record", "会诊记录"),
+    ("discharge_record", "出院记录"),
+    ("surgery_record", "手术记录"),
+    ("transfer_in_record", "转入记录"),
+    ("transfer_out_record", "转出记录"),
+)
+_CDM_TEXT_FIELDS = ("record_content", "content", "text", "medical_text")
+_CDM_SUPPLEMENT_TEXT_FIELDS = (
+    "chief_complaint",
+    "present_illness",
+    "history_of_present_illness",
+    "diagnosis",
+    "diagnosis_name",
+    "treatment_course",
+    "admission_condition",
+    "discharge_condition",
+    "discharge_order",
+    "consultation_opinion",
+    "surgery_name",
+)
+_CDM_TIME_FIELDS = (
+    "record_time",
+    "document_time",
+    "record_datetime",
+    "created_at",
+    "create_time",
+    "updated_at",
+    "update_time",
+    "modified_at",
+)
+_CDM_DOCUMENT_ID_FIELDS = ("document_id", "doc_id", "id")
 
 
 SENSITIVE_OUTPUT_KEYS = {
@@ -125,7 +164,7 @@ def _mask_sensitive_text(text: str) -> str:
 
 
 def _extract_document_text(document: Dict[str, Any]) -> str:
-    for key in ("content", "text", "medical_text", "record_content"):
+    for key in ("record_content", "content", "text", "medical_text"):
         value = document.get(key)
         if value:
             return _text(value)
@@ -167,13 +206,17 @@ def _summarize_documents(documents: Any) -> List[Dict[str, Any]]:
         if not isinstance(document, dict):
             continue
         doc_type = _document_type(document)
+        source_table = _text(document.get("source_table") or document.get("table"))
         summary = grouped.setdefault(
             doc_type,
             {
                 "document_type": doc_type,
+                "table": source_table,
                 "count": 0,
                 "text_length": 0,
+                "record_time": _document_time(document),
                 "latest_time": "",
+                "preview": _mask_sensitive_text(_extract_document_text(document))[:300] if source_table else "",
             },
         )
         summary["count"] += 1
@@ -181,6 +224,7 @@ def _summarize_documents(documents: Any) -> List[Dict[str, Any]]:
         doc_time = _document_time(document)
         if doc_time and doc_time > summary["latest_time"]:
             summary["latest_time"] = doc_time
+            summary["record_time"] = doc_time
     return list(grouped.values())
 
 
@@ -194,6 +238,141 @@ def _extract_medical_text(record: Dict[str, Any]) -> str:
         parts = [_extract_document_text(document) for document in documents if isinstance(document, dict)]
         return "\n".join(part for part in parts if part)
     return ""
+
+
+def _quote_identifier(value: str) -> str:
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+        raise ValueError(f"非法 SQL 标识符: {value}")
+    return f'"{value}"'
+
+
+def _cdm_table_columns(session: Any, table_name: str) -> tuple[str | None, set[str]]:
+    rows = (
+        session.execute(
+            sqlalchemy_text(
+                """
+                SELECT table_schema, column_name
+                FROM information_schema.columns
+                WHERE table_name = :table_name
+                  AND table_schema = ANY (current_schemas(false))
+                ORDER BY array_position(current_schemas(false), table_schema), ordinal_position
+                """
+            ),
+            {"table_name": table_name},
+        )
+        .mappings()
+        .all()
+    )
+    if not rows:
+        return None, set()
+    schema = _text(rows[0].get("table_schema"))
+    return schema, {_text(row.get("column_name")) for row in rows if row.get("column_name")}
+
+
+def _first_column_value(row: Dict[str, Any], columns: Iterable[str]) -> Any:
+    for column in columns:
+        value = row.get(column)
+        if value not in (None, ""):
+            return value
+    return ""
+
+
+def _build_cdm_document_text(row: Dict[str, Any]) -> str:
+    parts: List[str] = []
+    primary = _text(_first_column_value(row, _CDM_TEXT_FIELDS))
+    if primary:
+        parts.append(primary)
+    for field in _CDM_SUPPLEMENT_TEXT_FIELDS:
+        value = _text(row.get(field))
+        if value and value not in parts:
+            parts.append(f"{field}: {value}")
+    return "\n".join(parts).strip()
+
+
+def _documents_to_medical_text(documents: List[Dict[str, Any]]) -> str:
+    parts: List[str] = []
+    for document in documents:
+        text = _extract_document_text(document)
+        if not text:
+            continue
+        parts.append(f"【{_document_type(document)}】\n{text}")
+    return "\n\n".join(parts)
+
+
+def _read_cdm_detail_documents(visit_id: str, patient_id: str | None = None) -> tuple[List[Dict[str, Any]], List[str]]:
+    warnings: List[str] = []
+    documents: List[Dict[str, Any]] = []
+    try:
+        from app.database.connection import SessionLocal
+    except Exception as exc:  # pragma: no cover - 仅在数据库模块加载异常时触发
+        return [], [f"CDM 文书读取不可用: {type(exc).__name__}"]
+
+    session = SessionLocal()
+    try:
+        for table_name, document_type in _CDM_DOCUMENT_TABLES:
+            try:
+                schema, columns = _cdm_table_columns(session, table_name)
+            except Exception as exc:  # pragma: no cover - 防御数据库元数据读取异常
+                warnings.append(f"跳过 CDM 文书表 {table_name}: {type(exc).__name__}")
+                continue
+            if not schema or not columns:
+                continue
+            if "visit_id" not in columns:
+                warnings.append(f"跳过 CDM 文书表 {table_name}: 缺少 visit_id 字段")
+                continue
+
+            select_columns = sorted(
+                {
+                    "visit_id",
+                    "patient_id",
+                    *[field for field in _CDM_DOCUMENT_ID_FIELDS if field in columns],
+                    *[field for field in _CDM_TEXT_FIELDS if field in columns],
+                    *[field for field in _CDM_SUPPLEMENT_TEXT_FIELDS if field in columns],
+                    *[field for field in _CDM_TIME_FIELDS if field in columns],
+                }
+            )
+            if not any(field in columns for field in _CDM_TEXT_FIELDS + _CDM_SUPPLEMENT_TEXT_FIELDS):
+                continue
+
+            qualified_table = f"{_quote_identifier(schema)}.{_quote_identifier(table_name)}"
+            where_sql = ["visit_id = :visit_id"]
+            params: Dict[str, Any] = {"visit_id": visit_id}
+            if patient_id and "patient_id" in columns:
+                where_sql.append("patient_id = :patient_id")
+                params["patient_id"] = patient_id
+            order_column = next((field for field in _CDM_TIME_FIELDS if field in columns), None)
+            order_sql = f" ORDER BY {_quote_identifier(order_column)} NULLS LAST" if order_column else ""
+            sql = (
+                "SELECT "
+                + ", ".join(_quote_identifier(column) for column in select_columns)
+                + f" FROM {qualified_table} WHERE {' AND '.join(where_sql)}{order_sql} LIMIT 50"
+            )
+            try:
+                rows = session.execute(sqlalchemy_text(sql), params).mappings().all()
+            except Exception as exc:
+                warnings.append(f"跳过 CDM 文书表 {table_name}: {type(exc).__name__}")
+                continue
+
+            for index, row in enumerate(rows, start=1):
+                row_dict = dict(row)
+                document_text = _build_cdm_document_text(row_dict)
+                if not document_text:
+                    continue
+                document_id = _text(_first_column_value(row_dict, _CDM_DOCUMENT_ID_FIELDS)) or str(index)
+                documents.append(
+                    {
+                        "document_ref": f"{table_name}:{document_id}",
+                        "document_type": document_type,
+                        "title": document_type,
+                        "source_table": table_name,
+                        "record_time": _text(_first_column_value(row_dict, _CDM_TIME_FIELDS)),
+                        "content": document_text,
+                    }
+                )
+    finally:
+        session.close()
+
+    return documents, warnings
 
 
 def _ensure_single_visit_id(visit_id: str, tool_name: str) -> None:
@@ -216,9 +395,29 @@ def _alias_keywords(alias: str | None) -> List[str]:
 
 def _alias_document_types(alias: str | None) -> List[str]:
     aliases = {
-        "ward_round": ["查房", "上级医师查房", "主任医师查房", "主治医师查房", "病程记录"],
+        "ward_round": [
+            "查房",
+            "上级查房",
+            "上级医师查房",
+            "主任医师查房",
+            "主治医师查房",
+            "病程记录",
+            "日常病程记录",
+            "senior_course_record",
+            "daily_course_record",
+        ],
         "discharge": ["出院记录", "出院小结"],
-        "course": ["首次病程", "日常病程", "病程记录", "阶段小结", "上级医师查房"],
+        "course": [
+            "首次病程",
+            "日常病程",
+            "病程记录",
+            "阶段小结",
+            "上级查房",
+            "上级医师查房",
+            "first_course_record",
+            "daily_course_record",
+            "senior_course_record",
+        ],
         "consultation": ["会诊记录", "多学科会诊", "MDT"],
     }
     return aliases.get(alias or "", [])
@@ -264,6 +463,7 @@ def _candidate_documents(internal_context: Dict[str, Any]) -> List[Dict[str, Any
                     "document_ref": _text(document.get("document_ref") or document.get("id") or f"doc-{index}"),
                     "document_type": _document_type(document),
                     "title": _document_title(document),
+                    "source_table": _text(document.get("source_table") or document.get("table")),
                     "record_time": _document_time(document),
                     "update_time": _document_update_time(document),
                     "text": text,
@@ -302,11 +502,12 @@ def _select_documents_from_context(
             [
                 document.get("document_type", ""),
                 document.get("title", ""),
+                document.get("source_table", ""),
                 document.get("text", ""),
             ]
         )
         type_hits = _contains_any(
-            f"{document.get('document_type', '')}\n{document.get('title', '')}",
+            f"{document.get('document_type', '')}\n{document.get('title', '')}\n{document.get('source_table', '')}",
             type_terms,
         )
         keyword_hits = _contains_any(searchable, keyword_terms)
@@ -680,17 +881,27 @@ def get_record_context(
     documents = context_record.get("documents")
     bundle = context_record.get("bundle")
     structured_context = context_record.get("structured_context")
-    document_summary = _summarize_documents(documents)
     warnings: List[str] = []
+    if not medical_text:
+        fallback_documents, fallback_warnings = _read_cdm_detail_documents(params.visit_id, params.patient_id)
+        warnings.extend(fallback_warnings)
+        if fallback_documents:
+            documents = fallback_documents
+            medical_text = _documents_to_medical_text(fallback_documents)
+            source = f"{source}+cdm_detail_documents"
+    document_summary = _summarize_documents(documents)
     if not medical_text:
         warnings.append("未读取到病历文本")
     if not document_summary and medical_text:
         document_summary = [
             {
                 "document_type": "合并病历文本",
+                "table": "",
                 "count": 1,
                 "text_length": len(medical_text),
+                "record_time": "",
                 "latest_time": "",
+                "preview": _mask_sensitive_text(medical_text)[:300],
             }
         ]
     preview = ""

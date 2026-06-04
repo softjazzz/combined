@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-06-04T06:09:40+00:00",
+  "generated_at": "2026-06-04T06:47:29+00:00",
   "python_version": "3.11.9",
   "pi_agent_installed": "0.1.0",
   "pi_agent_core_installed": "0.1.1",
   "requests_installed": "2.34.2",
   "orchestration_mode": "requests_fallback",
   "base_url": "http://127.0.0.1:8001",
-  "visit_id": "2341278",
+  "visit_id": "2298532",
   "auth_mode": "auto_login_args",
   "login_attempted": true,
   "masked_account": "a***@medqc.com",
@@ -15,25 +15,26 @@
   "case_results": [
     {
       "case_id": "direct_ward_round_qc",
-      "message": "对 visit_id=2341278 的查房记录做质控",
-      "status": "needs_clarification",
+      "message": "对 visit_id=2298532 的查房记录做质控",
+      "status": "completed",
       "passed": true,
       "skipped": false,
-      "warnings": [
-        "未读取到病历文本",
-        "病历上下文缺少可用文书文本，无法执行文书质控",
-        "needs_clarification 在病历不明确或文书缺失时允许通过。"
+      "warnings": ["16 条规则因执行边界限制被跳过"],
+      "plan_tools": [
+        "get_record_context",
+        "select_record_documents",
+        "resolve_rule_scope",
+        "run_document_qc"
       ],
-      "plan_tools": ["get_record_context"],
       "sensitive_leak_found": false,
       "sensitive_paths": [],
       "error": null,
       "response_summary": {
-        "status": "needs_clarification",
+        "status": "completed",
         "http_status": null,
         "code": null,
         "message": "",
-        "trace_id": "8d83f39b-a262-47db-9d69-5aff4d59e0b8",
+        "trace_id": "2c928a1b-2a2c-4019-9c46-4bf069d09448",
         "parsed_intent_summary": {
           "document_alias": "ward_round",
           "document_type": null,
@@ -44,34 +45,43 @@
           "has_patient_name": false,
           "has_department": false
         },
-        "qc_summary": null,
-        "selected_rule_count": null,
-        "skipped_rule_count": null,
+        "qc_summary": {
+          "rule_count": 20,
+          "total_rules": 4,
+          "passed": 4,
+          "failed": 0,
+          "passed_count": 4,
+          "skipped_count": 16,
+          "issue_count": 0,
+          "pass_rate": 1.0
+        },
+        "selected_rule_count": 20,
+        "skipped_rule_count": 16,
         "candidate_count": 0
       }
     },
     {
       "case_id": "explicit_rule_id_qc",
-      "message": "用 WR-001 检查 visit_id=2341278 的查房记录",
-      "status": "needs_clarification",
+      "message": "用 WR-001 检查 visit_id=2298532 的查房记录",
+      "status": "completed",
       "passed": true,
       "skipped": false,
-      "warnings": [
-        "已识别显式 rule_ids，将优先按 rule_ids 执行或跳过",
-        "未读取到病历文本",
-        "病历上下文缺少可用文书文本，无法执行文书质控",
-        "needs_clarification 在病历不明确或文书缺失时允许通过。"
+      "warnings": ["已识别显式 rule_ids，将优先按 rule_ids 执行或跳过"],
+      "plan_tools": [
+        "get_record_context",
+        "select_record_documents",
+        "resolve_rule_scope",
+        "run_document_qc"
       ],
-      "plan_tools": ["get_record_context"],
       "sensitive_leak_found": false,
       "sensitive_paths": [],
       "error": null,
       "response_summary": {
-        "status": "needs_clarification",
+        "status": "completed",
         "http_status": null,
         "code": null,
         "message": "",
-        "trace_id": "7f036db7-f8da-4f0a-ba67-8997f279af0f",
+        "trace_id": "ef620422-4208-4b28-9f85-2736af3bbdee",
         "parsed_intent_summary": {
           "document_alias": "ward_round",
           "document_type": null,
@@ -82,9 +92,18 @@
           "has_patient_name": false,
           "has_department": false
         },
-        "qc_summary": null,
-        "selected_rule_count": null,
-        "skipped_rule_count": null,
+        "qc_summary": {
+          "rule_count": 1,
+          "total_rules": 1,
+          "passed": 1,
+          "failed": 0,
+          "passed_count": 1,
+          "skipped_count": 0,
+          "issue_count": 0,
+          "pass_rate": 1.0
+        },
+        "selected_rule_count": 1,
+        "skipped_rule_count": 0,
         "candidate_count": 0
       }
     },
@@ -104,7 +123,7 @@
         "http_status": null,
         "code": null,
         "message": "",
-        "trace_id": "c2472218-0cc0-4639-b164-1cdcb175a7bc",
+        "trace_id": "171b2132-309a-4258-a97f-4f83f7f53d57",
         "parsed_intent_summary": {
           "document_alias": null,
           "document_type": null,
@@ -123,25 +142,26 @@
     },
     {
       "case_id": "discharge_record_qc",
-      "message": "对 visit_id=2341278 的出院记录做完整性质控",
-      "status": "needs_clarification",
+      "message": "对 visit_id=2298532 的出院记录做完整性质控",
+      "status": "completed",
       "passed": true,
       "skipped": false,
-      "warnings": [
-        "未读取到病历文本",
-        "病历上下文缺少可用文书文本，无法执行文书质控",
-        "needs_clarification 在病历不明确或文书缺失时允许通过。"
+      "warnings": ["11 条规则因执行边界限制被跳过"],
+      "plan_tools": [
+        "get_record_context",
+        "select_record_documents",
+        "resolve_rule_scope",
+        "run_document_qc"
       ],
-      "plan_tools": ["get_record_context"],
       "sensitive_leak_found": false,
       "sensitive_paths": [],
       "error": null,
       "response_summary": {
-        "status": "needs_clarification",
+        "status": "completed",
         "http_status": null,
         "code": null,
         "message": "",
-        "trace_id": "d25e0e19-d107-41bb-a07c-21620a88d0aa",
+        "trace_id": "3b0d30bc-28f3-4f86-b118-0bc5c973fe74",
         "parsed_intent_summary": {
           "document_alias": "discharge",
           "document_type": null,
@@ -152,9 +172,18 @@
           "has_patient_name": false,
           "has_department": false
         },
-        "qc_summary": null,
-        "selected_rule_count": null,
-        "skipped_rule_count": null,
+        "qc_summary": {
+          "rule_count": 11,
+          "total_rules": 0,
+          "passed": 0,
+          "failed": 0,
+          "passed_count": 0,
+          "skipped_count": 11,
+          "issue_count": 0,
+          "pass_rate": 1.0
+        },
+        "selected_rule_count": 11,
+        "skipped_rule_count": 11,
         "candidate_count": 0
       }
     },
@@ -177,7 +206,7 @@
         "http_status": null,
         "code": null,
         "message": "",
-        "trace_id": "2de63c2a-6aa6-440f-8e86-bc049d5ceedc",
+        "trace_id": "3ff5a0ae-2f22-4c6d-bc8a-81c0fbe4fcfb",
         "parsed_intent_summary": {
           "document_alias": null,
           "document_type": null,
