@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List
 
@@ -16,11 +17,15 @@ from .schemas import (
     DocumentScope,
     GetRecordContextInput,
     ListQCRulesInput,
+    PredictDIPGroupInput,
+    PredictDRGGroupInput,
     RecordSummary,
     ResolveRuleScopeInput,
     RunDocumentQCInput,
     RunFrontpageQCInput,
+    SearchICDCodesInput,
     SelectRecordDocumentsInput,
+    SuggestRecordICDCodesInput,
     SearchRecordsInput,
     SearchRecordsPublicData,
 )
@@ -79,6 +84,16 @@ SENSITIVE_OUTPUT_KEYS = {
     "raw_document_text",
     "selected_document_texts",
     "raw_llm_output",
+    "raw_response",
+    "api_response",
+    "embedding",
+    "embeddings",
+    "vector",
+    "vectors",
+    "vector_path",
+    "api_key",
+    "token",
+    "access_token",
     "rule_prompt",
     "prompt",
     "custom_prompt",
@@ -2044,6 +2059,518 @@ def resolve_rule_scope(payload: BaseModel | Dict[str, Any]) -> AgentToolObservat
     )
 
 
+def _run_awaitable_blocking(awaitable: Any) -> Any:
+    """在同步工具处理器中执行 async 服务，避免污染当前事件循环。"""
+    result_box: List[Any] = []
+    error_box: List[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            import asyncio
+
+            result_box.append(asyncio.run(awaitable))
+        except BaseException as exc:  # pragma: no cover - 透传线程内异常
+            error_box.append(exc)
+
+    thread = threading.Thread(target=_runner, daemon=True)
+    thread.start()
+    thread.join()
+    if error_box:
+        raise error_box[0]
+    return result_box[0] if result_box else None
+
+
+def _icd_type_to_dataset_type(code_type: str) -> str:
+    if code_type == "diagnosis":
+        return "icd10"
+    if code_type == "procedure":
+        return "icd9cm3"
+    return "all"
+
+
+def _icd_public_type(dataset_type: str) -> str:
+    return "procedure" if dataset_type == "icd9cm3" else "diagnosis"
+
+
+def _icd_match_type(query: str, item: Dict[str, Any]) -> str:
+    query_lower = query.lower()
+    code = _text(item.get("code")).lower()
+    name = _text(item.get("name")).lower()
+    if code == query_lower:
+        return "exact_code"
+    if code.startswith(query_lower):
+        return "code_prefix"
+    if name == query_lower:
+        return "exact_name"
+    if query_lower in name:
+        return "name_contains"
+    if query_lower in code:
+        return "code_contains"
+    return "local_fuzzy"
+
+
+def _apply_icd_mapping(item: Dict[str, Any], version: str) -> None:
+    if item.get("type") != "icd10":
+        return
+    try:
+        from app.routers import icd_search as icd_mod
+
+        mapping = icd_mod._code_mapping or {}
+    except Exception:
+        mapping = {}
+    if not mapping:
+        return
+    code = _text(item.get("code"))
+    if version == "clinical":
+        mapped = (mapping.get("clinical_to_insurance") or {}).get(code)
+        if mapped:
+            item["mapped_code"] = _text(mapped.get("code"))
+            item["mapped_name"] = _text(mapped.get("name"))
+            item["mapped_version"] = "insurance"
+        return
+    c2i = mapping.get("clinical_to_insurance") or {}
+    i2c = mapping.get("insurance_to_clinical") or {}
+    if code in c2i and (c2i.get(code) or {}).get("code") == code:
+        item["mapped_code"] = code
+        item["mapped_name"] = _text(item.get("name"))
+        item["mapped_version"] = "clinical"
+    elif code in i2c:
+        mapped = i2c[code]
+        item["mapped_code"] = _text(mapped.get("code"))
+        item["mapped_name"] = _text(mapped.get("name"))
+        item["mapped_version"] = "clinical"
+
+
+def _search_icd_candidates(
+    *,
+    query: str,
+    code_type: str,
+    version: str,
+    limit: int,
+) -> tuple[List[Dict[str, Any]], List[str]]:
+    warnings: List[str] = []
+    try:
+        from app.routers import icd_search as icd_mod
+
+        icd_mod._load_data()
+        dataset_type = _icd_type_to_dataset_type(code_type)
+        raw_results: List[Dict[str, Any]] = []
+        if dataset_type in {"icd10", "all"}:
+            icd10_source = (
+                icd_mod._icd10_clinical_data
+                if version == "clinical" and icd_mod._icd10_clinical_data
+                else icd_mod._icd10_data
+            )
+            raw_results.extend(icd_mod._search_dataset(icd10_source, query, "icd10"))
+        if dataset_type in {"icd9cm3", "all"}:
+            raw_results.extend(icd_mod._search_dataset(icd_mod._icd9cm3_data, query, "icd9cm3"))
+    except Exception as exc:
+        return [], [f"本地 ICD 编码库检索失败: {type(exc).__name__}"]
+
+    raw_results.sort(key=lambda item: -int(item.get("_score") or 0))
+    candidates: List[Dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in raw_results:
+        key = (_text(item.get("type")), _text(item.get("code")))
+        if key in seen:
+            continue
+        seen.add(key)
+        score = float(item.get("_score") or 0)
+        public_item = {
+            "code": _text(item.get("code")),
+            "name": _text(item.get("name")),
+            "type": _icd_public_type(_text(item.get("type"))),
+            "version": "icd9cm3" if item.get("type") == "icd9cm3" else version,
+            "mapped_code": "",
+            "mapped_name": "",
+            "confidence": round(min(score, 100.0) / 100.0, 4),
+            "match_type": _icd_match_type(query, item),
+        }
+        _apply_icd_mapping(public_item | {"type": item.get("type")}, version)
+        if public_item.get("type") == "diagnosis":
+            mapped_probe = public_item | {"type": "icd10"}
+            _apply_icd_mapping(mapped_probe, version)
+            public_item["mapped_code"] = _text(mapped_probe.get("mapped_code"))
+            public_item["mapped_name"] = _text(mapped_probe.get("mapped_name"))
+        candidates.append(public_item)
+        if len(candidates) >= limit:
+            break
+    if not candidates:
+        warnings.append("未匹配到本地 ICD 编码候选")
+    return candidates, warnings
+
+
+def search_icd_codes(payload: BaseModel | Dict[str, Any]) -> AgentToolObservation:
+    if isinstance(payload, SearchICDCodesInput):
+        params = payload
+    elif isinstance(payload, dict):
+        params = SearchICDCodesInput(**payload)
+    else:
+        params = SearchICDCodesInput(**payload.model_dump())
+    candidates, warnings = _search_icd_candidates(
+        query=params.query,
+        code_type=params.code_type,
+        version=params.version,
+        limit=params.limit,
+    )
+    public = {
+        "query": params.query,
+        "code_type": params.code_type,
+        "version": params.version,
+        "returned": len(candidates),
+        "candidates": candidates,
+        "warnings": warnings,
+    }
+    public = _drop_sensitive_keys(public)
+    assert_no_sensitive_output(public)
+    return AgentToolObservation(
+        tool_name="search_icd_codes",
+        status="success",
+        public_data=public,
+        internal_data={"candidate_count": len(candidates)},
+    )
+
+
+def _item_name_code(item: Dict[str, Any], name_keys: Iterable[str], code_keys: Iterable[str]) -> tuple[str, str]:
+    name = _text(_first_column_value(item, name_keys))
+    code = _text(_first_column_value(item, code_keys))
+    return name, code
+
+
+def _dedupe_coding_items(items: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    deduped: List[Dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for item in items:
+        key = (_text(item.get("name")), _text(item.get("code")), _text(item.get("type")))
+        if not key[0] and not key[1]:
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def _extract_structured_coding_items(value: Any) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    diagnoses: List[Dict[str, Any]] = []
+    procedures: List[Dict[str, Any]] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in {"diagnoses", "diagnosis_list", "diagnosis_candidates"}:
+                child_diag, child_proc = _extract_structured_coding_items(item)
+                diagnoses.extend(child_diag)
+                procedures.extend(child_proc)
+                continue
+            if key in {"surgeries", "procedures", "procedure_list", "operations", "operation_list"}:
+                child_diag, child_proc = _extract_structured_coding_items(item)
+                diagnoses.extend(child_diag)
+                procedures.extend(child_proc)
+                continue
+        diag_name, diag_code = _item_name_code(
+            value,
+            ("diagnosis_name", "diagnosis_text", "name", "text", "discharge_main_diagnosis_text"),
+            ("diagnosis_code", "icd_code", "code", "discharge_main_icd"),
+        )
+        if diag_name or diag_code:
+            diagnoses.append(
+                {
+                    "name": diag_name,
+                    "code": diag_code,
+                    "type": _text(value.get("diagnosis_type") or "diagnosis"),
+                    "source": "structured_context",
+                    "confidence": 0.9 if diag_code else 0.75,
+                }
+            )
+        proc_name, proc_code = _item_name_code(
+            value,
+            ("procedure_name", "surgery_name", "operation_name", "main_procedure_text", "name", "text"),
+            ("procedure_code", "surgery_code", "operation_code", "main_procedure_code", "code"),
+        )
+        if proc_name or proc_code:
+            procedures.append(
+                {
+                    "name": proc_name,
+                    "code": proc_code,
+                    "type": "procedure",
+                    "source": "structured_context",
+                    "confidence": 0.9 if proc_code else 0.75,
+                }
+            )
+    elif isinstance(value, list):
+        for item in value:
+            child_diag, child_proc = _extract_structured_coding_items(item)
+            diagnoses.extend(child_diag)
+            procedures.extend(child_proc)
+    return diagnoses, procedures
+
+
+def _extract_text_coding_items(medical_text: str) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
+    warnings: List[str] = []
+    diagnoses = [
+        {
+            "name": _text(item.get("diagnosis_name")),
+            "code": _text(item.get("diagnosis_code")),
+            "type": _text(item.get("diagnosis_type") or "diagnosis"),
+            "source": "explicit_record_field",
+            "confidence": 0.65 if item.get("diagnosis_code") else 0.55,
+        }
+        for item in _extract_diagnoses(medical_text)
+    ]
+    procedures = [
+        {
+            "name": _text(item.get("surgery_name")),
+            "code": _text(item.get("surgery_code")),
+            "type": "procedure",
+            "source": "explicit_record_field",
+            "confidence": 0.65 if item.get("surgery_code") else 0.55,
+        }
+        for item in _extract_surgeries(medical_text)
+    ]
+    if diagnoses or procedures:
+        warnings.append("部分编码建议来自病历文本显式字段，未做全文医学推断，置信度按低到中等处理")
+    return diagnoses, procedures, warnings
+
+
+def _candidate_recommendations(item: Dict[str, Any], *, code_type: str, limit: int) -> List[Dict[str, Any]]:
+    query = _text(item.get("code") or item.get("name"))
+    if not query:
+        return []
+    candidates, _ = _search_icd_candidates(
+        query=query,
+        code_type=code_type,
+        version="insurance",
+        limit=limit,
+    )
+    return candidates
+
+
+def _coding_candidate(item: Dict[str, Any], *, code_type: str, limit: int) -> Dict[str, Any]:
+    candidates = _candidate_recommendations(item, code_type=code_type, limit=limit)
+    existing_code = _text(item.get("code"))
+    return {
+        "name": _text(item.get("name")),
+        "existing_code": existing_code,
+        "source": _text(item.get("source")),
+        "confidence": item.get("confidence", 0.5),
+        "low_confidence": float(item.get("confidence") or 0) < 0.7,
+        "candidates": candidates,
+    }
+
+
+def suggest_record_icd_codes(
+    payload: BaseModel | Dict[str, Any],
+    workspace: CustomQCWorkspaceService | None = None,
+) -> AgentToolObservation:
+    if isinstance(payload, SuggestRecordICDCodesInput):
+        params = payload
+    elif isinstance(payload, dict):
+        params = SuggestRecordICDCodesInput(**payload)
+    else:
+        params = SuggestRecordICDCodesInput(**payload.model_dump())
+    _ensure_single_visit_id(params.visit_id, "suggest_record_icd_codes")
+    context = get_record_context(
+        GetRecordContextInput(
+            visit_id=params.visit_id,
+            patient_id=params.patient_id,
+            scene="coding",
+            include_preview=False,
+        ),
+        workspace=workspace,
+    )
+    internal_context = context.internal_data or {}
+    record_summary = dict(internal_context.get("record_summary") or {})
+    diagnoses, procedures = _extract_structured_coding_items(internal_context.get("structured_context"))
+    text_diagnoses, text_procedures, extraction_warnings = _extract_text_coding_items(
+        _text(internal_context.get("medical_text"))
+    )
+    diagnoses.extend(text_diagnoses)
+    procedures.extend(text_procedures)
+    diagnoses = _dedupe_coding_items(diagnoses)
+    procedures = _dedupe_coding_items(procedures)
+    warnings = list(context.public_data.get("warnings") or [])
+    warnings.extend(extraction_warnings)
+    if not diagnoses:
+        warnings.append("未从结构化上下文或文本显式字段提取到诊断名称/编码")
+    if params.include_procedures and not procedures:
+        warnings.append("未从结构化上下文或文本显式字段提取到手术/操作名称或编码")
+    public = {
+        "record_summary": record_summary,
+        "diagnosis_candidates": [
+            _coding_candidate(item, code_type="diagnosis", limit=params.limit_per_item)
+            for item in diagnoses
+        ],
+        "procedure_candidates": [
+            _coding_candidate(item, code_type="procedure", limit=params.limit_per_item)
+            for item in procedures
+        ]
+        if params.include_procedures
+        else [],
+        "warnings": _unique_text_items(warnings),
+    }
+    public = _drop_sensitive_keys(public)
+    assert_no_sensitive_output(public)
+    return AgentToolObservation(
+        tool_name="suggest_record_icd_codes",
+        status="success",
+        public_data=public,
+        internal_data={
+            "record_ref": {
+                "visit_id": record_summary.get("visit_id", ""),
+                "patient_id": record_summary.get("patient_id", ""),
+            },
+            "diagnosis_item_count": len(diagnoses),
+            "procedure_item_count": len(procedures),
+        },
+    )
+
+
+def predict_dip_group(
+    payload: BaseModel | Dict[str, Any],
+    dip_service: Any | None = None,
+) -> AgentToolObservation:
+    if isinstance(payload, PredictDIPGroupInput):
+        params = payload
+    elif isinstance(payload, dict):
+        params = PredictDIPGroupInput(**payload)
+    else:
+        params = PredictDIPGroupInput(**payload.model_dump())
+    service = dip_service
+    if service is None:
+        from app.services.dip_grouping_service import DIPGrouperService
+
+        service = DIPGrouperService()
+    proc_code = params.proc_codes[0] if params.proc_codes else ""
+    result = _run_awaitable_blocking(
+        service.group_dip(
+            city_name=params.city_name,
+            pdx_code=params.pdx_code,
+            adx_code=",".join(params.adx_codes),
+            proc_code=proc_code,
+            patient_gender=params.patient_gender or "M",
+            patient_age=params.patient_age or 50,
+            los=params.los or 7,
+            total_fee=params.total_fee or 0,
+        )
+    )
+    warnings: List[str] = []
+    if len(params.proc_codes) > 1:
+        warnings.append("当前 DIP 本地入组服务仅消费首个手术/操作编码")
+    public = {
+        "success": bool(result.get("success")),
+        "dip_code": _text(result.get("dip_code")),
+        "dip_name": _text(result.get("dip_name")),
+        "dip_type": _text(result.get("dip_type")),
+        "grouping_path": _text(result.get("grouping_path")),
+        "input_summary": {
+            "city_name": params.city_name,
+            "pdx_code": params.pdx_code,
+            "adx_count": len(params.adx_codes),
+            "proc_count": len(params.proc_codes),
+            "patient_gender": params.patient_gender or "M",
+            "patient_age": params.patient_age or 50,
+            "los": params.los or 7,
+            "total_fee": params.total_fee or 0,
+        },
+        "warnings": _unique_text_items(warnings),
+    }
+    public = _drop_sensitive_keys(public)
+    assert_no_sensitive_output(public)
+    return AgentToolObservation(
+        tool_name="predict_dip_group",
+        status="success",
+        public_data=public,
+        internal_data={"pdx_code": params.pdx_code, "proc_code": proc_code},
+    )
+
+
+def _error_summary(value: Any) -> str:
+    sanitized = _mask_sensitive_text(_text(value))
+    sanitized = re.sub(r"(?i)(token|access_token|api_key|password)\s*[=:：]\s*[^,\s;；]+", r"\1=[已脱敏]", sanitized)
+    sanitized = re.sub(r"(?i)(raw_response|api_response|embedding|vector)", "[已过滤]", sanitized)
+    return sanitized[:300]
+
+
+def predict_drg_group(
+    payload: BaseModel | Dict[str, Any],
+    drg_service: Any | None = None,
+) -> AgentToolObservation:
+    if isinstance(payload, PredictDRGGroupInput):
+        params = payload
+    elif isinstance(payload, dict):
+        params = PredictDRGGroupInput(**payload)
+    else:
+        params = PredictDRGGroupInput(**payload.model_dump())
+    if drg_service is None:
+        from app.services.drg_grouping_service import get_drg_grouping_service
+
+        drg_service = get_drg_grouping_service()
+    warnings: List[str] = ["DRG 实时入组会调用外部分组服务，当前工具仅返回只读预测摘要"]
+    try:
+        result = _run_awaitable_blocking(
+            drg_service.group_drg(
+                primary_diagnosis=params.primary_diagnosis_code,
+                secondary_diagnoses=params.secondary_diagnosis_codes,
+                procedures=params.procedure_codes,
+                patient_age=params.patient_age or 50,
+                patient_gender=params.patient_gender or "M",
+                los=params.los or 7,
+                city_name=params.region or "四川省",
+                total_fee=params.total_cost or 0,
+            )
+        )
+    except Exception as exc:
+        result = {
+            "success": False,
+            "fallback": True,
+            "adrg_code": "",
+            "adrg_name": "",
+            "drg_code": "",
+            "drg_name": "",
+            "grouping_logic": "外部分组服务调用失败",
+            "error_summary": f"{type(exc).__name__}: {_error_summary(exc)}",
+        }
+    success = bool(result.get("success"))
+    fallback = bool(result.get("fallback")) or not success
+    error_summary = _error_summary(result.get("error_summary") or result.get("error")) if fallback else ""
+    if fallback:
+        warnings.append("DRG 外部分组失败或未入组，已返回受控 fallback 摘要")
+    public = {
+        "success": success,
+        "fallback": fallback,
+        "external_call": True,
+        "error_summary": error_summary,
+        "input_summary": {
+            "primary_diagnosis_code": params.primary_diagnosis_code,
+            "secondary_diagnosis_count": len(params.secondary_diagnosis_codes),
+            "procedure_count": len(params.procedure_codes),
+            "patient_age": params.patient_age or 50,
+            "patient_gender": params.patient_gender or "M",
+            "los": params.los or 7,
+            "total_cost": params.total_cost or 0,
+            "region": params.region or "四川省",
+        },
+        "adrg_code": _text(result.get("adrg_code")),
+        "adrg_name": _text(result.get("adrg_name")),
+        "drg_code": _text(result.get("drg_code")),
+        "drg_name": _text(result.get("drg_name")),
+        "weight": result.get("weight"),
+        "baseline_payment": result.get("baseline_payment"),
+        "profit_margin": result.get("profit_margin"),
+        "mapped_code": _text(result.get("mapped_code")),
+        "mapped_code_name": _text(result.get("mapped_code_name")),
+        "grouping_logic": _text(result.get("grouping_logic")),
+        "warnings": _unique_text_items(warnings),
+    }
+    public = _drop_sensitive_keys(public)
+    assert_no_sensitive_output(public)
+    return AgentToolObservation(
+        tool_name="predict_drg_group",
+        status="success",
+        public_data=public,
+        internal_data={"external_call": True, "fallback": fallback},
+    )
+
+
 def register_default_tools(registry: AgentToolRegistry) -> AgentToolRegistry:
     registry.register(
         name="search_records",
@@ -2120,6 +2647,50 @@ def register_default_tools(registry: AgentToolRegistry) -> AgentToolRegistry:
         writes_db=False,
         requires_confirmation=False,
         timeout_ms=5000,
+        max_records=1,
+    )
+    registry.register(
+        name="search_icd_codes",
+        description="只读检索本地 ICD-10/ICD-9-CM-3 编码候选；不依赖向量文件。",
+        input_model=SearchICDCodesInput,
+        handler=search_icd_codes,
+        risk_level="low",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=5000,
+        max_records=50,
+    )
+    registry.register(
+        name="suggest_record_icd_codes",
+        description="按单份病历已有诊断/手术字段推荐 ICD 编码候选；不做全文医学推断。",
+        input_model=SuggestRecordICDCodesInput,
+        handler=suggest_record_icd_codes,
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=10000,
+        max_records=1,
+    )
+    registry.register(
+        name="predict_dip_group",
+        description="只读执行 DIP 入组预测，返回分组摘要和输入摘要。",
+        input_model=PredictDIPGroupInput,
+        handler=predict_dip_group,
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=10000,
+        max_records=1,
+    )
+    registry.register(
+        name="predict_drg_group",
+        description="只读执行 DRG 实时入组预测；外部失败时返回受控 fallback 摘要。",
+        input_model=PredictDRGGroupInput,
+        handler=predict_drg_group,
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=30000,
         max_records=1,
     )
     return registry

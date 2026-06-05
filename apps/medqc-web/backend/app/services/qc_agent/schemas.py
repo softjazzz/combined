@@ -150,6 +150,42 @@ class ResolveRuleScopeInput(BaseModel):
     limit: int = Field(default=50, ge=1, le=200)
 
 
+class SearchICDCodesInput(BaseModel):
+    query: str = Field(..., min_length=1, max_length=100)
+    code_type: Literal["diagnosis", "procedure", "all"] = "all"
+    version: Literal["insurance", "clinical"] = "insurance"
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class SuggestRecordICDCodesInput(BaseModel):
+    visit_id: str = Field(..., min_length=1)
+    patient_id: Optional[str] = None
+    include_procedures: bool = True
+    limit_per_item: int = Field(default=5, ge=1, le=20)
+
+
+class PredictDIPGroupInput(BaseModel):
+    city_name: str = Field(default="泸州市", min_length=1, max_length=50)
+    pdx_code: str = Field(..., min_length=1, max_length=30)
+    adx_codes: List[str] = Field(default_factory=list)
+    proc_codes: List[str] = Field(default_factory=list)
+    patient_gender: Optional[str] = None
+    patient_age: Optional[int] = Field(default=None, ge=0, le=130)
+    los: Optional[int] = Field(default=None, ge=0, le=1000)
+    total_fee: Optional[float] = Field(default=None, ge=0)
+
+
+class PredictDRGGroupInput(BaseModel):
+    primary_diagnosis_code: str = Field(..., min_length=1, max_length=30)
+    secondary_diagnosis_codes: List[str] = Field(default_factory=list)
+    procedure_codes: List[str] = Field(default_factory=list)
+    patient_age: Optional[int] = Field(default=None, ge=0, le=130)
+    patient_gender: Optional[str] = None
+    los: Optional[int] = Field(default=None, ge=0, le=1000)
+    total_cost: Optional[float] = Field(default=None, ge=0)
+    region: str = Field(default="四川省", max_length=50)
+
+
 class RecordSummary(BaseModel):
     visit_id: str = ""
     patient_id: str = ""

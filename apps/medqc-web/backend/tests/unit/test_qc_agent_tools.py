@@ -12,21 +12,29 @@ from app.routers.qc_agent import get_qc_agent_registry
 from app.services.qc_agent.schemas import (
     GetRecordContextInput,
     ListQCRulesInput,
+    PredictDIPGroupInput,
+    PredictDRGGroupInput,
     ResolveRuleScopeInput,
     RunDocumentQCInput,
     RunFrontpageQCInput,
+    SearchICDCodesInput,
     SearchRecordsInput,
     SelectRecordDocumentsInput,
+    SuggestRecordICDCodesInput,
 )
 from app.services.qc_agent.tool_registry import AgentToolRegistry
 from app.services.qc_agent.tools import (
     get_record_context,
     list_qc_rules,
+    predict_dip_group,
+    predict_drg_group,
     register_default_tools,
     resolve_rule_scope,
     run_document_qc,
     run_frontpage_qc,
+    search_icd_codes,
     select_record_documents,
+    suggest_record_icd_codes,
     search_records,
 )
 
@@ -230,6 +238,13 @@ def _assert_no_sensitive_keys(value):
         assert "frontpage_draft" not in value
         assert "raw_draft" not in value
         assert "draft_json" not in value
+        assert "internal_data" not in value
+        assert "raw_response" not in value
+        assert "api_response" not in value
+        assert "embedding" not in value
+        assert "vector" not in value
+        assert "api_key" not in value
+        assert "token" not in value
         for item in value.values():
             _assert_no_sensitive_keys(item)
     elif isinstance(value, list):
@@ -255,6 +270,12 @@ def _assert_no_raw_context(value):
     assert "positive_example" not in raw_text
     assert "negative_example" not in raw_text
     assert "few_shot_examples" not in raw_text
+    assert "raw_response" not in raw_text
+    assert "api_response" not in raw_text
+    assert "embedding" not in raw_text
+    assert "vector" not in raw_text
+    assert "api_key" not in raw_text
+    assert "access_token" not in raw_text
 
 
 def _empty_cdm_documents(*_args, **_kwargs):
@@ -1170,6 +1191,102 @@ def test_list_qc_rules_limit_upper_bound():
         ListQCRulesInput(limit=201)
 
 
+def test_search_icd_codes_returns_local_candidates_without_vector_fields():
+    observation = search_icd_codes(
+        SearchICDCodesInput(query="糖尿病", code_type="diagnosis", version="insurance", limit=5)
+    )
+
+    assert observation.status == "success"
+    public_data = observation.public_data
+    assert public_data["returned"] > 0
+    first = public_data["candidates"][0]
+    assert first["code"]
+    assert first["name"]
+    assert first["type"] == "diagnosis"
+    assert "confidence" in first
+    assert "match_type" in first
+    _assert_no_sensitive_keys(public_data)
+    _assert_no_raw_context(public_data)
+
+
+def test_suggest_record_icd_codes_uses_explicit_record_fields_without_raw_text():
+    observation = suggest_record_icd_codes(
+        SuggestRecordICDCodesInput(visit_id="V001", patient_id="P001", include_procedures=False),
+        workspace=FakeWorkspace(),  # type: ignore[arg-type]
+    )
+
+    assert observation.status == "success"
+    public_data = observation.public_data
+    assert public_data["record_summary"]["visit_id"] == "V001"
+    assert public_data["diagnosis_candidates"]
+    main = public_data["diagnosis_candidates"][0]
+    assert main["name"] == "脑梗死"
+    assert main["existing_code"] == "I63.900"
+    assert main["low_confidence"] is True
+    _assert_no_sensitive_keys(public_data)
+    _assert_no_raw_context(public_data)
+
+
+def test_predict_dip_group_returns_readonly_grouping_summary():
+    observation = predict_dip_group(
+        PredictDIPGroupInput(
+            city_name="泸州市",
+            pdx_code="E11.900",
+            adx_codes=["I10.x00"],
+            proc_codes=["36.0600"],
+            patient_gender="M",
+            patient_age=65,
+            los=8,
+            total_fee=12345.67,
+        )
+    )
+
+    public_data = observation.public_data
+    assert observation.status == "success"
+    assert public_data["success"] is True
+    assert public_data["dip_code"]
+    assert public_data["dip_name"]
+    assert public_data["input_summary"]["pdx_code"] == "E11.900"
+    _assert_no_sensitive_keys(public_data)
+    _assert_no_raw_context(public_data)
+
+
+def test_predict_drg_group_external_failure_returns_controlled_fallback():
+    class FailingDRGService:
+        async def group_drg(self, **_kwargs):
+            raise RuntimeError("remote failed token=secret raw_response vector")
+
+    observation = predict_drg_group(
+        PredictDRGGroupInput(
+            primary_diagnosis_code="I10.x00",
+            secondary_diagnosis_codes=["E11.900"],
+            procedure_codes=["36.0600"],
+            patient_age=65,
+            patient_gender="M",
+            los=7,
+            total_cost=20000,
+            region="四川省",
+        ),
+        drg_service=FailingDRGService(),
+    )
+
+    public_data = observation.public_data
+    assert observation.status == "success"
+    assert public_data["success"] is False
+    assert public_data["fallback"] is True
+    assert public_data["external_call"] is True
+    assert "secret" not in public_data["error_summary"]
+    assert "raw_response" not in public_data["error_summary"]
+    assert "vector" not in public_data["error_summary"]
+    _assert_no_sensitive_keys(public_data)
+    _assert_no_raw_context(public_data)
+
+
+class _FailingDRGService:
+    async def group_drg(self, **_kwargs):
+        raise RuntimeError("remote failed token=secret raw_response vector")
+
+
 @pytest.fixture
 def qc_agent_auth(client):
     async def _noop_auth_gate():
@@ -1269,6 +1386,50 @@ def _registry_with_workspace(workspace) -> AgentToolRegistry:
         timeout_ms=5000,
         max_records=1,
     )
+    registry.register(
+        name="search_icd_codes",
+        description="只读检索本地 ICD-10/ICD-9-CM-3 编码候选；不依赖向量文件。",
+        input_model=SearchICDCodesInput,
+        handler=search_icd_codes,
+        risk_level="low",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=5000,
+        max_records=50,
+    )
+    registry.register(
+        name="suggest_record_icd_codes",
+        description="按单份病历已有诊断/手术字段推荐 ICD 编码候选；不做全文医学推断。",
+        input_model=SuggestRecordICDCodesInput,
+        handler=lambda payload: suggest_record_icd_codes(payload, workspace=workspace),
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=10000,
+        max_records=1,
+    )
+    registry.register(
+        name="predict_dip_group",
+        description="只读执行 DIP 入组预测，返回分组摘要和输入摘要。",
+        input_model=PredictDIPGroupInput,
+        handler=predict_dip_group,
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=10000,
+        max_records=1,
+    )
+    registry.register(
+        name="predict_drg_group",
+        description="只读执行 DRG 实时入组预测；外部失败时返回受控 fallback 摘要。",
+        input_model=PredictDRGGroupInput,
+        handler=lambda payload: predict_drg_group(payload, drg_service=_FailingDRGService()),
+        risk_level="medium",
+        writes_db=False,
+        requires_confirmation=False,
+        timeout_ms=30000,
+        max_records=1,
+    )
     return registry
 
 
@@ -1319,6 +1480,26 @@ def test_api_list_tools_returns_search_records_schema(client, qc_agent_auth):
     assert by_name["resolve_rule_scope"]["requires_confirmation"] is False
     assert by_name["resolve_rule_scope"]["max_records"] == 1
     assert "input_schema" in by_name["resolve_rule_scope"]
+    assert by_name["search_icd_codes"]["risk_level"] == "low"
+    assert by_name["search_icd_codes"]["writes_db"] is False
+    assert by_name["search_icd_codes"]["requires_confirmation"] is False
+    assert by_name["search_icd_codes"]["max_records"] == 50
+    assert "input_schema" in by_name["search_icd_codes"]
+    assert by_name["suggest_record_icd_codes"]["risk_level"] == "medium"
+    assert by_name["suggest_record_icd_codes"]["writes_db"] is False
+    assert by_name["suggest_record_icd_codes"]["requires_confirmation"] is False
+    assert by_name["suggest_record_icd_codes"]["max_records"] == 1
+    assert "input_schema" in by_name["suggest_record_icd_codes"]
+    assert by_name["predict_dip_group"]["risk_level"] == "medium"
+    assert by_name["predict_dip_group"]["writes_db"] is False
+    assert by_name["predict_dip_group"]["requires_confirmation"] is False
+    assert by_name["predict_dip_group"]["max_records"] == 1
+    assert "input_schema" in by_name["predict_dip_group"]
+    assert by_name["predict_drg_group"]["risk_level"] == "medium"
+    assert by_name["predict_drg_group"]["writes_db"] is False
+    assert by_name["predict_drg_group"]["requires_confirmation"] is False
+    assert by_name["predict_drg_group"]["max_records"] == 1
+    assert "input_schema" in by_name["predict_drg_group"]
 
 
 def test_api_requires_login(client):
@@ -1484,6 +1665,63 @@ def test_api_resolve_rule_scope_returns_rule_ids_and_unknown_warnings(client, qc
     warnings = unknown_response.json()["observation"]["public_data"]["warnings"]
     assert any("未知文书" in item for item in warnings)
     assert any("未知质控点" in item for item in warnings)
+
+
+def test_api_search_icd_codes_returns_sanitized_candidates(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/tools/search_icd_codes/run",
+        json={"query": "糖尿病", "code_type": "diagnosis", "limit": 3},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tool_call"]["tool_name"] == "search_icd_codes"
+    assert "internal_data" not in body["observation"]
+    assert body["observation"]["public_data"]["candidates"]
+    _assert_no_raw_context(body)
+
+
+def test_api_suggest_record_icd_codes_strips_raw_context(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/tools/suggest_record_icd_codes/run",
+        json={"visit_id": "V001", "patient_id": "P001", "include_procedures": False},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tool_call"]["tool_name"] == "suggest_record_icd_codes"
+    assert "internal_data" not in body["observation"]
+    public_data = body["observation"]["public_data"]
+    assert public_data["diagnosis_candidates"]
+    _assert_no_raw_context(body)
+
+
+def test_api_predict_dip_and_drg_group_outputs_are_sanitized(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    dip_response = client.post(
+        "/api/v1/qc-agent/tools/predict_dip_group/run",
+        json={"city_name": "泸州市", "pdx_code": "E11.900", "proc_codes": ["36.0600"]},
+    )
+    assert dip_response.status_code == 200
+    dip_body = dip_response.json()
+    assert dip_body["observation"]["public_data"]["success"] is True
+    assert "internal_data" not in dip_body["observation"]
+    _assert_no_raw_context(dip_body)
+
+    drg_response = client.post(
+        "/api/v1/qc-agent/tools/predict_drg_group/run",
+        json={"primary_diagnosis_code": "I10.x00", "procedure_codes": ["36.0600"]},
+    )
+    assert drg_response.status_code == 200
+    drg_body = drg_response.json()
+    assert drg_body["observation"]["public_data"]["fallback"] is True
+    assert "internal_data" not in drg_body["observation"]
+    _assert_no_raw_context(drg_body)
 
 
 def test_api_chat_direct_visit_id_completes_document_qc(client, qc_agent_auth):
@@ -1781,6 +2019,10 @@ def test_default_registry_contains_only_safe_search_tool():
         "run_document_qc",
         "list_qc_rules",
         "resolve_rule_scope",
+        "search_icd_codes",
+        "suggest_record_icd_codes",
+        "predict_dip_group",
+        "predict_drg_group",
     }
     assert by_name["search_records"].writes_db is False
     assert by_name["search_records"].requires_confirmation is False
@@ -1798,3 +2040,15 @@ def test_default_registry_contains_only_safe_search_tool():
     assert by_name["resolve_rule_scope"].writes_db is False
     assert by_name["resolve_rule_scope"].requires_confirmation is False
     assert by_name["resolve_rule_scope"].max_records == 1
+    assert by_name["search_icd_codes"].writes_db is False
+    assert by_name["search_icd_codes"].requires_confirmation is False
+    assert by_name["search_icd_codes"].max_records == 50
+    assert by_name["suggest_record_icd_codes"].writes_db is False
+    assert by_name["suggest_record_icd_codes"].requires_confirmation is False
+    assert by_name["suggest_record_icd_codes"].max_records == 1
+    assert by_name["predict_dip_group"].writes_db is False
+    assert by_name["predict_dip_group"].requires_confirmation is False
+    assert by_name["predict_dip_group"].max_records == 1
+    assert by_name["predict_drg_group"].writes_db is False
+    assert by_name["predict_drg_group"].requires_confirmation is False
+    assert by_name["predict_drg_group"].max_records == 1
