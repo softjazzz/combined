@@ -807,6 +807,16 @@ def test_run_document_qc_ward_round_scope_executes_more_programmatic_rules():
     assert {"WR-001", "WR-005", "WR-006", "WR-007", "SC-048", "SC-050", "SC-052"}.issubset(executed_ids)
     assert public_data["qc_summary"]["total_rules"] >= 7
     assert public_data["qc_summary"]["skipped_count"] < len(public_data["selected_rules"])
+    wr001 = next(rule for rule in public_data["executed_rules"] if rule["rule_id"] == "WR-001")
+    assert wr001["status"] in {"passed", "failed"}
+    assert wr001["check_type"] == "existence"
+    assert wr001["checked_target"] == "查房记录"
+    assert wr001["explanation"]
+    assert wr001["evidence_summary"]
+    assert wr001["matched_documents"]
+    assert set(wr001["matched_documents"][0]).issubset(
+        {"document_type", "record_time", "text_length", "source_table"}
+    )
     _assert_no_raw_context(public_data)
 
 
@@ -844,6 +854,9 @@ def test_run_document_qc_ward_round_short_document_returns_issue():
     issues = observation.public_data["issues"]
     assert any(issue["rule_id"] == "WR-006" and issue["passed"] is False for issue in issues)
     assert "选中文书总长度" in issues[0]["evidence_summary"]
+    assert issues[0]["suggestion"]
+    assert "matched_documents" in issues[0]
+    assert "document_type" in issues[0]
     _assert_no_raw_context(observation.public_data)
 
 
@@ -904,6 +917,8 @@ def test_run_document_qc_unsupported_llm_rules_still_skipped():
     skipped = observation.public_data["skipped_rules"]
     assert {item["rule_id"] for item in skipped} == {"SC-084", "SC-086", "SC-107"}
     assert all(item["reason"] in {"requires_llm", "unsupported_execution_mode"} for item in skipped)
+    assert all(item["reason_label"] for item in skipped)
+    assert all(item["next_step"] for item in skipped)
     assert observation.public_data["executed_rules"] == []
     _assert_no_raw_context(observation.public_data)
 
@@ -927,6 +942,23 @@ def test_run_document_qc_skips_requires_llm_and_unknown_rule_ids():
     assert observation.public_data["executed_rules"] == []
     assert observation.public_data["qc_summary"]["skipped_count"] == 2
     _assert_no_raw_context(observation.public_data)
+
+
+def test_run_document_qc_warnings_are_deduplicated():
+    workspace = FakeWorkspace()
+    observation = run_document_qc(
+        {
+            "visit_id": "V001",
+            "patient_id": "P001",
+            "document_alias": "ward_round",
+            "rule_ids": ["SC-084", "SC-086"],
+            "include_passed": True,
+        },
+        workspace=workspace,  # type: ignore[arg-type]
+    )
+
+    warnings = observation.public_data["warnings"]
+    assert len(warnings) == len(set(warnings))
 
 
 def test_run_document_qc_skips_not_applicable_document_rule():

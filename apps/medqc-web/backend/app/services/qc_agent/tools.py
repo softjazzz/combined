@@ -1088,17 +1088,119 @@ def _document_qc_rule(
     document_ref: str,
     evidence_summary: str,
     suggestion: str,
+    matched_documents: List[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
+    matched = matched_documents or []
+    document_types = sorted({_text(item.get("document_type")) for item in matched if item.get("document_type")})
+    source_tables = sorted({_text(item.get("source_table")) for item in matched if item.get("source_table")})
     return {
         "rule_id": rule_id,
         "rule_name": rule_name,
         "passed": passed,
+        "status": "passed" if passed else "failed",
         "severity": severity,
         "category": category,
         "document_ref": document_ref,
+        "document_type": "、".join(document_types),
+        "source_table": "、".join(source_tables),
+        "check_type": _rule_check_type(rule_id),
+        "checked_target": _rule_checked_target(rule_id, category),
+        "explanation": _rule_explanation(rule_id, rule_name),
         "evidence_summary": evidence_summary,
+        "matched_documents": matched,
+        "message": f"{'通过' if passed else '未通过'}：{rule_name}",
         "suggestion": "" if passed else suggestion,
     }
+
+
+_RULE_CHECK_TYPES = {
+    "WR-001": "existence",
+    "WR-002": "keyword",
+    "WR-003": "keyword",
+    "WR-004": "structure",
+    "WR-005": "keyword",
+    "WR-006": "length",
+    "WR-007": "time",
+    "SC-048": "time",
+    "SC-050": "structure",
+    "SC-052": "structure",
+    "CR-001": "existence",
+    "CR-002": "length",
+    "CR-003": "keyword",
+    "DIS-001": "existence",
+    "DIS-002": "length",
+    "DIS-003": "structure",
+    "CON-001": "existence",
+    "CON-002": "keyword",
+    "DG-001": "existence",
+    "DG-002": "time",
+}
+
+
+_CATEGORY_TARGETS = {
+    "ward_round": "查房记录",
+    "course": "病程记录",
+    "discharge": "出院记录",
+    "consultation": "会诊记录",
+    "document_general": "目标文书",
+}
+
+
+_RULE_EXPLANATIONS = {
+    "WR-001": "检查是否命中查房相关文书。",
+    "WR-002": "检查查房记录中是否出现上级、主任或主治医师查房意见线索。",
+    "WR-003": "检查查房记录是否包含病情变化、诊疗计划或处理意见线索。",
+    "WR-004": "检查查房记录是否同时具备记录时间和医师签名线索。",
+    "WR-005": "检查选中文书中是否出现明确查房关键词。",
+    "WR-006": "检查选中查房相关文书正文长度是否达到基础完整性阈值。",
+    "WR-007": "检查查房记录时间是否存在且未明显晚于出院时间。",
+    "SC-048": "检查入院后 48 小时内是否存在主治或上级医师首次查房时间线索。",
+    "SC-050": "检查上级医师查房记录是否包含病情分析或诊疗意见线索。",
+    "SC-052": "检查上级医师查房记录是否包含审阅或签名线索。",
+    "CR-001": "检查是否命中病程类文书。",
+    "CR-002": "检查病程记录正文长度是否达到基础完整性阈值。",
+    "CR-003": "检查病程记录是否包含病情、处理意见或诊疗计划线索。",
+    "DIS-001": "检查是否命中出院记录或出院小结。",
+    "DIS-002": "检查出院记录正文长度是否达到基础完整性阈值。",
+    "DIS-003": "检查出院记录是否包含出院诊断、出院情况、医嘱或随访等核心栏目线索。",
+    "CON-001": "检查是否命中会诊或 MDT 文书。",
+    "CON-002": "检查会诊记录是否包含会诊意见或处理建议线索。",
+    "DG-001": "检查目标文书是否存在。",
+    "DG-002": "检查目标文书是否有记录时间元数据。",
+}
+
+
+def _rule_check_type(rule_id: str) -> str:
+    return _RULE_CHECK_TYPES.get(rule_id, "other")
+
+
+def _rule_checked_target(rule_id: str, category: str) -> str:
+    if rule_id.startswith("DIS-"):
+        return "出院记录"
+    if rule_id.startswith("CON-"):
+        return "会诊记录"
+    if rule_id.startswith("CR-"):
+        return "病程记录"
+    return _CATEGORY_TARGETS.get(category, "目标文书")
+
+
+def _rule_explanation(rule_id: str, rule_name: str) -> str:
+    return _RULE_EXPLANATIONS.get(rule_id, f"检查{rule_name}是否满足基础质控要求。")
+
+
+def _matched_document_summaries(selected_documents: List[Dict[str, Any]], *, limit: int = 10) -> List[Dict[str, Any]]:
+    summaries: List[Dict[str, Any]] = []
+    for document in selected_documents[:limit]:
+        text = _text(document.get("text"))
+        summaries.append(
+            {
+                "document_type": _text(document.get("document_type")),
+                "record_time": _text(document.get("record_time") or document.get("update_time")),
+                "text_length": len(text),
+                "source_table": _text(document.get("source_table")),
+            }
+        )
+    return summaries
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -1171,6 +1273,7 @@ def _run_ward_round_rules(
     document_refs = _document_refs(selected_documents)
     has_document = bool(selected_documents)
     total_length = _total_text_length(selected_documents)
+    matched_documents = _matched_document_summaries(selected_documents)
     has_ward_round_keyword = bool(re.search(r"上级医师查房|主任医师查房|主治医师查房|副主任医师查房|主任查房|上级查房|查房", joined_text))
     has_superior_opinion = bool(re.search(r"上级医师|主任医师|副主任医师|主治医师|主任查房|上级查房", joined_text))
     has_plan = bool(re.search(r"病情变化|诊疗计划|治疗计划|处理意见|继续|调整|完善检查|下一步|复查|医嘱", joined_text))
@@ -1205,6 +1308,7 @@ def _run_ward_round_rules(
             document_ref=document_ref,
             evidence_summary=evidence["exists"],
             suggestion="请补充查房记录或确认文书类型。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="WR-002",
@@ -1215,6 +1319,7 @@ def _run_ward_round_rules(
             document_ref=document_ref,
             evidence_summary=evidence["superior"],
             suggestion="请在查房记录中补充上级医师或主任医师查房意见。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="WR-003",
@@ -1225,6 +1330,7 @@ def _run_ward_round_rules(
             document_ref=document_ref,
             evidence_summary=evidence["plan"],
             suggestion="请补充病情变化、诊疗计划或处理意见。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="WR-004",
@@ -1235,6 +1341,7 @@ def _run_ward_round_rules(
             document_ref=document_ref,
             evidence_summary=evidence["time_signature"],
             suggestion="请补充记录时间和医师签名线索。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="WR-005",
@@ -1245,6 +1352,7 @@ def _run_ward_round_rules(
             document_ref=document_refs or document_ref,
             evidence_summary=evidence["keyword"],
             suggestion="请确认文书类型或在查房记录中补充明确查房标题/段落。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="WR-006",
@@ -1255,6 +1363,7 @@ def _run_ward_round_rules(
             document_ref=document_refs or document_ref,
             evidence_summary=evidence["length"],
             suggestion="请补充查房记录的病情分析、诊疗意见和处理计划。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="WR-007",
@@ -1265,6 +1374,7 @@ def _run_ward_round_rules(
             document_ref=document_refs or document_ref,
             evidence_summary=evidence["time"],
             suggestion="请补充查房记录时间，或核对记录时间是否晚于出院后 1 天。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="SC-048",
@@ -1275,6 +1385,7 @@ def _run_ward_round_rules(
             document_ref=document_refs or document_ref,
             evidence_summary=evidence["first_round"],
             suggestion="请补充入院 48 小时内主治医师或上级医师首次查房记录。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="SC-050",
@@ -1285,6 +1396,7 @@ def _run_ward_round_rules(
             document_ref=document_refs or document_ref,
             evidence_summary=evidence["plan"] if has_superior_opinion else evidence["superior"],
             suggestion="请在上级医师查房记录中补充病情分析和诊疗意见。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="SC-052",
@@ -1295,6 +1407,7 @@ def _run_ward_round_rules(
             document_ref=document_refs or document_ref,
             evidence_summary=evidence["time_signature"],
             suggestion="请补充上级医师审阅或签名线索。",
+            matched_documents=matched_documents,
         ),
     ]
 
@@ -1340,6 +1453,7 @@ def _run_course_rules(
     document_ref = _document_refs(selected_documents) or _first_document_ref(selected_documents)
     has_document = bool(selected_documents)
     total_length = _total_text_length(selected_documents)
+    matched_documents = _matched_document_summaries(selected_documents)
     has_care_content = bool(re.search(r"病情|诊疗计划|治疗计划|处理意见|继续|调整|完善检查|复查|医嘱", joined_text))
     evidence = {
         "exists": "命中病程类文书" if has_document else "未命中病程类文书",
@@ -1358,6 +1472,7 @@ def _run_course_rules(
             document_ref=document_ref,
             evidence_summary=evidence["exists"],
             suggestion="请补充病程记录或调整文书筛选条件。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="CR-002",
@@ -1368,6 +1483,7 @@ def _run_course_rules(
             document_ref=document_ref,
             evidence_summary=evidence["length"],
             suggestion="请补充病程记录正文内容。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="CR-003",
@@ -1378,6 +1494,7 @@ def _run_course_rules(
             document_ref=document_ref,
             evidence_summary=evidence["content"],
             suggestion="请补充病情变化、处理意见或诊疗计划。",
+            matched_documents=matched_documents,
         ),
     ]
 
@@ -1391,6 +1508,7 @@ def _run_discharge_rules(
     document_ref = _document_refs(selected_documents) or _first_document_ref(selected_documents)
     has_document = bool(selected_documents)
     total_length = _total_text_length(selected_documents)
+    matched_documents = _matched_document_summaries(selected_documents)
     has_core_sections = bool(re.search(r"出院诊断|出院情况|出院医嘱|出院带药|随访|治疗经过|住院经过", joined_text))
     evidence = {
         "exists": "命中出院记录或出院小结" if has_document else "未命中出院记录或出院小结",
@@ -1409,6 +1527,7 @@ def _run_discharge_rules(
             document_ref=document_ref,
             evidence_summary=evidence["exists"],
             suggestion="请补充出院记录或出院小结。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="DIS-002",
@@ -1419,6 +1538,7 @@ def _run_discharge_rules(
             document_ref=document_ref,
             evidence_summary=evidence["length"],
             suggestion="请补充出院记录正文、诊疗经过、出院情况和医嘱。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="DIS-003",
@@ -1429,6 +1549,7 @@ def _run_discharge_rules(
             document_ref=document_ref,
             evidence_summary=evidence["sections"],
             suggestion="请补充出院诊断、出院情况、出院医嘱或随访安排。",
+            matched_documents=matched_documents,
         ),
     ]
 
@@ -1441,6 +1562,7 @@ def _run_consultation_rules(
     joined_text = _selected_text(selected_documents)
     document_ref = _document_refs(selected_documents) or _first_document_ref(selected_documents)
     has_document = bool(selected_documents)
+    matched_documents = _matched_document_summaries(selected_documents)
     has_opinion = bool(re.search(r"会诊意见|会诊建议|处理意见|诊疗建议|MDT|多学科", joined_text, re.IGNORECASE))
     evidence = {
         "exists": "命中会诊或 MDT 文书" if has_document else "未命中会诊或 MDT 文书",
@@ -1458,6 +1580,7 @@ def _run_consultation_rules(
             document_ref=document_ref,
             evidence_summary=evidence["exists"],
             suggestion="请补充会诊记录或 MDT 记录。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="CON-002",
@@ -1468,6 +1591,7 @@ def _run_consultation_rules(
             document_ref=document_ref,
             evidence_summary=evidence["opinion"],
             suggestion="请补充会诊意见、处理建议或诊疗建议。",
+            matched_documents=matched_documents,
         ),
     ]
 
@@ -1480,6 +1604,7 @@ def _run_document_general_rules(
     document_ref = selected_documents[0].get("document_ref", "") if selected_documents else ""
     has_document = bool(selected_documents)
     has_time = any(_text(document.get("record_time") or document.get("update_time")) for document in selected_documents)
+    matched_documents = _matched_document_summaries(selected_documents)
     return [
         _document_qc_rule(
             rule_id="DG-001",
@@ -1490,6 +1615,7 @@ def _run_document_general_rules(
             document_ref=document_ref,
             evidence_summary=("命中文书" if has_document else "未命中文书") if include_evidence else "",
             suggestion="请补充目标文书或调整文书筛选条件。",
+            matched_documents=matched_documents,
         ),
         _document_qc_rule(
             rule_id="DG-002",
@@ -1500,6 +1626,7 @@ def _run_document_general_rules(
             document_ref=document_ref,
             evidence_summary=("文书元数据包含记录时间" if has_time else "未见记录时间元数据") if include_evidence else "",
             suggestion="请补充文书记录时间。",
+            matched_documents=matched_documents,
         ),
     ]
 
@@ -1538,6 +1665,32 @@ def _rule_summary_public(rule: RuleSummary) -> Dict[str, Any]:
     return rule.to_public_dict()
 
 
+_SKIP_REASON_LABELS = {
+    "requires_llm": "需要受控 LLM 判断",
+    "unsupported_execution_mode": "暂未接入只读程序化执行器",
+    "unknown_rule": "规则目录未找到",
+    "not_applicable_document": "不适用于当前文书类型",
+    "not_safe_readonly": "尚未确认只读安全",
+}
+
+
+_SKIP_REASON_NEXT_STEPS = {
+    "requires_llm": "需接入受控 LLM 规则执行器后判断。",
+    "unsupported_execution_mode": "需补充安全程序化 evaluator 或接入正式只读规则引擎。",
+    "unknown_rule": "请核对 rule_id 或先通过规则目录重新选择规则。",
+    "not_applicable_document": "请更换文书类型或选择适用于当前文书的规则。",
+    "not_safe_readonly": "需完成规则执行安全审计后再开放。",
+}
+
+
+def _skip_reason_label(reason: str) -> str:
+    return _SKIP_REASON_LABELS.get(reason, "当前阶段未执行")
+
+
+def _skip_reason_next_step(reason: str) -> str:
+    return _SKIP_REASON_NEXT_STEPS.get(reason, "请由质控员复核规则适用性和执行方式。")
+
+
 def _skipped_rule(
     *,
     rule_id: str,
@@ -1547,12 +1700,31 @@ def _skipped_rule(
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "rule_id": rule_id,
+        "rule_name": "",
+        "source": "",
         "reason": reason,
+        "reason_label": _skip_reason_label(reason),
+        "next_step": _skip_reason_next_step(reason),
         "message": message,
     }
     if rule:
+        payload["rule_name"] = rule.rule_name
+        payload["source"] = rule.source
+        payload["severity"] = rule.severity
         payload["rule"] = _rule_summary_public(rule)
     return payload
+
+
+def _unique_text_items(items: Iterable[Any]) -> List[str]:
+    seen: set[str] = set()
+    result: List[str] = []
+    for item in items:
+        text = _text(item)
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
 
 
 def _document_scope_for_document_qc(params: RunDocumentQCInput) -> DocumentScope:
@@ -1784,12 +1956,13 @@ def run_document_qc(
         warnings.append("未命中可质控文书")
     if skipped_rules:
         warnings.append(f"{len(skipped_rules)} 条规则因执行边界限制被跳过")
+    warnings = _unique_text_items(warnings)
     public = {
         "record_summary": selection.public_data.get("record_summary", {}),
         "document_summary": selection.public_data.get("selection_summary", {}),
         "document_selection_summary": selection.public_data.get("selection_summary", {}),
         "selected_rules": [_rule_summary_public(rule) for rule in selected_rules],
-        "executed_rules": [_rule_summary_public(rule) for rule in executed_rules],
+        "executed_rules": results,
         "skipped_rules": skipped_rules,
         "qc_summary": {
             "rule_count": len(selected_rules) + len([item for item in skipped_rules if item.get("reason") == "unknown_rule"]),

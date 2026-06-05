@@ -132,6 +132,8 @@ import {
 import type {
   QCAgentCandidate,
   QCAgentChatResponse,
+  QCAgentExecutedRule,
+  QCAgentMatchedDocument,
   QCAgentRuleIssue,
   QCAgentSkippedRule,
   QCAgentUserContext,
@@ -216,6 +218,46 @@ function issueMessage(issue: QCAgentRuleIssue) {
   return issue.message || issue.description || issue.evidence_summary || '未返回问题描述'
 }
 
+function ruleStatusLabel(rule: QCAgentExecutedRule) {
+  if (rule.status === 'passed' || rule.passed === true) return '通过'
+  if (rule.status === 'failed' || rule.passed === false) return '未通过'
+  return rule.status || '未知'
+}
+
+function ruleStatusClass(rule: QCAgentExecutedRule) {
+  return rule.status === 'failed' || rule.passed === false
+    ? 'qc-agent-rule-status--failed'
+    : 'qc-agent-rule-status--passed'
+}
+
+function matchedDocumentSummary(documents: QCAgentMatchedDocument[] | undefined) {
+  const items = safeArray(documents)
+  if (!items.length) return '未返回文书元数据'
+  const totalLength = items.reduce((sum, item) => sum + numberValue(item.text_length), 0)
+  const types = uniqueTextItems(items.map((item) => item.document_type)).slice(0, 3)
+  const typeText = types.length ? types.join('、') : '未标注文书类型'
+  return `命中 ${items.length} 份文书，${typeText}，合计 ${totalLength} 字`
+}
+
+function skippedReasonLabel(rule: QCAgentSkippedRule) {
+  if (rule.reason_label) return rule.reason_label
+  if (rule.reason === 'requires_llm') return '需要受控 LLM 判断'
+  if (rule.reason === 'unsupported_execution_mode') return '暂未接入只读程序化执行器'
+  if (rule.reason === 'unknown_rule') return '规则目录未找到'
+  if (rule.reason === 'not_applicable_document') return '不适用于当前文书类型'
+  return rule.reason || '当前阶段未执行'
+}
+
+function skippedNextStep(rule: QCAgentSkippedRule) {
+  if (rule.next_step) return rule.next_step
+  if (rule.reason === 'requires_llm') return '需接入受控 LLM 规则执行器后判断。'
+  if (rule.reason === 'unsupported_execution_mode') {
+    return '需补充安全程序化 evaluator 或接入正式只读规则引擎。'
+  }
+  if (rule.reason === 'not_applicable_document') return '请更换文书类型或选择适用规则。'
+  return '请由质控员复核规则适用性和执行方式。'
+}
+
 function numberValue(value: unknown, fallback = 0) {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
@@ -294,7 +336,11 @@ const AgentResponseCard = defineComponent({
     return () => {
       const response = componentProps.response
       const result = response.result || {}
-      const issues = safeArray(result.issues?.length ? result.issues : result.results)
+      const issueSource = safeArray(result.issues?.length ? result.issues : result.results)
+      const issues = issueSource.filter(
+        (issue) => issue.passed !== true && issue.status !== 'passed',
+      )
+      const executedRules = safeArray(result.executed_rules)
       const skippedRules = safeArray(result.skipped_rules)
       const warnings = uniqueTextItems([
         ...safeArray(response.warnings),
@@ -421,30 +467,125 @@ const AgentResponseCard = defineComponent({
               ),
             ])
           : null,
-        issues.length
+        response.status === 'completed'
           ? h('div', { class: 'qc-agent-block' }, [
-              h('div', { class: 'qc-agent-block__title' }, '问题摘要'),
+              h('div', { class: 'qc-agent-block__title' }, '已发现问题'),
+              issues.length
+                ? h(
+                    'div',
+                    { class: 'qc-agent-issues' },
+                    issues.map((issue) =>
+                      h('div', { class: 'qc-agent-issue' }, [
+                        h('div', { class: 'qc-agent-issue__head' }, [
+                          h('span', issue.rule_id || '-'),
+                          h('em', issue.severity || 'normal'),
+                        ]),
+                        h('div', { class: 'qc-agent-issue__message' }, issueMessage(issue)),
+                        issue.evidence_summary
+                          ? h('div', { class: 'qc-agent-issue__evidence' }, [
+                              h('strong', '证据：'),
+                              h('span', issue.evidence_summary),
+                            ])
+                          : null,
+                        issue.suggestion
+                          ? h('div', { class: 'qc-agent-issue__suggestion' }, [
+                              h('strong', '建议：'),
+                              h('span', issue.suggestion),
+                            ])
+                          : null,
+                      ]),
+                    ),
+                  )
+                : h('div', { class: 'qc-agent-empty-note' }, '已执行规则暂未发现问题。'),
+            ])
+          : null,
+        executedRules.length
+          ? h('div', { class: 'qc-agent-block' }, [
+              h('div', { class: 'qc-agent-block__title' }, '已执行规则'),
               h(
                 'div',
-                { class: 'qc-agent-issues' },
-                issues.map((issue) =>
-                  h('div', { class: 'qc-agent-issue' }, [
-                    h('div', { class: 'qc-agent-issue__head' }, [
-                      h('span', issue.rule_id || '-'),
-                      h('em', issue.severity || 'normal'),
+                { class: 'qc-agent-executed-rules' },
+                executedRules
+                  .slice(0, 6)
+                  .map((rule) =>
+                    h('div', { class: 'qc-agent-executed-rule' }, [
+                      h('div', { class: 'qc-agent-rule-card__head' }, [
+                        h('span', { class: 'qc-agent-rule-card__id' }, rule.rule_id || '-'),
+                        h(
+                          'em',
+                          { class: ['qc-agent-rule-status', ruleStatusClass(rule)] },
+                          ruleStatusLabel(rule),
+                        ),
+                      ]),
+                      h(
+                        'div',
+                        { class: 'qc-agent-rule-card__name' },
+                        rule.rule_name || '未命名规则',
+                      ),
+                      rule.explanation
+                        ? h('div', { class: 'qc-agent-rule-card__text' }, rule.explanation)
+                        : null,
+                      rule.evidence_summary
+                        ? h('div', { class: 'qc-agent-rule-card__evidence' }, [
+                            h('strong', '证据：'),
+                            h('span', rule.evidence_summary),
+                          ])
+                        : null,
+                      h(
+                        'div',
+                        { class: 'qc-agent-rule-card__meta' },
+                        matchedDocumentSummary(rule.matched_documents),
+                      ),
                     ]),
-                    h('div', { class: 'qc-agent-issue__message' }, issueMessage(issue)),
-                    issue.suggestion
-                      ? h('div', { class: 'qc-agent-issue__suggestion' }, issue.suggestion)
-                      : null,
-                  ]),
-                ),
+                  ),
               ),
+              executedRules.length > 6
+                ? h('details', { class: 'qc-agent-more-rules' }, [
+                    h('summary', `展开其余 ${executedRules.length - 6} 条已执行规则`),
+                    h(
+                      'div',
+                      { class: 'qc-agent-executed-rules qc-agent-executed-rules--more' },
+                      executedRules
+                        .slice(6)
+                        .map((rule) =>
+                          h('div', { class: 'qc-agent-executed-rule' }, [
+                            h('div', { class: 'qc-agent-rule-card__head' }, [
+                              h('span', { class: 'qc-agent-rule-card__id' }, rule.rule_id || '-'),
+                              h(
+                                'em',
+                                { class: ['qc-agent-rule-status', ruleStatusClass(rule)] },
+                                ruleStatusLabel(rule),
+                              ),
+                            ]),
+                            h(
+                              'div',
+                              { class: 'qc-agent-rule-card__name' },
+                              rule.rule_name || '未命名规则',
+                            ),
+                            rule.explanation
+                              ? h('div', { class: 'qc-agent-rule-card__text' }, rule.explanation)
+                              : null,
+                            rule.evidence_summary
+                              ? h('div', { class: 'qc-agent-rule-card__evidence' }, [
+                                  h('strong', '证据：'),
+                                  h('span', rule.evidence_summary),
+                                ])
+                              : null,
+                            h(
+                              'div',
+                              { class: 'qc-agent-rule-card__meta' },
+                              matchedDocumentSummary(rule.matched_documents),
+                            ),
+                          ]),
+                        ),
+                    ),
+                  ])
+                : null,
             ])
           : null,
         skippedRules.length
           ? h('div', { class: 'qc-agent-block' }, [
-              h('div', { class: 'qc-agent-block__title' }, '跳过规则'),
+              h('div', { class: 'qc-agent-block__title' }, '未执行规则'),
               h(
                 'div',
                 { class: 'qc-agent-skipped-note' },
@@ -457,8 +598,14 @@ const AgentResponseCard = defineComponent({
                   .slice(0, 8)
                   .map((rule) =>
                     h('div', { class: 'qc-agent-skipped-rule' }, [
-                      h('span', rule.rule_id || '-'),
-                      h('strong', rule.reason || '执行边界限制'),
+                      h('div', { class: 'qc-agent-skipped-rule__head' }, [
+                        h('span', rule.rule_id || '-'),
+                        h('strong', rule.rule_name || skippedReasonLabel(rule)),
+                      ]),
+                      h('div', { class: 'qc-agent-skipped-rule__reason' }, [
+                        h('strong', skippedReasonLabel(rule)),
+                        h('span', skippedNextStep(rule)),
+                      ]),
                     ]),
                   ),
               ),
@@ -795,6 +942,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-candidates,
 .qc-agent-issues,
+.qc-agent-executed-rules,
 .qc-agent-skipped-rules {
   display: grid;
   gap: 8px;
@@ -802,6 +950,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-candidate,
 .qc-agent-issue,
+.qc-agent-executed-rule,
 .qc-agent-skipped-rule {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -811,7 +960,8 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-candidate__main,
 .qc-agent-issue__head,
-.qc-agent-skipped-rule {
+.qc-agent-rule-card__head,
+.qc-agent-skipped-rule__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -820,8 +970,13 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-candidate__main span,
 .qc-agent-candidate__meta,
+.qc-agent-empty-note,
+.qc-agent-issue__evidence,
 .qc-agent-issue__suggestion,
-.qc-agent-skipped-rule strong {
+.qc-agent-rule-card__evidence,
+.qc-agent-rule-card__meta,
+.qc-agent-rule-card__text,
+.qc-agent-skipped-rule__reason {
   color: #64748b;
   font-size: 12px;
 }
@@ -839,23 +994,83 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-issue__head span,
-.qc-agent-skipped-rule span {
+.qc-agent-rule-card__id,
+.qc-agent-skipped-rule__head span {
   color: #1d4ed8;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 800;
 }
 
-.qc-agent-issue__head em {
+.qc-agent-issue__head em,
+.qc-agent-rule-status {
+  border-radius: 999px;
+  padding: 2px 7px;
   color: #b45309;
   font-size: 12px;
   font-style: normal;
+  font-weight: 800;
 }
 
-.qc-agent-issue__message {
+.qc-agent-rule-status--passed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.qc-agent-rule-status--failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.qc-agent-issue__message,
+.qc-agent-rule-card__name {
   margin-top: 6px;
   color: #0f172a;
   font-size: 13px;
+  font-weight: 800;
+}
+
+.qc-agent-skipped-rule__head strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.qc-agent-issue__evidence,
+.qc-agent-issue__suggestion,
+.qc-agent-rule-card__evidence,
+.qc-agent-rule-card__meta,
+.qc-agent-rule-card__text,
+.qc-agent-skipped-rule__reason {
+  margin-top: 6px;
+  line-height: 1.55;
+}
+
+.qc-agent-issue__evidence strong,
+.qc-agent-issue__suggestion strong,
+.qc-agent-rule-card__evidence strong,
+.qc-agent-skipped-rule__reason strong {
+  margin-right: 4px;
+  color: #334155;
+}
+
+.qc-agent-skipped-rule__reason {
+  display: grid;
+  gap: 2px;
+}
+
+.qc-agent-more-rules {
+  margin-top: 8px;
+}
+
+.qc-agent-more-rules summary {
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-agent-executed-rules--more {
+  margin-top: 8px;
 }
 
 .qc-agent-skipped-note,

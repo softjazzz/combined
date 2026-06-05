@@ -63,13 +63,35 @@ export interface QCAgentRuleIssue {
   rule_id?: string
   rule_name?: string
   passed?: boolean
+  status?: 'passed' | 'failed' | string
   severity?: string
   category?: string
   document_ref?: string
+  document_type?: string
+  source_table?: string
+  check_type?: string
+  checked_target?: string
+  explanation?: string
   message?: string
   description?: string
   evidence_summary?: string
+  matched_documents?: QCAgentMatchedDocument[]
   suggestion?: string
+}
+
+export interface QCAgentMatchedDocument {
+  document_type?: string
+  record_time?: string
+  text_length?: number
+  source_table?: string
+}
+
+export interface QCAgentExecutedRule extends QCAgentRuleIssue {
+  status?: 'passed' | 'failed' | string
+  check_type?: string
+  checked_target?: string
+  explanation?: string
+  matched_documents?: QCAgentMatchedDocument[]
 }
 
 export interface QCAgentSkippedRule {
@@ -77,6 +99,8 @@ export interface QCAgentSkippedRule {
   rule_name?: string
   source?: string
   reason?: string
+  reason_label?: string
+  next_step?: string
   severity?: string
 }
 
@@ -87,7 +111,7 @@ export interface QCAgentRunResult {
   issues?: QCAgentRuleIssue[]
   results?: QCAgentRuleIssue[]
   selected_rules?: Array<Record<string, unknown>>
-  executed_rules?: Array<Record<string, unknown>>
+  executed_rules?: QCAgentExecutedRule[]
   skipped_rules?: QCAgentSkippedRule[]
   warnings?: string[]
 }

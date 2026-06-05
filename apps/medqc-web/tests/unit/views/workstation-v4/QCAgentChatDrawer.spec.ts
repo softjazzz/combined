@@ -100,9 +100,39 @@ describe('QCAgentChatDrawer', () => {
           rule_count: 20,
           total_rules: 4,
         },
+        executed_rules: [
+          {
+            rule_id: 'WR-001',
+            rule_name: '查房记录是否存在',
+            status: 'passed',
+            passed: true,
+            explanation: '检查是否命中查房相关文书。',
+            evidence_summary: '命中 10 份病程/查房文书，最长 842 字',
+            matched_documents: [
+              {
+                document_type: '上级查房记录',
+                record_time: '2026-05-03 08:30:00',
+                text_length: 842,
+                source_table: 'senior_course_record',
+              },
+            ],
+          },
+        ],
         skipped_rules: [
-          { rule_id: 'SC-050', reason: 'unsupported_execution_mode' },
-          { rule_id: 'SC-051', reason: 'requires_llm' },
+          {
+            rule_id: 'SC-050',
+            rule_name: '上级医师查房病情分析或诊疗意见',
+            reason: 'unsupported_execution_mode',
+            reason_label: '暂未接入只读程序化执行器',
+            next_step: '需补充安全程序化 evaluator 或接入正式只读规则引擎。',
+          },
+          {
+            rule_id: 'SC-051',
+            rule_name: '查房记录诊断依据充分性',
+            reason: 'requires_llm',
+            reason_label: '需要受控 LLM 判断',
+            next_step: '需接入受控 LLM 规则执行器后判断。',
+          },
         ],
         warnings: ['16 条规则因执行边界限制被跳过'],
       },
@@ -140,10 +170,16 @@ describe('QCAgentChatDrawer', () => {
     expect(wrapper.text()).toContain('选中规则')
     expect(wrapper.text()).toContain('部分执行')
     expect(wrapper.text()).toContain('get_record_context')
+    expect(wrapper.text()).toContain('已执行规则')
+    expect(wrapper.text()).toContain('查房记录是否存在')
+    expect(wrapper.text()).toContain('检查是否命中查房相关文书。')
+    expect(wrapper.text()).toContain('命中 1 份文书，上级查房记录，合计 842 字')
     expect(wrapper.findAll('.qc-agent-warnings li')).toHaveLength(1)
     expect(wrapper.text()).toContain(
       '这些规则已被选中，但当前即时质控模式未执行；需要正式规则引擎或 LLM 能力后才能判断。',
     )
+    expect(wrapper.text()).toContain('暂未接入只读程序化执行器')
+    expect(wrapper.text()).toContain('需接入受控 LLM 规则执行器后判断。')
     expect(wrapper.text()).toContain('查看脱敏响应摘要')
     expect(wrapper.text()).not.toContain('不应进入请求')
   })
@@ -225,7 +261,15 @@ describe('QCAgentChatDrawer', () => {
       status: 'completed',
       result: {
         qc_summary: { issue_count: 1, passed_count: 0, skipped_count: 0, rule_count: 1 },
-        issues: [{ rule_id: 'WR-002', severity: 'medium', message: '缺少上级医师意见' }],
+        issues: [
+          {
+            rule_id: 'WR-002',
+            severity: 'medium',
+            message: '缺少上级医师意见',
+            evidence_summary: '未见上级医师查房意见线索',
+            suggestion: '请补充上级医师查房意见。',
+          },
+        ],
         documents: [{ record_content: '完整病历正文不允许展示' }],
         internal_data: { medical_text: '完整病历正文不允许展示' },
       },
@@ -239,6 +283,8 @@ describe('QCAgentChatDrawer', () => {
 
     expect(wrapper.text()).toContain('WR-002')
     expect(wrapper.text()).toContain('缺少上级医师意见')
+    expect(wrapper.text()).toContain('未见上级医师查房意见线索')
+    expect(wrapper.text()).toContain('请补充上级医师查房意见。')
     expect(wrapper.text()).not.toContain('完整病历正文不允许展示')
     expect(wrapper.text()).not.toContain('medical_text')
     expect(wrapper.text()).not.toContain('record_content')
