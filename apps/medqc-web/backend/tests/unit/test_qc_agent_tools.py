@@ -342,6 +342,40 @@ class ConsultationWorkspace(FakeWorkspace):
         return hydrated
 
 
+class Visit2298532Workspace(FakeWorkspace):
+    def collect_records(
+        self,
+        *,
+        scope,
+        department,
+        doctor,
+        date_field,
+        start_date,
+        end_date,
+        keyword,
+        record_ids=None,
+    ):
+        records = super().collect_records(
+            scope=scope,
+            department=department,
+            doctor=doctor,
+            date_field=date_field,
+            start_date=start_date,
+            end_date=end_date,
+            keyword=keyword,
+            record_ids=None,
+        )
+        converted = []
+        for record in records:
+            if record.get("visit_id") != "V001":
+                continue
+            item = {**record, "visit_id": "2298532", "patient_id": "P2298532"}
+            converted.append(item)
+        if record_ids:
+            return [record for record in converted if record.get("visit_id") in record_ids]
+        return converted
+
+
 def test_search_records_returns_public_record_summaries_only():
     workspace = FakeWorkspace()
     observation = search_records(
@@ -1766,6 +1800,124 @@ def test_api_chat_explicit_rule_ids_take_priority(client, qc_agent_auth):
     result = body["result"]
     assert "WR-001" in {rule["rule_id"] for rule in result["executed_rules"]}
     assert any(item["rule_id"] == "DG-001" for item in result["skipped_rules"])
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_routes_icd_diagnosis_search(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "查询 2型糖尿病 的 ICD 编码"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["task_type"] == "coding"
+    assert body["parsed_intent"]["capability"] == "search_icd_codes"
+    assert body["parsed_intent"]["result_type"] == "icd_candidates"
+    assert [item["tool_name"] for item in body["plan"]] == ["search_icd_codes"]
+    assert body["plan"][0]["arguments"]["code_type"] in {"diagnosis", "all"}
+    assert body["result"]["candidates"]
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_routes_icd_procedure_search(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "查 腹腔镜胆囊切除术 的手术操作编码"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["capability"] == "search_icd_codes"
+    assert body["parsed_intent"]["code_type"] == "procedure"
+    assert body["plan"][0]["tool_name"] == "search_icd_codes"
+    assert body["plan"][0]["arguments"]["code_type"] == "procedure"
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_routes_record_icd_suggestions(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = lambda: _registry_with_workspace(Visit2298532Workspace())
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "给 visit_id=2298532 推荐诊断和手术编码"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["task_type"] == "coding"
+    assert body["parsed_intent"]["capability"] == "suggest_record_icd_codes"
+    assert body["parsed_intent"]["visit_id"] == "2298532"
+    assert [item["tool_name"] for item in body["plan"]] == ["suggest_record_icd_codes"]
+    assert body["plan"][0]["arguments"]["visit_id"] == "2298532"
+    assert body["plan"][0]["arguments"]["include_procedures"] is True
+    assert body["result"]["diagnosis_candidates"]
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_routes_dip_grouping(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "用 I10.x01，年龄 65，住院 7 天，费用 8000 做 DIP 入组"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["task_type"] == "grouping"
+    assert body["parsed_intent"]["capability"] == "predict_dip_group"
+    assert [item["tool_name"] for item in body["plan"]] == ["predict_dip_group"]
+    assert body["plan"][0]["arguments"]["pdx_code"] == "I10.X01"
+    assert body["plan"][0]["arguments"]["patient_age"] == 65
+    assert body["plan"][0]["arguments"]["los"] == 7
+    assert body["result"]["dip_code"]
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_routes_drg_grouping_with_controlled_fallback(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "用 K80.101 和 51.2101 做 DRG 入组"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["task_type"] == "grouping"
+    assert body["parsed_intent"]["capability"] == "predict_drg_group"
+    assert [item["tool_name"] for item in body["plan"]] == ["predict_drg_group"]
+    assert body["plan"][0]["arguments"]["primary_diagnosis_code"] == "K80.101"
+    assert body["plan"][0]["arguments"]["procedure_codes"] == ["51.2101"]
+    assert body["result"]["external_call"] is True
+    assert body["result"]["fallback"] is True
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_grouping_missing_params_needs_clarification(client, qc_agent_auth):
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "做 DIP 入组预测"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "needs_clarification"
+    assert body["parsed_intent"]["capability"] == "predict_dip_group"
+    assert body["plan"] == []
+    assert any("主诊断" in item for item in body["warnings"])
     _assert_no_raw_context(body)
 
 
