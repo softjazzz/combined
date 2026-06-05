@@ -104,6 +104,42 @@ export interface QCAgentSkippedRule {
   severity?: string
 }
 
+export interface QCAgentICDCandidate {
+  code?: string
+  name?: string
+  type?: string
+  version?: string
+  mapped_code?: string
+  mapped_name?: string
+  confidence?: number
+  match_type?: string
+}
+
+export interface QCAgentCodingSuggestionItem {
+  name?: string
+  existing_code?: string
+  source?: string
+  confidence?: number
+  low_confidence?: boolean
+  candidates?: QCAgentICDCandidate[]
+}
+
+export interface QCAgentGroupingInputSummary {
+  city_name?: string
+  pdx_code?: string
+  adx_count?: number
+  proc_count?: number
+  primary_diagnosis_code?: string
+  secondary_diagnosis_count?: number
+  procedure_count?: number
+  patient_gender?: string
+  patient_age?: number
+  los?: number
+  total_fee?: number
+  total_cost?: number
+  region?: string
+}
+
 export interface QCAgentRunResult {
   record_summary?: Record<string, unknown>
   document_selection_summary?: Record<string, unknown>
@@ -114,6 +150,32 @@ export interface QCAgentRunResult {
   executed_rules?: QCAgentExecutedRule[]
   skipped_rules?: QCAgentSkippedRule[]
   warnings?: string[]
+  query?: string
+  code_type?: 'diagnosis' | 'procedure' | 'all' | string
+  version?: 'insurance' | 'clinical' | string
+  returned?: number
+  candidates?: QCAgentICDCandidate[]
+  diagnosis_candidates?: QCAgentCodingSuggestionItem[]
+  procedure_candidates?: QCAgentCodingSuggestionItem[]
+  success?: boolean
+  fallback?: boolean
+  external_call?: boolean
+  error_summary?: string
+  input_summary?: QCAgentGroupingInputSummary
+  dip_code?: string
+  dip_name?: string
+  dip_type?: string
+  grouping_path?: string
+  adrg_code?: string
+  adrg_name?: string
+  drg_code?: string
+  drg_name?: string
+  weight?: number
+  baseline_payment?: number
+  profit_margin?: number
+  mapped_code?: string
+  mapped_code_name?: string
+  grouping_logic?: string
 }
 
 export interface QCAgentChatResponse {

@@ -85,9 +85,36 @@ describe('QCAgentChatDrawer', () => {
     vi.clearAllMocks()
   })
 
+  it('renders medical intelligence workspace empty state and capability shortcuts', async () => {
+    const wrapper = mountDrawer({
+      userContext: {
+        visit_id: '2298532',
+      },
+    })
+
+    expect(wrapper.text()).toContain('单病历只读分析，支持质控、编码、入组模拟')
+    expect(wrapper.text()).toContain('定位病历、匹配文书、执行规则、输出建议')
+    expect(wrapper.text()).toContain('输入诊断/手术名称，查询 ICD 候选并给出病历编码建议')
+    expect(wrapper.text()).toContain('输入主诊断、手术、年龄和费用，执行 DRG/DIP 模拟')
+
+    const buttons = wrapper.findAll('button')
+    await buttons.find((button) => button.text().includes('ICD 诊断编码查询'))?.trigger('click')
+    expect(
+      (wrapper.find('[data-testid="qc-agent-message-input"]').element as HTMLTextAreaElement).value,
+    ).toContain('2型糖尿病')
+
+    await buttons.find((button) => button.text().includes('DIP 入组预测'))?.trigger('click')
+    expect(
+      (wrapper.find('[data-testid="qc-agent-message-input"]').element as HTMLTextAreaElement).value,
+    ).toContain('DIP 入组')
+  })
+
   it('sends message with safe user_context', async () => {
     chatMock.mockResolvedValueOnce({
       status: 'completed',
+      parsed_intent: {
+        result_type: 'document_qc',
+      },
       plan: [
         { tool_name: 'get_record_context', status: 'success' },
         { tool_name: 'run_document_qc', status: 'success' },
@@ -184,6 +211,179 @@ describe('QCAgentChatDrawer', () => {
     expect(wrapper.text()).not.toContain('不应进入请求')
   })
 
+  it('renders ICD search result card with candidates and actions', async () => {
+    chatMock.mockResolvedValueOnce({
+      status: 'completed',
+      parsed_intent: {
+        result_type: 'icd_candidates',
+      },
+      plan: [{ tool_name: 'search_icd_codes', status: 'success' }],
+      result: {
+        query: '2型糖尿病',
+        code_type: 'diagnosis',
+        version: 'insurance',
+        returned: 1,
+        candidates: [
+          {
+            code: 'E11.900',
+            name: '2型糖尿病',
+            type: 'diagnosis',
+            version: 'insurance',
+            confidence: 0.96,
+            match_type: 'name',
+            mapped_code: 'E11.900x001',
+            mapped_name: '2型糖尿病医保版',
+          },
+        ],
+      },
+    })
+    const wrapper = mountDrawer()
+
+    await wrapper.find('[data-testid="qc-agent-message-input"]').setValue('查询 2型糖尿病 ICD 编码')
+    await wrapper.find('[data-testid="qc-agent-send-button"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('ICD 查询')
+    expect(wrapper.text()).toContain('查询词')
+    expect(wrapper.text()).toContain('2型糖尿病')
+    expect(wrapper.text()).toContain('E11.900')
+    expect(wrapper.text()).toContain('置信度：96%')
+    expect(wrapper.text()).toContain('映射：E11.900x001 2型糖尿病医保版')
+    expect(wrapper.text()).toContain('复制编码')
+    expect(wrapper.text()).toContain('用该编码做 DRG/DIP 入组')
+  })
+
+  it('renders coding suggestion result with diagnosis and procedure candidates', async () => {
+    chatMock.mockResolvedValueOnce({
+      status: 'completed',
+      parsed_intent: {
+        result_type: 'record_icd_suggestions',
+      },
+      plan: [{ tool_name: 'suggest_record_icd_codes', status: 'success' }],
+      result: {
+        record_summary: {
+          visit_id: '2298532',
+          patient_name: '张三',
+          department: '神经内科',
+        },
+        diagnosis_candidates: [
+          {
+            name: '高血压',
+            existing_code: 'I10.x01',
+            source: 'structured_context',
+            confidence: 0.9,
+            candidates: [{ code: 'I10.x01', name: '高血压', confidence: 0.93 }],
+          },
+        ],
+        procedure_candidates: [
+          {
+            name: '腰椎穿刺术',
+            source: 'explicit_record_field',
+            confidence: 0.65,
+            low_confidence: true,
+            candidates: [{ code: '03.3101', name: '腰椎穿刺术', confidence: 0.88 }],
+          },
+        ],
+        warnings: ['仅为编码建议，不写入正式首页或结算表'],
+      },
+    })
+    const wrapper = mountDrawer()
+
+    await wrapper
+      .find('[data-testid="qc-agent-message-input"]')
+      .setValue('给 visit_id=2298532 推荐编码')
+    await wrapper.find('[data-testid="qc-agent-send-button"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('编码建议')
+    expect(wrapper.text()).toContain('张三 / 神经内科 / visit_id=2298532')
+    expect(wrapper.text()).toContain('主要诊断候选')
+    expect(wrapper.text()).toContain('高血压')
+    expect(wrapper.text()).toContain('来源：病案首页/结构化上下文')
+    expect(wrapper.text()).toContain('手术/操作候选')
+    expect(wrapper.text()).toContain('腰椎穿刺术')
+    expect(wrapper.text()).toContain('低置信度')
+    expect(wrapper.text()).toContain('仅为编码建议，不写入正式首页或结算表')
+  })
+
+  it('renders DRG and DIP grouping result cards', async () => {
+    chatMock
+      .mockResolvedValueOnce({
+        status: 'completed',
+        parsed_intent: {
+          result_type: 'drg_group',
+        },
+        result: {
+          success: false,
+          fallback: true,
+          external_call: true,
+          input_summary: {
+            primary_diagnosis_code: 'K80.101',
+            secondary_diagnosis_count: 2,
+            procedure_count: 1,
+            total_cost: 12000,
+          },
+          adrg_code: 'HD1',
+          adrg_name: '胆道疾病',
+          drg_code: 'HD19',
+          drg_name: '胆囊切除',
+          weight: 1.21,
+          baseline_payment: 9800,
+          profit_margin: -2200,
+          mapped_code: 'K80.101',
+          mapped_code_name: '胆囊结石伴胆囊炎',
+          grouping_logic: '按主诊断和手术进入胆道疾病组',
+          error_summary: '外部分组服务调用失败',
+          warnings: ['模拟入组；外部失败时显示降级模式'],
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'completed',
+        parsed_intent: {
+          result_type: 'dip_group',
+        },
+        result: {
+          success: true,
+          input_summary: {
+            city_name: '泸州市',
+            pdx_code: 'I10.x01',
+            proc_count: 0,
+            total_fee: 8000,
+            los: 7,
+          },
+          dip_code: 'DIP001',
+          dip_name: '高血压病种',
+          dip_type: '核心病种',
+          grouping_path: '主诊断入组',
+        },
+      })
+
+    const wrapper = mountDrawer()
+    await wrapper
+      .find('[data-testid="qc-agent-message-input"]')
+      .setValue('用 K80.101 和 51.2101 做 DRG 入组')
+    await wrapper.find('[data-testid="qc-agent-send-button"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('DRG 模拟')
+    expect(wrapper.text()).toContain('降级模式')
+    expect(wrapper.text()).toContain('主诊断编码')
+    expect(wrapper.text()).toContain('K80.101')
+    expect(wrapper.text()).toContain('HD19 胆囊切除')
+    expect(wrapper.text()).toContain('外部分组服务调用失败')
+
+    await wrapper.find('[data-testid="qc-agent-message-input"]').setValue('用 I10.x01 做 DIP 入组')
+    await wrapper.find('[data-testid="qc-agent-send-button"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('DIP 预测')
+    expect(wrapper.text()).toContain('泸州市')
+    expect(wrapper.text()).toContain('DIP001')
+    expect(wrapper.text()).toContain('高血压病种')
+    expect(wrapper.text()).toContain('主诊断入组')
+    expect(wrapper.text()).toContain('8000.00 元 / 7 天')
+  })
+
   it('renders needs_confirmation candidates and continues with confirm_selection', async () => {
     chatMock
       .mockResolvedValueOnce({
@@ -272,8 +472,11 @@ describe('QCAgentChatDrawer', () => {
         ],
         documents: [{ record_content: '完整病历正文不允许展示' }],
         internal_data: { medical_text: '完整病历正文不允许展示' },
+        raw_response: { token: 'secret-token' },
+        vector: 'embedding-vector',
       },
       prompt: '规则 prompt 不允许展示',
+      api_key: 'secret-api-key',
     })
     const wrapper = mountDrawer()
 
@@ -289,5 +492,8 @@ describe('QCAgentChatDrawer', () => {
     expect(wrapper.text()).not.toContain('medical_text')
     expect(wrapper.text()).not.toContain('record_content')
     expect(wrapper.text()).not.toContain('规则 prompt 不允许展示')
+    expect(wrapper.text()).not.toContain('secret-token')
+    expect(wrapper.text()).not.toContain('embedding-vector')
+    expect(wrapper.text()).not.toContain('secret-api-key')
   })
 })

@@ -19,6 +19,12 @@ const SENSITIVE_KEYS = new Set([
   'prompt',
   'examples',
   'raw_llm_output',
+  'raw_response',
+  'embedding',
+  'vector',
+  'api_key',
+  'token',
+  'access_token',
 ])
 
 export type QCAgentMessageRole = 'user' | 'assistant' | 'system'
@@ -54,7 +60,15 @@ export function sanitizeQcAgentPayload<T = unknown>(value: T): T {
 }
 
 function responseTitle(response: QCAgentChatResponse) {
-  if (response.status === 'completed') return '已完成只读文书质控'
+  const resultType = String(response.parsed_intent?.result_type || '')
+  if (response.status === 'completed' && resultType === 'icd_candidates')
+    return '已完成 ICD 编码查询'
+  if (response.status === 'completed' && resultType === 'record_icd_suggestions') {
+    return '已生成当前病历编码建议'
+  }
+  if (response.status === 'completed' && resultType === 'drg_group') return '已完成 DRG 入组模拟'
+  if (response.status === 'completed' && resultType === 'dip_group') return '已完成 DIP 入组预测'
+  if (response.status === 'completed') return '已完成只读分析'
   if (response.status === 'needs_confirmation') return '命中多份病历，请确认单份病历'
   if (response.status === 'needs_clarification') return '需要补充信息后继续'
   if (response.status === 'unsupported') return '该操作不在受控助手范围内'

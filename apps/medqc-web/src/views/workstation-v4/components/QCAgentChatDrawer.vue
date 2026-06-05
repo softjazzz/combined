@@ -1,10 +1,10 @@
 <template>
   <a-drawer
     :open="open"
-    width="620"
+    width="760"
     placement="right"
     class="qc-agent-drawer"
-    :body-style="{ padding: 0, background: '#f8fbff' }"
+    :body-style="{ padding: 0, background: '#f6f9fc' }"
     @close="handleClose"
   >
     <template #title>
@@ -14,49 +14,89 @@
             质控助手
           </div>
           <div class="qc-agent-drawer__subtitle">
-            单病历只读质控，不写正式结果表
+            单病历只读分析，支持质控、编码、入组模拟
           </div>
         </div>
         <SafetyCertificateOutlined class="qc-agent-drawer__title-icon" />
       </div>
     </template>
 
-    <div class="qc-agent-drawer__layout">
+    <div class="qc-agent-panel">
       <section class="qc-agent-context">
-        <div class="qc-agent-context__label">
-          当前上下文
+        <div>
+          <div class="qc-agent-context__label">
+            当前上下文
+          </div>
+          <div class="qc-agent-context__value">
+            {{ contextSummary }}
+          </div>
         </div>
-        <div class="qc-agent-context__value">
-          {{ contextSummary }}
+        <div class="qc-agent-capabilities">
+          <button
+            v-for="capability in capabilityItems"
+            :key="capability.key"
+            type="button"
+            :class="[
+              'qc-agent-capability',
+              { 'qc-agent-capability--active': currentCapability === capability.key },
+            ]"
+            @click="selectCapability(capability.key)"
+          >
+            {{ capability.label }}
+          </button>
         </div>
       </section>
 
       <section class="qc-agent-shortcuts">
-        <a-button
-          v-for="shortcut in shortcutItems"
-          :key="shortcut"
-          size="small"
-          class="qc-agent-shortcuts__button"
-          @click="applyShortcut(shortcut)"
+        <div
+          v-for="group in shortcutGroups"
+          :key="group.key"
+          class="qc-agent-shortcut-group"
         >
-          {{ shortcut }}
-        </a-button>
+          <div class="qc-agent-shortcut-group__title">
+            {{ group.title }}
+          </div>
+          <div class="qc-agent-shortcut-group__actions">
+            <a-button
+              v-for="shortcut in group.items"
+              :key="shortcut.label"
+              size="small"
+              class="qc-agent-shortcuts__button"
+              @click="applyShortcut(shortcut)"
+            >
+              {{ shortcut.label }}
+            </a-button>
+          </div>
+        </div>
       </section>
 
       <section
-        class="qc-agent-chat"
+        class="qc-agent-workspace"
         data-testid="qc-agent-chat-messages"
       >
         <div
           v-if="!hasMessages"
           class="qc-agent-empty"
         >
-          <RobotOutlined class="qc-agent-empty__icon" />
-          <div class="qc-agent-empty__title">
-            输入一句质控请求
-          </div>
-          <div class="qc-agent-empty__desc">
-            例如：对 visit_id=2298532 的查房记录做质控
+          <div
+            v-for="item in emptyCapabilityCards"
+            :key="item.title"
+            class="qc-agent-empty-card"
+          >
+            <div class="qc-agent-empty-card__title">
+              {{ item.title }}
+            </div>
+            <div class="qc-agent-empty-card__desc">
+              {{ item.desc }}
+            </div>
+            <ul class="qc-agent-empty-card__list">
+              <li
+                v-for="point in item.points"
+                :key="point"
+              >
+                {{ point }}
+              </li>
+            </ul>
           </div>
         </div>
 
@@ -86,24 +126,28 @@
         {{ error }}
       </section>
 
-      <section class="qc-agent-input">
+      <section class="qc-agent-commandbar">
         <a-textarea
           v-model:value="draftMessage"
           data-testid="qc-agent-message-input"
           :auto-size="{ minRows: 3, maxRows: 5 }"
-          placeholder="请输入自然语言质控请求，支持 visit_id、住院号、姓名或科室"
+          placeholder="输入质控、编码或入组请求，支持 visit_id、诊断名称、ICD 编码、DRG/DIP 查询"
           :disabled="loading"
           @keydown.enter.exact.prevent="handleSend"
         />
-        <div class="qc-agent-input__actions">
-          <a-button
-            size="small"
-            :disabled="loading"
-            @click="clear"
-          >
-            <ClearOutlined />
-            清空
-          </a-button>
+        <div class="qc-agent-commandbar__actions">
+          <div class="qc-agent-commandbar__left">
+            <a-button
+              v-for="action in commandActions"
+              :key="action.label"
+              size="small"
+              class="qc-agent-commandbar__button"
+              :disabled="loading && action.kind !== 'clear'"
+              @click="handleCommandAction(action.kind)"
+            >
+              {{ action.label }}
+            </a-button>
+          </div>
           <a-button
             type="primary"
             size="small"
@@ -112,7 +156,7 @@
             @click="handleSend"
           >
             <SendOutlined />
-            发送
+            {{ sendButtonText }}
           </a-button>
         </div>
       </section>
@@ -122,23 +166,50 @@
 
 <script setup lang="ts">
 import { computed, defineComponent, h, ref } from 'vue'
-import {
-  ClearOutlined,
-  RobotOutlined,
-  SafetyCertificateOutlined,
-  SendOutlined,
-} from '@ant-design/icons-vue'
+import { SafetyCertificateOutlined, SendOutlined } from '@ant-design/icons-vue'
 
 import type {
   QCAgentCandidate,
   QCAgentChatResponse,
+  QCAgentCodingSuggestionItem,
   QCAgentExecutedRule,
+  QCAgentICDCandidate,
   QCAgentMatchedDocument,
   QCAgentRuleIssue,
+  QCAgentRunResult,
   QCAgentSkippedRule,
   QCAgentUserContext,
 } from '@/api/qcAgent'
 import { sanitizeQcAgentPayload, useQcAgentChat } from '../composables/useQcAgentChat'
+
+type AgentCapability = 'qc' | 'coding' | 'grouping'
+type NormalizedResultType =
+  | 'qc_result'
+  | 'icd_search_result'
+  | 'coding_suggestion_result'
+  | 'drg_grouping_result'
+  | 'dip_grouping_result'
+  | 'clarification'
+  | 'confirmation'
+  | 'unsupported'
+  | 'unknown'
+
+interface ShortcutItem {
+  label: string
+  capability: AgentCapability
+  build: (visitId: string) => string
+}
+
+interface ShortcutGroup {
+  key: AgentCapability
+  title: string
+  items: ShortcutItem[]
+}
+
+interface CommandAction {
+  label: string
+  kind: AgentCapability | 'record' | 'clear'
+}
 
 const open = defineModel<boolean>('open', { default: false })
 
@@ -151,10 +222,130 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const shortcutItems = ['查房记录质控', '出院记录完整性', '用 WR-001 检查查房记录', '查看执行计划']
+const selectedCapability = ref<AgentCapability>('qc')
 const draftMessage = ref('')
 
-const { messages, loading, error, hasMessages, chat, confirmCandidate, clear } = useQcAgentChat()
+const { messages, loading, error, hasMessages, lastResponse, chat, confirmCandidate, clear } =
+  useQcAgentChat()
+
+const capabilityItems: Array<{ key: AgentCapability; label: string }> = [
+  { key: 'qc', label: '质控' },
+  { key: 'coding', label: '编码' },
+  { key: 'grouping', label: 'DRG/DIP' },
+]
+
+const commandActions: CommandAction[] = [
+  { label: '规则', kind: 'qc' },
+  { label: '编码', kind: 'coding' },
+  { label: '入组', kind: 'grouping' },
+  { label: '病历', kind: 'record' },
+  { label: '清空', kind: 'clear' },
+]
+
+const shortcutGroups: ShortcutGroup[] = [
+  {
+    key: 'qc',
+    title: '质控',
+    items: [
+      {
+        label: '查房记录质控',
+        capability: 'qc',
+        build: (visitId) =>
+          visitId ? `对 visit_id=${visitId} 的查房记录做质控` : '对查房记录做质控',
+      },
+      {
+        label: '出院记录完整性',
+        capability: 'qc',
+        build: (visitId) =>
+          visitId ? `对 visit_id=${visitId} 的出院记录做完整性质控` : '对出院记录做完整性质控',
+      },
+      {
+        label: '用 WR-001 检查',
+        capability: 'qc',
+        build: (visitId) =>
+          visitId ? `用 WR-001 检查 visit_id=${visitId} 的查房记录` : '用 WR-001 检查查房记录',
+      },
+      {
+        label: '查看执行计划',
+        capability: 'qc',
+        build: (visitId) =>
+          visitId ? `对 visit_id=${visitId} 说明可执行的质控计划` : '说明可执行的质控计划',
+      },
+    ],
+  },
+  {
+    key: 'coding',
+    title: '编码',
+    items: [
+      {
+        label: 'ICD 诊断编码查询',
+        capability: 'coding',
+        build: () => '查询 2型糖尿病 的 ICD 诊断编码',
+      },
+      {
+        label: '手术操作编码查询',
+        capability: 'coding',
+        build: () => '查 腹腔镜胆囊切除术 的手术操作编码',
+      },
+      {
+        label: '当前病历编码建议',
+        capability: 'coding',
+        build: (visitId) =>
+          visitId ? `给 visit_id=${visitId} 推荐诊断和手术编码` : '给当前病历推荐诊断和手术编码',
+      },
+      {
+        label: '编码映射医保版',
+        capability: 'coding',
+        build: () => '查询医保版高血压编码',
+      },
+    ],
+  },
+  {
+    key: 'grouping',
+    title: '入组',
+    items: [
+      {
+        label: 'DRG 实时入组',
+        capability: 'grouping',
+        build: () => '用主诊断 K80.101 和手术 51.2101 做 DRG 入组',
+      },
+      {
+        label: 'DIP 入组预测',
+        capability: 'grouping',
+        build: () => '用 I10.x01，年龄 65，住院 7 天，费用 8000 做 DIP 入组',
+      },
+      {
+        label: '当前病历模拟入组',
+        capability: 'grouping',
+        build: (visitId) =>
+          visitId ? `对 visit_id=${visitId} 做 DRG/DIP 模拟入组` : '对当前病历做 DRG/DIP 模拟入组',
+      },
+      {
+        label: '解释入组依据',
+        capability: 'grouping',
+        build: () => '解释 DRG/DIP 入组依据和需要的主诊断、手术、年龄、费用参数',
+      },
+    ],
+  },
+]
+
+const emptyCapabilityCards = [
+  {
+    title: '质控',
+    desc: '定位病历、匹配文书、执行规则、输出建议',
+    points: ['查房/出院/病程记录质控', '执行计划与证据摘要', '未执行规则边界说明'],
+  },
+  {
+    title: '编码',
+    desc: '输入诊断/手术名称，查询 ICD 候选并给出病历编码建议',
+    points: ['医保版/国临版候选', '编码映射与置信度', '当前病历诊断/手术建议'],
+  },
+  {
+    title: '入组',
+    desc: '输入主诊断、手术、年龄和费用，执行 DRG/DIP 模拟',
+    points: ['DRG 实时入组', 'DIP 预测路径', '分组结果与风险提示'],
+  },
+]
 
 const safeUserContext = computed(() => sanitizeQcAgentPayload(props.userContext || {}))
 
@@ -167,28 +358,56 @@ const contextSummary = computed(() => {
       safeUserContext.value.department || safeUserContext.value.dept || '未标注科室'
     return `${name} / ${department} / visit_id=${visitId}`
   }
-  return '请输入 visit_id、住院号、姓名或科室'
+  return '请输入 visit_id、住院号、患者姓名或科室'
 })
 
-function buildMessageFromShortcut(shortcut: string) {
-  const visitId = String(safeUserContext.value.visit_id || '').trim()
-  if (shortcut === '查看执行计划') return '对当前病历说明可执行的质控计划'
-  if (shortcut === '出院记录完整性') {
-    return visitId ? `对 visit_id=${visitId} 的出院记录做完整性质控` : '对出院记录做完整性质控'
-  }
-  if (shortcut === '用 WR-001 检查查房记录') {
-    return visitId ? `用 WR-001 检查 visit_id=${visitId} 的查房记录` : '用 WR-001 检查查房记录'
-  }
-  return visitId ? `对 visit_id=${visitId} 的查房记录做质控` : '对查房记录做质控'
+const currentCapability = computed<AgentCapability>(() => {
+  const responseCapability = capabilityFromResponse(lastResponse.value || undefined)
+  if (responseCapability) return responseCapability
+  return selectedCapability.value
+})
+
+const sendButtonText = computed(() => {
+  if (currentCapability.value === 'qc') return '执行质控'
+  if (currentCapability.value === 'coding') return '查询编码'
+  if (currentCapability.value === 'grouping') return '模拟入组'
+  return '执行分析'
+})
+
+function visitIdFromContext() {
+  return String(safeUserContext.value.visit_id || '').trim()
 }
 
-function applyShortcut(shortcut: string) {
-  draftMessage.value = buildMessageFromShortcut(shortcut)
+function selectCapability(capability: AgentCapability) {
+  selectedCapability.value = capability
+}
+
+function applyShortcut(shortcut: ShortcutItem) {
+  selectedCapability.value = shortcut.capability
+  draftMessage.value = shortcut.build(visitIdFromContext())
+}
+
+function handleCommandAction(kind: CommandAction['kind']) {
+  if (kind === 'clear') {
+    clear()
+    draftMessage.value = ''
+    return
+  }
+  if (kind === 'record') {
+    draftMessage.value = visitIdFromContext()
+      ? `查看 visit_id=${visitIdFromContext()} 的病历可分析内容`
+      : '根据 visit_id 查看病历可分析内容'
+    return
+  }
+  selectedCapability.value = kind
+  const defaultShortcut = shortcutGroups.find((group) => group.key === kind)?.items[0]
+  if (defaultShortcut) draftMessage.value = defaultShortcut.build(visitIdFromContext())
 }
 
 async function handleSend() {
   const message = draftMessage.value.trim()
   if (!message) return
+  selectedCapability.value = capabilityFromText(message)
   draftMessage.value = ''
   await chat(message, { userContext: safeUserContext.value })
 }
@@ -202,6 +421,54 @@ function handleClose() {
   emit('close')
 }
 
+function capabilityFromText(text: string): AgentCapability {
+  if (/\b(?:DRG|DIP)\b/i.test(text) || text.includes('入组')) return 'grouping'
+  if (text.includes('编码') || /\bICD\b/i.test(text)) return 'coding'
+  return 'qc'
+}
+
+function capabilityFromResponse(response?: QCAgentChatResponse): AgentCapability | null {
+  const capability = String(response?.parsed_intent?.capability || '')
+  const resultType = normalizeResultType(response)
+  if (capability.includes('icd') || resultType === 'icd_search_result') return 'coding'
+  if (resultType === 'coding_suggestion_result') return 'coding'
+  if (capability.includes('dip') || capability.includes('drg')) return 'grouping'
+  if (resultType === 'drg_grouping_result' || resultType === 'dip_grouping_result')
+    return 'grouping'
+  if (resultType === 'qc_result') return 'qc'
+  return null
+}
+
+function normalizeResultType(response?: QCAgentChatResponse): NormalizedResultType {
+  if (!response) return 'unknown'
+  if (response.status === 'needs_confirmation') return 'confirmation'
+  if (response.status === 'needs_clarification') return 'clarification'
+  if (response.status === 'unsupported') return 'unsupported'
+  const resultType = String(response.parsed_intent?.result_type || '')
+  if (resultType === 'document_qc' || resultType === 'qc_result') return 'qc_result'
+  if (resultType === 'icd_candidates' || resultType === 'icd_search_result') {
+    return 'icd_search_result'
+  }
+  if (resultType === 'record_icd_suggestions' || resultType === 'coding_suggestion_result') {
+    return 'coding_suggestion_result'
+  }
+  if (resultType === 'drg_group' || resultType === 'drg_grouping_result') {
+    return 'drg_grouping_result'
+  }
+  if (resultType === 'dip_group' || resultType === 'dip_grouping_result') {
+    return 'dip_grouping_result'
+  }
+  const result = response.result
+  if (result?.qc_summary) return 'qc_result'
+  if (result?.candidates) return 'icd_search_result'
+  if (result?.diagnosis_candidates || result?.procedure_candidates) {
+    return 'coding_suggestion_result'
+  }
+  if (result?.drg_code || result?.adrg_code || result?.external_call) return 'drg_grouping_result'
+  if (result?.dip_code || result?.dip_name) return 'dip_grouping_result'
+  return 'unknown'
+}
+
 function statusLabel(status: string) {
   if (status === 'completed') return '完成'
   if (status === 'needs_confirmation') return '待确认'
@@ -210,8 +477,65 @@ function statusLabel(status: string) {
   return status || '未知'
 }
 
+function resultTypeLabel(type: NormalizedResultType) {
+  if (type === 'qc_result') return '文书质控'
+  if (type === 'icd_search_result') return 'ICD 查询'
+  if (type === 'coding_suggestion_result') return '编码建议'
+  if (type === 'drg_grouping_result') return 'DRG 模拟'
+  if (type === 'dip_grouping_result') return 'DIP 预测'
+  if (type === 'confirmation') return '候选确认'
+  if (type === 'clarification') return '澄清信息'
+  if (type === 'unsupported') return '受控拒绝'
+  return '智能分析'
+}
+
+function codeTypeLabel(value: string | undefined) {
+  if (value === 'diagnosis') return '诊断'
+  if (value === 'procedure') return '手术操作'
+  if (value === 'all') return '全部'
+  return value || '-'
+}
+
+function versionLabel(value: string | undefined) {
+  if (value === 'insurance') return '医保版'
+  if (value === 'clinical') return '国临版'
+  return value || '-'
+}
+
 function safeArray<T>(value: T[] | undefined): T[] {
   return Array.isArray(value) ? value : []
+}
+
+function textValue(value: unknown, fallback = '-') {
+  const text = String(value ?? '').trim()
+  return text || fallback
+}
+
+function numberValue(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function formatNumber(value: unknown, fallback = '-') {
+  return typeof value === 'number' && Number.isFinite(value) ? String(value) : fallback
+}
+
+function formatMoney(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(2)} 元` : '-'
+}
+
+function formatConfidence(value: unknown) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-'
+  return `${Math.round(value * 100)}%`
+}
+
+function uniqueTextItems(items: Array<string | undefined>) {
+  const seen = new Set<string>()
+  return items.filter((item): item is string => {
+    const text = String(item || '').trim()
+    if (!text || seen.has(text)) return false
+    seen.add(text)
+    return true
+  })
 }
 
 function issueMessage(issue: QCAgentRuleIssue) {
@@ -258,21 +582,7 @@ function skippedNextStep(rule: QCAgentSkippedRule) {
   return '请由质控员复核规则适用性和执行方式。'
 }
 
-function numberValue(value: unknown, fallback = 0) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
-}
-
-function uniqueTextItems(items: Array<string | undefined>) {
-  const seen = new Set<string>()
-  return items.filter((item): item is string => {
-    const text = String(item || '').trim()
-    if (!text || seen.has(text)) return false
-    seen.add(text)
-    return true
-  })
-}
-
-function executionStats(result: QCAgentChatResponse['result'] | undefined) {
+function executionStats(result: QCAgentRunResult | undefined) {
   const qcSummary = result?.qc_summary || {}
   const skippedRules = safeArray(result?.skipped_rules)
   const skippedCount = numberValue(qcSummary.skipped_count, skippedRules.length)
@@ -293,7 +603,7 @@ function executionStats(result: QCAgentChatResponse['result'] | undefined) {
   }
 }
 
-function conclusionText(result: QCAgentChatResponse['result'] | undefined) {
+function conclusionText(result: QCAgentRunResult | undefined) {
   const stats = executionStats(result)
   if (stats.issueCount > 0) return `发现 ${stats.issueCount} 条问题，需复核处理。`
   if (stats.skippedCount > 0) {
@@ -308,19 +618,399 @@ function rawSummary(response: QCAgentChatResponse) {
       status: response.status,
       parsed_intent: response.parsed_intent,
       plan: response.plan,
-      result: response.result
-        ? {
-            qc_summary: response.result.qc_summary,
-            document_selection_summary: response.result.document_selection_summary,
-            selected_rule_count: response.result.selected_rules?.length,
-            skipped_rule_count: response.result.skipped_rules?.length,
-          }
-        : undefined,
+      result_type: normalizeResultType(response),
+      result: response.result,
       warnings: response.warnings,
     }),
     null,
     2,
   )
+}
+
+function fieldRow(label: string, value: unknown) {
+  return h('div', { class: 'qc-agent-field' }, [
+    h('span', { class: 'qc-agent-field__label' }, label),
+    h('strong', { class: 'qc-agent-field__value' }, textValue(value)),
+  ])
+}
+
+function metricItem(label: string, value: unknown) {
+  return h('div', { class: 'qc-agent-summary-item' }, [
+    h('span', label),
+    h('strong', textValue(value, '0')),
+  ])
+}
+
+function renderPlan(response: QCAgentChatResponse) {
+  const plan = safeArray(response.plan)
+  if (!plan.length) return null
+  return h('div', { class: 'qc-agent-block' }, [
+    h('div', { class: 'qc-agent-block__title' }, '执行计划'),
+    h(
+      'ol',
+      { class: 'qc-agent-plan' },
+      plan.map((item) =>
+        h('li', { class: 'qc-agent-plan__item' }, [
+          h('span', { class: 'qc-agent-plan__dot' }),
+          h('span', { class: 'qc-agent-plan__tool' }, item.tool_name || '-'),
+          h('span', { class: 'qc-agent-plan__status' }, item.status || ''),
+        ]),
+      ),
+    ),
+  ])
+}
+
+function renderWarnings(response: QCAgentChatResponse) {
+  const warnings = uniqueTextItems([
+    ...safeArray(response.warnings),
+    ...safeArray(response.result?.warnings),
+  ])
+  if (!warnings.length) return null
+  return h('div', { class: 'qc-agent-block' }, [
+    h('div', { class: 'qc-agent-block__title' }, '提示'),
+    h(
+      'ul',
+      { class: 'qc-agent-warnings' },
+      warnings.map((item) => h('li', item)),
+    ),
+  ])
+}
+
+function renderCandidates(
+  response: QCAgentChatResponse,
+  emit: (event: 'confirm-candidate', candidate: QCAgentCandidate) => void,
+) {
+  const candidates = safeArray(response.candidates)
+  if (!candidates.length) return null
+  return h('div', { class: 'qc-agent-block' }, [
+    h('div', { class: 'qc-agent-block__title' }, '候选病历'),
+    h(
+      'div',
+      { class: 'qc-agent-candidates' },
+      candidates.map((candidate) =>
+        h('div', { class: 'qc-agent-candidate' }, [
+          h('div', { class: 'qc-agent-candidate__main' }, [
+            h('strong', candidate.patient_name || '未命名患者'),
+            h('span', `visit_id=${candidate.visit_id || '-'}`),
+          ]),
+          h(
+            'div',
+            { class: 'qc-agent-candidate__meta' },
+            [
+              candidate.department || '未标注科室',
+              candidate.discharge_date ? `出院 ${candidate.discharge_date}` : '',
+              candidate.mr_no ? `病案号 ${candidate.mr_no}` : '',
+            ]
+              .filter(Boolean)
+              .join(' / '),
+          ),
+          h(
+            'button',
+            {
+              class: 'qc-agent-candidate__button',
+              type: 'button',
+              onClick: () => emit('confirm-candidate', candidate),
+            },
+            '选择并继续',
+          ),
+        ]),
+      ),
+    ),
+  ])
+}
+
+function renderQCResult(result: QCAgentRunResult | undefined) {
+  const issueSource = safeArray(result?.issues?.length ? result?.issues : result?.results)
+  const issues = issueSource.filter((issue) => issue.passed !== true && issue.status !== 'passed')
+  const executedRules = safeArray(result?.executed_rules)
+  const skippedRules = safeArray(result?.skipped_rules)
+  const stats = executionStats(result)
+
+  return [
+    h('div', { class: 'qc-agent-conclusion' }, [
+      h('div', { class: 'qc-agent-conclusion__label' }, '本次结论'),
+      h('div', { class: 'qc-agent-conclusion__text' }, conclusionText(result)),
+    ]),
+    h('div', { class: 'qc-agent-summary-grid' }, [
+      metricItem('已发现问题', stats.issueCount),
+      metricItem('已执行通过', stats.passedCount),
+      metricItem('未执行规则', stats.skippedCount),
+      metricItem('选中规则', stats.selectedRuleCount),
+    ]),
+    h('div', { class: 'qc-agent-block' }, [
+      h('div', { class: 'qc-agent-block__title' }, '已发现问题'),
+      issues.length
+        ? h(
+            'div',
+            { class: 'qc-agent-issues' },
+            issues.map((issue) =>
+              h('div', { class: 'qc-agent-issue' }, [
+                h('div', { class: 'qc-agent-issue__head' }, [
+                  h('span', issue.rule_id || '-'),
+                  h('em', issue.severity || 'normal'),
+                ]),
+                h('div', { class: 'qc-agent-issue__message' }, issueMessage(issue)),
+                issue.evidence_summary
+                  ? h('div', { class: 'qc-agent-issue__evidence' }, [
+                      h('strong', '证据：'),
+                      h('span', issue.evidence_summary),
+                    ])
+                  : null,
+                issue.suggestion
+                  ? h('div', { class: 'qc-agent-issue__suggestion' }, [
+                      h('strong', '建议：'),
+                      h('span', issue.suggestion),
+                    ])
+                  : null,
+              ]),
+            ),
+          )
+        : h('div', { class: 'qc-agent-empty-note' }, '已执行规则暂未发现问题。'),
+    ]),
+    executedRules.length
+      ? h('div', { class: 'qc-agent-block' }, [
+          h('div', { class: 'qc-agent-block__title' }, '已执行规则'),
+          h(
+            'div',
+            { class: 'qc-agent-executed-rules' },
+            executedRules.slice(0, 6).map((rule) => renderExecutedRule(rule)),
+          ),
+          executedRules.length > 6
+            ? h('details', { class: 'qc-agent-more-rules' }, [
+                h('summary', `展开其余 ${executedRules.length - 6} 条已执行规则`),
+                h(
+                  'div',
+                  { class: 'qc-agent-executed-rules qc-agent-executed-rules--more' },
+                  executedRules.slice(6).map((rule) => renderExecutedRule(rule)),
+                ),
+              ])
+            : null,
+        ])
+      : null,
+    skippedRules.length
+      ? h('div', { class: 'qc-agent-block' }, [
+          h('div', { class: 'qc-agent-block__title' }, '未执行规则'),
+          h(
+            'div',
+            { class: 'qc-agent-skipped-note' },
+            '这些规则已被选中，但当前即时质控模式未执行；需要正式规则引擎或 LLM 能力后才能判断。',
+          ),
+          h(
+            'div',
+            { class: 'qc-agent-skipped-rules' },
+            skippedRules
+              .slice(0, 8)
+              .map((rule) =>
+                h('div', { class: 'qc-agent-skipped-rule' }, [
+                  h('div', { class: 'qc-agent-skipped-rule__head' }, [
+                    h('span', rule.rule_id || '-'),
+                    h('strong', rule.rule_name || skippedReasonLabel(rule)),
+                  ]),
+                  h('div', { class: 'qc-agent-skipped-rule__reason' }, [
+                    h('strong', skippedReasonLabel(rule)),
+                    h('span', skippedNextStep(rule)),
+                  ]),
+                ]),
+              ),
+          ),
+        ])
+      : null,
+  ]
+}
+
+function renderExecutedRule(rule: QCAgentExecutedRule) {
+  return h('div', { class: 'qc-agent-executed-rule' }, [
+    h('div', { class: 'qc-agent-rule-card__head' }, [
+      h('span', { class: 'qc-agent-rule-card__id' }, rule.rule_id || '-'),
+      h('em', { class: ['qc-agent-rule-status', ruleStatusClass(rule)] }, ruleStatusLabel(rule)),
+    ]),
+    h('div', { class: 'qc-agent-rule-card__name' }, rule.rule_name || '未命名规则'),
+    rule.explanation ? h('div', { class: 'qc-agent-rule-card__text' }, rule.explanation) : null,
+    rule.evidence_summary
+      ? h('div', { class: 'qc-agent-rule-card__evidence' }, [
+          h('strong', '证据：'),
+          h('span', rule.evidence_summary),
+        ])
+      : null,
+    h('div', { class: 'qc-agent-rule-card__meta' }, matchedDocumentSummary(rule.matched_documents)),
+  ])
+}
+
+function renderICDSearchResult(result: QCAgentRunResult | undefined) {
+  const candidates = safeArray(result?.candidates)
+  return [
+    h('div', { class: 'qc-agent-result-summary' }, [
+      fieldRow('查询词', result?.query),
+      fieldRow('编码类型', codeTypeLabel(result?.code_type)),
+      fieldRow('版本', versionLabel(result?.version)),
+      fieldRow('候选数量', result?.returned ?? candidates.length),
+    ]),
+    h('div', { class: 'qc-agent-block' }, [
+      h('div', { class: 'qc-agent-block__title' }, '候选编码列表'),
+      candidates.length
+        ? h(
+            'div',
+            { class: 'qc-agent-code-list' },
+            candidates.map((candidate) => renderCodeCandidate(candidate, true)),
+          )
+        : h('div', { class: 'qc-agent-empty-note' }, '未返回 ICD 候选编码。'),
+    ]),
+  ]
+}
+
+function renderCodeCandidate(candidate: QCAgentICDCandidate, withActions = false) {
+  return h('div', { class: 'qc-agent-code-card' }, [
+    h('div', { class: 'qc-agent-code-card__head' }, [
+      h('span', { class: 'qc-agent-code-card__code' }, candidate.code || '-'),
+      h('em', versionLabel(candidate.version)),
+    ]),
+    h('div', { class: 'qc-agent-code-card__name' }, candidate.name || '未命名编码'),
+    h('div', { class: 'qc-agent-code-card__meta' }, [
+      h('span', `类型：${codeTypeLabel(candidate.type)}`),
+      h('span', `置信度：${formatConfidence(candidate.confidence)}`),
+      h('span', `匹配：${candidate.match_type || '-'}`),
+    ]),
+    candidate.mapped_code || candidate.mapped_name
+      ? h('div', { class: 'qc-agent-code-card__mapping' }, [
+          h('strong', '映射：'),
+          h('span', `${candidate.mapped_code || '-'} ${candidate.mapped_name || ''}`.trim()),
+        ])
+      : null,
+    withActions
+      ? h('div', { class: 'qc-agent-code-card__actions' }, [
+          h('button', { type: 'button' }, '复制编码'),
+          h('button', { type: 'button' }, '用该编码做 DRG/DIP 入组'),
+          h('button', { type: 'button' }, '继续查相近编码'),
+        ])
+      : null,
+  ])
+}
+
+function renderCodingSuggestionResult(result: QCAgentRunResult | undefined) {
+  return [
+    h('div', { class: 'qc-agent-result-summary' }, [
+      fieldRow('病历', recordSummaryText(result?.record_summary)),
+      fieldRow('主要诊断候选', safeArray(result?.diagnosis_candidates).length),
+      fieldRow('手术/操作候选', safeArray(result?.procedure_candidates).length),
+      fieldRow('口径', '仅为编码建议，不写入正式首页或结算表'),
+    ]),
+    renderCodingSuggestionGroup('主要诊断候选', safeArray(result?.diagnosis_candidates)),
+    renderCodingSuggestionGroup('手术/操作候选', safeArray(result?.procedure_candidates)),
+  ]
+}
+
+function recordSummaryText(summary: Record<string, unknown> | undefined) {
+  if (!summary) return '-'
+  const name = textValue(summary.patient_name || summary.name, '未命名患者')
+  const visitId = textValue(summary.visit_id, '-')
+  const department = textValue(summary.department || summary.dept, '未标注科室')
+  return `${name} / ${department} / visit_id=${visitId}`
+}
+
+function renderCodingSuggestionGroup(title: string, items: QCAgentCodingSuggestionItem[]) {
+  return h('div', { class: 'qc-agent-block' }, [
+    h('div', { class: 'qc-agent-block__title' }, title),
+    items.length
+      ? h(
+          'div',
+          { class: 'qc-agent-coding-list' },
+          items.map((item) =>
+            h('div', { class: 'qc-agent-coding-item' }, [
+              h('div', { class: 'qc-agent-coding-item__head' }, [
+                h('strong', item.name || item.existing_code || '未命名项目'),
+                h('span', `置信度 ${formatConfidence(item.confidence)}`),
+              ]),
+              h('div', { class: 'qc-agent-coding-item__meta' }, [
+                h('span', `已有编码：${item.existing_code || '-'}`),
+                h('span', `来源：${sourceLabel(item.source)}`),
+                item.low_confidence ? h('em', '低置信度') : null,
+              ]),
+              h(
+                'div',
+                { class: 'qc-agent-code-list qc-agent-code-list--compact' },
+                safeArray(item.candidates)
+                  .slice(0, 3)
+                  .map((candidate) => renderCodeCandidate(candidate)),
+              ),
+            ]),
+          ),
+        )
+      : h('div', { class: 'qc-agent-empty-note' }, '未返回候选。'),
+  ])
+}
+
+function sourceLabel(source: string | undefined) {
+  if (source === 'structured_context') return '病案首页/结构化上下文'
+  if (source === 'explicit_record_field') return '诊断表/手术表/文书显式字段'
+  return source || '-'
+}
+
+function renderDRGResult(result: QCAgentRunResult | undefined) {
+  const input = result?.input_summary || {}
+  return [
+    h('div', { class: 'qc-agent-result-summary' }, [
+      fieldRow('主诊断编码', input.primary_diagnosis_code),
+      fieldRow('其他诊断数量', input.secondary_diagnosis_count),
+      fieldRow('手术操作数量', input.procedure_count),
+      fieldRow('模拟状态', result?.fallback ? '降级模式' : result?.success ? '成功' : '未入组'),
+    ]),
+    h('div', { class: 'qc-agent-grouping-card' }, [
+      fieldRow(
+        'ADRG',
+        `${textValue(result?.adrg_code)} ${textValue(result?.adrg_name, '')}`.trim(),
+      ),
+      fieldRow('DRG', `${textValue(result?.drg_code)} ${textValue(result?.drg_name, '')}`.trim()),
+      fieldRow('权重', formatNumber(result?.weight)),
+      fieldRow('基准支付', formatMoney(result?.baseline_payment)),
+      fieldRow('盈亏/风险提示', formatMoney(result?.profit_margin)),
+      fieldRow(
+        '编码映射信息',
+        `${textValue(result?.mapped_code)} ${textValue(result?.mapped_code_name, '')}`.trim(),
+      ),
+      fieldRow('入组逻辑摘要', result?.grouping_logic),
+      result?.error_summary ? fieldRow('降级原因', result.error_summary) : null,
+    ]),
+  ]
+}
+
+function renderDIPResult(result: QCAgentRunResult | undefined) {
+  const input = result?.input_summary || {}
+  return [
+    h('div', { class: 'qc-agent-result-summary' }, [
+      fieldRow('城市', input.city_name),
+      fieldRow('主诊断编码', input.pdx_code),
+      fieldRow('手术编码数量', input.proc_count),
+      fieldRow('预测状态', result?.success ? '成功' : '未入组'),
+    ]),
+    h('div', { class: 'qc-agent-grouping-card' }, [
+      fieldRow('DIP 编码', result?.dip_code),
+      fieldRow('DIP 名称', result?.dip_name),
+      fieldRow('病种类型', result?.dip_type),
+      fieldRow('入组路径', result?.grouping_path),
+      fieldRow(
+        '费用/住院日摘要',
+        `${formatMoney(input.total_fee)} / ${formatNumber(input.los)} 天`,
+      ),
+    ]),
+  ]
+}
+
+function renderStateNotice(response: QCAgentChatResponse) {
+  const type = normalizeResultType(response)
+  if (type === 'clarification') {
+    return h('div', { class: 'qc-agent-state-note qc-agent-state-note--warning' }, [
+      h('strong', '需要补充信息'),
+      h('span', '请补充 visit_id、文书类型、诊断/手术名称或入组所需编码后继续。'),
+      h('span', '建议问法：对 visit_id=xxxx 的查房记录做质控，或查询 2型糖尿病 ICD 编码。'),
+    ])
+  }
+  if (type === 'unsupported') {
+    return h('div', { class: 'qc-agent-state-note qc-agent-state-note--danger' }, [
+      h('strong', '受控拒绝'),
+      h('span', '当前助手只做只读分析，不执行删除、写入、导出或正式结果持久化。'),
+    ])
+  }
+  return null
 }
 
 const AgentResponseCard = defineComponent({
@@ -335,20 +1025,21 @@ const AgentResponseCard = defineComponent({
   setup(componentProps, { emit: componentEmit }) {
     return () => {
       const response = componentProps.response
-      const result = response.result || {}
-      const issueSource = safeArray(result.issues?.length ? result.issues : result.results)
-      const issues = issueSource.filter(
-        (issue) => issue.passed !== true && issue.status !== 'passed',
-      )
-      const executedRules = safeArray(result.executed_rules)
-      const skippedRules = safeArray(result.skipped_rules)
-      const warnings = uniqueTextItems([
-        ...safeArray(response.warnings),
-        ...safeArray(result.warnings),
-      ])
-      const plan = safeArray(response.plan)
-      const candidates = safeArray(response.candidates)
+      const result = response.result
+      const resultType = normalizeResultType(response)
       const stats = executionStats(result)
+      const resultContent =
+        resultType === 'qc_result'
+          ? renderQCResult(result)
+          : resultType === 'icd_search_result'
+            ? renderICDSearchResult(result)
+            : resultType === 'coding_suggestion_result'
+              ? renderCodingSuggestionResult(result)
+              : resultType === 'drg_grouping_result'
+                ? renderDRGResult(result)
+                : resultType === 'dip_grouping_result'
+                  ? renderDIPResult(result)
+                  : null
 
       return h('div', { class: 'qc-agent-result-card' }, [
         h('div', { class: 'qc-agent-result-card__header' }, [
@@ -358,7 +1049,8 @@ const AgentResponseCard = defineComponent({
               { class: `qc-agent-status qc-agent-status--${response.status}` },
               statusLabel(response.status),
             ),
-            response.status === 'completed'
+            h('span', { class: 'qc-agent-result-type' }, resultTypeLabel(resultType)),
+            response.status === 'completed' && resultType === 'qc_result'
               ? h(
                   'span',
                   {
@@ -372,6 +1064,13 @@ const AgentResponseCard = defineComponent({
                   stats.isPartial ? '部分执行' : '完整执行',
                 )
               : null,
+            resultType === 'drg_grouping_result' && result?.fallback
+              ? h(
+                  'span',
+                  { class: 'qc-agent-execution-tag qc-agent-execution-tag--partial' },
+                  '降级模式',
+                )
+              : null,
           ]),
           h(
             'span',
@@ -379,245 +1078,11 @@ const AgentResponseCard = defineComponent({
             response.run_id ? `run ${response.run_id.slice(0, 8)}` : '',
           ),
         ]),
-        response.status === 'completed'
-          ? [
-              h('div', { class: 'qc-agent-conclusion' }, [
-                h('div', { class: 'qc-agent-conclusion__label' }, '本次结论'),
-                h('div', { class: 'qc-agent-conclusion__text' }, conclusionText(result)),
-              ]),
-              h('div', { class: 'qc-agent-summary-grid' }, [
-                h('div', { class: 'qc-agent-summary-item' }, [
-                  h('span', '已发现问题'),
-                  h('strong', String(stats.issueCount)),
-                ]),
-                h('div', { class: 'qc-agent-summary-item' }, [
-                  h('span', '已执行通过'),
-                  h('strong', String(stats.passedCount)),
-                ]),
-                h('div', { class: 'qc-agent-summary-item' }, [
-                  h('span', '未执行规则'),
-                  h('strong', String(stats.skippedCount)),
-                ]),
-                h('div', { class: 'qc-agent-summary-item' }, [
-                  h('span', '选中规则'),
-                  h('strong', String(stats.selectedRuleCount)),
-                ]),
-              ]),
-            ]
-          : null,
-        plan.length
-          ? h('div', { class: 'qc-agent-block' }, [
-              h('div', { class: 'qc-agent-block__title' }, '执行计划'),
-              h(
-                'ol',
-                { class: 'qc-agent-plan' },
-                plan.map((item) =>
-                  h('li', { class: 'qc-agent-plan__item' }, [
-                    h('span', { class: 'qc-agent-plan__dot' }),
-                    h('span', { class: 'qc-agent-plan__tool' }, item.tool_name || '-'),
-                    h('span', { class: 'qc-agent-plan__status' }, item.status || ''),
-                  ]),
-                ),
-              ),
-            ])
-          : null,
-        candidates.length
-          ? h('div', { class: 'qc-agent-block' }, [
-              h('div', { class: 'qc-agent-block__title' }, '候选病历'),
-              h(
-                'div',
-                { class: 'qc-agent-candidates' },
-                candidates.map((candidate) =>
-                  h('div', { class: 'qc-agent-candidate' }, [
-                    h('div', { class: 'qc-agent-candidate__main' }, [
-                      h('strong', candidate.patient_name || '未命名患者'),
-                      h('span', `visit_id=${candidate.visit_id || '-'}`),
-                    ]),
-                    h(
-                      'div',
-                      { class: 'qc-agent-candidate__meta' },
-                      [
-                        candidate.department || '未标注科室',
-                        candidate.discharge_date ? `出院 ${candidate.discharge_date}` : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' / '),
-                    ),
-                    h(
-                      'button',
-                      {
-                        class: 'qc-agent-candidate__button',
-                        type: 'button',
-                        onClick: () => componentEmit('confirm-candidate', candidate),
-                      },
-                      '选择并继续',
-                    ),
-                  ]),
-                ),
-              ),
-            ])
-          : null,
-        warnings.length
-          ? h('div', { class: 'qc-agent-block' }, [
-              h('div', { class: 'qc-agent-block__title' }, '提示'),
-              h(
-                'ul',
-                { class: 'qc-agent-warnings' },
-                warnings.map((item) => h('li', item)),
-              ),
-            ])
-          : null,
-        response.status === 'completed'
-          ? h('div', { class: 'qc-agent-block' }, [
-              h('div', { class: 'qc-agent-block__title' }, '已发现问题'),
-              issues.length
-                ? h(
-                    'div',
-                    { class: 'qc-agent-issues' },
-                    issues.map((issue) =>
-                      h('div', { class: 'qc-agent-issue' }, [
-                        h('div', { class: 'qc-agent-issue__head' }, [
-                          h('span', issue.rule_id || '-'),
-                          h('em', issue.severity || 'normal'),
-                        ]),
-                        h('div', { class: 'qc-agent-issue__message' }, issueMessage(issue)),
-                        issue.evidence_summary
-                          ? h('div', { class: 'qc-agent-issue__evidence' }, [
-                              h('strong', '证据：'),
-                              h('span', issue.evidence_summary),
-                            ])
-                          : null,
-                        issue.suggestion
-                          ? h('div', { class: 'qc-agent-issue__suggestion' }, [
-                              h('strong', '建议：'),
-                              h('span', issue.suggestion),
-                            ])
-                          : null,
-                      ]),
-                    ),
-                  )
-                : h('div', { class: 'qc-agent-empty-note' }, '已执行规则暂未发现问题。'),
-            ])
-          : null,
-        executedRules.length
-          ? h('div', { class: 'qc-agent-block' }, [
-              h('div', { class: 'qc-agent-block__title' }, '已执行规则'),
-              h(
-                'div',
-                { class: 'qc-agent-executed-rules' },
-                executedRules
-                  .slice(0, 6)
-                  .map((rule) =>
-                    h('div', { class: 'qc-agent-executed-rule' }, [
-                      h('div', { class: 'qc-agent-rule-card__head' }, [
-                        h('span', { class: 'qc-agent-rule-card__id' }, rule.rule_id || '-'),
-                        h(
-                          'em',
-                          { class: ['qc-agent-rule-status', ruleStatusClass(rule)] },
-                          ruleStatusLabel(rule),
-                        ),
-                      ]),
-                      h(
-                        'div',
-                        { class: 'qc-agent-rule-card__name' },
-                        rule.rule_name || '未命名规则',
-                      ),
-                      rule.explanation
-                        ? h('div', { class: 'qc-agent-rule-card__text' }, rule.explanation)
-                        : null,
-                      rule.evidence_summary
-                        ? h('div', { class: 'qc-agent-rule-card__evidence' }, [
-                            h('strong', '证据：'),
-                            h('span', rule.evidence_summary),
-                          ])
-                        : null,
-                      h(
-                        'div',
-                        { class: 'qc-agent-rule-card__meta' },
-                        matchedDocumentSummary(rule.matched_documents),
-                      ),
-                    ]),
-                  ),
-              ),
-              executedRules.length > 6
-                ? h('details', { class: 'qc-agent-more-rules' }, [
-                    h('summary', `展开其余 ${executedRules.length - 6} 条已执行规则`),
-                    h(
-                      'div',
-                      { class: 'qc-agent-executed-rules qc-agent-executed-rules--more' },
-                      executedRules
-                        .slice(6)
-                        .map((rule) =>
-                          h('div', { class: 'qc-agent-executed-rule' }, [
-                            h('div', { class: 'qc-agent-rule-card__head' }, [
-                              h('span', { class: 'qc-agent-rule-card__id' }, rule.rule_id || '-'),
-                              h(
-                                'em',
-                                { class: ['qc-agent-rule-status', ruleStatusClass(rule)] },
-                                ruleStatusLabel(rule),
-                              ),
-                            ]),
-                            h(
-                              'div',
-                              { class: 'qc-agent-rule-card__name' },
-                              rule.rule_name || '未命名规则',
-                            ),
-                            rule.explanation
-                              ? h('div', { class: 'qc-agent-rule-card__text' }, rule.explanation)
-                              : null,
-                            rule.evidence_summary
-                              ? h('div', { class: 'qc-agent-rule-card__evidence' }, [
-                                  h('strong', '证据：'),
-                                  h('span', rule.evidence_summary),
-                                ])
-                              : null,
-                            h(
-                              'div',
-                              { class: 'qc-agent-rule-card__meta' },
-                              matchedDocumentSummary(rule.matched_documents),
-                            ),
-                          ]),
-                        ),
-                    ),
-                  ])
-                : null,
-            ])
-          : null,
-        skippedRules.length
-          ? h('div', { class: 'qc-agent-block' }, [
-              h('div', { class: 'qc-agent-block__title' }, '未执行规则'),
-              h(
-                'div',
-                { class: 'qc-agent-skipped-note' },
-                '这些规则已被选中，但当前即时质控模式未执行；需要正式规则引擎或 LLM 能力后才能判断。',
-              ),
-              h(
-                'div',
-                { class: 'qc-agent-skipped-rules' },
-                skippedRules
-                  .slice(0, 8)
-                  .map((rule) =>
-                    h('div', { class: 'qc-agent-skipped-rule' }, [
-                      h('div', { class: 'qc-agent-skipped-rule__head' }, [
-                        h('span', rule.rule_id || '-'),
-                        h('strong', rule.rule_name || skippedReasonLabel(rule)),
-                      ]),
-                      h('div', { class: 'qc-agent-skipped-rule__reason' }, [
-                        h('strong', skippedReasonLabel(rule)),
-                        h('span', skippedNextStep(rule)),
-                      ]),
-                    ]),
-                  ),
-              ),
-            ])
-          : null,
-        response.status === 'needs_clarification'
-          ? h(
-              'div',
-              { class: 'qc-agent-suggestion' },
-              '建议问法：对 visit_id=xxxx 的查房记录做质控',
-            )
-          : null,
+        renderStateNotice(response),
+        renderCandidates(response, componentEmit),
+        resultContent,
+        renderPlan(response),
+        renderWarnings(response),
         h('details', { class: 'qc-agent-raw' }, [
           h('summary', '查看脱敏响应摘要'),
           h('pre', rawSummary(response)),
@@ -654,24 +1119,30 @@ const AgentResponseCard = defineComponent({
   font-size: 18px;
 }
 
-.qc-agent-drawer__layout {
+.qc-agent-panel {
   display: flex;
   min-height: calc(100vh - 56px);
   flex-direction: column;
   gap: 12px;
   padding: 14px;
+  background: #f6f9fc;
 }
 
 .qc-agent-context,
-.qc-agent-input,
+.qc-agent-shortcuts,
+.qc-agent-commandbar,
 .qc-agent-result-card {
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #ffffff;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
 }
 
 .qc-agent-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 12px 14px;
 }
 
@@ -688,55 +1159,103 @@ const AgentResponseCard = defineComponent({
   font-weight: 700;
 }
 
+.qc-agent-capabilities {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.qc-agent-capability {
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 5px 10px;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-agent-capability--active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
 .qc-agent-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.qc-agent-shortcut-group__title {
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-agent-shortcut-group__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .qc-agent-shortcuts__button {
   border-color: #dbeafe;
-  background: #eff6ff;
+  border-radius: 8px;
+  background: #f8fbff;
   color: #1d4ed8;
   font-weight: 700;
 }
 
-.qc-agent-chat {
+.qc-agent-workspace {
   display: flex;
-  min-height: 320px;
+  min-height: 360px;
   flex: 1;
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
-  padding: 4px;
+  padding: 2px;
 }
 
 .qc-agent-empty {
-  display: flex;
-  min-height: 220px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.qc-agent-empty-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
   background: #ffffff;
-  color: #64748b;
+  padding: 14px;
 }
 
-.qc-agent-empty__icon {
-  color: #2563eb;
-  font-size: 28px;
-}
-
-.qc-agent-empty__title {
-  margin-top: 10px;
+.qc-agent-empty-card__title {
   color: #0f172a;
   font-size: 14px;
   font-weight: 800;
 }
 
-.qc-agent-empty__desc {
-  margin-top: 4px;
+.qc-agent-empty-card__desc {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.qc-agent-empty-card__list {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qc-agent-empty-card__list li {
+  color: #334155;
   font-size: 12px;
 }
 
@@ -754,8 +1273,8 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-message__bubble {
-  max-width: 92%;
-  border-radius: 8px;
+  max-width: 94%;
+  border-radius: 10px;
   padding: 10px 12px;
   font-size: 13px;
   line-height: 1.55;
@@ -791,7 +1310,9 @@ const AgentResponseCard = defineComponent({
   gap: 6px;
 }
 
-.qc-agent-status {
+.qc-agent-status,
+.qc-agent-result-type,
+.qc-agent-execution-tag {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
@@ -816,13 +1337,9 @@ const AgentResponseCard = defineComponent({
   color: #991b1b;
 }
 
-.qc-agent-execution-tag {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 3px 8px;
-  font-size: 12px;
-  font-weight: 800;
+.qc-agent-result-type {
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .qc-agent-execution-tag--partial {
@@ -841,21 +1358,25 @@ const AgentResponseCard = defineComponent({
   font-size: 11px;
 }
 
-.qc-agent-conclusion {
+.qc-agent-conclusion,
+.qc-agent-state-note {
   margin-top: 12px;
   border: 1px solid #fed7aa;
-  border-radius: 8px;
+  border-radius: 12px;
   background: #fff7ed;
   padding: 10px;
 }
 
-.qc-agent-conclusion__label {
+.qc-agent-conclusion__label,
+.qc-agent-state-note strong {
   color: #9a3412;
   font-size: 12px;
   font-weight: 800;
 }
 
-.qc-agent-conclusion__text {
+.qc-agent-conclusion__text,
+.qc-agent-state-note span {
+  display: block;
   margin-top: 4px;
   color: #431407;
   font-size: 13px;
@@ -863,29 +1384,59 @@ const AgentResponseCard = defineComponent({
   line-height: 1.55;
 }
 
-.qc-agent-summary-grid {
+.qc-agent-state-note--danger {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.qc-agent-state-note--danger strong,
+.qc-agent-state-note--danger span {
+  color: #991b1b;
+}
+
+.qc-agent-summary-grid,
+.qc-agent-result-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-top: 12px;
 }
 
-.qc-agent-summary-item {
-  border-radius: 8px;
+.qc-agent-summary-item,
+.qc-agent-field,
+.qc-agent-grouping-card {
+  border-radius: 10px;
   background: #f8fafc;
   padding: 9px 8px;
 }
 
-.qc-agent-summary-item span {
+.qc-agent-summary-item span,
+.qc-agent-field__label {
   display: block;
   color: #64748b;
   font-size: 11px;
   font-weight: 700;
 }
 
-.qc-agent-summary-item strong {
+.qc-agent-summary-item strong,
+.qc-agent-field__value {
+  display: block;
+  margin-top: 3px;
   color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.qc-agent-summary-item strong {
   font-size: 18px;
+}
+
+.qc-agent-grouping-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .qc-agent-block {
@@ -933,7 +1484,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-warnings li {
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fffbeb;
   padding: 7px 9px;
   color: #92400e;
@@ -943,17 +1494,25 @@ const AgentResponseCard = defineComponent({
 .qc-agent-candidates,
 .qc-agent-issues,
 .qc-agent-executed-rules,
-.qc-agent-skipped-rules {
+.qc-agent-skipped-rules,
+.qc-agent-code-list,
+.qc-agent-coding-list {
   display: grid;
   gap: 8px;
+}
+
+.qc-agent-code-list--compact {
+  margin-top: 8px;
 }
 
 .qc-agent-candidate,
 .qc-agent-issue,
 .qc-agent-executed-rule,
-.qc-agent-skipped-rule {
+.qc-agent-skipped-rule,
+.qc-agent-code-card,
+.qc-agent-coding-item {
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #f8fafc;
   padding: 9px;
 }
@@ -961,7 +1520,9 @@ const AgentResponseCard = defineComponent({
 .qc-agent-candidate__main,
 .qc-agent-issue__head,
 .qc-agent-rule-card__head,
-.qc-agent-skipped-rule__head {
+.qc-agent-skipped-rule__head,
+.qc-agent-code-card__head,
+.qc-agent-coding-item__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -976,7 +1537,10 @@ const AgentResponseCard = defineComponent({
 .qc-agent-rule-card__evidence,
 .qc-agent-rule-card__meta,
 .qc-agent-rule-card__text,
-.qc-agent-skipped-rule__reason {
+.qc-agent-skipped-rule__reason,
+.qc-agent-code-card__meta,
+.qc-agent-code-card__mapping,
+.qc-agent-coding-item__meta {
   color: #64748b;
   font-size: 12px;
 }
@@ -984,7 +1548,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-candidate__button {
   margin-top: 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   background: #2563eb;
   padding: 5px 9px;
   color: #ffffff;
@@ -995,7 +1559,8 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-issue__head span,
 .qc-agent-rule-card__id,
-.qc-agent-skipped-rule__head span {
+.qc-agent-skipped-rule__head span,
+.qc-agent-code-card__code {
   color: #1d4ed8;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
@@ -1003,8 +1568,11 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-issue__head em,
-.qc-agent-rule-status {
+.qc-agent-rule-status,
+.qc-agent-code-card__head em,
+.qc-agent-coding-item__meta em {
   border-radius: 999px;
+  background: #fef3c7;
   padding: 2px 7px;
   color: #b45309;
   font-size: 12px;
@@ -1023,16 +1591,14 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-issue__message,
-.qc-agent-rule-card__name {
+.qc-agent-rule-card__name,
+.qc-agent-skipped-rule__head strong,
+.qc-agent-code-card__name,
+.qc-agent-coding-item__head strong {
   margin-top: 6px;
   color: #0f172a;
   font-size: 13px;
   font-weight: 800;
-}
-
-.qc-agent-skipped-rule__head strong {
-  color: #0f172a;
-  font-size: 13px;
 }
 
 .qc-agent-issue__evidence,
@@ -1040,15 +1606,26 @@ const AgentResponseCard = defineComponent({
 .qc-agent-rule-card__evidence,
 .qc-agent-rule-card__meta,
 .qc-agent-rule-card__text,
-.qc-agent-skipped-rule__reason {
+.qc-agent-skipped-rule__reason,
+.qc-agent-code-card__meta,
+.qc-agent-code-card__mapping,
+.qc-agent-coding-item__meta {
   margin-top: 6px;
   line-height: 1.55;
+}
+
+.qc-agent-code-card__meta,
+.qc-agent-coding-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .qc-agent-issue__evidence strong,
 .qc-agent-issue__suggestion strong,
 .qc-agent-rule-card__evidence strong,
-.qc-agent-skipped-rule__reason strong {
+.qc-agent-skipped-rule__reason strong,
+.qc-agent-code-card__mapping strong {
   margin-right: 4px;
   color: #334155;
 }
@@ -1056,6 +1633,24 @@ const AgentResponseCard = defineComponent({
 .qc-agent-skipped-rule__reason {
   display: grid;
   gap: 2px;
+}
+
+.qc-agent-code-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.qc-agent-code-card__actions button {
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 4px 8px;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .qc-agent-more-rules {
@@ -1073,8 +1668,7 @@ const AgentResponseCard = defineComponent({
   margin-top: 8px;
 }
 
-.qc-agent-skipped-note,
-.qc-agent-suggestion {
+.qc-agent-skipped-note {
   margin-bottom: 8px;
   color: #64748b;
   font-size: 12px;
@@ -1096,7 +1690,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-raw pre {
   max-height: 220px;
   overflow: auto;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #0f172a;
   padding: 10px;
   color: #dbeafe;
@@ -1104,21 +1698,59 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-error {
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fee2e2;
   padding: 8px 10px;
   color: #991b1b;
   font-size: 12px;
 }
 
-.qc-agent-input {
+.qc-agent-commandbar {
+  position: sticky;
+  bottom: 0;
   padding: 10px;
 }
 
-.qc-agent-input__actions {
+.qc-agent-commandbar :deep(textarea) {
+  border-radius: 10px;
+}
+
+.qc-agent-commandbar__actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-top: 8px;
+}
+
+.qc-agent-commandbar__left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qc-agent-commandbar__button {
+  border-radius: 8px;
+  color: #334155;
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .qc-agent-shortcuts,
+  .qc-agent-empty {
+    grid-template-columns: 1fr;
+  }
+
+  .qc-agent-context,
+  .qc-agent-commandbar__actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .qc-agent-summary-grid,
+  .qc-agent-result-summary,
+  .qc-agent-grouping-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>
