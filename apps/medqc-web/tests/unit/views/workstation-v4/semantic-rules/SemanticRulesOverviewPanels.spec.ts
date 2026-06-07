@@ -3,7 +3,7 @@ import { mount } from '@vue/test-utils'
 import SemanticRulesOverviewPanels from '@/views/workstation-v4/semantic-rules/components/SemanticRulesOverviewPanels.vue'
 
 describe('SemanticRulesOverviewPanels', () => {
-  it('应仅渲染双栏分析并保留 Hero 右上三操作', () => {
+  it('应仅渲染双栏分析并保留总览右上三操作', () => {
     const wrapper = mount(SemanticRulesOverviewPanels, {
       props: {
         loading: false,
@@ -45,7 +45,7 @@ describe('SemanticRulesOverviewPanels', () => {
     expect(wrapper.text()).toContain('分类覆盖 Top3')
     expect(wrapper.text()).not.toContain('规则复杂度结构')
 
-    const heroActions = wrapper.findAll('.hero-actions button').map((node) => node.text())
-    expect(heroActions).toEqual(['查询', '重置', '刷新'])
+    const overviewActions = wrapper.findAll('.overview-actions button').map((node) => node.text())
+    expect(overviewActions).toEqual(['查询', '重置', '刷新'])
   })
 })

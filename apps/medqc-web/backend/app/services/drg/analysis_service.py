@@ -117,7 +117,7 @@ def _load_analysis_dataframe(
     records: List[Dict[str, Any]] = []
     if session_id:
         records = batch_store.get_all_records(session_id=session_id, batch_id=batch_id)
-    if not records:
+    if not records and not session_id:
         records = demo_store.list_cases(limit=500)
 
     normalized = [_normalize_analysis_record(item) for item in records]
@@ -432,7 +432,23 @@ def build_analysis_payload(
             for idx, item in enumerate(profitability["by_diagnosis_group"])
         ],
         "ward": levels["ward"]["items"],
+        "attending_group": levels["attending_group"]["items"],
+        "person": levels["person"]["items"],
         "doctor": levels["person"]["items"],
+        "diagnosis_group": [
+            {
+                "id": f"diagnosis-{idx + 1}",
+                "name": item["diagnosis_group"],
+                "caseCount": item["case_count"],
+                "totalRevenue": item["insurance_payment"],
+                "totalCost": item["total_cost"],
+                "profit": item["profit_loss"],
+                "cmi": round(cmi, 4),
+                "costRate": item["cost_consumption_index"],
+                "avgLos": item["avg_los"],
+            }
+            for idx, item in enumerate(profitability["by_diagnosis_group"])
+        ],
         "drg": [
             {
                 "id": f"drg-{idx + 1}",
@@ -739,4 +755,3 @@ def build_analysis_export_response(
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
-

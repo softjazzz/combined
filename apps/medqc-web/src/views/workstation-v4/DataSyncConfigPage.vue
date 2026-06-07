@@ -18,8 +18,11 @@
               <div class="wv4-analysis-overview__header">
                 <div>
                   <h2 class="wv4-analysis-overview__title">
-                    数据同步配置中心
+                    系统配置
                   </h2>
+                  <p class="mt-1 text-sm font-medium text-slate-500">
+                    统一管理数据同步、首页抽取和模型连接配置，危险执行需先预检确认。
+                  </p>
                 </div>
 
                 <div class="wv4-analysis-overview__actions">
@@ -154,6 +157,43 @@
             </div>
 
             <section class="system-config-execution-area flex-1 min-h-0">
+              <aside class="system-config-side-panel">
+                <div>
+                  <div class="system-config-side-kicker">
+                    配置流程
+                  </div>
+                  <h3>同步执行面板</h3>
+                  <p>
+                    左侧说明当前配置状态，右侧完成连接配置、预检和同步执行。所有正式写入前必须先完成预检确认。
+                  </p>
+                </div>
+
+                <div class="system-config-state-list">
+                  <div class="system-config-state-row">
+                    <span>连接状态</span>
+                    <strong>{{ connectedCount }} / 2</strong>
+                  </div>
+                  <div class="system-config-state-row">
+                    <span>预检状态</span>
+                    <strong>{{ state.preflightResult?.executable ? '已通过' : '待预检' }}</strong>
+                  </div>
+                  <div class="system-config-state-row">
+                    <span>权限状态</span>
+                    <strong>{{ isReadonly ? '只读' : '可执行' }}</strong>
+                  </div>
+                </div>
+
+                <div class="system-config-danger-box">
+                  <div class="system-config-side-kicker">
+                    风险操作
+                  </div>
+                  <h4>危险操作集中确认</h4>
+                  <p>
+                    执行同步会影响本地数据表。当前页面只提供预检、确认和执行入口，不跳过后端安全校验。
+                  </p>
+                </div>
+              </aside>
+
               <div class="layout-main flex-1 overflow-hidden min-h-0">
                 <article
                   class="system-config-execution-card system-config-execution-card--connection overflow-hidden flex flex-col min-h-0"
@@ -368,7 +408,7 @@ onUnmounted(() => {
 </style>
 <style scoped>
 .sync-config-page {
-  background: linear-gradient(180deg, #f8fafc, #f1f5f9 48%, #edf2f7);
+  background: #f5f9fc;
 }
 
 .system-config-tabs {
@@ -380,7 +420,7 @@ onUnmounted(() => {
 .system-config-tabs :deep(.ant-tabs-nav) {
   margin-bottom: 16px;
   flex-shrink: 0;
-  border-radius: 16px;
+  border-radius: 14px;
   border: 1px solid rgba(226, 232, 240, 0.92);
   background: rgba(255, 255, 255, 0.9);
   padding: 8px 12px;
@@ -429,7 +469,7 @@ onUnmounted(() => {
 
 .wv4-overview-btn {
   height: 34px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 600;
   padding-inline: 14px;
@@ -447,7 +487,7 @@ onUnmounted(() => {
 
 .wv4-status-chip {
   height: 24px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid rgba(226, 232, 240, 0.9);
   background: rgba(248, 250, 252, 0.96);
   color: #475569;
@@ -491,13 +531,99 @@ onUnmounted(() => {
 }
 
 .system-config-execution-area {
-  border-radius: 24px;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 14px;
+  border-radius: 18px;
   border: 1px solid rgba(226, 232, 240, 0.92);
   background: rgba(255, 255, 255, 0.95);
   box-shadow:
     inset 0 1px rgba(255, 255, 255, 0.98),
-    0 14px 34px rgba(148, 163, 184, 0.12);
+    0 12px 28px rgba(15, 23, 42, 0.04);
   padding: 14px;
+}
+
+.system-config-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: #f8fbff;
+  padding: 18px;
+}
+
+.system-config-side-kicker {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.system-config-side-panel h3,
+.system-config-danger-box h4 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-weight: 900;
+}
+
+.system-config-side-panel h3 {
+  font-size: 18px;
+}
+
+.system-config-danger-box h4 {
+  font-size: 15px;
+}
+
+.system-config-side-panel p,
+.system-config-danger-box p {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.system-config-state-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.system-config-state-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px 12px;
+}
+
+.system-config-state-row span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.system-config-state-row strong {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.system-config-danger-box {
+  margin-top: auto;
+  border: 1px solid #fed7aa;
+  border-radius: 14px;
+  background: #fff7ed;
+  padding: 14px;
+}
+
+.system-config-danger-box .system-config-side-kicker,
+.system-config-danger-box h4,
+.system-config-danger-box p {
+  color: #b45309;
 }
 
 .layout-main {
@@ -531,6 +657,10 @@ onUnmounted(() => {
 }
 
 @media (max-width: 980px) {
+  .system-config-execution-area {
+    grid-template-columns: 1fr;
+  }
+
   .layout-main {
     grid-template-columns: 1fr;
   }

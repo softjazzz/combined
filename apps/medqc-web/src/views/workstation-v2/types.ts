@@ -117,6 +117,9 @@ export interface WorkstationHomeHotspotItem {
   visit_id: string
   patient_id?: string
   patient_name?: string
+  patient_age?: number | string | null
+  patient_sex?: string | null
+  patient_gender?: string | null
   department: string
   workflow_type: 'frontpage' | 'coding' | 'settlement' | string
   severity: string
@@ -142,6 +145,9 @@ export interface WorkstationHomeTodoItem {
   visit_id: string
   patient_id?: string
   patient_name?: string
+  patient_age?: number | string | null
+  patient_sex?: string | null
+  patient_gender?: string | null
   department: string
   workflow_type: 'frontpage' | 'coding' | 'settlement' | string
   task_status: 'pending' | 'in_progress' | 'overdue' | string
@@ -194,6 +200,9 @@ export interface UnifiedTaskItem {
   record_id: string
   visit_id: string
   patient_name?: string
+  patient_age?: number | string | null
+  patient_sex?: string | null
+  patient_gender?: string | null
   department: string
   workflow_type: string
   severity: string

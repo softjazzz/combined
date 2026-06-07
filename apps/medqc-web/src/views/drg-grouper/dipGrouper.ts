@@ -1,6 +1,6 @@
 /**
- * 四川省 DIP 分组引擎
- * 基于四川省按病种分值（DIP）付费病种库
+ * 泸州市 DIP 分组引擎
+ * 基于泸州市按病种分值（DIP）付费核心和综合病种库
  *
  * DIP 分组逻辑：
  *   1. 主诊断 + 主手术 + 相关手术 → 精确匹配
@@ -9,6 +9,7 @@
  *   4. 均不匹配 → 未入组
  */
 import {
+  LUZHOU_DIP_CORE_BY_KEY,
   ZD_ONLY_MAP,
   ZD_SS_MAP,
   ZD_SS_REL_MAP,
@@ -28,6 +29,8 @@ export interface DipGrouperInput {
   age?: number
   /** 住院天数 */
   days?: number
+  /** 离院方式，仅用于模拟输入上下文，当前 DIP 匹配不参与计算 */
+  leavingType?: string
 }
 
 /** DIP 分组结果 */
@@ -48,6 +51,12 @@ export interface DipGrouperResult {
   matchedRelSs?: string
   /** 匹配方式 */
   matchType?: '诊断+手术+相关手术' | '诊断+手术' | '纯诊断' | string
+  /** DIP 分值 */
+  score?: number
+  /** 病种属性 */
+  diseaseAttribute?: string
+  /** 基层病种标识 */
+  primaryCareFlag?: string
   /** 分组过程消息 */
   messages: string[]
 }
@@ -70,7 +79,7 @@ export function performDipGrouping(input: DipGrouperInput): DipGrouperResult {
 
   // 验证主诊断是否在病种库中
   if (!VALID_ZD_CODES.has(primaryZd)) {
-    messages.push(`主诊断 ${primaryZd} 不在四川DIP病种库中`)
+    messages.push(`主诊断 ${primaryZd} 不在泸州DIP病种库中`)
     // 尝试模糊匹配（取前5位/前3位）
     const fuzzyCode = tryFuzzyZdMatch(primaryZd)
     if (fuzzyCode) {
@@ -104,6 +113,7 @@ function performGroupingWithZd(
       const key3 = `${primaryZd}|${mainSs}|${relSs}`
       if (ZD_SS_REL_MAP[key3]) {
         const dipCode = `${primaryZd}+${mainSs}`
+        const coreEntry = getCoreEntry(key3)
         messages.push(`精确匹配: ${primaryZd} + ${mainSs} + 相关手术 ${relSs}`)
         return {
           status: '分组成功',
@@ -114,6 +124,9 @@ function performGroupingWithZd(
           matchedSs: mainSs,
           matchedRelSs: relSs,
           matchType: '诊断+手术+相关手术',
+          score: coreEntry?.score,
+          diseaseAttribute: coreEntry?.diseaseAttribute,
+          primaryCareFlag: coreEntry?.primaryCareFlag,
           messages,
         }
       }
@@ -126,6 +139,7 @@ function performGroupingWithZd(
         const key3 = `${primaryZd}|${mainSs}|${relSsCombined}`
         if (ZD_SS_REL_MAP[key3]) {
           const dipCode = `${primaryZd}+${mainSs}`
+          const coreEntry = getCoreEntry(key3)
           messages.push(`精确匹配: ${primaryZd} + ${mainSs} + 相关手术 ${relSsCombined}`)
           return {
             status: '分组成功',
@@ -136,6 +150,9 @@ function performGroupingWithZd(
             matchedSs: mainSs,
             matchedRelSs: relSsCombined,
             matchType: '诊断+手术+相关手术',
+            score: coreEntry?.score,
+            diseaseAttribute: coreEntry?.diseaseAttribute,
+            primaryCareFlag: coreEntry?.primaryCareFlag,
             messages,
           }
         }
@@ -148,6 +165,7 @@ function performGroupingWithZd(
     const key2 = `${primaryZd}|${mainSs}`
     if (ZD_SS_MAP[key2]) {
       const dipCode = `${primaryZd}+${mainSs}`
+      const coreEntry = getCoreEntry(key2)
       messages.push(`标准匹配: ${primaryZd} + ${mainSs}`)
       return {
         status: '分组成功',
@@ -157,6 +175,9 @@ function performGroupingWithZd(
         primaryZdName,
         matchedSs: mainSs,
         matchType: '诊断+手术',
+        score: coreEntry?.score,
+        diseaseAttribute: coreEntry?.diseaseAttribute,
+        primaryCareFlag: coreEntry?.primaryCareFlag,
         messages,
       }
     }
@@ -167,6 +188,7 @@ function performGroupingWithZd(
       const altKey = `${primaryZd}|${altSs}`
       if (ZD_SS_MAP[altKey]) {
         const dipCode = `${primaryZd}+${altSs}`
+        const coreEntry = getCoreEntry(altKey)
         messages.push(`备选手术匹配: ${primaryZd} + ${altSs}（原主手术 ${mainSs} 未匹配）`)
         return {
           status: '分组成功',
@@ -176,6 +198,9 @@ function performGroupingWithZd(
           primaryZdName,
           matchedSs: altSs,
           matchType: '诊断+手术',
+          score: coreEntry?.score,
+          diseaseAttribute: coreEntry?.diseaseAttribute,
+          primaryCareFlag: coreEntry?.primaryCareFlag,
           messages,
         }
       }
@@ -187,6 +212,7 @@ function performGroupingWithZd(
   // Step 3: 纯诊断匹配
   if (ZD_ONLY_MAP[primaryZd]) {
     const dipCode = primaryZd
+    const coreEntry = getCoreEntry(primaryZd)
     if (mainSs) {
       messages.push(`手术操作未匹配，回退到纯诊断分组: ${primaryZd}`)
     } else {
@@ -199,6 +225,9 @@ function performGroupingWithZd(
       primaryZd: originalZd || primaryZd,
       primaryZdName,
       matchType: '纯诊断',
+      score: coreEntry?.score,
+      diseaseAttribute: coreEntry?.diseaseAttribute,
+      primaryCareFlag: coreEntry?.primaryCareFlag,
       messages,
     }
   }
@@ -238,7 +267,8 @@ function tryFuzzyZdMatch(code: string): string | null {
 
   // 第二轮：尝试替换末尾为 x（如 B99.x）
   if (suffix.length >= 1) {
-    const tryWithX = `${prefix}.${suffix[0]}` + (suffix.length > 1 ? suffix.substring(1).replace(/\d/g, 'x') : '')
+    const tryWithX =
+      `${prefix}.${suffix[0]}` + (suffix.length > 1 ? suffix.substring(1).replace(/\d/g, 'x') : '')
     if (VALID_ZD_CODES.has(tryWithX)) {
       return tryWithX
     }
@@ -246,7 +276,7 @@ function tryFuzzyZdMatch(code: string): string | null {
 
   // 第三轮：前缀搜索 — 用大类前缀在 VALID_ZD_CODES 里找候选
   // 解决 DIP 病种库与医保版 ICD 亚目分类不一致的问题
-  const categoryPrefix = `${prefix}.`   // 如 "K35."
+  const categoryPrefix = `${prefix}.` // 如 "K35."
   const candidates: string[] = []
   for (const zdCode of VALID_ZD_CODES) {
     if (zdCode.startsWith(categoryPrefix)) {
@@ -266,16 +296,23 @@ function tryFuzzyZdMatch(code: string): string | null {
 
 /** 标准化编码列表 */
 function normalizeCodeList(list: string[] | undefined): string[] {
-  return (list ?? []).map(item => item.trim()).filter(Boolean)
+  return (list ?? []).map((item) => item.trim()).filter(Boolean)
+}
+
+function getCoreEntry(matchKey: string) {
+  return LUZHOU_DIP_CORE_BY_KEY[matchKey]
 }
 
 /** 获取 DIP 分组方案信息 */
 export function getDipSchemeInfo() {
   return {
-    key: 'sichuan_dip',
-    label: '四川省 DIP',
-    version: 'CHS-DIP（四川）',
-    totalGroups: Object.keys(ZD_SS_MAP).length + Object.keys(ZD_ONLY_MAP).length,
+    key: 'luzhou_dip_2025',
+    label: '泸州市 DIP',
+    version: 'CHS-DIP（泸州 2025）',
+    totalGroups:
+      Object.keys(ZD_SS_MAP).length +
+      Object.keys(ZD_SS_REL_MAP).length +
+      Object.keys(ZD_ONLY_MAP).length,
     zdCount: VALID_ZD_CODES.size,
   }
 }

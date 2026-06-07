@@ -669,6 +669,17 @@ def pick_document(
     wanted_type = _safe_text(doc_type)
 
     if wanted_id:
+        if wanted_type:
+            for doc in documents:
+                if _safe_text(doc.get("doc_type")) != wanted_type:
+                    continue
+                if wanted_id in {
+                    _safe_text(doc.get("id")),
+                    _safe_text(doc.get("doc_id")),
+                    _safe_text(doc.get("document_id")),
+                    _safe_text(doc.get("doc_key")),
+                }:
+                    return doc
         for doc in documents:
             if wanted_id in {
                 _safe_text(doc.get("id")),

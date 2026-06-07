@@ -1,4 +1,5 @@
 import sichuanDrgEngineUrl from './sichuan2024Grouper.js?url'
+import { getDrgWeightInfo } from './drgWeightData'
 
 type SichuanDrgEngine = typeof import('./sichuan2024Grouper')
 let drgEnginePromise: Promise<SichuanDrgEngine> | null = null
@@ -35,6 +36,10 @@ export interface GrouperResult {
   adrgName?: string
   /** 权重值 RW（从引擎 messages 中解析） */
   rw?: number
+  /** 是否属于 2024 年度绩效监测低风险 DRG 组 */
+  isLowRisk?: boolean
+  /** 权重来源 */
+  weightSource?: string
   messages: string[]
   qcMessages: string[]
 }
@@ -152,17 +157,20 @@ export async function performGrouping(input: GrouperInput): Promise<GrouperResul
       messages.push(success ? '分组成功' : raw.status || '无法入组')
     }
 
-    // 从 messages 中解析 DRG 名称和 RW
+    // 从 messages 中解析 DRG 名称和 RW，再用 2024 绩效监测权重库补齐权重与低风险标识。
     const { drgName, adrgName, rw } = parseDrgDetails(messages, drg, adrg)
+    const weightInfo = getDrgWeightInfo(drg)
 
     return {
       status: success ? '分组成功' : '未入组',
       mdc,
       adrg,
       drg,
-      drgName,
+      drgName: weightInfo?.drgName || drgName,
       adrgName,
-      rw,
+      rw: weightInfo?.weight ?? rw,
+      isLowRisk: weightInfo?.isLowRisk,
+      weightSource: weightInfo ? '2024年度三级公立医院绩效监测DRG权重和低风险组列表' : undefined,
       messages,
       qcMessages,
     }

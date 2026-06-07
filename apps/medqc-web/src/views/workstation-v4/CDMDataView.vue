@@ -73,7 +73,7 @@
     <div class="datasource-bar">
       <div class="ds-left">
         <span class="ds-dot ds-active" />
-        <span class="ds-text">数据源：<strong>SQLite</strong>（本地测试）</span>
+        <span class="ds-text">数据源：<strong>SQLite</strong>（本地库）</span>
         <a-tag color="green">
           已连接
         </a-tag>
@@ -655,33 +655,27 @@ onMounted(loadData)
 
 <style scoped>
 .cdm-data-view {
-  padding: 24px;
+  padding: 20px 24px 24px;
   min-height: 100vh;
-  background: #f1f5f9;
+  background: #f5f9fc;
 }
 
 /* ===== 顶部统计 ===== */
 .stats-row {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
+  gap: 12px;
   margin-bottom: 16px;
 }
 .stat-card {
   background: white;
-  border-radius: 16px;
-  padding: 20px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  padding: 16px;
   display: flex;
   align-items: center;
   gap: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s;
-}
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
 }
 .stat-icon {
   width: 48px;
@@ -714,8 +708,8 @@ onMounted(loadData)
   color: #ea580c;
 }
 .stat-value {
-  font-size: 28px;
-  font-weight: 800;
+  font-size: 26px;
+  font-weight: 900;
   color: #0f172a;
   line-height: 1.2;
 }
@@ -728,13 +722,14 @@ onMounted(loadData)
 /* ===== 数据源 ===== */
 .datasource-bar {
   background: white;
-  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
   padding: 12px 20px;
   margin-bottom: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
 }
 .ds-left {
   display: flex;
@@ -768,7 +763,7 @@ onMounted(loadData)
 /* ===== 主体 ===== */
 .main-content {
   display: grid;
-  grid-template-columns: 420px 1fr;
+  grid-template-columns: minmax(0, 1fr) 420px;
   gap: 16px;
   min-height: calc(100vh - 260px);
 }
@@ -776,13 +771,16 @@ onMounted(loadData)
 /* ===== 左侧面板 ===== */
 .schema-panel {
   background: white;
-  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  display: flex;
-  flex-direction: column;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.04);
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 .panel-header {
+  grid-column: 1 / -1;
   padding: 16px 20px;
   border-bottom: 1px solid #e2e8f0;
   font-size: 15px;
@@ -824,14 +822,27 @@ onMounted(loadData)
 }
 
 .table-tabs {
+  min-height: 0;
+  border-right: 1px solid #e2e8f0;
+  overflow-y: auto;
+}
+
+.columns-list,
+.table-data-view {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.table-tabs {
   padding: 12px;
-  border-bottom: 1px solid #f1f5f9;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
 }
 .table-tab {
-  padding: 6px 12px;
+  width: 100%;
+  padding: 9px 10px;
   border-radius: 8px;
   font-size: 12px;
   cursor: pointer;
@@ -1000,9 +1011,10 @@ onMounted(loadData)
 /* ===== 右侧 ===== */
 .data-panel {
   background: white;
-  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
 }
@@ -1145,8 +1157,9 @@ onMounted(loadData)
 }
 .cost-total {
   grid-column: span 3;
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
-  color: white;
+  border: 1px solid #bfdbfe;
+  background: #eaf2ff;
+  color: #1d4ed8;
   padding: 16px;
   border-radius: 12px;
   display: flex;

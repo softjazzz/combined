@@ -340,14 +340,11 @@ async def auto_generate_frontpage_draft(
     current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
 ):
     """
-    自动生成病案首页草稿（不含 ICD 编码）
+    自动生成病案首页草稿（不含正式写入）。
 
-    当前实现：
-    - 不解析真实病历，仅返回 demo JSON 中的 frontpage 数据，作为骨架和前端联调基础。
-    - 后续将在此处接入：
-      - 根据 visit_id 获取全病历文书；
-      - 调用 LLM 抽取字段；
-      - 构造 FrontPageDraft 返回。
+    输入优先级：medical_text > documents > visit_id。
+    当前接口只在获得明确病历正文或文书列表时执行抽取；仅提供 visit_id
+    但未能加载到文书时，返回 requires_data 状态，避免用 demo 数据伪装成功。
     """
     trace_id = get_trace_id(request)
     visit_id_for_state = (payload.visit_id or "").strip()
@@ -371,20 +368,54 @@ async def auto_generate_frontpage_draft(
                 user_id=user_id,
             )
 
+        source_medical_text: Optional[str] = None
+        source_type = "medical_text" if payload.medical_text else "documents" if payload.documents else "visit_id"
+
         if payload.medical_text:
             # 直接从传入的病历文本提取
-            draft: FrontPageDraft = await service.extract_from_text(payload.medical_text)
+            source_medical_text = payload.medical_text
+            draft: FrontPageDraft = await service.extract_from_text(source_medical_text)
         elif payload.documents:
+            source_medical_text = "\n\n".join(
+                f"【{doc.type or '未知文书'}】\n{doc.content or ''}"
+                for doc in payload.documents
+                if str(doc.content or "").strip()
+            )
             draft = await service.generate_draft_from_documents(
                 [doc.model_dump() for doc in payload.documents]
             )
         else:
-            # 当前版本 visit_id 未参与真实逻辑，仅作为参数占位
-            draft = await service.generate_draft_from_visit(payload.visit_id or "demo")
+            visit_medical_text = await service._get_medical_text(
+                visit_id_for_state,
+                allow_demo_fallback=False,
+            )
+            if visit_medical_text and visit_medical_text.strip():
+                source_medical_text = visit_medical_text
+                draft = await service.extract_from_text(source_medical_text)
+            else:
+                if run_id and visit_id_for_state:
+                    default_workflow_queue_state_service.finish_failed(
+                        workflow_type="frontpage_generate",
+                        visit_id=visit_id_for_state,
+                        run_id=run_id,
+                        error_message="requires_data",
+                        user_id=user_id,
+                    )
+                return success_response(
+                    data={
+                        "status": "requires_data",
+                        "frontpage": None,
+                        "visit_id": payload.visit_id,
+                        "reason": "未提供病历正文或文书列表，且 visit_id 未能读取到真实病历文书；当前接口不会用 demo 数据生成首页草稿",
+                        "required_inputs": ["medical_text", "documents", "visit_id_with_emr_documents"],
+                    },
+                    message="需要病历正文或真实文书后才能自动生成病案首页草稿",
+                    trace_id=trace_id,
+                )
 
         frontpage = draft.model_dump()
-        if payload.medical_text:
-            frontpage = _postprocess_frontpage_diagnoses(frontpage, payload.medical_text)
+        if source_medical_text:
+            frontpage = _postprocess_frontpage_diagnoses(frontpage, source_medical_text)
 
         if visit_id_for_state:
             identity = _resolve_visit_identity(visit_id_for_state)
@@ -409,7 +440,15 @@ async def auto_generate_frontpage_draft(
             )
 
         return success_response(
-            data={"frontpage": frontpage},
+            data={
+                "frontpage": frontpage,
+                "source": {
+                    "type": source_type,
+                    "visit_id": visit_id_for_state or payload.visit_id,
+                    "text_length": len(source_medical_text or ""),
+                    "demo_fallback_used": False,
+                },
+            },
             message="自动生成病案首页草稿成功",
             trace_id=trace_id,
         )
@@ -673,6 +712,4 @@ async def get_export_formats(request: Request):
         message=f"支持 {len(formats)} 种导出格式",
         trace_id=get_trace_id(request),
     )
-
-
 

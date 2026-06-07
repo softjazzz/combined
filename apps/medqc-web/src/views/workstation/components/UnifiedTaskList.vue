@@ -1,46 +1,23 @@
 <template>
-  <div class="flex flex-col flex-1 min-h-0 bg-white">
-    <!-- 列表主体 -->
+  <div class="flex flex-1 flex-col bg-transparent">
     <div
-      v-if="urgentTasks.length"
+      v-if="displayTasks.length"
       class="flex-1 overflow-y-auto custom-scrollbar"
     >
-      <!-- 紧急组 - P0/P1 -->
-      <div class="mb-4">
-        <!-- 去掉夸张的红背景，使用极简的实线分割及左侧红杠标示 -->
-        <div
-          class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-6 py-3"
-        >
-          <div class="flex items-center gap-2">
-            <span
-              class="h-1.5 w-1.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"
-            />
-            <span class="text-[12.5px] font-extrabold text-slate-800 tracking-wide">
-              最高优先级 (P0/P1)
-            </span>
-          </div>
-          <span class="text-[11.5px] font-medium text-slate-400">
-            {{ urgentTasks.length }} 项
-          </span>
-        </div>
-        <div class="flex flex-col">
-          <UnifiedTaskRow
-            v-for="task in urgentTasks"
-            :key="task.id"
-            :task="task"
-            :expanded-id="expandedId"
-            :format-date-time="formatDateTime"
-            @open="emit('open', $event)"
-            @toggle-expand="toggleExpand"
-          />
-        </div>
+      <div class="flex flex-col">
+        <UnifiedTaskRow
+          v-for="task in displayTasks"
+          :key="task.id"
+          :task="task"
+          :format-date-time="formatDateTime"
+          @open="emit('open', $event)"
+        />
       </div>
     </div>
 
-    <!-- 空态 -->
     <div
       v-else
-      class="flex-1 flex flex-col items-center justify-center py-20 bg-white"
+      class="flex flex-1 flex-col items-center justify-center bg-transparent py-16"
     >
       <div
         class="h-16 w-16 mb-4 rounded-full bg-slate-50 flex items-center justify-center border border-slate-100 shadow-sm"
@@ -80,40 +57,31 @@
         </svg>
       </div>
       <div class="text-[15px] font-semibold text-slate-800">
-        当前无最高优先级任务
+        {{ emptyTitle }}
       </div>
       <div class="text-[13px] text-slate-400 mt-1">
-        仅展示 P0/P1 常规待办已隐藏
+        {{ emptyDesc }}
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import type { UnifiedTaskItem } from '@/views/workstation-v2/types'
 import UnifiedTaskRow from './UnifiedTaskRow.vue'
 
 const props = defineProps<{
   tasks: UnifiedTaskItem[]
   formatDateTime: (value?: string | null) => string
+  previewLimit?: number
+  emptyTitle?: string
+  emptyDesc?: string
 }>()
 
 const emit = defineEmits<{
   open: [task: UnifiedTaskItem]
 }>()
-
-const expandedId = ref('')
-
-function toggleExpand(id: string) {
-  expandedId.value = expandedId.value === id ? '' : id
-}
-
-function isUrgent(task: UnifiedTaskItem): boolean {
-  const s = (task.severity || '').toLowerCase()
-  const p = (task.priority || '').toLowerCase()
-  return s === 'critical' || s === 'high' || p === 'critical' || p === 'high'
-}
 
 function sortWeight(task: UnifiedTaskItem): number {
   let w = 0
@@ -137,5 +105,14 @@ function sortedGroup(items: UnifiedTaskItem[]): UnifiedTaskItem[] {
   })
 }
 
-const urgentTasks = computed(() => sortedGroup(props.tasks.filter(isUrgent)))
+const displayTasks = computed(() => {
+  const sorted = sortedGroup(props.tasks)
+  if (props.previewLimit && props.previewLimit > 0) {
+    return sorted.slice(0, props.previewLimit)
+  }
+  return sorted
+})
+
+const emptyTitle = computed(() => props.emptyTitle || '当前无任务')
+const emptyDesc = computed(() => props.emptyDesc || '可以调整筛选条件后再查看。')
 </script>

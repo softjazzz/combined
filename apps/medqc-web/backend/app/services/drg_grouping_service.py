@@ -2,9 +2,14 @@
 DRG/DIP 分组服务 - 调用 medchat.fun 真实 API
 """
 
+from functools import lru_cache
+from pathlib import Path
 from typing import Dict, Any, List, Optional
+import json
 import httpx
 import logging
+
+from .drg_config_store import get_runtime_grouping_config
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +20,26 @@ CODE_INFO_API_URL = "https://medchat.fun/api/find-info-by-code"
 
 # 默认基准支付 (四川省)
 DEFAULT_BASE_PAYMENT = 8000.0
+DRG_WEIGHT_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "drg_weights.json"
+
+
+@lru_cache(maxsize=1)
+def load_drg_weight_dataset() -> Dict[str, Any]:
+    with DRG_WEIGHT_DATA_PATH.open("r", encoding="utf-8") as f:
+        payload = json.load(f)
+    entries = payload.get("entries") or []
+    by_code = {
+        str(item.get("drgCode") or "").strip().upper(): item
+        for item in entries
+        if item.get("drgCode")
+    }
+    return {"meta": payload.get("meta") or {}, "entries": entries, "by_code": by_code}
+
+
+def lookup_drg_weight(drg_code: str | None) -> Optional[Dict[str, Any]]:
+    if not drg_code:
+        return None
+    return load_drg_weight_dataset()["by_code"].get(drg_code.strip().upper())
 
 
 class DRGGroupingService:
@@ -89,6 +114,7 @@ class DRGGroupingService:
         }
 
         logger.info(f"调用 DRG 分组 API: PDX={primary_diagnosis}, 城市={city_name}")
+        runtime_config = get_runtime_grouping_config()
 
         try:
             async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
@@ -113,8 +139,13 @@ class DRGGroupingService:
                 adrg_name = result_item.get("ADRGName", "-")
                 weight = float(result_item.get("RW", 0))
 
+                weight_info = lookup_drg_weight(drg_code)
+                if weight_info:
+                    weight = float(weight_info.get("weight") or weight)
+                    drg_name = weight_info.get("drgName") or drg_name
+
                 # 计算支付金额
-                baseline_payment = round(DEFAULT_BASE_PAYMENT * weight, 2)
+                baseline_payment = self._calculate_payment(weight, runtime_config)
 
                 return {
                     "success": True,
@@ -128,6 +159,12 @@ class DRGGroupingService:
                     "confidence": 1.0,
                     "risk_level": "medium",
                     "grouping_logic": f"远程分组: {grouping_path.get('final_outcome', 'Success')}",
+                    "is_low_risk": bool(weight_info.get("isLowRisk")) if weight_info else None,
+                    "weight_source": "backend/app/data/drg_weights.json" if weight_info else "remote_response",
+                    "config_version_id": runtime_config.get("config_version_id"),
+                    "runtime_config": self._public_runtime_config(runtime_config),
+                    "cost_ratio": self._cost_ratio(total_fee, baseline_payment),
+                    "cost_group": self._cost_group(total_fee, baseline_payment, runtime_config),
                     "raw_response": result_item,
                     # 编码映射信息
                     "original_code": original_pdx,
@@ -197,19 +234,70 @@ class DRGGroupingService:
 
     def _fallback_result(self, primary_diagnosis: str, error_msg: str) -> Dict[str, Any]:
         """降级返回 Mock 结果"""
+        runtime_config = get_runtime_grouping_config()
+        local_weight = lookup_drg_weight(primary_diagnosis)
+        drg_code = local_weight.get("drgCode") if local_weight else "ZZ91"
+        drg_name = local_weight.get("drgName") if local_weight else "未入组"
+        weight = float(local_weight.get("weight")) if local_weight else 1.0
+        baseline_payment = self._calculate_payment(weight, runtime_config)
         return {
             "success": False,
             "adrg_code": "ZZ9",
             "adrg_name": "其他",
-            "drg_code": "ZZ91",
-            "drg_name": "未入组",
-            "weight": 1.0,
-            "baseline_payment": DEFAULT_BASE_PAYMENT,
+            "drg_code": drg_code,
+            "drg_name": drg_name,
+            "weight": weight,
+            "baseline_payment": baseline_payment,
             "expected_los": {"min": 7, "max": 14},
             "confidence": 0.5,
             "risk_level": "unknown",
             "grouping_logic": f"分组失败: {error_msg}",
+            "is_low_risk": bool(local_weight.get("isLowRisk")) if local_weight else None,
+            "weight_source": "backend/app/data/drg_weights.json" if local_weight else "fallback_default",
+            "config_version_id": runtime_config.get("config_version_id"),
+            "runtime_config": self._public_runtime_config(runtime_config),
+            "cost_ratio": 0,
+            "cost_group": "base",
             "error": error_msg
+        }
+
+    def _calculate_payment(self, weight: float, runtime_config: Dict[str, Any]) -> float:
+        return round(
+            float(runtime_config.get("base_rate") or DEFAULT_BASE_PAYMENT)
+            * float(weight or 0)
+            * float(runtime_config.get("hospital_coefficient") or 1)
+            * float(runtime_config.get("region_coefficient") or 1),
+            2,
+        )
+
+    def _cost_ratio(self, total_fee: float, baseline_payment: float) -> float:
+        try:
+            return round(float(total_fee or 0) / float(baseline_payment or 0), 4)
+        except Exception:
+            return 0
+
+    def _cost_group(
+        self,
+        total_fee: float,
+        baseline_payment: float,
+        runtime_config: Dict[str, Any],
+    ) -> str:
+        ratio = self._cost_ratio(total_fee, baseline_payment)
+        if baseline_payment <= 0:
+            return "base"
+        if ratio >= float(runtime_config.get("high_rate_threshold") or 3):
+            return "high_cost"
+        if ratio <= float(runtime_config.get("low_rate_threshold") or 0.5):
+            return "low_cost"
+        return "base"
+
+    def _public_runtime_config(self, runtime_config: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "base_rate": runtime_config.get("base_rate"),
+            "hospital_coefficient": runtime_config.get("hospital_coefficient"),
+            "region_coefficient": runtime_config.get("region_coefficient"),
+            "high_rate_threshold": runtime_config.get("high_rate_threshold"),
+            "low_rate_threshold": runtime_config.get("low_rate_threshold"),
         }
 
 

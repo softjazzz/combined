@@ -1,317 +1,395 @@
 <template>
-  <div class="h-full w-full flex flex-col bg-slate-50 dark:bg-slate-900 p-6 overflow-y-auto">
-    <!-- Header -->
-    <div class="flex items-center gap-3 mb-6">
-      <button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-        <ArrowLeftOutlined class="text-lg" />
-      </button>
-      <h2 class="text-xl font-semibold text-slate-800 dark:text-white">
-        事后分析
-      </h2>
-      <span class="text-sm text-slate-400">基于大数据的病案质量分析与趋势预测</span>
-    </div>
+  <div class="post-event-analysis-page">
+    <header class="analysis-header">
+      <div class="analysis-title-block">
+        <button
+          class="back-icon-button"
+          type="button"
+          aria-label="返回"
+        >
+          <ArrowLeftOutlined />
+        </button>
+        <div>
+          <h2>事后分析</h2>
+          <p>从质量、费用和分组结果复盘科室效率表现与改进方向</p>
+        </div>
+      </div>
 
-    <!-- 五级层级维度选择 -->
-    <div
-      class="flex items-center gap-4 mb-4 bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700"
-    >
-      <span class="text-sm font-medium text-slate-600 dark:text-slate-400">分析维度:</span>
-      <a-radio-group
-        v-model:value="analysisDimension"
-        button-style="solid"
-        size="small"
-        @change="handleDimensionChange"
-      >
-        <a-radio-button value="hospital">
-          全院概览
-        </a-radio-button>
-        <a-radio-button value="department">
-          科室分析
-        </a-radio-button>
-        <a-radio-button value="ward">
-          病区分析
-        </a-radio-button>
-        <a-radio-button value="chief_group">
-          主诊医师组
-        </a-radio-button>
-        <a-radio-button value="person">
-          个人
-        </a-radio-button>
-      </a-radio-group>
-      <span class="ml-auto text-xs text-slate-400">当前: {{ dimensionLabel }}</span>
-    </div>
+      <div class="header-actions">
+        <span
+          v-if="useDemoData || hasUploadedDataset"
+          class="mode-chip"
+        >
+          <WarningOutlined />
+          {{ drgModeHintText }}
+        </span>
+        <a-dropdown>
+          <template #overlay>
+            <a-menu @click="handleExportMenuClick">
+              <a-menu-item key="excel">
+                <FileExcelOutlined /> 导出 Excel
+              </a-menu-item>
+              <a-menu-item key="pdf">
+                <FilePdfOutlined /> 导出 PDF
+              </a-menu-item>
+              <a-menu-item key="word">
+                <FileWordOutlined /> 导出 Word
+              </a-menu-item>
+            </a-menu>
+          </template>
+          <a-button
+            type="primary"
+            class="export-button"
+          >
+            <template #icon>
+              <DownloadOutlined />
+            </template>
+            导出报告
+          </a-button>
+        </a-dropdown>
+      </div>
+    </header>
 
-    <!-- 数据集管理面板 -->
+    <section class="analysis-toolbar">
+      <div class="dimension-control">
+        <span class="control-label">分析维度</span>
+        <a-radio-group
+          v-model:value="analysisDimension"
+          button-style="solid"
+          size="small"
+          @change="handleDimensionChange"
+        >
+          <a-radio-button value="hospital">
+            全院
+          </a-radio-button>
+          <a-radio-button value="department">
+            科室
+          </a-radio-button>
+          <a-radio-button value="ward">
+            病区
+          </a-radio-button>
+          <a-radio-button value="chief_group">
+            主诊组
+          </a-radio-button>
+          <a-radio-button value="person">
+            个人
+          </a-radio-button>
+        </a-radio-group>
+      </div>
+
+      <div class="filter-actions">
+        <a-range-picker
+          v-if="!useDemoData && !hasUploadedDataset && batchId"
+          v-model:value="dateRange"
+          class="date-range-picker"
+        />
+        <a-select
+          v-model:value="analysisType"
+          class="analysis-type-select"
+        >
+          <a-select-option value="quality">
+            质量分析
+          </a-select-option>
+          <a-select-option value="cost">
+            费用分析
+          </a-select-option>
+          <a-select-option value="drg">
+            DRG分析
+          </a-select-option>
+        </a-select>
+      </div>
+    </section>
+
     <DatasetUploadPanel
-      class="mb-4"
+      class="dataset-upload-compact"
       @data-changed="handleDatasetChanged"
     />
 
-    <!-- Time Range Selector -->
-    <div class="flex items-center gap-4 mb-6">
-      <div
-        v-if="useDemoData || hasUploadedDataset"
-        class="text-orange-500 text-sm flex items-center gap-2"
-      >
-        <WarningOutlined />
-        <span>{{ drgModeHintText }}</span>
-      </div>
-      <a-range-picker
-        v-if="!useDemoData && !hasUploadedDataset && batchId"
-        v-model:value="dateRange"
-        class="w-80"
-      />
-      <a-select
-        v-model:value="analysisType"
-        class="w-40"
-      >
-        <a-select-option value="quality">
-          质量分析
-        </a-select-option>
-        <a-select-option value="cost">
-          费用分析
-        </a-select-option>
-        <a-select-option value="drg">
-          DRG分析
-        </a-select-option>
-      </a-select>
-      <a-dropdown>
-        <template #overlay>
-          <a-menu
-            @click="
-              (info) => {
-                void handleExport(info)
-              }
-            "
-          >
-            <a-menu-item key="excel">
-              <FileExcelOutlined /> 导出 Excel
-            </a-menu-item>
-            <a-menu-item key="pdf">
-              <FilePdfOutlined /> 导出 PDF
-            </a-menu-item>
-            <a-menu-item key="word">
-              <FileWordOutlined /> 导出 Word
-            </a-menu-item>
-          </a-menu>
-        </template>
-        <button
-          class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
-        >
-          <DownloadOutlined />
-          导出报告
-        </button>
-      </a-dropdown>
-    </div>
-
-    <!-- KPI Cards -->
-    <div class="grid grid-cols-1 gap-4 mb-6 md:grid-cols-2 xl:grid-cols-4">
-      <div
-        v-for="card in kpiCards"
+    <section class="kpi-strip">
+      <article
+        v-for="(card, index) in primaryKpiCards"
         :key="card.label"
-        :class="['rounded-xl p-4 border bg-white dark:bg-slate-800', card.cardClass]"
+        :class="['kpi-card', getKpiToneClass(index), card.cardClass]"
       >
-        <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">
-          {{ card.label }}
+        <div class="kpi-icon">
+          <InfoCircleOutlined />
         </div>
-        <div
-          class="text-2xl font-bold"
-          :class="card.valueClass"
-        >
-          {{ card.value }}
+        <div class="kpi-content">
+          <span class="kpi-label">{{ card.label }}</span>
+          <strong :class="card.valueClass">{{ card.value }}</strong>
+          <span :class="['kpi-hint', card.hintClass]">{{ card.hint }}</span>
         </div>
-        <div
-          class="text-xs mt-1"
-          :class="card.hintClass"
-        >
-          {{ card.hint }}
-        </div>
-      </div>
-    </div>
+      </article>
+    </section>
 
-    <!-- Backend Generated Advanced Charts -->
-    <div
-      v-if="stats.charts && Object.keys(stats.charts).length > 0"
-      class="flex flex-col gap-4 mb-6"
-    >
-      <div class="grid grid-cols-2 gap-4">
-        <div
-          v-show="stats.charts.profit_waterfall"
-          class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700"
-        >
-          <div
-            ref="waterfallRef"
-            class="h-80 w-full"
-          />
+    <section class="analysis-primary-grid">
+      <article class="analysis-panel trend-panel">
+        <div class="panel-header">
+          <div>
+            <h3>绩效复盘趋势</h3>
+            <p>{{ chartTitles.trend }} · {{ dimensionLabel }}</p>
+          </div>
+          <div class="metric-tabs">
+            <button
+              :class="{ active: analysisType === 'quality' }"
+              type="button"
+              @click="analysisType = 'quality'"
+            >
+              质量
+            </button>
+            <button
+              :class="{ active: analysisType === 'cost' }"
+              type="button"
+              @click="analysisType = 'cost'"
+            >
+              费用
+            </button>
+            <button
+              :class="{ active: analysisType === 'drg' }"
+              type="button"
+              @click="analysisType = 'drg'"
+            >
+              DRG
+            </button>
+          </div>
         </div>
-        <div
-          v-show="stats.charts.dept_profit_ranking"
-          class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700"
-        >
-          <div
-            ref="deptRankingRef"
-            class="h-80 w-full"
-          />
-        </div>
-      </div>
-      <div
-        v-show="stats.charts.drg_scatter"
-        class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700"
-      >
-        <div
-          ref="drgScatterRef"
-          class="h-96 w-full"
-        />
-      </div>
-    </div>
-
-    <!-- Fallback Charts Grid (Demo Data) -->
-    <div
-      v-else
-      class="grid grid-cols-2 gap-4 mb-6"
-    >
-      <!-- Quality Trend -->
-      <div
-        class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700"
-      >
-        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">
-          {{ chartTitles.trend }}
-        </h3>
         <div
           ref="qualityTrendRef"
-          class="h-64"
+          class="trend-chart"
         />
-      </div>
+        <p class="chart-note">
+          注：折线用于观察 CMI 波动，柱形用于复盘入组例数变化。
+        </p>
+      </article>
 
-      <!-- Department Comparison -->
-      <div
-        class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700"
-      >
-        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">
-          {{ chartTitles.comparison }}
-        </h3>
+      <aside class="analysis-panel insight-panel">
+        <div class="panel-header compact">
+          <div>
+            <h3>关键结论</h3>
+            <p>按当前维度自动汇总高优先级问题</p>
+          </div>
+          <a-tag color="blue">
+            {{ dimensionLabel }}
+          </a-tag>
+        </div>
+        <div class="insight-list">
+          <div
+            v-for="(item, index) in insightItems"
+            :key="`${item.title}-${index}`"
+            :class="['insight-row', getInsightToneClass(item.tone)]"
+          >
+            <span class="insight-icon">
+              <ExclamationCircleOutlined v-if="item.tone === 'danger'" />
+              <WarningOutlined v-else-if="item.tone === 'warning'" />
+              <InfoCircleOutlined v-else />
+            </span>
+            <div>
+              <div class="insight-title-line">
+                <span>{{ item.title }}</span>
+                <a-button
+                  type="link"
+                  size="small"
+                  @click="openDrillDown(item.dimension, item.value)"
+                >
+                  查看详情
+                </a-button>
+              </div>
+              <p>{{ item.detail }}</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="analysis-secondary-grid">
+      <article class="analysis-panel department-panel">
+        <div class="panel-header">
+          <div>
+            <h3>{{ chartTitles.comparison }}</h3>
+            <p>科室 CMI、费用指数与病例规模对比</p>
+          </div>
+          <InfoCircleOutlined class="panel-info-icon" />
+        </div>
         <div
           ref="deptComparisonRef"
-          class="h-64"
+          class="department-chart"
         />
-      </div>
+        <div class="rank-table">
+          <div class="rank-head">
+            <span>排名</span>
+            <span>科室</span>
+            <span>病例</span>
+            <span>CMI</span>
+            <span>费用指数</span>
+          </div>
+          <div
+            v-for="row in departmentRows"
+            :key="row.name"
+            class="rank-row"
+          >
+            <span class="rank-no">{{ row.rank }}</span>
+            <span class="rank-name">
+              {{ row.name }}
+              <i :style="{ width: `${row.barWidth}%` }" />
+            </span>
+            <span>{{ row.casesText }}</span>
+            <span>{{ row.avgCmiText }}</span>
+            <span :class="row.costIndexTone">{{ row.costIndexText }}</span>
+          </div>
+        </div>
+      </article>
 
-      <!-- DRG Distribution -->
-      <div
-        class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700"
-      >
-        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">
-          DRG 分组占比
-        </h3>
+      <article class="analysis-panel drg-structure-panel">
+        <div class="panel-header">
+          <div>
+            <h3>DRG 结构分布</h3>
+            <p>按权重/病组区间查看病例构成</p>
+          </div>
+          <InfoCircleOutlined class="panel-info-icon" />
+        </div>
+        <div class="drg-structure-content">
+          <div
+            ref="drgPieRef"
+            class="drg-chart"
+          />
+          <div class="drg-legend-table">
+            <div class="drg-legend-head">
+              <span>DRG 权重区间</span>
+              <span>病例数</span>
+              <span>占比</span>
+            </div>
+            <div
+              v-for="row in drgStructureRows"
+              :key="row.name"
+              class="drg-legend-row"
+            >
+              <span>
+                <i :class="row.dotClass" />
+                {{ row.name }}
+              </span>
+              <span>{{ row.countText }}</span>
+              <span>{{ row.shareText }}</span>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="analysis-panel task-panel">
+      <div class="panel-header">
+        <div>
+          <h3>改进任务清单</h3>
+          <p>根据当前分析结果生成可跟踪的科室改进动作</p>
+        </div>
+        <a-button
+          type="link"
+          size="small"
+        >
+          查看全部任务
+        </a-button>
+      </div>
+      <div class="task-table">
+        <div class="task-head">
+          <span>对象</span>
+          <span>问题类型</span>
+          <span>影响</span>
+          <span>建议动作</span>
+          <span>责任科室</span>
+          <span>状态</span>
+          <span>截止</span>
+        </div>
         <div
-          ref="drgPieRef"
-          class="h-64"
-        />
+          v-for="task in improvementTasks"
+          :key="`${task.owner}-${task.issue}`"
+          class="task-row"
+        >
+          <span>{{ task.owner }}</span>
+          <span>
+            <a-tag :color="task.tagColor">{{ task.issue }}</a-tag>
+          </span>
+          <span>{{ task.impact }}</span>
+          <span>{{ task.action }}</span>
+          <span>{{ task.department }}</span>
+          <span>
+            <a-tag :color="task.statusColor">{{ task.status }}</a-tag>
+          </span>
+          <span>{{ task.due }}</span>
+        </div>
       </div>
+    </section>
 
-      <!-- Cost Analysis -->
-      <div
-        class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700"
-      >
-        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">
-          费用结构分析
-        </h3>
-        <div
-          ref="costStructureRef"
-          class="h-64"
-        />
-      </div>
-    </div>
-
-    <!-- 超费原因分析 (新增) -->
-    <div class="grid grid-cols-2 gap-4 mb-6">
+    <section class="supplementary-grid">
       <OverCostAnalysisCard
         :batch-id="useDemoData || hasUploadedDataset ? undefined : batchId"
         :session-id="useDemoData || hasUploadedDataset ? undefined : sessionId"
         :dimension="analysisDimension"
         :dimension-label="dimensionLabel"
       />
-    </div>
 
-    <!-- AI Insights Summary -->
-    <div
-      v-if="stats.ai_insights && stats.ai_insights.length > 0"
-      class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700"
+      <article class="analysis-panel cost-panel">
+        <div class="panel-header">
+          <div>
+            <h3>费用结构分析</h3>
+            <p>按药品、耗材、检查、治疗拆解费用构成</p>
+          </div>
+        </div>
+        <div
+          ref="costStructureRef"
+          class="cost-chart"
+        />
+      </article>
+    </section>
+
+    <section
+      v-if="advancedChartsAvailable"
+      class="advanced-chart-grid"
     >
-      <div class="flex items-center gap-2 mb-4">
-        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
-          AI 智能洞察
-        </h3>
-        <a-tag color="blue">
-          模型分析
-        </a-tag>
-      </div>
-      <div class="space-y-3">
-        <div
-          v-for="(insight, idx) in stats.ai_insights"
-          :key="idx"
-          class="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-900/30"
-        >
-          <InfoCircleOutlined class="text-blue-500 text-lg mt-0.5" />
-          <div class="flex-1 text-sm text-blue-700 dark:text-blue-300">
-            {{ insight }}
+      <article
+        v-show="stats.charts.profit_waterfall"
+        class="analysis-panel"
+      >
+        <div class="panel-header">
+          <div>
+            <h3>支付差额瀑布</h3>
+            <p>后端专项图表</p>
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Legacy Issue Summary (Fallback) -->
-    <div
-      v-else
-      class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700"
-    >
-      <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">
-        问题汇总与建议
-      </h3>
-      <div class="space-y-3">
         <div
-          class="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-900/30"
-        >
-          <ExclamationCircleOutlined class="text-red-500 text-lg mt-0.5" />
-          <div class="flex-1">
-            <div class="font-medium text-red-700 dark:text-red-300 mb-1">
-              编码准确性问题
-            </div>
-            <div class="text-sm text-red-600/80 dark:text-red-400/80">
-              发现23例主诊断编码与临床诊断不符，建议加强编码培训
-            </div>
+          ref="waterfallRef"
+          class="advanced-chart"
+        />
+      </article>
+      <article
+        v-show="stats.charts.dept_profit_ranking"
+        class="analysis-panel"
+      >
+        <div class="panel-header">
+          <div>
+            <h3>科室盈亏排行</h3>
+            <p>后端专项图表</p>
           </div>
         </div>
-
         <div
-          class="flex items-start gap-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-100 dark:border-yellow-900/30"
-        >
-          <WarningOutlined class="text-yellow-500 text-lg mt-0.5" />
-          <div class="flex-1">
-            <div class="font-medium text-yellow-700 dark:text-yellow-300 mb-1">
-              费用消耗异常
-            </div>
-            <div class="text-sm text-yellow-600/80 dark:text-yellow-400/80">
-              骨科和神经内科费用消耗指数偏高，需关注成本控制
-            </div>
+          ref="deptRankingRef"
+          class="advanced-chart"
+        />
+      </article>
+      <article
+        v-show="stats.charts.drg_scatter"
+        class="analysis-panel wide"
+      >
+        <div class="panel-header">
+          <div>
+            <h3>DRG 风险散点</h3>
+            <p>后端专项图表</p>
           </div>
         </div>
-
         <div
-          class="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-900/30"
-        >
-          <InfoCircleOutlined class="text-blue-500 text-lg mt-0.5" />
-          <div class="flex-1">
-            <div class="font-medium text-blue-700 dark:text-blue-300 mb-1">
-              优化建议
-            </div>
-            <div class="text-sm text-blue-600/80 dark:text-blue-400/80">
-              建议优化心内科和呼吸科的诊疗路径，可提升CMI约5%
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+          ref="drgScatterRef"
+          class="advanced-chart large"
+        />
+      </article>
+    </section>
   </div>
 
   <!-- Drill Down Modal -->
@@ -377,8 +455,8 @@ const drgModeHintText = computed(() =>
   hasUploadedDataset.value
     ? `当前使用模板上传数据（${drgDatasetStore.meta?.validCount ?? drgDatasetStore.records.length} 例）`
     : drgMockEnabled.value
-      ? '当前已开启 Mock 演示模式，展示前端演示数据'
-      : '当前缺少 session_id，自动展示演示数据',
+      ? '当前处于降级数据模式，仅用于复核展示'
+      : '当前缺少 session_id，展示待接入数据状态',
 )
 let unsubscribeDrgMockMode: (() => void) | null = null
 
@@ -389,6 +467,11 @@ const dimensionLabelMap: Record<string, string> = {
   ward: '病区分析',
   chief_group: '主诊医师组',
   person: '个人',
+}
+
+const toApiAnalysisDimension = (dimension: string) => {
+  if (dimension === 'chief_group') return 'attending_group'
+  return dimension
 }
 
 // 计算属性：当前维度名称
@@ -417,6 +500,30 @@ const formatPercent = (value: unknown, digits = 2) =>
   `${(safeNumber(value) * 100).toFixed(digits)}%`
 const formatCurrency = (value: unknown) =>
   `¥${safeNumber(value).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`
+const formatDateOffset = (days: number) => {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+type LooseRecord = Record<string, unknown>
+
+const pickValue = (row: LooseRecord, keys: string[]) => {
+  for (const key of keys) {
+    const value = row[key]
+    if (value !== undefined && value !== null && value !== '') {
+      return value
+    }
+  }
+  return undefined
+}
+
+const pickText = (row: LooseRecord, keys: string[], fallback: string) => {
+  const value = pickValue(row, keys)
+  return value === undefined ? fallback : String(value)
+}
 
 const kpiCards = computed(() => {
   const summary = stats.value.summary as Record<string, any>
@@ -424,7 +531,7 @@ const kpiCards = computed(() => {
   const profitClass = insuranceProfit >= 0 ? 'text-green-600' : 'text-red-500'
   const profitHintClass = insuranceProfit >= 0 ? 'text-green-600' : 'text-red-500'
   const mortality = safeNumber(summary.low_risk_mortality_rate)
-  const mortalityClass = mortality > 0.1 ? 'text-red-600' : 'text-slate-800 dark:text-white'
+  const mortalityClass = mortality > 0.1 ? 'text-red-600' : 'text-slate-800'
   const mortalityHintClass = mortality > 0.1 ? 'text-red-500' : 'text-slate-400'
 
   return [
@@ -432,7 +539,7 @@ const kpiCards = computed(() => {
       label: '病组数',
       value: formatInteger(summary.drg_count ?? summary.total_records),
       hint: `入组率: ${formatPercent(summary.grouping_success_rate)}`,
-      valueClass: 'text-slate-800 dark:text-white',
+      valueClass: 'text-slate-800',
       hintClass: 'text-slate-400',
       cardClass: '',
     },
@@ -440,7 +547,7 @@ const kpiCards = computed(() => {
       label: 'CMI',
       value: formatDecimal(summary.avg_cmi),
       hint: '基准: 1.00',
-      valueClass: 'text-slate-800 dark:text-white',
+      valueClass: 'text-slate-800',
       hintClass: 'text-green-600',
       cardClass: '',
     },
@@ -448,7 +555,7 @@ const kpiCards = computed(() => {
       label: '费用消耗指数',
       value: formatDecimal(summary.cost_consumption_index),
       hint: '越低越优',
-      valueClass: 'text-slate-800 dark:text-white',
+      valueClass: 'text-slate-800',
       hintClass: 'text-slate-400',
       cardClass: '',
     },
@@ -456,7 +563,7 @@ const kpiCards = computed(() => {
       label: '时间消耗指数',
       value: formatDecimal(summary.time_consumption_index),
       hint: '越低越优',
-      valueClass: 'text-slate-800 dark:text-white',
+      valueClass: 'text-slate-800',
       hintClass: 'text-slate-400',
       cardClass: '',
     },
@@ -466,14 +573,13 @@ const kpiCards = computed(() => {
       hint: `${formatInteger(summary.low_risk_death_count)} / ${formatInteger(summary.low_risk_total_count)} 例`,
       valueClass: mortalityClass,
       hintClass: mortalityHintClass,
-      cardClass:
-        mortality > 0.1 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' : '',
+      cardClass: mortality > 0.1 ? 'bg-red-50 border-red-200' : '',
     },
     {
       label: '平均住院日',
       value: `${formatDecimal(summary.avg_length_of_stay, 1)} 天`,
       hint: '按出院病例口径',
-      valueClass: 'text-slate-800 dark:text-white',
+      valueClass: 'text-slate-800',
       hintClass: 'text-slate-400',
       cardClass: '',
     },
@@ -481,7 +587,7 @@ const kpiCards = computed(() => {
       label: '平均住院费用',
       value: formatCurrency(summary.avg_inpatient_cost),
       hint: '含医保结算口径',
-      valueClass: 'text-slate-800 dark:text-white',
+      valueClass: 'text-slate-800',
       hintClass: 'text-slate-400',
       cardClass: '',
     },
@@ -494,6 +600,164 @@ const kpiCards = computed(() => {
       cardClass: '',
     },
   ]
+})
+
+const primaryKpiCards = computed(() => {
+  const preferredLabels = new Set(['病组数', 'CMI', '费用消耗指数', '低风险死亡率'])
+  return kpiCards.value.filter((card) => preferredLabels.has(card.label))
+})
+
+const advancedChartsAvailable = computed(
+  () => stats.value.charts && Object.keys(stats.value.charts).length > 0,
+)
+
+const getKpiToneClass = (index: number) => {
+  const classes = ['tone-blue', 'tone-green', 'tone-orange', 'tone-red']
+  return classes[index % classes.length]
+}
+
+const getInsightToneClass = (tone: string) => `tone-${tone}`
+
+const insightItems = computed(() => {
+  const fallback = [
+    '费用消耗指数高于基准，需重点复核高值耗材使用与住院日。',
+    '疑似存在编码缺口，可能影响 DRG 入组准确性和支付结果。',
+    '低权重 DRG 组占比偏高，建议复盘主诊断选择和并发症记录。',
+    '科室 CMI 波动较大，建议加强病种结构管理。',
+  ]
+  const source = stats.value.ai_insights.length ? stats.value.ai_insights : fallback
+
+  return source.slice(0, 4).map((detail, index) => {
+    const text = String(detail)
+    if (text.includes('费用') || text.includes('亏损') || text.includes('耗材')) {
+      return {
+        title: '费用偏高',
+        detail: text,
+        tone: 'warning',
+        dimension: 'cost',
+        value: '费用偏高',
+      }
+    }
+    if (text.includes('编码') || text.includes('入组')) {
+      return {
+        title: '编码缺口',
+        detail: text,
+        tone: 'blue',
+        dimension: 'coding',
+        value: '编码缺口',
+      }
+    }
+    if (text.includes('低风险') || text.includes('死亡')) {
+      return {
+        title: '低风险死亡',
+        detail: text,
+        tone: 'danger',
+        dimension: 'mortality',
+        value: '低风险死亡',
+      }
+    }
+    return {
+      title: index === 2 ? '低权重组' : '科室波动',
+      detail: text,
+      tone: index === 2 ? 'purple' : 'cyan',
+      dimension: 'department',
+      value: dimensionLabel.value,
+    }
+  })
+})
+
+const departmentRows = computed(() => {
+  const rows = (stats.value.department_stats || []).slice(0, 5) as LooseRecord[]
+  const maxCases = Math.max(
+    ...rows.map((row) => safeNumber(pickValue(row, ['case_count', 'count', 'total_records']))),
+    1,
+  )
+
+  return rows.map((row, index) => {
+    const cases = safeNumber(pickValue(row, ['case_count', 'count', 'total_records']))
+    const avgCmi = safeNumber(pickValue(row, ['avg_cmi', 'cmi']))
+    const costIndex = safeNumber(pickValue(row, ['cost_index', 'cost_consumption_index']), 1)
+    return {
+      rank: index + 1,
+      name: pickText(row, ['dept_name', 'department', 'name', 'ward_name', 'doctor_name'], '-'),
+      casesText: formatInteger(cases),
+      avgCmiText: formatDecimal(avgCmi),
+      costIndexText: formatDecimal(costIndex),
+      costIndexTone: costIndex > 1.05 ? 'metric-up' : 'metric-down',
+      barWidth: Math.max(18, Math.round((cases / maxCases) * 100)),
+    }
+  })
+})
+
+const drgStructureRows = computed(() => {
+  const source = (
+    stats.value.drg_distribution.length
+      ? stats.value.drg_distribution
+      : stats.value.mdc_distribution
+  ) as LooseRecord[]
+  const rows = source.slice(0, 4)
+  const total = Math.max(
+    rows.reduce(
+      (sum, row) => sum + safeNumber(pickValue(row, ['count', 'case_count', 'cases'])),
+      0,
+    ),
+    1,
+  )
+  const dots = ['dot-blue', 'dot-green', 'dot-orange', 'dot-purple']
+
+  return rows.map((row, index) => {
+    const count = safeNumber(pickValue(row, ['count', 'case_count', 'cases']))
+    return {
+      name: pickText(row, ['weight_range', 'drg_name', 'drg', 'mdc', 'name'], `DRG ${index + 1}`),
+      countText: formatInteger(count),
+      shareText: `${((count / total) * 100).toFixed(1)}%`,
+      dotClass: dots[index % dots.length],
+    }
+  })
+})
+
+const improvementTasks = computed(() => {
+  const rows = departmentRows.value.length
+    ? departmentRows.value
+    : [
+        {
+          name: dimensionLabel.value,
+          casesText: formatInteger(stats.value.summary.total_records),
+          avgCmiText: formatDecimal(stats.value.summary.avg_cmi),
+          costIndexText: formatDecimal(stats.value.summary.cost_consumption_index),
+          costIndexTone: 'metric-up',
+          rank: 1,
+          barWidth: 100,
+        },
+      ]
+  const dueDates = [3, 7, 10, 14].map(formatDateOffset)
+  const statuses = [
+    { label: '进行中', color: 'processing' },
+    { label: '未开始', color: 'default' },
+    { label: '待评估', color: 'warning' },
+    { label: '进行中', color: 'processing' },
+  ]
+
+  return rows.slice(0, 4).map((row, index) => {
+    const costIndex = safeNumber(row.costIndexText, 1)
+    const highCost = costIndex > 1.05
+    const status = statuses[index % statuses.length]
+    return {
+      owner: row.name,
+      issue: highCost ? '费用偏高' : index % 2 === 0 ? '编码缺口' : 'DRG 低权重占比高',
+      tagColor: highCost ? 'orange' : index % 2 === 0 ? 'blue' : 'purple',
+      impact: highCost
+        ? `费用指数 ${row.costIndexText}，高于目标线`
+        : `病例 ${row.casesText} 例，CMI ${row.avgCmiText}`,
+      action: highCost
+        ? '审核高值耗材使用，优化治疗路径，缩短 LOS'
+        : '加强病案首页编码复核，建立高频问题清单',
+      department: row.name,
+      status: status.label,
+      statusColor: status.color,
+      due: dueDates[index % dueDates.length],
+    }
+  })
 })
 
 const updateDatasetDataForDimension = () => {
@@ -528,12 +792,12 @@ const handleDimensionChange = () => {
   if (!useDemoData.value && props.batchId) {
     fetchStatistics()
   } else {
-    // 演示模式：更新 mock 数据
+    // 降级模式：更新本地数据
     updateMockDataForDimension()
   }
 }
 
-// 根据维度更新 mock 数据
+// 根据维度更新本地降级数据
 const updateMockDataForDimension = () => {
   const realisticSummaryByDimension: Record<string, any> = {
     hospital: {
@@ -1446,20 +1710,66 @@ const fetchStatistics = async () => {
   if (!props.sessionId) return // 需要 session_id
 
   try {
-    const res = await axios.get('/api/v1/drg/statistics', {
+    const res = await axios.get('/api/v1/drg/analysis', {
       params: {
+        dimension: toApiAnalysisDimension(analysisDimension.value),
         session_id: props.sessionId, // 传递 session_id
         batch_id: props.batchId,
       },
     })
     const payload = res.data?.data ?? res.data
     if (payload && typeof payload === 'object') {
+      const kpis = (payload as any).kpis || {}
+      const overview = (payload as any).overview || {}
+      const profitability = (payload as any).profitability || {}
+      const trends = (payload as any).trends || {}
+      const distribution = (payload as any).distribution || {}
+      const levels = (payload as any).levels || {}
       stats.value = {
         ...stats.value,
-        ...payload,
+        department_stats: (profitability.by_department || levels.department?.items || []).map(
+          (item: any) => ({
+            dept_name: item.department || item.name || '未知科室',
+            count: item.case_count ?? item.caseCount ?? 0,
+            total_profit: item.profit_loss ?? item.profit ?? 0,
+            avg_cmi: item.cmi ?? kpis.cmi ?? 0,
+            cost_index: item.cost_consumption_index ?? item.costRate ?? 0,
+            avg_los: item.avg_los ?? item.avgLos ?? 0,
+          }),
+        ),
+        doctor_stats: (profitability.by_doctor || levels.person?.items || []).map((item: any) => ({
+          doctor: item.doctor || item.name || '未分配医师',
+          count: item.case_count ?? item.caseCount ?? 0,
+          total_profit: item.profit_loss ?? item.profit ?? 0,
+          avg_cmi: item.cmi ?? kpis.cmi ?? 0,
+        })),
+        daily_trends: (trends.cmi || []).map((item: any, index: number) => ({
+          date: item.date,
+          count: distribution.drg?.[index]?.value ?? overview.totalCases ?? 0,
+          avg_cmi: item.value,
+        })),
+        mdc_distribution: (distribution.drg || []).map((item: any) => ({
+          mdc: item.name,
+          count: item.value,
+        })),
+        drg_distribution: distribution.drg || [],
+        cost_structure: profitability.reason_breakdown || stats.value.cost_structure,
+        ai_insights: (payload as any).conclusions || stats.value.ai_insights,
         summary: {
           ...stats.value.summary,
-          ...(payload as any).summary,
+          drg_count: kpis.drg_dip_group_count ?? overview.drgGroupCount,
+          total_records: overview.totalCases,
+          grouping_success_rate: overview.totalCases ? 1 : 0,
+          avg_cmi: kpis.cmi ?? overview.cmi,
+          cost_consumption_index: kpis.cost_consumption_index ?? overview.avgCostRate,
+          time_consumption_index: kpis.time_consumption_index ?? overview.timeConsumptionIndex,
+          low_risk_mortality_rate:
+            (kpis.low_risk_mortality_rate ?? overview.lowRiskMortalityRate ?? 0) / 100,
+          low_risk_death_count: overview.lowRiskDeathCount,
+          low_risk_total_count: overview.lowRiskTotalCount,
+          avg_length_of_stay: kpis.avg_los,
+          avg_inpatient_cost: kpis.avg_cost,
+          insurance_profit: kpis.insurance_profit_loss ?? overview.insuranceProfitLoss,
         },
       } as any
     }
@@ -1490,10 +1800,9 @@ const updateCharts = async () => {
       if (!drgScatterChart) drgScatterChart = echarts.init(drgScatterRef.value)
       drgScatterChart.setOption(c.drg_scatter, true)
     }
-    return
   }
 
-  // 回退到静态演示图表（如果 backend 没有提供 charts）
+  // 回退到静态降级图表（如果 backend 没有提供 charts）
   // 1. Quality/Daily Trend Chart
   if (qualityChart && stats.value.daily_trends) {
     const dates = stats.value.daily_trends.map((d: any) => d.date)
@@ -1706,8 +2015,8 @@ const buildMockExportPayload = () => {
     safeNumber(item.avg_los ?? item.avg_length_of_stay).toFixed(1),
   ])
   return {
-    title: `DRG ${dimensionLabel.value} 演示报告`,
-    filenameBase: `drg_demo_report_${analysisDimension.value}_${Date.now()}`,
+    title: `DRG ${dimensionLabel.value} 分析报告`,
+    filenameBase: `drg_analysis_report_${analysisDimension.value}_${Date.now()}`,
     meta: [
       ['当前维度', dimensionLabel.value],
       ['导出时间', new Date().toLocaleString('zh-CN')],
@@ -1716,8 +2025,8 @@ const buildMockExportPayload = () => {
         hasUploadedDataset.value
           ? `模板上传数据（${drgDatasetStore.meta?.validCount ?? drgDatasetStore.records.length}例）`
           : drgMockEnabled.value
-            ? 'Mock 演示模式'
-            : '无 session_id 的演示导出',
+            ? '降级数据模式'
+            : '无 session_id 的降级导出',
       ],
     ] as Array<[string, string]>,
     kpis: kpiCards.value.map(
@@ -1760,7 +2069,7 @@ const handleExport = async ({ key }: MenuInfo) => {
     if (hasUploadedDataset.value) {
       message.success(`已导出 ${format.name} 模板数据报告`)
     } else {
-      message.warning(`当前缺少 session_id，已导出 ${format.name} 演示报告`)
+      message.warning(`当前缺少 session_id，已导出 ${format.name} 降级数据报告`)
     }
     return
   }
@@ -1770,7 +2079,9 @@ const handleExport = async ({ key }: MenuInfo) => {
   if (props.batchId) {
     params.set('batch_id', props.batchId)
   }
-  const url = `/api/v1/drg/export/${key}?${params.toString()}`
+  params.set('dimension', toApiAnalysisDimension(analysisDimension.value))
+  const exportFormat = keyStr === 'word' ? 'docx' : keyStr
+  const url = `/api/v1/drg/analysis/export/${exportFormat}?${params.toString()}`
 
   const hideLoading = message.loading(`正在生成 ${format.name} 报告...`, 0)
 
@@ -1780,7 +2091,7 @@ const handleExport = async ({ key }: MenuInfo) => {
     const downloadUrl = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = downloadUrl
-    link.download = `drg_report_${props.batchId || props.sessionId}.${format.ext}`
+    link.download = `drg_analysis_${props.batchId || props.sessionId}.${format.ext}`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -1794,6 +2105,10 @@ const handleExport = async ({ key }: MenuInfo) => {
   }
 }
 
+const handleExportMenuClick = (info: MenuInfo) => {
+  void handleExport(info)
+}
+
 onUnmounted(() => {
   unsubscribeDrgMockMode?.()
   qualityChart?.dispose()
@@ -1805,3 +2120,575 @@ onUnmounted(() => {
   drgScatterChart?.dispose()
 })
 </script>
+
+<style scoped>
+.post-event-analysis-page {
+  min-height: 100%;
+  padding: 20px 24px 28px;
+  overflow-y: auto;
+  background: #f5f9fc;
+  color: #0f172a;
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.analysis-header,
+.analysis-toolbar,
+.analysis-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.04);
+}
+
+.analysis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 18px 20px;
+  border-radius: 14px;
+}
+
+.analysis-title-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 280px;
+}
+
+.back-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: #64748b;
+  background: #f8fbff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.analysis-title-block h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.analysis-title-block p,
+.panel-header p,
+.chart-note {
+  margin: 2px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.header-actions,
+.filter-actions,
+.dimension-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 420px;
+  padding: 5px 10px;
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 700;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+}
+
+.export-button {
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.analysis-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+}
+
+.control-label {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.date-range-picker {
+  width: 280px;
+}
+
+.analysis-type-select {
+  width: 128px;
+}
+
+.dataset-upload-compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.035);
+}
+
+.dataset-upload-compact :deep(.mode-alert) {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.dataset-upload-compact :deep(.action-bar) {
+  margin: 0;
+}
+
+.dataset-upload-compact :deep(.validation-result) {
+  grid-column: 1 / -1;
+}
+
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 92px;
+  padding: 16px 18px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.kpi-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  font-size: 18px;
+}
+
+.kpi-content {
+  min-width: 0;
+}
+
+.kpi-label {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.kpi-content strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.kpi-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 700;
+}
+
+.tone-blue .kpi-icon,
+.tone-blue.insight-row .insight-icon {
+  color: #2563eb;
+  background: #eaf2ff;
+}
+
+.tone-green .kpi-icon {
+  color: #10b981;
+  background: #dcfce7;
+}
+
+.tone-orange .kpi-icon,
+.tone-warning .insight-icon {
+  color: #f59e0b;
+  background: #fff7ed;
+}
+
+.tone-red .kpi-icon,
+.tone-danger .insight-icon {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
+.tone-cyan .insight-icon {
+  color: #06b6d4;
+  background: #ecfeff;
+}
+
+.tone-purple .insight-icon {
+  color: #7c3aed;
+  background: #f3e8ff;
+}
+
+.analysis-primary-grid,
+.analysis-secondary-grid,
+.supplementary-grid,
+.advanced-chart-grid {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.analysis-primary-grid {
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.95fr);
+}
+
+.analysis-secondary-grid,
+.supplementary-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.advanced-chart-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.analysis-panel {
+  min-width: 0;
+  padding: 16px 18px;
+  border-radius: 12px;
+}
+
+.analysis-panel.wide {
+  grid-column: 1 / -1;
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.panel-header.compact {
+  align-items: center;
+}
+
+.panel-header h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.panel-info-icon {
+  color: #94a3b8;
+}
+
+.metric-tabs {
+  display: inline-flex;
+  padding: 2px;
+  background: #f8fbff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.metric-tabs button {
+  min-width: 58px;
+  height: 28px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+
+.metric-tabs button.active {
+  color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+}
+
+.trend-chart {
+  width: 100%;
+  height: 288px;
+}
+
+.department-chart,
+.drg-chart {
+  width: 100%;
+  height: 210px;
+}
+
+.cost-chart {
+  width: 100%;
+  height: 260px;
+}
+
+.advanced-chart {
+  width: 100%;
+  height: 300px;
+}
+
+.advanced-chart.large {
+  height: 360px;
+}
+
+.chart-note {
+  padding-top: 4px;
+  color: #64748b;
+}
+
+.insight-list {
+  display: grid;
+  gap: 10px;
+}
+
+.insight-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.insight-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.insight-title-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.insight-row p {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.rank-table,
+.task-table,
+.drg-legend-table {
+  border-top: 1px solid #e2e8f0;
+}
+
+.rank-head,
+.rank-row,
+.task-head,
+.task-row,
+.drg-legend-head,
+.drg-legend-row {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.rank-head,
+.task-head,
+.drg-legend-head {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.rank-row,
+.task-row,
+.drg-legend-row {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rank-head,
+.rank-row {
+  grid-template-columns: 44px minmax(120px, 1fr) 76px 76px 88px;
+}
+
+.rank-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  background: #f59e0b;
+  border-radius: 6px;
+}
+
+.rank-name {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rank-name i {
+  display: block;
+  max-width: 100%;
+  height: 5px;
+  background: linear-gradient(90deg, #2563eb, #93c5fd);
+  border-radius: 999px;
+}
+
+.metric-up {
+  color: #ef4444;
+}
+
+.metric-down {
+  color: #10b981;
+}
+
+.drg-structure-content {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.drg-legend-head,
+.drg-legend-row {
+  grid-template-columns: minmax(120px, 1fr) 72px 72px;
+}
+
+.drg-legend-row span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.drg-legend-row i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot-blue {
+  background: #2563eb;
+}
+
+.dot-green {
+  background: #10b981;
+}
+
+.dot-orange {
+  background: #f59e0b;
+}
+
+.dot-purple {
+  background: #7c3aed;
+}
+
+.task-panel {
+  margin-bottom: 14px;
+}
+
+.task-head,
+.task-row {
+  grid-template-columns:
+    minmax(90px, 0.8fr)
+    minmax(104px, 0.9fr)
+    minmax(170px, 1.35fr)
+    minmax(260px, 2fr)
+    minmax(90px, 0.9fr)
+    minmax(82px, 0.7fr)
+    minmax(96px, 0.8fr);
+}
+
+.task-row {
+  min-height: 44px;
+}
+
+@media (max-width: 1280px) {
+  .analysis-primary-grid,
+  .analysis-secondary-grid,
+  .supplementary-grid,
+  .advanced-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .drg-structure-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 960px) {
+  .post-event-analysis-page {
+    padding: 16px;
+  }
+
+  .analysis-header,
+  .analysis-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions,
+  .filter-actions,
+  .dimension-control {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .dataset-upload-compact,
+  .kpi-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .task-table {
+    overflow-x: auto;
+  }
+
+  .task-head,
+  .task-row {
+    min-width: 1040px;
+  }
+}
+</style>

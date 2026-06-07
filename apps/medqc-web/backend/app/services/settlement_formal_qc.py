@@ -1007,3 +1007,16 @@ class SettlementFormalQCEngine:
             "by_category": {k: len(v) for k, v in categories.items()},
             "rules": categories,
         }
+
+    def get_rule_coverage_report(self) -> dict:
+        """获取医保结算清单规则覆盖注册表。"""
+        from .qc_rule_coverage import (
+            build_settlement_rule_coverage_items,
+            summarize_rule_coverage,
+        )
+
+        items = build_settlement_rule_coverage_items(self.rules)
+        return {
+            "summary": summarize_rule_coverage(items),
+            "items": [item.to_dict() for item in items],
+        }

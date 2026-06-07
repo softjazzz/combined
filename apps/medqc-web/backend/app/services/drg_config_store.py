@@ -39,6 +39,7 @@ class ConsistencySummary:
     valid_count: int
     consistency_rate: float
     difference_count: int
+    invalid_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -46,15 +47,16 @@ class ConsistencySummary:
             "valid_count": self.valid_count,
             "consistency_rate": self.consistency_rate,
             "difference_count": self.difference_count,
+            "invalid_count": self.invalid_count,
         }
 
 
 class DRGConfigStore:
     """File-backed DRG grouper configuration store for config/version/rollback."""
 
-    def __init__(self) -> None:
+    def __init__(self, path: Optional[Path] = None) -> None:
         self._lock = RLock()
-        self._path = (
+        self._path = path or (
             Path(__file__).resolve().parents[2]
             / "data"
             / "drg_grouper_config_store.json"
@@ -210,22 +212,45 @@ class DRGConfigStore:
             valid_count = 0
             matched_count = 0
             diff_items: List[Dict[str, Any]] = []
+            invalid_items: List[Dict[str, Any]] = []
 
             for idx, item in enumerate(samples):
-                hospital_group = str(item.get("hospital_group") or "").strip()
-                insurance_group = str(item.get("insurance_group") or "").strip()
+                hospital_group = str(
+                    item.get("hospital_group")
+                    or item.get("actual_group")
+                    or item.get("predicted_group")
+                    or item.get("computed_group")
+                    or ""
+                ).strip()
+                expected_group = str(
+                    item.get("expected_group")
+                    or item.get("expected_drg")
+                    or item.get("expected_dip")
+                    or item.get("insurance_group")
+                    or ""
+                ).strip()
                 case_key = str(item.get("case_key") or item.get("admission_id") or f"sample-{idx + 1}")
-                if not hospital_group or not insurance_group:
+                if not hospital_group or not expected_group:
+                    invalid_items.append(
+                        {
+                            "case_key": case_key,
+                            "hospital_group": hospital_group,
+                            "expected_group": expected_group,
+                            "mismatch_reason": "缺少院内模拟分组或预期医保分组",
+                        }
+                    )
                     continue
                 valid_count += 1
-                if hospital_group == insurance_group:
+                if hospital_group == expected_group:
                     matched_count += 1
                 else:
                     diff_items.append(
                         {
                             "case_key": case_key,
                             "hospital_group": hospital_group,
-                            "insurance_group": insurance_group,
+                            "insurance_group": expected_group,
+                            "expected_group": expected_group,
+                            "mismatch_reason": "院内模拟分组与预期医保分组不一致",
                         }
                     )
 
@@ -235,6 +260,7 @@ class DRGConfigStore:
                 valid_count=valid_count,
                 consistency_rate=rate,
                 difference_count=len(diff_items),
+                invalid_count=len(invalid_items),
             )
             report = {
                 "version_id": check_version_id,
@@ -243,6 +269,7 @@ class DRGConfigStore:
                 "formula": "一致率 = 匹配成功样本数 / 有效对照样本数",
                 "summary": summary.to_dict(),
                 "differences": diff_items,
+                "invalid_samples": invalid_items,
                 "samples_preview": samples[:50],
             }
             self._state["latest_consistency_report"] = deepcopy(report)
@@ -282,3 +309,35 @@ def get_drg_config_store() -> DRGConfigStore:
         _STORE = DRGConfigStore()
     return _STORE
 
+
+def _float_config(config: Dict[str, Any], key: str, default: float) -> float:
+    try:
+        return float(config.get(key, default))
+    except Exception:
+        return default
+
+
+def get_runtime_grouping_config(store: Optional[DRGConfigStore] = None) -> Dict[str, Any]:
+    """返回分组运行时使用的已发布配置。
+
+    若尚未发布版本，则退回当前草稿配置，但会显式标记 `config_version_id=draft`。
+    """
+    current = (store or get_drg_config_store()).get_current()
+    config = deepcopy(current.get("published_config") or current.get("draft") or _default_config())
+    version_id = current.get("published_version_id") or "draft"
+    base_rate = _float_config(config, "baseRate", 10000.0)
+    hospital_coefficient = _float_config(config, "hospitalCoefficient", 1.0)
+    region_coefficient = _float_config(config, "regionCoefficient", 1.0)
+    high_threshold = _float_config(config, "highRateThreshold", 3.0)
+    low_threshold = _float_config(config, "lowRateThreshold", 0.5)
+    return {
+        "config_version_id": version_id,
+        "region": config.get("region") or "sichuan",
+        "engine": config.get("engine") or "OpenDRG",
+        "base_rate": base_rate,
+        "hospital_coefficient": hospital_coefficient,
+        "region_coefficient": region_coefficient,
+        "high_rate_threshold": high_threshold,
+        "low_rate_threshold": low_threshold,
+        "raw_config": config,
+    }

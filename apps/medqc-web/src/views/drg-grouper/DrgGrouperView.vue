@@ -1,469 +1,303 @@
 <template>
-  <div class="h-full bg-slate-50 flex overflow-hidden">
-    <div class="flex-1 flex w-full max-w-[1440px] mx-auto p-6 gap-6">
-      <!-- ========== 左侧：输入面板 ========== -->
-      <div class="w-[420px] bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-y-auto flex flex-col shrink-0">
-        <!-- 患者病案特征 -->
-        <div class="px-5 py-3.5 border-b border-slate-100">
-          <h3 class="text-[13px] font-bold text-slate-800 mb-3 flex items-center gap-2">
-            <svg
-              class="w-4 h-4 text-slate-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            ><path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-            /></svg>
-            患者病案特征
-          </h3>
-          <div class="grid grid-cols-2 gap-2.5">
-            <div class="ghost-field">
-              <div class="ghost-label">
-                性别
-              </div>
-              <select
-                v-model="formData.gender"
-                class="ghost-select"
-              >
-                <option value="1">
-                  男
-                </option>
-                <option value="2">
-                  女
-                </option>
+  <div class="grouper-page">
+    <section class="grouper-panel condition-panel">
+      <header class="panel-heading">
+        <div class="panel-title">
+          <span class="heading-icon"><ProfileOutlined /></span>
+          <div>
+            <h2>分组条件</h2>
+            <p>CHS-DRG 四川 2.0，录入病案特征、诊断、手术和费用信息。</p>
+          </div>
+        </div>
+      </header>
+
+      <div class="condition-body">
+        <div class="form-section">
+          <div class="section-title">
+            <span class="section-title-main"><UserOutlined />基本信息</span>
+          </div>
+          <div class="field-grid">
+            <label class="field-card">
+              <span>性别</span>
+              <select v-model="formData.gender">
+                <option value="1">男</option>
+                <option value="2">女</option>
               </select>
-            </div>
-            <div class="ghost-field">
-              <div class="ghost-label">
-                年龄
-              </div>
+            </label>
+            <label class="field-card">
+              <span>年龄（岁）</span>
               <input
                 v-model.number="formData.age"
                 type="number"
-                class="ghost-input font-mono font-semibold"
                 placeholder="岁"
               >
-            </div>
-            <div class="ghost-field">
-              <div class="ghost-label">
-                住院天数
-              </div>
+            </label>
+            <label class="field-card">
+              <span>住院天数（天）</span>
               <input
                 v-model.number="formData.days"
                 type="number"
-                class="ghost-input font-mono font-semibold"
                 placeholder="天"
               >
-            </div>
-            <div class="ghost-field">
-              <div class="ghost-label">
-                离院方式
-              </div>
-              <select
-                v-model="formData.leavingType"
-                class="ghost-select"
-              >
-                <option value="1">
-                  医嘱离院
-                </option>
-                <option value="5">
-                  死亡
-                </option>
-                <option value="2">
-                  医嘱转院
-                </option>
-                <option value="3">
-                  医嘱转社区
-                </option>
-                <option value="4">
-                  非医嘱离院
-                </option>
+            </label>
+            <label class="field-card">
+              <span>离院方式</span>
+              <select v-model="formData.leavingType">
+                <option value="1">医嘱离院</option>
+                <option value="2">医嘱转院</option>
+                <option value="3">医嘱转社区</option>
+                <option value="4">非医嘱离院</option>
+                <option value="5">死亡</option>
               </select>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="section-title">
+            <span class="section-title-main"><FileSearchOutlined />主诊断</span>
+            <span class="optional-chip">必填</span>
+          </div>
+          <div class="code-list">
+            <div class="code-row primary">
+              <span class="code-label">主诊断</span>
+              <input
+                v-model="formData.zdList[0]"
+                type="text"
+                placeholder="输入 ICD-10 编码"
+                @keyup.enter="addDiagnosis"
+              >
+              <span />
             </div>
           </div>
         </div>
 
-        <!-- 诊断编码 -->
-        <div class="px-5 py-3.5 border-b border-slate-100">
-          <h3 class="text-[13px] font-bold text-slate-800 mb-3 flex items-center gap-2">
-            <svg
-              class="w-4 h-4 text-indigo-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            ><path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-            /></svg>
-            诊断编码提取
-          </h3>
-          <div class="space-y-2">
+        <div class="form-section">
+          <div class="section-title">
+            <span class="section-title-main"><FileAddOutlined />其他诊断</span>
+            <span class="optional-chip">选填</span>
+          </div>
+          <div class="code-list">
             <div
-              v-for="(_, index) in formData.zdList"
-              :key="'zd-' + index"
-              class="relative flex items-center rounded-lg p-1.5 group transition-colors"
-              :class="index === 0
-                ? 'bg-indigo-50/50 border border-indigo-100'
-                : 'bg-slate-50/80 border border-slate-100 hover:bg-slate-100/80'"
+              v-for="(_, index) in otherDiagnosisIndexes"
+              :key="`zd-${index}`"
+              class="code-row"
             >
-              <!-- 主诊断左侧竖线 -->
-              <div
-                v-if="index === 0"
-                class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-3/4 bg-indigo-500 rounded-r-full"
-              />
-              <span
-                class="w-14 text-center text-[11px] font-bold shrink-0"
-                :class="index === 0 ? 'text-indigo-600' : 'text-slate-500 font-medium'"
-              >
-                {{ index === 0 ? '主诊断' : `其他 ${index}` }}
-              </span>
+              <span class="code-label">其他 {{ index }}</span>
               <input
                 v-model="formData.zdList[index]"
                 type="text"
-                class="flex-1 bg-white rounded py-1.5 px-3 text-[13px] font-mono text-slate-800 outline-none shadow-sm transition-all"
-                :class="index === 0
-                  ? 'border border-indigo-100/50 font-semibold focus:ring-1 focus:ring-indigo-400'
-                  : 'border border-slate-200/60 focus:ring-1 focus:ring-blue-400'"
                 placeholder="输入 ICD-10 编码"
                 @keyup.enter="addDiagnosis"
               >
               <button
-                v-if="index > 0"
-                class="w-8 flex justify-center text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-500 transition-all cursor-pointer"
+                type="button"
+                class="icon-button"
                 @click="formData.zdList.splice(index, 1)"
               >
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                ><path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                /></svg>
+                <DeleteOutlined />
               </button>
             </div>
             <button
-              class="ghost-add-btn"
+              type="button"
+              class="add-button"
               @click="addDiagnosis"
             >
-              <svg
-                class="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              ><path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 4v16m8-8H4"
-              /></svg>
-              增加其他诊断
+              <PlusOutlined /> 添加诊断
             </button>
           </div>
         </div>
 
-        <!-- 手术操作编码 -->
-        <div class="px-5 py-3.5 border-b border-slate-100">
-          <h3 class="text-[13px] font-bold text-slate-800 mb-3 flex items-center gap-2">
-            <svg
-              class="w-4 h-4 text-sky-500"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            ><path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-            /><path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-            /></svg>
-            手术操作编码
-          </h3>
-          <div class="space-y-2">
+        <div class="form-section">
+          <div class="section-title">
+            <span class="section-title-main"><MedicineBoxOutlined />手术操作</span>
+            <span class="optional-chip">选填</span>
+          </div>
+          <div class="code-list">
             <div
               v-for="(_, index) in formData.ssList"
-              :key="'ss-' + index"
-              class="flex items-center bg-slate-50/80 border border-slate-100 rounded-lg p-1.5 group hover:bg-slate-100/80 transition-colors"
+              :key="`ss-${index}`"
+              class="code-row"
             >
-              <span class="w-14 text-center text-[11px] font-medium text-slate-500 shrink-0">
-                {{ index === 0 ? '主手术' : `其他 ${index}` }}
-              </span>
+              <span class="code-label">{{ index === 0 ? '主手术' : `其他 ${index}` }}</span>
               <input
                 v-model="formData.ssList[index]"
                 type="text"
-                class="flex-1 bg-white border border-slate-200/60 rounded py-1.5 px-3 text-[13px] font-mono text-slate-700 outline-none focus:ring-1 focus:ring-blue-400 shadow-sm"
                 placeholder="输入手术操作编码"
                 @keyup.enter="addProcedure"
               >
               <button
-                v-if="formData.ssList.length > 1 || (formData.ssList.length === 1 && formData.ssList[0])"
-                class="w-8 flex justify-center text-slate-300 opacity-0 group-hover:opacity-100 hover:text-rose-500 transition-all cursor-pointer"
+                v-if="formData.ssList.length > 1 || formData.ssList[0]"
+                type="button"
+                class="icon-button"
                 @click="formData.ssList.splice(index, 1)"
               >
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                ><path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                /></svg>
+                <DeleteOutlined />
               </button>
+              <span v-else />
             </div>
             <button
-              class="ghost-add-btn"
+              type="button"
+              class="add-button"
               @click="addProcedure"
             >
-              <svg
-                class="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              ><path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 4v16m8-8H4"
-              /></svg>
-              增加手术操作
+              <PlusOutlined /> 添加手术
             </button>
           </div>
         </div>
 
-        <!-- 操作按钮 -->
-        <div class="px-5 py-3.5 flex gap-3">
-          <button
-            class="flex-1 h-11 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-bold text-[14px] rounded-lg shadow-[0_4px_14px_rgba(37,99,235,0.3)] hover:shadow-[0_6px_20px_rgba(37,99,235,0.4)] hover:from-blue-500 hover:to-blue-400 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-            :disabled="grouping"
-            @click="doGrouping"
-          >
-            <svg
-              v-if="!grouping"
-              class="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            ><path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M13 10V3L4 14h7v7l9-11h-7z"
-            /></svg>
-            <svg
-              v-else
-              class="w-4 h-4 animate-spin"
-              fill="none"
-              viewBox="0 0 24 24"
-            ><circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-            /><path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            /></svg>
-            {{ grouping ? '分组中...' : 'DRG 分组' }}
-          </button>
-          <button
-            class="h-11 px-4 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
-            @click="resetForm"
-          >
-            重置
-          </button>
-          <button
-            class="h-11 px-4 border border-slate-200 rounded-lg text-[13px] text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
-            @click="fillTestCase"
-          >
-            测试
-          </button>
+        <div class="form-section">
+          <div class="section-title">
+            <span class="section-title-main"><PayCircleOutlined />费用信息（元）</span>
+            <span class="optional-chip">选填</span>
+          </div>
+          <div class="field-grid">
+            <label class="field-card">
+              <span>总费用</span>
+              <input
+                v-model.number="formData.totalFee"
+                type="number"
+                placeholder="0.00"
+              >
+            </label>
+            <label class="field-card">
+              <span>药品费用</span>
+              <input
+                v-model.number="formData.drugFee"
+                type="number"
+                placeholder="0.00"
+              >
+            </label>
+            <label class="field-card">
+              <span>材料费用</span>
+              <input
+                v-model.number="formData.materialFee"
+                type="number"
+                placeholder="0.00"
+              >
+            </label>
+            <label class="field-card">
+              <span>其他费用</span>
+              <input
+                v-model.number="formData.otherFee"
+                type="number"
+                placeholder="0.00"
+              >
+            </label>
+          </div>
+          <p class="field-help">
+            费用信息用于页面模拟摘要，不参与本地 DRG 算法判定。
+          </p>
         </div>
       </div>
 
-      <!-- ========== 右侧：结果区域 ========== -->
-      <div class="flex-1 flex flex-col gap-5 overflow-y-auto">
-        <!-- 空状态 -->
+      <footer class="action-bar">
+        <button
+          class="secondary-button"
+          type="button"
+          @click="fillTestCase"
+        >
+          填入示例
+        </button>
+        <button
+          class="secondary-button"
+          type="button"
+          @click="resetForm"
+        >
+          重置
+        </button>
+        <button
+          class="primary-button"
+          type="button"
+          :disabled="grouping"
+          @click="doGrouping"
+        >
+          <LoadingOutlined v-if="grouping" />
+          <ThunderboltOutlined v-else />
+          {{ grouping ? '分组中...' : '执行分组' }}
+        </button>
+      </footer>
+    </section>
+
+    <section class="grouper-panel result-panel">
+      <header class="panel-heading">
+        <div class="panel-title">
+          <span class="heading-icon"><BarChartOutlined /></span>
+          <div>
+            <h2>模拟结果</h2>
+            <p>结构化展示 DRG 编码、权重、费用和风险提示。</p>
+          </div>
+        </div>
+        <span class="simulate-chip"><AlertOutlined />仅模拟</span>
+      </header>
+
+      <div class="result-body">
         <div
           v-if="!result && !grouping"
-          class="flex-1 flex flex-col items-center justify-center text-slate-400"
+          class="empty-state"
         >
-          <div class="w-20 h-20 rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center mb-5">
-            <svg
-              class="w-9 h-9 text-blue-300"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            ><path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1.5"
-              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
-            /></svg>
-          </div>
-          <h3 class="text-lg font-semibold text-slate-500 mb-1">
-            等待分组
-          </h3>
-          <p class="text-[13px] text-slate-400">
-            输入病案信息，点击「DRG 分组」开始
-          </p>
+          <FileSearchOutlined />
+          <h3>等待分组</h3>
+          <p>填写条件后点击执行分组，结果不会写入正式首页或结算清单。</p>
         </div>
 
-        <!-- 加载中 -->
         <div
           v-else-if="grouping"
-          class="flex-1 flex flex-col items-center justify-center text-slate-400"
+          class="empty-state"
         >
-          <svg
-            class="w-10 h-10 animate-spin text-blue-500 mb-4"
-            fill="none"
-            viewBox="0 0 24 24"
-          ><circle
-            class="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            stroke-width="4"
-          /><path
-            class="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-          /></svg>
-          <p class="text-[13px]">
-            分组计算中...
-          </p>
+          <LoadingOutlined class="spin-icon" />
+          <h3>正在执行分组</h3>
+          <p>系统正在读取本地 CHS-DRG 分组器并生成模拟结果。</p>
         </div>
 
-        <!-- 分组结果 -->
-        <template v-else-if="result">
-          <!-- 分组结果（Pipeline） -->
-          <div class="bg-white rounded-xl border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)] p-8 relative overflow-hidden">
-            <!-- 背景光晕 -->
-            <div
-              class="absolute right-0 top-0 w-64 h-64 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none"
-              :class="result.status === '分组成功' ? 'bg-emerald-50/50' : 'bg-rose-50/50'"
-            />
-
-            <div class="flex items-center gap-2 mb-10">
-              <span
-                v-if="result.status === '分组成功'"
-                class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-600"
-              >
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                ><path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="3"
-                  d="M5 13l4 4L19 7"
-                /></svg>
+        <div
+          v-else-if="result"
+          class="result-summary"
+        >
+          <div class="result-block">
+            <div class="result-block-header">
+              <span :class="['result-icon', result.status === '分组成功' ? 'success' : 'danger']">
+                <CheckCircleOutlined v-if="result.status === '分组成功'" />
+                <CloseCircleOutlined v-else />
               </span>
-              <span
-                v-else
-                class="flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 text-rose-600"
-              >
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                ><path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="3"
-                  d="M6 18L18 6M6 6l12 12"
-                /></svg>
-              </span>
-              <h2 class="text-[16px] font-bold text-slate-800">
-                {{ result.status === '分组成功' ? 'DRG 分组成功' : '未能入组' }}
-              </h2>
-            </div>
-
-            <!-- MDC → ADRG → DRG 管线 -->
-            <div
-              v-if="result.status === '分组成功'"
-              class="flex items-center justify-center gap-4 relative z-10 py-4"
-            >
-              <!-- MDC -->
-              <div class="flex flex-col items-center group cursor-default">
-                <div class="text-[11px] font-bold text-slate-400 mb-2 tracking-widest uppercase">
-                  MDC
-                </div>
-                <div class="w-16 h-16 rounded-2xl border-2 border-slate-200 bg-slate-50 flex items-center justify-center text-2xl font-black text-slate-700 font-mono shadow-sm group-hover:border-blue-400 transition-colors">
-                  {{ result.mdc }}
-                </div>
-                <div class="text-[12px] font-medium text-slate-500 mt-3 text-center max-w-[120px] leading-snug">
-                  {{ mdcName }}
-                </div>
-              </div>
-
-              <!-- 箭头 -->
-              <div class="pipe-arrow" />
-
-              <!-- ADRG -->
-              <div class="flex flex-col items-center group cursor-default">
-                <div class="text-[11px] font-bold text-slate-400 mb-2 tracking-widest uppercase">
-                  ADRG
-                </div>
-                <div class="w-20 h-16 rounded-2xl border-2 border-blue-200 bg-blue-50 flex items-center justify-center text-2xl font-black text-blue-700 font-mono shadow-sm group-hover:border-blue-500 transition-colors">
-                  {{ result.adrg }}
-                </div>
-              </div>
-
-              <!-- 箭头 -->
-              <div class="pipe-arrow" />
-
-              <!-- DRG (放大高亮) -->
-              <div class="flex flex-col items-center transform scale-110 -translate-y-2">
-                <div class="text-[12px] font-black text-emerald-600 mb-2 tracking-widest uppercase">
-                  DRG Result
-                </div>
-                <div class="px-8 h-20 rounded-2xl border-2 border-emerald-400 bg-emerald-500 flex items-center justify-center text-4xl font-black text-white font-mono shadow-[0_8px_30px_rgba(16,185,129,0.3)]">
-                  {{ result.drg }}
-                </div>
-                <!-- DRG 名称 -->
-                <div
-                  v-if="result.drgName"
-                  class="text-[13px] font-bold text-slate-800 mt-4 text-center max-w-[220px] leading-snug"
-                >
-                  {{ result.drgName }}
-                </div>
-                <!-- RW 权重 -->
-                <div
-                  v-if="result.rw"
-                  class="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 border border-amber-200"
-                >
-                  <span class="text-[11px] text-amber-600 font-medium">RW</span>
-                  <span class="text-[15px] font-black text-amber-700 font-mono">{{ result.rw }}</span>
-                </div>
+              <div>
+                <h3>{{ result.status === '分组成功' ? 'DRG 模拟结果' : '未能入组' }}</h3>
+                <p>CHS-DRG 四川 2.0</p>
               </div>
             </div>
 
-            <!-- 未入组时的消息 -->
+            <template v-if="result.status === '分组成功'">
+              <div class="result-row">
+                <span>DRG 编码</span>
+                <strong class="primary-value">{{ result.drg || '--' }}</strong>
+              </div>
+              <div class="result-row">
+                <span>DRG 名称</span>
+                <strong>{{ result.drgName || '暂无 DRG 名称' }}</strong>
+              </div>
+              <div class="result-row">
+                <span>权重</span>
+                <strong class="primary-value">{{ result.rw ?? '--' }}</strong>
+              </div>
+              <div class="result-row">
+                <span>是否低风险</span>
+                <strong :class="result.isLowRisk ? 'success-value' : 'danger-value'">
+                  {{ result.isLowRisk === undefined ? '--' : result.isLowRisk ? '是' : '否' }}
+                </strong>
+              </div>
+              <div class="result-row">
+                <span>费用合计</span>
+                <strong>{{ formatMoney(formData.totalFee) }}</strong>
+              </div>
+              <div class="result-row">
+                <span>风险提示</span>
+                <strong class="warning-value">{{ riskLevel }}</strong>
+              </div>
+            </template>
+
             <div
               v-else
-              class="text-slate-500 text-[14px] py-4"
+              class="message-list"
             >
               <p
                 v-for="(msg, idx) in result.messages"
@@ -474,116 +308,254 @@
             </div>
           </div>
 
-          <!-- 分组过程 -->
-          <div class="flex-1 bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 flex flex-col overflow-hidden">
-            <h3 class="text-[13px] font-bold text-slate-800 mb-5 flex items-center gap-2 uppercase tracking-wider">
-              <svg
-                class="w-4 h-4 text-slate-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              ><path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              /></svg>
-              分组过程 (Execution Trace)
-            </h3>
-            <div class="flex-1 overflow-y-auto space-y-0 pl-2">
-              <div
-                v-for="(msg, idx) in result.messages"
-                :key="idx"
-                class="relative pl-6 pb-5 last:pb-0"
-                :class="idx < result.messages.length - 1 ? 'border-l-2 border-slate-200' : 'border-l-2 border-transparent'"
-              >
-                <span
-                  class="absolute top-1 w-2.5 h-2.5 rounded-full ring-4 ring-white"
-                  :class="idx === result.messages.length - 1
-                    ? (result.status === '分组成功' ? 'left-[-6px] bg-emerald-500 shadow-sm' : 'left-[-6px] bg-rose-500 shadow-sm')
-                    : idx === 0 ? 'left-[-5px] bg-slate-400' : 'left-[-6px] bg-blue-500 shadow-sm'"
-                />
-                <div
-                  class="text-[13px] font-medium"
-                  :class="idx === result.messages.length - 1 ? 'text-slate-800 font-bold' : 'text-slate-700'"
-                >
-                  {{ msg }}
-                </div>
-              </div>
+          <div class="result-block">
+            <div class="result-row">
+              <span>MDC</span>
+              <strong>{{ result.mdc || '--' }} {{ mdcName ? ` / ${mdcName}` : '' }}</strong>
+            </div>
+            <div class="result-row">
+              <span>ADRG</span>
+              <strong>{{ result.adrg || '--' }}
+                {{ result.adrgName ? ` / ${result.adrgName}` : '' }}</strong>
+            </div>
+            <div class="result-row">
+              <span>权重来源</span>
+              <strong>{{ result.weightSource || '本地分组器返回' }}</strong>
+            </div>
+            <div class="result-row">
+              <span>正式结果</span>
+              <strong class="warning-value">不写入</strong>
             </div>
           </div>
 
-          <!-- 质控提醒 -->
           <div
             v-if="result.qcMessages.length > 0"
-            class="bg-amber-50 rounded-xl border border-amber-200/80 shadow-sm p-5"
+            class="message-list"
           >
-            <h3 class="text-[13px] font-bold text-amber-800 mb-3 flex items-center gap-2">
-              <svg
-                class="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              ><path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"
-              /></svg>
-              质控提醒
-            </h3>
-            <div
+            <p
               v-for="(msg, idx) in result.qcMessages"
               :key="idx"
-              class="text-[13px] text-amber-700 py-1"
             >
-              ⚠ {{ msg }}
-            </div>
+              {{ msg }}
+            </p>
           </div>
-        </template>
+        </div>
       </div>
-    </div>
+    </section>
+
+    <section class="grouper-panel path-panel">
+      <header class="panel-heading">
+        <div class="panel-title">
+          <span class="heading-icon"><ApartmentOutlined /></span>
+          <div>
+            <h3>入组路径解释</h3>
+            <p>按校验、MDC、ADRG、DRG 四步解释模拟过程。</p>
+          </div>
+        </div>
+      </header>
+
+      <div class="path-body">
+        <div class="path-grid">
+          <div
+            v-for="step in pathSteps"
+            :key="step.title"
+            class="path-step"
+          >
+            <span class="step-badge">{{ step.index }}</span>
+            <h4>{{ step.title }}</h4>
+            <p>{{ step.description }}</p>
+            <span class="step-status">{{ step.status }}</span>
+          </div>
+        </div>
+        <div
+          v-if="result?.messages.length"
+          class="timeline"
+        >
+          <div
+            v-for="(msg, idx) in result.messages"
+            :key="idx"
+            class="timeline-item"
+          >
+            <span class="timeline-dot">{{ idx + 1 }}</span>
+            <span>{{ msg }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grouper-panel mapping-panel">
+      <header class="panel-heading">
+        <div class="panel-title">
+          <span class="heading-icon"><TableOutlined /></span>
+          <div>
+            <h3>编码映射</h3>
+            <p>展示本次输入编码与模拟口径，不改写数据源。</p>
+          </div>
+        </div>
+      </header>
+
+      <div class="mapping-body">
+        <table class="mapping-table">
+          <thead>
+            <tr>
+              <th>项目</th>
+              <th>输入编码</th>
+              <th>标准映射</th>
+              <th>版本</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="row in mappingRows"
+              :key="`${row.item}-${row.code}`"
+            >
+              <td>{{ row.item }}</td>
+              <td class="mono">
+                {{ row.code }}
+              </td>
+              <td>{{ row.standard }}</td>
+              <td>{{ row.version }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="mapping-footnote">
+          查看全部映射记录
+        </p>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import {
-  performGrouping,
-  getAvailableSchemes,
-  getMdcName,
-  type GrouperResult,
-} from './drgGrouper'
+  AlertOutlined,
+  ApartmentOutlined,
+  BarChartOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  DeleteOutlined,
+  FileAddOutlined,
+  FileSearchOutlined,
+  LoadingOutlined,
+  MedicineBoxOutlined,
+  PayCircleOutlined,
+  PlusOutlined,
+  ProfileOutlined,
+  TableOutlined,
+  ThunderboltOutlined,
+  UserOutlined,
+} from '@ant-design/icons-vue'
+import { performGrouping, getAvailableSchemes, getMdcName, type GrouperResult } from './drgGrouper'
+
+interface MappingRow {
+  item: string
+  code: string
+  standard: string
+  version: string
+}
 
 const schemes = getAvailableSchemes()
 const currentScheme = schemes[0]
+void currentScheme
 
 const formData = reactive({
-  gender: '2',
-  age: 30,
-  days: 15,
+  gender: '1',
+  age: 58,
+  days: 7,
   leavingType: '1',
-  zdList: [''] as string[],
-  ssList: [''] as string[],
+  totalFee: 48360.25,
+  drugFee: 15680.4,
+  materialFee: 18543.3,
+  otherFee: 14136.55,
+  zdList: ['I25.110'] as string[],
+  ssList: ['36.06'] as string[],
 })
 
 const grouping = ref(false)
 const result = ref<GrouperResult | null>(null)
 
-const mdcName = computed(() => {
-  if (!result.value?.mdc) return ''
-  return getMdcName(result.value.mdc)
+const otherDiagnosisIndexes = computed(() => formData.zdList.slice(1).map((_, index) => index + 1))
+const mdcName = computed(() => (result.value?.mdc ? getMdcName(result.value.mdc) : ''))
+const primaryDiagnosis = computed(() => formData.zdList.find(Boolean) || '--')
+const otherDiagnosisCount = computed(() => Math.max(formData.zdList.filter(Boolean).length - 1, 0))
+const procedureCount = computed(() => formData.ssList.filter(Boolean).length)
+const riskLevel = computed(() =>
+  Number(result.value?.rw || 0) >= 2 ? '权重较高，建议关注费用结构与合理性' : '常规复核',
+)
+const pathSteps = computed(() => [
+  {
+    index: 1,
+    title: '校验编码',
+    description: `主诊断 ${primaryDiagnosis.value}，共 ${otherDiagnosisCount.value} 个其他诊断、${procedureCount.value} 个手术操作。`,
+    status: result.value ? '已校验' : '待执行',
+  },
+  {
+    index: 2,
+    title: '匹配 MDC',
+    description: result.value?.mdc
+      ? `${result.value.mdc} ${mdcName.value}`
+      : '执行后展示主要诊断类别。',
+    status: result.value?.mdc ? '命中' : '待执行',
+  },
+  {
+    index: 3,
+    title: '匹配 ADRG',
+    description: result.value?.adrg
+      ? `${result.value.adrg} ${result.value.adrgName || ''}`
+      : '结合手术、合并症与并发症匹配 ADRG。',
+    status: result.value?.adrg ? '命中' : '待执行',
+  },
+  {
+    index: 4,
+    title: '确定 DRG',
+    description: result.value?.drg
+      ? `${result.value.drg}，权重 ${result.value.rw ?? '--'}`
+      : '输出最终 DRG 模拟结果。',
+    status: result.value?.status === '分组成功' ? '完成' : result.value ? '未入组' : '待执行',
+  },
+])
+const mappingRows = computed<MappingRow[]>(() => {
+  const rows: MappingRow[] = []
+  const zdList = formData.zdList.filter(Boolean)
+  const ssList = formData.ssList.filter(Boolean)
+  zdList.forEach((code, index) => {
+    rows.push({
+      item: index === 0 ? '主诊断' : `其他诊断${index}`,
+      code,
+      standard: 'ICD-10 第10版',
+      version: '2025-01',
+    })
+  })
+  ssList.forEach((code, index) => {
+    rows.push({
+      item: index === 0 ? '手术操作' : `其他手术${index}`,
+      code,
+      standard: '手术操作分类代码国家临床版',
+      version: '2024-01',
+    })
+  })
+  return rows.length > 0 ? rows : [{ item: '待输入', code: '--', standard: '--', version: '--' }]
 })
 
-function addDiagnosis() { formData.zdList.push('') }
-function addProcedure() { formData.ssList.push('') }
+function addDiagnosis() {
+  formData.zdList.push('')
+}
+
+function addProcedure() {
+  formData.ssList.push('')
+}
 
 function resetForm() {
-  formData.gender = '2'
-  formData.age = 30
-  formData.days = 15
+  formData.gender = '1'
+  formData.age = 58
+  formData.days = 7
   formData.leavingType = '1'
+  formData.totalFee = 0
+  formData.drugFee = 0
+  formData.materialFee = 0
+  formData.otherFee = 0
   formData.zdList = ['']
   formData.ssList = ['']
   result.value = null
@@ -594,31 +566,48 @@ function fillTestCase() {
   formData.age = 30
   formData.days = 15
   formData.leavingType = '1'
+  formData.totalFee = 48360.25
+  formData.drugFee = 15680.4
+  formData.materialFee = 18543.3
+  formData.otherFee = 14136.55
   formData.zdList = ['K80.501', 'K80.100x001', 'K83.109', 'K72.905', 'E11.900']
   formData.ssList = ['51.8803', '51.8701', '51.2300']
   result.value = null
-  message.success('已填入测试用例')
+  message.success('已填入示例病案')
+}
+
+function formatMoney(value: number) {
+  return Number.isFinite(value) && value > 0
+    ? value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '--'
 }
 
 async function doGrouping() {
-  const zdList = formData.zdList.filter(z => z.trim())
-  const ssList = formData.ssList.filter(s => s.trim())
-  if (zdList.length === 0) { message.warning('请至少输入一个诊断编码'); return }
+  const zdList = formData.zdList.filter((z) => z.trim())
+  const ssList = formData.ssList.filter((s) => s.trim())
+  if (zdList.length === 0) {
+    message.warning('请至少输入一个诊断编码')
+    return
+  }
 
   grouping.value = true
   result.value = null
   try {
     result.value = await performGrouping({
-      gender: formData.gender, age: formData.age, zdList, ssList,
-      days: formData.days, leavingType: formData.leavingType,
+      gender: formData.gender,
+      age: formData.age,
+      zdList,
+      ssList,
+      days: formData.days,
+      leavingType: formData.leavingType,
     })
     if (result.value.status === '分组成功') {
-      message.success(`分组成功: ${result.value.drg}`)
+      message.success(`DRG 入组成功：${result.value.drg}`)
     } else {
-      message.warning('未入组')
+      message.warning('未能入组，请复核编码和病案条件')
     }
   } catch (err) {
-    message.error('分组失败: ' + (err instanceof Error ? err.message : String(err)))
+    message.error('分组失败：' + (err instanceof Error ? err.message : String(err)))
   } finally {
     grouping.value = false
   }
@@ -626,47 +615,5 @@ async function doGrouping() {
 </script>
 
 <style scoped>
-/* Ghost form field — 底线风格 */
-.ghost-field {
-  padding: 6px 2px 4px;
-  border-bottom: 1.5px solid #e2e8f0;
-  transition: border-color 0.2s;
-}
-.ghost-field:focus-within {
-  border-bottom-color: #3b82f6;
-}
-.ghost-label {
-  font-size: 11px; color: #94a3b8; font-weight: 500;
-  margin-bottom: 2px; padding-left: 1px;
-}
-.ghost-input {
-  width: 100%; background: transparent;
-  font-size: 14px; color: #1e293b; font-weight: 600;
-  padding: 2px 1px; outline: none; border: none;
-}
-.ghost-select {
-  width: 100%; background: transparent;
-  font-size: 14px; color: #1e293b; font-weight: 600;
-  padding: 2px 1px; outline: none; border: none;
-  appearance: none; cursor: pointer;
-}
-.ghost-add-btn {
-  @apply w-full mt-2 py-2 border border-dashed border-slate-300 rounded-lg text-xs font-medium text-slate-500
-    hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer
-    flex items-center justify-center gap-1.5;
-}
-
-/* Pipeline arrow */
-.pipe-arrow {
-  @apply w-14 h-px bg-slate-300 relative -translate-y-4;
-}
-.pipe-arrow::after {
-  content: '';
-  @apply absolute right-0 top-1/2 -translate-y-1/2 translate-x-0.5 w-2 h-2 border-t-2 border-r-2 border-slate-300 transform rotate-45;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 3px; }
+@import './grouper-workbench.css';
 </style>

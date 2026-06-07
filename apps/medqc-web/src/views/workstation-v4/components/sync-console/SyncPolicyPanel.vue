@@ -109,7 +109,7 @@
           :class="
             isReadonly || state.templateApplying
               ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100'
-              : 'bg-gradient-to-r from-[#1890FF] to-[#40A9FF] hover:from-[#40A9FF] hover:to-[#69C0FF] hover:shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-[0.98]'
+              : 'bg-[#2563eb] hover:bg-[#1d4ed8] hover:shadow-[0_4px_12px_rgba(37,99,235,0.22)] active:scale-[0.98]'
           "
           :disabled="isReadonly || state.templateApplying"
           @click="handleApplyTemplate"

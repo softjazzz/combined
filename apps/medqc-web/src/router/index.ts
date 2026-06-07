@@ -142,8 +142,9 @@ const routes: RouteRecordRaw[] = [
         name: 'FrontPageAutoDemo',
         component: () => import('@/views/demo/FrontPageDemoView.vue'),
         meta: {
-          title: '首页自动生成（Demo）',
+          title: '首页自动生成样例',
           icon: 'FileTextOutlined',
+          hidden: true,
           permission: ['admin', 'qc_manager'],
         },
       },
@@ -152,8 +153,9 @@ const routes: RouteRecordRaw[] = [
         name: 'TestMedicalRecords',
         component: () => import('@/views/test-medical-records/TestMedicalRecordsView.vue'),
         meta: {
-          title: '测试病历管理',
+          title: '病历管理',
           icon: 'ProfileOutlined',
+          hidden: true,
           permission: ['admin', 'qc_manager', 'developer'],
         },
       },
@@ -234,7 +236,7 @@ const routes: RouteRecordRaw[] = [
         name: 'CustomRuleWorkspace',
         component: () => import('@/views/rules/CustomRuleWorkspaceView.vue'),
         meta: {
-          title: '自定义规则工作台',
+          title: '自定义质控点',
           icon: 'AppstoreOutlined',
           permission: ['admin', 'qc_manager'],
           hidden: true,
@@ -267,6 +269,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '质控集成测试',
           icon: 'ExperimentOutlined',
+          hidden: true,
           permission: ['admin', 'developer'],
         },
       },
@@ -290,6 +293,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '自定义质控规则',
           icon: 'AppstoreOutlined',
+          hidden: true,
           permission: ['admin', 'qc_manager'],
         },
       },
@@ -378,6 +382,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'LLM质控演示',
           icon: 'ExperimentOutlined',
+          hidden: true,
           permission: ['admin'],
         },
       },
@@ -388,6 +393,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'LLM质控演示增强版',
           icon: 'ExperimentOutlined',
+          hidden: true,
           permission: ['admin'],
           description: '完整的LLM质控演示系统，包含规则应用、通知提醒和申诉功能',
         },
@@ -399,6 +405,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: 'LLM质控演示新版（测试）',
           icon: 'ExperimentOutlined',
+          hidden: true,
           permission: ['admin'],
           description: '重构后的LLM质控演示系统 - P0测试版',
         },
@@ -410,6 +417,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '四川质控引擎演示',
           icon: 'ThunderboltOutlined',
+          hidden: true,
           permission: ['admin'],
           description: '基于阿里云百炼 LLM 的四川质控引擎演示，展示首次病程记录质控分析',
         },
@@ -421,6 +429,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '组件测试',
           icon: 'BugOutlined',
+          hidden: true,
           permission: ['admin'],
           description: '测试演示组件功能',
         },
@@ -485,14 +494,15 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '分类算法版本测试', icon: 'BranchesOutlined', hidden: true },
       },
 
-      // 测试病历管理路由
+      // 病历管理路由（隐藏入口，保留兼容访问）
       {
         path: 'medical-records',
         name: 'MedicalRecords',
         component: () => import('@/views/medical-records/MedicalRecordsView.vue'),
         meta: {
-          title: '测试病历管理',
+          title: '病历管理',
           icon: 'FileTextOutlined',
+          hidden: true,
           permission: ['admin', 'qc_manager', 'doctor'],
         },
       },
@@ -834,7 +844,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/demo/FrontPageDemoView.vue'),
         meta: {
           requiresAuth: false,
-          title: '病案首页自动生成 Demo',
+          title: '病案首页自动生成样例',
         },
       },
     ],
@@ -1061,7 +1071,7 @@ const routes: RouteRecordRaw[] = [
         path: 'rules/custom-workspace',
         name: 'WorkstationV4CustomRuleWorkspace',
         component: () => import('@/views/rules/CustomRuleWorkspaceView.vue'),
-        meta: { title: '自定义规则工作台', permission: ['admin', 'qc_manager'] },
+        meta: { title: '自定义质控点', permission: ['admin', 'qc_manager'] },
       },
       {
         path: 'qc-overview',
@@ -1074,6 +1084,12 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4SystemConfig',
         component: () => import('@/views/workstation-v4/DataSyncConfigPage.vue'),
         meta: { title: '系统配置', permission: ['admin', 'qc_manager'] },
+      },
+      {
+        path: 'tender-acceptance',
+        name: 'WorkstationV4TenderAcceptance',
+        component: () => import('@/views/workstation-v4/components/TenderAcceptanceDashboard.vue'),
+        meta: { title: '投标验收看板', permission: ['admin', 'qc_manager'] },
       },
     ],
   },
@@ -1092,7 +1108,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/demo/ClinicalWorkstationDemoView.vue'),
     meta: {
       requiresAuth: false,
-      title: '临床工作站 Demo',
+      title: '临床工作站样例',
     },
   },
   {

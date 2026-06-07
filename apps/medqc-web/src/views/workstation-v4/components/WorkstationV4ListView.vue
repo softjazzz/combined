@@ -3,10 +3,13 @@
     <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
       <div class="mx-auto w-full max-w-[1440px]">
         <div class="workstation-surface-enter mb-4">
-          <section class="wv4-analysis-overview">
+          <section class="wv4-analysis-overview wv4-record-pool-hero">
             <div class="wv4-analysis-overview__header">
               <div>
-                <div class="wv4-analysis-overview__eyebrow">
+                <div
+                  v-if="isFrontpageGenerateStage"
+                  class="wv4-analysis-overview__eyebrow"
+                >
                   {{ overviewEyebrow }}
                 </div>
                 <h3 class="wv4-analysis-overview__title">
@@ -23,16 +26,11 @@
                   当前阶段：参考首页生成
                 </div>
               </div>
-              <div class="wv4-analysis-overview__actions">
+              <div
+                v-if="isFrontpageGenerateStage"
+                class="wv4-analysis-overview__actions"
+              >
                 <a-button
-                  size="small"
-                  class="wv4-analysis-overview__action"
-                  @click="emit('clear-filters')"
-                >
-                  重置
-                </a-button>
-                <a-button
-                  v-if="isFrontpageGenerateStage"
                   size="small"
                   class="wv4-analysis-overview__action"
                   data-testid="frontpage-tender-validation-entry"
@@ -50,20 +48,110 @@
               </div>
             </div>
 
+            <div class="wv4-analysis-overview__controls wv4-record-pool-filter">
+              <div class="workbench-filter-toolbar">
+                <a-input
+                  :value="searchText"
+                  class="workbench-controls__search-input"
+                  :placeholder="searchPlaceholder"
+                  size="large"
+                  allow-clear
+                  @update:value="emit('update:searchText', $event)"
+                >
+                  <template #prefix>
+                    <SearchOutlined class="text-slate-400" />
+                  </template>
+                </a-input>
+
+                <a-range-picker
+                  v-if="!isStageQueueMode"
+                  :value="dateRange || undefined"
+                  class="workbench-date-row__range"
+                  size="large"
+                  allow-clear
+                  value-format="YYYY-MM-DD"
+                  format="YYYY-MM-DD"
+                  @update:value="emit('update:dateRange', normalizeDateRange($event))"
+                />
+
+                <a-select
+                  :value="activeDept"
+                  class="workbench-dept-select"
+                  size="large"
+                  show-search
+                  :filter-option="filterDepartmentSelectOption"
+                  @update:value="emit('selectDept', normalizeDepartmentValue($event))"
+                >
+                  <a-select-option
+                    v-for="dept in departmentSelectOptions"
+                    :key="dept.name"
+                    :value="dept.name"
+                  >
+                    <span class="workbench-dept-select__option">
+                      <span class="workbench-dept-select__name">{{ dept.name }}</span>
+                      <span class="workbench-dept-select__count">{{ dept.total }}</span>
+                    </span>
+                  </a-select-option>
+                </a-select>
+
+                <a-select
+                  v-if="!isStageQueueMode"
+                  :value="activePriorityGroup"
+                  class="workbench-status-select"
+                  size="large"
+                  @update:value="emit('update:activePriorityGroup', normalizePriorityGroup($event))"
+                >
+                  <a-select-option
+                    v-for="group in priorityGroups"
+                    :key="group.key"
+                    :value="group.key"
+                  >
+                    {{ group.label }}
+                  </a-select-option>
+                </a-select>
+
+                <div class="wv4-filter-actions">
+                  <a-button
+                    type="primary"
+                    size="small"
+                    class="wv4-filter-actions__button"
+                    @click="emit('page-change', 1)"
+                  >
+                    查询
+                  </a-button>
+                  <a-button
+                    size="small"
+                    class="wv4-filter-actions__button"
+                    @click="emit('clear-filters')"
+                  >
+                    重置
+                  </a-button>
+                </div>
+              </div>
+              <div class="workbench-filter-summary wv4-record-pool-filter__summary">
+                {{ tableSummaryText }}
+              </div>
+            </div>
+
             <div class="wv4-analysis-kpis">
               <article
                 v-for="card in kpiCards"
                 :key="card.key"
-                class="wv4-analysis-kpi-card"
+                :class="['wv4-analysis-kpi-card', `wv4-analysis-kpi-card--${card.tone}`]"
               >
-                <div class="wv4-analysis-kpi-card__label">
-                  {{ card.label }}
+                <div class="wv4-analysis-kpi-card__icon">
+                  <component :is="card.icon" />
                 </div>
-                <div class="wv4-analysis-kpi-card__value">
-                  {{ card.value }}
-                </div>
-                <div class="wv4-analysis-kpi-card__desc">
-                  {{ card.desc }}
+                <div class="min-w-0">
+                  <div class="wv4-analysis-kpi-card__label">
+                    {{ card.label }}
+                  </div>
+                  <div class="wv4-analysis-kpi-card__value">
+                    {{ card.value }}
+                  </div>
+                  <div class="wv4-analysis-kpi-card__desc">
+                    {{ card.desc }}
+                  </div>
                 </div>
               </article>
             </div>
@@ -85,273 +173,34 @@
           </section>
         </div>
 
-        <div
-          v-if="!isFrontpageGenerateStage"
-          class="workstation-surface-enter"
-        >
-          <PriorityLane
-            :active-group="activePriorityGroup"
-            class="mb-4"
-            :groups="priorityGroups"
-            :cards="priorityCardsFiltered"
-            :readonly="isStageQueueMode"
-            @update:active-group="emit('update:activePriorityGroup', $event)"
-            @open-record="emit('priority-open', $event)"
-            @defer-record="emit('priority-defer', $event)"
-          />
-        </div>
-
-        <div class="workstation-surface-enter workstation-surface-enter--delay-1 mb-4">
-          <div class="workstation-panel workstation-panel--filters">
-            <div class="relative workbench-hero">
-              <div class="workbench-controls-panel">
-                <div class="workbench-filter-toolbar">
-                  <a-input
-                    :value="searchText"
-                    class="workbench-controls__search-input"
-                    :placeholder="searchPlaceholder"
-                    size="large"
-                    allow-clear
-                    @update:value="emit('update:searchText', $event)"
-                  >
-                    <template #prefix>
-                      <SearchOutlined class="text-slate-400" />
-                    </template>
-                  </a-input>
-
-                  <a-select
-                    :value="activeDept"
-                    class="workbench-dept-select"
-                    size="large"
-                    show-search
-                    :filter-option="filterDepartmentSelectOption"
-                    @update:value="emit('selectDept', normalizeDepartmentValue($event))"
-                  >
-                    <a-select-option
-                      v-for="dept in departmentSelectOptions"
-                      :key="dept.name"
-                      :value="dept.name"
-                    >
-                      <span class="workbench-dept-select__option">
-                        <span class="workbench-dept-select__name">{{ dept.name }}</span>
-                        <span class="workbench-dept-select__count">{{ dept.total }}</span>
-                      </span>
-                    </a-select-option>
-                  </a-select>
-
-                  <a-select
-                    v-if="!isStageQueueMode"
-                    :value="dateField"
-                    class="workbench-date-row__field"
-                    size="large"
-                    @update:value="emit('update:dateField', normalizeDateField($event))"
-                  >
-                    <a-select-option value="visit">
-                      入/出院日期
-                    </a-select-option>
-                    <a-select-option value="admission">
-                      入院日期
-                    </a-select-option>
-                    <a-select-option value="discharge">
-                      出院日期
-                    </a-select-option>
-                    <a-select-option value="updated">
-                      更新时间
-                    </a-select-option>
-                  </a-select>
-                  <a-range-picker
-                    v-if="!isStageQueueMode"
-                    :value="dateRange || undefined"
-                    class="workbench-date-row__range"
-                    size="large"
-                    allow-clear
-                    value-format="YYYY-MM-DD"
-                    format="YYYY-MM-DD"
-                    @update:value="emit('update:dateRange', normalizeDateRange($event))"
-                  />
-
-                  <div class="wv4-filter-actions">
-                    <a-button
-                      type="primary"
-                      size="small"
-                      class="wv4-filter-actions__button"
-                      @click="emit('page-change', 1)"
-                    >
-                      查询
-                    </a-button>
-                    <a-button
-                      size="small"
-                      class="wv4-filter-actions__button"
-                      @click="emit('clear-filters')"
-                    >
-                      重置
-                    </a-button>
-                    <a-button
-                      size="small"
-                      class="wv4-filter-actions__button"
-                      @click="emit('page-change', currentPage)"
-                    >
-                      刷新
-                    </a-button>
-                  </div>
-                </div>
-
-                <div class="workbench-dept-row">
-                  <div class="workbench-filter-summary">
-                    {{ tableSummaryText }}
-                  </div>
-                  <div class="workbench-dept-row__list">
-                    <button
-                      v-for="dept in quickDepartments"
-                      :key="dept.name"
-                      type="button"
-                      :class="[
-                        'workbench-dept-chip',
-                        activeDept === dept.name
-                          ? 'workbench-dept-chip--active'
-                          : 'workbench-dept-chip--idle',
-                      ]"
-                      @click="emit('selectDept', dept.name)"
-                    >
-                      <span>{{ dept.name }}</span>
-                      <span class="workbench-dept-chip__count">{{ dept.total }}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+        <div class="workstation-surface-enter workstation-surface-enter--delay-1">
+          <div class="wv4-record-pool-main">
+            <div class="wv4-record-pool-main__list">
+              <BatchTablePanel
+                :rows="workbenchRows"
+                :selected-row-keys="selectedWorkbenchKeys"
+                :summary-text="tableSummaryText"
+                :current-page="currentPage"
+                :page-size="pageSize"
+                :total="displayServerTotal"
+                :loading="displayLoading"
+                :title="isStageQueueMode ? stageMeta.tableTitle || '批量工作台' : '病历池列表'"
+                :primary-action-label="stageMeta.batchActionText"
+                :row-action-label="stageMeta.singleActionText"
+                :show-primary-action="isStageQueueMode"
+                :show-selection="isStageQueueMode"
+                :show-defer-action="false"
+                :show-assign-action="false"
+                @update:selected-row-keys="emit('update:selectedRowKeys', $event)"
+                @open-record="emit('open-record', $event)"
+                @batch-extract="emit('batch-extract', $event)"
+                @batch-defer="emit('batch-defer', $event)"
+                @batch-assign="emit('batch-assign', $event)"
+                @clear-filters="emit('clear-filters')"
+                @page-change="handleBatchPageChange"
+              />
             </div>
           </div>
-        </div>
-
-        <div class="workstation-surface-enter workstation-surface-enter--delay-2 mb-4">
-          <div class="wv4-analysis-split">
-            <a-card
-              size="small"
-              :bordered="false"
-              class="wv4-analysis-split__left"
-            >
-              <template #title>
-                <span class="wv4-analysis-card__title">趋势与分布</span>
-              </template>
-              <a-tabs
-                v-model:active-key="analysisTab"
-                size="small"
-                class="wv4-analysis-tabs"
-              >
-                <a-tab-pane
-                  key="stage"
-                  tab="阶段分布"
-                >
-                  <div class="space-y-3">
-                    <div
-                      v-for="item in stageDistribution"
-                      :key="`stage-${item.label}`"
-                    >
-                      <div class="mb-1.5 flex items-center justify-between text-xs">
-                        <span class="font-medium text-slate-600">{{ item.label }}</span>
-                        <span class="font-semibold text-slate-700">{{ item.count }}</span>
-                      </div>
-                      <a-progress
-                        :percent="item.percent"
-                        :show-info="false"
-                        :stroke-color="item.color"
-                        size="small"
-                      />
-                    </div>
-                  </div>
-                </a-tab-pane>
-                <a-tab-pane
-                  key="workflow"
-                  :tab="analysisSecondaryTabLabel"
-                >
-                  <div class="space-y-3">
-                    <div
-                      v-for="item in workflowLoad"
-                      :key="`workflow-${item.label}`"
-                    >
-                      <div class="mb-1.5 flex items-center justify-between text-xs">
-                        <span class="font-medium text-slate-600">{{ item.label }}</span>
-                        <span class="font-semibold text-slate-700">{{ item.count }}</span>
-                      </div>
-                      <a-progress
-                        :percent="item.percent"
-                        :show-info="false"
-                        stroke-color="#2563eb"
-                        size="small"
-                      />
-                    </div>
-                  </div>
-                </a-tab-pane>
-              </a-tabs>
-            </a-card>
-
-            <a-card
-              size="small"
-              :bordered="false"
-              class="wv4-analysis-split__right"
-            >
-              <template #title>
-                <span class="wv4-analysis-card__title">排行洞察</span>
-              </template>
-              <div class="space-y-4">
-                <div>
-                  <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {{ departmentRankingTitle }}
-                  </div>
-                  <ol class="space-y-2">
-                    <li
-                      v-for="(item, index) in departmentRanking"
-                      :key="`dept-rank-${item.label}`"
-                      class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2"
-                    >
-                      <span class="truncate text-sm text-slate-700">{{ index + 1 }}. {{ item.label }}</span>
-                      <span class="text-sm font-bold text-slate-800">{{ item.count }}</span>
-                    </li>
-                  </ol>
-                </div>
-
-                <div>
-                  <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {{ secondaryRankingTitle }}
-                  </div>
-                  <ol class="space-y-2">
-                    <li
-                      v-for="item in secondaryRankingData"
-                      :key="`secondary-rank-${item.label}`"
-                      class="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2"
-                    >
-                      <span class="truncate text-sm text-slate-700">{{ item.label }}</span>
-                      <span class="text-sm font-bold text-blue-700">{{ item.count }}</span>
-                    </li>
-                  </ol>
-                </div>
-              </div>
-            </a-card>
-          </div>
-        </div>
-
-        <div class="workstation-surface-enter workstation-surface-enter--delay-2">
-          <BatchTablePanel
-            :rows="workbenchRows"
-            :selected-row-keys="selectedWorkbenchKeys"
-            :summary-text="tableSummaryText"
-            :current-page="currentPage"
-            :page-size="pageSize"
-            :total="displayServerTotal"
-            :loading="displayLoading"
-            :primary-action-label="stageMeta.batchActionText"
-            :row-action-label="stageMeta.singleActionText"
-            :show-primary-action="isStageQueueMode"
-            :show-defer-action="false"
-            :show-assign-action="false"
-            @update:selected-row-keys="emit('update:selectedRowKeys', $event)"
-            @open-record="emit('open-record', $event)"
-            @batch-extract="emit('batch-extract', $event)"
-            @batch-defer="emit('batch-defer', $event)"
-            @batch-assign="emit('batch-assign', $event)"
-            @clear-filters="emit('clear-filters')"
-            @page-change="handleBatchPageChange"
-          />
         </div>
 
         <div
@@ -371,11 +220,18 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { InboxOutlined, SearchOutlined } from '@ant-design/icons-vue'
+import {
+  CheckCircleOutlined,
+  FileTextOutlined,
+  InboxOutlined,
+  SearchOutlined,
+  SyncOutlined,
+  WarningOutlined,
+} from '@ant-design/icons-vue'
 
-import PriorityLane, { type PriorityCard, type PriorityGroup } from './workbench/PriorityLane.vue'
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
 import FrontpageTenderValidationDrawer from './FrontpageTenderValidationDrawer.vue'
+import type { PriorityCard, PriorityGroup } from './workbench/PriorityLane.vue'
 import type { DeptInfo } from '../types'
 import type { WorkflowStageKey } from '@/types/workflow'
 import type { WorkstationDateField, WorkstationDateRange } from '../composables/usePatientRecords'
@@ -442,11 +298,8 @@ function normalizeDateRange(value: unknown): WorkstationDateRange {
   return start && end ? [start, end] : null
 }
 
-function normalizeDateField(value: unknown): WorkstationDateField {
-  if (value === 'admission' || value === 'discharge' || value === 'updated') {
-    return value
-  }
-  return 'visit'
+function normalizePriorityGroup(value: unknown): string {
+  return String(value || 'all').trim() || 'all'
 }
 
 function normalizeDepartmentValue(value: unknown): string {
@@ -460,31 +313,26 @@ function filterDepartmentSelectOption(
   return filterDepartmentOption(input, option)
 }
 
-const analysisTab = ref<'stage' | 'workflow'>('stage')
 const tenderValidationOpen = ref(false)
 
 const isFrontpageGenerateStage = computed(() => props.currentStageFilter === 'frontpage_generate')
 
 const overviewEyebrow = computed(() =>
-  isFrontpageGenerateStage.value ? 'Workstation / Frontpage Generate' : 'Workstation / Analysis',
+  isFrontpageGenerateStage.value ? 'Workstation / Frontpage Generate' : 'Workstation / Record Pool',
 )
 
 const overviewTitle = computed(() =>
-  isFrontpageGenerateStage.value
-    ? props.stageMeta.pageTitle || '参考首页生成队列'
-    : '质控工作台总览',
+  isFrontpageGenerateStage.value ? props.stageMeta.pageTitle || '参考首页生成队列' : '病历池',
 )
 
 const overviewSubtitle = computed(() =>
   isFrontpageGenerateStage.value
     ? props.stageMeta.pageDesc || '对待生成病历进行批量生成和阻塞清理，不影响正式首页数据。'
-    : '以分析视图汇总当前筛选结果，快速定位高风险与处理优先级',
+    : '聚合待处理、超时与资料异常病历，快速定位处理优先级',
 )
 
 const searchPlaceholder = computed(() =>
-  isFrontpageGenerateStage.value
-    ? '搜索病案号、姓名、住院号、生成状态'
-    : '搜索病案号、姓名、住院号',
+  isFrontpageGenerateStage.value ? '搜索病案号、姓名、住院号、生成状态' : '搜索患者、住院号、科室',
 )
 
 const totalRows = computed(() =>
@@ -523,6 +371,17 @@ const highRiskCount = computed(
       .length,
 )
 
+const timeoutPriorityCount = computed(() =>
+  Number(props.priorityGroups.find((group) => group.key === 'timeout')?.count || 0),
+)
+
+const priorityTotalCount = computed(() =>
+  Number(
+    props.priorityGroups.find((group) => group.key === 'all')?.count ||
+      props.priorityCardsFiltered.length,
+  ),
+)
+
 const inProgressCount = computed(
   () =>
     props.workbenchRows.filter((row) =>
@@ -534,11 +393,6 @@ const completedCount = computed(
   () => props.workbenchRows.filter((row) => /(完成|已完成|终末|通过)/.test(row.stageStatus)).length,
 )
 
-const completionRate = computed(() => {
-  if (totalRows.value <= 0) return 0
-  return Math.round((completedCount.value / totalRows.value) * 100)
-})
-
 const kpiCards = computed(() =>
   isFrontpageGenerateStage.value
     ? [
@@ -547,161 +401,67 @@ const kpiCards = computed(() =>
           label: '待生成总量',
           value: totalRows.value,
           desc: '当前筛选范围内病历总数',
+          icon: FileTextOutlined,
+          tone: 'brand',
         },
         {
           key: 'pending',
           label: '待生成',
           value: pendingGenerateCount.value,
           desc: '尚未启动生成任务',
+          icon: CheckCircleOutlined,
+          tone: 'success',
         },
         {
           key: 'running',
           label: '生成中',
           value: generatingCount.value,
           desc: '后台任务执行中',
+          icon: SyncOutlined,
+          tone: 'info',
         },
         {
           key: 'failed-rate',
           label: '失败占比',
           value: `${failedRate.value}%`,
           desc: '需优先排查失败病历',
+          icon: WarningOutlined,
+          tone: 'warning',
         },
       ]
     : [
         {
           key: 'total',
-          label: '当前任务总量',
+          label: '病历总量',
           value: totalRows.value,
           desc: '当前筛选范围内病历总数',
+          icon: FileTextOutlined,
+          tone: 'brand',
         },
         {
-          key: 'risk',
-          label: '高风险任务',
-          value: highRiskCount.value,
-          desc: '优先建议立即处理',
+          key: 'pending',
+          label: '待处理',
+          value: priorityTotalCount.value,
+          desc: '待人工处理病历数',
+          icon: CheckCircleOutlined,
+          tone: 'success',
+        },
+        {
+          key: 'timeout',
+          label: '超时风险',
+          value: timeoutPriorityCount.value || highRiskCount.value,
+          desc: '超过处理时限的病历数',
+          icon: WarningOutlined,
+          tone: 'warning',
         },
         {
           key: 'progress',
           label: '处理中',
           value: inProgressCount.value,
-          desc: '正在执行中的任务',
-        },
-        {
-          key: 'rate',
-          label: '完成率',
-          value: `${completionRate.value}%`,
-          desc: '按阶段状态估算闭环率',
+          desc: '当前正在处理中的病历数',
+          icon: SyncOutlined,
+          tone: 'info',
         },
       ],
-)
-
-const stageDistribution = computed(() => {
-  const palette = ['#2563eb', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e']
-  const total = Math.max(props.workbenchRows.length, 1)
-  const map = new Map<string, number>()
-
-  for (const row of props.workbenchRows) {
-    const key = row.stageStatus || '未标注'
-    map.set(key, (map.get(key) || 0) + 1)
-  }
-
-  return [...map.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([label, count], index) => ({
-      label,
-      count,
-      percent: Math.round((count / total) * 100),
-      color: palette[index % palette.length],
-    }))
-})
-
-const workflowLoad = computed(() => {
-  const total = Math.max(props.workbenchRows.length, 1)
-  const map = new Map<string, number>()
-
-  if (isFrontpageGenerateStage.value) {
-    const statusGroups = [
-      { label: '待生成', count: pendingGenerateCount.value },
-      { label: '生成中', count: generatingCount.value },
-      { label: '已生成', count: generatedCount.value },
-      { label: '生成失败', count: failedGenerateCount.value },
-    ]
-    return statusGroups
-      .filter((item) => item.count > 0)
-      .map((item) => ({
-        label: item.label,
-        count: item.count,
-        percent: Math.round((item.count / total) * 100),
-      }))
-  }
-
-  const detectWorkflow = (row: WorkbenchRow) => {
-    const text = `${row.riskReason} ${row.stageStatus}`
-    if (/(编码|icd|drg)/i.test(text)) return '编码质控'
-    if (/(首页|frontpage)/i.test(text)) return '首页质控'
-    if (/(结算|费用|settlement)/i.test(text)) return '结算质控'
-    return '综合质控'
-  }
-
-  for (const row of props.workbenchRows) {
-    const key = detectWorkflow(row)
-    map.set(key, (map.get(key) || 0) + 1)
-  }
-
-  return [...map.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([label, count]) => ({
-      label,
-      count,
-      percent: Math.round((count / total) * 100),
-    }))
-})
-
-const departmentRanking = computed(() => {
-  const map = new Map<string, number>()
-  for (const row of props.workbenchRows) {
-    const key = row.department || '未分科室'
-    map.set(key, (map.get(key) || 0) + 1)
-  }
-  return [...map.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([label, count]) => ({ label, count }))
-})
-
-const frontpageRiskRanking = computed(() => {
-  const map = new Map<string, number>()
-  for (const row of props.workbenchRows) {
-    const key = row.riskReason || '其他生成阻塞'
-    map.set(key, (map.get(key) || 0) + 1)
-  }
-  return [...map.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([label, count]) => ({ label, count }))
-})
-
-const priorityGroupRanking = computed(() =>
-  [...props.priorityGroups]
-    .map((group) => ({ label: group.label, count: Number(group.count || 0) }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5),
-)
-
-const analysisSecondaryTabLabel = computed(() =>
-  isFrontpageGenerateStage.value ? '生成状态占比' : '工作流负载',
-)
-
-const departmentRankingTitle = computed(() =>
-  isFrontpageGenerateStage.value ? '待生成科室排行' : '科室风险排行',
-)
-
-const secondaryRankingTitle = computed(() =>
-  isFrontpageGenerateStage.value ? '生成阻塞原因 TopN' : '优先池分组',
-)
-
-const secondaryRankingData = computed(() =>
-  isFrontpageGenerateStage.value ? frontpageRiskRanking.value : priorityGroupRanking.value,
 )
 </script>

@@ -21,7 +21,7 @@
           ]"
           @click="handleSwitchDoc(doc)"
         >
-          {{ doc.doc_name || doc.doc_type }}
+          {{ displayDocName(doc) }}
         </button>
       </div>
     </div>
@@ -41,7 +41,7 @@
     >
       <div class="emr-struct__header">
         <div class="emr-struct__title">
-          {{ metadata.doc_name || metadata.doc_type || '病历文书' }}
+          {{ displayMetadataTitle }}
         </div>
         <div
           v-if="metadata.record_time"
@@ -58,21 +58,25 @@
       >
         <template v-if="block.block_type === 'kv_section'">
           <h4 class="emr-struct__block-title">
-            {{ block.title || '基础信息' }}
+            {{ displayBlockTitle(block.title || '基础信息') }}
           </h4>
           <div
             v-if="(block.fields || []).length > 0"
-            class="emr-struct__kv-grid"
+            class="emr-struct__field-list"
           >
-            <div
+            <article
               v-for="field in block.fields || []"
               :key="`${block.block_id}:${field.key}`"
-              class="emr-struct__kv-row"
+              class="emr-struct__field-item"
               :data-field-value="field.value || ''"
             >
-              <span class="emr-struct__kv-label">{{ field.label }}</span>
-              <span class="emr-struct__kv-value">{{ field.value || '-' }}</span>
-            </div>
+              <h5 class="emr-struct__field-label">
+                {{ displayFieldLabel(field) }}
+              </h5>
+              <div class="emr-struct__field-value">
+                {{ field.value || '-' }}
+              </div>
+            </article>
           </div>
           <div
             v-else
@@ -84,7 +88,7 @@
 
         <template v-else-if="block.block_type === 'order_table'">
           <h4 class="emr-struct__block-title">
-            {{ block.title || '医嘱' }}
+            {{ displayBlockTitle(block.title || '医嘱') }}
           </h4>
           <div
             v-if="(block.rows || []).length > 0"
@@ -97,7 +101,7 @@
                     v-for="col in block.columns || []"
                     :key="col.key"
                   >
-                    {{ col.label }}
+                    {{ displayColumnLabel(col) }}
                   </th>
                 </tr>
               </thead>
@@ -126,7 +130,7 @@
 
         <template v-else>
           <h4 class="emr-struct__block-title">
-            {{ block.title || '正文' }}
+            {{ displayBlockTitle(block.title || '正文') }}
           </h4>
           <div
             class="emr-struct__paragraph"
@@ -314,6 +318,171 @@ const renderedContent = computed(() => {
 const isStructuredLayout = computed(
   () => layoutVersion.value === 'bundle_struct_v1' && renderBlocks.value.length > 0,
 )
+
+const displayMetadataTitle = computed(() =>
+  displayDocName({
+    doc_type: String(metadata.value.doc_type || ''),
+    doc_name: String(metadata.value.doc_name || ''),
+  }),
+)
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  admission_record: '入院记录',
+  admission_note: '入院记录',
+  discharge_record: '出院记录',
+  progress_note: '病程记录',
+  course_record: '病程记录',
+  surgery_record: '手术记录',
+  operation_record: '手术记录',
+  order_record: '医嘱',
+  orders: '医嘱',
+}
+
+const BLOCK_TITLE_LABELS: Record<string, string> = {
+  basic_info: '基础信息',
+  basic: '基础信息',
+  admission: '入院信息',
+  hospitalization: '住院信息',
+  diagnosis: '诊断',
+  diagnoses: '诊断',
+  procedure: '手术操作',
+  procedures: '手术操作',
+  exam: '检查检验',
+  examination: '检查检验',
+  orders: '医嘱',
+  medical_orders: '医嘱',
+  content: '正文',
+  text: '正文',
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  record_time: '记录时间',
+  department: '科室',
+  dept_name: '科室',
+  ward_name: '病区',
+  ward_no: '病区',
+  doctor_name: '医生',
+  recorder_name: '记录者',
+  submitter: '记录者',
+  chief_complaint: '主诉',
+  chief_complaints: '主诉',
+  history_of_present_illness: '现病史',
+  present_illness_history: '现病史',
+  present_history: '现病史',
+  current_medical_history: '现病史',
+  past_history: '既往史',
+  previous_history: '既往史',
+  personal_history: '个人史',
+  personal_his_tory: '个人史',
+  marital_delivery_history: '婚育史',
+  menstrual_history: '月经史',
+  marital_history: '婚育史',
+  family_history: '家族史',
+  family_histo_ry: '家族史',
+  allergy_history: '过敏史',
+  drug_allergy_history: '药物过敏史',
+  food_allergy_history: '食物过敏史',
+  physical_examination: '体格检查',
+  physical_exam: '体格检查',
+  checkup: '体格检查',
+  checkup_special: '专科情况',
+  specialist_examination: '专科检查',
+  auxiliary_examination: '辅助检查',
+  assist_exam: '辅助检查',
+  admission_diagnosis: '入院诊断',
+  preliminary_diagnosis: '初步诊断',
+  diagnosis: '诊断',
+  treatment_plan: '诊疗计划',
+  treatment_course: '诊疗经过',
+  admission_condition: '入院情况',
+  record_content: '记录内容',
+  other_content: '其他内容',
+}
+
+const EN_LABELS: Record<string, string> = {
+  'basic info': '基础信息',
+  'chief complaint': '主诉',
+  'chief complaints': '主诉',
+  'history of present illness': '现病史',
+  'present illness history': '现病史',
+  'present history': '现病史',
+  'current medical history': '现病史',
+  'past history': '既往史',
+  'previous history': '既往史',
+  'personal history': '个人史',
+  'personal his tory': '个人史',
+  'marital delivery history': '婚育史',
+  'menstrual history': '月经史',
+  'marital history': '婚育史',
+  'family history': '家族史',
+  'family histo ry': '家族史',
+  'allergy history': '过敏史',
+  'drug allergy history': '药物过敏史',
+  'food allergy history': '食物过敏史',
+  'physical examination': '体格检查',
+  'physical exam': '体格检查',
+  'specialist examination': '专科检查',
+  'auxiliary examination': '辅助检查',
+  'assist exam': '辅助检查',
+  'admission diagnosis': '入院诊断',
+  'preliminary diagnosis': '初步诊断',
+  'treatment plan': '诊疗计划',
+  'treatment course': '诊疗经过',
+  'admission condition': '入院情况',
+  'record content': '记录内容',
+  'other content': '其他内容',
+}
+
+function normalizeLabelKey(value?: string): string {
+  return String(value || '')
+    .trim()
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+}
+
+function displayDocName(doc: Pick<EmrDocumentSummary, 'doc_name' | 'doc_type'>): string {
+  const rawName = String(doc.doc_name || '').trim()
+  const rawType = String(doc.doc_type || '').trim()
+  const typeLabel = DOC_TYPE_LABELS[rawType] || EN_LABELS[normalizeLabelKey(rawType)]
+  if (!rawName || rawName === rawType) return typeLabel || rawName || rawType || '病历文书'
+  return EN_LABELS[normalizeLabelKey(rawName)] || typeLabel || rawName
+}
+
+function displayBlockTitle(title?: string): string {
+  const raw = String(title || '').trim()
+  if (!raw) return '正文'
+  return BLOCK_TITLE_LABELS[raw] || FIELD_LABELS[raw] || EN_LABELS[normalizeLabelKey(raw)] || raw
+}
+
+function displayFieldLabel(field: EmrKvField): string {
+  const rawLabel = String(field.label || field.key || '').trim()
+  const rawKey = String(field.key || '').trim()
+  return (
+    FIELD_LABELS[rawKey] ||
+    FIELD_LABELS[rawLabel] ||
+    EN_LABELS[normalizeLabelKey(rawLabel)] ||
+    EN_LABELS[normalizeLabelKey(rawKey)] ||
+    rawLabel ||
+    rawKey ||
+    '字段'
+  )
+}
+
+function displayColumnLabel(col: EmrTableColumn): string {
+  const rawLabel = String(col.label || col.key || '').trim()
+  const rawKey = String(col.key || '').trim()
+  return (
+    FIELD_LABELS[rawKey] ||
+    FIELD_LABELS[rawLabel] ||
+    EN_LABELS[normalizeLabelKey(rawLabel)] ||
+    EN_LABELS[normalizeLabelKey(rawKey)] ||
+    rawLabel ||
+    rawKey ||
+    '字段'
+  )
+}
 
 function buildUrl(path: 'documents' | 'render', extraParams?: Record<string, string>) {
   const baseId = effectiveRecordId.value
@@ -572,17 +741,18 @@ watch(
 .emr-content,
 .emr-struct {
   margin: 0 auto;
-  max-width: 104ch;
-  border: 1px solid rgba(226, 232, 240, 0.56);
-  border-radius: 10px;
+  max-width: 112ch;
+  border: 1px solid rgba(226, 232, 240, 0.62);
+  border-radius: 16px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 253, 255, 0.98));
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.025);
-  padding: 12px 14px 22px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.035);
+  padding: 18px 22px 26px;
   color: #475569;
   font-family: 'PingFang SC', 'Microsoft YaHei', 'SimSun', serif;
   font-size: 14px;
-  line-height: 1.9;
-  word-break: break-all;
+  line-height: 1.78;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .emr-content {
@@ -590,14 +760,15 @@ watch(
 }
 
 .emr-struct__header {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   border-bottom: 1px solid rgba(226, 232, 240, 0.7);
-  padding-bottom: 10px;
+  padding-bottom: 12px;
 }
 
 .emr-struct__title {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.45;
   color: #0f172a;
 }
 
@@ -608,40 +779,53 @@ watch(
 }
 
 .emr-struct__block {
-  margin-bottom: 12px;
-  border: 1px solid rgba(226, 232, 240, 0.62);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.86);
-  padding: 10px 12px;
+  margin-bottom: 18px;
+  border: 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0 16px;
+}
+
+.emr-struct__block:last-child {
+  margin-bottom: 0;
+  border-bottom: 0;
+  padding-bottom: 0;
 }
 
 .emr-struct__block-title {
-  margin: 0 0 8px;
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.5;
+  color: #0f172a;
+}
+
+.emr-struct__field-list {
+  display: grid;
+  gap: 14px;
+}
+
+.emr-struct__field-item {
+  display: block;
+  padding-left: 14px;
+  border-left: 3px solid rgba(191, 219, 254, 0.9);
+}
+
+.emr-struct__field-label {
+  margin: 0 0 4px;
+  color: #475569;
   font-size: 13px;
-  font-weight: 700;
-  color: #1e293b;
+  font-weight: 800;
+  line-height: 1.6;
 }
 
-.emr-struct__kv-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 14px;
-}
-
-.emr-struct__kv-row {
-  display: grid;
-  grid-template-columns: 88px 1fr;
-  align-items: start;
-  gap: 8px;
-}
-
-.emr-struct__kv-label {
-  color: #64748b;
-  font-weight: 600;
-}
-
-.emr-struct__kv-value {
-  color: #334155;
+.emr-struct__field-value {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.85;
+  white-space: pre-wrap;
 }
 
 .emr-struct__paragraph {
@@ -815,10 +999,6 @@ watch(
   .emr-struct {
     max-width: none;
     padding: 12px 14px 18px;
-  }
-
-  .emr-struct__kv-grid {
-    grid-template-columns: 1fr;
   }
 }
 </style>

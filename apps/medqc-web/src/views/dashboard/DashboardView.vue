@@ -2,7 +2,6 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { useAuthStore } from '@/stores/auth'
 import { getTodoStats, getPerformanceRanking } from '@/api/dashboard'
 import type { TodoStats, PerformanceData, DashboardScene } from '@/api/dashboard'
 import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow'
@@ -22,14 +21,12 @@ import {
   FileSearchOutlined,
   SettingOutlined,
   CalendarOutlined,
-  UserOutlined,
   MoreOutlined,
   TrophyOutlined,
   RightOutlined,
 } from '@ant-design/icons-vue'
 
 // 状态管理
-const authStore = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -258,19 +255,6 @@ function continueStage(card: WorkflowEntryCard) {
   openWorkstationAction(card.continueRecordId, card.action, card.key, card.continueTaskId)
 }
 
-// 获取问候语
-const getGreeting = () => {
-  const hour = new Date().getHours()
-  if (hour < 6) return '凌晨好'
-  if (hour < 9) return '早上好'
-  if (hour < 12) return '上午好'
-  if (hour < 14) return '中午好'
-  if (hour < 17) return '下午好'
-  if (hour < 19) return '傍晚好'
-  if (hour < 22) return '晚上好'
-  return '深夜好'
-}
-
 // 处理快捷操作
 const handleQuickAction = (action: string) => {
   const routeMap: Record<string, string> = {
@@ -434,64 +418,45 @@ watch(
 </script>
 
 <template>
-  <div class="w-full bg-slate-50/50 p-6 lg:p-8 font-sans relative overflow-x-hidden">
-    <!-- 顶部装饰背景 -->
-    <div
-      class="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-blue-100/40 via-indigo-50/20 to-transparent pointer-events-none z-0"
-    />
-    <div
-      class="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-gradient-to-br from-blue-200/30 to-purple-200/30 rounded-full blur-3xl pointer-events-none z-0"
-    />
-
-    <div class="relative z-10 max-w-7xl mx-auto">
-      <!-- 1. Hero Section: 欢迎区 -->
-      <div class="mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div class="flex items-center gap-5">
-          <div class="relative group cursor-pointer">
-            <div
-              class="absolute inset-0 bg-blue-600 rounded-2xl blur opacity-20 group-hover:opacity-30 transition-opacity"
-            />
-            <div
-              class="relative w-16 h-16 rounded-2xl bg-white flex items-center justify-center text-blue-600 shadow-sm border border-blue-50 group-hover:scale-105 transition-transform duration-300"
-            >
-              <UserOutlined class="text-3xl" />
-            </div>
-            <div
-              class="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 border-2 border-white rounded-full"
-            />
-          </div>
-
+  <div class="w-full bg-[#f5f9fc] p-5 lg:p-6 font-sans relative overflow-x-hidden">
+    <div class="max-w-7xl mx-auto">
+      <!-- 1. 工作台入口标题 -->
+      <div
+        class="mb-5 rounded-[18px] border border-slate-200/80 bg-white/95 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.05)]"
+      >
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
             <div
-              class="text-slate-500 text-xs font-medium mb-1.5 flex items-center gap-2 bg-white/60 backdrop-blur-sm px-2 py-0.5 rounded-full w-fit border border-slate-200/50"
+              class="mb-1.5 flex w-fit items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-bold text-slate-500"
             >
               <CalendarOutlined /> {{ currentDate }}
             </div>
-            <h1 class="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight mb-1">
-              {{ getGreeting() }}，{{ authStore.userName }}
+            <h1 class="text-[28px] font-black leading-9 tracking-tight text-slate-900">
+              工作台
             </h1>
-            <p class="text-slate-500 text-sm">
-              今天系统运行平稳，有
-              <span class="text-blue-600 font-bold px-1">{{ stats.pendingRecords }}</span>
-              份待分析病案。
+            <p class="mt-1 text-sm font-medium text-slate-500">
+              汇总待办队列、今日风险和快捷入口，优先处理需要人工复核的病案。
+              <span class="font-bold text-blue-600">{{ stats.pendingRecords }}</span>
+              份待处理。
             </p>
           </div>
-        </div>
 
-        <div class="flex items-center gap-3 w-full md:w-auto">
-          <button
-            class="flex-1 md:flex-none px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200 transition-all font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
-            @click="refreshData"
-          >
-            <ReloadOutlined :class="{ 'animate-spin': refreshing }" />
-            <span class="hidden sm:inline">刷新</span>
-          </button>
-          <button
-            class="flex-1 md:flex-none px-6 py-2.5 rounded-xl bg-slate-900 text-white hover:bg-blue-600 transition-all font-medium text-sm flex items-center justify-center gap-2 shadow-lg shadow-slate-200 hover:shadow-blue-500/30"
-          >
-            <ThunderboltOutlined />
-            开始质控
-          </button>
+          <div class="flex items-center gap-3 w-full md:w-auto">
+            <button
+              class="flex-1 md:flex-none px-4 py-2.5 rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200 transition-all font-bold text-sm flex items-center justify-center gap-2 shadow-sm"
+              @click="refreshData"
+            >
+              <ReloadOutlined :class="{ 'animate-spin': refreshing }" />
+              <span class="hidden sm:inline">刷新</span>
+            </button>
+            <button
+              class="flex-1 md:flex-none px-6 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-500 transition-all font-bold text-sm flex items-center justify-center gap-2 shadow-sm shadow-blue-500/20"
+              @click="handleQuickAction('analyze')"
+            >
+              <ThunderboltOutlined />
+              开始质控
+            </button>
+          </div>
         </div>
       </div>
 
@@ -514,7 +479,7 @@ watch(
           <div
             v-for="card in workflowCards"
             :key="card.key"
-            class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 hover:shadow-md transition-all"
+            class="bg-white rounded-[14px] border border-slate-200/80 shadow-[0_10px_24px_rgba(15,23,42,0.04)] p-4 transition-all"
           >
             <div class="flex items-start justify-between mb-3">
               <div>
@@ -554,13 +519,8 @@ watch(
       <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-8">
         <!-- 核心指标 1: 平均评分 -->
         <div
-          class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md hover:border-blue-100 transition-all relative overflow-hidden group"
+          class="bg-white rounded-[14px] p-5 shadow-[0_10px_24px_rgba(15,23,42,0.04)] border border-slate-200/80 transition-all relative overflow-hidden group"
         >
-          <div
-            class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity group-hover:scale-110 duration-500"
-          >
-            <TrophyOutlined class="text-6xl text-blue-600" />
-          </div>
           <div class="flex justify-between items-start mb-3">
             <div
               class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"
@@ -585,7 +545,7 @@ watch(
             </div>
             <div class="w-full h-1.5 bg-slate-100 rounded-full mt-3 overflow-hidden">
               <div
-                class="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"
+                class="h-full bg-blue-600 rounded-full"
                 style="width: 87.5%"
               />
             </div>
@@ -594,13 +554,8 @@ watch(
 
         <!-- 核心指标 2: 质控通过率 -->
         <div
-          class="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-md hover:border-indigo-100 transition-all relative overflow-hidden group"
+          class="bg-white rounded-[14px] p-5 shadow-[0_10px_24px_rgba(15,23,42,0.04)] border border-slate-200/80 transition-all relative overflow-hidden group"
         >
-          <div
-            class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity group-hover:scale-110 duration-500"
-          >
-            <CheckCircleOutlined class="text-6xl text-indigo-600" />
-          </div>
           <div class="flex justify-between items-start mb-3">
             <div
               class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center"
@@ -625,7 +580,7 @@ watch(
             </div>
             <div class="w-full h-1.5 bg-slate-100 rounded-full mt-3 overflow-hidden">
               <div
-                class="h-full bg-gradient-to-r from-indigo-400 to-indigo-600 rounded-full"
+                class="h-full bg-blue-600 rounded-full"
                 style="width: 94.2%"
               />
             </div>
@@ -634,7 +589,7 @@ watch(
 
         <!-- 工作量概览 (合并列) -->
         <div
-          class="bg-white rounded-2xl p-0 shadow-sm border border-slate-100 lg:col-span-2 flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-slate-100 overflow-hidden"
+          class="bg-white rounded-[14px] p-0 shadow-[0_10px_24px_rgba(15,23,42,0.04)] border border-slate-200/80 lg:col-span-2 flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-slate-100 overflow-hidden"
         >
           <div class="flex-1 p-5 hover:bg-slate-50/50 transition-colors group cursor-pointer">
             <div class="flex items-center gap-2 mb-3">

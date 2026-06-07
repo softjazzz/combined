@@ -1,22 +1,28 @@
 <template>
   <section class="batch-table-panel">
-    <div class="batch-table-panel__header px-5 py-3.5">
+    <div class="batch-table-panel__header px-4 py-2">
       <div
         class="batch-table-panel__toolbar flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"
       >
         <div class="batch-table-panel__toolbar-meta min-w-0">
           <div class="flex flex-wrap items-center gap-2.5">
             <div class="batch-table-panel__title">
-              批量工作台
+              {{ title }}
             </div>
             <span class="batch-table-panel__summary-pill">当前 {{ rows.length }} 条</span>
-            <span class="batch-table-panel__summary-pill batch-table-panel__summary-pill--selected">
+            <span
+              v-if="showSelection"
+              class="batch-table-panel__summary-pill batch-table-panel__summary-pill--selected"
+            >
               已选 {{ selectedRowKeys.length }} 条
             </span>
           </div>
         </div>
 
-        <div class="batch-table-panel__actions flex flex-wrap items-center gap-2">
+        <div
+          v-if="showBatchActions"
+          class="batch-table-panel__actions flex flex-wrap items-center gap-2"
+        >
           <a-button
             v-if="showPrimaryAction"
             size="small"
@@ -46,6 +52,7 @@
             分派
           </a-button>
           <a-button
+            v-if="showClearFiltersAction"
             size="small"
             class="batch-table-panel__action batch-table-panel__action--ghost"
             @click="emit('clear-filters')"
@@ -59,31 +66,38 @@
     <a-table
       class="batch-table-panel__table"
       :columns="columns"
-      :data-source="rows"
+      :data-source="displayRows"
       :loading="loading"
       row-key="id"
       :pagination="tablePagination"
       :row-selection="rowSelection"
-      :scroll="{ x: 980 }"
+      :scroll="tableScroll"
       :locale="tableLocale"
       @change="handleTableChange"
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'patient'">
           <div class="batch-table-panel__patient-cell">
-            <span class="batch-table-panel__patient-name">
-              {{ record.patientName }}
-            </span>
-            <span
-              class="batch-table-panel__visit-id inline-flex items-center px-2.5 py-1 font-mono text-[11px]"
+            <img
+              class="batch-table-panel__avatar"
+              :src="patientAvatarSrc(record)"
+              :alt="`${record.patientName || '患者'}头像`"
             >
-              {{ record.visitId }}
-            </span>
-            <span
-              v-if="record.isDemo"
-              class="batch-table-panel__tag batch-table-panel__tag--demo inline-flex items-center px-2.5 py-1 text-[11px] font-semibold"
-            >
-              Demo
+            <span class="batch-table-panel__patient-meta">
+              <span class="batch-table-panel__patient-name">
+                {{ record.patientName }}
+              </span>
+              <span class="batch-table-panel__visit-line">
+                <span class="batch-table-panel__visit-id font-mono">
+                  {{ record.visitId }}
+                </span>
+                <span
+                  v-if="record.isDemo"
+                  class="batch-table-panel__tag batch-table-panel__tag--demo inline-flex items-center px-2 py-0.5 text-[11px] font-semibold"
+                >
+                  样例
+                </span>
+              </span>
             </span>
           </div>
         </template>
@@ -100,6 +114,12 @@
         </template>
         <template v-else-if="column.key === 'risk'">
           <span class="batch-table-panel__risk">{{ record.riskReason }}</span>
+        </template>
+        <template v-else-if="column.key === 'admissionDischarge'">
+          <span class="batch-table-panel__date-pair">
+            <span>{{ record.admissionDate || '-' }}</span>
+            <span>{{ record.dischargeDate || '-' }}</span>
+          </span>
         </template>
         <template v-else-if="column.key === 'updatedAt'">
           <span class="batch-table-panel__updated-at">{{ record.updatedAt }}</span>
@@ -121,14 +141,24 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import patientIconBoy from '@/assets/avatar-icons/patient-icon-boy.png'
+import patientIconElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
+import patientIconElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
+import patientIconGirl from '@/assets/avatar-icons/patient-icon-girl.png'
+import patientIconMan from '@/assets/avatar-icons/patient-icon-man.png'
+import patientIconWoman from '@/assets/avatar-icons/patient-icon-woman.png'
 
 export interface WorkbenchRow {
   id: string
   patientName: string
+  patientSex?: string
+  patientAge?: number
   visitId: string
   department: string
   stageStatus: string
   riskReason: string
+  admissionDate?: string
+  dischargeDate?: string
   updatedAt: string
   isDemo: boolean
 }
@@ -142,11 +172,14 @@ const props = defineProps<{
   total?: number
   loading?: boolean
   readonly?: boolean
+  title?: string
   primaryActionLabel?: string
   rowActionLabel?: string
+  showSelection?: boolean
   showPrimaryAction?: boolean
   showDeferAction?: boolean
   showAssignAction?: boolean
+  showClearFiltersAction?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -159,27 +192,51 @@ const emit = defineEmits<{
   'page-change': [page: number, pageSize?: number]
 }>()
 
-const rowSelection = computed(() => ({
-  selectedRowKeys: props.selectedRowKeys,
-  onChange: (keys: (string | number)[]) =>
-    emit(
-      'update:selectedRowKeys',
-      keys.map((k) => String(k)),
-    ),
-}))
+const showSelection = computed(() => props.showSelection !== false)
 
+const rowSelection = computed(() => {
+  if (!showSelection.value) return undefined
+  return {
+    selectedRowKeys: props.selectedRowKeys,
+    onChange: (keys: (string | number)[]) =>
+      emit(
+        'update:selectedRowKeys',
+        keys.map((k) => String(k)),
+      ),
+  }
+})
+
+const title = computed(() => props.title || '病历池列表')
 const primaryActionLabel = computed(() => props.primaryActionLabel || '批量处理')
 const rowActionLabel = computed(() => props.rowActionLabel || '查看详情')
 const showPrimaryAction = computed(() => props.showPrimaryAction !== false)
 const showDeferAction = computed(() => props.showDeferAction === true)
 const showAssignAction = computed(() => props.showAssignAction === true)
+const showClearFiltersAction = computed(() => props.showClearFiltersAction === true)
+const showBatchActions = computed(
+  () =>
+    showPrimaryAction.value ||
+    showDeferAction.value ||
+    showAssignAction.value ||
+    showClearFiltersAction.value,
+)
+const tableScroll = computed(() => ({
+  x: 980,
+  y: showSelection.value ? undefined : 440,
+}))
+const displayRows = computed(() => {
+  if (showSelection.value) return props.rows
+  const currentPageSize = Number(props.pageSize || 15)
+  if (!Number.isFinite(currentPageSize) || currentPageSize <= 0) return props.rows
+  return props.rows.slice(0, currentPageSize)
+})
 
 const tableLocale = {
   emptyText: '当前筛选条件下暂无候选病历',
 }
 
 const tablePagination = computed(() => {
-  const pageSize = Number(props.pageSize || 20)
+  const pageSize = Number(props.pageSize || 15)
   const totalFromProps = Number(props.total || 0)
   const totalFromRows = Array.isArray(props.rows) ? props.rows.length : 0
   const total = Math.max(totalFromProps, totalFromRows)
@@ -190,7 +247,7 @@ const tablePagination = computed(() => {
     size: 'small' as const,
     showQuickJumper: true,
     showSizeChanger: true,
-    pageSizeOptions: ['20', '50', '100'],
+    pageSizeOptions: ['15', '30', '50', '100'],
     hideOnSinglePage: false,
     showTotal: (value: number) => `共 ${value} 例`,
   }
@@ -198,27 +255,45 @@ const tablePagination = computed(() => {
 
 function handleTableChange(pagination: { current?: number; pageSize?: number }) {
   const nextPage = Number(pagination.current || 1)
-  const nextPageSize = Number(pagination.pageSize || props.pageSize || 20)
+  const nextPageSize = Number(pagination.pageSize || props.pageSize || 15)
   const currentPage = Number(props.currentPage || 1)
-  const currentPageSize = Number(props.pageSize || 20)
+  const currentPageSize = Number(props.pageSize || 15)
   if (nextPage === currentPage && nextPageSize === currentPageSize) return
   emit('page-change', nextPage, nextPageSize)
+}
+
+function isFemale(sex?: string) {
+  return /女|female|^f$/i.test(String(sex || '').trim())
+}
+
+function patientAvatarSrc(record: { patientSex?: string; patientAge?: number }) {
+  const age = Number(record.patientAge || 0)
+  const female = isFemale(record.patientSex)
+  if (Number.isFinite(age) && age > 0 && age < 14) {
+    return female ? patientIconGirl : patientIconBoy
+  }
+  if (Number.isFinite(age) && age >= 55) {
+    return female ? patientIconElderWoman : patientIconElderMan
+  }
+  return female ? patientIconWoman : patientIconMan
 }
 
 function stageTagClass(stageStatus: string) {
   if (/终末|完成|已完成/.test(stageStatus)) return 'batch-table-panel__tag--success'
   if (/待复核|质控|待审核/.test(stageStatus)) return 'batch-table-panel__tag--review'
   if (/资料不全|缺失/.test(stageStatus)) return 'batch-table-panel__tag--danger'
+  if (/超时|临期/.test(stageStatus)) return 'batch-table-panel__tag--warning'
   if (/待处理|处理中|抽取/.test(stageStatus)) return 'batch-table-panel__tag--brand'
   return 'batch-table-panel__tag--neutral'
 }
 
 const columns = [
-  { title: '患者信息', key: 'patient', dataIndex: 'patient', width: 340 },
+  { title: '患者信息', key: 'patient', dataIndex: 'patient', width: 260 },
   { title: '科室', key: 'department', dataIndex: 'department', width: 160 },
-  { title: '阶段状态', key: 'stageStatus', dataIndex: 'stageStatus', width: 120 },
-  { title: '风险原因', key: 'risk', dataIndex: 'riskReason', width: 340 },
-  { title: '更新时间', key: 'updatedAt', dataIndex: 'updatedAt', width: 100 },
+  { title: '状态', key: 'stageStatus', dataIndex: 'stageStatus', width: 110 },
+  { title: '风险标签', key: 'risk', dataIndex: 'riskReason', width: 220 },
+  { title: '入院 / 出院', key: 'admissionDischarge', dataIndex: 'admissionDischarge', width: 140 },
+  { title: '更新时间', key: 'updatedAt', dataIndex: 'updatedAt', width: 150 },
   { title: '操作', key: 'action', dataIndex: 'action', width: 120 },
 ]
 </script>
@@ -226,10 +301,12 @@ const columns = [
 <style scoped>
 .batch-table-panel {
   overflow: hidden;
-  border-radius: var(--workstation-radius-panel, 28px);
-  border: 1px solid var(--workstation-border-light, rgba(255, 255, 255, 0.92));
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 249, 252, 0.96));
-  box-shadow: var(--workstation-shadow-panel, 0 24px 60px rgba(148, 163, 184, 0.12));
+  border-radius: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 14px 32px rgba(148, 163, 184, 0.12);
 }
 
 .batch-table-panel__header {
@@ -237,7 +314,7 @@ const columns = [
 }
 
 .batch-table-panel__toolbar {
-  gap: 12px;
+  gap: 8px;
 }
 
 .batch-table-panel__toolbar-meta {
@@ -245,9 +322,9 @@ const columns = [
 }
 
 .batch-table-panel__title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
   color: var(--workstation-text-primary, #0f172a);
 }
 
@@ -257,7 +334,7 @@ const columns = [
   border-radius: var(--workstation-radius-pill, 999px);
   border: 0;
   background: rgba(248, 250, 252, 0.9);
-  padding: 4px 10px;
+  padding: 3px 9px;
   font-size: 12px;
   font-weight: 700;
   color: var(--workstation-text-secondary, #5b6b84);
@@ -270,8 +347,8 @@ const columns = [
 }
 
 .batch-table-panel__action {
-  height: 36px !important;
-  border-radius: var(--workstation-radius-pill, 999px) !important;
+  height: 34px !important;
+  border-radius: 9px !important;
   padding: 0 16px !important;
   font-weight: 700 !important;
   transition:
@@ -284,26 +361,14 @@ const columns = [
 
 .batch-table-panel__action--primary {
   border: 0 !important;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--workstation-brand-500, #2f6fed) 88%, white),
-    var(--workstation-brand-500, #2f6fed)
-  ) !important;
+  background: var(--workstation-brand-500, #2563eb) !important;
   color: #fff !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    0 12px 22px rgba(47, 111, 237, 0.22) !important;
+  box-shadow: 0 12px 22px rgba(47, 111, 237, 0.18) !important;
 }
 
 .batch-table-panel__action--primary:hover {
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--workstation-brand-600, #1e5ae0) 86%, white),
-    var(--workstation-brand-600, #1e5ae0)
-  ) !important;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 14px 26px rgba(47, 111, 237, 0.26) !important;
+  background: var(--workstation-brand-600, #1e5ae0) !important;
+  box-shadow: 0 14px 26px rgba(47, 111, 237, 0.22) !important;
 }
 
 .batch-table-panel__action--secondary {
@@ -336,12 +401,21 @@ const columns = [
   gap: 8px;
 }
 
+.batch-table-panel :deep(.ant-table-pagination) {
+  margin: 8px 12px !important;
+}
+
+.batch-table-panel :deep(.ant-table-thead > tr > th) {
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+}
+
 .batch-table-panel :deep(.ant-pagination-options-size-changer) {
   min-width: 104px;
 }
 
 .batch-table-panel__patient-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--workstation-text-primary, #0f172a);
@@ -350,35 +424,65 @@ const columns = [
 .batch-table-panel__patient-cell {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  white-space: nowrap;
 }
 
-.batch-table-panel__visit-id,
+.batch-table-panel__avatar {
+  display: block;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eaf2ff;
+  object-fit: cover;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.96),
+    0 2px 6px rgba(37, 99, 235, 0.1);
+}
+
+.batch-table-panel__patient-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.batch-table-panel__visit-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
 .batch-table-panel__tag,
 .batch-table-panel__detail-button {
-  border-radius: var(--workstation-radius-pill, 999px);
+  border-radius: 8px;
 }
 
 .batch-table-panel__visit-id {
-  border: 1px solid var(--workstation-border-soft, rgba(15, 23, 42, 0.06));
-  background: var(--workstation-bg-card-soft, rgba(248, 250, 252, 0.92));
   color: var(--workstation-text-secondary, #5b6b84);
-  flex-shrink: 0;
+  font-size: 12px;
 }
 
 .batch-table-panel__department,
 .batch-table-panel__risk {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--workstation-text-secondary, #5b6b84);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.batch-table-panel__updated-at {
+.batch-table-panel__date-pair {
+  display: flex;
+  gap: 6px;
   font-size: 12px;
+  font-weight: 600;
+  color: var(--workstation-text-secondary, #5b6b84);
+}
+
+.batch-table-panel__updated-at {
+  font-size: 11px;
   font-weight: 600;
   color: var(--workstation-text-muted, #94a3b8);
 }
@@ -413,6 +517,11 @@ const columns = [
   color: var(--workstation-state-danger-text, #b94a48);
 }
 
+.batch-table-panel__tag--warning {
+  background: color-mix(in srgb, var(--workstation-state-warning-bg, #fff6e5) 84%, white);
+  color: var(--workstation-state-warning-text, #b85a00);
+}
+
 .batch-table-panel__tag--success {
   background: color-mix(in srgb, rgba(236, 253, 245, 0.96) 86%, white);
   color: #0f766e;
@@ -434,7 +543,7 @@ const columns = [
 .batch-table-panel :deep(.ant-table-thead > tr > th) {
   background: var(--workstation-bg-table-header, rgba(248, 250, 252, 0.92));
   color: var(--workstation-text-muted, #94a3b8);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -444,8 +553,8 @@ const columns = [
 .batch-table-panel :deep(.ant-table-tbody > tr > td) {
   background: transparent;
   border-bottom: 1px solid rgba(241, 245, 249, 0.9);
-  padding-top: 12px;
-  padding-bottom: 12px;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 
 .batch-table-panel :deep(.ant-table-tbody > tr:hover > td) {
@@ -480,9 +589,9 @@ const columns = [
 }
 
 .batch-table-panel__detail-button {
-  height: 32px !important;
-  padding: 0 14px !important;
-  font-size: 12px !important;
+  height: 26px !important;
+  padding: 0 10px !important;
+  font-size: 11px !important;
   font-weight: 700 !important;
 }
 </style>

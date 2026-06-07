@@ -464,10 +464,13 @@ class WorkstationAggregationService:
 
             return {
                 "visit_id": visit_id,
-                "patient_id": base["patient_id"],
-                "institute_id": base["institute_id"],
-                "patient_name": base["patient_name"],
-                "department": base["department"],
+            "patient_id": base["patient_id"],
+            "institute_id": base["institute_id"],
+            "patient_name": base["patient_name"],
+            "patient_age": base.get("patient_age"),
+            "patient_sex": base.get("patient_sex"),
+            "patient_gender": base.get("patient_sex"),
+            "department": base["department"],
                 "workflow_type": workflow_type,
                 "workflow_label": WORKFLOW_LABELS[workflow_type],
                 "queue_status": status_code,
@@ -537,6 +540,9 @@ class WorkstationAggregationService:
                     "patient_id": row["patient_id"],
                     "institute_id": row["institute_id"],
                     "patient_name": row["patient_name"],
+                    "patient_age": row.get("patient_age"),
+                    "patient_sex": row.get("patient_sex"),
+                    "patient_gender": row.get("patient_sex"),
                     "department": row["department"],
                     "admission_date": row.get("admission_date"),
                     "discharge_date": row.get("discharge_date"),
@@ -669,6 +675,9 @@ class WorkstationAggregationService:
             if context:
                 item["patient_id"] = context.get("patient_id")
                 item["patient_name"] = context.get("patient_name")
+                item["patient_age"] = context.get("patient_age")
+                item["patient_sex"] = context.get("patient_sex")
+                item["patient_gender"] = context.get("patient_gender")
                 item["department"] = context.get("department") or item["department"]
                 item["active_defect_count"] = int(context.get("active_defect_count") or 0)
                 item["latest_qc_score"] = context.get("latest_qc_score")
@@ -750,6 +759,9 @@ class WorkstationAggregationService:
                     "visit_id": item.get("visit_id"),
                     "patient_id": item.get("patient_id"),
                     "patient_name": item.get("patient_name"),
+                    "patient_age": item.get("patient_age"),
+                    "patient_sex": item.get("patient_sex"),
+                    "patient_gender": item.get("patient_gender"),
                     "department": item.get("department"),
                     "workflow_type": workflow_name,
                     "task_status": task_status,
@@ -1018,6 +1030,8 @@ class WorkstationAggregationService:
             mr.c.patient_id.label("patient_id"),
             mr.c.visit_id.label("visit_id"),
             mr.c.name.label("patient_name"),
+            func.coalesce(mr.c.age, mr.c.age_year, mr.c.age_month).label("patient_age"),
+            mr.c.sex.label("patient_sex"),
             func.coalesce(mr.c.discharge_dept_name, mr.c.admission_dept_name, "").label("department"),
             mr.c.admission_datetime.label("admission_date"),
             mr.c.discharge_datetime.label("discharge_date"),

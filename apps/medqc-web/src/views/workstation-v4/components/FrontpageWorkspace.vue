@@ -1,45 +1,73 @@
 <template>
-  <div class="px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5">
+  <div class="px-4 pb-5 pt-3 lg:px-5">
     <div
-      class="mx-auto w-full max-w-[1200px] rounded-[18px] border border-slate-200/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(250,252,255,0.98))] p-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.03)]"
+      class="mx-auto w-full max-w-[1480px] rounded-[18px] border border-slate-200/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(250,252,255,0.98))] p-3 shadow-[0_8px_20px_rgba(15,23,42,0.03)]"
     >
       <div
-        v-if="
-          frontpageGenerating ||
-            frontpagePostProcessing ||
-            draft ||
-            frontpageSheetLoading ||
-            frontpageSheetData
-        "
-        class="mb-2 flex flex-wrap items-center justify-end gap-2 px-1"
+        class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-slate-200/80 bg-white/82 px-4 py-3"
       >
-        <a-tooltip title="基于当前已选病历/同步文书">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="text-[17px] font-black text-slate-950">
+              病案首页工作区
+            </div>
+            <span
+              class="rounded-full border border-blue-100 bg-blue-50/85 px-2.5 py-0.5 text-[11px] font-bold text-blue-700"
+            >
+              {{ sourceLabel }}
+            </span>
+            <span
+              v-if="reportResult?.coverage"
+              class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600"
+            >
+              覆盖 {{ reportResult.coverage.present }}/{{ reportResult.coverage.total }}
+            </span>
+          </div>
+          <div class="mt-1 text-[12px] font-medium text-slate-500">
+            提取结果、首页预览/打印、系统首页集中在当前工作区完成。
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <a-tooltip title="基于当前已选病历/同步文书">
+            <a-button
+              type="primary"
+              class="!h-9 !rounded-full !border-0 !px-4 !text-sm !font-bold !shadow-[0_8px_18px_rgba(37,99,235,0.16)]"
+              :loading="frontpageGenerating"
+              :disabled="!canGenerateFrontpage"
+              @click="emit('generate-frontpage')"
+            >
+              <template #icon>
+                <ThunderboltOutlined />
+              </template>
+              AI 生成首页
+            </a-button>
+          </a-tooltip>
+          <a-tooltip title="直接粘贴完整病历原文抽取">
+            <a-button
+              class="!h-9 !rounded-full !border-blue-100 !bg-blue-50/70 !px-4 !text-sm !font-semibold !text-blue-700 hover:!border-blue-200 hover:!bg-blue-50"
+              :disabled="frontpageGenerating || frontpagePostProcessing"
+              @click="emit('paste-frontpage')"
+            >
+              <template #icon>
+                <FileTextOutlined />
+              </template>
+              粘贴病历生成首页
+            </a-button>
+          </a-tooltip>
           <a-button
-            type="primary"
-            class="!h-9 !rounded-full !border-0 !px-4 !text-sm !font-bold !shadow-[0_8px_18px_rgba(37,99,235,0.16)]"
-            :loading="frontpageGenerating"
-            :disabled="!canGenerateFrontpage"
-            @click="emit('generate-frontpage')"
-          >
-            <template #icon>
-              <ThunderboltOutlined />
-            </template>
-            AI 生成首页
-          </a-button>
-        </a-tooltip>
-        <a-tooltip title="直接粘贴完整病历原文抽取">
-          <a-button
-            class="!h-9 !rounded-full !border-blue-100 !bg-blue-50/70 !px-4 !text-sm !font-semibold !text-blue-700 hover:!border-blue-200 hover:!bg-blue-50"
+            class="!h-9 !rounded-full !border-slate-200/90 !bg-white/85 !px-4 !text-sm !font-semibold !text-slate-600"
             :disabled="frontpageGenerating || frontpagePostProcessing"
-            @click="emit('paste-frontpage')"
+            @click="emit('reload-frontpage-sheet')"
           >
             <template #icon>
-              <FileTextOutlined />
+              <SyncOutlined />
             </template>
-            粘贴病历生成首页
+            重新加载
           </a-button>
-        </a-tooltip>
+        </div>
       </div>
+
       <div
         v-if="
           !frontpageGenerating &&
@@ -59,38 +87,7 @@
           暂无病案首页数据
         </div>
         <div class="mt-2 max-w-[360px] text-[13px] leading-6 text-slate-500">
-          当前病历还没有可展示的病案首页正式数据，可先生成首页草稿后再继续复核与补录。
-        </div>
-        <div class="mt-6 flex items-center gap-2">
-          <a-button
-            type="primary"
-            class="!h-10 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18)]"
-            :disabled="!canGenerateFrontpage"
-            @click="emit('generate-frontpage')"
-          >
-            <template #icon>
-              <ThunderboltOutlined />
-            </template>
-            AI 生成首页
-          </a-button>
-          <a-button
-            class="!h-10 !rounded-full !border-blue-100 !bg-blue-50/70 !px-5 !text-sm !font-semibold !text-blue-700"
-            @click="emit('paste-frontpage')"
-          >
-            <template #icon>
-              <FileTextOutlined />
-            </template>
-            粘贴病历生成首页
-          </a-button>
-          <a-button
-            class="!h-10 !rounded-full !border-slate-200/90 !bg-white/85 !px-5 !text-sm !font-semibold !text-slate-600"
-            @click="emit('reload-frontpage-sheet')"
-          >
-            <template #icon>
-              <SyncOutlined />
-            </template>
-            重新加载
-          </a-button>
+          当前病历还没有可展示的病案首页正式数据，可使用上方工具栏生成首页草稿或重新加载系统首页。
         </div>
       </div>
       <FrontpageWorkspacePanel
@@ -133,11 +130,88 @@
           </div>
         </template>
       </a-alert>
+      <section
+        v-if="coverageGroupSummaries.length"
+        class="mt-3 rounded-[16px] border border-slate-200/80 bg-white/82 p-4"
+      >
+        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div class="text-[14px] font-black text-slate-900">
+              字段覆盖报告
+            </div>
+            <div class="mt-0.5 text-[12px] font-medium text-slate-500">
+              按首页生成条款分组展示抽取完成度，缺失字段需复核后再进入正式首页。
+            </div>
+          </div>
+          <span
+            class="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700"
+          >
+            {{ reportResult.coverage.status === 'complete' ? '可复核提交' : '待补全复核' }}
+          </span>
+        </div>
+        <div class="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+          <article
+            v-for="item in coverageGroupSummaries"
+            :key="item.group"
+            class="rounded-[14px] border border-slate-200/80 bg-slate-50/70 px-3 py-2.5"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="truncate text-[12px] font-bold text-slate-700">{{ item.group }}</span>
+              <span
+                class="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                :class="
+                  item.status === 'completed'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : item.status === 'review'
+                      ? 'bg-amber-50 text-amber-700'
+                      : 'bg-rose-50 text-rose-700'
+                "
+              >
+                {{ coverageStatusText(item.status) }}
+              </span>
+            </div>
+            <div class="mt-2 flex items-end justify-between">
+              <div class="text-[24px] font-black leading-none text-slate-950">
+                {{ item.present }}/{{ item.total }}
+              </div>
+              <div class="text-right text-[11px] leading-4 text-slate-500">
+                <div v-if="item.missing">
+                  缺失 {{ item.missing }}
+                </div>
+                <div v-if="item.partial">
+                  需复核 {{ item.partial }}
+                </div>
+                <div v-if="!item.missing && !item.partial">
+                  字段完整
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div
+          v-if="topMissingFields.length"
+          class="mt-3 rounded-[12px] border border-rose-100 bg-rose-50/55 px-3 py-2"
+        >
+          <div class="mb-1 text-[12px] font-bold text-rose-700">
+            优先补全字段
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <span
+              v-for="field in topMissingFields"
+              :key="field.path || field.field"
+              class="rounded-full border border-rose-100 bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-rose-700"
+            >
+              {{ field.group }} / {{ field.field }}
+            </span>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import {
   FileSearchOutlined,
   FileTextOutlined,
@@ -145,6 +219,12 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons-vue'
 import FrontpageWorkspacePanel from './FrontpageWorkspacePanel.vue'
+import {
+  coverageStatusText,
+  extractCoverageFields,
+  summarizeCoverageFields,
+  topMissingCoverageFields,
+} from '../../../types/frontpage'
 
 type FrontpageTabKey = 'fields' | 'preview' | 'official'
 type FrontpageModuleCard = {
@@ -157,7 +237,7 @@ type FrontpageModuleCard = {
   }
 }
 
-defineProps<{
+const props = defineProps<{
   frontpageGenerating: boolean
   frontpagePostProcessing: boolean
   draft: Record<string, any> | null
@@ -179,6 +259,17 @@ const emit = defineEmits<{
   'export-frontpage': [format: 'health' | 'insurance' | 'settlement']
   'save-frontpage': []
 }>()
+
+const sourceLabel = computed(() => {
+  if (props.frontpageSheetData) return '官方首页'
+  if (props.draft) return 'AI 草稿'
+  if (props.frontpageGenerating || props.frontpagePostProcessing) return '生成中'
+  return '待生成'
+})
+
+const coverageFields = computed(() => extractCoverageFields(props.reportResult))
+const coverageGroupSummaries = computed(() => summarizeCoverageFields(coverageFields.value))
+const topMissingFields = computed(() => topMissingCoverageFields(coverageFields.value, 6))
 
 function sceneLabel(scene?: string) {
   if (scene === 'nhc_frontpage') return '病案首页'

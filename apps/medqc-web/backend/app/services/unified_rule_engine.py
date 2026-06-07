@@ -1221,6 +1221,8 @@ class UnifiedRuleEngine:
             return {"items": [], "parse_error": True}
 
         cleaned = re.sub(r"<think>[\s\S]*?</think>", "", raw_output or "", flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"\s*```$", "", cleaned).strip()
         payload: Any = None
 
         object_match = re.search(r"\{[\s\S]*\}", cleaned)
@@ -1244,7 +1246,14 @@ class UnifiedRuleEngine:
         items_raw: List[Any]
         if isinstance(payload, dict):
             maybe_items = payload.get("results")
-            items_raw = maybe_items if isinstance(maybe_items, list) else []
+            if not isinstance(maybe_items, list):
+                maybe_items = payload.get("items")
+            if isinstance(maybe_items, list):
+                items_raw = maybe_items
+            elif payload.get("rule_id") or payload.get("rule_code"):
+                items_raw = [payload]
+            else:
+                items_raw = []
         elif isinstance(payload, list):
             items_raw = payload
         else:

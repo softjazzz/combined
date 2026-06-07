@@ -94,6 +94,11 @@ FRONTPAGE_TO_SETTLEMENT = {
 }
 
 
+def get_frontpage_to_settlement_mapping() -> Dict[str, str]:
+    """Return a copy of the FrontPageDraft path to settlement key mapping."""
+    return dict(FRONTPAGE_TO_SETTLEMENT)
+
+
 # ============================================================
 # C 类字段（留空的默认值）
 # ============================================================

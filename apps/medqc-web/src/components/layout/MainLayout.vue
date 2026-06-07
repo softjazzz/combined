@@ -143,7 +143,7 @@
             <template #icon>
               <ThunderboltOutlined />
             </template>
-            <span class="font-medium">自定义规则工作台</span>
+            <span class="font-medium">自定义质控点</span>
           </a-menu-item>
 
           <!-- 任务管理 -->
@@ -366,7 +366,7 @@
             >
               <a-avatar
                 :size="36"
-                class="mr-2 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white"
+                class="mr-2 bg-[#2563eb] text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white"
               >
                 <template #icon>
                   <UserOutlined />
@@ -515,7 +515,7 @@ const breadcrumbItems = computed(() => {
         items.push({ title: '质控规则管理', path: null })
         break
       case 'medical-records':
-        items.push({ title: '测试病历管理', path: '/dashboard/medical-records' })
+        items.push({ title: '病历管理', path: '/dashboard/medical-records' })
         if (pathSegments.length > 2) {
           if (pathSegments[2] === 'create') {
             items.push({ title: '新建病历', path: null })
@@ -530,10 +530,10 @@ const breadcrumbItems = computed(() => {
         items.push({ title: '数据权限配置', path: null })
         break
       case 'llm-qc-demo-enhanced':
-        items.push({ title: 'LLM质控演示增强版', path: null })
+        items.push({ title: 'LLM质控样例增强版', path: null })
         break
       case 'llm-qc-demo-new':
-        items.push({ title: 'LLM质控演示新版', path: null })
+        items.push({ title: 'LLM质控样例新版', path: null })
         break
       case 'drg':
         items.push({ title: 'DRG/DIP', path: '/dashboard/drg' })

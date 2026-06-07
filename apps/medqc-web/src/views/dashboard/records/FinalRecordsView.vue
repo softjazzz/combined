@@ -1,83 +1,114 @@
 <template>
-  <div class="final-records-page min-h-screen bg-slate-50/50 p-6">
-    <!-- 1. 顶部 KPI 概览卡片 -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-      <div
-        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
-      >
+  <div class="final-records-page min-h-screen bg-[#f5f9fc] p-5 lg:p-6">
+    <!-- 1. 顶部业务标题与 KPI -->
+    <div
+      class="mb-5 rounded-[18px] border border-slate-200/80 bg-white/95 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.05)]"
+    >
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">
-            总病历数
+          <div class="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">
+            WORKLIST / FINAL
           </div>
-          <div class="text-2xl font-bold text-blue-600 font-mono">
-            {{ formatInteger(overviewStats.total_records) }}
-          </div>
+          <h1 class="mt-1 text-[28px] font-black leading-9 tracking-tight text-slate-900">
+            终末病历质控
+          </h1>
+          <p class="mt-1 text-sm font-medium text-slate-500">
+            聚合已出院病历、归档状态与终末质控任务，快速定位待处理记录。
+          </p>
         </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform"
-        >
-          <FileTextOutlined class="text-lg" />
+        <div class="flex items-center gap-2">
+          <a-button
+            class="!h-9 !rounded-lg !border-slate-200 !bg-white !text-slate-700 hover:!border-blue-200 hover:!text-blue-700"
+            @click="handleRefresh"
+          >
+            <ReloadOutlined :spin="loading" />
+            刷新
+          </a-button>
+          <a-button
+            type="primary"
+            class="!h-9 !rounded-lg !border-0 !bg-blue-600 !text-white shadow-sm shadow-blue-500/20 hover:!bg-blue-500"
+            @click="openBatchLaunchModal"
+          >
+            <FileSearchOutlined />
+            发起批量质控
+          </a-button>
         </div>
       </div>
 
-      <div
-        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
-      >
-        <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">
-            已归档
+      <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div class="queue-kpi-card">
+          <div class="queue-kpi-icon bg-blue-50 text-blue-600">
+            <FileTextOutlined />
           </div>
-          <div class="text-2xl font-bold text-emerald-600 font-mono">
-            {{ formatInteger(overviewStats.archived_count) }}
+          <div>
+            <div class="queue-kpi-label">
+              总病历数
+            </div>
+            <div class="queue-kpi-value">
+              {{ formatInteger(overviewStats.total_records) }}
+            </div>
+            <div class="queue-kpi-desc">
+              当前筛选范围
+            </div>
           </div>
         </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform"
-        >
-          <CheckCircleOutlined class="text-lg" />
-        </div>
-      </div>
 
-      <div
-        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
-      >
-        <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">
-            待处理
+        <div class="queue-kpi-card">
+          <div class="queue-kpi-icon bg-emerald-50 text-emerald-600">
+            <CheckCircleOutlined />
           </div>
-          <div class="text-2xl font-bold text-amber-600 font-mono">
-            {{ formatInteger(overviewStats.pending_count) }}
+          <div>
+            <div class="queue-kpi-label">
+              已归档
+            </div>
+            <div class="queue-kpi-value">
+              {{ formatInteger(overviewStats.archived_count) }}
+            </div>
+            <div class="queue-kpi-desc">
+              已完成质控闭环
+            </div>
           </div>
         </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform"
-        >
-          <ClockCircleOutlined class="text-lg" />
-        </div>
-      </div>
 
-      <div
-        class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all"
-      >
-        <div>
-          <div class="text-slate-500 text-xs font-medium mb-1">
-            质控通过率
+        <div class="queue-kpi-card">
+          <div class="queue-kpi-icon bg-orange-50 text-orange-500">
+            <ClockCircleOutlined />
           </div>
-          <div class="text-2xl font-bold text-purple-600 font-mono">
-            {{ formatRate(overviewStats.pass_rate) }}%
+          <div>
+            <div class="queue-kpi-label">
+              待处理
+            </div>
+            <div class="queue-kpi-value">
+              {{ formatInteger(overviewStats.pending_count) }}
+            </div>
+            <div class="queue-kpi-desc">
+              等待人工复核
+            </div>
           </div>
         </div>
-        <div
-          class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform"
-        >
-          <TrophyOutlined class="text-lg" />
+
+        <div class="queue-kpi-card">
+          <div class="queue-kpi-icon bg-blue-50 text-blue-600">
+            <TrophyOutlined />
+          </div>
+          <div>
+            <div class="queue-kpi-label">
+              质控通过率
+            </div>
+            <div class="queue-kpi-value">
+              {{ formatRate(overviewStats.pass_rate) }}%
+            </div>
+            <div class="queue-kpi-desc">
+              终末质控结果
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- 2. 主内容区：工具栏 + 表格 -->
     <div
-      class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]"
+      class="flex h-[calc(100vh-198px)] flex-col rounded-[18px] border border-slate-200/80 bg-white shadow-[0_12px_28px_rgba(15,23,42,0.04)]"
     >
       <ProQueryBar>
         <template #filters>
@@ -85,21 +116,21 @@
             <div class="relative">
               <a-input
                 v-model:value="searchKeyword"
-                placeholder="搜索病历号/姓名..."
-                class="w-64 !rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400 focus:!border-blue-500 !pl-10"
+                placeholder="搜索病历号、姓名"
+                class="w-64 !rounded-lg !bg-slate-50 !border-slate-200 hover:!border-blue-400 focus:!border-blue-500 !pl-10"
                 @press-enter="handleSearch"
               />
               <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             </div>
             <a-button
               type="primary"
-              class="!rounded-xl !h-9"
+              class="!h-9 !rounded-lg"
               @click="handleSearch"
             >
               查询
             </a-button>
             <a-button
-              class="!rounded-xl !h-9"
+              class="!h-9 !rounded-lg"
               @click="handleResetFilters"
             >
               重置
@@ -142,7 +173,7 @@
 
           <a-range-picker
             v-model:value="dateRange"
-            class="!rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400"
+            class="!rounded-lg !bg-slate-50 !border-slate-200 hover:!border-blue-400"
             :bordered="false"
           />
         </template>
@@ -150,15 +181,15 @@
         <template #actions>
           <ProTableToolbar>
             <a-button
-              class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9"
+              class="!h-9 !rounded-lg !border-slate-200 text-slate-600 hover:text-blue-600"
               @click="openCustomQCExperience()"
             >
-              自定义质控体验
+              自定义质控点
             </a-button>
 
             <a-button
               type="primary"
-              class="bg-blue-600 hover:bg-blue-500 border-none shadow-md shadow-blue-500/20 !rounded-xl !flex items-center gap-1 !h-9"
+              class="!flex !h-9 items-center gap-1 !rounded-lg border-none bg-blue-600 shadow-sm shadow-blue-500/20 hover:bg-blue-500"
               @click="openBatchLaunchModal"
             >
               <FileSearchOutlined /> 发起批量质控
@@ -166,7 +197,7 @@
 
             <a-tooltip title="归档能力待后端路由接入">
               <a-button
-                class="!rounded-xl !border-slate-200 text-slate-400 !h-9 !flex items-center gap-1"
+                class="!flex !h-9 items-center gap-1 !rounded-lg !border-slate-200 text-slate-400"
                 :disabled="!archiveFeatureEnabled"
                 @click="handleBatchArchive"
               >
@@ -175,7 +206,7 @@
             </a-tooltip>
 
             <a-button
-              class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9 !flex items-center gap-1"
+              class="!flex !h-9 items-center gap-1 !rounded-lg !border-slate-200 text-slate-600 hover:text-blue-600"
               @click="handleExport"
             >
               <DownloadOutlined /> 导出
@@ -183,7 +214,7 @@
 
             <a-tooltip title="刷新数据">
               <a-button
-                class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center"
+                class="flex !h-9 !w-9 items-center justify-center !rounded-lg !border-slate-200 !p-0 text-slate-500 hover:text-blue-600"
                 @click="handleRefresh"
               >
                 <ReloadOutlined :spin="loading" />
@@ -242,13 +273,18 @@
 
             <template v-if="column.key === 'patientInfo'">
               <div class="flex items-center gap-2">
-                <div
-                  class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-200"
+                <img
+                  :src="patientAvatarSrc(record as AdminRecordItem)"
+                  alt=""
+                  class="record-patient-avatar"
                 >
-                  {{ (record.patient_name || '').charAt(0) }}
-                </div>
-                <div class="text-sm font-medium text-slate-700">
-                  {{ record.patient_name }}
+                <div class="min-w-0">
+                  <div class="truncate text-sm font-bold text-slate-800">
+                    {{ record.patient_name || '-' }}
+                  </div>
+                  <div class="mt-0.5 truncate text-xs font-medium text-slate-400">
+                    {{ getPatientMeta(record as AdminRecordItem) }}
+                  </div>
                 </div>
               </div>
             </template>
@@ -396,20 +432,20 @@
       <transition name="slide-up">
         <div
           v-if="selectedRowKeys.length > 0"
-          class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-6 z-50"
+          class="absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-[14px] border border-slate-200 bg-white px-5 py-3 text-slate-700 shadow-[0_16px_36px_rgba(15,23,42,0.12)]"
         >
-          <span class="text-sm font-medium">已选择
-            <span class="text-blue-400 font-bold mx-1">{{ selectedRowKeys.length }}</span> 项</span>
-          <div class="h-4 w-px bg-slate-600" />
+          <span class="text-sm font-semibold">已选择
+            <span class="mx-1 font-black text-blue-600">{{ selectedRowKeys.length }}</span> 项</span>
+          <div class="h-4 w-px bg-slate-200" />
           <div class="flex items-center gap-2">
             <button
-              class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-medium transition-colors flex items-center gap-2"
+              class="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-blue-500/20 transition-colors hover:bg-blue-500"
               @click="openBatchLaunchModal"
             >
               <FileSearchOutlined /> 发起批量质控
             </button>
             <button
-              class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors ml-2"
+              class="ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
               @click="selectedRowKeys = []"
             >
               <CloseOutlined />
@@ -646,6 +682,12 @@ import QCReviewDrawer from '@/components/qc/QCReviewDrawer.vue'
 import ProQueryBar from '@/components/pro/ProQueryBar.vue'
 import ProTableToolbar from '@/components/pro/ProTableToolbar.vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
+import avatarBoy from '@/assets/avatar-icons/patient-icon-boy.png'
+import avatarElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
+import avatarElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
+import avatarGirl from '@/assets/avatar-icons/patient-icon-girl.png'
+import avatarMan from '@/assets/avatar-icons/patient-icon-man.png'
+import avatarWoman from '@/assets/avatar-icons/patient-icon-woman.png'
 import SemanticRulesBatchPanel from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchPanel.vue'
 import SemanticRulesBatchResultDrawer from '@/views/workstation-v4/semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
 import { useSichuanBatchJobs } from '@/views/workstation-v4/semantic-rules/composables/useSichuanBatchJobs'
@@ -1134,6 +1176,34 @@ const formatRate = (value: unknown): string => {
   return toNumber(value).toFixed(1)
 }
 
+const isFemale = (value: unknown): boolean => {
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase()
+  return ['女', 'female', 'f', '2'].includes(raw)
+}
+
+const patientAvatarSrc = (record: AdminRecordItem): string => {
+  const source = record as unknown as Record<string, unknown>
+  const age = Number(source.patient_age ?? source.patientAge ?? source.age ?? 0)
+  const female = isFemale(
+    source.patient_sex ?? source.patient_gender ?? source.patientGender ?? source.sex,
+  )
+  if (Number.isFinite(age) && age > 0 && age < 14) return female ? avatarGirl : avatarBoy
+  if (Number.isFinite(age) && age >= 55) return female ? avatarElderWoman : avatarElderMan
+  return female ? avatarWoman : avatarMan
+}
+
+const getPatientMeta = (record: AdminRecordItem): string => {
+  const source = record as unknown as Record<string, unknown>
+  const sex = String(
+    source.patient_sex ?? source.patient_gender ?? source.patientGender ?? '',
+  ).trim()
+  const age = String(source.patient_age ?? source.patientAge ?? source.age ?? '').trim()
+  const recordId = String(record.record_id || '').trim()
+  return [sex, age ? `${age}岁` : '', recordId].filter(Boolean).join(' · ') || recordId || '-'
+}
+
 // ============= 数据加载 =============
 
 /** 加载科室列表 */
@@ -1605,10 +1675,68 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.queue-kpi-card {
+  display: flex;
+  min-height: 92px;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.queue-kpi-icon {
+  display: flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  font-size: 18px;
+}
+
+.queue-kpi-label {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 18px;
+}
+
+.queue-kpi-value {
+  margin-top: 2px;
+  color: #0f172a;
+  font-family: Inter, 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 34px;
+}
+
+.queue-kpi-desc {
+  margin-top: 2px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.record-patient-avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  border-radius: 999px;
+  background: #eff6ff;
+  object-fit: cover;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+}
+
 /* 自定义下拉框样式 */
 :deep(.custom-select .ant-select-selector) {
   background-color: #f8fafc !important; /* slate-50 */
-  border-radius: 0.75rem !important; /* rounded-xl */
+  border-radius: 8px !important;
   border: 1px solid #e2e8f0 !important; /* slate-200 */
   height: 36px !important;
   display: flex;

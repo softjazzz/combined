@@ -78,6 +78,108 @@ type GrouperConsistencySample = {
   insurance_group: string
 }
 
+export type PreGroupingChangedField = {
+  field: string
+  previous: unknown
+  current: unknown
+}
+
+export type PreGroupingSimulation = {
+  simulation_id: string
+  visit_id: string
+  document_id: string
+  version: number
+  created_at: string
+  status: string
+  read_only: boolean
+  input_summary?: Record<string, unknown>
+  change_tracking?: {
+    previous_version: number | null
+    current_version: number
+    needs_regrouping: boolean
+    reason: string
+    changed_fields: PreGroupingChangedField[]
+  }
+}
+
+export type GroupingCorrectionCandidate = {
+  code?: string
+  name?: string
+  dip_code?: string
+  dip_name?: string
+  score?: number
+  weight?: number
+  match_type?: string
+  source?: string
+}
+
+export type GroupingCorrectionSuggestion = {
+  suggestion_type: string
+  severity: 'high' | 'medium' | 'low' | string
+  title: string
+  reason: string
+  candidates: GroupingCorrectionCandidate[]
+  action?: string
+}
+
+export type GroupingCorrectionResult = {
+  result_type: 'grouping_correction_suggestions'
+  pdx_code: string
+  proc_codes: string[]
+  grouped: boolean
+  suggestions: GroupingCorrectionSuggestion[]
+  safety_warning: string
+  writes_formal_tables: boolean
+}
+
+export type PaymentMonitoringRecordInput = {
+  case_id?: string
+  visit_id?: string
+  admission_id?: string
+  patient_name?: string
+  department?: string
+  department_name?: string
+  group_type?: 'DRG' | 'DIP' | string
+  group_code?: string
+  group_name?: string
+  drg_code?: string
+  drg_name?: string
+  dip_code?: string
+  dip_name?: string
+  weight?: number
+  rw?: number
+  score?: number
+  dip_score?: number
+  actual_cost?: number
+  total_fee?: number
+  total_cost?: number
+  expected_payment?: number
+  baseline_payment?: number
+  insurance_payment?: number
+  is_low_risk?: boolean
+  isLowRisk?: boolean
+}
+
+export type PaymentMonitoringResult = {
+  result_type: 'payment_monitoring'
+  config_version_id: string
+  overview: {
+    case_count: number
+    actual_cost: number
+    expected_payment: number
+    profit_loss: number
+    payment_rate: number
+    loss_case_count: number
+    base_group: number
+    high_cost_group: number
+    low_cost_group: number
+  }
+  records: Array<Record<string, unknown>>
+  cost_control_hints: Array<Record<string, unknown>>
+  safety_warning: string
+  writes_formal_tables: boolean
+}
+
 const mockGrouperStore: {
   draft: GrouperConfigPayload
   published_version_id: string | null
@@ -370,6 +472,69 @@ export async function getGroupingHistory(admissionId: string): Promise<DRGGroupi
     url: `${API_V1_PREFIX}/drg/grouping/${admissionId}/history`,
   })
   return data.history ?? data.data?.history ?? data.data ?? data
+}
+
+export async function getPreGroupingHistory(visitId: string): Promise<PreGroupingSimulation[]> {
+  const data = await requestApi<any>({
+    method: 'GET',
+    url: `${API_V1_PREFIX}/pre-grouping/${encodeURIComponent(visitId)}/history`,
+  })
+  const payload = data.data ?? data
+  return Array.isArray(payload?.items) ? payload.items : []
+}
+
+export async function triggerAdmissionPreGrouping(params: {
+  visit_id: string
+  document_id: string
+  patient_id?: string
+  medical_text: string
+}): Promise<PreGroupingSimulation> {
+  const data = await requestApi<any>({
+    method: 'POST',
+    url: `${API_V1_PREFIX}/pre-grouping/admission-note-completed`,
+    data: params,
+  })
+  return (data.data ?? data) as PreGroupingSimulation
+}
+
+export async function triggerAdmissionPreGroupingFromVisit(params: {
+  visit_id: string
+  document_id: string
+  patient_id?: string
+}): Promise<PreGroupingSimulation> {
+  const data = await requestApi<any>({
+    method: 'POST',
+    url: `${API_V1_PREFIX}/pre-grouping/admission-note-completed/from-visit`,
+    data: params,
+  })
+  return (data.data ?? data) as PreGroupingSimulation
+}
+
+export async function suggestGroupingCorrections(params: {
+  pdx_code: string
+  proc_codes?: string[]
+  grouping_result?: Record<string, unknown>
+  diagnosis_candidates?: string[]
+  procedure_candidates?: string[]
+}): Promise<GroupingCorrectionResult> {
+  const data = await requestApi<any>({
+    method: 'POST',
+    url: `${API_V1_PREFIX}/pre-grouping/corrections`,
+    data: params,
+  })
+  return (data.data ?? data) as GroupingCorrectionResult
+}
+
+export async function simulatePaymentMonitoring(params: {
+  records: PaymentMonitoringRecordInput[]
+  payment_standard?: Record<string, unknown>
+}): Promise<PaymentMonitoringResult> {
+  const data = await requestApi<any>({
+    method: 'POST',
+    url: `${API_V1_PREFIX}/payment-monitoring/simulate`,
+    data: params,
+  })
+  return (data.data ?? data) as PaymentMonitoringResult
 }
 
 // ==================== 编码建议相关 API ====================
@@ -1044,6 +1209,11 @@ export const drgApi = {
   predictDRGGrouping,
   predictDIPGrouping,
   getGroupingHistory,
+  getPreGroupingHistory,
+  triggerAdmissionPreGrouping,
+  triggerAdmissionPreGroupingFromVisit,
+  suggestGroupingCorrections,
+  simulatePaymentMonitoring,
 
   // 编码建议
   getCodingSuggestions,

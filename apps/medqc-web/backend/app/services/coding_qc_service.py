@@ -28,6 +28,10 @@ class CodingIssue:
     description: str         # 问题描述
     suggestion: str = ""     # 修改建议
     source: str = "rule"     # rule / llm
+    rule_id: str = ""        # 确定性规则编号
+    rule_name: str = ""      # 规则名称
+    location: str = "病案首页编码区"
+    evidence: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -229,6 +233,65 @@ def check_procedure_existence(code: str, name: str = "") -> Optional[CodingIssue
             )
 
     return None
+
+
+def _diag_code(diag: dict) -> str:
+    return str(diag.get("code") or diag.get("icd_code") or diag.get("diagnosis_code") or "").strip().upper()
+
+
+def _diag_name(diag: dict) -> str:
+    return str(diag.get("name") or diag.get("diagnosis_name") or "").strip()
+
+
+def _surgery_code(surgery: dict) -> str:
+    return str(surgery.get("code") or surgery.get("operation_code") or surgery.get("procedure_code") or "").strip()
+
+
+def _surgery_name(surgery: dict) -> str:
+    return str(surgery.get("name") or surgery.get("operation_name") or surgery.get("procedure_name") or "").strip()
+
+
+def _is_tumor_code(code: str) -> bool:
+    if code.startswith("C"):
+        return True
+    return (
+        code.startswith("D")
+        and len(code) >= 3
+        and code[1:3].isdigit()
+        and int(code[1:3]) <= 48
+    )
+
+
+def _has_positive_pathology_fee(frontpage: dict) -> bool:
+    """判断病理诊断费是否有有效金额。"""
+    candidate_keys = (
+        "pathology_fee",
+        "pathology_diagnosis_fee",
+        "pathology_diagnostic_fee",
+        "pathology_diagnosis_cost",
+        "pathological_diagnostic",
+        "病理诊断费",
+    )
+    containers = [
+        frontpage,
+        frontpage.get("fees") if isinstance(frontpage.get("fees"), dict) else {},
+        frontpage.get("costs") if isinstance(frontpage.get("costs"), dict) else {},
+        frontpage.get("fee_info") if isinstance(frontpage.get("fee_info"), dict) else {},
+        frontpage.get("settlement") if isinstance(frontpage.get("settlement"), dict) else {},
+    ]
+    for container in containers:
+        if not isinstance(container, dict):
+            continue
+        for key in candidate_keys:
+            value = container.get(key)
+            if value in (None, ""):
+                continue
+            try:
+                if float(str(value).replace(",", "")) > 0:
+                    return True
+            except (TypeError, ValueError):
+                continue
+    return False
 
 
 # ============================================================
@@ -505,44 +568,113 @@ class CodingQCEngine:
 
         覆盖招标条款 3.4.1 中 LLM 可能遗漏的场景：
         - 场景 A：肿瘤主诊断（C/D00-D48）→ 应有病理形态学诊断编码（M 码）
+        - 场景 B：存在病理编码或肿瘤诊断 → 病理诊断费字段应保持一致
+        - 场景 C：阑尾炎与腹膜炎同时出现 → 提示合并编码
+        - 场景 D：冠状动脉支架置入术 → 提示补充附加编码
         """
         issues = []
         diagnoses = frontpage.get("diagnoses") or []
-        if not diagnoses:
+        surgeries = frontpage.get("surgeries") or []
+        if not diagnoses and not surgeries:
             return issues
 
-        # 提取所有诊断编码
-        all_codes = [
-            (d.get("code") or d.get("icd_code") or "").strip().upper()
-            for d in diagnoses
-        ]
+        diagnosis_codes = [_diag_code(d) for d in diagnoses]
+        diagnosis_names = [_diag_name(d) for d in diagnoses]
+        surgery_codes = [_surgery_code(s) for s in surgeries]
+        surgery_names = [_surgery_name(s) for s in surgeries]
 
-        # 场景 A：肿瘤诊断 → 检查是否有病理形态学编码（M 码）
-        tumor_codes = []
+        # 场景 A：肿瘤主诊断 → 检查是否有病理形态学编码（M 码）
+        primary_code = diagnosis_codes[0] if diagnosis_codes else ""
+        primary_tumor_code = primary_code if _is_tumor_code(primary_code) else ""
         has_morphology = False
-        for code in all_codes:
+        for code in diagnosis_codes:
             if not code:
                 continue
-            # C00-C97（恶性肿瘤）和 D00-D48（原位/良性/未定性肿瘤）
-            if code.startswith("C") or (
-                code.startswith("D")
-                and len(code) >= 3
-                and code[1:3].isdigit()
-                and int(code[1:3]) <= 48
-            ):
-                tumor_codes.append(code)
             # M 码（病理形态学编码）
             if code.startswith("M"):
                 has_morphology = True
 
-        if tumor_codes and not has_morphology:
+        if primary_tumor_code and not has_morphology:
             issues.append(CodingIssue(
                 dimension="consistency",
                 severity="warning",
-                code=tumor_codes[0],
-                description=f"主要诊断含肿瘤编码（{tumor_codes[0]}），但未见病理形态学诊断编码（M 码），建议补充病理诊断",
+                code=primary_tumor_code,
+                description=f"出院主要诊断为肿瘤编码（{primary_tumor_code}），但未见病理形态学诊断编码（M 码），建议补充病理诊断",
                 suggestion="肿瘤相关诊断应同时提供病理形态学编码（M 码），以确保编码完整性",
                 source="rule",
+                rule_id="CQ-TENDER-001",
+                rule_name="肿瘤诊断病理形态学编码完整性",
+                evidence="; ".join(code for code in diagnosis_codes if code),
+            ))
+
+        # 场景 B：病理编码或肿瘤诊断存在时，病理诊断费字段应一致。
+        if (primary_tumor_code or has_morphology) and not _has_positive_pathology_fee(frontpage):
+            issues.append(CodingIssue(
+                dimension="consistency",
+                severity="warning",
+                code=primary_tumor_code or "M",
+                description="存在肿瘤诊断或病理形态学编码，但未见病理诊断费字段有效金额，需核对病理诊断与费用一致性",
+                suggestion="请核对首页/结算清单病理诊断费，确认是否漏填或费用归类错误",
+                source="rule",
+                rule_id="CQ-TENDER-002",
+                rule_name="病理编码与病理诊断费一致性",
+                evidence="; ".join(code for code in diagnosis_codes if code),
+            ))
+
+        # 场景 C：阑尾炎与腹膜炎同时出现时，提示是否应合并编码。
+        has_appendicitis = any(
+            code.startswith("K35") or "阑尾炎" in name
+            for code, name in zip(diagnosis_codes, diagnosis_names)
+        )
+        has_peritonitis = any(
+            code.startswith("K65") or "腹膜炎" in name
+            for code, name in zip(diagnosis_codes, diagnosis_names)
+        )
+        has_appendicitis_combined_code = any(code.startswith(("K35.2", "K35.3")) for code in diagnosis_codes)
+        if has_appendicitis and has_peritonitis and not has_appendicitis_combined_code:
+            issues.append(CodingIssue(
+                dimension="merge",
+                severity="warning",
+                code="K35/K65",
+                description="阑尾炎与腹膜炎诊断同时出现，可能需要使用急性阑尾炎伴腹膜炎合并编码，而不是分开编码",
+                suggestion="请优先核对 K35.2 或 K35.3 等急性阑尾炎伴腹膜炎编码是否更符合病案首页编码规范",
+                source="rule",
+                rule_id="CQ-TENDER-003",
+                rule_name="阑尾炎伴腹膜炎合并编码提示",
+                evidence="; ".join(
+                    f"{code} {name}".strip()
+                    for code, name in zip(diagnosis_codes, diagnosis_names)
+                    if code or name
+                ),
+            ))
+
+        # 场景 D：冠状动脉支架置入术需要共同使用附加编码。
+        has_coronary_stent = any(
+            code.startswith(("36.06", "36.07")) or "支架" in name or "PCI" in name.upper()
+            for code, name in zip(surgery_codes, surgery_names)
+        )
+        has_stent_count_code = any(code.startswith("00.66") for code in surgery_codes)
+        has_vessel_count_code = any(code.startswith("00.40") for code in surgery_codes)
+        if has_coronary_stent and (not has_stent_count_code or not has_vessel_count_code):
+            missing_codes = []
+            if not has_stent_count_code:
+                missing_codes.append("00.66 支架数目")
+            if not has_vessel_count_code:
+                missing_codes.append("00.40 血管内操作数目")
+            issues.append(CodingIssue(
+                dimension="additional",
+                severity="warning",
+                code="36.06/36.07",
+                description="冠状动脉支架置入术应补充共同使用的附加编码",
+                suggestion=f"请补充或核对附加编码：{'、'.join(missing_codes)}",
+                source="rule",
+                rule_id="CQ-TENDER-004",
+                rule_name="冠状动脉支架置入术附加编码完整性",
+                evidence="; ".join(
+                    f"{code} {name}".strip()
+                    for code, name in zip(surgery_codes, surgery_names)
+                    if code or name
+                ),
             ))
 
         return issues

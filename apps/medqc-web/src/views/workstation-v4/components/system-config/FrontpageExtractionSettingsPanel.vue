@@ -6,7 +6,7 @@
           首页抽取设置
         </h2>
         <p class="ds-section-desc">
-          管理首页抽取策略、演示病历显隐与生成体验策略。配置由后端统一持久化并实时生效。
+          管理首页抽取策略、样例病历显隐与生成体验策略。配置由后端统一持久化并实时生效。
         </p>
       </div>
       <div class="ds-split__main">
@@ -74,16 +74,16 @@
 
             <div class="ds-group">
               <div class="ds-group__title">
-                演示数据策略
+                样例数据策略
               </div>
 
               <div class="ds-row">
                 <div class="ds-row__left">
                   <div class="ds-row__label">
-                    显示演示病历
+                    显示样例病历
                   </div>
                   <div class="ds-row__hint">
-                    控制首页是否合并展示 demo 病历。
+                    控制首页是否合并展示样例病历。
                   </div>
                 </div>
                 <a-switch
@@ -95,10 +95,10 @@
               <div class="ds-row">
                 <div class="ds-row__left">
                   <div class="ds-row__label">
-                    真实数据阈值自动隐藏 demo
+                    真实数据阈值自动隐藏样例
                   </div>
                   <div class="ds-row__hint">
-                    真实病历量达到阈值后自动隐藏演示病历。
+                    真实病历量达到阈值后自动隐藏样例病历。
                   </div>
                 </div>
                 <a-switch

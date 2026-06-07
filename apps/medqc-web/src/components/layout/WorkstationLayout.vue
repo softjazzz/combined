@@ -1,11 +1,14 @@
 <template>
-  <a-layout class="min-h-screen">
+  <a-layout
+    class="workstation-layout min-h-screen"
+    :class="{ 'workstation-layout--overview': isQcOverviewRoute }"
+  >
     <!-- 侧边栏 -->
     <a-layout-sider
       v-model:collapsed="collapsed"
       collapsible
       class="sidebar-container shadow-xl relative overflow-hidden border-none bg-slate-900"
-      theme="dark"
+      :theme="isQcOverviewRoute ? 'light' : 'dark'"
       width="260"
     >
       <!-- Logo区域 -->
@@ -23,8 +26,14 @@
             v-if="!collapsed"
             class="flex flex-col transition-all duration-300 opacity-100"
           >
-            <span class="text-white font-bold text-lg leading-tight tracking-tight">病案质控系统</span>
-            <span class="text-slate-400 text-xs font-medium tracking-wide">AI-Powered QC Platform</span>
+            <span
+              class="font-bold text-lg leading-tight tracking-tight"
+              :class="isQcOverviewRoute ? 'text-slate-900' : 'text-white'"
+            >病案质控系统</span>
+            <span
+              class="text-xs font-medium tracking-wide"
+              :class="isQcOverviewRoute ? 'text-slate-500' : 'text-slate-400'"
+            >AI-Powered QC Platform</span>
           </div>
         </div>
       </div>
@@ -34,7 +43,7 @@
         <a-menu
           v-model:selected-keys="selectedKeys"
           mode="inline"
-          theme="dark"
+          :theme="isQcOverviewRoute ? 'light' : 'dark'"
           class="border-none px-3 space-y-1 bg-slate-900"
           :open-keys="openKeys"
           @click="handleMenuSelect"
@@ -208,7 +217,7 @@
             <template #icon>
               <ThunderboltOutlined />
             </template>
-            <span class="font-medium">自定义规则工作台</span>
+            <span class="font-medium">自定义质控点</span>
           </a-menu-item>
 
           <!-- 数据上传 -->
@@ -240,6 +249,7 @@
     <a-layout>
       <!-- 顶部导航栏 -->
       <a-layout-header
+        v-if="!isQcOverviewRoute"
         class="header bg-white/90 backdrop-blur-sm sticky top-0 z-20 shadow-sm border-b border-slate-200/60 px-6 flex items-center justify-between h-16 transition-all duration-300"
       >
         <div class="flex items-center">
@@ -333,7 +343,7 @@
             >
               <a-avatar
                 :size="36"
-                class="mr-2 bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white"
+                class="mr-2 bg-[#2563eb] text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white"
               >
                 <template #icon>
                   <UserOutlined />
@@ -394,7 +404,10 @@
       </a-layout-header>
 
       <!-- 内容区域 -->
-      <a-layout-content class="bg-slate-100 overflow-x-hidden">
+      <a-layout-content
+        class="bg-slate-100 overflow-x-hidden"
+        :class="{ 'workstation-overview-content': isQcOverviewRoute }"
+      >
         <router-view v-slot="{ Component }">
           <transition
             name="fade"
@@ -469,7 +482,7 @@ const currentPageTitle = computed(() => {
     '/workstation-v4/grouper': '医保分组器',
     '/workstation-v4/data': '数据管理',
     '/workstation-v4/rules': '质控规则管理',
-    '/workstation-v4/rules/custom-workspace': '自定义规则工作台',
+    '/workstation-v4/rules/custom-workspace': '自定义质控点',
     '/workstation-v4/records/running': '运行病历',
     '/workstation-v4/records/final': '终末病历质控',
     '/workstation-v4/customer-sample-validation': '客户样本验证',
@@ -492,6 +505,8 @@ const roleLabel = computed(() => {
   const raw = authStore.userRoles?.[0] || ''
   return ROLE_LABEL_MAP[raw] || raw || '用户'
 })
+
+const isQcOverviewRoute = computed(() => route.path === '/workstation-v4/qc-overview')
 
 // 方法
 async function navigateTo(path: string, query?: Record<string, string>) {
@@ -725,5 +740,76 @@ watch(
 /* 头部样式 */
 .header {
   height: 64px;
+}
+
+.workstation-layout--overview {
+  min-height: 100vh;
+  background: #f5f9fc;
+}
+
+.workstation-layout--overview :deep(.ant-layout) {
+  background: transparent;
+}
+
+.workstation-layout--overview :deep(.ant-layout-sider) {
+  margin: 32px 0 32px 32px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-right-color: rgba(203, 213, 225, 0.72);
+  border-radius: 18px 0 0 18px;
+  background: #ffffff !important;
+  box-shadow: 0 18px 42px rgba(50, 82, 120, 0.1);
+}
+
+.workstation-layout--overview .logo-container {
+  border-bottom-color: rgba(203, 213, 225, 0.56) !important;
+}
+
+.workstation-layout--overview .sidebar-container :deep(.ant-layout-sider-trigger) {
+  border-top: 1px solid rgba(203, 213, 225, 0.5);
+  background: rgba(255, 255, 255, 0.72) !important;
+  color: #64748b;
+}
+
+.workstation-layout--overview :deep(.ant-menu) {
+  background: transparent !important;
+}
+
+.workstation-layout--overview :deep(.ant-menu-item),
+.workstation-layout--overview :deep(.ant-menu-submenu-title) {
+  color: #64748b !important;
+}
+
+.workstation-layout--overview :deep(.ant-menu-item:hover),
+.workstation-layout--overview :deep(.ant-menu-submenu-title:hover) {
+  background: rgba(59, 130, 246, 0.08) !important;
+  color: #1d4ed8 !important;
+}
+
+.workstation-layout--overview :deep(.ant-menu-item-selected) {
+  background: rgba(37, 99, 235, 0.1) !important;
+  color: #2563eb !important;
+}
+
+.workstation-layout--overview :deep(.ant-menu-sub.ant-menu-inline) {
+  border-left-color: rgba(37, 99, 235, 0.22);
+  background: rgba(248, 250, 252, 0.72) !important;
+}
+
+.workstation-layout--overview :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item) {
+  color: #64748b !important;
+}
+
+.workstation-layout--overview
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected) {
+  background: rgba(37, 99, 235, 0.1) !important;
+  color: #2563eb !important;
+}
+
+.workstation-layout--overview :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
+  color: #1d4ed8 !important;
+}
+
+.workstation-overview-content {
+  background: transparent !important;
 }
 </style>

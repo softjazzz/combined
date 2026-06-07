@@ -2277,7 +2277,7 @@ def _extract_structured_coding_items(value: Any) -> tuple[List[Dict[str, Any]], 
                     "name": diag_name,
                     "code": diag_code,
                     "type": _text(value.get("diagnosis_type") or "diagnosis"),
-                    "source": "structured_context",
+                    "source": _text(value.get("source") or value.get("source_name") or "结构化字段"),
                     "confidence": 0.9 if diag_code else 0.75,
                 }
             )
@@ -2292,7 +2292,7 @@ def _extract_structured_coding_items(value: Any) -> tuple[List[Dict[str, Any]], 
                     "name": proc_name,
                     "code": proc_code,
                     "type": "procedure",
-                    "source": "structured_context",
+                    "source": _text(value.get("source") or value.get("source_name") or "结构化字段"),
                     "confidence": 0.9 if proc_code else 0.75,
                 }
             )

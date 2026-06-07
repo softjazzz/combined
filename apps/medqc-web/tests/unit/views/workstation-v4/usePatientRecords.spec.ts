@@ -33,7 +33,7 @@ function mockWorkstationResponse() {
       ],
       total: 1,
       page: 1,
-      pageSize: 20,
+      pageSize: 15,
       totalPages: 1,
     },
   })
@@ -92,7 +92,7 @@ describe('usePatientRecords workstation filters', () => {
     expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
       params: {
         page: 1,
-        page_size: 20,
+        page_size: 15,
         date_field: 'visit',
         dept: '普通外科',
       },

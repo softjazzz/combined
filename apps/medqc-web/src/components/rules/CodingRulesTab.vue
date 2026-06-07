@@ -26,6 +26,55 @@
       @click-metric="handleMetricClick"
     />
 
+    <section class="coding-qc-audit">
+      <div class="coding-qc-audit__head">
+        <div>
+          <strong>编码内涵质控闭环</strong>
+          <span>按投标示例执行规则层校验，结果进入统一编码质控结构，不写病案首页。</span>
+        </div>
+        <button
+          type="button"
+          class="coding-qc-audit__button"
+          :disabled="codingQcLoading"
+          @click="runCodingQcAudit"
+        >
+          {{ codingQcLoading ? '执行中' : '执行验收样例' }}
+        </button>
+      </div>
+      <div class="coding-qc-audit__body">
+        <div class="coding-qc-audit__metric">
+          <span>问题总数</span>
+          <strong>{{ codingQcResult?.total_issues ?? '-' }}</strong>
+          <small>规则层 + 可选语义层</small>
+        </div>
+        <div class="coding-qc-audit__metric">
+          <span>规则问题</span>
+          <strong>{{ codingQcRuleIssues.length }}</strong>
+          <small>确定性编码规范</small>
+        </div>
+        <div class="coding-qc-audit__metric">
+          <span>正式写入</span>
+          <strong>否</strong>
+          <small>仅写质控分析结果</small>
+        </div>
+        <div class="coding-qc-audit__issues">
+          <div
+            v-for="issue in codingQcRuleIssues.slice(0, 3)"
+            :key="issue.rule_id || issue.description"
+          >
+            <b>{{ issue.rule_name || issue.dimension || '编码规则' }}</b>
+            <span>{{ issue.description }}</span>
+          </div>
+          <p v-if="codingQcResult && codingQcRuleIssues.length === 0">
+            当前样例未发现编码内涵问题。
+          </p>
+          <p v-else-if="!codingQcResult">
+            点击执行后展示肿瘤病理、病理费用、合并编码和附加编码等规则结果。
+          </p>
+        </div>
+      </div>
+    </section>
+
     <div class="grid grid-cols-1 gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
       <RulesCodingFilterPanel
         :rule-type="query.ruleType"
@@ -141,6 +190,20 @@ interface CodingRuleApiItem {
   updated_by?: string
 }
 
+interface CodingQcIssue {
+  rule_id?: string
+  rule_name?: string
+  dimension?: string
+  description?: string
+}
+
+interface CodingQcResult {
+  total_issues?: number
+  rule_issues?: CodingQcIssue[]
+  llm_issues?: CodingQcIssue[]
+  persistence?: unknown
+}
+
 const readonly = ref(false)
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -157,6 +220,10 @@ const dirty = ref(false)
 const publishOpen = ref(false)
 const timelineCollapsed = ref(true)
 const timelineItems = ref<RuleChangeLogItem[]>([])
+const codingQcLoading = ref(false)
+const codingQcResult = ref<CodingQcResult | null>(null)
+
+const codingQcRuleIssues = computed(() => codingQcResult.value?.rule_issues || [])
 
 const samplePreview = ref([
   { caseId: 'V-001', matched: true, reason: '主诊断命中规则' },
@@ -478,6 +545,45 @@ function handleRunPreflight() {
   message.success(`预检通过：预计影响 ${estimatedImpactCount.value} 条病历`)
 }
 
+async function runCodingQcAudit() {
+  codingQcLoading.value = true
+  try {
+    const response = await ApiService.post<CodingQcResult>('/api/v1/qc/coding-qc/check', {
+      skip_llm: true,
+      frontpage: {
+        diagnoses: {
+          discharge_main_diagnosis_text: '急性阑尾炎伴腹膜炎',
+          discharge_main_icd: 'K35.900',
+          discharge_other_diagnoses_texts: ['腹膜炎', '胃恶性肿瘤'],
+          discharge_other_icds: ['K65.900', 'C16.900'],
+          pathology_diagnosis_code: '',
+        },
+        procedures: {
+          main_procedure_name: '冠状动脉支架置入术',
+          main_procedure_code: '36.0601',
+          other_procedure_names: [],
+          other_procedure_codes: [],
+        },
+        costs: {
+          categories: {
+            pathology_fee: 280,
+          },
+        },
+      },
+    })
+    if (!response.success || !response.data) {
+      throw new Error(response.error || '编码内涵质控执行失败')
+    }
+    codingQcResult.value = response.data
+    message.success(`编码内涵质控完成：${codingQcResult.value?.total_issues ?? 0} 个问题`)
+  } catch (error) {
+    codingQcResult.value = null
+    message.error('编码内涵质控执行失败')
+  } finally {
+    codingQcLoading.value = false
+  }
+}
+
 async function handleConfirmPublish() {
   publishing.value = true
   try {
@@ -521,5 +627,118 @@ onMounted(async () => {
 <style scoped>
 .coding-rules-workbench {
   width: 100%;
+}
+
+.coding-qc-audit {
+  border: 1px solid #bfdbfe;
+  border-radius: 16px;
+  background: #f8fbff;
+  padding: 16px;
+}
+
+.coding-qc-audit__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.coding-qc-audit__head strong {
+  display: block;
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.coding-qc-audit__head span {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.coding-qc-audit__button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: #2563eb;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  padding: 0 14px;
+}
+
+.coding-qc-audit__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.coding-qc-audit__body {
+  display: grid;
+  grid-template-columns: repeat(3, 150px) minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.coding-qc-audit__metric,
+.coding-qc-audit__issues {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.coding-qc-audit__metric span,
+.coding-qc-audit__metric small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.coding-qc-audit__metric strong {
+  display: block;
+  color: #2563eb;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 30px;
+}
+
+.coding-qc-audit__issues {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.coding-qc-audit__issues div {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 10px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.coding-qc-audit__issues b {
+  color: #0f172a;
+}
+
+.coding-qc-audit__issues p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+@media (max-width: 1100px) {
+  .coding-qc-audit__body {
+    grid-template-columns: 1fr;
+  }
+
+  .coding-qc-audit__issues div {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -1150,6 +1150,19 @@ class FrontpageFormalQC:
             "by_severity": by_severity,
         }
 
+    def get_rule_coverage_report(self) -> dict:
+        """获取病案首页规则覆盖注册表。"""
+        from .qc_rule_coverage import (
+            build_frontpage_rule_coverage_items,
+            summarize_rule_coverage,
+        )
+
+        items = build_frontpage_rule_coverage_items(self.rules)
+        return {
+            "summary": summarize_rule_coverage(items),
+            "items": [item.to_dict() for item in items],
+        }
+
 
 class FrontpageFormalQCEngine(FrontpageFormalQC):
     """

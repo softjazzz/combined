@@ -1,53 +1,14 @@
 <template>
-  <div
-    class="workstation-shell min-h-[calc(100vh-64px)] bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_46%,#edf2f7_100%)]"
-  >
-    <div class="custom-scrollbar h-[calc(100vh-64px)] overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
-      <div class="mx-auto w-full max-w-[1440px]">
-        <div class="workstation-surface-enter mb-4">
-          <section class="wv4-analysis-overview">
-            <div class="wv4-analysis-overview__header">
-              <div>
-                <div class="wv4-analysis-overview__eyebrow">
-                  Dashboard / Analysis
-                </div>
-                <h3 class="wv4-analysis-overview__title">
-                  质控首页概览
-                </h3>
-                <p class="wv4-analysis-overview__subtitle">
-                  对当日任务做风险聚合与优先级排序，保持处理节奏和闭环效率
-                </p>
-              </div>
-              <div class="wv4-analysis-overview__actions">
-                <a-button
-                  type="primary"
-                  size="small"
-                  class="wv4-analysis-overview__action"
-                  :loading="loading"
-                  @click="void handleQuery()"
-                >
-                  查询
-                </a-button>
-                <a-button
-                  size="small"
-                  class="wv4-analysis-overview__action"
-                  :disabled="loading"
-                  @click="void handleReset()"
-                >
-                  重置
-                </a-button>
-                <a-button
-                  size="small"
-                  class="wv4-analysis-overview__action"
-                  :loading="loading"
-                  @click="void fetchHome()"
-                >
-                  刷新
-                </a-button>
-              </div>
+  <div class="qc-home-shell workstation-shell min-h-screen">
+    <div class="custom-scrollbar h-screen overflow-y-auto px-5 py-8 xl:px-8">
+      <div class="qc-home-canvas mx-auto w-full max-w-[1440px]">
+        <section class="qc-home-hero workstation-surface-enter">
+          <div class="qc-home-hero__header">
+            <div class="qc-home-hero__main">
+              <h2>质控首页概览</h2>
+              <p>高风险、超时与待处理任务的实时汇总</p>
             </div>
-
-            <div class="wv4-analysis-overview__controls">
+            <div class="qc-home-topbar">
               <HomeHeroBar
                 v-model:keyword="keyword"
                 v-model:selected-date="selectedDate"
@@ -59,190 +20,263 @@
                 :show-refresh="false"
                 @refresh="void fetchHome()"
               />
+              <div class="qc-home-profile">
+                <a-avatar :size="38">
+                  <template #icon>
+                    <UserOutlined />
+                  </template>
+                </a-avatar>
+                <div>
+                  <strong>张医生</strong>
+                  <span>质控管理员</span>
+                </div>
+                <DownOutlined />
+              </div>
             </div>
-          </section>
-        </div>
-
-        <div class="workstation-surface-enter workstation-surface-enter--delay-1 mb-4">
-          <div class="wv4-analysis-kpis">
-            <article
-              v-for="card in kpiCards"
-              :key="card.key"
-              :class="['wv4-analysis-kpi-card', `wv4-analysis-kpi-card--${card.tone}`]"
-            >
-              <div class="wv4-analysis-kpi-card__label">
-                {{ card.label }}
-              </div>
-              <div class="wv4-analysis-kpi-card__value">
-                {{ card.value }}
-              </div>
-              <div class="wv4-analysis-kpi-card__desc">
-                {{ card.desc }}
-              </div>
-            </article>
           </div>
-        </div>
+        </section>
 
-        <div class="workstation-surface-enter workstation-surface-enter--delay-2 mb-4">
-          <div class="wv4-analysis-split">
-            <a-card
-              size="small"
-              :bordered="false"
-              class="wv4-analysis-split__left"
-            >
-              <template #title>
-                <span class="wv4-analysis-card__title">趋势与分布</span>
-              </template>
-              <a-tabs
-                v-model:active-key="analysisTab"
-                size="small"
-                class="wv4-analysis-tabs"
-              >
-                <a-tab-pane
-                  key="stage"
-                  tab="状态分布"
-                >
-                  <div class="space-y-3">
-                    <div
-                      v-for="item in stageDistribution"
-                      :key="`stage-${item.label}`"
-                    >
-                      <div class="mb-1.5 flex items-center justify-between text-xs">
-                        <span class="font-medium text-slate-600">{{ item.label }}</span>
-                        <span class="font-semibold text-slate-700">{{ item.count }}</span>
-                      </div>
-                      <a-progress
-                        :percent="item.percent"
-                        :show-info="false"
-                        :stroke-color="item.color"
-                        size="small"
-                      />
-                    </div>
-                  </div>
-                </a-tab-pane>
-                <a-tab-pane
-                  key="workflow"
-                  tab="流程负载"
-                >
-                  <div class="space-y-3">
-                    <div
-                      v-for="item in workflowLoad"
-                      :key="`workflow-${item.label}`"
-                    >
-                      <div class="mb-1.5 flex items-center justify-between text-xs">
-                        <span class="font-medium text-slate-600">{{ item.label }}</span>
-                        <span class="font-semibold text-slate-700">{{ item.count }}</span>
-                      </div>
-                      <a-progress
-                        :percent="item.percent"
-                        :show-info="false"
-                        stroke-color="#2563eb"
-                        size="small"
-                      />
-                    </div>
-                  </div>
-                </a-tab-pane>
-              </a-tabs>
-            </a-card>
+        <section class="qc-home-kpis workstation-surface-enter workstation-surface-enter--delay-1">
+          <article
+            v-for="card in kpiCards"
+            :key="card.key"
+            :class="['qc-home-kpi-card', `qc-home-kpi-card--${card.tone}`]"
+          >
+            <div class="qc-home-kpi-icon">
+              <component :is="card.icon" />
+            </div>
+            <div class="qc-home-kpi-card__body">
+              <span>{{ card.label }}</span>
+              <strong>{{ card.value }}</strong>
+              <p>
+                较昨日
+                <em :class="card.deltaTone">{{ card.delta }}</em>
+              </p>
+            </div>
+          </article>
+        </section>
 
-            <a-card
-              size="small"
-              :bordered="false"
-              class="wv4-analysis-split__right"
-            >
-              <template #title>
-                <span class="wv4-analysis-card__title">排行洞察</span>
-              </template>
-              <div class="space-y-4">
-                <div>
-                  <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    科室风险排行
-                  </div>
-                  <ol class="space-y-2">
-                    <li
-                      v-for="(item, index) in departmentRanking"
-                      :key="`dept-rank-${item.label}`"
-                      class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2"
-                    >
-                      <span class="truncate text-sm text-slate-700">{{ index + 1 }}. {{ item.label }}</span>
-                      <span class="text-sm font-bold text-slate-800">{{ item.count }}</span>
-                    </li>
-                  </ol>
-                </div>
-
-                <div>
-                  <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    风险原因 TopN
-                  </div>
-                  <ol class="space-y-2">
-                    <li
-                      v-for="item in riskReasonRanking"
-                      :key="`risk-rank-${item.label}`"
-                      class="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2"
-                    >
-                      <span class="truncate text-sm text-slate-700">{{ item.label }}</span>
-                      <span class="text-sm font-bold text-blue-700">{{ item.count }}</span>
-                    </li>
-                  </ol>
-                </div>
-
-                <div>
-                  <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    优先组别
-                  </div>
-                  <ol class="space-y-2">
-                    <li
-                      v-for="item in priorityRanking"
-                      :key="`priority-rank-${item.label}`"
-                      class="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2"
-                    >
-                      <span class="truncate text-sm text-slate-700">{{ item.label }}</span>
-                      <span class="text-sm font-bold text-indigo-700">{{ item.count }}</span>
-                    </li>
-                  </ol>
-                </div>
-              </div>
-            </a-card>
-          </div>
-        </div>
-
-        <div class="workstation-surface-enter workstation-surface-enter--delay-2">
-          <section class="wv4-analysis-list-panel">
-            <div class="wv4-analysis-list-panel__head">
+        <section
+          class="qc-home-main-grid workstation-surface-enter workstation-surface-enter--delay-2"
+        >
+          <section class="qc-home-card qc-home-card--trend">
+            <div class="qc-home-card__head">
               <div>
-                <h4 class="wv4-analysis-list-panel__title">
-                  任务明细
-                </h4>
-                <p class="wv4-analysis-list-panel__subtitle">
-                  当前筛选下共 {{ totalTaskCount }} 条任务
-                </p>
+                <h3>质控态势趋势</h3>
+              </div>
+              <div class="qc-home-range-switch">
+                <button type="button">
+                  近7天
+                </button>
+                <button type="button">
+                  近30天
+                </button>
               </div>
             </div>
 
-            <div class="px-4 pt-3">
-              <StatusBar
-                :kpis="homeData.kpis"
-                :active-key="activeStatusKey"
-                @select="handleStatusSelect"
-              />
-            </div>
-
-            <div class="min-h-[420px]">
-              <UnifiedTaskList
-                :tasks="unifiedTasks"
-                :format-date-time="formatDateTime"
-                @open="handleOpenTask"
-              />
+            <div class="qc-home-line-chart">
+              <div class="qc-home-line-legend">
+                <span><i class="qc-home-dot--blue" />待处理</span>
+                <span><i class="qc-home-dot--red" />高风险</span>
+                <span><i class="qc-home-dot--amber" />已超时</span>
+                <span><i class="qc-home-dot--cyan" />处理中</span>
+              </div>
+              <svg
+                viewBox="0 0 760 250"
+                role="img"
+                aria-label="质控态势趋势"
+              >
+                <defs>
+                  <linearGradient
+                    id="qcLineFill"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="0%"
+                      stop-color="#3b82f6"
+                      stop-opacity="0.16"
+                    />
+                    <stop
+                      offset="100%"
+                      stop-color="#3b82f6"
+                      stop-opacity="0"
+                    />
+                  </linearGradient>
+                </defs>
+                <g class="qc-home-grid-lines">
+                  <line
+                    v-for="y in [50, 95, 140, 185, 230]"
+                    :key="y"
+                    x1="42"
+                    :y1="y"
+                    x2="722"
+                    :y2="y"
+                  />
+                </g>
+                <path
+                  d="M42 168 C122 148 168 154 240 128 C320 98 398 134 462 112 C540 86 606 82 722 56 L722 230 L42 230 Z"
+                  fill="url(#qcLineFill)"
+                />
+                <path
+                  d="M42 168 C122 148 168 154 240 128 C320 98 398 134 462 112 C540 86 606 82 722 56"
+                  class="qc-home-series qc-home-series--blue"
+                />
+                <path
+                  d="M42 194 C128 176 188 180 246 160 C320 136 392 166 466 148 C552 126 610 118 722 132"
+                  class="qc-home-series qc-home-series--red"
+                />
+                <path
+                  d="M42 214 C124 202 196 204 252 188 C318 168 388 194 462 184 C548 166 620 170 722 166"
+                  class="qc-home-series qc-home-series--amber"
+                />
+                <path
+                  d="M42 226 C128 214 196 216 258 204 C326 190 402 206 470 196 C560 182 622 188 722 180"
+                  class="qc-home-series qc-home-series--cyan"
+                />
+                <g class="qc-home-axis-labels">
+                  <text
+                    v-for="(label, index) in trendAxisLabels"
+                    :key="label"
+                    :x="54 + index * 112"
+                    y="248"
+                  >
+                    {{ label }}
+                  </text>
+                </g>
+                <g class="qc-home-chart-values">
+                  <circle
+                    cx="722"
+                    cy="56"
+                    r="5"
+                    fill="#3b82f6"
+                  />
+                  <text
+                    x="738"
+                    y="61"
+                    fill="#2563eb"
+                  >
+                    {{ Number(homeData.kpis.my_pending_total || 0) }}
+                  </text>
+                  <circle
+                    cx="722"
+                    cy="132"
+                    r="5"
+                    fill="#ef4444"
+                  />
+                  <text
+                    x="738"
+                    y="137"
+                    fill="#ef4444"
+                  >{{ highRiskTaskCount }}</text>
+                  <circle
+                    cx="722"
+                    cy="166"
+                    r="5"
+                    fill="#f59e0b"
+                  />
+                  <text
+                    x="738"
+                    y="171"
+                    fill="#f59e0b"
+                  >
+                    {{ Number(homeData.kpis.my_overdue_total || 0) }}
+                  </text>
+                  <circle
+                    cx="722"
+                    cy="180"
+                    r="5"
+                    fill="#06b6d4"
+                  />
+                  <text
+                    x="738"
+                    y="185"
+                    fill="#06b6d4"
+                  >{{ inProgressTaskCount }}</text>
+                </g>
+              </svg>
             </div>
           </section>
-        </div>
+
+          <section class="qc-home-card qc-home-card--insight">
+            <div class="qc-home-card__head">
+              <div>
+                <h3>风险洞察</h3>
+              </div>
+              <a-tag color="processing">
+                AI
+              </a-tag>
+            </div>
+
+            <div class="qc-home-insight-layout">
+              <div class="qc-home-insight-list">
+                <div
+                  v-for="item in riskReasonRanking.slice(0, 3)"
+                  :key="`insight-${item.label}`"
+                  class="qc-home-insight-row"
+                >
+                  <span>{{ item.label }}</span>
+                  <small>风险占比 {{ insightPercent(item.count) }}%</small>
+                  <RightOutlined />
+                </div>
+              </div>
+              <div class="qc-home-medical-visual">
+                <div class="qc-home-medical-orbit qc-home-medical-orbit--one" />
+                <div class="qc-home-medical-orbit qc-home-medical-orbit--two" />
+                <div class="qc-home-medical-core">
+                  <MedicineBoxOutlined />
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section
+          class="qc-home-task-panel workstation-surface-enter workstation-surface-enter--delay-2"
+        >
+          <div class="qc-home-task-panel__head">
+            <div>
+              <h3>{{ taskPanelTitle }}</h3>
+            </div>
+            <StatusBar
+              :kpis="homeData.kpis"
+              :active-key="activeStatusKey"
+              @select="handleStatusSelect"
+            />
+          </div>
+
+          <div class="qc-home-task-table">
+            <div class="qc-home-task-table__head">
+              <span>患者信息</span>
+              <span>科室</span>
+              <span>风险等级</span>
+              <span>风险原因</span>
+              <span>截止时间</span>
+              <span>操作</span>
+            </div>
+            <UnifiedTaskList
+              :tasks="taskListItems"
+              :preview-limit="activeStatusKey ? undefined : 3"
+              :format-date-time="formatDateTime"
+              :empty-title="activeStatusKey ? '当前筛选无任务' : '当前无高优先级任务'"
+              :empty-desc="
+                activeStatusKey
+                  ? '可以切换筛选条件或重置筛选后查看。'
+                  : '今日暂未发现 P0/P1 风险任务。'
+              "
+              @open="handleOpenTask"
+            />
+          </div>
+        </section>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs, { type Dayjs } from 'dayjs'
 import { message } from 'ant-design-vue'
@@ -252,15 +286,20 @@ import type { WorkstationLaunchAction, WorkflowStageKey } from '@/types/workflow
 import HomeHeroBar from './components/HomeHeroBar.vue'
 import StatusBar from './components/StatusBar.vue'
 import UnifiedTaskList from './components/UnifiedTaskList.vue'
+import {
+  ClockCircleOutlined,
+  DownOutlined,
+  FileDoneOutlined,
+  MedicineBoxOutlined,
+  RightOutlined,
+  SyncOutlined,
+  ThunderboltOutlined,
+  UserOutlined,
+} from '@ant-design/icons-vue'
 
 interface RankItem {
   label: string
   count: number
-}
-
-interface DistributionItem extends RankItem {
-  percent: number
-  color?: string
 }
 
 interface KpiCard {
@@ -269,6 +308,9 @@ interface KpiCard {
   value: string | number
   desc: string
   tone: 'brand' | 'danger' | 'warning' | 'success'
+  icon: Component
+  delta: string
+  deltaTone: 'is-up' | 'is-down' | 'is-neutral'
 }
 
 const router = useRouter()
@@ -281,7 +323,6 @@ const workflowFilter = ref('all')
 const keyword = ref('')
 const activeStatusKey = ref('')
 const syncingFromRoute = ref(false)
-const analysisTab = ref<'stage' | 'workflow'>('stage')
 
 const homeData = ref<WorkstationHomePayload>({
   date: dayjs().format('YYYY-MM-DD'),
@@ -306,6 +347,13 @@ const homeData = ref<WorkstationHomePayload>({
 })
 
 const departmentOptions = computed(() => homeData.value.department_options || [])
+const trendAxisLabels = computed(() =>
+  Array.from({ length: 7 }, (_, index) =>
+    dayjs(selectedDate.value)
+      .subtract(6 - index, 'day')
+      .format('MM-DD'),
+  ),
+)
 
 const unifiedTasks = computed<UnifiedTaskItem[]>(() => {
   const hotspotItems: UnifiedTaskItem[] = (homeData.value.hotspots || []).map((h) => ({
@@ -314,6 +362,9 @@ const unifiedTasks = computed<UnifiedTaskItem[]>(() => {
     record_id: h.record_id,
     visit_id: h.visit_id,
     patient_name: h.patient_name,
+    patient_age: h.patient_age,
+    patient_sex: h.patient_sex,
+    patient_gender: h.patient_gender,
     department: h.department,
     workflow_type: h.workflow_type,
     severity: h.severity,
@@ -338,6 +389,9 @@ const unifiedTasks = computed<UnifiedTaskItem[]>(() => {
     record_id: t.record_id,
     visit_id: t.visit_id,
     patient_name: t.patient_name,
+    patient_age: t.patient_age,
+    patient_sex: t.patient_sex,
+    patient_gender: t.patient_gender,
     department: t.department,
     workflow_type: t.workflow_type,
     severity: t.priority === 'critical' ? 'critical' : t.priority === 'high' ? 'high' : 'info',
@@ -400,123 +454,48 @@ const inProgressTaskCount = computed(
     }).length,
 )
 
-const passRate = computed(() => {
-  const gradedTasks = unifiedTasks.value.filter(
-    (task) => typeof task.latest_qc_score === 'number' || !!task.latest_qc_grade,
-  )
-  if (gradedTasks.length > 0) {
-    const passed = gradedTasks.filter((task) => {
-      const scorePass = typeof task.latest_qc_score === 'number' && task.latest_qc_score >= 90
-      const grade = (task.latest_qc_grade || '').toUpperCase()
-      const gradePass = grade === 'A' || grade === 'B'
-      return scorePass || gradePass
-    }).length
-    return Math.round((passed / gradedTasks.length) * 100)
-  }
-  if (totalTaskCount.value <= 0) return 0
-  const riskRate = Math.round((highRiskTaskCount.value / totalTaskCount.value) * 100)
-  return Math.max(0, 100 - riskRate)
-})
-
 const kpiCards = computed<KpiCard[]>(() => [
   {
-    key: 'total',
-    label: '任务总量',
-    value: totalTaskCount.value,
-    desc: '当前筛选范围的任务总数',
+    key: 'pending',
+    label: '待处理',
+    value: Number(homeData.value.kpis.my_pending_total || 0),
+    desc: '等待进入处理队列',
     tone: 'brand',
+    icon: FileDoneOutlined,
+    delta: '+12（10.3%）',
+    deltaTone: 'is-up',
   },
   {
     key: 'risk',
     label: '高风险任务',
     value: highRiskTaskCount.value,
-    desc: '优先建议立即处理',
+    desc: '建议优先复核',
     tone: 'danger',
+    icon: ThunderboltOutlined,
+    delta: '+5（16.1%）',
+    deltaTone: 'is-up',
+  },
+  {
+    key: 'overdue',
+    label: '已超时',
+    value: Number(homeData.value.kpis.my_overdue_total || 0),
+    desc: '已超过处理时限',
+    tone: 'warning',
+    icon: ClockCircleOutlined,
+    delta: '+3（20.0%）',
+    deltaTone: 'is-up',
   },
   {
     key: 'progress',
     label: '处理中',
     value: inProgressTaskCount.value,
-    desc: '待办与执行中的任务',
-    tone: 'warning',
-  },
-  {
-    key: 'pass',
-    label: '质控通过率',
-    value: `${passRate.value}%`,
-    desc: '按评分与等级估算',
+    desc: '正在推进闭环',
     tone: 'success',
+    icon: SyncOutlined,
+    delta: '-6（7.5%）',
+    deltaTone: 'is-down',
   },
 ])
-
-const stageDistribution = computed<DistributionItem[]>(() => {
-  const source = [
-    { label: '待处理', count: Number(homeData.value.kpis.my_pending_total || 0), color: '#64748b' },
-    {
-      label: '进行中',
-      count: Number(homeData.value.kpis.my_in_progress_total || 0),
-      color: '#2563eb',
-    },
-    { label: '已超时', count: Number(homeData.value.kpis.my_overdue_total || 0), color: '#f59e0b' },
-    { label: '高风险', count: Number(homeData.value.kpis.high_risk_total || 0), color: '#ef4444' },
-  ]
-  const total = Math.max(
-    1,
-    source.reduce((sum, item) => sum + item.count, 0),
-  )
-  return source.map((item) => ({
-    ...item,
-    percent: Math.round((item.count / total) * 100),
-  }))
-})
-
-function resolveWorkflowLabel(workflowType: string | undefined): string {
-  const value = (workflowType || '').toLowerCase()
-  if (value.includes('coding') || value.includes('编码')) return '编码质控'
-  if (value.includes('frontpage') || value.includes('首页')) return '首页质控'
-  if (value.includes('settlement') || value.includes('结算')) return '结算质控'
-  return '综合质控'
-}
-
-const workflowLoad = computed<DistributionItem[]>(() => {
-  const map = new Map<string, number>()
-  for (const task of unifiedTasks.value) {
-    const key = resolveWorkflowLabel(task.workflow_type)
-    map.set(key, (map.get(key) || 0) + 1)
-  }
-  const total = Math.max(1, unifiedTasks.value.length)
-  return [...map.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([label, count]) => ({
-      label,
-      count,
-      percent: Math.round((count / total) * 100),
-    }))
-})
-
-const departmentRanking = computed<RankItem[]>(() => {
-  const summary = homeData.value.team_summary?.department_risk_distribution
-  if (summary?.length) {
-    return summary
-      .map((item) => ({
-        label: item.department || '未分科室',
-        count: Number(item.count || 0),
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5)
-  }
-
-  const map = new Map<string, number>()
-  for (const task of unifiedTasks.value) {
-    if (!task.department) continue
-    map.set(task.department, (map.get(task.department) || 0) + 1)
-  }
-  return [...map.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([label, count]) => ({ label, count }))
-})
 
 function classifyRiskReason(task: UnifiedTaskItem): string {
   const text = `${task.title || ''} ${task.summary || ''}`
@@ -539,21 +518,32 @@ const riskReasonRanking = computed<RankItem[]>(() => {
     .map(([label, count]) => ({ label, count }))
 })
 
-function resolvePriorityBucket(task: UnifiedTaskItem): string {
-  const severity = (task.severity || task.priority || '').toLowerCase()
-  if (task.task_status === 'overdue' || severity === 'critical') return 'P0 紧急'
-  if (severity === 'high') return 'P1 高优先'
-  if (task.task_status === 'in_progress' || task.task_status === 'pending') return 'P2 处理中'
-  return 'P3 常规'
+function insightPercent(count: number): number {
+  if (highRiskTaskCount.value <= 0) return 0
+  return Math.round((count / highRiskTaskCount.value) * 1000) / 10
 }
 
-const priorityRanking = computed<RankItem[]>(() => {
-  const map = new Map<string, number>()
-  for (const task of unifiedTasks.value) {
-    const bucket = resolvePriorityBucket(task)
-    map.set(bucket, (map.get(bucket) || 0) + 1)
+function isHighPriorityTask(task: UnifiedTaskItem): boolean {
+  const severity = (task.severity || task.priority || '').toLowerCase()
+  return (
+    task.task_status === 'overdue' ||
+    severity === 'critical' ||
+    severity === 'high' ||
+    task.priority === 'critical' ||
+    task.priority === 'high'
+  )
+}
+
+const highPriorityTasks = computed(() => unifiedTasks.value.filter(isHighPriorityTask))
+const taskListItems = computed(() =>
+  activeStatusKey.value ? unifiedTasks.value : highPriorityTasks.value,
+)
+const taskPanelTitle = computed(() => (activeStatusKey.value ? '筛选任务' : '高优先级任务'))
+const taskPanelSubtitle = computed(() => {
+  if (activeStatusKey.value) {
+    return `当前筛选下共 ${taskListItems.value.length} 条任务，支持继续按风险和时效聚焦。`
   }
-  return [...map.entries()].sort((a, b) => b[1] - a[1]).map(([label, count]) => ({ label, count }))
+  return `默认展示最需要处理的 ${Math.min(highPriorityTasks.value.length, 3)} 条任务，降低首屏干扰。`
 })
 
 function disabledFutureDate(current: Dayjs) {
@@ -726,4 +716,1125 @@ watch(
 
 <style>
 @import '../workstation-v4/styles/workstation-v4-view.css';
+
+.qc-home-shell {
+  background: linear-gradient(180deg, #dcebea 0%, #f8fafc 46%, #edf3f7 100%);
+}
+
+.qc-home-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 30px;
+  background: rgba(247, 250, 252, 0.78);
+  box-shadow: 0 28px 64px rgba(15, 23, 42, 0.09);
+  backdrop-filter: blur(20px);
+}
+
+.qc-home-hero,
+.qc-home-card,
+.qc-home-task-panel {
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.055);
+}
+
+.qc-home-hero {
+  padding: 22px;
+}
+
+.qc-home-hero__header,
+.qc-home-task-panel__head,
+.qc-home-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.qc-home-hero__main {
+  max-width: 560px;
+}
+
+.qc-home-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.qc-home-hero h2,
+.qc-home-card h3,
+.qc-home-task-panel h3 {
+  margin: 0;
+  color: #0f172a;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.qc-home-hero h2 {
+  font-size: 30px;
+  line-height: 1.16;
+}
+
+.qc-home-hero p,
+.qc-home-task-panel p {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.qc-home-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.qc-home-hero__meta {
+  display: flex;
+  min-width: 92px;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 8px 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.qc-home-hero__meta span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.qc-home-hero__meta strong {
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.qc-home-action-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qc-home-action {
+  height: 32px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.qc-home-filter-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.74);
+}
+
+.qc-home-kpis {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.35fr) repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.qc-home-kpi-card {
+  min-height: 132px;
+  padding: 18px 20px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.045);
+}
+
+.qc-home-kpi-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.qc-home-kpi-card__top i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #38bdf8;
+  box-shadow: 0 0 0 5px rgba(56, 189, 248, 0.12);
+}
+
+.qc-home-kpi-card strong {
+  display: block;
+  margin-top: 18px;
+  color: #0f172a;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.qc-home-kpi-card p {
+  margin: 10px 0 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.qc-home-kpi-card--featured {
+  border-color: rgba(45, 212, 191, 0.26);
+  background: linear-gradient(135deg, #5dd7d0 0%, #18aaa7 58%, #0f766e 100%);
+  box-shadow: 0 22px 42px rgba(20, 184, 166, 0.22);
+}
+
+.qc-home-kpi-card--featured .qc-home-kpi-card__top,
+.qc-home-kpi-card--featured p {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.qc-home-kpi-card--featured strong {
+  color: #fff;
+}
+
+.qc-home-kpi-card--featured .qc-home-kpi-card__top i {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.16);
+}
+
+.qc-home-kpi-card--danger .qc-home-kpi-card__top i {
+  background: #fb7185;
+  box-shadow: 0 0 0 5px rgba(251, 113, 133, 0.12);
+}
+
+.qc-home-kpi-card--warning .qc-home-kpi-card__top i {
+  background: #f59e0b;
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.13);
+}
+
+.qc-home-kpi-card--success .qc-home-kpi-card__top i {
+  background: #10b981;
+  box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.12);
+}
+
+.qc-home-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.72fr);
+  gap: 16px;
+}
+
+.qc-home-card {
+  padding: 20px;
+}
+
+.qc-home-card--trend {
+  min-height: 440px;
+}
+
+.qc-home-card h3,
+.qc-home-task-panel h3 {
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.qc-home-score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.qc-home-score strong {
+  color: #0f172a;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.qc-home-score span {
+  margin-top: 4px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qc-home-progress-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 22px;
+  margin-top: 24px;
+}
+
+.qc-home-progress-row__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qc-home-chart-shell {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.58fr) minmax(0, 1fr);
+  gap: 18px;
+  min-height: 190px;
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255, 255, 255, 0.84));
+}
+
+.qc-home-chart-summary {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.qc-home-chart-summary span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.qc-home-chart-summary strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.qc-home-chart-summary p {
+  max-width: 210px;
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.qc-home-chart-plot {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 16px;
+  min-height: 150px;
+  padding-top: 14px;
+}
+
+.qc-home-chart-baseline {
+  position: absolute;
+  right: 0;
+  bottom: 26px;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.32));
+}
+
+.qc-home-chart-column {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+}
+
+.qc-home-chart-track {
+  display: flex;
+  width: 100%;
+  height: 120px;
+  align-items: end;
+  justify-content: center;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(226, 232, 240, 0.28), rgba(226, 232, 240, 0.05));
+}
+
+.qc-home-chart-bar {
+  width: min(54px, 58%);
+  min-height: 12px;
+  border-radius: 999px 999px 12px 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 12px 22px rgba(15, 23, 42, 0.1);
+}
+
+.qc-home-chart-column span {
+  overflow: hidden;
+  max-width: 100%;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-home-progress-row__meta strong {
+  color: #0f172a;
+}
+
+.qc-home-workflow-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.qc-home-workflow-item {
+  min-height: 74px;
+  padding: 13px;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.qc-home-workflow-item span {
+  display: block;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-home-workflow-item strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.qc-home-risk-summary {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid rgba(186, 230, 253, 0.8);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(240, 249, 255, 0.95), rgba(255, 255, 255, 0.92));
+}
+
+.qc-home-risk-summary__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.qc-home-risk-summary__top > div:last-child {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.qc-home-risk-donut {
+  display: grid;
+  width: 112px;
+  height: 112px;
+  flex: none;
+  place-items: center;
+  border-radius: 999px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.9),
+    0 16px 26px rgba(14, 165, 233, 0.13);
+}
+
+.qc-home-risk-donut > div {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  place-items: center;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.qc-home-risk-donut strong {
+  color: #0369a1;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.qc-home-risk-donut span {
+  margin-top: -20px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.qc-home-risk-summary span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-home-risk-summary strong {
+  color: #0369a1;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.qc-home-risk-summary small {
+  margin-top: 6px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.qc-home-risk-summary p {
+  margin: 12px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.qc-home-ranking-stack {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.qc-home-mini-title {
+  margin-bottom: 9px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.qc-home-ranking-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.76);
+}
+
+.qc-home-ranking-row span {
+  overflow: hidden;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-home-ranking-row strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.qc-home-task-panel {
+  overflow: hidden;
+}
+
+.qc-home-task-panel__head {
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.76);
+}
+
+.qc-home-shell {
+  background: transparent;
+}
+
+.qc-home-canvas {
+  min-height: calc(100vh - 64px);
+  padding: 32px;
+  border-radius: 0 18px 18px 0;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.qc-home-hero {
+  padding: 0 2px 4px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.qc-home-hero__header {
+  align-items: center;
+}
+
+.qc-home-hero__main h2 {
+  font-size: 30px;
+}
+
+.qc-home-topbar {
+  display: flex;
+  min-width: 680px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+}
+
+.qc-home-topbar > .flex:first-child {
+  max-width: 690px;
+}
+
+.qc-home-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 148px;
+  color: #334155;
+}
+
+.qc-home-profile .ant-avatar {
+  background: linear-gradient(135deg, #dbeafe, #eff6ff);
+  color: #2563eb;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+}
+
+.qc-home-profile strong,
+.qc-home-profile span {
+  display: block;
+  white-space: nowrap;
+}
+
+.qc-home-profile strong {
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.1;
+}
+
+.qc-home-profile span {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.qc-home-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.qc-home-kpi-card {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: center;
+  min-height: 132px;
+  padding: 24px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 18px 42px rgba(42, 82, 128, 0.08);
+}
+
+.qc-home-kpi-icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef6ff;
+  color: #2563eb;
+  font-size: 28px;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
+.qc-home-kpi-card--danger .qc-home-kpi-icon {
+  background: #fff1f2;
+  color: #ef4444;
+}
+
+.qc-home-kpi-card--warning .qc-home-kpi-icon {
+  background: #fff7ed;
+  color: #f59e0b;
+}
+
+.qc-home-kpi-card--success .qc-home-kpi-icon {
+  background: #ecfeff;
+  color: #06b6d4;
+}
+
+.qc-home-kpi-card__body span {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.qc-home-kpi-card__body strong {
+  margin-top: 8px;
+  font-size: 31px;
+}
+
+.qc-home-kpi-card__body p {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.qc-home-kpi-card__body em {
+  margin-left: 8px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.qc-home-kpi-card__body em.is-up {
+  color: #ef4444;
+}
+
+.qc-home-kpi-card__body em.is-down {
+  color: #06b6d4;
+}
+
+.qc-home-main-grid {
+  grid-template-columns: minmax(0, 1.6fr) minmax(360px, 0.94fr);
+  gap: 18px;
+}
+
+.qc-home-card,
+.qc-home-task-panel {
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.qc-home-card--trend {
+  min-height: 320px;
+  padding: 26px 26px 18px;
+}
+
+.qc-home-card h3,
+.qc-home-task-panel h3 {
+  font-size: 20px;
+}
+
+.qc-home-range-switch {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid rgba(203, 213, 225, 0.72);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.8);
+}
+
+.qc-home-range-switch button {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-home-range-switch button:first-child {
+  background: #fff;
+  color: #2563eb;
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.08);
+}
+
+.qc-home-line-chart {
+  margin-top: 18px;
+}
+
+.qc-home-line-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.qc-home-line-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qc-home-line-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+}
+
+.qc-home-dot--blue {
+  background: #3b82f6;
+}
+
+.qc-home-dot--red {
+  background: #ef4444;
+}
+
+.qc-home-dot--amber {
+  background: #f59e0b;
+}
+
+.qc-home-dot--cyan {
+  background: #06b6d4;
+}
+
+.qc-home-line-chart svg {
+  width: 100%;
+  height: 250px;
+  overflow: visible;
+}
+
+.qc-home-grid-lines line {
+  stroke: rgba(148, 163, 184, 0.18);
+  stroke-width: 1;
+}
+
+.qc-home-series {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 2.2;
+}
+
+.qc-home-series--blue {
+  stroke: #3b82f6;
+}
+
+.qc-home-series--red {
+  stroke: #ef4444;
+}
+
+.qc-home-series--amber {
+  stroke: #f59e0b;
+}
+
+.qc-home-series--cyan {
+  stroke: #06b6d4;
+}
+
+.qc-home-axis-labels text,
+.qc-home-chart-values text {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-home-axis-labels text {
+  fill: #94a3b8;
+}
+
+.qc-home-card--insight {
+  padding: 26px;
+}
+
+.qc-home-insight-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  align-items: center;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.qc-home-insight-list {
+  display: grid;
+  gap: 17px;
+}
+
+.qc-home-insight-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 12px;
+  color: #334155;
+}
+
+.qc-home-insight-row span {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-home-insight-row small {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.qc-home-insight-row .anticon {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.qc-home-medical-visual {
+  position: relative;
+  display: grid;
+  width: 180px;
+  height: 180px;
+  place-items: center;
+}
+
+.qc-home-medical-orbit {
+  position: absolute;
+  width: 150px;
+  height: 78px;
+  border: 1px solid rgba(37, 99, 235, 0.34);
+  border-radius: 50%;
+}
+
+.qc-home-medical-orbit--one {
+  transform: rotate(23deg);
+}
+
+.qc-home-medical-orbit--two {
+  transform: rotate(-28deg);
+}
+
+.qc-home-medical-core {
+  display: grid;
+  width: 110px;
+  height: 110px;
+  place-items: center;
+  border-radius: 38px;
+  background: radial-gradient(circle at 30% 22%, #f8fbff, #7fb4ff 58%, #3b82f6);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 54px;
+  box-shadow: 0 22px 42px rgba(37, 99, 235, 0.24);
+}
+
+.qc-home-task-panel {
+  padding: 0;
+}
+
+.qc-home-task-panel__head {
+  align-items: center;
+}
+
+.qc-home-task-table__head {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.45fr) minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(
+      160px,
+      1fr
+    ) minmax(140px, 0.8fr) minmax(110px, 0.6fr);
+  gap: 16px;
+  padding: 0 26px 10px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.78);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.qc-task-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.45fr) minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(
+      160px,
+      1fr
+    ) minmax(140px, 0.8fr) minmax(110px, 0.6fr);
+  align-items: center;
+  gap: 16px;
+  min-height: 64px;
+  padding: 10px 26px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
+  color: #0f172a;
+}
+
+.qc-task-row:hover {
+  background: rgba(248, 250, 252, 0.72);
+}
+
+.qc-task-patient {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.qc-task-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #dbeafe, #f8fafc);
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 6px 14px rgba(15, 23, 42, 0.08);
+}
+
+.qc-task-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.qc-task-patient__name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.qc-task-patient__name span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.qc-task-patient__id {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-task-cell {
+  min-width: 0;
+  overflow: hidden;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-task-dept {
+  color: #0f172a;
+}
+
+.qc-task-risk {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.qc-task-risk--high {
+  border: 1px solid rgba(248, 113, 113, 0.36);
+  background: #fff1f2;
+  color: #ef4444;
+}
+
+.qc-task-risk--medium {
+  border: 1px solid rgba(251, 146, 60, 0.38);
+  background: #fff7ed;
+  color: #f97316;
+}
+
+.qc-task-risk--normal {
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.qc-task-reason {
+  color: #334155;
+}
+
+.qc-task-deadline {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.qc-task-deadline strong {
+  font-size: 12px;
+}
+
+.qc-task-deadline .is-overdue {
+  color: #ef4444;
+}
+
+.qc-task-deadline .is-progress {
+  color: #2563eb;
+}
+
+.qc-task-deadline .is-pending {
+  color: #f59e0b;
+}
+
+.qc-task-action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.qc-task-action button {
+  height: 34px;
+  min-width: 88px;
+  border: 1px solid rgba(37, 99, 235, 0.52);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 850;
+  transition: all 0.18s ease;
+}
+
+.qc-task-action button:hover {
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 10px 18px rgba(37, 99, 235, 0.18);
+}
+
+@media (max-width: 1180px) {
+  .qc-home-kpis,
+  .qc-home-main-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .qc-home-card--insight {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 860px) {
+  .qc-home-canvas {
+    padding: 12px;
+    border-radius: 22px;
+  }
+
+  .qc-home-hero__header,
+  .qc-home-task-panel__head,
+  .qc-home-card__head {
+    flex-direction: column;
+  }
+
+  .qc-home-hero__actions,
+  .qc-home-filter-strip {
+    width: 100%;
+  }
+
+  .qc-home-filter-strip {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .qc-home-kpis,
+  .qc-home-main-grid,
+  .qc-home-progress-list,
+  .qc-home-workflow-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .qc-home-card--insight {
+    grid-column: auto;
+  }
+}
 </style>

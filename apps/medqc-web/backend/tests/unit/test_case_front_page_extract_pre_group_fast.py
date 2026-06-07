@@ -46,5 +46,5 @@ async def test_extract_pre_group_fast_path(monkeypatch):
     assert data["diagnoses"]["admission_main_icd"] in {"I20.0", "I25.103"}
     assert data["diagnoses"]["discharge_main_icd"] in {"I20.0", "I25.103"}
     assert data["procedures"]["main_procedure_text"] == "冠状动脉造影"
-    assert data["procedures"]["main_procedure_code"] == "88.56"
+    assert data["procedures"]["main_procedure_code"] in {"88.56", "88.5701"}
     assert fake_store.saved

@@ -1,23 +1,24 @@
 <template>
-  <div class="pre-analysis-shell">
+  <div class="pre-analysis-shell drg-workbench-page">
     <section class="command-header">
-      <div class="header-main">
+      <div class="command-top">
         <div class="title-block">
-          <h1>病历抽取与 DRG / DIP 预判</h1>
-          <p>先阅读原始病历，再执行结构化抽取与分组预判，统一在一个中控台完成。</p>
+          <span class="eyebrow">DRG / DIP PRE-GROUPING</span>
+          <h1>事前分析</h1>
+          <p>只读完成病历字段抽取、编码核对与模拟入组，不写正式结果。</p>
         </div>
 
-        <div class="action-bar">
+        <div class="header-tools">
+          <span class="readonly-badge">只读模拟</span>
+          <span class="stage-badge">{{ currentStageLabel }}</span>
           <button
             type="button"
-            class="btn btn-ghost"
+            class="btn btn-primary"
             :disabled="extracting || grouping"
             @click="handleExtract"
           >
-            <span class="btn-icon">⚡</span>
-            {{ extracting ? '抽取中...' : '开始抽取' }}
+            {{ extracting ? '抽取中...' : '执行抽取' }}
           </button>
-
           <div
             class="segmented"
             role="tablist"
@@ -45,107 +46,154 @@
         </div>
       </div>
 
-      <div
-        class="case-strip"
-        role="tablist"
-        aria-label="病例切换"
-      >
-        <button
-          v-for="(item, index) in testCases"
-          :key="item.name"
-          type="button"
-          class="case-chip"
-          :class="{ active: selectedCaseIndex === index }"
-          @click="handleCaseChange(index)"
-        >
-          <span class="case-chip__id">{{ item.admissionId || `病例 ${index + 1}` }}</span>
-          <span class="case-chip__name">{{ item.name }}</span>
-        </button>
-
-        <div class="active-case">
-          <span class="active-case__label">当前病例</span>
+      <div class="pre-analysis-filter-strip">
+        <div class="case-selector">
+          <span class="filter-label">病案选择</span>
+          <button
+            v-for="(item, index) in testCases"
+            :key="item.name"
+            type="button"
+            class="case-pill"
+            :class="{ active: selectedCaseIndex === index }"
+            @click="handleCaseChange(index)"
+          >
+            <span>{{ item.admissionId || `病案 ${index + 1}` }}</span>
+            <strong>{{ item.name }}</strong>
+          </button>
+        </div>
+        <div class="current-case">
+          <span>当前病案</span>
           <strong>{{ currentCase.admissionId }}</strong>
-          <span>{{ currentCase.name }}</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="status-zone">
-      <div
-        class="workflow-rail"
-        aria-label="工作流"
-      >
-        <div
-          class="workflow-node"
-          :class="{ active: !!medicalText }"
-        >
-          <span class="workflow-node__index">01</span>
-          <div>
-            <div class="workflow-node__title">
-              病历阅读
-            </div>
-            <div class="workflow-node__desc">
-              确认原始文本与临床场景
-            </div>
-          </div>
-        </div>
-        <div
-          class="workflow-node"
-          :class="{ active: hasExtractedData }"
-        >
-          <span class="workflow-node__index">02</span>
-          <div>
-            <div class="workflow-node__title">
-              结构化抽取
-            </div>
-            <div class="workflow-node__desc">
-              沉淀主诊断、手术与费用字段
-            </div>
-          </div>
-        </div>
-        <div
-          class="workflow-node"
-          :class="{ active: !!drgResult }"
-        >
-          <span class="workflow-node__index">03</span>
-          <div>
-            <div class="workflow-node__title">
-              分组预判
-            </div>
-            <div class="workflow-node__desc">
-              输出分组结果与费用判断
-            </div>
-          </div>
+          <em>{{ currentCase.name }}</em>
         </div>
       </div>
 
-      <div class="snapshot-strip">
-        <article class="snapshot-card">
-          <span class="snapshot-card__label">文书长度</span>
-          <strong>{{ textLength }}</strong>
-          <small>字</small>
-        </article>
-        <article class="snapshot-card">
-          <span class="snapshot-card__label">诊断条目</span>
-          <strong>{{ diagnosisCount }}</strong>
-          <small>条</small>
-        </article>
-        <article class="snapshot-card">
-          <span class="snapshot-card__label">手术条目</span>
-          <strong>{{ procedures.length }}</strong>
-          <small>条</small>
-        </article>
-        <article class="snapshot-card snapshot-card--status">
-          <span class="snapshot-card__label">当前状态</span>
+      <div class="command-metrics">
+        <div class="metric-inline metric-inline--active">
+          <span>状态</span>
           <strong>{{ currentStageLabel }}</strong>
-        </article>
+        </div>
+        <div class="metric-inline">
+          <span>文书</span>
+          <strong>{{ textLength }}</strong>
+          <em>字</em>
+        </div>
+        <div class="metric-inline">
+          <span>诊断</span>
+          <strong>{{ diagnosisCount }}</strong>
+          <em>条</em>
+        </div>
+        <div class="metric-inline">
+          <span>手术</span>
+          <strong>{{ procedures.length }}</strong>
+          <em>条</em>
+        </div>
       </div>
     </section>
 
-    <section class="workspace-grid">
+    <section class="analysis-layout">
+      <aside class="side-rail surface">
+        <div class="panel-head">
+          <div>
+            <h2>病例队列</h2>
+            <p>选择病历后重新抽取与预判</p>
+          </div>
+        </div>
+
+        <div
+          class="case-list"
+          role="tablist"
+          aria-label="病例切换"
+        >
+          <button
+            v-for="(item, index) in testCases"
+            :key="item.name"
+            type="button"
+            class="case-chip"
+            :class="{ active: selectedCaseIndex === index }"
+            @click="handleCaseChange(index)"
+          >
+            <span class="case-chip__id">{{ item.admissionId || `病例 ${index + 1}` }}</span>
+            <strong>{{ item.name }}</strong>
+          </button>
+        </div>
+
+        <div class="case-metrics">
+          <div class="case-metric">
+            <span>文书</span>
+            <strong>{{ textLength }}</strong>
+            <small>字</small>
+          </div>
+          <div class="case-metric">
+            <span>诊断</span>
+            <strong>{{ diagnosisCount }}</strong>
+            <small>条</small>
+          </div>
+          <div class="case-metric">
+            <span>手术</span>
+            <strong>{{ procedures.length }}</strong>
+            <small>条</small>
+          </div>
+        </div>
+
+        <div class="workflow-block">
+          <h3>分析流程</h3>
+          <div
+            class="workflow-node"
+            :class="{ active: !!medicalText }"
+          >
+            <span class="workflow-node__index">01</span>
+            <div>
+              <div class="workflow-node__title">
+                病历阅读
+              </div>
+              <div class="workflow-node__desc">
+                确认原始文本与临床场景
+              </div>
+            </div>
+          </div>
+          <div
+            class="workflow-node"
+            :class="{ active: hasExtractedData }"
+          >
+            <span class="workflow-node__index">02</span>
+            <div>
+              <div class="workflow-node__title">
+                结构化抽取
+              </div>
+              <div class="workflow-node__desc">
+                沉淀主诊断、手术与费用字段
+              </div>
+            </div>
+          </div>
+          <div
+            class="workflow-node"
+            :class="{ active: !!drgResult }"
+          >
+            <span class="workflow-node__index">03</span>
+            <div>
+              <div class="workflow-node__title">
+                分组预判
+              </div>
+              <div class="workflow-node__desc">
+                输出模拟结果与费用判断
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="safety-note">
+          <span>安全边界</span>
+          <strong>不写病案首页、医保结算清单或正式 DRG/DIP 结果。</strong>
+        </div>
+      </aside>
+
       <article class="surface reader-panel">
         <div class="panel-head panel-head--between">
-          <h2>原始病历内容</h2>
+          <div>
+            <h2>原始病历内容</h2>
+            <p>高亮内容会随抽取结果更新</p>
+          </div>
           <div class="reading-meta">
             <span>当前病案</span>
             <strong>{{ currentCase.admissionId }}</strong>
@@ -164,10 +212,13 @@
       </article>
 
       <aside class="result-column">
-        <article class="surface">
+        <article class="surface result-card">
           <div class="panel-head panel-head--between">
-            <h2>主诊断与手术 / 操作</h2>
-            <span class="status-pill">{{ hasExtractedData ? '已同步' : '等待抽取' }}</span>
+            <div>
+              <h2>抽取结果</h2>
+              <p>主诊断、手术和候选编码</p>
+            </div>
+            <span class="status-pill">{{ hasExtractedData ? '已抽取' : '待抽取' }}</span>
           </div>
 
           <div class="summary-list">
@@ -204,11 +255,44 @@
               </span>
             </div>
           </div>
+
+          <div
+            v-if="latestPreGroupingSimulation"
+            class="simulation-version"
+            data-testid="pre-grouping-version"
+          >
+            <div class="simulation-version__head">
+              <span>自动模拟版本</span>
+              <strong>V{{ latestPreGroupingSimulation.version }}</strong>
+              <em>{{ formatSimulationTime(latestPreGroupingSimulation.created_at) }}</em>
+            </div>
+            <div class="simulation-version__body">
+              <span>{{
+                latestPreGroupingSimulation.change_tracking?.needs_regrouping
+                  ? '检测到输入变化'
+                  : '关键输入未变化'
+              }}</span>
+              <div
+                v-if="preGroupingChangedFields.length"
+                class="simulation-version__changes"
+              >
+                <span
+                  v-for="item in preGroupingChangedFields.slice(0, 4)"
+                  :key="item.field"
+                >
+                  {{ preGroupingFieldLabel(item.field) }}
+                </span>
+              </div>
+            </div>
+          </div>
         </article>
 
-        <article class="surface">
+        <article class="surface result-card">
           <div class="panel-head panel-head--between">
-            <h2>DRG / DIP 预判结果</h2>
+            <div>
+              <h2>预判结果</h2>
+              <p>模拟入组，不写正式结果</p>
+            </div>
             <div
               class="segmented segmented--compact"
               role="tablist"
@@ -250,6 +334,18 @@
                 <span>权重 / 点数</span>
                 <strong>{{ drgResult.weight || '--' }}</strong>
               </div>
+              <template v-if="drgResult.groupingType === 'DRG'">
+                <div class="metric-card">
+                  <span>低风险组</span>
+                  <strong>{{
+                    drgResult.isLowRisk === undefined ? '--' : drgResult.isLowRisk ? '是' : '否'
+                  }}</strong>
+                </div>
+                <div class="metric-card">
+                  <span>权重来源</span>
+                  <strong>{{ drgResult.weightSource ? '2024绩效监测权重' : '--' }}</strong>
+                </div>
+              </template>
               <div class="metric-card">
                 <span>预估费用</span>
                 <strong>{{
@@ -268,6 +364,70 @@
                   drgResult.profit !== '--' ? drgResult.profit?.toLocaleString() : '--'
                 }}</strong>
               </div>
+              <template v-if="drgResult.groupingType === 'DIP'">
+                <div class="metric-card">
+                  <span>分值</span>
+                  <strong>{{ drgResult.score ?? '--' }}</strong>
+                </div>
+                <div class="metric-card">
+                  <span>病种属性</span>
+                  <strong>{{ drgResult.diseaseAttribute || '--' }}</strong>
+                </div>
+                <div class="metric-card">
+                  <span>基层病种标识</span>
+                  <strong>{{ drgResult.primaryCareFlag || '否' }}</strong>
+                </div>
+              </template>
+            </div>
+
+            <div
+              v-if="groupingCorrections"
+              class="correction-panel"
+            >
+              <div class="correction-panel__head">
+                <span>修正建议</span>
+                <em>{{ groupingCorrections.suggestions.length }} 条</em>
+              </div>
+              <div
+                v-if="groupingCorrections.suggestions.length"
+                class="correction-list"
+              >
+                <div
+                  v-for="item in groupingCorrections.suggestions.slice(0, 3)"
+                  :key="`${item.suggestion_type}-${item.title}`"
+                  class="correction-item"
+                >
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.reason }}</p>
+                  <div
+                    v-if="item.candidates?.length"
+                    class="correction-candidates"
+                  >
+                    <span
+                      v-for="candidate in item.candidates.slice(0, 3)"
+                      :key="candidate.code || candidate.name"
+                    >
+                      {{ candidate.code || '--' }} {{ candidate.name || candidate.dip_name || '' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div
+                v-else
+                class="correction-empty"
+              >
+                当前分组未返回需要调整的编码建议。
+              </div>
+              <p class="correction-warning">
+                {{ groupingCorrections.safety_warning }}
+              </p>
+            </div>
+
+            <div
+              v-if="correctionsLoading && !groupingCorrections"
+              class="correction-empty"
+            >
+              正在生成预入组修正建议...
             </div>
           </div>
 
@@ -276,7 +436,7 @@
             class="empty-state"
           >
             <div class="empty-state__icon">
-              DRG
+              {{ groupingType }}
             </div>
             <div class="empty-state__title">
               等待分组结果
@@ -287,9 +447,12 @@
           </div>
         </article>
 
-        <article class="surface">
+        <article class="surface result-card trace-card">
           <div class="panel-head">
-            <h2>分组执行轨迹</h2>
+            <div>
+              <h2>执行轨迹</h2>
+              <p>保留可复核的分组路径</p>
+            </div>
           </div>
           <div
             v-if="drgResult && (drgResult.messages || []).length"
@@ -322,11 +485,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { performGrouping as localDrgGrouping } from '@/views/drg-grouper/drgGrouper'
 import { performDipGrouping as localDipGrouping } from '@/views/drg-grouper/dipGrouper'
 import { searchICD9Procedures } from '@/data/drg/mock-icd-codes'
+import { getAccessToken } from '@/utils/auth-token'
+import {
+  getPreGroupingHistory,
+  suggestGroupingCorrections,
+  triggerAdmissionPreGrouping,
+  type GroupingCorrectionResult,
+  type PreGroupingSimulation,
+} from '@/api/drg'
 
 const testCases = [
   {
@@ -376,6 +547,9 @@ const drgResult = ref<any>(null)
 const admissionId = ref<string | null>(testCases[0].admissionId)
 const groupingType = ref<'DIP' | 'DRG'>('DIP')
 const codeMappings = ref<Record<string, string>>({})
+const preGroupingHistory = ref<PreGroupingSimulation[]>([])
+const groupingCorrections = ref<GroupingCorrectionResult | null>(null)
+const correctionsLoading = ref(false)
 
 function isGroupingSuccess(status?: string): boolean {
   if (!status) return false
@@ -385,6 +559,10 @@ function isGroupingSuccess(status?: string): boolean {
 const hasExtractedData = computed(() => !!extractedData.value)
 const currentCase = computed(() => testCases[selectedCaseIndex.value] || testCases[0])
 const textLength = computed(() => (medicalText.value || '').replace(/\s+/g, '').length)
+const latestPreGroupingSimulation = computed(() => preGroupingHistory.value[0] || null)
+const preGroupingChangedFields = computed(
+  () => latestPreGroupingSimulation.value?.change_tracking?.changed_fields || [],
+)
 
 const currentStageLabel = computed(() => {
   if (grouping.value) return '分组中'
@@ -595,12 +773,93 @@ function highlightCodes(msg: string): string {
   )
 }
 
+function preGroupingFieldLabel(field: string): string {
+  const labels: Record<string, string> = {
+    pdx_code: '主诊断',
+    adx_count: '其他诊断',
+    procedure_count: '手术操作',
+    patient_age: '年龄',
+    patient_gender: '性别',
+    los: '住院日',
+    total_fee: '费用',
+    medical_text: '病历文本',
+  }
+  return labels[field] || field
+}
+
+function formatSimulationTime(value: string): string {
+  if (!value) return ''
+  return value.replace('T', ' ').replace('Z', '').slice(0, 16)
+}
+
+async function loadPreGroupingHistory(visitId = currentCase.value.admissionId) {
+  if (!visitId) {
+    preGroupingHistory.value = []
+    return
+  }
+  try {
+    preGroupingHistory.value = await getPreGroupingHistory(visitId)
+  } catch (error) {
+    console.warn('加载预入组历史失败:', error)
+    preGroupingHistory.value = []
+  }
+}
+
 const handleCaseChange = (idx: number) => {
   selectedCaseIndex.value = idx
   medicalText.value = testCases[idx].medical_text
   extractedData.value = null
   drgResult.value = null
+  groupingCorrections.value = null
   admissionId.value = testCases[idx].admissionId
+  void loadPreGroupingHistory(testCases[idx].admissionId)
+}
+
+async function createBackendPreGroupingSimulation() {
+  try {
+    const simulation = await triggerAdmissionPreGrouping({
+      visit_id: currentCase.value.admissionId,
+      document_id: `${currentCase.value.admissionId}-admission-note`,
+      medical_text: medicalText.value,
+    })
+    preGroupingHistory.value = [simulation, ...preGroupingHistory.value]
+  } catch (error) {
+    console.warn('创建后端预入组模拟历史失败:', error)
+  }
+}
+
+function buildGroupingCorrectionInput(result: Record<string, unknown>) {
+  const diagnoses = extractedData.value?.diagnoses || {}
+  const proceduresData = extractedData.value?.procedures || extractedData.value?.surgeries || {}
+  const primaryDiagCode = diagnoses.discharge_main_icd || diagnoses.admission_main_icd || ''
+  const secondaryDiagCodes = diagnoses.discharge_other_icds || diagnoses.admission_other_icds || []
+  const mainProcCode = proceduresData.main_procedure_code || ''
+  const otherProcCodes = proceduresData.other_procedure_codes || []
+  const fallbackProcCodes = procedures.value.map((item) => item.code).filter(Boolean)
+  const procCodes = Array.from(
+    new Set([mainProcCode, ...otherProcCodes, ...fallbackProcCodes].filter(Boolean)),
+  )
+  return {
+    pdx_code: primaryDiagCode,
+    proc_codes: procCodes,
+    grouping_result: result,
+    diagnosis_candidates: [primaryDiagCode, ...secondaryDiagCodes].filter(Boolean),
+    procedure_candidates: procCodes,
+  }
+}
+
+async function refreshGroupingCorrections(result: Record<string, unknown>) {
+  correctionsLoading.value = true
+  groupingCorrections.value = null
+  try {
+    groupingCorrections.value = await suggestGroupingCorrections(
+      buildGroupingCorrectionInput(result),
+    )
+  } catch (error) {
+    console.warn('生成预入组修正建议失败:', error)
+  } finally {
+    correctionsLoading.value = false
+  }
 }
 
 const handleExtract = async () => {
@@ -611,9 +870,17 @@ const handleExtract = async () => {
 
   extracting.value = true
   try {
+    const token = getAccessToken()
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    }
+
     const response = await fetch('/api/v1/case-front-page/extract-pre-group', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ medical_text: medicalText.value }),
     })
     const data = await response.json()
@@ -621,10 +888,18 @@ const handleExtract = async () => {
     if (response.ok && data.success && data.data) {
       extractedData.value = data.data
       admissionId.value = data.data.admission_id
+      await createBackendPreGroupingSimulation()
+      await loadPreGroupingHistory(currentCase.value.admissionId)
       message.success('AI 智能抽取完成')
+      extracting.value = false
       await handleDIPGrouping()
     } else {
-      message.error(data.error || data.detail || '抽取失败')
+      const errorText = data.error || data.detail || '抽取失败'
+      if (response.status === 401) {
+        message.error('登录状态已失效，请重新登录后再执行抽取')
+      } else {
+        message.error(errorText)
+      }
     }
   } catch (error) {
     console.error('Extract error:', error)
@@ -642,6 +917,7 @@ const handleDIPGrouping = async () => {
 
   grouping.value = true
   groupingType.value = 'DIP'
+  groupingCorrections.value = null
 
   try {
     const diagnoses = extractedData.value.diagnoses || {}
@@ -672,9 +948,13 @@ const handleDIPGrouping = async () => {
         actual_cost: costs.total_cost || 0,
         profit: '--',
         matchType: dipResult.matchType || '',
+        score: dipResult.score,
+        diseaseAttribute: dipResult.diseaseAttribute,
+        primaryCareFlag: dipResult.primaryCareFlag,
         messages: dipResult.messages,
       }
-      message.success(`四川 DIP 入组成功: ${dipResult.dipCode}`)
+      message.success(`泸州 DIP 入组成功: ${dipResult.dipCode}`)
+      await refreshGroupingCorrections(drgResult.value)
     } else {
       drgResult.value = {
         code: '未入组',
@@ -687,6 +967,7 @@ const handleDIPGrouping = async () => {
         messages: dipResult.messages,
       }
       message.warning('DIP 未能入组')
+      await refreshGroupingCorrections(drgResult.value)
     }
   } catch (error) {
     console.error('DIP grouping error:', error)
@@ -705,6 +986,7 @@ const handleDRGGrouping = async () => {
 
   grouping.value = true
   groupingType.value = 'DRG'
+  groupingCorrections.value = null
 
   try {
     const diagnoses = extractedData.value.diagnoses || {}
@@ -747,9 +1029,12 @@ const handleDRGGrouping = async () => {
         payment: baselinePayment,
         actual_cost: actualCost,
         profit: Math.round((baselinePayment - actualCost) * 100) / 100,
+        isLowRisk: drgGroupResult.isLowRisk,
+        weightSource: drgGroupResult.weightSource,
         messages: drgGroupResult.messages,
       }
       message.success(`四川 DRG 入组成功: ${drgGroupResult.drg} (RW=${rw})`)
+      await refreshGroupingCorrections(drgResult.value)
     } else {
       drgResult.value = {
         code: '未入组',
@@ -762,6 +1047,7 @@ const handleDRGGrouping = async () => {
         messages: drgGroupResult.messages,
       }
       message.warning('DRG 未能入组')
+      await refreshGroupingCorrections(drgResult.value)
     }
   } catch (error) {
     console.error('DRG grouping error:', error)
@@ -771,78 +1057,101 @@ const handleDRGGrouping = async () => {
     grouping.value = false
   }
 }
+
+onMounted(() => {
+  void loadPreGroupingHistory()
+})
 </script>
 
 <style scoped>
 .pre-analysis-shell {
-  --bg: #f3f6fb;
+  --bg: #f5f9fc;
   --surface: #ffffff;
   --surface-soft: #f8fbff;
-  --line: #d8e1ee;
-  --text: #15233b;
-  --text-muted: #62748f;
-  --accent: #1f63f2;
-  --accent-soft: #e8f0ff;
+  --line: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-subtle: #94a3b8;
+  --accent: #2563eb;
+  --accent-soft: #eaf2ff;
   --ok: #15803d;
   --bad: #dc2626;
   height: 100%;
   min-height: 100%;
-  padding: 16px;
-  background: linear-gradient(180deg, #f6f8fc 0%, var(--bg) 100%);
+  padding: 24px 28px 28px;
+  background: var(--bg);
   color: var(--text);
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   overflow-y: auto;
   box-sizing: border-box;
 }
 
 .command-header,
-.status-zone,
 .surface {
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: var(--surface);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.03);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.045);
 }
 
 .command-header {
-  padding: 16px;
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px 16px;
 }
 
-.header-main {
+.command-top {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
+  gap: 24px;
 }
 
 .title-block h1 {
   margin: 0;
-  font-size: 28px;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  font-weight: 900;
+  color: #14213d;
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+.eyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 780;
+  letter-spacing: 0.06em;
 }
 
 .title-block p {
-  margin: 8px 0 0;
+  margin: 5px 0 0;
   color: var(--text-muted);
   font-size: 14px;
-  line-height: 1.7;
+  line-height: 22px;
+  font-weight: 500;
 }
 
-.action-bar {
+.header-tools {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-top: 2px;
 }
 
 .btn {
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid #bfd0ee;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid #c7d7ef;
   background: #fff;
   color: #2b4d8c;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 730;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -855,143 +1164,375 @@ const handleDRGGrouping = async () => {
   cursor: not-allowed;
 }
 
-.btn-ghost {
-  background: var(--surface-soft);
+.btn-primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.14);
 }
 
-.btn-icon {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #e7eeff;
+.readonly-badge,
+.stage-badge {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 26px;
+  font-weight: 730;
+}
+
+.readonly-badge {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.stage-badge {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .segmented {
   display: inline-flex;
-  border: 1px solid #bfd0ee;
-  border-radius: 10px;
+  border: 1px solid #dbe5f3;
+  border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: #f8fbff;
 }
 
 .segmented-item {
-  height: 36px;
-  min-width: 64px;
+  height: 30px;
+  min-width: 56px;
   border: 0;
   background: transparent;
-  color: #315ea8;
+  color: #42618d;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 760;
   padding: 0 12px;
 }
 
 .segmented-item.active {
-  background: var(--accent);
-  color: #fff;
+  background: #eaf2ff;
+  color: #2563eb;
+}
+
+.segmented-item:disabled {
+  background: #f8fbff;
+  color: #94a3b8;
+}
+
+.segmented-item.active:disabled {
+  background: #dbeafe;
+  color: #2563eb;
 }
 
 .segmented--compact .segmented-item {
-  height: 32px;
-  min-width: 56px;
+  height: 30px;
+  min-width: 54px;
 }
 
-.case-strip {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) 200px;
+.pre-analysis-filter-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 10px;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  border-radius: 12px;
+  background: rgba(248, 251, 255, 0.72);
+}
+
+.case-selector {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
   gap: 8px;
 }
 
-.case-chip,
-.active-case {
-  min-height: 68px;
+.filter-label {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.case-pill {
+  display: inline-grid;
+  min-width: 150px;
+  height: 38px;
+  padding: 5px 10px;
+  border: 1px solid rgba(203, 213, 225, 0.86);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.88);
+  text-align: left;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.case-pill span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 800;
+}
+
+.case-pill strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.case-pill.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
+}
+
+.current-case {
+  display: grid;
+  min-width: 190px;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 2px 10px;
+  padding: 7px 12px;
+  border-left: 1px solid rgba(203, 213, 225, 0.72);
+}
+
+.current-case span {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.current-case strong {
+  color: #2563eb;
+  font-size: 14px;
+  line-height: 1.1;
+  font-weight: 790;
+}
+
+.current-case em {
+  grid-column: 1 / -1;
+  color: #334155;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 680;
+}
+
+.command-metrics {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(3, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, 0.86);
   border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface-soft);
-  padding: 10px;
+  background: #fbfdff;
+}
+
+.metric-inline {
+  min-height: 54px;
+  padding: 9px 14px;
+  border-left: 1px solid rgba(226, 232, 240, 0.82);
+}
+
+.metric-inline:first-child {
+  border-left: 0;
+}
+
+.metric-inline span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 17px;
+  font-weight: 700;
+}
+
+.metric-inline strong {
+  display: inline-block;
+  margin-top: 3px;
+  color: #172033;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 720;
+}
+
+.metric-inline em {
+  margin-left: 4px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.metric-inline--active {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.metric-inline--active strong {
+  color: #2563eb;
+}
+
+.analysis-layout {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.68fr) minmax(350px, 0.72fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.surface {
+  padding: 18px;
+}
+
+.panel-head {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+}
+
+.panel-head--between {
+  justify-content: space-between;
+}
+
+.panel-head h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.panel-head p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.side-rail {
+  display: none;
+}
+
+.case-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
 }
 
 .case-chip {
-  display: grid;
-  align-content: center;
+  min-height: 58px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fbff;
+  padding: 9px 11px;
   text-align: left;
-  gap: 3px;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .case-chip.active {
-  border-color: #9bb9f3;
-  background: var(--accent-soft);
+  border-color: #93c5fd;
+  background: #eff6ff;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .case-chip__id {
+  display: block;
+  color: #4f6d9e;
   font-size: 11px;
-  font-weight: 700;
-  color: #4c6ca5;
-}
-
-.case-chip__name {
-  font-size: 16px;
+  line-height: 16px;
   font-weight: 800;
-  line-height: 1.25;
 }
 
-.active-case {
-  display: grid;
-  align-content: center;
-  gap: 2px;
+.case-chip strong {
+  display: block;
+  margin-top: 2px;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 800;
 }
 
-.active-case__label {
-  font-size: 11px;
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.active-case strong {
-  font-size: 18px;
-  line-height: 1.2;
-}
-
-.active-case span:last-child {
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.status-zone {
+.case-metrics {
   margin-top: 12px;
-  padding: 14px;
-}
-
-.workflow-rail {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.case-metric {
+  min-height: 60px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  padding: 8px 9px;
+}
+
+.case-metric span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 700;
+}
+
+.case-metric strong {
+  display: inline-block;
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 850;
+}
+
+.case-metric small {
+  margin-left: 3px;
+  color: var(--text-subtle, #94a3b8);
+  font-size: 12px;
+}
+
+.workflow-block {
+  margin-top: 14px;
+}
+
+.workflow-block h3 {
+  margin: 0 0 9px;
+  color: #334155;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 850;
 }
 
 .workflow-node {
   display: flex;
   gap: 10px;
   align-items: center;
-  min-height: 70px;
-  padding: 10px;
+  min-height: 56px;
+  margin-top: 7px;
+  padding: 9px;
   border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--surface-soft);
 }
 
 .workflow-node.active {
-  border-color: #a9c1f2;
-  background: #eef5ff;
+  border-color: #bfdbfe;
+  background: #eff6ff;
 }
 
 .workflow-node__index {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: #dce7fb;
+  background: #e5efff;
   color: var(--accent);
   display: inline-flex;
   align-items: center;
@@ -1001,7 +1542,9 @@ const handleDRGGrouping = async () => {
 }
 
 .workflow-node__title {
-  font-size: 15px;
+  color: #1e293b;
+  font-size: 13px;
+  line-height: 18px;
   font-weight: 800;
 }
 
@@ -1012,80 +1555,40 @@ const handleDRGGrouping = async () => {
   line-height: 1.45;
 }
 
-.snapshot-strip {
-  margin-top: 10px;
+.safety-note {
+  margin-top: 14px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-}
-
-.snapshot-card {
-  min-height: 72px;
   border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface-soft);
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
   padding: 10px;
+  color: #33547f;
+  font-size: 13px;
+  line-height: 19px;
 }
 
-.snapshot-card__label {
-  display: block;
+.safety-note span {
+  width: fit-content;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  padding: 3px 9px;
   font-size: 12px;
-  color: var(--text-muted);
+  font-weight: 800;
 }
 
-.snapshot-card strong {
-  display: inline-block;
-  margin-top: 6px;
-  font-size: 22px;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.snapshot-card small {
-  margin-left: 4px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.snapshot-card--status strong {
-  color: var(--accent);
-}
-
-.workspace-grid {
-  margin-top: 12px;
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
-  gap: 12px;
-}
-
-.surface {
-  padding: 14px;
-}
-
-.panel-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.panel-head--between {
-  justify-content: space-between;
-}
-
-.panel-head h2 {
-  margin: 0;
-  font-size: 22px;
-  line-height: 1.2;
-  font-weight: 900;
-  letter-spacing: -0.01em;
+.safety-note strong {
+  font-weight: 700;
 }
 
 .reader-panel {
-  min-height: 640px;
+  min-height: 620px;
+  padding: 20px;
 }
 
 .reading-meta {
-  height: 32px;
+  height: 30px;
   border-radius: 999px;
   padding: 0 10px;
   border: 1px solid var(--line);
@@ -1103,26 +1606,28 @@ const handleDRGGrouping = async () => {
 }
 
 .reader-body {
-  margin-top: 12px;
-  height: calc(100% - 46px);
+  margin-top: 16px;
+  min-height: 430px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 16px;
   background: #fbfdff;
   overflow: hidden;
 }
 
 .reader-scroll {
-  height: 100%;
+  min-height: 430px;
+  max-height: calc(100vh - 336px);
   overflow: auto;
-  padding: 14px 16px;
+  padding: 22px 24px;
 }
 
 .medical-text {
   color: var(--text);
-  font-size: 16px;
-  line-height: 1.78;
+  font-size: 15px;
+  line-height: 1.9;
   white-space: pre-wrap;
   word-break: break-word;
+  max-width: 900px;
 }
 
 .medical-text :deep(mark.hl-diag) {
@@ -1139,8 +1644,13 @@ const handleDRGGrouping = async () => {
 
 .result-column {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-content: start;
+}
+
+.result-card {
+  padding: 16px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.035);
 }
 
 .status-pill {
@@ -1157,30 +1667,30 @@ const handleDRGGrouping = async () => {
 }
 
 .summary-list {
-  margin-top: 10px;
+  margin-top: 12px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .summary-row {
-  min-height: 52px;
+  min-height: 54px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: var(--surface-soft);
-  padding: 10px;
+  background: #fbfdff;
+  padding: 10px 11px;
   display: grid;
-  grid-template-columns: 86px minmax(0, 1fr) auto;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
 }
 
 .summary-row__label {
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .summary-row strong {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 800;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1194,10 +1704,10 @@ const handleDRGGrouping = async () => {
 }
 
 .tag-block {
-  margin-top: 8px;
+  margin-top: 10px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: var(--surface-soft);
+  background: #fbfdff;
   padding: 10px;
 }
 
@@ -1227,19 +1737,76 @@ const handleDRGGrouping = async () => {
   padding: 0 8px;
 }
 
+.simulation-version {
+  margin-top: 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  padding: 11px 12px;
+}
+
+.simulation-version__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.simulation-version__head span,
+.simulation-version__body span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.simulation-version__head strong {
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.simulation-version__head em {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.simulation-version__body {
+  margin-top: 8px;
+  display: grid;
+  gap: 7px;
+}
+
+.simulation-version__changes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.simulation-version__changes span {
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+}
+
 .group-result {
-  margin-top: 10px;
+  margin-top: 12px;
   border-radius: 12px;
   border: 1px solid #c2d4f5;
-  background: #f5f9ff;
-  padding: 10px;
+  background: #fbfdff;
+  padding: 12px;
 }
 
 .group-result__top h3 {
   margin: 6px 0 0;
-  font-size: 20px;
-  line-height: 1.2;
-  font-weight: 900;
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 780;
 }
 
 .group-result__top p {
@@ -1262,7 +1829,7 @@ const handleDRGGrouping = async () => {
 }
 
 .metric-grid {
-  margin-top: 10px;
+  margin-top: 12px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
@@ -1272,7 +1839,7 @@ const handleDRGGrouping = async () => {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #fff;
-  padding: 9px 10px;
+  padding: 11px 12px;
 }
 
 .metric-card span {
@@ -1283,9 +1850,95 @@ const handleDRGGrouping = async () => {
 .metric-card strong {
   display: block;
   margin-top: 6px;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.1;
-  font-weight: 900;
+  font-weight: 760;
+}
+
+.correction-panel,
+.correction-empty {
+  margin-top: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.correction-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.correction-panel__head span {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.correction-panel__head em {
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  padding: 3px 8px;
+}
+
+.correction-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.correction-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.correction-item strong {
+  color: #172033;
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.correction-item p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.correction-candidates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.correction-candidates span {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 760;
+  padding: 3px 8px;
+}
+
+.correction-warning,
+.correction-empty {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.correction-warning {
+  margin: 9px 0 0;
 }
 
 .profit-positive {
@@ -1297,7 +1950,7 @@ const handleDRGGrouping = async () => {
 }
 
 .trace-list {
-  margin-top: 8px;
+  margin-top: 12px;
   display: grid;
   gap: 8px;
 }
@@ -1323,7 +1976,7 @@ const handleDRGGrouping = async () => {
 }
 
 .trace-empty {
-  margin-top: 10px;
+  margin-top: 12px;
   border: 1px dashed #c2d3ee;
   border-radius: 10px;
   background: #f8fbff;
@@ -1334,11 +1987,11 @@ const handleDRGGrouping = async () => {
 }
 
 .empty-state {
-  margin-top: 10px;
+  margin-top: 12px;
   border: 1px dashed #c2d3ee;
   border-radius: 12px;
-  background: #f8fbff;
-  min-height: 170px;
+  background: #fbfdff;
+  min-height: 150px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1347,9 +2000,9 @@ const handleDRGGrouping = async () => {
 }
 
 .empty-state__icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   background: #dce8ff;
   color: #2958b4;
   display: inline-flex;
@@ -1361,8 +2014,8 @@ const handleDRGGrouping = async () => {
 
 .empty-state__title {
   margin-top: 8px;
-  font-size: 18px;
-  font-weight: 900;
+  font-size: 16px;
+  font-weight: 850;
 }
 
 .empty-state__desc {
@@ -1380,24 +2033,31 @@ const handleDRGGrouping = async () => {
 }
 
 @media (max-width: 1180px) {
-  .header-main {
+  .command-top {
     flex-direction: column;
+    align-items: flex-start;
   }
-  .action-bar {
+  .header-tools {
     align-items: center;
     justify-content: space-between;
   }
-  .case-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .active-case {
-    grid-column: span 2;
-  }
-  .snapshot-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .workspace-grid {
+  .analysis-layout {
     grid-template-columns: 1fr;
+  }
+  .side-rail {
+    position: static;
+  }
+  .case-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .command-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .metric-inline:nth-child(3) {
+    border-left: 0;
+  }
+  .reader-panel {
+    min-height: auto;
   }
 }
 
@@ -1411,16 +2071,20 @@ const handleDRGGrouping = async () => {
   .panel-head h2 {
     font-size: 18px;
   }
-  .case-strip,
-  .workflow-rail,
-  .snapshot-strip,
+  .case-list,
+  .case-metrics,
+  .command-metrics,
   .metric-grid {
     grid-template-columns: 1fr;
   }
-  .active-case {
-    grid-column: auto;
+  .metric-inline {
+    border-left: 0;
+    border-top: 1px solid rgba(226, 232, 240, 0.82);
   }
-  .action-bar {
+  .metric-inline:first-child {
+    border-top: 0;
+  }
+  .header-tools {
     flex-wrap: wrap;
   }
   .summary-row {

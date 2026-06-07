@@ -233,6 +233,80 @@ def test_pick_document_priority():
     assert default_picked["doc_type"] == "discharge_record"
 
 
+def test_pick_document_prefers_type_when_document_id_is_reused():
+    docs = [
+        {
+            "id": "4632166||28",
+            "doc_id": "4632166||28",
+            "document_id": "4632166||28",
+            "doc_key": "daily_course_record::4632166||28",
+            "doc_type": "daily_course_record",
+            "doc_name": "今日王春萌主治医师查房",
+            "has_content": True,
+        },
+        {
+            "id": "4632166||28",
+            "doc_id": "4632166||28",
+            "document_id": "4632166||28",
+            "doc_key": "senior_course_record::4632166||28",
+            "doc_type": "senior_course_record",
+            "doc_name": "王春萌主治医师查房记录",
+            "has_content": True,
+        },
+    ]
+
+    picked = pick_document(
+        documents=docs,
+        doc_type="senior_course_record",
+        doc_id="4632166||28",
+    )
+
+    assert picked is not None
+    assert picked["doc_key"] == "senior_course_record::4632166||28"
+
+
+def test_build_documents_should_keep_senior_round_display_time_when_id_is_reused():
+    domain_bundles = {
+        "course": {
+            "source_documents": [
+                {
+                    "document_type": "daily_course_record",
+                    "document_id": "4632166||28",
+                    "document_title": "今日王春萌主治医师查房",
+                    "record_time": "2026-04-15 08:35:46",
+                    "display_time": "2026-04-15 08:35:46",
+                    "content": "今日王春萌主治医师查房后指出: 术后第10天。",
+                    "source_fields": [],
+                },
+                {
+                    "document_type": "senior_course_record",
+                    "document_id": "4632166||28",
+                    "document_title": "王春萌主治医师查房记录",
+                    "record_time": "",
+                    "display_time": "2026-04-19 09:39:42",
+                    "content": "查房内容：今日王春萌主治医师查房后指出：术后第10天。",
+                    "source_fields": [],
+                },
+            ]
+        }
+    }
+
+    documents = build_documents_from_domain_bundles(domain_bundles)
+    senior_doc = next(doc for doc in documents if doc["doc_type"] == "senior_course_record")
+
+    assert senior_doc["record_time"] == ""
+    assert senior_doc["sort_time"] == "2026-04-19 09:39:42"
+
+    tree = build_documents_tree(documents)
+    senior_node = next(
+        node
+        for group in tree
+        for node in group["children"]
+        if node["doc_key"] == "senior_course_record::4632166||28"
+    )
+    assert senior_node["record_time"] == "2026-04-19 09:39:42"
+
+
 def test_build_render_view_with_sections_and_kv():
     document = {
         "id": "adm-1",

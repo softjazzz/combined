@@ -1,114 +1,57 @@
 <template>
-  <div class="h-screen bg-slate-50 flex flex-col font-sans overflow-hidden">
-    <!-- 顶部 Header -->
-    <div
-      class="bg-white px-8 py-4 border-b border-slate-200/80 flex items-center gap-8 shrink-0 z-20"
-    >
-      <!-- 左侧标题 -->
-      <div class="flex items-center gap-3 shrink-0">
-        <div class="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
-          <svg
-            class="w-5 h-5 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
-            />
-          </svg>
+  <div class="grouper-shell">
+    <header class="grouper-header">
+      <div class="header-main">
+        <div class="breadcrumb">
+          <HomeOutlined />
+          <span>工作台</span>
+          <span>/</span>
+          <strong>分组器</strong>
         </div>
-        <h1 class="text-xl font-extrabold text-slate-900 tracking-tight">
-          医保分组器
-        </h1>
+        <div class="title-row">
+          <div>
+            <h1>医保分组器</h1>
+            <p>输入诊断、手术和费用条件，输出 DRG/DIP 模拟入组结果。</p>
+          </div>
+          <span class="safety-chip">
+            <AlertOutlined />
+            仅模拟，不写入正式结果
+          </span>
+        </div>
       </div>
 
-      <!-- Tab 切换器 -->
-      <div class="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200/60 gap-1">
+      <div class="tab-segment">
         <button
           v-for="tab in tabs"
           :key="tab.key"
-          class="px-6 py-2.5 rounded-lg text-[15px] font-semibold transition-all flex items-center gap-2.5 cursor-pointer whitespace-nowrap"
-          :class="
-            activeTab === tab.key
-              ? 'bg-white shadow-md ring-1 ring-black/[0.04] ' + tab.activeText
-              : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'
-          "
+          class="tab-button"
+          :class="{ active: activeTab === tab.key }"
+          type="button"
           @click="activeTab = tab.key"
         >
-          <!-- CHS-DRG 图标 -->
-          <svg
-            v-if="tab.icon === 'drg'"
-            class="w-[18px] h-[18px]"
-            :class="activeTab === tab.key ? tab.iconColor : 'text-slate-300'"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
-            />
-          </svg>
-          <!-- CN-DRG 图标 (绩效监测) -->
-          <svg
-            v-else-if="tab.icon === 'cndrg'"
-            class="w-[18px] h-[18px]"
-            :class="activeTab === tab.key ? tab.iconColor : 'text-slate-300'"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-            />
-          </svg>
-          <!-- DIP 图标 -->
-          <svg
-            v-else
-            class="w-[18px] h-[18px]"
-            :class="activeTab === tab.key ? tab.iconColor : 'text-slate-300'"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-            />
-          </svg>
-          {{ tab.label }}
-          <span
-            class="text-[12px] font-mono font-normal px-1.5 py-0.5 rounded"
-            :class="activeTab === tab.key ? tab.badgeStyle : 'text-slate-300 bg-transparent'"
-          >
-            {{ tab.version }}
-          </span>
+          <component :is="tab.icon" />
+          <span>{{ tab.label }}</span>
         </button>
       </div>
-    </div>
+    </header>
 
-    <!-- 内容区域 -->
-    <div class="flex-1 overflow-hidden">
+    <main class="grouper-content">
       <DrgGrouperView v-if="activeTab === 'drg'" />
       <CnDrgGrouperView v-if="activeTab === 'cndrg'" />
       <DipGrouperView v-if="activeTab === 'dip'" />
-    </div>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
 import { defineAsyncComponent, ref } from 'vue'
+import {
+  AlertOutlined,
+  BarChartOutlined,
+  ClusterOutlined,
+  HomeOutlined,
+  PartitionOutlined,
+} from '@ant-design/icons-vue'
 
 const DrgGrouperView = defineAsyncComponent(() => import('./DrgGrouperView.vue'))
 const CnDrgGrouperView = defineAsyncComponent(() => import('./CnDrgGrouperView.vue'))
@@ -117,32 +60,166 @@ const DipGrouperView = defineAsyncComponent(() => import('./DipGrouperView.vue')
 const tabs = [
   {
     key: 'drg',
-    label: 'CHS-DRG',
-    version: '2.0 四川',
-    icon: 'drg',
-    activeText: 'text-blue-700',
-    iconColor: 'text-blue-500',
-    badgeStyle: 'text-blue-500 bg-blue-50',
+    label: 'CHS-DRG 四川 2.0',
+    icon: ClusterOutlined,
   },
   {
     key: 'cndrg',
-    label: 'CN-DRG',
-    version: '2023 绩效',
-    icon: 'cndrg',
-    activeText: 'text-amber-700',
-    iconColor: 'text-amber-500',
-    badgeStyle: 'text-amber-500 bg-amber-50',
+    label: 'CN-DRG 2023',
+    icon: BarChartOutlined,
   },
   {
     key: 'dip',
-    label: 'DIP 分组',
-    version: '四川 DIP',
-    icon: 'dip',
-    activeText: 'text-emerald-700',
-    iconColor: 'text-emerald-500',
-    badgeStyle: 'text-emerald-500 bg-emerald-50',
+    label: 'DIP 泸州版',
+    icon: PartitionOutlined,
   },
 ]
 
 const activeTab = ref('drg')
 </script>
+
+<style scoped>
+.grouper-shell {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f5f9fc;
+  color: #0f172a;
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.grouper-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 24px 12px;
+}
+
+.header-main {
+  min-width: 0;
+}
+
+.breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.breadcrumb strong {
+  color: #0f172a;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.title-row h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 850;
+  line-height: 30px;
+}
+
+.title-row p {
+  margin: 3px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.safety-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #ea580c;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tab-segment {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.tab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-right: 1px solid #e2e8f0;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 18px;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.tab-button:last-child {
+  border-right: 0;
+}
+
+.tab-button:hover {
+  background: #f8fbff;
+  color: #2563eb;
+}
+
+.tab-button.active {
+  background: #eaf2ff;
+  color: #2563eb;
+  box-shadow: inset 0 -2px 0 #2563eb;
+}
+
+.grouper-content {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+@media (max-width: 1040px) {
+  .grouper-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tab-segment {
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .title-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>

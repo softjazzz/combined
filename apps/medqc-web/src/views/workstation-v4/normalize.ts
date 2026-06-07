@@ -250,6 +250,8 @@ export function normalizeWorklistItem(raw: unknown): WorkstationWorklistItem {
     patientId: pickString(source, ['patientId', 'patient_id']) || undefined,
     instituteId: pickString(source, ['instituteId', 'institute_id']) || undefined,
     patientName: pickString(source, ['patientName', 'patient_name', 'name']) || '未知患者',
+    patientSex: pickString(source, ['patientSex', 'patient_sex', 'sex', 'gender']) || undefined,
+    patientAge: asNumber(source.patientAge ?? source.patient_age ?? source.age ?? source.age_years),
     department: pickString(source, ['department', 'dept_name', 'deptName']) || '未分科室',
     admissionDate: pickString(source, ['admissionDate', 'admission_date']) || undefined,
     dischargeDate: pickString(source, ['dischargeDate', 'discharge_date']) || undefined,

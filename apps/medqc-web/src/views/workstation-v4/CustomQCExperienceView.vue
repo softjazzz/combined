@@ -1,9 +1,9 @@
 <template>
-  <div class="min-h-screen bg-slate-50 p-6">
+  <div class="min-h-screen bg-[#f5f9fc] p-5 lg:p-6">
     <div class="mx-auto max-w-7xl space-y-6">
       <a-card
         :bordered="false"
-        class="rounded-3xl shadow-sm"
+        class="custom-qc-surface"
       >
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -12,27 +12,29 @@
                 {{ sceneLabel }}
               </a-tag>
               <a-tag color="blue">
-                Workstation V4 尝鲜版
+                只读试跑
+              </a-tag>
+              <a-tag color="default">
+                待人工复核后发布
               </a-tag>
             </div>
-            <h1 class="text-3xl font-semibold text-slate-900">
-              自定义质控点体验中心
+            <h1 class="text-[28px] font-black leading-9 tracking-tight text-slate-900">
+              自定义质控点工作台
             </h1>
-            <p class="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-              统一完成质控点定义、AI 生成
-              Prompt、病历测试验证和发布上线。当前页面只做体验和验证，不接入正式自动质控流水线。
+            <p class="mt-2 max-w-3xl text-sm font-medium leading-7 text-slate-500">
+              按“规则定义、病历试跑、结果复核”完成自定义质控点验证。试跑过程只读病历，不写正式质控结果表。
             </p>
           </div>
           <div class="flex flex-wrap gap-2">
             <a-button
-              class="!rounded-xl"
+              class="!rounded-lg"
               @click="goBack"
             >
               返回来源页
             </a-button>
             <a-button
               type="primary"
-              class="!rounded-xl"
+              class="!rounded-lg"
               @click="jumpToRulesList"
             >
               查看规则库
@@ -44,10 +46,10 @@
       <div class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <a-card
           :bordered="false"
-          class="rounded-3xl shadow-sm"
+          class="custom-qc-surface"
         >
           <template #title>
-            1. 定义质控点
+            1. 规则定义
           </template>
           <a-form layout="vertical">
             <div class="grid gap-4 md:grid-cols-2">
@@ -107,16 +109,16 @@
               <a-button
                 type="primary"
                 size="large"
-                class="!rounded-xl"
+                class="!rounded-lg"
                 :loading="generatingPrompt"
                 :disabled="!canGeneratePrompt"
                 @click="handleGeneratePrompt"
               >
-                AI 生成 Prompt
+                生成检查逻辑
               </a-button>
               <a-button
                 size="large"
-                class="!rounded-xl"
+                class="!rounded-lg"
                 @click="applyExample"
               >
                 填充示例
@@ -127,17 +129,17 @@
 
         <a-card
           :bordered="false"
-          class="rounded-3xl shadow-sm"
+          class="custom-qc-surface"
         >
           <template #title>
-            2. Prompt 生成与编辑
+            2. 检查逻辑复核
           </template>
           <div class="space-y-4">
             <a-alert
               :type="generationMode === 'llm' ? 'success' : 'warning'"
               show-icon
               :message="
-                generationMode === 'llm' ? '已使用真实 AI 生成 Prompt' : '当前为模板回退 Prompt'
+                generationMode === 'llm' ? '检查逻辑已生成' : '该能力待接入，当前使用规则草稿'
               "
               :description="promptSummary || '生成后将在这里展示摘要与检查要点。'"
             />
@@ -157,7 +159,7 @@
               </div>
             </div>
             <a-form layout="vertical">
-              <a-form-item label="Prompt 模板">
+              <a-form-item label="检查逻辑">
                 <a-textarea
                   v-model:value="draftRule.prompt_template"
                   :rows="16"
@@ -166,7 +168,7 @@
                 />
               </a-form-item>
               <div class="grid gap-4 md:grid-cols-3">
-                <a-form-item label="temperature">
+                <a-form-item label="结果稳定性">
                   <a-input-number
                     v-model:value="advancedParams.temperature"
                     :min="0"
@@ -175,7 +177,7 @@
                     class="!w-full"
                   />
                 </a-form-item>
-                <a-form-item label="top_p">
+                <a-form-item label="候选范围">
                   <a-input-number
                     v-model:value="advancedParams.top_p"
                     :min="0"
@@ -184,7 +186,7 @@
                     class="!w-full"
                   />
                 </a-form-item>
-                <a-form-item label="max_tokens">
+                <a-form-item label="最大输出长度">
                   <a-input-number
                     v-model:value="advancedParams.max_tokens"
                     :min="256"
@@ -202,10 +204,10 @@
       <div class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <a-card
           :bordered="false"
-          class="rounded-3xl shadow-sm"
+          class="custom-qc-surface"
         >
           <template #title>
-            3. 病历选择与测试
+            3. 病历试跑
           </template>
           <div class="space-y-4">
             <div class="grid gap-4 lg:grid-cols-[160px_220px_1fr_auto]">
@@ -228,7 +230,7 @@
               />
               <a-button
                 size="large"
-                class="!rounded-xl"
+                class="!rounded-lg"
                 :loading="recordsLoading"
                 @click="handleSearchRecords"
               >
@@ -251,25 +253,25 @@
               </div>
               <div class="flex flex-wrap gap-2">
                 <a-button
-                  class="!rounded-xl"
+                  class="!rounded-lg"
                   @click="selectCurrentPage"
                 >
                   全选当前页
                 </a-button>
                 <a-button
-                  class="!rounded-xl"
+                  class="!rounded-lg"
                   @click="selectedRecordKeys = []"
                 >
                   清空选择
                 </a-button>
                 <a-button
                   type="primary"
-                  class="!rounded-xl"
+                  class="!rounded-lg"
                   :loading="testing"
                   :disabled="!canRunTest"
                   @click="runSelectedTest"
                 >
-                  {{ selectedRecordKeys.length > 1 ? '批量测试' : '测试连接并运行' }}
+                  {{ selectedRecordKeys.length > 1 ? '批量试跑' : '单病历试跑' }}
                 </a-button>
               </div>
             </div>
@@ -306,7 +308,7 @@
                     class="!rounded-lg"
                     @click="runDirectSingle(record)"
                   >
-                    单条测试
+                    单条试跑
                   </a-button>
                 </template>
               </template>
@@ -316,15 +318,15 @@
 
         <a-card
           :bordered="false"
-          class="rounded-3xl shadow-sm"
+          class="custom-qc-surface"
         >
           <template #title>
-            4. 验证结果与发布
+            4. 结果复核
           </template>
           <div class="space-y-4">
             <a-empty
               v-if="!singleResult && !batchResult"
-              description="完成一次测试后，这里会展示结果摘要和发布入口。"
+              description="完成一次试跑后，这里会展示结果摘要、证据和复核入口。"
             />
             <div
               v-if="singleResult"
@@ -332,7 +334,7 @@
             >
               <div class="flex items-center justify-between gap-3">
                 <div class="text-sm font-medium text-slate-900">
-                  单病历测试结果
+                  单病历试跑结果
                 </div>
                 <a-tag :color="singleResult.result.is_compliant ? 'success' : 'error'">
                   {{ singleResult.result.is_compliant ? '合规 / 不适用' : '发现问题' }}
@@ -365,7 +367,7 @@
               <div class="grid grid-cols-2 gap-3">
                 <div class="rounded-xl bg-white p-3">
                   <div class="text-xs text-slate-400">
-                    成功测试
+                    成功试跑
                   </div>
                   <div class="mt-2 text-xl font-semibold text-slate-900">
                     {{ batchResult.summary.success_count }}
@@ -407,23 +409,24 @@
             </div>
             <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-4">
               <div class="text-sm font-medium text-slate-900">
-                发布上线
+                规则发布
               </div>
               <div class="mt-2 text-xs leading-6 text-slate-500">
-                发布后会写入主站 `qc_rules`，规则类型固定为主观规则，编码使用 `LXE-####`。
+                发布后仅写入规则库，不写病历、首页、结算清单或正式质控结果；规则编码使用
+                `LXE-####`。
               </div>
               <div class="mt-4 flex flex-wrap gap-2">
                 <a-button
                   type="primary"
-                  class="!rounded-xl"
+                  class="!rounded-lg"
                   :loading="publishing"
                   :disabled="!canPublish"
                   @click="handlePublish"
                 >
-                  发布到规则库
+                  复核通过并发布
                 </a-button>
                 <a-button
-                  class="!rounded-xl"
+                  class="!rounded-lg"
                   :disabled="!publishedRuleId"
                   @click="jumpToRulesList"
                 >
@@ -484,7 +487,7 @@ type Scene = 'running' | 'final'
 const route = useRoute()
 const router = useRouter()
 const scene = computed<Scene>(() => (route.query.scene === 'final' ? 'final' : 'running'))
-const sceneLabel = computed(() => (scene.value === 'final' ? '终末病历体验' : '运行病历体验'))
+const sceneLabel = computed(() => (scene.value === 'final' ? '终末病历' : '运行病历'))
 const recordsLoading = ref(false)
 const generatingPrompt = ref(false)
 const testing = ref(false)
@@ -671,7 +674,8 @@ function selectCurrentPage() {
 }
 
 function applyExample() {
-  draftRule.name = scene.value === 'final' ? '出院记录未写出院带药用法' : '日常病程记录未写当日处理意见'
+  draftRule.name =
+    scene.value === 'final' ? '出院记录未写出院带药用法' : '日常病程记录未写当日处理意见'
   draftRule.document_type = defaultDocumentTypeByScene(scene.value)
   draftRule.severity = 'major'
   draftRule.description =
@@ -698,13 +702,13 @@ async function handleGeneratePrompt() {
       description: draftRule.description.trim(),
       severity: draftRule.severity,
     })
-    if (!response.success || !response.data) throw new Error(response.message || '生成 Prompt 失败')
+    if (!response.success || !response.data) throw new Error(response.message || '生成检查逻辑失败')
     applyGeneratedPrompt(response.data)
     message.success(
-      response.data.generation_mode === 'llm' ? 'Prompt 生成成功' : '已回退为模板 Prompt',
+      response.data.generation_mode === 'llm' ? '检查逻辑生成成功' : '该能力待接入，已使用规则草稿',
     )
   } catch (error: any) {
-    message.error(error?.message || '生成 Prompt 失败')
+    message.error(error?.message || '生成检查逻辑失败')
   } finally {
     generatingPrompt.value = false
   }
@@ -837,7 +841,7 @@ async function runSelectedTest() {
   batchResult.value = null
   try {
     const recordsPayload = await fetchSelectedRecordPayloads([...selectedRecordKeys.value])
-    if (!recordsPayload.length) throw new Error('未获取到可测试的病历正文')
+    if (!recordsPayload.length) throw new Error('未获取到可试跑的病历正文')
     const rulePayload = buildDraftRulePayload()
 
     if (recordsPayload.length === 1) {
@@ -846,10 +850,10 @@ async function runSelectedTest() {
         records: recordsPayload,
         ...advancedParams,
       })
-      if (!response.success || !response.data) throw new Error(response.message || '单病历测试失败')
+      if (!response.success || !response.data) throw new Error(response.message || '单病历试跑失败')
       singleResult.value = response.data
       await persistSingleResult(response.data)
-      message.success('单病历测试完成')
+      message.success('单病历试跑完成')
       return
     }
 
@@ -858,12 +862,12 @@ async function runSelectedTest() {
       records: recordsPayload,
       ...advancedParams,
     })
-    if (!response.success || !response.data) throw new Error(response.message || '批量测试失败')
+    if (!response.success || !response.data) throw new Error(response.message || '批量试跑失败')
     batchResult.value = response.data
     await persistBatchResult(response.data)
-    message.success('批量测试完成')
+    message.success('批量试跑完成')
   } catch (error: any) {
-    message.error(error?.message || '测试失败')
+    message.error(error?.message || '试跑失败')
   } finally {
     testing.value = false
   }
@@ -947,3 +951,30 @@ onMounted(async () => {
   await fetchRecords()
 })
 </script>
+
+<style scoped>
+.custom-qc-surface {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+}
+
+:deep(.custom-qc-surface .ant-card-head) {
+  min-height: 52px;
+  border-bottom-color: #e2e8f0;
+}
+
+:deep(.custom-qc-surface .ant-card-head-title) {
+  color: #0f172a;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+:deep(.custom-qc-surface .ant-input),
+:deep(.custom-qc-surface .ant-select-selector),
+:deep(.custom-qc-surface .ant-picker),
+:deep(.custom-qc-surface .ant-input-number) {
+  border-radius: 8px !important;
+}
+</style>

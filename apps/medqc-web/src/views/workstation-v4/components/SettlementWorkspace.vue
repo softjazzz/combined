@@ -1,8 +1,82 @@
 <template>
-  <div class="min-h-[400px] px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5">
+  <div class="min-h-[400px] px-4 pb-5 pt-3 lg:px-5">
     <div
-      class="mx-auto w-full max-w-[1200px] rounded-[18px] border border-slate-200/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(250,252,255,0.98))] p-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.03)]"
+      class="mx-auto w-full max-w-[1480px] rounded-[18px] border border-slate-200/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(250,252,255,0.98))] p-3 shadow-[0_8px_20px_rgba(15,23,42,0.03)]"
     >
+      <div
+        class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-slate-200/80 bg-white/82 px-4 py-3"
+      >
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="text-[17px] font-black text-slate-950">
+              结算清单工作区
+            </div>
+            <span
+              class="rounded-full border border-blue-100 bg-blue-50/85 px-2.5 py-0.5 text-[11px] font-bold text-blue-700"
+            >
+              {{ settlementStatusLabel }}
+            </span>
+            <span
+              v-if="settlementData?.medinsur_serial_no"
+              class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600"
+            >
+              流水号 {{ settlementData.medinsur_serial_no }}
+            </span>
+            <span
+              v-if="settlementQcReport"
+              class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-bold text-slate-600"
+            >
+              通过率 {{ settlementQcReport.summary.pass_rate }}
+            </span>
+          </div>
+          <div class="mt-1 text-[12px] font-medium text-slate-500">
+            清单预览、结算草稿生成和控费质控集中在当前工作区完成。
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <a-button
+            v-if="!settlementData"
+            type="primary"
+            class="!h-9 !rounded-full !border-0 !px-4 !text-sm !font-bold !shadow-[0_8px_18px_rgba(37,99,235,0.16)]"
+            :disabled="
+              settlementLoading ||
+                !canGenerateSettlement ||
+                !selectedRecord?.patientId ||
+                !selectedRecord?.visitId
+            "
+            @click="emit('generate-settlement-draft')"
+          >
+            <template #icon>
+              <ThunderboltOutlined />
+            </template>
+            生成结算草稿
+          </a-button>
+          <a-button
+            v-if="settlementData"
+            type="primary"
+            class="!h-9 !rounded-full !border-0 !px-4 !text-sm !font-bold !shadow-[0_8px_18px_rgba(37,99,235,0.16)]"
+            :loading="settlementQcLoading"
+            @click="emit('run-settlement-qc')"
+          >
+            <template #icon>
+              <CheckOutlined />
+            </template>
+            执行质控
+          </a-button>
+          <a-button
+            class="!h-9 !rounded-full !border-slate-200/90 !bg-white/85 !px-4 !text-sm !font-semibold !text-slate-600"
+            :disabled="settlementLoading || settlementQcLoading"
+            @click="emit('reload-settlement')"
+          >
+            <template #icon>
+              <SyncOutlined />
+            </template>
+            重新加载
+          </a-button>
+        </div>
+      </div>
+
       <div
         v-if="settlementLoading"
         class="flex flex-col items-center py-20"
@@ -33,6 +107,58 @@
             Draft
           </a-tag>
         </div>
+        <section
+          v-if="settlementCoverageGroupSummaries.length"
+          class="mx-1 mb-3 rounded-[14px] border border-slate-200/80 bg-white/82 px-4 py-3"
+        >
+          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div class="text-[13px] font-black text-slate-900">
+                清单字段覆盖
+              </div>
+              <div class="mt-0.5 text-[12px] font-medium text-slate-500">
+                展示由首页草稿映射到医保结算清单的字段覆盖情况。
+              </div>
+            </div>
+            <span
+              class="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700"
+            >
+              待人工复核
+            </span>
+          </div>
+          <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <article
+              v-for="item in settlementCoverageGroupSummaries"
+              :key="item.group"
+              class="rounded-[12px] border border-slate-200/80 bg-slate-50/70 px-3 py-2"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="truncate text-[12px] font-bold text-slate-700">{{ item.group }}</span>
+                <span
+                  class="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                  :class="
+                    item.status === 'completed'
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : item.status === 'review'
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-rose-50 text-rose-700'
+                  "
+                >
+                  {{ coverageStatusText(item.status) }}
+                </span>
+              </div>
+              <div class="mt-2 text-[20px] font-black leading-none text-slate-950">
+                {{ item.present }}/{{ item.total }}
+              </div>
+            </article>
+          </div>
+          <div
+            v-if="settlementMissingFields.length"
+            class="mt-2 text-[12px] leading-5 text-rose-600"
+          >
+            优先补全：{{ settlementMissingFields.map((item) => item.field).join('、') }}
+          </div>
+        </section>
         <div
           class="mb-4 flex items-center justify-between rounded-[14px] border border-slate-200/80 bg-white/72 px-4 py-3"
         >
@@ -42,18 +168,12 @@
               settlementData.medinsur_serial_no || '-'
             }}</span>
           </div>
-          <div class="flex items-center gap-2">
-            <a-button
-              size="small"
-              class="!rounded-full !border-slate-200/80 !shadow-none"
-              :loading="settlementQcLoading"
-              @click="emit('run-settlement-qc')"
-            >
-              <template #icon>
-                <CheckOutlined />
-              </template>
-              执行质控
-            </a-button>
+          <div class="text-[12px] font-semibold text-slate-500">
+            {{
+              settlementData?.data_source === 'generated_from_frontpage'
+                ? '待人工复核后上传医保系统'
+                : '系统清单预览'
+            }}
           </div>
         </div>
 
@@ -144,36 +264,13 @@
         <div class="mt-2 max-w-[360px] text-[13px] leading-6 text-slate-500">
           当前病历还没有正式结算清单，可根据首页草稿和 CDM 数据生成一份结算草稿后继续质控。
         </div>
-        <div class="mt-6 flex items-center gap-2">
-          <a-button
-            type="primary"
-            class="!h-10 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18)]"
-            :disabled="
-              !canGenerateSettlement || !selectedRecord?.patientId || !selectedRecord?.visitId
-            "
-            @click="emit('generate-settlement-draft')"
-          >
-            <template #icon>
-              <ThunderboltOutlined />
-            </template>
-            生成结算草稿
-          </a-button>
-          <a-button
-            class="!h-10 !rounded-full !border-slate-200/90 !bg-white/85 !px-5 !text-sm !font-semibold !text-slate-600"
-            @click="emit('reload-settlement')"
-          >
-            <template #icon>
-              <SyncOutlined />
-            </template>
-            重新加载
-          </a-button>
-        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import {
   CheckCircleOutlined,
   CheckOutlined,
@@ -183,6 +280,12 @@ import {
 } from '@ant-design/icons-vue'
 import SettlementSheet from './SettlementSheet.vue'
 import type { PatientRecord } from '../types'
+import {
+  coverageStatusText,
+  extractCoverageFields,
+  summarizeCoverageFields,
+  topMissingCoverageFields,
+} from '../../../types/frontpage'
 
 interface SettlementQcRuleResult {
   rule_id: string
@@ -202,7 +305,7 @@ interface SettlementQcReport {
   results: SettlementQcRuleResult[]
 }
 
-defineProps<{
+const props = defineProps<{
   settlementLoading: boolean
   settlementData: Record<string, any> | null
   settlementQcLoading: boolean
@@ -216,4 +319,26 @@ const emit = defineEmits<{
   'generate-settlement-draft': []
   'reload-settlement': []
 }>()
+
+const settlementStatusLabel = computed(() => {
+  if (props.settlementLoading) return '加载中'
+  if (!props.settlementData) return '待生成'
+  if (props.settlementData?.data_source === 'generated_from_frontpage') return 'AI 草稿'
+  return '正式清单'
+})
+
+const settlementCoveragePayload = computed(() => {
+  const data = props.settlementData
+  if (!data) return null
+  return data.coverage || data._coverage || data.field_coverage || null
+})
+const settlementCoverageFields = computed(() =>
+  extractCoverageFields(settlementCoveragePayload.value),
+)
+const settlementCoverageGroupSummaries = computed(() =>
+  summarizeCoverageFields(settlementCoverageFields.value),
+)
+const settlementMissingFields = computed(() =>
+  topMissingCoverageFields(settlementCoverageFields.value, 5),
+)
 </script>

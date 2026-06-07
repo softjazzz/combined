@@ -25,6 +25,13 @@ from ..core.http import safe_post_json
 logger = logging.getLogger(__name__)
 
 
+def get_tender_extraction_contract():
+    """Return the tender-level frontpage extraction contract."""
+    from ..schemas.frontpage_generation_contract import get_frontpage_generation_contract
+
+    return get_frontpage_generation_contract()
+
+
 class FrontPageLLMClient:
     """病案首页抽取专用 LLM 客户端"""
 
@@ -1817,7 +1824,7 @@ class FrontPageExtractionService:
         logger.info(f"_get_llm_context_text 完成: 长度={len(full_text)}")
         return full_text
 
-    async def _get_medical_text(self, visit_id: str) -> str:
+    async def _get_medical_text(self, visit_id: str, *, allow_demo_fallback: bool = True) -> str:
         """
         根据 visit_id 从本地 PG 获取病历文书，拼接为全文供大模型提取。
         支持提取病案首页、入院出院记录、诊断列表及十余种病程和各类报告表。
@@ -1968,7 +1975,11 @@ class FrontPageExtractionService:
         except Exception as e:
             logger.warning(f"从本地 PG 获取全病历文本失败: {e}, 回退到 demo 数据")
 
-        # 回退到 demo JSON
+        if not allow_demo_fallback:
+            logger.info(f"visit_id={visit_id} 在本地 PG 无可用病历文本，且已禁用 demo 回退")
+            return ""
+
+        # 回退到 demo JSON，仅用于旧演示/开发路径；正式自动生成接口会禁用该回退。
         logger.info(f"visit_id={visit_id} 在本地 PG 无数据，使用 demo 数据")
         if self.demo_data_path.exists():
             with self.demo_data_path.open("r", encoding="utf-8") as f:
@@ -4497,11 +4508,73 @@ class FrontPageExtractionService:
         - Split compound procedures
         - Select exactly one main procedure
         - Keep the rest in other_procedures_texts
+        - Normalize tender-required procedure detail fields to stable keys
         """
         proc = dict(procedures) if isinstance(procedures, dict) else {}
+
+        main_obj = proc.get("main_procedure")
+        if isinstance(main_obj, dict):
+            nested_aliases = {
+                "main_procedure_text": ("name", "text", "procedure_name", "operation_name"),
+                "main_procedure_code": ("code", "procedure_code", "operation_code"),
+                "main_procedure_date": ("date", "operation_date", "procedure_date"),
+                "main_procedure_level": ("level", "operation_level", "procedure_level"),
+                "surgeon_name": ("surgeon_name", "operator_name", "doctor_name"),
+                "surgeon_code": ("surgeon_code", "operator_code", "doctor_code"),
+                "assistant1_name": ("assistant1_name", "first_assistant_name", "assistant_i_name"),
+                "assistant1_code": ("assistant1_code", "first_assistant_code", "assistant_i_code"),
+                "assistant2_name": ("assistant2_name", "second_assistant_name", "assistant_ii_name"),
+                "assistant2_code": ("assistant2_code", "second_assistant_code", "assistant_ii_code"),
+                "incision_healing_grade": ("incision_healing_grade", "incision_healing", "healing_grade"),
+                "anesthesia_method": ("anesthesia_method", "anaesthesia_method"),
+                "anesthetist_name": ("anesthetist_name", "anesthesia_doctor_name", "anaesthetist_name"),
+                "anesthetist_code": ("anesthetist_code", "anesthesia_doctor_code", "anaesthetist_code"),
+            }
+            for target, aliases in nested_aliases.items():
+                if proc.get(target) not in (None, ""):
+                    continue
+                for alias in aliases:
+                    value = main_obj.get(alias)
+                    if value not in (None, ""):
+                        proc[target] = value
+                        break
+
+        procedure_aliases = {
+            "main_procedure_text": (
+                "main_operation_text",
+                "main_surgery_text",
+                "operation_name",
+                "surgery_name",
+                "手术名称",
+                "主要手术名称",
+            ),
+            "main_procedure_code": ("main_operation_code", "main_surgery_code", "operation_code", "手术编码"),
+            "main_procedure_date": ("operation_date", "procedure_date", "surgery_date", "手术日期", "操作日期"),
+            "main_procedure_level": ("operation_level", "procedure_level", "surgery_level", "手术级别"),
+            "surgeon_name": ("operator_name", "operation_doctor_name", "术者", "术者姓名", "术者医师姓名"),
+            "surgeon_code": ("operator_code", "operation_doctor_code", "术者代码", "术者医师代码"),
+            "assistant1_name": ("first_assistant_name", "assistant_i_name", "i_assistant_name", "I助", "一助", "I助姓名"),
+            "assistant1_code": ("first_assistant_code", "assistant_i_code", "i_assistant_code", "I助代码", "一助代码"),
+            "assistant2_name": ("second_assistant_name", "assistant_ii_name", "ii_assistant_name", "II助", "二助", "II助姓名"),
+            "assistant2_code": ("second_assistant_code", "assistant_ii_code", "ii_assistant_code", "II助代码", "二助代码"),
+            "incision_healing_grade": ("incision_healing", "healing_grade", "切口愈合", "切口愈合等级"),
+            "anesthesia_method": ("anaesthesia_method", "麻醉方式", "麻醉方法"),
+            "anesthetist_name": ("anesthesia_doctor_name", "anaesthetist_name", "麻醉医师", "麻醉医师姓名"),
+            "anesthetist_code": ("anesthesia_doctor_code", "anaesthetist_code", "麻醉医师代码"),
+        }
+        for target, aliases in procedure_aliases.items():
+            if proc.get(target) not in (None, ""):
+                continue
+            for alias in aliases:
+                value = proc.get(alias)
+                if value not in (None, ""):
+                    proc[target] = value
+                    break
+
         main_text = proc.get("main_procedure_text")
         other_raw = proc.get("other_procedures_texts")
         other_list = other_raw if isinstance(other_raw, list) else []
+        other_objects = proc.get("other_procedures") if isinstance(proc.get("other_procedures"), list) else []
 
         candidates: List[str] = []
         seen = set()
@@ -4513,6 +4586,16 @@ class FrontPageExtractionService:
             candidates.append(text)
         for other in other_list:
             for text in self._split_procedure_candidates(other):
+                key = text.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(text)
+        for other in other_objects:
+            if not isinstance(other, dict):
+                continue
+            other_text = other.get("text") or other.get("name") or other.get("procedure_name") or other.get("operation_name")
+            for text in self._split_procedure_candidates(other_text):
                 key = text.lower()
                 if key in seen:
                     continue

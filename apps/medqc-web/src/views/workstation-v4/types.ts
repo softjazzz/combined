@@ -78,6 +78,8 @@ export interface DocTreeNode {
   doc_type: string
   title: string
   record_time?: string
+  source_table?: string
+  group_key?: string
   has_content: boolean
   length: number
 }
@@ -222,6 +224,8 @@ export interface WorkstationWorklistItem {
   patientId?: string
   instituteId?: string
   patientName: string
+  patientSex?: string
+  patientAge?: number
   department: string
   admissionDate?: string
   dischargeDate?: string

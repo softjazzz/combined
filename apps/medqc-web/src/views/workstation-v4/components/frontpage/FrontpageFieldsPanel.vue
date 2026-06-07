@@ -1,93 +1,197 @@
 <template>
   <div
-    class="mb-3 flex flex-wrap items-center gap-2.5 rounded-[16px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(250,252,255,0.98)_0%,rgba(255,255,255,0.98)_100%)] px-4 py-2.5 shadow-[0_6px_16px_rgba(15,23,42,0.03)]"
+    class="mb-3 rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(248,251,255,0.98)_100%)] px-4 py-3.5 shadow-[0_8px_20px_rgba(15,23,42,0.03)]"
   >
-    <div
-      class="flex h-7 w-7 items-center justify-center rounded-[10px] bg-blue-500/95 shadow-[0_6px_14px_rgba(37,99,235,0.1)]"
-    >
-      <CheckCircleOutlined class="text-sm text-white" />
-    </div>
-    <div class="flex-1">
-      <div class="text-[13px] font-bold text-slate-800">
-        病案首页提取完成
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="flex min-w-0 items-start gap-3">
+        <div
+          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-blue-500/95 shadow-[0_8px_18px_rgba(37,99,235,0.14)]"
+        >
+          <CheckCircleOutlined class="text-base text-white" />
+        </div>
+        <div class="min-w-0">
+          <div class="text-[16px] font-black text-slate-950">
+            病案首页提取结果
+          </div>
+          <div class="mt-1 text-[12px] leading-5 text-slate-500">
+            按首页模块归并结构化字段，用于复核后预览、导出或保存。
+          </div>
+        </div>
       </div>
-      <div class="mt-0.5 text-xs text-slate-400">
-        已从病历中提取 {{ completedCount }} 个模块的结构化字段信息
+
+      <div class="flex flex-wrap gap-2">
+        <a-button
+          size="small"
+          class="!h-8 !rounded-full !border-slate-200/80 !bg-white !px-3 !font-semibold !shadow-none"
+          @click="emit('export-frontpage', 'health')"
+        >
+          <template #icon>
+            <DownloadOutlined />
+          </template>
+          导出
+        </a-button>
+        <a-button
+          size="small"
+          type="primary"
+          class="!h-8 !rounded-full !px-3 !font-semibold !shadow-[0_6px_14px_rgba(37,99,235,0.14)]"
+          @click="emit('save-frontpage')"
+        >
+          <template #icon>
+            <SaveOutlined />
+          </template>
+          保存到数据库
+        </a-button>
       </div>
     </div>
-    <div class="flex flex-wrap gap-2">
-      <a-button
-        size="small"
-        class="!rounded-full !border-slate-200/80 !bg-white !shadow-none"
-        @click="emit('export-frontpage', 'health')"
+
+    <div class="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+      <div
+        v-for="metric in summaryMetrics"
+        :key="metric.label"
+        class="rounded-[14px] border border-slate-200/70 bg-white/82 px-3 py-2.5"
       >
-        <template #icon>
-          <DownloadOutlined />
-        </template>
-        导出
-      </a-button>
-      <a-button
-        size="small"
-        type="primary"
-        class="!rounded-full !shadow-[0_6px_14px_rgba(37,99,235,0.14)]"
-        @click="emit('save-frontpage')"
-      >
-        <template #icon>
-          <SaveOutlined />
-        </template>
-        保存到数据库
-      </a-button>
+        <div class="text-[11px] font-bold text-slate-400">
+          {{ metric.label }}
+        </div>
+        <div class="mt-1 flex items-end gap-1">
+          <span class="text-[22px] font-black leading-none text-slate-950">{{ metric.value }}</span>
+          <span
+            v-if="metric.suffix"
+            class="pb-0.5 text-[11px] font-semibold text-slate-400"
+          >{{
+            metric.suffix
+          }}</span>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="columns-1 xl:columns-2 gap-3 space-y-3 pb-2 pt-1">
+  <div class="grid gap-3 pb-2 lg:grid-cols-[260px_minmax(0,1fr)]">
     <div
-      v-for="module in moduleCards"
-      :key="module.key"
-      class="break-inside-avoid rounded-[16px] border border-slate-200/70 bg-white px-4 py-3.5 shadow-[0_2px_10px_rgba(15,23,42,0.02)] transition-shadow hover:shadow-[0_6px_16px_rgba(15,23,42,0.04)]"
+      class="self-start rounded-[18px] border border-slate-200/80 bg-white/88 p-2 shadow-[0_6px_16px_rgba(15,23,42,0.025)] lg:sticky lg:top-3"
     >
-      <div class="mb-3 flex items-center gap-2.5 border-b border-slate-100/80 pb-2.5">
-        <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500/10">
-          <CheckCircleOutlined class="text-[11px] text-blue-600" />
+      <div class="px-2 pb-2 pt-1">
+        <div class="text-[12px] font-black text-slate-900">
+          提取模块
         </div>
-        <span class="text-[14px] font-semibold tracking-wide text-slate-800">{{
-          module.label
-        }}</span>
-        <span
-          v-if="module.entry?.timestamp"
-          class="ml-auto rounded-full bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium tabular-nums text-slate-400"
-        >{{ (module.entry.timestamp / 1000).toFixed(1) }}s</span>
-        <span
-          v-if="!module.entry?.preview?.length"
-          class="ml-auto text-[11px] italic text-slate-400"
-        >未提取到数据</span>
+        <div class="mt-0.5 text-[11px] text-slate-400">
+          点击定位到对应字段组
+        </div>
       </div>
-
       <div
-        v-if="module.entry?.preview?.length"
-        class="flex flex-col gap-3"
+        v-for="module in moduleCards"
+        :key="module.key"
+        class="mb-1 last:mb-0"
+      >
+        <button
+          type="button"
+          class="flex w-full items-center gap-2 rounded-[12px] px-2.5 py-2 text-left transition hover:bg-blue-50/60"
+          @click="scrollToModule(module.key)"
+        >
+          <span
+            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px]"
+            :class="moduleIconClass(module)"
+          >
+            <CheckCircleOutlined
+              v-if="module.entry?.preview?.length"
+              class="text-[12px]"
+            />
+            <span
+              v-else
+              class="h-2 w-2 rounded-full bg-current"
+            />
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-[13px] font-bold text-slate-700">{{
+              module.label
+            }}</span>
+            <span class="mt-0.5 block text-[11px] text-slate-400">
+              {{ moduleFieldCount(module) }} 项字段
+            </span>
+          </span>
+          <span
+            class="rounded-full px-2 py-0.5 text-[10px] font-bold"
+            :class="moduleStatusClass(module)"
+          >
+            {{ moduleStatusLabel(module) }}
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <div class="space-y-3">
+      <div
+        v-for="module in moduleCards"
+        :id="moduleDomId(module.key)"
+        :key="module.key"
+        class="scroll-mt-4 rounded-[18px] border border-slate-200/75 bg-white/92 px-4 py-3.5 shadow-[0_4px_14px_rgba(15,23,42,0.025)]"
       >
         <div
-          v-for="(preview, pi) in module.entry.preview"
-          :key="pi"
-          class="text-[13px] leading-relaxed"
+          class="mb-3 flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 pb-3"
         >
-          <template v-if="preview.isLongText">
-            <div class="mb-1 text-[11px] font-medium tracking-wide text-slate-400">
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <span
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px]"
+                :class="moduleIconClass(module)"
+              >
+                <CheckCircleOutlined
+                  v-if="module.entry?.preview?.length"
+                  class="text-[13px]"
+                />
+                <span
+                  v-else
+                  class="h-2 w-2 rounded-full bg-current"
+                />
+              </span>
+              <span class="text-[15px] font-black text-slate-950">{{ module.label }}</span>
+              <span
+                class="rounded-full px-2.5 py-0.5 text-[11px] font-bold"
+                :class="moduleStatusClass(module)"
+              >
+                {{ moduleStatusLabel(module) }}
+              </span>
+            </div>
+            <div class="mt-1 text-[12px] font-medium text-slate-400">
+              {{ moduleFieldCount(module) }} 项字段
+              <span v-if="moduleTimestampLabel(module)"> · {{ moduleTimestampLabel(module) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="module.entry?.preview?.length"
+          class="grid gap-2.5 sm:grid-cols-2 2xl:grid-cols-3"
+        >
+          <div
+            v-for="(preview, pi) in module.entry.preview"
+            :key="pi"
+            class="rounded-[12px] border border-slate-100 bg-slate-50/55 px-3 py-2.5"
+            :class="preview.isLongText ? 'sm:col-span-2 2xl:col-span-3' : ''"
+          >
+            <div class="text-[11px] font-bold text-slate-400">
               {{ preview.label }}
             </div>
-            <div class="rounded-lg bg-slate-50/80 px-3 py-2 text-[13px] text-slate-700">
-              {{ preview.value }}
+            <div
+              class="mt-1 text-[13px] font-semibold leading-6 text-slate-800"
+              :class="preview.isLongText ? 'whitespace-pre-wrap font-medium' : 'truncate'"
+              :title="preview.value"
+            >
+              {{ preview.value || '-' }}
             </div>
-          </template>
-          <template v-else>
-            <div class="flex items-start justify-between">
-              <span class="w-24 shrink-0 text-[12px] text-slate-400">{{ preview.label }}</span>
-              <span class="text-right text-[13px] font-medium text-slate-800">{{
-                preview.value
-              }}</span>
-            </div>
-          </template>
+          </div>
+        </div>
+
+        <div
+          v-else
+          class="rounded-[14px] border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center"
+        >
+          <div class="text-[13px] font-bold text-slate-500">
+            未提取到结构化字段
+          </div>
+          <div class="mt-1 text-[12px] text-slate-400">
+            可在病历文书中复核该模块来源，必要时重新生成首页草稿。
+          </div>
         </div>
       </div>
     </div>
@@ -95,6 +199,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { CheckCircleOutlined, DownloadOutlined, SaveOutlined } from '@ant-design/icons-vue'
 
 interface PreviewItem {
@@ -106,13 +211,14 @@ interface PreviewItem {
 interface ModuleCard {
   key: string
   label: string
+  status?: 'done' | 'active' | 'pending'
   entry?: {
     preview?: PreviewItem[]
     timestamp?: number
   }
 }
 
-defineProps<{
+const props = defineProps<{
   moduleCards: ModuleCard[]
   completedCount: number
 }>()
@@ -121,4 +227,66 @@ const emit = defineEmits<{
   'export-frontpage': [format: 'health' | 'insurance' | 'settlement']
   'save-frontpage': []
 }>()
+
+const fieldCount = computed(() =>
+  props.moduleCards.reduce((sum, module) => sum + moduleFieldCount(module), 0),
+)
+
+const emptyModuleCount = computed(
+  () => props.moduleCards.filter((module) => !module.entry?.preview?.length).length,
+)
+
+const totalSeconds = computed(
+  () =>
+    props.moduleCards.reduce((sum, module) => sum + Number(module.entry?.timestamp || 0), 0) / 1000,
+)
+
+const summaryMetrics = computed(() => [
+  { label: '完成模块', value: props.completedCount, suffix: `/${props.moduleCards.length}` },
+  { label: '结构化字段', value: fieldCount.value, suffix: '项' },
+  { label: '待复核模块', value: emptyModuleCount.value, suffix: '个' },
+  {
+    label: '累计耗时',
+    value: totalSeconds.value ? totalSeconds.value.toFixed(1) : '-',
+    suffix: 's',
+  },
+])
+
+function moduleFieldCount(module: ModuleCard) {
+  return module.entry?.preview?.length || 0
+}
+
+function moduleDomId(key: string) {
+  return `frontpage-module-${key}`
+}
+
+function moduleTimestampLabel(module: ModuleCard) {
+  if (!module.entry?.timestamp) return ''
+  return `提取耗时 ${(module.entry.timestamp / 1000).toFixed(1)}s`
+}
+
+function moduleStatusLabel(module: ModuleCard) {
+  if (module.entry?.preview?.length) return '已提取'
+  if (module.status === 'active') return '提取中'
+  return '待复核'
+}
+
+function moduleStatusClass(module: ModuleCard) {
+  if (module.entry?.preview?.length) return 'bg-blue-50 text-blue-700'
+  if (module.status === 'active') return 'bg-cyan-50 text-cyan-700'
+  return 'bg-slate-100 text-slate-500'
+}
+
+function moduleIconClass(module: ModuleCard) {
+  if (module.entry?.preview?.length) return 'bg-blue-500 text-white'
+  if (module.status === 'active') return 'bg-cyan-500 text-white'
+  return 'bg-slate-100 text-slate-400'
+}
+
+function scrollToModule(key: string) {
+  document.getElementById(moduleDomId(key))?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  })
+}
 </script>

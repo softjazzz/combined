@@ -809,6 +809,8 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
     return stageWorklistItems.value.map((item) => ({
       id: item.visitId,
       patientName: item.patientName,
+      patientSex: item.patientSex,
+      patientAge: item.patientAge,
       visitId: item.visitId,
       department: item.department || '未分科室',
       stageStatus: resolveStageStatus({
@@ -819,6 +821,8 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
         workflowType: item.workflowType,
       }),
       riskReason: item.riskReason || '',
+      admissionDate: item.admissionDate || '-',
+      dischargeDate: item.dischargeDate || '-',
       updatedAt:
         item.latestQcTime ||
         item.notificationUpdatedAt ||
@@ -832,6 +836,8 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
   return listRecords.value.map((record) => ({
     id: record.id,
     patientName: displayRecordName(record),
+    patientSex: record.sex,
+    patientAge: record.age,
     visitId: record.id,
     department: record.department || '未分科室',
     stageStatus: resolveStageStatus({
@@ -845,6 +851,8 @@ const workbenchRows = computed<WorkbenchRow[]>(() => {
       record,
     }),
     riskReason: priorityReason(record),
+    admissionDate: record.admissionDate || '-',
+    dischargeDate: record.dischargeDate || '-',
     updatedAt:
       record.sortTime || record.updateTime || record.dischargeDate || record.admissionDate || '-',
     isDemo: isDemoRecord(record),
@@ -970,9 +978,10 @@ const activeDocType = ref<string>('')
 const docPreviewTitle = ref('')
 const docPreviewContent = ref('')
 
-// ========== 璇︽儏涓?Tab ==========
-const detailMainTab = ref<'records' | 'frontpage' | 'settlement'>('records')
-const pendingDetailMainTab = ref<'records' | 'frontpage' | 'settlement' | null>(null)
+// ========== 详情主 Tab ==========
+type DetailMainTab = 'records' | 'frontpage' | 'settlement' | 'completeness'
+const detailMainTab = ref<DetailMainTab>('records')
+const pendingDetailMainTab = ref<DetailMainTab | null>(null)
 const emrRenderState = ref<'idle' | 'loading' | 'ready' | 'fallback'>('idle')
 
 // ========== 鐥呭巻璇︽儏锛堟嫾鎺ユ枃涔︼級 ==========
@@ -1373,6 +1382,8 @@ function buildTreeNodeFromDoc(doc: DocItem): DocTreeNode {
     doc_type: docType,
     title: String(doc.label || doc.doc_name || doc.document_title || docType || '未命名文书'),
     record_time: String(doc.record_time || doc.sort_time || ''),
+    source_table: String(doc.source_table || ''),
+    group_key: String(doc.group_key || ''),
     has_content: Boolean(doc.has_content),
     length: Number(doc.length || 0),
   }
@@ -1380,10 +1391,15 @@ function buildTreeNodeFromDoc(doc: DocItem): DocTreeNode {
 
 function inferGroupKey(doc: DocItem): string {
   const explicit = String(doc.group_key || '').trim()
-  if (explicit) return explicit
   const docType = String(doc.doc_type || doc.type || '').toLowerCase()
+  const sourceTable = String(doc.source_table || '').toLowerCase()
+  const title = String(doc.label || doc.doc_name || doc.document_title || '').toLowerCase()
+  const identity = `${explicit} ${docType} ${sourceTable} ${title}`
   if (['mr', 'mr_surgery', 'mr_cost'].includes(docType)) return 'frontpage'
   if (docType.includes('admission')) return 'admission'
+  if (isRoundCourseIdentity(identity)) return 'round_course'
+  if (isDailyCourseIdentity(identity)) return 'daily_course'
+  if (explicit && explicit !== 'course') return explicit
   if (docType.includes('course')) return 'course'
   if (
     docType.includes('surgery') ||
@@ -1396,12 +1412,24 @@ function inferGroupKey(doc: DocItem): string {
   return 'course'
 }
 
+function isRoundCourseIdentity(identity: string): boolean {
+  return /查房|主任医师|副主任医师|主治医师|上级医师|round|ward[_-]?round|chief[_-]?round|attending[_-]?round/.test(
+    identity,
+  )
+}
+
+function isDailyCourseIdentity(identity: string): boolean {
+  return /日常病程|日常病历|daily[_-]?course|daily[_-]?progress|progress[_-]?note/.test(identity)
+}
+
 function buildFallbackTreeFromDocs(docs: DocItem[]): DocTreeGroup[] {
   const groups: Array<{ key: string; label: string }> = [
     { key: 'all', label: '全部' },
     { key: 'frontpage', label: '病案首页(临床医生)' },
     { key: 'admission', label: '入院记录' },
-    { key: 'course', label: '病程记录' },
+    { key: 'round_course', label: '查房记录' },
+    { key: 'daily_course', label: '日常病程记录' },
+    { key: 'course', label: '其他病程记录' },
     { key: 'surgery', label: '手术相关单据' },
     { key: 'terminal', label: '出院记录' },
     { key: 'orders', label: '医嘱' },
@@ -1422,6 +1450,81 @@ function buildFallbackTreeFromDocs(docs: DocItem[]): DocTreeGroup[] {
       children,
     }
   })
+}
+
+function shouldSplitCourseGroup(group: DocTreeGroup): boolean {
+  const key = String(group.key || '').toLowerCase()
+  const label = String(group.label || '').toLowerCase()
+  if (key === 'course') return true
+  if (label.includes('病程') && !label.includes('日常病程')) return true
+  return false
+}
+
+function inferCourseGroupKey(node: DocTreeNode, doc?: DocItem): string {
+  const identity = [
+    node.group_key,
+    node.doc_type,
+    node.source_table,
+    node.title,
+    doc?.group_key,
+    doc?.doc_type || doc?.type,
+    doc?.source_table,
+    doc?.label,
+    doc?.doc_name,
+    doc?.document_title,
+  ]
+    .map((item) => String(item || '').toLowerCase())
+    .join(' ')
+  if (isRoundCourseIdentity(identity)) return 'round_course'
+  if (isDailyCourseIdentity(identity)) return 'daily_course'
+  return 'course'
+}
+
+function splitCourseGroups(groups: DocTreeGroup[], docs: DocItem[]): DocTreeGroup[] {
+  const docByKey = new Map(docs.map((doc) => [String(doc.doc_key || ''), doc]))
+  const groupLabels: Record<string, string> = {
+    round_course: '查房记录',
+    daily_course: '日常病程记录',
+    course: '其他病程记录',
+  }
+
+  const result: DocTreeGroup[] = []
+  const appendGroup = (nextGroup: DocTreeGroup) => {
+    const existed = result.find((group) => group.key === nextGroup.key)
+    if (!existed) {
+      result.push(nextGroup)
+      return
+    }
+    existed.children = [...existed.children, ...nextGroup.children]
+    existed.count = existed.children.length
+  }
+
+  for (const group of groups) {
+    if (!shouldSplitCourseGroup(group)) {
+      appendGroup(group)
+      continue
+    }
+
+    const buckets = new Map<string, DocTreeNode[]>()
+    for (const node of group.children || []) {
+      const doc = docByKey.get(String(node.doc_key || ''))
+      const groupKey = inferCourseGroupKey(node, doc)
+      buckets.set(groupKey, [...(buckets.get(groupKey) || []), node])
+    }
+
+    for (const key of ['round_course', 'daily_course', 'course']) {
+      const children = buckets.get(key) || []
+      if (!children.length) continue
+      appendGroup({
+        key,
+        label: groupLabels[key],
+        count: children.length,
+        children,
+      })
+    }
+  }
+
+  return result
 }
 
 function normalizeDocumentsTree(rawTree: unknown, docs: DocItem[]): DocTreeGroup[] {
@@ -1459,6 +1562,8 @@ function normalizeDocumentsTree(rawTree: unknown, docs: DocItem[]): DocTreeGroup
             doc_type: docType || '',
             title,
             record_time: pickText(nodeSource, ['record_time', 'sort_time']) || undefined,
+            source_table: pickText(nodeSource, ['source_table']) || undefined,
+            group_key: pickText(nodeSource, ['group_key']) || groupKey || undefined,
             has_content: hasContent,
             length: pickNumber(nodeSource, ['length']),
           } as DocTreeNode
@@ -1477,7 +1582,7 @@ function normalizeDocumentsTree(rawTree: unknown, docs: DocItem[]): DocTreeGroup
   const hasUsefulGroup = normalized.some(
     (group) => group.key !== 'all' && Array.isArray(group.children) && group.children.length > 0,
   )
-  if (hasUsefulGroup) return normalized
+  if (hasUsefulGroup) return splitCourseGroups(normalized, docs)
   if (docs.length > 0) return buildFallbackTreeFromDocs(docs)
   return normalized
 }

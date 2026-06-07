@@ -1,0 +1,384 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-07",
+  "status_values": ["implemented", "partial", "missing"],
+  "clauses": [
+    {
+      "clause": "3.1.1",
+      "title": "首页自动生成",
+      "status": "implemented",
+      "owner": "frontpage-generation",
+      "backend_files": [
+        "backend/app/routers/frontpage.py",
+        "backend/app/routers/case_front_page.py",
+        "backend/app/schemas/frontpage_generation_contract.py",
+        "backend/app/services/frontpage_extraction_service.py",
+        "backend/app/services/frontpage_report_generation_service.py",
+        "backend/app/services/settlement_assembly_service.py"
+      ],
+      "frontend_files": [
+        "src/views/workstation-v4/components/FrontpageWorkspace.vue",
+        "src/views/workstation-v4/components/SettlementWorkspace.vue"
+      ],
+      "data_sources": [
+        "backend/app/data/frontpage_demo_case.json",
+        "tests/fixtures/tender_demo_cases.json"
+      ],
+      "tests": [
+        "backend/tests/unit/test_frontpage_report_generation_service.py",
+        "backend/tests/unit/test_frontpage_extraction_service.py",
+        "backend/tests/unit/test_frontpage_tender_field_extraction.py",
+        "backend/tests/unit/test_frontpage_export.py",
+        "tests/unit/test_demo_case_loader.py",
+        "tests/unit/test_frontpage_generation_contract.py",
+        "tests/unit/test_frontpage_auto_generate.py",
+        "tests/unit/test_frontpage_procedure_detail_extraction.py",
+        "tests/unit/views/workstation-v4/frontpage-field-coverage.spec.ts"
+      ],
+      "demo_entry": "workstation-v4 病案详情 / 病案首页 / 结算清单",
+      "evidence": [
+        "统一生成接口支持病案首页和医保结算清单草稿",
+        "已有诊断、手术编码建议、入院病情推理和部分其他医疗信息归一化",
+        "导出格式包含卫健委标准首页、医保病案首页、医保结算清单",
+        "已建立 tender 级首页生成字段契约并校验当前结算映射",
+        "auto-generate-draft 在缺少病历正文/文书时返回 requires_data，避免 demo 数据伪装成功",
+        "auto-generate-draft 支持仅传 visit_id 时加载真实病历文书正文并生成草稿，未命中真实文书时不启用 demo 兜底",
+        "手术细项归一化支持中文键、别名键和嵌套 main_procedure 结构",
+        "前端首页/结算清单工作区展示字段覆盖分组摘要和优先补全字段"
+      ],
+      "gaps": []
+    },
+    {
+      "clause": "3.3.1",
+      "title": "质控规则",
+      "status": "implemented",
+      "owner": "formal-qc",
+      "backend_files": [
+        "backend/app/routers/qc.py",
+        "backend/app/services/frontpage_formal_qc.py",
+        "backend/app/services/qc_rule_coverage.py",
+        "backend/app/services/settlement_formal_qc.py",
+        "backend/app/services/unified_rule_engine.py"
+      ],
+      "frontend_files": [
+        "src/views/workstation-v4/WorkstationRulesView.vue",
+        "src/views/workstation-v4/components/WorkstationV4RulesView.vue"
+      ],
+      "data_sources": ["backend/app/data/coding_rules.json"],
+      "tests": [
+        "backend/tests/unit/test_frontpage_formal_qc.py",
+        "tests/unit/test_qc_rule_coverage.py"
+      ],
+      "demo_entry": "质控规则管理 / 首页质控 / 结算清单质控",
+      "evidence": [
+        "首页正式质控包含必填、格式、逻辑、一致性规则",
+        "结算清单正式质控包含必填、格式、逻辑、一致性规则",
+        "已建立规则覆盖注册表，可按标准来源、适用对象、分类、严重度和字段统计规则覆盖",
+        "已提供只读规则覆盖审计 API，并在质控规则管理页展示首页、结算清单、完整性、逻辑一致性覆盖情况"
+      ],
+      "gaps": []
+    },
+    {
+      "clause": "3.4.1",
+      "title": "基于编码规范的内涵质控",
+      "status": "implemented",
+      "owner": "coding-qc",
+      "backend_files": [
+        "backend/app/routers/qc.py",
+        "backend/app/services/coding_qc_service.py",
+        "backend/app/data/coding_rules.json"
+      ],
+      "frontend_files": [
+        "src/components/rules/CodingRulesTab.vue",
+        "src/views/workstation-v4/semantic-rules/components/SemanticRulesOverviewPanels.vue",
+        "src/views/workstation-v4/WorkstationRulesView.vue"
+      ],
+      "data_sources": ["backend/app/data/coding_rules.json"],
+      "tests": [
+        "backend/tests/unit/test_coding_qc.py",
+        "backend/tests/unit/test_coding_qc_api.py",
+        "tests/unit/test_coding_connotation_qc.py"
+      ],
+      "demo_entry": "编码内涵质控 / 质控规则管理",
+      "evidence": [
+        "已有编码合并、互斥、主诊断、主手术、附加编码和一致性审查提示",
+        "规则数据包含阑尾炎伴腹膜炎、肿瘤形态学编码、冠脉支架附加编码、病理编码费用关联",
+        "投标示例已转为确定性规则：肿瘤病理 M 码、病理费一致性、阑尾炎伴腹膜炎合并编码、冠脉支架附加编码",
+        "编码内涵规则通过现有 /api/v1/qc/coding-qc/check 进入统一质控问题持久化结构",
+        "编码质控规则页已提供可执行验收样例，直接调用真实编码内涵质控接口并展示规则问题、问题数量和只读边界"
+      ],
+      "gaps": []
+    },
+    {
+      "clause": "3.4.3",
+      "title": "诊断及手术操作完整性校验",
+      "status": "implemented",
+      "owner": "clinical-completeness",
+      "backend_files": [
+        "backend/app/main.py",
+        "backend/app/routers/clinical_completeness.py",
+        "backend/app/schemas/clinical_timeline.py",
+        "backend/app/services/clinical_timeline_service.py",
+        "backend/app/services/frontpage_extraction_service.py",
+        "backend/app/services/bundles/assembly.py"
+      ],
+      "frontend_files": [
+        "src/views/workstation-v4/components/ClinicalCompletenessPanel.vue",
+        "src/views/workstation-v4/components/WorkstationV4DetailView.vue"
+      ],
+      "data_sources": ["backend/docs/cdm_field_list.csv"],
+      "tests": [
+        "tests/unit/test_clinical_completeness_router.py",
+        "tests/unit/test_clinical_timeline_service.py"
+      ],
+      "demo_entry": "病历详情 / 诊疗完整性；API: GET /api/v1/clinical-completeness/{visit_id}",
+      "evidence": [
+        "已有病历 bundle 和首页抽取证据基础",
+        "已建立确定性诊断/手术时间轴服务，可从 bundle 文书提取诊断证据、手术计划和手术执行闭环",
+        "已提供只读临床完整性 API，返回诊断时间轴、手术计划/执行验证和安全声明，不写正式首页或正式质控结果",
+        "已支持与草稿病案首页诊断/手术字段对照，输出漏填、无依据和计划未执行问题",
+        "病历详情页已接入诊疗完整性面板，展示诊断发生发展时间轴、手术操作执行验证和首页书写提示"
+      ],
+      "gaps": []
+    },
+    {
+      "clause": "3.5.1",
+      "title": "智能编码",
+      "status": "implemented",
+      "owner": "icd-coding",
+      "backend_files": [
+        "backend/app/routers/icd_search.py",
+        "backend/app/services/local_icd_service.py",
+        "backend/app/services/icd_coding_service.py",
+        "backend/app/services/qc_agent/tools.py"
+      ],
+      "frontend_files": [
+        "src/views/workstation-v4/components/FrontpageWorkspace.vue",
+        "src/views/workstation-v4/components/SettlementWorkspace.vue",
+        "src/views/workstation-v4/components/QCAgentChatDrawer.vue"
+      ],
+      "data_sources": [
+        "backend/data/icd10_diagnoses.json",
+        "backend/data/icd10_clinical_diagnoses.json",
+        "backend/data/icd9cm3_procedures.json",
+        "backend/data/icd10_code_mapping.json",
+        "tests/fixtures/icd_coding_cases.json"
+      ],
+      "tests": [
+        "backend/tests/unit/test_case_front_page_extract.py",
+        "backend/tests/unit/test_frontpage_extraction_service.py",
+        "backend/tests/unit/test_icd_search_contract.py",
+        "tests/unit/test_record_coding_suggestions.py"
+      ],
+      "demo_entry": "ICD 编码查询 / 质控助手编码查询 / 病案首页编码建议",
+      "evidence": [
+        "ICD 查询支持诊断、手术操作、医保版、国临版和映射信息",
+        "本地 ICD 服务支持精确、模糊和可选语义兜底",
+        "ICD 查询响应已收敛为候选卡契约，包含编码类型、版本、匹配方式、置信度和映射信息",
+        "ICD 查询响应测试覆盖原始响应、向量、内部路径、病历正文等敏感字段过滤",
+        "当前病历编码建议已用固定夹具验证主诊断、其他诊断、手术操作、业务来源和候选编码稳定性"
+      ],
+      "gaps": []
+    },
+    {
+      "clause": "4.1.2",
+      "title": "病案问题概览",
+      "status": "implemented",
+      "owner": "notification-overview",
+      "backend_files": ["backend/app/routers/notifications.py"],
+      "frontend_files": [
+        "src/views/workstation-v4/composables/useNotifications.ts",
+        "src/views/workstation-v4/components/WorkstationV4AssistView.vue"
+      ],
+      "data_sources": [],
+      "tests": [
+        "backend/tests/unit/test_notifications_overview_router.py",
+        "tests/unit/views/workstation-v4/useNotifications.spec.ts"
+      ],
+      "demo_entry": "工作台右侧助手 / 问题概览",
+      "evidence": [
+        "当天问题按类型、严重度、科室、病历聚合",
+        "已有概览/明细切换、筛选、点击联动和验收报告",
+        "通知概览后端测试覆盖同日聚合、严重度排序、嵌套科室提取和日期格式校验",
+        "前端通知 composable 测试覆盖概览接口失败后的本地聚合回退、批量汇总过滤、已读标记和病历定位"
+      ],
+      "gaps": []
+    },
+    {
+      "clause": "6.1.1",
+      "title": "基于病历信息的自动化入组",
+      "status": "implemented",
+      "owner": "pre-grouping",
+      "backend_files": [
+        "backend/app/routers/case_front_page.py",
+        "backend/app/routers/pre_grouping.py",
+        "backend/app/services/frontpage_extraction_service.py",
+        "backend/app/services/pre_grouping_diff_service.py",
+        "backend/app/services/pre_grouping_event_service.py",
+        "backend/app/services/dip_grouping_service.py",
+        "backend/app/services/drg_grouping_service.py"
+      ],
+      "frontend_files": [
+        "src/views/workstation-v4/frontpage/components/PreAnalysisView.vue",
+        "src/api/drg.ts"
+      ],
+      "data_sources": [
+        "src/views/drg-grouper/luzhouDipData.ts",
+        "src/views/drg-grouper/drgWeightData.ts"
+      ],
+      "tests": [
+        "backend/tests/unit/test_case_front_page_extract_pre_group_fast.py",
+        "backend/tests/unit/test_case_front_page_extract.py",
+        "tests/unit/test_pre_grouping_diff_service.py",
+        "tests/unit/test_pre_grouping_event_service.py",
+        "tests/unit/views/workstation-v4/frontpage/pre-analysis-auto-update.spec.ts"
+      ],
+      "demo_entry": "DRG/DIP 分析 / 事前分析",
+      "evidence": [
+        "事前分析支持手动抽取和 DIP/DRG 预判",
+        "入院导向抽取接口不要求出院诊断",
+        "新增入院记录完成事件服务，按 visit_id/document_id 生成只读模拟入组版本",
+        "自动化入组事件结果包含输入 hash、版本、DIP/DRG 模拟结果和不写正式表安全声明",
+        "预入组差异服务已比较主诊断、其他诊断数量、手术数量、年龄、住院日和费用变化，并写入 change_tracking",
+        "事前分析页已读取最新自动模拟历史，展示版本号、生成时间、是否需要重新入组以及变化字段",
+        "已提供 admission-note-completed/from-visit 入口，可按 visit_id 加载真实病历文书触发自动预入组，未命中真实文书时不启用 demo 兜底",
+        "事前分析页抽取完成后会创建后端只读模拟历史，支持病历书写变化后的版本追踪"
+      ],
+      "gaps": []
+    },
+    {
+      "clause": "6.2.1",
+      "title": "预入组及修正建议",
+      "status": "implemented",
+      "owner": "grouping-correction",
+      "backend_files": [
+        "backend/app/routers/pre_grouping.py",
+        "backend/app/services/dip_grouping_service.py",
+        "backend/app/services/drg_grouping_service.py",
+        "backend/app/services/grouping_correction_service.py"
+      ],
+      "frontend_files": [
+        "src/views/workstation-v4/frontpage/components/PreAnalysisView.vue",
+        "src/api/drg.ts"
+      ],
+      "data_sources": [
+        "backend/app/data/luzhou_dip_groups.json",
+        "backend/app/data/drg_weights.json",
+        "src/views/drg-grouper/luzhouDipData.ts",
+        "src/views/drg-grouper/drgWeightData.ts"
+      ],
+      "tests": [
+        "backend/tests/unit/test_drg_analysis_router.py",
+        "tests/unit/test_luzhou_dip_grouping_service.py",
+        "tests/unit/test_drg_weight_lookup.py",
+        "tests/unit/test_grouping_correction_service.py"
+      ],
+      "demo_entry": "DRG/DIP 分析 / 事前分析 / 分组器",
+      "evidence": [
+        "DRG 服务支持远程分组和本地降级",
+        "已有 DIP/DRG 预判 UI",
+        "后端 DIP 服务已读取泸州市 DIP 核心和综合病种 JSON，返回分值、病种属性和基层病种标识",
+        "DRG 服务已读取 2024 绩效监测权重 JSON，补齐权重、低风险组标识和本地降级来源",
+        "已提供只读预入组修正建议服务，覆盖缺主诊断、未入组诊断候选、手术候选和更高分值入组选项",
+        "事前分析结果卡已接入预入组修正建议接口，按当前主诊断、手术编码和分组结果展示候选修正，不写正式结果"
+      ],
+      "gaps": []
+    },
+    {
+      "clause": "6.2.2",
+      "title": "分组器本地化适配",
+      "status": "implemented",
+      "owner": "grouper-config",
+      "backend_files": [
+        "backend/app/services/dip_grouping_service.py",
+        "backend/app/services/drg_grouping_service.py",
+        "backend/app/services/drg/config_service.py",
+        "backend/app/services/drg_config_store.py"
+      ],
+      "frontend_files": ["src/views/drg/GrouperConfig.vue", "src/api/drg.ts"],
+      "data_sources": [
+        "backend/data/drg_grouper_config_store.json",
+        "tests/fixtures/grouper_consistency_acceptance_samples.json"
+      ],
+      "tests": [
+        "backend/tests/unit/test_drg_config_router.py",
+        "tests/unit/test_grouping_config_runtime.py",
+        "tests/unit/test_drg_config_consistency_real_samples.py"
+      ],
+      "demo_entry": "DRG/DIP 分析 / 分组器 / 本地化配置",
+      "evidence": [
+        "支持配置读取、保存、发布、版本、回滚、审计和一致率校验",
+        "已有验收报告记录样本一致率",
+        "已发布配置参与 DIP/DRG 运行时计算，分组结果返回 config_version_id、费率、医院系数、地区系数及高低费用阈值",
+        "一致率校验支持 expected_group / expected_drg / expected_dip 对照字段，并返回差异原因和无效样本",
+        "已补充 20 条医保对照验收样本并用单元测试验证一致率不低于 95%"
+      ],
+      "gaps": []
+    },
+    {
+      "clause": "6.2.3",
+      "title": "医保付费监测",
+      "status": "implemented",
+      "owner": "payment-monitoring",
+      "backend_files": [
+        "backend/app/routers/payment_monitoring.py",
+        "backend/app/services/payment_monitoring_service.py",
+        "backend/app/services/drg/analysis_service.py"
+      ],
+      "frontend_files": [
+        "src/views/workstation-v4/frontpage/components/PaymentMonitoringView.vue",
+        "src/api/drg.ts"
+      ],
+      "data_sources": [
+        "backend/app/data/drg_weights.json",
+        "backend/app/data/luzhou_dip_groups.json",
+        "src/views/drg-grouper/drgWeightData.ts",
+        "src/views/drg-grouper/luzhouDipData.ts"
+      ],
+      "tests": [
+        "tests/unit/test_payment_monitoring_service.py",
+        "tests/unit/views/workstation-v4/frontpage/payment-monitoring.spec.ts"
+      ],
+      "demo_entry": "DRG/DIP 分析 / 付费监测",
+      "evidence": [
+        "前端已有总费用、预计支付、支付率、盈亏风险和趋势展示",
+        "后端已提供付费监测模拟服务，按地方运行时配置计算预计支付、实际费用、盈亏、医保支付率、基础组/费用极高/极低组和控费提示",
+        "前端 API 层已提供 simulatePaymentMonitoring 调用入口",
+        "付费监测页面已优先调用后端模拟接口，失败时展示降级状态并保留不写正式结果安全提示",
+        "付费监测服务测试覆盖预计支付、实际费用、盈亏、支付率、基础组/极高费用组/极低费用组和安全边界"
+      ],
+      "gaps": []
+    },
+    {
+      "clause": "6.3.1",
+      "title": "DRG/DIP 综合分析",
+      "status": "implemented",
+      "owner": "drg-analysis",
+      "backend_files": [
+        "backend/app/routers/drg_analysis.py",
+        "backend/app/services/drg/analysis_service.py"
+      ],
+      "frontend_files": [
+        "src/views/workstation-v4/frontpage/components/PostEventAnalysisView.vue",
+        "src/api/drg.ts"
+      ],
+      "data_sources": [],
+      "tests": [
+        "backend/tests/unit/test_drg_analysis_router.py",
+        "tests/unit/test_drg_analysis_dimensions.py",
+        "tests/unit/test_drg_analysis_metrics.py",
+        "tests/unit/test_drg_analysis_exports.py"
+      ],
+      "demo_entry": "DRG/DIP 分析 / 事后分析",
+      "evidence": [
+        "后端可计算组数、CMI、费用消耗指数、时间消耗指数、低风险死亡率、平均住院日、平均费用、医保盈亏",
+        "分析导出支持 excel、pdf、docx",
+        "分析维度已支持院级、科级、病区、主诊医师组、个人、诊断组和 DRG，doctor 作为 person 兼容别名",
+        "真实感夹具已校验 DRG/DIP 组数、CMI、费用消耗指数、时间消耗指数、低风险组死亡率、平均住院日、平均费用、医保盈亏及科室/诊断组/医师盈亏",
+        "传入 session_id 时综合分析只读取该 session 的正式上传/批量分组数据，空 session 返回空结构，不再回退演示库",
+        "事后分析页面已接入 /api/v1/drg/analysis 和 /api/v1/drg/analysis/export/{format}，页面指标与导出使用同一分析模型"
+      ],
+      "gaps": []
+    }
+  ]
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.access_control import enforce_default_auth
 from app.core.security import get_current_user
 
 
@@ -38,8 +39,10 @@ class _Resp:
 
 @pytest.fixture(autouse=True)
 def _override_user(client):
+    client.app.dependency_overrides[enforce_default_auth] = lambda: None
     client.app.dependency_overrides[get_current_user] = lambda: {"id": "u-test-notif"}
     yield
+    client.app.dependency_overrides.pop(enforce_default_auth, None)
     client.app.dependency_overrides.clear()
 
 
@@ -78,7 +81,7 @@ def test_notifications_overview_aggregate_and_sort(client, monkeypatch):
             "recipient_id": "u-test-notif",
             "type": "task_assign",
             "severity": "critical",
-            "department": "外科",
+            "metadata": {"department": "外科"},
             "record_id": "R002",
             "title": "任务分配",
             "content": "新任务",
@@ -98,8 +101,25 @@ def test_notifications_overview_aggregate_and_sort(client, monkeypatch):
     assert body["success"] is True
     items = body["data"]["items"]
     assert len(items) == 2
+    assert items[0]["type"] == "task_assign"
+    assert items[0]["severity"] == "critical"
+    assert items[0]["department"] == "外科"
+    assert items[0]["record_id"] == "R002"
 
     defect_item = next(item for item in items if item["type"] == "defect_urge")
     assert defect_item["occurrence_count"] == 2
     assert defect_item["unread_count"] == 1
+    assert defect_item["latest_created_at"] == "2026-03-23T11:00:00Z"
+    assert defect_item["summary"] == "请处理缺陷 A-2"
     assert set(defect_item["source_notification_ids"]) == {"n1", "n2"}
+
+
+@pytest.mark.unit
+@pytest.mark.api
+def test_notifications_overview_rejects_invalid_date(client, monkeypatch):
+    monkeypatch.setattr("app.routers.notifications._ensure_db", lambda: _FakeSupabase())
+
+    resp = client.get("/api/v1/notifications/overview?date=2026/03/23")
+
+    assert resp.status_code == 422
+    assert "YYYY-MM-DD" in resp.text

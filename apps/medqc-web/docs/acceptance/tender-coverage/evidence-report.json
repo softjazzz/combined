@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-06-07T11:57:17.146962+00:00",
+  "matrix_path": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\acceptance\\tender-coverage\\coverage-matrix.json",
+  "result": {
+    "ok": true,
+    "total_clauses": 11,
+    "status_counts": {
+      "implemented": 11,
+      "missing": 0,
+      "partial": 0
+    },
+    "issues": []
+  }
+}

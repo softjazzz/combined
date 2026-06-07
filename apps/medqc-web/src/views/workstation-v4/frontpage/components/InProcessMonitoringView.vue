@@ -1,46 +1,45 @@
 <template>
-  <div class="h-full w-full overflow-y-auto bg-slate-50 px-6 py-5 text-slate-700">
-    <div class="mx-auto flex max-w-[1600px] flex-col gap-5">
-      <header
-        class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/90 px-5 py-4 shadow-sm backdrop-blur"
-      >
-        <div class="flex items-center gap-3">
+  <div
+    class="in-process-page h-full w-full overflow-y-auto bg-[#f5f9fc] px-5 py-5 text-slate-700 lg:px-6"
+  >
+    <div class="mx-auto flex max-w-[1600px] flex-col gap-4">
+      <header class="page-header">
+        <div class="header-title">
           <button
             type="button"
-            class="rounded-full p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+            class="back-button"
             @click="$router.back()"
           >
-            <ArrowLeftOutlined class="text-base" />
+            <ArrowLeftOutlined />
           </button>
           <div>
-            <h2 class="text-xl font-semibold tracking-tight text-slate-900">
-              事中监控
-            </h2>
-            <p class="mt-1 text-sm text-slate-500">
-              费用控制提示 + 模拟分组监测，统一 mid/payment/post mock 口径
-            </p>
+            <div class="breadcrumb">
+              工作台 / 事中监控
+            </div>
+            <h2>事中监控</h2>
+            <p>跟踪在院病例费用消耗、分组变化和干预优先级。</p>
           </div>
         </div>
 
-        <div class="flex items-center gap-3 text-sm text-slate-500">
-          <span class="rounded-full bg-slate-100 px-3 py-1">统一口径：{{ mockScopeNote }}</span>
-          <span
-            :class="
-              drgMockEnabled
-                ? 'rounded-full bg-emerald-50 px-3 py-1 text-emerald-700'
-                : 'rounded-full bg-sky-50 px-3 py-1 text-sky-700'
-            "
-          >
-            {{ drgMockEnabled ? 'Mock 演示模式' : '真实优先模式' }}
+        <div class="header-actions">
+          <span class="filter-chip">近 7 日</span>
+          <span class="filter-chip">全部科室</span>
+          <span class="filter-chip threshold-chip">阈值 {{ stats.control_threshold.toFixed(2) }}</span>
+          <span :class="drgMockEnabled ? 'mode-chip mode-chip--mock' : 'mode-chip mode-chip--real'">
+            {{ drgMockEnabled ? '降级数据' : '真实优先' }}
           </span>
-          <span class="rounded-full bg-blue-50 px-3 py-1 text-blue-700">控制阈值 {{ stats.control_threshold.toFixed(2) }}</span>
-          <span
-            v-if="loading"
-            class="flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-amber-700"
+          <button
+            type="button"
+            class="secondary-button"
+            :disabled="loading"
+            @click="loadData"
           >
-            <LoadingOutlined class="animate-spin" />
-            加载中
-          </span>
+            <LoadingOutlined
+              v-if="loading"
+              class="animate-spin"
+            />
+            <span v-else>刷新</span>
+          </button>
           <a-dropdown>
             <template #overlay>
               <a-menu @click="handleExport">
@@ -55,324 +54,279 @@
                 </a-menu-item>
               </a-menu>
             </template>
-            <button
-              class="rounded-lg bg-blue-500 px-3 py-1.5 text-white transition-colors hover:bg-blue-600"
-            >
-              <DownloadOutlined /> 导出报告
+            <button class="primary-button">
+              <DownloadOutlined /> 导出
             </button>
           </a-dropdown>
         </div>
       </header>
 
-      <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div class="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
-            监测病例
+      <section class="kpi-strip">
+        <article class="kpi-card">
+          <span class="kpi-icon kpi-icon--blue"><InfoCircleOutlined /></span>
+          <div>
+            <div class="kpi-label">
+              监测病例
+            </div>
+            <div class="kpi-value">
+              {{ stats.total_alerts }}
+            </div>
+            <p>当前纳入事中跟踪的病例</p>
           </div>
-          <div class="mt-3 flex items-end gap-2">
-            <WarningOutlined class="text-xl text-amber-500" />
-            <span class="text-3xl font-semibold text-slate-900">{{ stats.total_alerts }}</span>
-            <span class="pb-1 text-sm text-slate-400">例</span>
-          </div>
-          <p class="mt-2 text-xs text-slate-500">
-            当前命中的模拟监测病例总数
-          </p>
         </article>
 
-        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div class="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
-            重点预警
+        <article class="kpi-card">
+          <span class="kpi-icon kpi-icon--red"><CloseCircleOutlined /></span>
+          <div>
+            <div class="kpi-label">
+              重点预警
+            </div>
+            <div class="kpi-value">
+              {{ stats.severe_alerts }}
+            </div>
+            <p>费用比超过重点阈值</p>
           </div>
-          <div class="mt-3 flex items-end gap-2">
-            <CloseCircleOutlined class="text-xl text-red-500" />
-            <span class="text-3xl font-semibold text-slate-900">{{ stats.severe_alerts }}</span>
-            <span class="pb-1 text-sm text-slate-400">例</span>
-          </div>
-          <p class="mt-2 text-xs text-slate-500">
-            费用比超过重点阈值的病例数
-          </p>
         </article>
 
-        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div class="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
-            待处理建议
+        <article class="kpi-card">
+          <span class="kpi-icon kpi-icon--amber"><WarningOutlined /></span>
+          <div>
+            <div class="kpi-label">
+              待处理建议
+            </div>
+            <div class="kpi-value">
+              {{ stats.pending_suggestions }}
+            </div>
+            <p>需科室复核的控费建议</p>
           </div>
-          <div class="mt-3 flex items-end gap-2">
-            <InfoCircleOutlined class="text-xl text-blue-500" />
-            <span class="text-3xl font-semibold text-slate-900">{{
-              stats.pending_suggestions
-            }}</span>
-            <span class="pb-1 text-sm text-slate-400">条</span>
-          </div>
-          <p class="mt-2 text-xs text-slate-500">
-            可直接落地的费用控制建议
-          </p>
         </article>
 
-        <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div class="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
-            模拟分组
+        <article class="kpi-card">
+          <span class="kpi-icon kpi-icon--green"><RiseOutlined /></span>
+          <div>
+            <div class="kpi-label">
+              今日干预
+            </div>
+            <div class="kpi-value">
+              {{ stats.today_new }}
+            </div>
+            <p>新进入监控队列的变化</p>
           </div>
-          <div class="mt-3 flex items-end gap-2">
-            <RiseOutlined class="text-xl text-emerald-500" />
-            <span class="text-3xl font-semibold text-slate-900">{{ stats.simulated_groups }}</span>
-            <span class="pb-1 text-sm text-slate-400">组</span>
-          </div>
-          <p class="mt-2 text-xs text-slate-500">
-            今日新增 {{ stats.today_new }} 条，支持离线演示
-          </p>
         </article>
       </section>
 
-      <section class="grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div class="mb-4 flex items-center justify-between gap-3">
+      <section class="main-grid">
+        <div class="panel monitor-panel">
+          <div class="panel-head">
             <div>
-              <h3 class="text-base font-semibold text-slate-900">
-                费用控制提示
-              </h3>
-              <p class="mt-1 text-sm text-slate-500">
-                把“当前值、目标值、建议动作”拆开展示，便于 mid/payment/post 共用同一套话术
-              </p>
+              <h3>费用消耗监控</h3>
+              <p>{{ mockScopeNote }}</p>
+            </div>
+            <div class="panel-tools">
+              <a-select
+                v-model:value="filterType"
+                class="status-select"
+                size="small"
+              >
+                <a-select-option value="all">
+                  全部病例
+                </a-select-option>
+                <a-select-option value="warning">
+                  仅看预警
+                </a-select-option>
+                <a-select-option value="normal">
+                  仅看正常
+                </a-select-option>
+              </a-select>
             </div>
           </div>
 
-          <div class="grid gap-4 lg:grid-cols-3">
-            <article
+          <div class="chart-toolbar">
+            <span>费用比中位数</span>
+            <span>消耗比均值</span>
+            <span>阈值 {{ stats.control_threshold.toFixed(2) }}</span>
+          </div>
+          <div
+            ref="cmiChartRef"
+            class="trend-chart"
+          />
+
+          <div class="case-list">
+            <table>
+              <thead>
+                <tr>
+                  <th>患者信息 / 分组</th>
+                  <th>科室</th>
+                  <th>费用消耗比</th>
+                  <th>风险原因</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="item in filteredAlerts"
+                  :key="item.id"
+                >
+                  <td>
+                    <div class="patient-cell">
+                      <strong>{{ item.diagnosis }}</strong>
+                      <span>{{ item.case_no }} · {{ item.drg }}</span>
+                    </div>
+                  </td>
+                  <td>{{ item.dept }}</td>
+                  <td>
+                    <div class="ratio-cell">
+                      <strong :class="item.ratio > 1 ? 'text-red-600' : 'text-emerald-600'">
+                        {{ formatRatio(item.ratio) }}
+                      </strong>
+                      <span :class="item.payment_gap >= 0 ? 'text-red-600' : 'text-emerald-600'">
+                        {{ formatMoney(item.payment_gap) }}
+                      </span>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="reason-text">{{ item.control_tip }}</span>
+                  </td>
+                  <td>
+                    <span
+                      :class="levelClass(item.monitor_level)"
+                      class="status-pill"
+                    >
+                      {{ levelLabel(item.monitor_level) }}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      class="link-button"
+                      @click="openDetail(item)"
+                    >
+                      查看建议
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <aside class="panel priority-panel">
+          <div class="panel-head">
+            <div>
+              <h3>干预优先级</h3>
+              <p>按费用比和监测等级排序处理</p>
+            </div>
+            <button
+              type="button"
+              class="text-link"
+              @click="filterType = 'warning'"
+            >
+              查看全部
+            </button>
+          </div>
+
+          <div class="priority-list">
+            <button
+              v-for="(item, index) in drgAlerts.slice(0, 5)"
+              :key="item.id"
+              type="button"
+              class="priority-row"
+              @click="openDetail(item)"
+            >
+              <span
+                class="rank"
+                :class="index < 3 ? 'rank--hot' : ''"
+              >
+                {{ index + 1 }}
+              </span>
+              <span class="priority-main">
+                <strong>{{ item.diagnosis }}</strong>
+                <span>{{ item.dept }} · {{ item.case_no }}</span>
+              </span>
+              <span class="priority-value">
+                {{ formatRatio(item.ratio) }}
+              </span>
+              <span class="priority-action">评估费用</span>
+            </button>
+          </div>
+
+          <div class="suggestion-block">
+            <div
               v-for="tip in controlTips"
               :key="tip.title"
-              class="rounded-2xl border px-4 py-4 shadow-sm"
-              :class="tipClass(tip.level)"
+              class="suggestion-row"
             >
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <div class="text-xs font-medium uppercase tracking-[0.18em] opacity-70">
-                    {{ levelLabel(tip.level) }}
-                  </div>
-                  <h4 class="mt-2 text-sm font-semibold text-slate-900">
-                    {{ tip.title }}
-                  </h4>
-                </div>
-                <span
-                  class="rounded-full bg-white/70 px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm"
-                >
-                  {{ tip.indicator }}
-                </span>
-              </div>
-
-              <dl class="mt-4 space-y-2 text-sm">
-                <div class="flex items-center justify-between gap-4">
-                  <dt class="text-slate-500">
-                    当前值
-                  </dt>
-                  <dd class="font-medium text-slate-900">
-                    {{ tip.current_value }}
-                  </dd>
-                </div>
-                <div class="flex items-center justify-between gap-4">
-                  <dt class="text-slate-500">
-                    控制目标
-                  </dt>
-                  <dd class="font-medium text-slate-900">
-                    {{ tip.target_value }}
-                  </dd>
-                </div>
-              </dl>
-
-              <p class="mt-4 text-sm leading-6 text-slate-700">
-                {{ tip.suggestion }}
-              </p>
-            </article>
-          </div>
-        </div>
-
-        <div class="grid gap-5">
-          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div class="mb-4 flex items-center justify-between">
+              <span
+                class="suggestion-dot"
+                :class="`suggestion-dot--${tip.level}`"
+              />
               <div>
-                <h3 class="text-base font-semibold text-slate-900">
-                  CMI 近 7 日趋势
-                </h3>
-                <p class="mt-1 text-sm text-slate-500">
-                  用于展示事中波动和统一演示口径
-                </p>
+                <strong>{{ tip.title }}</strong>
+                <p>{{ tip.suggestion }}</p>
               </div>
             </div>
-            <div
-              ref="cmiChartRef"
-              class="h-64"
-            />
           </div>
-
-          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div class="mb-4 flex items-center justify-between">
-              <div>
-                <h3 class="text-base font-semibold text-slate-900">
-                  科室费用消耗指数
-                </h3>
-                <p class="mt-1 text-sm text-slate-500">
-                  高于基准的科室会被标记为红色
-                </p>
-              </div>
-            </div>
-            <div
-              ref="costChartRef"
-              class="h-64"
-            />
-          </div>
-        </div>
+        </aside>
       </section>
 
-      <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div
-          class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4"
-        >
-          <div>
-            <h3 class="text-base font-semibold text-slate-900">
-              模拟分组监测
-            </h3>
-            <p class="mt-1 text-sm text-slate-500">
-              字段明确展示：支付标准、实际费用、差额、费用比、控制提示、监测等级
-            </p>
+      <section class="bottom-grid">
+        <div class="panel">
+          <div class="panel-head compact">
+            <div>
+              <h3>科室消耗指数</h3>
+              <p>高于基准的科室优先纳入复核</p>
+            </div>
+            <span class="panel-meta">模拟分组 {{ stats.simulated_groups }} 组</span>
           </div>
-          <a-select
-            v-model:value="filterType"
-            class="w-36"
-            size="small"
-          >
-            <a-select-option value="all">
-              全部
-            </a-select-option>
-            <a-select-option value="warning">
-              预警
-            </a-select-option>
-            <a-select-option value="normal">
-              正常
-            </a-select-option>
-          </a-select>
+          <div
+            ref="costChartRef"
+            class="cost-chart"
+          />
         </div>
 
-        <div class="overflow-x-auto">
-          <table class="min-w-full text-sm">
-            <thead class="bg-slate-50 text-slate-500">
-              <tr>
-                <th class="px-4 py-3 text-left font-medium">
-                  病例号
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  科室
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  诊断
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  DRG
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  支付标准
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  实际费用
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  差额
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  费用比
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  控制提示
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  监测等级
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  状态
-                </th>
-                <th class="px-4 py-3 text-left font-medium">
-                  操作
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="item in filteredAlerts"
-                :key="item.id"
-                class="border-t border-slate-100 hover:bg-slate-50/80"
+        <div class="panel">
+          <div class="panel-head compact">
+            <div>
+              <h3>分组变动提醒</h3>
+              <p>跟踪费用比、分组和路径变化</p>
+            </div>
+            <span class="panel-meta">共 {{ stats.pending_suggestions }} 条建议</span>
+          </div>
+
+          <div class="change-list">
+            <button
+              v-for="(item, index) in drgAlerts.slice(0, 5)"
+              :key="`change-${item.id}`"
+              type="button"
+              class="change-row"
+              @click="openDetail(item)"
+            >
+              <span
+                class="change-dot"
+                :class="
+                  item.monitor_level === 'critical'
+                    ? 'bg-red-500'
+                    : item.monitor_level === 'warning'
+                      ? 'bg-amber-500'
+                      : 'bg-blue-500'
+                "
+              />
+              <span class="change-main">
+                <strong>{{ item.diagnosis }}</strong>
+                <span>{{ item.drg }} · {{ item.dept }}</span>
+              </span>
+              <span
+                class="change-tag"
+                :class="item.ratio > 1 ? 'change-tag--up' : 'change-tag--down'"
               >
-                <td class="px-4 py-3 font-medium text-slate-900">
-                  {{ item.case_no }}
-                </td>
-                <td class="px-4 py-3 text-slate-600">
-                  {{ item.dept }}
-                </td>
-                <td class="px-4 py-3 text-slate-600">
-                  {{ item.diagnosis }}
-                </td>
-                <td class="px-4 py-3">
-                  <div class="font-medium text-slate-900">
-                    {{ item.drg }}
-                  </div>
-                  <div class="text-xs text-slate-400">
-                    模拟分组
-                  </div>
-                </td>
-                <td class="px-4 py-3 text-slate-600">
-                  {{ formatMoney(item.baseline_payment) }}
-                </td>
-                <td
-                  class="px-4 py-3"
-                  :class="
-                    item.actual_cost >= item.baseline_payment ? 'text-red-600' : 'text-emerald-600'
-                  "
-                >
-                  {{ formatMoney(item.actual_cost) }}
-                </td>
-                <td
-                  class="px-4 py-3"
-                  :class="item.payment_gap >= 0 ? 'text-red-600' : 'text-emerald-600'"
-                >
-                  {{ formatMoney(item.payment_gap) }}
-                </td>
-                <td class="px-4 py-3">
-                  <span
-                    :class="ratioClass(item.ratio)"
-                    class="rounded-full px-2.5 py-1 text-xs font-medium"
-                  >
-                    {{ formatRatio(item.ratio) }}
-                  </span>
-                </td>
-                <td class="px-4 py-3 text-slate-600">
-                  <span class="line-clamp-2 max-w-[280px] leading-5">{{ item.control_tip }}</span>
-                </td>
-                <td class="px-4 py-3">
-                  <span
-                    :class="levelClass(item.monitor_level)"
-                    class="rounded-full px-2.5 py-1 text-xs font-medium"
-                  >
-                    {{ levelLabel(item.monitor_level) }}
-                  </span>
-                </td>
-                <td class="px-4 py-3">
-                  <span
-                    :class="statusClass(item.status)"
-                    class="rounded-full px-2.5 py-1 text-xs font-medium"
-                  >
-                    {{ statusLabel(item.status) }}
-                  </span>
-                </td>
-                <td class="px-4 py-3">
-                  <button
-                    type="button"
-                    class="text-xs font-medium text-blue-600 transition hover:text-blue-700"
-                    @click="openDetail(item)"
-                  >
-                    查看详情
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                {{ item.ratio > 1 ? '费用上浮' : '低耗复核' }}
+              </span>
+              <span class="change-time">{{
+                index === 0 ? '10:25' : `0${9 - index}:5${index}`
+              }}</span>
+            </button>
+          </div>
         </div>
       </section>
     </div>
@@ -505,11 +459,11 @@ const FALLBACK_TIPS: MonitoringControlTip[] = [
     level: 'warning',
   },
   {
-    title: '统一 mock 口径',
+    title: '数据口径统一',
     indicator: 'mid/payment/post',
     current_value: '同一契约',
     target_value: '字段不漂移',
-    suggestion: '各页面共用同一套字段，兜底 mock 可直接演示，不依赖真实后端。',
+    suggestion: '各页面共用同一套字段，后端未接入时仅展示降级数据，不写入正式结果。',
     level: 'info',
   },
 ]
@@ -521,7 +475,7 @@ const FALLBACK_STATS: MonitoringStats = {
   today_new: 15,
   simulated_groups: 8,
   control_threshold: 1.0,
-  mock_scope_note: 'mid/payment/post 共用同一 mock 口径',
+  mock_scope_note: '事中/付费/事后共用同一数据口径',
   control_tips: FALLBACK_TIPS,
 }
 
@@ -830,11 +784,11 @@ const filteredAlerts = computed(() => {
 function buildExportPayload() {
   const now = new Date().toLocaleString('zh-CN')
   return {
-    title: 'DRG/DIP 事中监控演示报告',
+    title: 'DRG/DIP 事中监控报告',
     filenameBase: `drg_mid_${Date.now()}`,
     meta: [
       ['导出时间', now],
-      ['数据模式', drgMockEnabled.value ? 'Mock 演示模式' : '真实优先模式（当前页导出为演示快照）'],
+      ['数据模式', drgMockEnabled.value ? '降级数据模式' : '真实优先模式'],
       [
         '筛选状态',
         filterType.value === 'all' ? '全部' : filterType.value === 'warning' ? '预警' : '正常',
@@ -914,11 +868,11 @@ function levelClass(level: MonitoringControlTip['level'] | DrgAlert['monitor_lev
 function tipClass(level: MonitoringControlTip['level']) {
   switch (level) {
     case 'critical':
-      return 'bg-gradient-to-br from-red-50 to-white border-red-100'
+      return 'bg-red-50 border-red-100'
     case 'warning':
-      return 'bg-gradient-to-br from-amber-50 to-white border-amber-100'
+      return 'bg-amber-50 border-amber-100'
     default:
-      return 'bg-gradient-to-br from-sky-50 to-white border-sky-100'
+      return 'bg-sky-50 border-sky-100'
   }
 }
 
@@ -1186,3 +1140,666 @@ onUnmounted(() => {
   costChart?.dispose()
 })
 </script>
+
+<style scoped>
+.in-process-page {
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.page-header,
+.panel,
+.kpi-card {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 72px;
+  border-radius: 14px;
+  padding: 14px 18px;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 260px;
+}
+
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 8px;
+  color: #64748b;
+  background: #ffffff;
+  transition: all 0.16s ease;
+}
+
+.back-button:hover {
+  border-color: #bfdbfe;
+  color: #2563eb;
+  background: #eff6ff;
+}
+
+.breadcrumb {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.page-header h2 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 32px;
+}
+
+.page-header p,
+.panel-head p,
+.kpi-card p {
+  margin: 0;
+  color: #64748b;
+}
+
+.page-header p {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.filter-chip,
+.mode-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #334155;
+  background: #f8fafc;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.threshold-chip {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.mode-chip--mock {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.mode-chip--real {
+  color: #0369a1;
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+
+.primary-button,
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.16s ease;
+}
+
+.primary-button {
+  border: 1px solid #2563eb;
+  color: #ffffff;
+  background: #2563eb;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
+}
+
+.primary-button:hover {
+  background: #1d4ed8;
+}
+
+.secondary-button {
+  border: 1px solid #dbe4f0;
+  color: #334155;
+  background: #ffffff;
+}
+
+.secondary-button:hover {
+  color: #2563eb;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 96px;
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.kpi-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  font-size: 20px;
+}
+
+.kpi-icon--blue {
+  color: #2563eb;
+  background: #eaf2ff;
+}
+
+.kpi-icon--red {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
+.kpi-icon--amber {
+  color: #f59e0b;
+  background: #fef3c7;
+}
+
+.kpi-icon--green {
+  color: #10b981;
+  background: #d1fae5;
+}
+
+.kpi-label {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.kpi-value {
+  margin-top: 4px;
+  color: #0f172a;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 34px;
+}
+
+.kpi-card p {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 14px;
+}
+
+.bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(380px, 1.05fr);
+  gap: 14px;
+}
+
+.panel {
+  min-width: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #edf2f7;
+  padding: 14px 16px;
+}
+
+.panel-head.compact {
+  align-items: center;
+}
+
+.panel-head h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 24px;
+}
+
+.panel-head p {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-select {
+  width: 116px;
+}
+
+.panel-meta {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 12px 16px 0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chart-toolbar span {
+  position: relative;
+  padding-left: 12px;
+}
+
+.chart-toolbar span::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2563eb;
+  content: '';
+  transform: translateY(-50%);
+}
+
+.chart-toolbar span:nth-child(2)::before {
+  background: #10b981;
+}
+
+.chart-toolbar span:nth-child(3)::before {
+  background: #ef4444;
+}
+
+.trend-chart {
+  height: 208px;
+  margin: 0 12px;
+}
+
+.cost-chart {
+  height: 218px;
+  padding: 4px 8px 10px;
+}
+
+.case-list {
+  overflow-x: auto;
+  border-top: 1px solid #edf2f7;
+}
+
+.case-list table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.case-list th {
+  padding: 10px 14px;
+  color: #64748b;
+  background: #f8fafc;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.case-list td {
+  padding: 11px 14px;
+  border-top: 1px solid #edf2f7;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.case-list tbody tr:hover {
+  background: #f8fbff;
+}
+
+.patient-cell,
+.ratio-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.patient-cell strong {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.patient-cell span,
+.ratio-cell span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.ratio-cell strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.reason-text {
+  display: -webkit-box;
+  max-width: 280px;
+  overflow: hidden;
+  color: #475569;
+  line-height: 20px;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.link-button,
+.text-link {
+  border: 0;
+  color: #2563eb;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.link-button:hover,
+.text-link:hover {
+  color: #1d4ed8;
+}
+
+.priority-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.priority-list {
+  padding: 10px 16px 8px;
+}
+
+.priority-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 52px 64px;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  border: 0;
+  border-bottom: 1px solid #edf2f7;
+  padding: 11px 0;
+  background: transparent;
+  text-align: left;
+}
+
+.priority-row:hover {
+  background: #f8fbff;
+}
+
+.rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: #64748b;
+  background: #f1f5f9;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.rank--hot {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
+.priority-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.priority-main strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.priority-main span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.priority-value {
+  color: #ef4444;
+  font-size: 15px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.priority-action {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.suggestion-block {
+  margin: 0 16px 16px;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.suggestion-row {
+  display: flex;
+  gap: 10px;
+  padding: 11px 12px;
+  border-top: 1px solid #edf2f7;
+}
+
+.suggestion-row:first-child {
+  border-top: 0;
+}
+
+.suggestion-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+.suggestion-dot--critical {
+  background: #ef4444;
+}
+
+.suggestion-dot--warning {
+  background: #f59e0b;
+}
+
+.suggestion-row strong {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 20px;
+}
+
+.suggestion-row p {
+  margin: 1px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.change-list {
+  padding: 6px 16px 14px;
+}
+
+.change-row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 70px 42px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 45px;
+  border: 0;
+  border-bottom: 1px solid #edf2f7;
+  padding: 8px 0;
+  background: transparent;
+  text-align: left;
+}
+
+.change-row:hover {
+  background: #f8fbff;
+}
+
+.change-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.change-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.change-main strong,
+.change-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-main strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.change-main span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.change-tag {
+  display: inline-flex;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.change-tag--up {
+  color: #ef4444;
+  background: #fee2e2;
+}
+
+.change-tag--down {
+  color: #2563eb;
+  background: #dbeafe;
+}
+
+.change-time {
+  color: #64748b;
+  font-size: 12px;
+  text-align: right;
+}
+
+@media (max-width: 1280px) {
+  .main-grid,
+  .bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .page-header,
+  .panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+  }
+
+  .kpi-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .trend-chart,
+  .cost-chart {
+    height: 240px;
+  }
+}
+</style>

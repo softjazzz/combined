@@ -60,6 +60,9 @@ from .routers import workstation as workstation_router
 from .routers import custom_qc as custom_qc_router
 from .routers import qc_sample_pools as qc_sample_pools_router
 from .routers import qc_agent as qc_agent_router
+from .routers import clinical_completeness as clinical_completeness_router
+from .routers import pre_grouping as pre_grouping_router
+from .routers import payment_monitoring as payment_monitoring_router
 # Mount legacy routes to preserve all routes during migration
 try:
     from ..main_api import app as legacy_app  # type: ignore
@@ -305,6 +308,12 @@ def create_app() -> FastAPI:
     app.include_router(qc_sample_pools_router.router)
     # 受控质控 Agent 工具层
     app.include_router(qc_agent_router.router)
+    # 诊断及手术操作完整性校验
+    app.include_router(clinical_completeness_router.router)
+    # 事前自动模拟入组
+    app.include_router(pre_grouping_router.router)
+    # 医保付费监测
+    app.include_router(payment_monitoring_router.router)
 
     # Static files: expose /downloads for exported reports
     downloads_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "downloads"))

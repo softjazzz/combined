@@ -1,6 +1,5 @@
 <template>
-  <!-- 左侧：全局搜索 -->
-  <div class="flex items-center gap-1.5 flex-1 max-w-[400px]">
+  <div class="flex min-w-[280px] flex-1 items-center gap-2">
     <div class="relative w-full">
       <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
         <SearchOutlined class="text-[14px]" />
@@ -9,34 +8,25 @@
         :value="keyword"
         maxlength="60"
         type="text"
-        class="h-8 w-full rounded-md border border-slate-200 bg-slate-50/50 pl-9 pr-3 text-[13px] text-slate-800 outline-none transition-all focus:border-blue-500 focus:bg-white focus:shadow-[0_0_0_2px_rgba(59,130,246,0.1)] hover:border-slate-300 placeholder-slate-400"
-        placeholder="搜索患者、病历号 / ⌘K"
+        class="h-10 w-full rounded-xl border border-slate-200/80 bg-white/85 pl-9 pr-3 text-[13px] text-slate-800 shadow-sm outline-none transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-sky-400 focus:bg-white focus:shadow-[0_0_0_3px_rgba(14,165,233,0.12)]"
+        placeholder="搜索患者、病历号"
         @input="emit('update:keyword', ($event.target as HTMLInputElement).value)"
       >
-      <span
-        v-if="!keyword"
-        class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-slate-200 bg-white px-1 py-0.5 text-[10px] font-bold text-slate-400 shadow-sm"
-      >
-        ⌘K
-      </span>
     </div>
   </div>
 
-  <!-- 右侧：过滤器组 -->
-  <div class="flex items-center gap-3">
-    <!-- 日期 -->
+  <div class="flex flex-wrap items-center justify-end gap-2.5">
     <a-date-picker
       :value="selectedDate"
       :allow-clear="false"
       :disabled-date="disabledFutureDate"
-      class="!h-8 !w-[130px] !rounded-md !border-slate-200 !bg-white !text-[13px] hover:!border-slate-300 focus:!border-blue-500 shadow-sm"
+      class="!h-10 !w-[144px] !rounded-xl !border-slate-200/80 !bg-white/85 !text-[13px] shadow-sm hover:!border-slate-300 focus:!border-sky-400"
       @update:value="emit('update:selectedDate', $event)"
     />
 
-    <!-- 科室下拉 -->
     <a-select
       :value="departmentFilter"
-      class="!h-8 !w-[140px] shadow-sm [&_.ant-select-selector]:!rounded-md [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white !text-[13px] hover:[&_.ant-select-selector]:!border-slate-300"
+      class="!h-10 !w-[156px] !text-[13px] shadow-sm [&_.ant-select-selector]:!h-10 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200/80 [&_.ant-select-selector]:!bg-white/85 hover:[&_.ant-select-selector]:!border-slate-300"
       @update:value="emit('update:departmentFilter', String($event || 'all'))"
     >
       <a-select-option value="all">
@@ -51,10 +41,9 @@
       </a-select-option>
     </a-select>
 
-    <!-- 流程下拉 -->
     <a-select
       :value="workflowFilter"
-      class="!h-8 !w-[130px] shadow-sm [&_.ant-select-selector]:!rounded-md [&_.ant-select-selector]:!border-slate-200 [&_.ant-select-selector]:!bg-white !text-[13px] hover:[&_.ant-select-selector]:!border-slate-300"
+      class="!h-10 !w-[148px] !text-[13px] shadow-sm [&_.ant-select-selector]:!h-10 [&_.ant-select-selector]:!rounded-xl [&_.ant-select-selector]:!border-slate-200/80 [&_.ant-select-selector]:!bg-white/85 hover:[&_.ant-select-selector]:!border-slate-300"
       @update:value="emit('update:workflowFilter', String($event || 'all'))"
     >
       <a-select-option value="all">
@@ -72,12 +61,11 @@
     </a-select>
 
     <template v-if="showRefresh !== false">
-      <div class="h-4 w-px bg-slate-200 mx-1" />
+      <div class="mx-1 h-5 w-px bg-slate-200" />
 
-      <!-- 刷新按钮 -->
       <button
         type="button"
-        class="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 shadow-sm transition-all hover:bg-slate-50 hover:text-slate-800 disabled:opacity-50"
+        class="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white/85 text-slate-500 shadow-sm transition-all hover:bg-white hover:text-slate-800 disabled:opacity-50"
         :disabled="loading"
         title="刷新数据"
         @click="emit('refresh')"

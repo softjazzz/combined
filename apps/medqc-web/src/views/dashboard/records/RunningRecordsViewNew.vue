@@ -1,5 +1,5 @@
 <template>
-  <div class="running-records-page min-h-screen bg-slate-50/50 p-6">
+  <div class="running-records-page min-h-screen bg-[#f5f9fc] p-5 lg:p-6">
     <!-- 任务进度条（创建任务后显示） -->
     <transition name="slide-down">
       <div
@@ -39,28 +39,25 @@
         </div>
       </div>
     </transition>
-    <!-- 1. 顶部 Pro 风格信息头 -->
+    <!-- 1. 顶部业务标题与 KPI -->
     <div
-      class="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-blue-50 to-slate-50 p-6 shadow-sm"
+      class="mb-5 rounded-[18px] border border-slate-200/80 bg-white/95 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.05)]"
     >
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div
-            class="mb-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-medium text-blue-700"
-          >
-            <ThunderboltOutlined />
-            运行病历 · Pro 控台
+          <div class="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">
+            WORKLIST / RUNNING
           </div>
-          <h2 class="text-2xl font-bold tracking-tight text-slate-800">
-            运行病历质控中心
-          </h2>
-          <p class="mt-1 text-sm text-slate-600">
-            统一管理质控任务、缺陷处理与整改闭环
+          <h1 class="mt-1 text-[28px] font-black leading-9 tracking-tight text-slate-900">
+            运行病历质控
+          </h1>
+          <p class="mt-1 text-sm font-medium text-slate-500">
+            聚合在院病历、质控任务与整改闭环，优先处理高风险和待审核记录。
           </p>
         </div>
         <div class="flex items-center gap-2">
           <a-button
-            class="!h-9 !rounded-xl !border-slate-200 !bg-white !text-slate-700 hover:!border-slate-300 hover:!bg-slate-50"
+            class="!h-9 !rounded-lg !border-slate-200 !bg-white !text-slate-700 hover:!border-blue-200 hover:!text-blue-700"
             @click="handleRefresh"
           >
             <ReloadOutlined :spin="loading" />
@@ -68,7 +65,7 @@
           </a-button>
           <a-button
             type="primary"
-            class="!h-9 !rounded-xl !border-0 !bg-emerald-500 !text-white hover:!bg-emerald-400"
+            class="!h-9 !rounded-lg !border-0 !bg-blue-600 !text-white shadow-sm shadow-blue-500/20 hover:!bg-blue-500"
             @click="showCreateTaskModal = true"
           >
             <PlusOutlined />
@@ -78,51 +75,71 @@
       </div>
 
       <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
-        <div class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div class="text-xs text-slate-500">
-            今日待审核
+        <div class="queue-kpi-card">
+          <div class="queue-kpi-icon bg-blue-50 text-blue-600">
+            <ClockCircleOutlined />
           </div>
-          <div class="mt-1 flex items-end justify-between">
-            <div class="text-2xl font-bold text-slate-800">
+          <div>
+            <div class="queue-kpi-label">
+              今日待审核
+            </div>
+            <div class="queue-kpi-value">
               {{ overviewStats.pending_count || 0 }}
             </div>
-            <ClockCircleOutlined class="text-base text-blue-500" />
+            <div class="queue-kpi-desc">
+              等待质控处理
+            </div>
           </div>
         </div>
         <button
-          class="rounded-xl border border-rose-200 bg-rose-50/60 p-3 text-left transition hover:bg-rose-50"
+          class="queue-kpi-card text-left transition hover:border-red-200 hover:bg-red-50/30"
           @click="handleQuickFilter('critical')"
         >
-          <div class="text-xs text-rose-500">
-            高风险病历
+          <div class="queue-kpi-icon bg-red-50 text-red-500">
+            <AlertOutlined />
           </div>
-          <div class="mt-1 flex items-end justify-between">
-            <div class="text-2xl font-bold text-rose-600">
+          <div>
+            <div class="queue-kpi-label">
+              高风险病历
+            </div>
+            <div class="queue-kpi-value">
               {{ overviewStats.defects_by_severity?.critical || 0 }}
             </div>
-            <AlertOutlined class="text-base text-rose-500" />
+            <div class="queue-kpi-desc">
+              建议优先复核
+            </div>
           </div>
         </button>
-        <div class="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 shadow-sm">
-          <div class="text-xs text-emerald-600">
-            审核通过率
+        <div class="queue-kpi-card">
+          <div class="queue-kpi-icon bg-emerald-50 text-emerald-600">
+            <CheckCircleOutlined />
           </div>
-          <div class="mt-1 flex items-end justify-between">
-            <div class="text-2xl font-bold text-emerald-600">
+          <div>
+            <div class="queue-kpi-label">
+              审核通过率
+            </div>
+            <div class="queue-kpi-value">
               {{ overviewStats.pass_rate?.toFixed?.(1) || '0.0' }}%
             </div>
-            <CheckCircleOutlined class="text-base text-emerald-500" />
+            <div class="queue-kpi-desc">
+              当前筛选范围
+            </div>
           </div>
         </div>
-        <div class="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 shadow-sm">
-          <div class="text-xs text-indigo-600">
-            总缺陷数
+        <div class="queue-kpi-card">
+          <div class="queue-kpi-icon bg-orange-50 text-orange-500">
+            <ThunderboltOutlined />
           </div>
-          <div class="mt-1 flex items-end justify-between">
-            <div class="text-2xl font-bold text-indigo-600">
+          <div>
+            <div class="queue-kpi-label">
+              总缺陷数
+            </div>
+            <div class="queue-kpi-value">
               {{ overviewStats.total_defects || 0 }}
             </div>
-            <ThunderboltOutlined class="text-base text-indigo-500" />
+            <div class="queue-kpi-desc">
+              已发现问题
+            </div>
           </div>
         </div>
       </div>
@@ -130,15 +147,15 @@
 
     <!-- 2. 主内容区：工具栏 + 表格 -->
     <div
-      class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]"
+      class="flex h-[calc(100vh-198px)] flex-col rounded-[18px] border border-slate-200/80 bg-white shadow-[0_12px_28px_rgba(15,23,42,0.04)]"
     >
       <ProQueryBar>
         <template #filters>
           <div class="relative">
             <a-input
               v-model:value="queryConditions.searchValue"
-              placeholder="搜索病案号/姓名/医生..."
-              class="w-64 !rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400 focus:!border-blue-500 !pl-10"
+              placeholder="搜索病案号、姓名、医生"
+              class="w-64 !rounded-lg !bg-slate-50 !border-slate-200 hover:!border-blue-400 focus:!border-blue-500 !pl-10"
               @press-enter="handleQuery"
             />
             <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -193,13 +210,13 @@
           <ProTableToolbar>
             <a-button
               type="primary"
-              class="!h-9 !rounded-xl"
+              class="!h-9 !rounded-lg"
               @click="handleQuery"
             >
               查询
             </a-button>
             <a-button
-              class="!h-9 !rounded-xl !border-slate-200"
+              class="!h-9 !rounded-lg !border-slate-200"
               @click="handleResetQuery"
             >
               重置
@@ -242,10 +259,10 @@
             </div>
 
             <a-button
-              class="!rounded-xl !border-slate-200 text-slate-600 hover:text-blue-600 !h-9"
+              class="!h-9 !rounded-lg !border-slate-200 text-slate-600 hover:text-blue-600"
               @click="openCustomQCExperience()"
             >
-              自定义质控体验
+              自定义质控点
             </a-button>
           </ProTableToolbar>
         </template>
@@ -320,22 +337,36 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'caseInfo'">
-              <div class="flex flex-col">
-                <div class="flex items-center gap-2">
-                  <span
-                    class="font-mono font-bold text-slate-700 text-sm cursor-pointer hover:text-blue-600 transition-colors"
-                    @click="handleViewDetail(record)"
-                  >{{ record.task_number || record.task_name || record.id }}</span>
-                  <a-tag
-                    v-if="record.status === 'completed'"
-                    color="success"
-                    class="!rounded-md !text-[10px] !px-1 !mr-0"
-                  >
-                    完成
-                  </a-tag>
+              <div class="flex items-center gap-3">
+                <img
+                  v-if="hasPatientIdentity(record)"
+                  :src="patientAvatarSrc(record)"
+                  alt=""
+                  class="record-patient-avatar"
+                >
+                <div
+                  v-else
+                  class="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100 bg-blue-50 text-blue-600"
+                >
+                  <FileTextOutlined />
                 </div>
-                <div class="text-xs text-slate-400 mt-0.5">
-                  {{ record.task_name || '' }}
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span
+                      class="cursor-pointer truncate text-sm font-bold text-slate-800 transition-colors hover:text-blue-600"
+                      @click="handleViewDetail(record)"
+                    >{{ getPrimaryRecordTitle(record) }}</span>
+                    <a-tag
+                      v-if="record.status === 'completed'"
+                      color="success"
+                      class="!mr-0 !rounded-md !px-1 !text-[10px]"
+                    >
+                      完成
+                    </a-tag>
+                  </div>
+                  <div class="mt-0.5 truncate text-xs font-medium text-slate-400">
+                    {{ getSecondaryRecordTitle(record) }}
+                  </div>
                 </div>
               </div>
             </template>
@@ -517,40 +548,40 @@
       <transition name="slide-up">
         <div
           v-if="selectedRowKeys.length > 0"
-          class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl flex items-center gap-6 z-50"
+          class="absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-[14px] border border-slate-200 bg-white px-5 py-3 text-slate-700 shadow-[0_16px_36px_rgba(15,23,42,0.12)]"
         >
-          <span class="text-sm font-medium">已选择
-            <span class="text-blue-400 font-bold mx-1">{{ selectedRowKeys.length }}</span> 项</span>
-          <div class="h-4 w-px bg-slate-600" />
+          <span class="text-sm font-semibold">已选择
+            <span class="mx-1 font-black text-blue-600">{{ selectedRowKeys.length }}</span> 项</span>
+          <div class="h-4 w-px bg-slate-200" />
           <div class="flex items-center gap-2">
             <button
-              class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium transition-colors flex items-center gap-2"
+              class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-amber-200 hover:bg-amber-50 hover:text-amber-700"
               @click="handleBatchUrge"
             >
               <SendOutlined /> 批量催办
             </button>
             <button
-              class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-medium transition-colors flex items-center gap-2"
+              class="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-blue-500/20 transition-colors hover:bg-blue-500"
               @click="handleBatchPass"
             >
               <CheckOutlined /> 批量通过
             </button>
             <button
-              class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-medium transition-colors flex items-center gap-2"
+              class="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
               @click="handleBatchAssign"
             >
               <SendOutlined /> 派发整改
             </button>
 
             <button
-              class="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-xs font-medium transition-colors flex items-center gap-2"
+              class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-blue-200 hover:text-blue-700"
               @click="handleExportDefects"
             >
               <FilePdfOutlined /> 导出
             </button>
 
             <button
-              class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center transition-colors ml-2"
+              class="ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
               @click="selectedRowKeys = []"
             >
               <CloseOutlined />
@@ -620,6 +651,12 @@ import RemediationPanel from '@/components/qc/RemediationPanel.vue'
 import ProQueryBar from '@/components/pro/ProQueryBar.vue'
 import ProTableToolbar from '@/components/pro/ProTableToolbar.vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
+import avatarBoy from '@/assets/avatar-icons/patient-icon-boy.png'
+import avatarElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
+import avatarElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
+import avatarGirl from '@/assets/avatar-icons/patient-icon-girl.png'
+import avatarMan from '@/assets/avatar-icons/patient-icon-man.png'
+import avatarWoman from '@/assets/avatar-icons/patient-icon-woman.png'
 import {
   fetchTaskProgress,
   batchCreateRemediation,
@@ -668,9 +705,11 @@ const records = ref<any[]>([])
 // 缺陷列表数据（缺陷 Tab 用）
 const defects = ref<DefectItem[]>([])
 
+type QueueRecord = Record<string, unknown>
+
 // 表格列配置 — 病历/任务视图（后端返回任务级数据）
 const recordColumns = [
-  { title: '任务信息', key: 'caseInfo', width: 200 },
+  { title: '病历/任务信息', key: 'caseInfo', width: 240 },
   { title: '抽样方式', dataIndex: 'sampling_method', key: 'sampling_method', width: 120 },
   { title: '状态', key: 'auditStatus', width: 120 },
   { title: '创建时间', key: 'createdAt', width: 160 },
@@ -758,7 +797,7 @@ const fetchRecords = async () => {
         records.value = res.data.items || []
         pagination.total = res.data.total || 0
       } else {
-        // API 未就绪时 mock 兜底
+        // API 未就绪时使用本地降级数据兜底
         records.value = [
           {
             id: '1',
@@ -1160,6 +1199,54 @@ const getScoreColor = (score: number) => {
   return '#f43f5e'
 }
 
+const pickText = (record: QueueRecord, keys: string[]): string => {
+  for (const key of keys) {
+    const value = record[key]
+    if (value !== null && value !== undefined && String(value).trim()) {
+      return String(value).trim()
+    }
+  }
+  return ''
+}
+
+const getPrimaryRecordTitle = (record: QueueRecord): string => {
+  return (
+    pickText(record, ['patient_name', 'patientName', 'patient']) ||
+    pickText(record, ['task_number', 'task_name', 'record_id', 'visit_id', 'id']) ||
+    '-'
+  )
+}
+
+const getSecondaryRecordTitle = (record: QueueRecord): string => {
+  const recordId = pickText(record, ['record_id', 'visit_id', 'visitId', 'registrationNo'])
+  const taskName = pickText(record, ['task_name', 'task_number'])
+  const department = pickText(record, ['department', 'dept_name', 'deptName'])
+  return [recordId || taskName, department].filter(Boolean).join(' · ') || taskName || '-'
+}
+
+const hasPatientIdentity = (record: QueueRecord): boolean => {
+  return Boolean(pickText(record, ['patient_name', 'patientName', 'patient']))
+}
+
+const isFemale = (value: unknown): boolean => {
+  const raw = String(value || '')
+    .trim()
+    .toLowerCase()
+  return ['女', 'female', 'f', '2'].includes(raw)
+}
+
+const patientAvatarSrc = (record: QueueRecord): string => {
+  const age = Number(
+    record.patient_age ?? record.patientAge ?? record.age ?? record.patient_age_years ?? 0,
+  )
+  const female = isFemale(
+    record.patient_sex ?? record.patient_gender ?? record.patientGender ?? record.sex,
+  )
+  if (Number.isFinite(age) && age > 0 && age < 14) return female ? avatarGirl : avatarBoy
+  if (Number.isFinite(age) && age >= 55) return female ? avatarElderWoman : avatarElderMan
+  return female ? avatarWoman : avatarMan
+}
+
 // 视图切换时重新加载数据
 watch(currentView, () => {
   pagination.current = 1
@@ -1185,6 +1272,64 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.queue-kpi-card {
+  display: flex;
+  min-height: 92px;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 16px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.queue-kpi-icon {
+  display: flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  font-size: 18px;
+}
+
+.queue-kpi-label {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 18px;
+}
+
+.queue-kpi-value {
+  margin-top: 2px;
+  color: #0f172a;
+  font-family: Inter, 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 34px;
+}
+
+.queue-kpi-desc {
+  margin-top: 2px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.record-patient-avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  border-radius: 999px;
+  background: #eff6ff;
+  object-fit: cover;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+}
+
 /* 胶囊选择器样式覆盖 */
 :deep(.custom-select .ant-select-selector) {
   background-color: #f8fafc !important;

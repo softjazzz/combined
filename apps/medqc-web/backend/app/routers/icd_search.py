@@ -26,6 +26,30 @@ _icd10_tree: Optional[dict] = None
 _icd9cm3_tree: Optional[dict] = None
 _code_mapping: Optional[dict] = None
 _initialized: bool = False
+_SENSITIVE_RESPONSE_KEYS = {
+    "_score",
+    "_match_type",
+    "_confidence",
+    "name_lower",
+    "code_lower",
+    "_from_mapping",
+    "raw_response",
+    "raw",
+    "raw_data",
+    "embedding",
+    "embeddings",
+    "vector",
+    "vectors",
+    "internal_data",
+    "medical_text",
+    "documents",
+    "bundle",
+    "record_content",
+    "prompt",
+    "source_path",
+    "file_path",
+    "path",
+}
 
 # 简易拼音首字母映射表（覆盖常见3500字）
 _PINYIN_MAP: dict = {}
@@ -163,27 +187,32 @@ def _search_dataset(data: List[dict], query: str, ds_type: str) -> List[dict]:
     """在单个数据集中搜索"""
     results = []
     query_lower = query.lower()
-    is_alpha = query.isascii() and query.isalpha()
 
     for item in data:
         score = 0
+        match_type = ""
 
         # 1. 编码完全匹配
         if item['code_lower'] == query_lower:
             score = 100
+            match_type = "exact_code"
         # 2. 编码前缀匹配
         elif item['code_lower'].startswith(query_lower):
             score = 90
+            match_type = "prefix_code"
         # 3. 中文名称包含
         elif query_lower in item['name_lower']:
             # 名称以关键词开头得更高分
             if item['name_lower'].startswith(query_lower):
                 score = 85
+                match_type = "prefix_name"
             else:
                 score = 80
+                match_type = "contains_name"
         # 4. 编码部分包含
         elif query_lower in item['code_lower']:
             score = 50
+            match_type = "contains_code"
 
         if score > 0:
             results.append({
@@ -191,9 +220,55 @@ def _search_dataset(data: List[dict], query: str, ds_type: str) -> List[dict]:
                 'name': item['name'],
                 'type': ds_type,
                 '_score': score,
+                '_match_type': match_type,
+                '_confidence': round(score / 100, 2),
             })
 
     return results
+
+
+def _code_type_for_dataset(ds_type: str) -> str:
+    return "procedure" if ds_type == "icd9cm3" else "diagnosis"
+
+
+def _type_label_for_dataset(ds_type: str) -> str:
+    return "手术操作" if ds_type == "icd9cm3" else "诊断"
+
+
+def _coding_system_for_dataset(ds_type: str) -> str:
+    return "ICD-9-CM-3" if ds_type == "icd9cm3" else "ICD-10"
+
+
+def _version_label(version: str, ds_type: str) -> str:
+    if ds_type == "icd9cm3":
+        return "ICD-9-CM-3"
+    return "国临版" if version == "clinical" else "医保版"
+
+
+def _sanitize_response_item(item: dict, *, version: str) -> dict:
+    """返回给前端的 ICD 候选契约，过滤内部字段。"""
+    ds_type = str(item.get("type") or "")
+    normalized_version = "icd9cm3" if ds_type == "icd9cm3" else version
+    payload = {
+        "code": str(item.get("code") or ""),
+        "name": str(item.get("name") or ""),
+        "type": ds_type,
+        "code_type": _code_type_for_dataset(ds_type),
+        "type_label": _type_label_for_dataset(ds_type),
+        "coding_system": _coding_system_for_dataset(ds_type),
+        "version": normalized_version,
+        "version_label": _version_label(version, ds_type),
+        "match_type": str(item.get("_match_type") or item.get("match_type") or "unknown"),
+        "confidence": float(item.get("_confidence") or item.get("confidence") or 0),
+    }
+    for key in ("mapped_code", "mapped_name", "mapped_version", "is_diff"):
+        if key in item:
+            payload[key] = item.get(key)
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in _SENSITIVE_RESPONSE_KEYS
+    }
 
 
 # ==================== API 路由 ====================
@@ -232,9 +307,8 @@ async def search_icd_codes(
     # 分页
     page = results[offset:offset + limit]
 
-    # 清理内部字段 + 附加映射信息
+    # 附加映射信息，最后统一收敛为前端可展示的候选契约。
     for r in page:
-        del r['_score']
         # 为 ICD-10 结果附加另一版本映射
         if r['type'] == 'icd10' and _code_mapping:
             code = r['code']
@@ -268,6 +342,8 @@ async def search_icd_codes(
                     r['mapped_version'] = mapped_label
                     r['is_diff'] = m.get('diff', False)
 
+    page = [_sanitize_response_item(r, version=version) for r in page]
+
     return {
         'success': True,
         'data': {
@@ -275,6 +351,8 @@ async def search_icd_codes(
             'total': total,
             'query': q,
             'type': type,
+            'version': version,
+            'contract_version': 'icd-search-v1',
         }
     }
 

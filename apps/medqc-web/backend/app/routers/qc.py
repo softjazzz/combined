@@ -778,6 +778,19 @@ async def list_formal_qc_rules(request: Request):
     )
 
 
+@router.get("/formal-qc/rule-coverage")
+async def get_formal_qc_rule_coverage(request: Request):
+    """获取首页与医保结算清单正式质控规则覆盖审计报告。"""
+    from ..services.qc_rule_coverage import build_rule_coverage_report
+
+    report = build_rule_coverage_report()
+    return success_response(
+        data=report,
+        message="获取正式质控规则覆盖审计成功",
+        trace_id=get_trace_id(request),
+    )
+
+
 # ==================== 编码质控规则管理 API ====================
 
 import os as _os
@@ -1076,7 +1089,6 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
     except Exception as e:
         logger.warning(f"从 PG 读取编码质控数据失败: {e}")
         return None
-
 
 
 

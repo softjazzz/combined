@@ -3,7 +3,7 @@ import { ApiService } from '@/services/apiService'
 import type { DeptInfo, PatientRecord } from '../types'
 import { normalizeRecord } from '../normalize'
 
-const WORKSTATION_PAGE_SIZE = 20
+const WORKSTATION_PAGE_SIZE = 15
 export type WorkstationDateField = 'visit' | 'admission' | 'discharge' | 'updated'
 export type WorkstationDateRange = [string, string] | null
 
@@ -82,9 +82,13 @@ export function usePatientRecords() {
     loading.value = true
     try {
       const [startDate, endDate] = dateRange.value || []
+      const requestedPageSize =
+        Number.isFinite(Number(targetPageSize)) && Number(targetPageSize) > 0
+          ? Number(targetPageSize)
+          : WORKSTATION_PAGE_SIZE
       const params: Record<string, string | number> = {
         page,
-        page_size: targetPageSize,
+        page_size: requestedPageSize,
         date_field: dateField.value,
       }
       if (activeDept.value !== '\u5168\u90e8\u79d1\u5ba4') {
@@ -121,17 +125,12 @@ export function usePatientRecords() {
           : buildDepartments(normalizedRecords)
 
       const total = Number(data.total ?? data.total_count ?? 0)
-      const resolvedPageSize = Number(data.page_size ?? data.pageSize ?? targetPageSize)
-      const totalPagesRaw = Number(data.totalPages ?? data.total_pages ?? 0)
-      const totalPagesComputed = resolvedPageSize > 0 ? Math.ceil(total / resolvedPageSize) : 1
+      const totalPagesComputed = requestedPageSize > 0 ? Math.ceil(total / requestedPageSize) : 1
 
       serverTotal.value = total
-      serverTotalPages.value = Math.max(1, totalPagesRaw || totalPagesComputed || 1)
+      serverTotalPages.value = Math.max(1, totalPagesComputed || 1)
       currentPage.value = Number(data.page ?? data.current_page ?? page) || 1
-      pageSize.value =
-        Number.isFinite(resolvedPageSize) && resolvedPageSize > 0
-          ? resolvedPageSize
-          : WORKSTATION_PAGE_SIZE
+      pageSize.value = requestedPageSize
     } catch (error) {
       console.error('\u52a0\u8f7d\u5de5\u4f5c\u53f0\u6570\u636e\u5931\u8d25:', error)
     } finally {

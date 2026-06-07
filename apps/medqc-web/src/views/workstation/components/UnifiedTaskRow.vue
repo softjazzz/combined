@@ -1,196 +1,85 @@
 <template>
-  <div
-    class="group relative flex flex-col transition-colors duration-150 border-b border-slate-100"
-    :class="isExpanded ? 'bg-slate-50/70' : 'bg-white hover:bg-[#F8FAFC]'"
-  >
-    <!-- 卡片主体区 -->
-    <div
-      class="flex items-start gap-4 px-6 py-4 cursor-pointer"
-      @click="emit('toggleExpand', task.id)"
-    >
-      <!-- 左侧图标标识 -->
-      <div class="mt-0.5 shrink-0">
-        <div
-          v-if="isUrgent"
-          class="h-3 w-3 rounded-sm bg-red-100 border border-red-200 flex items-center justify-center shadow-sm"
+  <div class="qc-task-row">
+    <div class="qc-task-patient">
+      <div class="qc-task-avatar">
+        <img
+          v-if="!avatarBroken"
+          :src="avatarSrc"
+          :alt="`${task.patient_name || '患者'}头像`"
+          @error="avatarBroken = true"
         >
-          <div class="h-1.5 w-1.5 rounded-full bg-red-500" />
-        </div>
-        <div
-          v-else
-          class="h-3 w-3 rounded-sm border border-slate-200 bg-slate-50 flex items-center justify-center"
-        >
-          <div
-            class="h-1.5 w-1.5 rounded-full"
-            :class="task.source_type === 'hotspot' ? 'bg-amber-400' : 'bg-blue-400'"
-          />
-        </div>
+        <span v-else>{{ patientInitial }}</span>
       </div>
-
-      <!-- 中心内容区 (两行排布：核心在标题) -->
-      <div class="flex-1 min-w-0 pr-6 flex flex-col gap-1.5">
-        <!-- 第一行：问题核心 (Task Title) -->
-        <div class="flex items-center gap-2.5">
-          <span
-            class="text-[14px] text-slate-900 truncate"
-            :class="isUrgent ? 'font-bold' : 'font-medium'"
-          >
-            {{ task.summary || task.title || '无核心问题摘要，请展开查看详情' }}
-          </span>
-          <!-- 缺陷 Badge 作为状态补丁，紧跟问题旁边 -->
-          <span
-            v-if="task.active_defect_count > 0"
-            class="shrink-0 inline-flex items-center px-1.5 rounded border border-red-200 bg-red-50 text-[11px] font-bold text-red-600 leading-tight"
-          >
-            {{ task.active_defect_count }} 缺陷
-          </span>
+      <div class="min-w-0">
+        <div class="qc-task-patient__name">
+          {{ task.patient_name || '未知患者' }}
+          <span>{{ patientMeta }}</span>
         </div>
-
-        <!-- 第二行：病历元数据与标签连击 -->
-        <div class="flex items-center gap-1.5 text-[12.5px] text-slate-500 font-medium">
-          <!-- 患者 -->
-          <span class="text-slate-700 font-bold">{{ task.patient_name || '未知患者' }}</span>
-
-          <span class="text-slate-300">·</span>
-
-          <!-- ID -->
-          <span class="font-mono text-slate-400">{{ task.visit_id || '--' }}</span>
-
-          <span class="text-slate-300">·</span>
-
-          <!-- 科室/流程 -->
-          <span>{{ task.department || '未分科' }} ({{ workflowLabel(task.workflow_type) }})</span>
-
-          <!-- 额外属性（未读、来源等）用极简标签表示 -->
-          <span
-            v-if="task.unread_count > 0"
-            class="ml-1 text-[11px] text-blue-600 font-bold flex items-center"
-          >
-            <div class="w-1.5 h-1.5 bg-blue-500 rounded-full mr-1" />
-            未读
-          </span>
-
-          <span
-            v-if="task.source_type === 'hotspot'"
-            class="ml-1 text-[11px] text-amber-600 bg-amber-50 px-1 rounded shadow-sm border border-amber-100/50"
-          >集中点</span>
-        </div>
-      </div>
-
-      <!-- 右侧信息与互动 (固定宽度对齐) -->
-      <div class="w-[120px] shrink-0 flex items-center justify-end relative h-8">
-        <!-- 默认展示日期时间 -->
-        <div
-          class="text-[12px] text-slate-400 font-mono tracking-tight absolute right-0 transition-opacity duration-200"
-          :class="isExpanded ? 'opacity-0' : 'group-hover:opacity-0'"
-        >
-          {{ formatDateTime(task.latest_created_at || task.due_at) }}
-        </div>
-
-        <!-- Hover 行动按钮 (完全干净的浅灰底/深色字组件) -->
-        <div
-          class="absolute right-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          :class="{ 'opacity-100': isExpanded }"
-        >
-          <button
-            type="button"
-            class="flex items-center justify-center gap-1 rounded-[4px] px-3 py-1.5 text-[12px] font-bold border transition-all"
-            :class="
-              isExpanded
-                ? 'bg-blue-600 border-blue-600 text-white shadow hover:bg-blue-700'
-                : 'bg-white border-slate-300 text-slate-700 shadow-sm hover:border-slate-800 hover:text-slate-900'
-            "
-            @click.stop="handleClickAction"
-          >
-            <span
-              v-if="isLoading"
-              class="animate-spin"
-            ><LoadingOutlined /></span>
-            <span v-else>立即处理</span>
-            <ArrowRightOutlined
-              v-if="!isLoading"
-              class="text-[10px]"
-            />
-          </button>
+        <div class="qc-task-patient__id">
+          {{ task.visit_id || '--' }}
         </div>
       </div>
     </div>
 
-    <!-- 行内展开上下文 -->
-    <div
-      v-if="isExpanded"
-      class="bg-slate-50 border-t border-slate-200/60 px-[52px] py-4"
-    >
-      <div class="grid grid-cols-3 gap-6 text-[12.5px]">
-        <!-- 左栏：关键评估 -->
-        <div class="flex flex-col gap-2">
-          <div
-            class="flex justify-between items-center text-slate-500 border-b border-slate-200/50 pb-1"
-          >
-            <span>风险级别</span>
-            <span class="font-bold text-slate-700">{{ severityLabel(task.severity) }}</span>
-          </div>
-          <div
-            class="flex justify-between items-center text-slate-500 border-b border-slate-200/50 pb-1"
-          >
-            <span>当前状态</span>
-            <span
-              class="font-bold"
-              :class="task.task_status === 'overdue' ? 'text-orange-600' : 'text-slate-700'"
-            >
-              {{ taskStatusLabel(task.task_status) }}
-            </span>
-          </div>
-        </div>
+    <div class="qc-task-cell qc-task-dept">
+      {{ task.department || '未分科' }}
+    </div>
 
-        <!-- 中栏：质控上下文 -->
-        <div class="flex flex-col gap-2">
-          <div
-            class="flex justify-between items-center text-slate-500 border-b border-slate-200/50 pb-1"
-          >
-            <span>质控评级</span>
-            <span class="font-bold text-slate-700">{{ task.latest_qc_grade || '--' }}</span>
-          </div>
-          <div
-            class="flex justify-between items-center text-slate-500 border-b border-slate-200/50 pb-1"
-          >
-            <span>质控得分</span>
-            <span class="font-bold font-mono text-slate-700">{{
-              task.latest_qc_score ?? '--'
-            }}</span>
-          </div>
-        </div>
+    <div class="qc-task-cell">
+      <span
+        class="qc-task-risk"
+        :class="riskClass"
+      >
+        {{ riskLabel }}
+      </span>
+    </div>
 
-        <!-- 右栏：额外详情 -->
-        <div
-          class="bg-white border border-slate-200 rounded p-2 text-slate-600 leading-relaxed max-h-[80px] overflow-y-auto custom-scrollbar shadow-sm"
-        >
-          <span class="font-bold text-slate-400 text-[10px] uppercase mb-1 block">扩展摘要</span>
-          {{ task.summary || task.title || '无补充摘要' }}
-        </div>
-      </div>
+    <div class="qc-task-cell qc-task-reason">
+      {{ riskReason }}
+    </div>
+
+    <div class="qc-task-deadline">
+      <span>{{ deadlineText }}</span>
+      <strong :class="deadlineClass">{{ deadlineStatus }}</strong>
+    </div>
+
+    <div class="qc-task-action">
+      <button
+        type="button"
+        @click="handleClickAction"
+      >
+        <span
+          v-if="isLoading"
+          class="animate-spin"
+        ><LoadingOutlined /></span>
+        <span v-else>立即处理</span>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ArrowRightOutlined, LoadingOutlined } from '@ant-design/icons-vue'
+import { LoadingOutlined } from '@ant-design/icons-vue'
 import type { UnifiedTaskItem } from '@/views/workstation-v2/types'
+import avatarBoy from '@/assets/avatar-icons/patient-icon-boy.png'
+import avatarElderMan from '@/assets/avatar-icons/patient-icon-elder-man.png'
+import avatarElderWoman from '@/assets/avatar-icons/patient-icon-elder-woman.png'
+import avatarGirl from '@/assets/avatar-icons/patient-icon-girl.png'
+import avatarMan from '@/assets/avatar-icons/patient-icon-man.png'
+import avatarWoman from '@/assets/avatar-icons/patient-icon-woman.png'
 
 const props = defineProps<{
   task: UnifiedTaskItem
-  expandedId: string
   formatDateTime: (value?: string | null) => string
 }>()
 
 const emit = defineEmits<{
   open: [task: UnifiedTaskItem]
-  toggleExpand: [id: string]
 }>()
 
-const isExpanded = computed(() => props.expandedId === props.task.id)
 const isLoading = ref(false)
+const avatarBroken = ref(false)
 
 function handleClickAction() {
   isLoading.value = true
@@ -200,10 +89,92 @@ function handleClickAction() {
   }, 150)
 }
 
-const isUrgent = computed(() => {
-  const s = (props.task.severity || '').toLowerCase()
-  const p = (props.task.priority || '').toLowerCase()
-  return s === 'critical' || s === 'high' || p === 'critical' || p === 'high'
+const patientInitial = computed(() => (props.task.patient_name || '患').slice(0, 1).toUpperCase())
+
+const avatarSrc = computed(() => {
+  const seed = getSeed(props.task.patient_name || props.task.visit_id || props.task.id)
+  const gender = resolvePatientGender(seed)
+  const age = resolvePatientAge()
+
+  if (age !== null && age < 14) return gender === 'female' ? avatarGirl : avatarBoy
+  if (age !== null && age >= 55) return gender === 'female' ? avatarElderWoman : avatarElderMan
+  if (age !== null) return gender === 'female' ? avatarWoman : avatarMan
+
+  return gender === 'female' ? avatarWoman : avatarMan
+})
+
+function getSeed(value: string): number {
+  return [...value].reduce((sum, char) => sum + char.charCodeAt(0), 0)
+}
+
+function resolvePatientAge(): number | null {
+  const value = props.task.patient_age
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string') return null
+
+  const normalized = value.trim()
+  if (!normalized) return null
+  if (/[月天日]/.test(normalized)) return 0
+
+  const matched = normalized.match(/\d+(?:\.\d+)?/)
+  if (!matched) return null
+  const age = Number(matched[0])
+  return Number.isFinite(age) ? age : null
+}
+
+function resolvePatientGender(seed: number): 'male' | 'female' {
+  const value = `${props.task.patient_sex || props.task.patient_gender || ''}`.trim().toLowerCase()
+  if (/女|female|^f$|^2$/.test(value)) return 'female'
+  if (/男|male|^m$|^1$/.test(value)) return 'male'
+  return seed % 2 === 0 ? 'male' : 'female'
+}
+
+const patientMeta = computed(() => {
+  const score =
+    typeof props.task.latest_qc_score === 'number' ? `${props.task.latest_qc_score}分` : ''
+  return score || workflowLabel(props.task.workflow_type)
+})
+
+const riskLevel = computed(() => {
+  const value = (props.task.severity || props.task.priority || '').toLowerCase()
+  if (value === 'critical' || props.task.task_status === 'overdue') return 'high'
+  if (value === 'high') return 'high'
+  if (value === 'warning' || value === 'medium') return 'medium'
+  return 'normal'
+})
+
+const riskLabel = computed(() => {
+  if (riskLevel.value === 'high') return '高风险'
+  if (riskLevel.value === 'medium') return '中风险'
+  return '低风险'
+})
+
+const riskClass = computed(() => `qc-task-risk--${riskLevel.value}`)
+
+const riskReason = computed(() => {
+  const text = `${props.task.title || ''} ${props.task.summary || ''}`
+  if (/(编码|icd|drg)/i.test(text)) return '编码规范风险'
+  if (/(首页|字段|漏填|缺失|主诊断|手术)/i.test(text)) return '病历书写不规范'
+  if (/(结算|费用|医保|支付|清单)/i.test(text)) return '结算费用风险'
+  if (/(知情|同意|签字|麻醉)/i.test(text)) return '关键诊疗记录缺失'
+  return props.task.summary || props.task.title || '质控风险待复核'
+})
+
+const deadlineText = computed(() => {
+  const value = props.task.due_at || props.task.latest_created_at
+  return props.formatDateTime(value)
+})
+
+const deadlineStatus = computed(() => {
+  if (props.task.task_status === 'overdue') return '已超时 2小时'
+  if (props.task.task_status === 'in_progress') return '处理中'
+  return '剩余 2小时'
+})
+
+const deadlineClass = computed(() => {
+  if (props.task.task_status === 'overdue') return 'is-overdue'
+  if (props.task.task_status === 'in_progress') return 'is-progress'
+  return 'is-pending'
 })
 
 function workflowLabel(value?: string) {
@@ -211,20 +182,6 @@ function workflowLabel(value?: string) {
   if (value === 'coding') return '编码质控'
   if (value === 'settlement') return '结算质控'
   if (value === 'frontpage_generate') return '首页生成'
-  return '未知流程'
-}
-
-function severityLabel(value?: string) {
-  const n = (value || '').toLowerCase()
-  if (n === 'critical') return '严重'
-  if (n === 'high') return '高风险'
-  if (n === 'warning' || n === 'medium') return '警告'
-  return '提示'
-}
-
-function taskStatusLabel(value?: string) {
-  if (value === 'in_progress') return '进行中'
-  if (value === 'overdue') return '已超时'
-  return '常规待办'
+  return '质控任务'
 }
 </script>

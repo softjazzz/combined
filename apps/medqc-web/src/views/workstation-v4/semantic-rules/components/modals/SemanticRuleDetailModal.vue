@@ -60,7 +60,7 @@
       >
         <div class="prompt-header">
           <h4 class="prompt-title">
-            Prompt 管理
+            检查模板管理
           </h4>
           <div class="prompt-actions">
             <a-button
@@ -94,14 +94,14 @@
           v-if="!isEditingPrompt"
           class="prompt-content"
         >
-          {{ currentPrompt || '// 暂无提示词，使用系统默认模板' }}
+          {{ currentPrompt || '// 暂无检查模板，使用系统默认逻辑' }}
         </div>
         <a-textarea
           v-else
           :value="editingPrompt"
           :rows="10"
           class="prompt-editor"
-          placeholder="请输入自定义 Prompt"
+          placeholder="请输入自定义检查模板"
           @update:value="emit('update:editingPrompt', String($event || ''))"
         />
       </div>

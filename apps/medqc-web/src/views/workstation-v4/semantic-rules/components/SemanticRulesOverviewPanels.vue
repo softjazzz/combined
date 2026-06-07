@@ -1,32 +1,32 @@
 <template>
-  <section class="hero-shell">
-    <div class="hero-head">
+  <section class="overview-shell">
+    <div class="overview-head">
       <div>
-        <p class="hero-eyebrow">
+        <p class="overview-eyebrow">
           四川省语义质控规则库
         </p>
-        <h2 class="hero-title">
+        <h2 class="overview-title">
           规则运营总览
         </h2>
-        <p class="hero-subtitle">
+        <p class="overview-subtitle">
           面向病历质控运营与审计，统一管理规则复杂度、缺陷风险与执行入口。
         </p>
       </div>
-      <div class="hero-actions">
+      <div class="overview-actions">
         <a-button
-          class="hero-action-btn"
+          class="overview-action-btn"
           @click="emit('query')"
         >
           查询
         </a-button>
         <a-button
-          class="hero-action-btn"
+          class="overview-action-btn"
           @click="emit('reset')"
         >
           重置
         </a-button>
         <a-button
-          class="hero-action-btn"
+          class="overview-action-btn"
           :loading="loading"
           @click="emit('refresh')"
         >
@@ -156,24 +156,22 @@ const emit = defineEmits<{
 </script>
 
 <style scoped>
-.hero-shell {
+.overview-shell {
   border: 1px solid rgba(226, 232, 240, 0.88);
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at top right, rgba(47, 111, 237, 0.12), transparent 35%),
-    linear-gradient(180deg, rgba(239, 246, 255, 0.96), #ffffff);
-  box-shadow: 0 14px 34px rgba(148, 163, 184, 0.14);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(148, 163, 184, 0.1);
   padding: 20px;
 }
 
-.hero-head {
+.overview-head {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   align-items: flex-start;
 }
 
-.hero-eyebrow {
+.overview-eyebrow {
   margin: 0 0 6px;
   color: #5b6b84;
   font-size: 11px;
@@ -182,7 +180,7 @@ const emit = defineEmits<{
   text-transform: uppercase;
 }
 
-.hero-title {
+.overview-title {
   margin: 0;
   font-size: 28px;
   line-height: 1.25;
@@ -190,20 +188,20 @@ const emit = defineEmits<{
   font-weight: 700;
 }
 
-.hero-subtitle {
+.overview-subtitle {
   margin: 10px 0 0;
   color: #475569;
   font-size: 14px;
 }
 
-.hero-actions {
+.overview-actions {
   display: inline-flex;
   gap: 8px;
 }
 
-.hero-action-btn {
+.overview-action-btn {
   height: 30px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: 13px;
 }
 
@@ -397,10 +395,10 @@ const emit = defineEmits<{
 }
 
 @media (max-width: 1023px) {
-  .hero-head {
+  .overview-head {
     flex-direction: column;
   }
-  .hero-actions {
+  .overview-actions {
     flex-wrap: wrap;
   }
   .kpi-grid {

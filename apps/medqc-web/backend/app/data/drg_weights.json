@@ -1,0 +1,4589 @@
+{
+  "meta": {
+    "country": "中国",
+    "year": 2024,
+    "source_file": "2024年度三级公立医院绩效监测DRG权重和低风险组列表(2).xlsx",
+    "group_count": 654,
+    "low_risk_count": 100
+  },
+  "entries": [
+    {
+      "sourceRow": 3,
+      "drgCode": "AG19",
+      "drgName": "非同胞全相合异基因造血干细胞移植",
+      "weight": 13.65,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 4,
+      "drgCode": "AG29",
+      "drgName": "同胞全相合异基因造血干细胞移植",
+      "weight": 13.48,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 5,
+      "drgCode": "AG39",
+      "drgName": "自体骨髓／造血干细胞移植",
+      "weight": 6.93,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 6,
+      "drgCode": "AH19",
+      "drgName": "ECMO 或全人工心脏植入术",
+      "weight": 16.72,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 7,
+      "drgCode": "AH29",
+      "drgName": "有创呼吸机支持≥96 小时",
+      "weight": 8.3,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 8,
+      "drgCode": "BB11",
+      "drgName": "神经系统复合手术，伴严重合并症或并发症",
+      "weight": 7.93,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 9,
+      "drgCode": "BB15",
+      "drgName": "神经系统复合手术，不伴严重合并症或并发症",
+      "weight": 5.12,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 10,
+      "drgCode": "BB21",
+      "drgName": "伴出血诊断的颅脑手术，伴严重合并症或并发症",
+      "weight": 5.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 11,
+      "drgCode": "BB23",
+      "drgName": "伴出血诊断的颅脑手术，伴一般合并症或并发症",
+      "weight": 4.23,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 12,
+      "drgCode": "BB25",
+      "drgName": "伴出血诊断的颅脑手术，不伴合并症或并发症",
+      "weight": 3.21,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 13,
+      "drgCode": "BB31",
+      "drgName": "伴肿瘤诊断的颅脑手术，伴严重合并症或并发症",
+      "weight": 6.3,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 14,
+      "drgCode": "BB35",
+      "drgName": "伴肿瘤诊断的颅脑手术，不伴严重合并症或并发症",
+      "weight": 5.29,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 15,
+      "drgCode": "BB41",
+      "drgName": "伴创伤诊断的颅脑手术，伴严重合并症或并发症",
+      "weight": 5.68,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 16,
+      "drgCode": "BB43",
+      "drgName": "伴创伤诊断的颅脑手术，伴一般合并症或并发症",
+      "weight": 4.21,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 17,
+      "drgCode": "BB45",
+      "drgName": "伴创伤诊断的颅脑手术，不伴合并症或并发症",
+      "weight": 3.2,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 18,
+      "drgCode": "BB51",
+      "drgName": "其他颅脑相关手术，伴严重合并症或并发症",
+      "weight": 5.89,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 19,
+      "drgCode": "BB55",
+      "drgName": "其他颅脑相关手术，不伴严重合并症或并发症",
+      "weight": 3.83,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 20,
+      "drgCode": "BC19",
+      "drgName": "脑室分流及翻修手术",
+      "weight": 4.86,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 21,
+      "drgCode": "BD19",
+      "drgName": "脊柱脊髓手术",
+      "weight": 2.75,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 22,
+      "drgCode": "BD29",
+      "drgName": "立体定向与功能性神经外科手术",
+      "weight": 7.79,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 23,
+      "drgCode": "BE19",
+      "drgName": "颈及脑血管手术",
+      "weight": 3.34,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 24,
+      "drgCode": "BE21",
+      "drgName": "神经介入治疗，伴严重合并症或并发症",
+      "weight": 7.12,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 25,
+      "drgCode": "BE25",
+      "drgName": "神经介入治疗，不伴严重合并症或并发症",
+      "weight": 5.71,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 26,
+      "drgCode": "BJ11",
+      "drgName": "神经系统其他手术，伴严重合并症或并发症",
+      "weight": 2.88,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 27,
+      "drgCode": "BJ13",
+      "drgName": "神经系统其他手术，伴一般合并症或并发症",
+      "weight": 1.36,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 28,
+      "drgCode": "BJ15",
+      "drgName": "神经系统其他手术，不伴合并症或并发症",
+      "weight": 1.03,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 29,
+      "drgCode": "BL11",
+      "drgName": "神经系统血管病溶栓治疗，伴严重合并症或并发症",
+      "weight": 1.68,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 30,
+      "drgCode": "BL15",
+      "drgName": "神经系统血管病溶栓治疗，不伴严重合并症或并发症",
+      "weight": 1.19,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 31,
+      "drgCode": "BM11",
+      "drgName": "神经介入检查术，伴严重合并症或并发症",
+      "weight": 1.67,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 32,
+      "drgCode": "BM15",
+      "drgName": "神经介入检查术，不伴严重合并症或并发症",
+      "weight": 1.16,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 33,
+      "drgCode": "BR11",
+      "drgName": "脑卒中，伴严重合并症或并发症",
+      "weight": 1.33,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 34,
+      "drgCode": "BR13",
+      "drgName": "脑卒中，伴一般合并症或并发症",
+      "weight": 0.83,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 35,
+      "drgCode": "BR15",
+      "drgName": "脑卒中，不伴合并症或并发症",
+      "weight": 0.68,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 36,
+      "drgCode": "BR21",
+      "drgName": "其他脑缺血性疾病，伴严重合并症或并发症",
+      "weight": 0.8,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 37,
+      "drgCode": "BR23",
+      "drgName": "其他脑缺血性疾病，伴一般合并症或并发症",
+      "weight": 0.57,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 38,
+      "drgCode": "BR25",
+      "drgName": "其他脑缺血性疾病，不伴合并症或并发症",
+      "weight": 0.46,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 39,
+      "drgCode": "BS11",
+      "drgName": "非创伤性意识障碍，伴严重合并症或并发症",
+      "weight": 1.79,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 40,
+      "drgCode": "BS13",
+      "drgName": "非创伤性意识障碍，伴一般合并症或并发症",
+      "weight": 0.94,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 41,
+      "drgCode": "BS15",
+      "drgName": "非创伤性意识障碍，不伴合并症或并发症",
+      "weight": 0.54,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 42,
+      "drgCode": "BT11",
+      "drgName": "病毒性脑、脊髓和脑膜炎，伴严重合并症或并发症",
+      "weight": 1.66,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 43,
+      "drgCode": "BT13",
+      "drgName": "病毒性脑、脊髓和脑膜炎，伴一般合并症或并发症",
+      "weight": 1.05,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 44,
+      "drgCode": "BT15",
+      "drgName": "病毒性脑、脊髓和脑膜炎，不伴合并症或并发症",
+      "weight": 0.66,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 45,
+      "drgCode": "BT21",
+      "drgName": "细菌性脑、脊髓和脑膜炎，伴严重合并症或并发症",
+      "weight": 2.16,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 46,
+      "drgCode": "BT23",
+      "drgName": "细菌性脑、脊髓和脑膜炎，伴一般合并症或并发症",
+      "weight": 1.4,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 47,
+      "drgCode": "BT25",
+      "drgName": "细菌性脑、脊髓和脑膜炎，不伴合并症或并发症",
+      "weight": 1.02,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 48,
+      "drgCode": "BT31",
+      "drgName": "神经系统的其他感染，伴严重合并症或并发症",
+      "weight": 1.22,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 49,
+      "drgCode": "BT33",
+      "drgName": "神经系统的其他感染，伴一般合并症或并发症",
+      "weight": 0.68,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 50,
+      "drgCode": "BT35",
+      "drgName": "神经系统的其他感染，不伴合并症或并发症",
+      "weight": 0.48,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 51,
+      "drgCode": "BU11",
+      "drgName": "神经系统肿瘤，伴严重合并症或并发症",
+      "weight": 1.17,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 52,
+      "drgCode": "BU15",
+      "drgName": "神经系统肿瘤，不伴严重合并症或并发症",
+      "weight": 0.88,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 53,
+      "drgCode": "BU21",
+      "drgName": "神经系统变性疾病，伴严重合并症或并发症",
+      "weight": 1.22,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 54,
+      "drgCode": "BU25",
+      "drgName": "神经系统变性疾病，不伴严重合并症或并发症",
+      "weight": 0.77,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 55,
+      "drgCode": "BU31",
+      "drgName": "中枢神经系统脱髓鞘病，伴严重合并症或并发症",
+      "weight": 1.72,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 56,
+      "drgCode": "BU35",
+      "drgName": "中枢神经系统脱髓鞘病，不伴严重合并症或并发症",
+      "weight": 0.96,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 57,
+      "drgCode": "BV11",
+      "drgName": "癫痫，伴严重合并症或并发症",
+      "weight": 0.99,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 58,
+      "drgCode": "BV13",
+      "drgName": "癫痫，伴一般合并症或并发症",
+      "weight": 0.6,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 59,
+      "drgCode": "BV15",
+      "drgName": "癫痫，不伴合并症或并发症",
+      "weight": 0.38,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 60,
+      "drgCode": "BV21",
+      "drgName": "神经肌肉接头及肌肉病，伴严重合并症或并发症",
+      "weight": 1.28,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 61,
+      "drgCode": "BV25",
+      "drgName": "神经肌肉接头及肌肉病，不伴严重合并症或并发症",
+      "weight": 0.59,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 62,
+      "drgCode": "BV39",
+      "drgName": "头痛",
+      "weight": 0.42,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 63,
+      "drgCode": "BW13",
+      "drgName": "神经系统先天性疾病，伴合并症或并发症",
+      "weight": 0.78,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 64,
+      "drgCode": "BW15",
+      "drgName": "神经系统先天性疾病，不伴合并症或并发症",
+      "weight": 0.71,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 65,
+      "drgCode": "BW21",
+      "drgName": "脑性瘫痪，伴严重合并症或并发症",
+      "weight": 1.83,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 66,
+      "drgCode": "BW23",
+      "drgName": "脑性瘫痪，伴一般合并症或并发症",
+      "weight": 1.47,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 67,
+      "drgCode": "BW25",
+      "drgName": "脑性瘫痪，不伴合并症或并发症",
+      "weight": 1.27,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 68,
+      "drgCode": "BX11",
+      "drgName": "认知功能障碍，伴严重合并症或并发症",
+      "weight": 1.72,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 69,
+      "drgCode": "BX15",
+      "drgName": "认知功能障碍，不伴严重合并症或并发症",
+      "weight": 1.08,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 70,
+      "drgCode": "BX23",
+      "drgName": "脑神经/周围神经疾病，伴合并症或并发症",
+      "weight": 0.65,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 71,
+      "drgCode": "BX25",
+      "drgName": "脑神经/周围神经疾病，不伴合并症或并发症",
+      "weight": 0.53,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 72,
+      "drgCode": "BY11",
+      "drgName": "颅脑损伤，伴严重合并症或并发症",
+      "weight": 1.65,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 73,
+      "drgCode": "BY15",
+      "drgName": "颅脑损伤，不伴严重合并症或并发症",
+      "weight": 0.61,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 74,
+      "drgCode": "BY21",
+      "drgName": "脊髓伤病及功能障碍，伴严重合并症或并发症",
+      "weight": 2.14,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 75,
+      "drgCode": "BY23",
+      "drgName": "脊髓伤病及功能障碍，伴一般合并症或并发症",
+      "weight": 1.32,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 76,
+      "drgCode": "BY25",
+      "drgName": "脊髓伤病及功能障碍，不伴合并症或并发症",
+      "weight": 0.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 77,
+      "drgCode": "BZ11",
+      "drgName": "神经系统其他疾病，伴严重合并症或并发症",
+      "weight": 1.63,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 78,
+      "drgCode": "BZ13",
+      "drgName": "神经系统其他疾病，伴一般合并症或并发症",
+      "weight": 0.97,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 79,
+      "drgCode": "BZ15",
+      "drgName": "神经系统其他疾病，不伴合并症或并发症",
+      "weight": 0.52,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 80,
+      "drgCode": "CB19",
+      "drgName": "角膜移植手术",
+      "weight": 1.28,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 81,
+      "drgCode": "CB29",
+      "drgName": "玻璃体、视网膜、脉络膜联合晶状体手术",
+      "weight": 1.46,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 82,
+      "drgCode": "CB39",
+      "drgName": "晶状体联合视网膜及晶状体以外的内眼手术",
+      "weight": 0.86,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 83,
+      "drgCode": "CB43",
+      "drgName": "玻璃体、视网膜、脉络膜手术，伴合并症或并发症",
+      "weight": 0.73,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 84,
+      "drgCode": "CB45",
+      "drgName": "玻璃体、视网膜、脉络膜手术，不伴合并症或并发症",
+      "weight": 0.53,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 85,
+      "drgCode": "CB59",
+      "drgName": "晶状体手术",
+      "weight": 0.7,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 86,
+      "drgCode": "CB69",
+      "drgName": "视网膜及晶状体以外的内眼手术",
+      "weight": 0.59,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 87,
+      "drgCode": "CB79",
+      "drgName": "角膜、巩膜、结膜手术",
+      "weight": 0.43,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 88,
+      "drgCode": "CD19",
+      "drgName": "眼眶手术",
+      "weight": 1.2,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 89,
+      "drgCode": "CD29",
+      "drgName": "眼肌手术",
+      "weight": 0.7,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 90,
+      "drgCode": "CD31",
+      "drgName": "除眼眶外的外眼手术，伴严重合并症或并发症",
+      "weight": 0.6,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 91,
+      "drgCode": "CD35",
+      "drgName": "除眼眶外的外眼手术，不伴严重合并症或并发症",
+      "weight": 0.51,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 92,
+      "drgCode": "CJ19",
+      "drgName": "其他眼部手术",
+      "weight": 0.63,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 93,
+      "drgCode": "CR19",
+      "drgName": "眼部恶性肿瘤及交界性肿瘤",
+      "weight": 0.88,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 94,
+      "drgCode": "CS13",
+      "drgName": "眼外肌、眼的神经及血管疾病，伴合并症或并发症",
+      "weight": 0.63,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 95,
+      "drgCode": "CS15",
+      "drgName": "眼外肌、眼的神经及血管疾病，不伴合并症或并发症",
+      "weight": 0.45,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 96,
+      "drgCode": "CT19",
+      "drgName": "前房出血及眼创伤的非手术治疗",
+      "weight": 0.26,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 97,
+      "drgCode": "CU19",
+      "drgName": "急性重大眼感染",
+      "weight": 0.27,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 98,
+      "drgCode": "CV19",
+      "drgName": "各种类型青光眼",
+      "weight": 0.21,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 99,
+      "drgCode": "CW19",
+      "drgName": "各种类型白内障",
+      "weight": 0.31,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 100,
+      "drgCode": "CX13",
+      "drgName": "其他疾病引起眼部病变，伴合并症或并发症",
+      "weight": 0.51,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 101,
+      "drgCode": "CX15",
+      "drgName": "其他疾病引起眼部病变，不伴合并症或并发症",
+      "weight": 0.39,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 102,
+      "drgCode": "CZ19",
+      "drgName": "其他眼部疾病",
+      "weight": 0.3,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 103,
+      "drgCode": "DB19",
+      "drgName": "鼻颅底或鼻眼复杂手术",
+      "weight": 2.28,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 104,
+      "drgCode": "DB29",
+      "drgName": "鼻颅底或鼻眼一般手术",
+      "weight": 1.43,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 105,
+      "drgCode": "DC19",
+      "drgName": "口腔颌面头颈缺损游离组织瓣修复术",
+      "weight": 5.42,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 106,
+      "drgCode": "DC23",
+      "drgName": "口腔颌面头颈缺损其他组织瓣修复术，伴合并症或并发症",
+      "weight": 2.19,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 107,
+      "drgCode": "DC25",
+      "drgName": "口腔颌面头颈缺损其他组织瓣修复术，不伴合并症或并发症",
+      "weight": 1.21,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 108,
+      "drgCode": "DC39",
+      "drgName": "口腔颌面头颈恶性肿瘤根治术",
+      "weight": 3.36,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 109,
+      "drgCode": "DC43",
+      "drgName": "口腔颌面头颈肿瘤切除术，伴合并症或并发症",
+      "weight": 1.46,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 110,
+      "drgCode": "DC45",
+      "drgName": "口腔颌面头颈肿瘤切除术，不伴合并症或并发症",
+      "weight": 1.05,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 111,
+      "drgCode": "DD19",
+      "drgName": "人工听觉装置植入",
+      "weight": 16.93,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 112,
+      "drgCode": "DD29",
+      "drgName": "唇、腭裂修补术",
+      "weight": 1.15,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 113,
+      "drgCode": "DE19",
+      "drgName": "中耳/内耳/侧颅底手术",
+      "weight": 1.27,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 114,
+      "drgCode": "DE23",
+      "drgName": "耳部其他小手术，伴合并症或并发症",
+      "weight": 0.9,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 115,
+      "drgCode": "DE25",
+      "drgName": "耳部其他小手术，不伴合并症或并发症",
+      "weight": 0.65,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 116,
+      "drgCode": "DF19",
+      "drgName": "鼻成形术",
+      "weight": 1.16,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 117,
+      "drgCode": "DF29",
+      "drgName": "鼻腔、鼻窦手术",
+      "weight": 1.02,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 118,
+      "drgCode": "DG19",
+      "drgName": "咽、喉、气管手术",
+      "weight": 0.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 119,
+      "drgCode": "DG29",
+      "drgName": "扁桃体和/或腺样体切除手术",
+      "weight": 0.84,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 120,
+      "drgCode": "DH19",
+      "drgName": "颅面骨正颌手术",
+      "weight": 4.37,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 121,
+      "drgCode": "DH29",
+      "drgName": "颅面骨创伤手术",
+      "weight": 2.13,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 122,
+      "drgCode": "DH39",
+      "drgName": "颞下颌关节手术",
+      "weight": 1.79,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 123,
+      "drgCode": "DH49",
+      "drgName": "颅面骨其他手术",
+      "weight": 1.01,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 124,
+      "drgCode": "DJ11",
+      "drgName": "头、颈、耳、鼻、咽、口其他手术，伴严重合并症或并发症",
+      "weight": 1.11,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 125,
+      "drgCode": "DJ15",
+      "drgName": "头、颈、耳、鼻、咽、口其他手术，不伴严重合并症或并发症",
+      "weight": 0.69,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 126,
+      "drgCode": "DK19",
+      "drgName": "其他头、颈、耳、鼻、咽、口治疗操作",
+      "weight": 0.36,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 127,
+      "drgCode": "DR11",
+      "drgName": "头、颈、耳、鼻、咽、口恶性肿瘤，伴严重合并症或并发症",
+      "weight": 1.55,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 128,
+      "drgCode": "DR15",
+      "drgName": "头、颈、耳、鼻、咽、口恶性肿瘤，不伴严重合并症或并发症",
+      "weight": 1.0,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 129,
+      "drgCode": "DS19",
+      "drgName": "平衡失调及听觉障碍",
+      "weight": 0.42,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 130,
+      "drgCode": "DT11",
+      "drgName": "中耳炎及上呼吸道感染，伴严重合并症或并发症",
+      "weight": 0.27,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 131,
+      "drgCode": "DT15",
+      "drgName": "中耳炎及上呼吸道感染，不伴严重合并症或并发症",
+      "weight": 0.22,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 132,
+      "drgCode": "DT29",
+      "drgName": "会厌炎、喉炎及气管炎",
+      "weight": 0.25,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 133,
+      "drgCode": "DU11",
+      "drgName": "头、颈、外耳、口鼻的创伤及变形，伴严重合并症或并发症",
+      "weight": 0.52,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 134,
+      "drgCode": "DU15",
+      "drgName": "头、颈、外耳、口鼻的创伤及变形，不伴严重合并症或并发症",
+      "weight": 0.3,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 135,
+      "drgCode": "DV11",
+      "drgName": "头、颈、耳、鼻、咽、口非恶性增生性疾病，伴严重合并症或并发症",
+      "weight": 0.54,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 136,
+      "drgCode": "DV15",
+      "drgName": "头、颈、耳、鼻、咽、口非恶性增生性疾病，不伴严重合并症或并发症",
+      "weight": 0.32,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 137,
+      "drgCode": "DW11",
+      "drgName": "口腔、牙齿有关疾病，伴严重合并症或并发症",
+      "weight": 0.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 138,
+      "drgCode": "DW15",
+      "drgName": "口腔、牙齿有关疾病，不伴严重合并症或并发症",
+      "weight": 0.37,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 139,
+      "drgCode": "DZ11",
+      "drgName": "其他头、颈、耳、鼻、咽、口疾病，伴严重合并症或并发症",
+      "weight": 0.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 140,
+      "drgCode": "DZ13",
+      "drgName": "其他头、颈、耳、鼻、咽、口疾病，伴一般合并症或并发症",
+      "weight": 0.5,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 141,
+      "drgCode": "DZ15",
+      "drgName": "其他头、颈、耳、鼻、咽、口疾病，不伴合并症或并发症",
+      "weight": 0.29,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 142,
+      "drgCode": "EB19",
+      "drgName": "肺大手术",
+      "weight": 3.83,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 143,
+      "drgCode": "EB29",
+      "drgName": "肺其他手术",
+      "weight": 2.67,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 144,
+      "drgCode": "EC19",
+      "drgName": "纵隔、气管、胸壁大手术",
+      "weight": 2.56,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 145,
+      "drgCode": "EC29",
+      "drgName": "纵隔、气管、胸壁其他手术",
+      "weight": 2.77,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 146,
+      "drgCode": "ED11",
+      "drgName": "除肺、纵隔、气管、胸壁外的其他手术，伴严重合并症或并发症",
+      "weight": 2.72,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 147,
+      "drgCode": "ED13",
+      "drgName": "除肺、纵隔、气管、胸壁外的其他手术，伴一般合并症或并发症",
+      "weight": 1.46,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 148,
+      "drgCode": "ED15",
+      "drgName": "除肺、纵隔、气管、胸壁外的其他手术，不伴合并症或并发症",
+      "weight": 1.03,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 149,
+      "drgCode": "EJ11",
+      "drgName": "呼吸系统其他手术，伴严重合并症或并发症",
+      "weight": 3.79,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 150,
+      "drgCode": "EJ13",
+      "drgName": "呼吸系统其他手术，伴一般合并症或并发症",
+      "weight": 2.02,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 151,
+      "drgCode": "EJ15",
+      "drgName": "呼吸系统其他手术，不伴合并症或并发症",
+      "weight": 1.45,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 152,
+      "drgCode": "EK19",
+      "drgName": "有创呼吸机治疗小于 96 小时",
+      "weight": 2.18,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 153,
+      "drgCode": "EK23",
+      "drgName": "伴肺水肿或呼吸衰竭的无创呼吸支持技术，伴合并症或并发症",
+      "weight": 1.67,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 154,
+      "drgCode": "EK25",
+      "drgName": "伴肺水肿或呼吸衰竭的无创呼吸支持技术，不伴合并症或并发症",
+      "weight": 1.18,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 155,
+      "drgCode": "ER11",
+      "drgName": "呼吸系统肿瘤，伴严重合并症或并发症",
+      "weight": 1.48,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 156,
+      "drgCode": "ER15",
+      "drgName": "呼吸系统肿瘤，不伴严重合并症或并发症",
+      "weight": 1.15,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 157,
+      "drgCode": "ER23",
+      "drgName": "肺水肿或呼吸衰竭，伴合并症或并发症",
+      "weight": 1.35,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 158,
+      "drgCode": "ER25",
+      "drgName": "肺水肿或呼吸衰竭，不伴合并症或并发症",
+      "weight": 0.82,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 159,
+      "drgCode": "ES11",
+      "drgName": "肺真菌病，伴严重合并症或并发症",
+      "weight": 2.01,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 160,
+      "drgCode": "ES13",
+      "drgName": "肺真菌病，伴一般合并症或并发症",
+      "weight": 1.22,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 161,
+      "drgCode": "ES15",
+      "drgName": "肺真菌病，不伴合并症或并发症",
+      "weight": 0.89,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 162,
+      "drgCode": "ES29",
+      "drgName": "呼吸系统结核",
+      "weight": 0.87,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 163,
+      "drgCode": "ES31",
+      "drgName": "呼吸系统感染/炎症，伴严重合并症或并发症",
+      "weight": 1.15,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 164,
+      "drgCode": "ES33",
+      "drgName": "呼吸系统感染/炎症，伴一般合并症或并发症",
+      "weight": 0.66,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 165,
+      "drgCode": "ES35",
+      "drgName": "呼吸系统感染/炎症，不伴合并症或并发症",
+      "weight": 0.39,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 166,
+      "drgCode": "ET11",
+      "drgName": "肺间质性疾病，伴严重合并症或并发症",
+      "weight": 1.03,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 167,
+      "drgCode": "ET13",
+      "drgName": "肺间质性疾病，伴一般合并症或并发症",
+      "weight": 0.77,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 168,
+      "drgCode": "ET15",
+      "drgName": "肺间质性疾病，不伴合并症或并发症",
+      "weight": 0.7,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 169,
+      "drgCode": "ET23",
+      "drgName": "慢性气道阻塞病，伴合并症或并发症",
+      "weight": 0.78,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 170,
+      "drgCode": "ET25",
+      "drgName": "慢性气道阻塞病，不伴合并症或并发症",
+      "weight": 0.52,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 171,
+      "drgCode": "EU19",
+      "drgName": "重大胸部创伤",
+      "weight": 0.57,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 172,
+      "drgCode": "EV19",
+      "drgName": "呼吸系统症状、体征",
+      "weight": 0.57,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 173,
+      "drgCode": "EW11",
+      "drgName": "胸膜病变及胸腔积液，伴严重合并症或并发症",
+      "weight": 1.03,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 174,
+      "drgCode": "EW13",
+      "drgName": "胸膜病变及胸腔积液，伴一般合并症或并发症",
+      "weight": 0.74,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 175,
+      "drgCode": "EW15",
+      "drgName": "胸膜病变及胸腔积液，不伴合并症或并发症",
+      "weight": 0.49,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 176,
+      "drgCode": "EX13",
+      "drgName": "哮喘及喘息性支气管炎，伴合并症或并发症",
+      "weight": 0.61,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 177,
+      "drgCode": "EX15",
+      "drgName": "哮喘及喘息性支气管炎，不伴合并症或并发症",
+      "weight": 0.43,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 178,
+      "drgCode": "EX29",
+      "drgName": "百日咳及急性支气管炎",
+      "weight": 0.28,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 179,
+      "drgCode": "EZ11",
+      "drgName": "其他呼吸系统疾病，伴严重合并症或并发症",
+      "weight": 1.55,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 180,
+      "drgCode": "EZ13",
+      "drgName": "其他呼吸系统疾病，伴一般合并症或并发症",
+      "weight": 0.89,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 181,
+      "drgCode": "EZ15",
+      "drgName": "其他呼吸系统疾病，不伴合并症或并发症",
+      "weight": 0.59,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 182,
+      "drgCode": "FB19",
+      "drgName": "瓣膜手术伴冠脉手术",
+      "weight": 13.72,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 183,
+      "drgCode": "FB23",
+      "drgName": "心脏瓣膜手术，伴合并症或并发症",
+      "weight": 10.88,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 184,
+      "drgCode": "FB25",
+      "drgName": "心脏瓣膜手术，不伴合并症或并发症",
+      "weight": 8.59,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 185,
+      "drgCode": "FC19",
+      "drgName": "冠状动脉手术",
+      "weight": 9.38,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 186,
+      "drgCode": "FD19",
+      "drgName": "先天性心脏病复杂手术",
+      "weight": 9.24,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 187,
+      "drgCode": "FD23",
+      "drgName": "先天性心脏病常规手术，伴合并症或并发症",
+      "weight": 5.83,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 188,
+      "drgCode": "FD25",
+      "drgName": "先天性心脏病常规手术，不伴合并症或并发症",
+      "weight": 4.78,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 189,
+      "drgCode": "FE19",
+      "drgName": "大血管复杂手术",
+      "weight": 13.77,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 190,
+      "drgCode": "FE29",
+      "drgName": "大血管常规手术",
+      "weight": 5.72,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 191,
+      "drgCode": "FF19",
+      "drgName": "外周血管手术伴介入操作",
+      "weight": 4.91,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 192,
+      "drgCode": "FF21",
+      "drgName": "外周血管（除大隐静脉外）其他的手术，伴严重合并症或并发症",
+      "weight": 3.8,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 193,
+      "drgCode": "FF23",
+      "drgName": "外周血管（除大隐静脉外）其他的手术，伴一般合并症或并发症",
+      "weight": 2.21,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 194,
+      "drgCode": "FF25",
+      "drgName": "外周血管（除大隐静脉外）其他的手术，不伴合并症或并发症",
+      "weight": 1.59,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 195,
+      "drgCode": "FF39",
+      "drgName": "大隐静脉和小隐静脉手术",
+      "weight": 1.1,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 196,
+      "drgCode": "FJ19",
+      "drgName": "心血管系统其他手术",
+      "weight": 5.27,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 197,
+      "drgCode": "FK19",
+      "drgName": "心脏循环辅助系统植入",
+      "weight": 6.41,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 198,
+      "drgCode": "FK29",
+      "drgName": "伴急性心肌梗死/心衰/休克的心脏除颤器及心室同步",
+      "weight": 8.04,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 199,
+      "drgCode": "FK39",
+      "drgName": "不伴急性心肌梗死/心衰/休克的心脏除颤器及心室同步",
+      "weight": 7.41,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 200,
+      "drgCode": "FK49",
+      "drgName": "永久性起搏器植入/置换/更新",
+      "weight": 3.59,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 201,
+      "drgCode": "FL19",
+      "drgName": "经皮瓣膜植入或修复术",
+      "weight": 14.89,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 202,
+      "drgCode": "FL29",
+      "drgName": "经皮心脏消融术伴房颤和/或房扑",
+      "weight": 4.51,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 203,
+      "drgCode": "FL39",
+      "drgName": "经皮心脏消融术除房扑、房颤外其他心律失常",
+      "weight": 2.54,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 204,
+      "drgCode": "FL49",
+      "drgName": "先天性心脏病介入治疗",
+      "weight": 2.31,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 205,
+      "drgCode": "FM19",
+      "drgName": "经皮大血管复杂手术",
+      "weight": 10.75,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 206,
+      "drgCode": "FM29",
+      "drgName": "经皮大血管常规手术",
+      "weight": 7.71,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 207,
+      "drgCode": "FM39",
+      "drgName": "经皮冠状动脉支架植入",
+      "weight": 2.37,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 208,
+      "drgCode": "FM49",
+      "drgName": "其他经皮心血管治疗",
+      "weight": 2.28,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 209,
+      "drgCode": "FM59",
+      "drgName": "经皮心导管检查操作",
+      "weight": 0.87,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 210,
+      "drgCode": "FN19",
+      "drgName": "下肢动脉经皮血管内治疗",
+      "weight": 4.2,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 211,
+      "drgCode": "FN23",
+      "drgName": "其他外周血管检查和/或治疗，伴合并症或并发症",
+      "weight": 2.44,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 212,
+      "drgCode": "FN25",
+      "drgName": "其他外周血管检查和/或治疗，不伴合并症或并发症",
+      "weight": 1.79,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 213,
+      "drgCode": "FP13",
+      "drgName": "心力衰竭、休克伴操作性治疗，伴合并症或并发症",
+      "weight": 2.56,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 214,
+      "drgCode": "FP15",
+      "drgName": "心力衰竭、休克伴操作性治疗，不伴合并症或并发症",
+      "weight": 2.01,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 215,
+      "drgCode": "FR11",
+      "drgName": "急性心肌梗死，伴严重合并症或并发症",
+      "weight": 1.24,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 216,
+      "drgCode": "FR15",
+      "drgName": "急性心肌梗死，不伴严重合并症或并发症",
+      "weight": 0.71,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 217,
+      "drgCode": "FR21",
+      "drgName": "心力衰竭、休克，伴严重合并症或并发症",
+      "weight": 1.11,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 218,
+      "drgCode": "FR25",
+      "drgName": "心力衰竭、休克，不伴严重合并症或并发症",
+      "weight": 0.66,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 219,
+      "drgCode": "FR33",
+      "drgName": "肺栓塞，伴合并症或并发症",
+      "weight": 1.1,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 220,
+      "drgCode": "FR35",
+      "drgName": "肺栓塞，不伴合并症或并发症",
+      "weight": 0.74,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 221,
+      "drgCode": "FR49",
+      "drgName": "心绞痛",
+      "weight": 0.5,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 222,
+      "drgCode": "FR59",
+      "drgName": "冠状动脉粥样硬化/血栓/闭塞",
+      "weight": 0.53,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 223,
+      "drgCode": "FT19",
+      "drgName": "心肌病",
+      "weight": 0.64,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 224,
+      "drgCode": "FT29",
+      "drgName": "感染性心内膜炎",
+      "weight": 1.45,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 225,
+      "drgCode": "FT31",
+      "drgName": "瓣膜疾病，伴严重合并症或并发症",
+      "weight": 0.84,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 226,
+      "drgCode": "FT35",
+      "drgName": "瓣膜疾病，不伴严重合并症或并发症",
+      "weight": 0.6,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 227,
+      "drgCode": "FT41",
+      "drgName": "心包疾病，伴严重合并症或并发症",
+      "weight": 1.28,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 228,
+      "drgCode": "FT43",
+      "drgName": "心包疾病，伴一般合并症或并发症",
+      "weight": 0.93,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 229,
+      "drgCode": "FT45",
+      "drgName": "心包疾病，不伴合并症或并发症",
+      "weight": 0.73,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 230,
+      "drgCode": "FU11",
+      "drgName": "严重心律失常及心脏停搏，伴严重合并症或并发症",
+      "weight": 1.41,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 231,
+      "drgCode": "FU15",
+      "drgName": "严重心律失常及心脏停搏，不伴严重合并症或并发症",
+      "weight": 0.64,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 232,
+      "drgCode": "FU29",
+      "drgName": "心律失常及传导障碍",
+      "weight": 0.45,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 233,
+      "drgCode": "FV11",
+      "drgName": "先天性心脏病，伴严重合并症或并发症",
+      "weight": 0.8,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 234,
+      "drgCode": "FV15",
+      "drgName": "先天性心脏病，不伴严重合并症或并发症",
+      "weight": 0.51,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 235,
+      "drgCode": "FV23",
+      "drgName": "高血压，伴合并症或并发症",
+      "weight": 0.54,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 236,
+      "drgCode": "FV25",
+      "drgName": "高血压，不伴合并症或并发症",
+      "weight": 0.4,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 237,
+      "drgCode": "FV33",
+      "drgName": "晕厥及/或虚脱，伴合并症或并发症",
+      "weight": 0.52,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 238,
+      "drgCode": "FV35",
+      "drgName": "晕厥及/或虚脱，不伴合并症或并发症",
+      "weight": 0.4,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 239,
+      "drgCode": "FW13",
+      "drgName": "动脉疾病，伴合并症或并发症",
+      "weight": 0.67,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 240,
+      "drgCode": "FW15",
+      "drgName": "动脉疾病，不伴合并症或并发症",
+      "weight": 0.54,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 241,
+      "drgCode": "FW29",
+      "drgName": "静脉疾病",
+      "weight": 0.49,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 242,
+      "drgCode": "FZ11",
+      "drgName": "其他循环系统疾病，伴严重合并症或并发症",
+      "weight": 0.82,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 243,
+      "drgCode": "FZ15",
+      "drgName": "其他循环系统疾病，不伴严重合并症或并发症",
+      "weight": 0.45,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 244,
+      "drgCode": "GB11",
+      "drgName": "食管大手术，伴严重合并症或并发症",
+      "weight": 6.88,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 245,
+      "drgCode": "GB15",
+      "drgName": "食管大手术，不伴严重合并症或并发症",
+      "weight": 5.55,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 246,
+      "drgCode": "GB29",
+      "drgName": "胃、十二指肠大手术",
+      "weight": 4.68,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 247,
+      "drgCode": "GB39",
+      "drgName": "小肠、大肠（含直肠）的大手术",
+      "weight": 4.29,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 248,
+      "drgCode": "GC19",
+      "drgName": "食管其他手术",
+      "weight": 2.55,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 249,
+      "drgCode": "GC21",
+      "drgName": "胃、十二指肠其他手术，伴严重合并症或并发症",
+      "weight": 3.73,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 250,
+      "drgCode": "GC23",
+      "drgName": "胃、十二指肠其他手术，伴一般合并症或并发症",
+      "weight": 2.49,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 251,
+      "drgCode": "GC25",
+      "drgName": "胃、十二指肠其他手术，不伴合并症或并发症",
+      "weight": 1.9,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 252,
+      "drgCode": "GC31",
+      "drgName": "小肠、大肠（含直肠）的其他手术，伴严重合并症或并发症",
+      "weight": 4.08,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 253,
+      "drgCode": "GC33",
+      "drgName": "小肠、大肠（含直肠）的其他手术，伴一般合并症或并发症",
+      "weight": 2.76,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 254,
+      "drgCode": "GC35",
+      "drgName": "小肠、大肠（含直肠）的其他手术，不伴合并症或并发症",
+      "weight": 2.18,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 255,
+      "drgCode": "GD19",
+      "drgName": "腹膜后肿瘤手术",
+      "weight": 3.35,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 256,
+      "drgCode": "GE19",
+      "drgName": "伴穿孔、化脓、坏疽等阑尾切除术",
+      "weight": 1.02,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 257,
+      "drgCode": "GE29",
+      "drgName": "阑尾切除术",
+      "weight": 0.99,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 258,
+      "drgCode": "GF19",
+      "drgName": "特殊类型疝手术",
+      "weight": 2.06,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 259,
+      "drgCode": "GF23",
+      "drgName": "腹壁疝及脐疝手术，伴合并症或并发症",
+      "weight": 1.91,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 260,
+      "drgCode": "GF25",
+      "drgName": "腹壁疝及脐疝手术，不伴合并症或并发症",
+      "weight": 1.44,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 261,
+      "drgCode": "GF39",
+      "drgName": "腹股沟疝及股疝手术",
+      "weight": 0.95,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 262,
+      "drgCode": "GG19",
+      "drgName": "肛管、肛门及肛周手术",
+      "weight": 0.81,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 263,
+      "drgCode": "GG29",
+      "drgName": "直肠其他手术",
+      "weight": 0.84,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 264,
+      "drgCode": "GH11",
+      "drgName": "腹腔/盆腔内粘连松解术，伴严重合并症或并发症",
+      "weight": 3.55,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 265,
+      "drgCode": "GH13",
+      "drgName": "腹腔/盆腔内粘连松解术，伴一般合并症或并发症",
+      "weight": 2.59,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 266,
+      "drgCode": "GH15",
+      "drgName": "腹腔/盆腔内粘连松解术，不伴合并症或并发症",
+      "weight": 1.92,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 267,
+      "drgCode": "GJ11",
+      "drgName": "消化系统其他手术，伴严重合并症或并发症",
+      "weight": 3.16,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 268,
+      "drgCode": "GJ13",
+      "drgName": "消化系统其他手术，伴一般合并症或并发症",
+      "weight": 2.35,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 269,
+      "drgCode": "GJ15",
+      "drgName": "消化系统其他手术，不伴合并症或并发症",
+      "weight": 0.96,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 270,
+      "drgCode": "GK19",
+      "drgName": "消化系统其他内镜治疗操作",
+      "weight": 1.02,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 271,
+      "drgCode": "GK23",
+      "drgName": "胃镜治疗操作，伴合并症或并发症",
+      "weight": 0.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 272,
+      "drgCode": "GK25",
+      "drgName": "胃镜治疗操作，不伴合并症或并发症",
+      "weight": 0.6,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 273,
+      "drgCode": "GK33",
+      "drgName": "结肠镜治疗操作，伴合并症或并发症",
+      "weight": 0.67,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 274,
+      "drgCode": "GK35",
+      "drgName": "结肠镜治疗操作，不伴合并症或并发症",
+      "weight": 0.54,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 275,
+      "drgCode": "GR11",
+      "drgName": "消化系统恶性肿瘤，伴严重合并症或并发症",
+      "weight": 1.36,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 276,
+      "drgCode": "GR15",
+      "drgName": "消化系统恶性肿瘤，不伴严重合并症或并发症",
+      "weight": 0.89,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 277,
+      "drgCode": "GS11",
+      "drgName": "胃肠出血，伴严重合并症或并发症",
+      "weight": 0.97,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 278,
+      "drgCode": "GS13",
+      "drgName": "胃肠出血，伴一般合并症或并发症",
+      "weight": 0.68,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 279,
+      "drgCode": "GS15",
+      "drgName": "胃肠出血，不伴合并症或并发症",
+      "weight": 0.49,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 280,
+      "drgCode": "GT13",
+      "drgName": "炎症性肠病，伴合并症或并发症",
+      "weight": 0.61,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 281,
+      "drgCode": "GT15",
+      "drgName": "炎症性肠病，不伴合并症或并发症",
+      "weight": 0.37,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 282,
+      "drgCode": "GU19",
+      "drgName": "消化道溃疡伴穿孔",
+      "weight": 0.8,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 283,
+      "drgCode": "GU23",
+      "drgName": "其他消化道溃疡，伴合并症或并发症",
+      "weight": 0.64,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 284,
+      "drgCode": "GU25",
+      "drgName": "其他消化道溃疡，不伴合并症或并发症",
+      "weight": 0.44,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 285,
+      "drgCode": "GV13",
+      "drgName": "消化道梗阻或腹痛，伴合并症或并发症",
+      "weight": 0.58,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 286,
+      "drgCode": "GV15",
+      "drgName": "消化道梗阻或腹痛，不伴合并症或并发症",
+      "weight": 0.35,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 287,
+      "drgCode": "GW13",
+      "drgName": "食管炎、胃肠炎，伴合并症或并发症",
+      "weight": 0.44,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 288,
+      "drgCode": "GW15",
+      "drgName": "食管炎、胃肠炎，不伴合并症或并发症",
+      "weight": 0.31,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 289,
+      "drgCode": "GZ11",
+      "drgName": "其他消化系统疾病，伴严重合并症或并发症",
+      "weight": 0.74,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 290,
+      "drgCode": "GZ15",
+      "drgName": "其他消化系统疾病，不伴严重合并症或并发症",
+      "weight": 0.44,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 291,
+      "drgCode": "HB11",
+      "drgName": "胰、肝切除和/或分流手术，伴严重合并症或并发症",
+      "weight": 6.17,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 292,
+      "drgCode": "HB15",
+      "drgName": "胰、肝切除和/或分流手术，不伴严重合并症或并发症",
+      "weight": 4.48,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 293,
+      "drgCode": "HC11",
+      "drgName": "胆总管手术，伴严重合并症或并发症",
+      "weight": 3.0,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 294,
+      "drgCode": "HC15",
+      "drgName": "胆总管手术，不伴严重合并症或并发症",
+      "weight": 2.24,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 295,
+      "drgCode": "HC23",
+      "drgName": "胆囊切除手术，伴合并症或并发症",
+      "weight": 1.48,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 296,
+      "drgCode": "HC25",
+      "drgName": "胆囊切除手术，不伴合并症或并发症",
+      "weight": 1.19,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 297,
+      "drgCode": "HC31",
+      "drgName": "除胆囊切除术以外的胆道手术，伴严重合并症或并发症",
+      "weight": 2.56,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 298,
+      "drgCode": "HC33",
+      "drgName": "除胆囊切除术以外的胆道手术，伴一般合并症或并发症",
+      "weight": 1.78,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 299,
+      "drgCode": "HC35",
+      "drgName": "除胆囊切除术以外的胆道手术，不伴合并症或并发症",
+      "weight": 1.63,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 300,
+      "drgCode": "HJ11",
+      "drgName": "与肝、胆或胰腺疾病有关的其他手术，伴严重合并症或并发症",
+      "weight": 4.7,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 301,
+      "drgCode": "HJ13",
+      "drgName": "与肝、胆或胰腺疾病有关的其他手术，伴一般合并症或并发症",
+      "weight": 3.06,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 302,
+      "drgCode": "HJ15",
+      "drgName": "与肝、胆或胰腺疾病有关的其他手术，不伴合并症或并发症",
+      "weight": 2.23,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 303,
+      "drgCode": "HK19",
+      "drgName": "食管曲张静脉出血的治疗性内镜操作",
+      "weight": 1.54,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 304,
+      "drgCode": "HL19",
+      "drgName": "肝胆胰系统的治疗性操作",
+      "weight": 1.84,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 305,
+      "drgCode": "HL29",
+      "drgName": "肝胆胰系统的诊断性操作",
+      "weight": 1.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 306,
+      "drgCode": "HR19",
+      "drgName": "肝胆胰系统恶性肿瘤",
+      "weight": 0.96,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 307,
+      "drgCode": "HS19",
+      "drgName": "肝功能衰竭",
+      "weight": 1.26,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 308,
+      "drgCode": "HS21",
+      "drgName": "肝硬化，伴严重合并症或并发症",
+      "weight": 0.9,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 309,
+      "drgCode": "HS25",
+      "drgName": "肝硬化，不伴严重合并症或并发症",
+      "weight": 0.66,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 310,
+      "drgCode": "HS39",
+      "drgName": "病毒性肝炎",
+      "weight": 0.57,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 311,
+      "drgCode": "HT11",
+      "drgName": "重症胰腺炎，伴严重合并症或并发症",
+      "weight": 2.48,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 312,
+      "drgCode": "HT13",
+      "drgName": "重症胰腺炎，伴一般合并症或并发症",
+      "weight": 1.37,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 313,
+      "drgCode": "HT15",
+      "drgName": "重症胰腺炎，不伴合并症或并发症",
+      "weight": 1.02,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 314,
+      "drgCode": "HT21",
+      "drgName": "急性胰腺炎，伴严重合并症或并发症",
+      "weight": 0.85,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 315,
+      "drgCode": "HT23",
+      "drgName": "急性胰腺炎，伴一般合并症或并发症",
+      "weight": 0.64,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 316,
+      "drgCode": "HT25",
+      "drgName": "急性胰腺炎，不伴合并症或并发症",
+      "weight": 0.5,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 317,
+      "drgCode": "HU11",
+      "drgName": "急性胆道疾病，伴严重合并症或并发症",
+      "weight": 0.76,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 318,
+      "drgCode": "HU15",
+      "drgName": "急性胆道疾病，不伴严重合并症或并发症",
+      "weight": 0.44,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 319,
+      "drgCode": "HZ11",
+      "drgName": "其他肝脏疾病，伴严重合并症或并发症",
+      "weight": 0.98,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 320,
+      "drgCode": "HZ13",
+      "drgName": "其他肝脏疾病，伴一般合并症或并发症",
+      "weight": 0.66,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 321,
+      "drgCode": "HZ15",
+      "drgName": "其他肝脏疾病，不伴合并症或并发症",
+      "weight": 0.52,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 322,
+      "drgCode": "HZ21",
+      "drgName": "胆道其他疾病，伴严重合并症或并发症",
+      "weight": 0.65,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 323,
+      "drgCode": "HZ25",
+      "drgName": "胆道其他疾病，不伴严重合并症或并发症",
+      "weight": 0.44,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 324,
+      "drgCode": "HZ31",
+      "drgName": "胰腺其他疾病，伴严重合并症或并发症",
+      "weight": 0.8,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 325,
+      "drgCode": "HZ35",
+      "drgName": "胰腺其他疾病，不伴严重合并症或并发症",
+      "weight": 0.57,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 326,
+      "drgCode": "IB19",
+      "drgName": "复杂脊柱疾病或 3 节段及以上脊柱融合手术或翻修手术",
+      "weight": 4.73,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 327,
+      "drgCode": "IB29",
+      "drgName": "脊柱 2 节段及以下脊柱融合术",
+      "weight": 3.3,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 328,
+      "drgCode": "IB31",
+      "drgName": "与脊柱有关的其他手术，伴严重合并症或并发症",
+      "weight": 1.91,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 329,
+      "drgCode": "IB35",
+      "drgName": "与脊柱有关的其他手术，不伴严重合并症或并发症",
+      "weight": 1.69,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 330,
+      "drgCode": "IC19",
+      "drgName": "髋、肩、膝、肘和踝关节假体翻修/修正手术",
+      "weight": 4.41,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 331,
+      "drgCode": "IC29",
+      "drgName": "髋、肩、膝、肘和踝关节置换术",
+      "weight": 2.5,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 332,
+      "drgCode": "IC39",
+      "drgName": "除置换/翻修外的髋、肩、膝、肘、踝和足部关节的修复、重建手术",
+      "weight": 2.14,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 333,
+      "drgCode": "IC49",
+      "drgName": "除置换/翻修外的髋、肩、膝、肘、踝和足部关节其他手术",
+      "weight": 1.59,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 334,
+      "drgCode": "ID19",
+      "drgName": "脊柱、骨盆的骨与软组织肿瘤手术",
+      "weight": 3.77,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 335,
+      "drgCode": "ID23",
+      "drgName": "除脊柱、骨盆以外的骨与软组织肿瘤手术，伴合并症或并发症",
+      "weight": 2.57,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 336,
+      "drgCode": "ID25",
+      "drgName": "除脊柱、骨盆以外的骨与软组织肿瘤手术，不伴合并症或并发症",
+      "weight": 1.78,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 337,
+      "drgCode": "IE13",
+      "drgName": "骨盆髋臼手术，伴合并症或并发症",
+      "weight": 2.95,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 338,
+      "drgCode": "IE15",
+      "drgName": "骨盆髋臼手术，不伴合并症或并发症",
+      "weight": 2.01,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 339,
+      "drgCode": "IE21",
+      "drgName": "股骨手术，伴严重合并症或并发症",
+      "weight": 2.84,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 340,
+      "drgCode": "IE25",
+      "drgName": "股骨手术，不伴严重合并症或并发症",
+      "weight": 2.04,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 341,
+      "drgCode": "IE39",
+      "drgName": "除股骨以外的下肢骨手术",
+      "weight": 1.8,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 342,
+      "drgCode": "IE43",
+      "drgName": "小关节手术，伴合并症或并发症",
+      "weight": 1.66,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 343,
+      "drgCode": "IE45",
+      "drgName": "小关节手术，不伴合并症或并发症",
+      "weight": 1.15,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 344,
+      "drgCode": "IE59",
+      "drgName": "上肢骨手术",
+      "weight": 1.45,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 345,
+      "drgCode": "IE69",
+      "drgName": "手外科手术",
+      "weight": 1.08,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 346,
+      "drgCode": "IF19",
+      "drgName": "骨科固定装置去除/修正术",
+      "weight": 0.7,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 347,
+      "drgCode": "IG19",
+      "drgName": "周围神经手术",
+      "weight": 1.04,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 348,
+      "drgCode": "IH11",
+      "drgName": "肌肉、肌腱手术，伴严重合并症或并发症",
+      "weight": 1.65,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 349,
+      "drgCode": "IH13",
+      "drgName": "肌肉、肌腱手术，伴一般合并症或并发症",
+      "weight": 0.99,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 350,
+      "drgCode": "IH15",
+      "drgName": "肌肉、肌腱手术，不伴合并症或并发症",
+      "weight": 0.7,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 351,
+      "drgCode": "IJ13",
+      "drgName": "骨骼肌肉系统的其他手术，伴合并症或并发症",
+      "weight": 0.97,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 352,
+      "drgCode": "IJ15",
+      "drgName": "骨骼肌肉系统的其他手术，不伴合并症或并发症",
+      "weight": 0.73,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 353,
+      "drgCode": "IR19",
+      "drgName": "骨盆骨折",
+      "weight": 0.63,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 354,
+      "drgCode": "IR21",
+      "drgName": "股骨骨折，伴严重合并症或并发症",
+      "weight": 0.88,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 355,
+      "drgCode": "IR25",
+      "drgName": "股骨骨折，不伴严重合并症或并发症",
+      "weight": 0.51,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 356,
+      "drgCode": "IS11",
+      "drgName": "前臂、腕、手或足损伤，伴严重合并症或并发症",
+      "weight": 0.57,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 357,
+      "drgCode": "IS15",
+      "drgName": "前臂、腕、手或足损伤，不伴严重合并症或并发症",
+      "weight": 0.35,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 358,
+      "drgCode": "IS21",
+      "drgName": "除前臂、腕、手足外的损伤，伴严重合并症或并发症",
+      "weight": 0.69,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 359,
+      "drgCode": "IS25",
+      "drgName": "除前臂、腕、手足外的损伤，不伴严重合并症或并发症",
+      "weight": 0.43,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 360,
+      "drgCode": "IT19",
+      "drgName": "骨髓炎",
+      "weight": 0.61,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 361,
+      "drgCode": "IT21",
+      "drgName": "慢性炎症性肌肉骨骼结缔组织疾病，伴严重合并症或并发症",
+      "weight": 0.83,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 362,
+      "drgCode": "IT23",
+      "drgName": "慢性炎症性肌肉骨骼结缔组织疾病，伴一般合并症或并发症",
+      "weight": 0.6,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 363,
+      "drgCode": "IT25",
+      "drgName": "慢性炎症性肌肉骨骼结缔组织疾病，不伴合并症或并发症",
+      "weight": 0.46,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 364,
+      "drgCode": "IT33",
+      "drgName": "感染性关节炎，伴合并症或并发症",
+      "weight": 0.83,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 365,
+      "drgCode": "IT35",
+      "drgName": "感染性关节炎，不伴合并症或并发症",
+      "weight": 0.6,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 366,
+      "drgCode": "IU13",
+      "drgName": "骨病及其他关节病，伴合并症或并发症",
+      "weight": 0.59,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 367,
+      "drgCode": "IU15",
+      "drgName": "骨病及其他关节病，不伴合并症或并发症",
+      "weight": 0.43,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 368,
+      "drgCode": "IU29",
+      "drgName": "颈腰背疾病",
+      "weight": 0.56,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 369,
+      "drgCode": "IU39",
+      "drgName": "骨骼、肌肉、结缔组织恶性病损、病理性骨折",
+      "weight": 0.68,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 370,
+      "drgCode": "IV19",
+      "drgName": "除脊柱外先天性骨骼肌肉系统疾病",
+      "weight": 0.46,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 371,
+      "drgCode": "IZ13",
+      "drgName": "肌肉骨骼系统植入物/假体的康复照护，伴合并症或并发症",
+      "weight": 0.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 372,
+      "drgCode": "IZ15",
+      "drgName": "肌肉骨骼系统植入物/假体的康复照护，不伴合并症或并发症",
+      "weight": 0.38,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 373,
+      "drgCode": "IZ21",
+      "drgName": "骨骼、肌肉、肌腱、结缔组织的其他疾病，伴严重合并症或并发症",
+      "weight": 0.94,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 374,
+      "drgCode": "IZ23",
+      "drgName": "骨骼、肌肉、肌腱、结缔组织的其他疾病，伴一般合并症或并发症",
+      "weight": 0.62,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 375,
+      "drgCode": "IZ25",
+      "drgName": "骨骼、肌肉、肌腱、结缔组织的其他疾病，不伴合并症或并发症",
+      "weight": 0.46,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 376,
+      "drgCode": "JA19",
+      "drgName": "乳房恶性肿瘤根治性切除伴乳房重建术",
+      "weight": 4.07,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 377,
+      "drgCode": "JA21",
+      "drgName": "乳房恶性肿瘤根治性切除术，伴严重合并症或并发症",
+      "weight": 2.23,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 378,
+      "drgCode": "JA25",
+      "drgName": "乳房恶性肿瘤根治性切除术，不伴严重合并症或并发症",
+      "weight": 1.98,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 379,
+      "drgCode": "JB19",
+      "drgName": "乳房成形手术",
+      "weight": 2.04,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 380,
+      "drgCode": "JB29",
+      "drgName": "乳腺切除手术",
+      "weight": 1.13,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 381,
+      "drgCode": "JB39",
+      "drgName": "其他乳房手术",
+      "weight": 0.57,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 382,
+      "drgCode": "JC19",
+      "drgName": "颜面及其他皮肤、皮下组织成形术",
+      "weight": 0.95,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 383,
+      "drgCode": "JD11",
+      "drgName": "皮肤移植手术，伴严重合并症或并发症",
+      "weight": 2.72,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 384,
+      "drgCode": "JD13",
+      "drgName": "皮肤移植手术，伴一般合并症或并发症",
+      "weight": 1.93,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 385,
+      "drgCode": "JD15",
+      "drgName": "皮肤移植手术，不伴合并症或并发症",
+      "weight": 0.95,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 386,
+      "drgCode": "JD21",
+      "drgName": "皮肤清创手术，伴严重合并症或并发症",
+      "weight": 2.08,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 387,
+      "drgCode": "JD23",
+      "drgName": "皮肤清创手术，伴一般合并症或并发症",
+      "weight": 1.4,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 388,
+      "drgCode": "JD25",
+      "drgName": "皮肤清创手术，不伴合并症或并发症",
+      "weight": 0.88,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 389,
+      "drgCode": "JJ11",
+      "drgName": "皮肤、皮下组织的其他手术，伴严重合并症或并发症",
+      "weight": 1.01,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 390,
+      "drgCode": "JJ15",
+      "drgName": "皮肤、皮下组织的其他手术，不伴严重合并症或并发症",
+      "weight": 0.47,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 391,
+      "drgCode": "JR11",
+      "drgName": "乳房恶性肿瘤，伴严重合并症或并发症",
+      "weight": 1.49,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 392,
+      "drgCode": "JR15",
+      "drgName": "乳房恶性肿瘤，不伴严重合并症或并发症",
+      "weight": 1.04,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 393,
+      "drgCode": "JR23",
+      "drgName": "皮肤、皮下组织的恶性肿瘤，伴合并症或并发症",
+      "weight": 1.05,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 394,
+      "drgCode": "JR25",
+      "drgName": "皮肤、皮下组织的恶性肿瘤，不伴合并症或并发症",
+      "weight": 0.69,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 395,
+      "drgCode": "JS11",
+      "drgName": "重大皮肤疾病，伴严重合并症或并发症",
+      "weight": 1.06,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 396,
+      "drgCode": "JS13",
+      "drgName": "重大皮肤疾病，伴一般合并症或并发症",
+      "weight": 0.7,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 397,
+      "drgCode": "JS15",
+      "drgName": "重大皮肤疾病，不伴合并症或并发症",
+      "weight": 0.45,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 398,
+      "drgCode": "JS21",
+      "drgName": "炎症性皮肤病，伴严重合并症或并发症",
+      "weight": 0.55,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 399,
+      "drgCode": "JS25",
+      "drgName": "炎症性皮肤病，不伴严重合并症或并发症",
+      "weight": 0.41,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 400,
+      "drgCode": "JT19",
+      "drgName": "乳房、皮肤、皮下组织创伤",
+      "weight": 0.33,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 401,
+      "drgCode": "JU13",
+      "drgName": "感染性皮肤病，伴合并症或并发症",
+      "weight": 0.67,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 402,
+      "drgCode": "JU15",
+      "drgName": "感染性皮肤病，不伴合并症或并发症",
+      "weight": 0.4,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 403,
+      "drgCode": "JV19",
+      "drgName": "皮肤、皮下组织的非恶性增生性病变",
+      "weight": 0.4,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 404,
+      "drgCode": "JV29",
+      "drgName": "乳房良性病变",
+      "weight": 0.34,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 405,
+      "drgCode": "JZ13",
+      "drgName": "其他皮肤及乳腺疾病，伴合并症或并发症",
+      "weight": 0.43,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 406,
+      "drgCode": "JZ15",
+      "drgName": "其他皮肤及乳腺疾病，不伴合并症或并发症",
+      "weight": 0.33,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 407,
+      "drgCode": "KB19",
+      "drgName": "肾上腺手术",
+      "weight": 2.36,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 408,
+      "drgCode": "KC11",
+      "drgName": "垂体手术，伴严重合并症或并发症",
+      "weight": 4.67,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 409,
+      "drgCode": "KC15",
+      "drgName": "垂体手术，不伴严重合并症或并发症",
+      "weight": 3.82,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 410,
+      "drgCode": "KD19",
+      "drgName": "甲状腺、甲状旁腺大手术",
+      "weight": 1.74,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 411,
+      "drgCode": "KD29",
+      "drgName": "甲状旁腺、甲状舌管及甲状腺其他手术",
+      "weight": 1.11,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 412,
+      "drgCode": "KE19",
+      "drgName": "减重手术",
+      "weight": 3.19,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 413,
+      "drgCode": "KJ13",
+      "drgName": "因内分泌、营养、代谢疾病的其他手术，伴合并症或并发症",
+      "weight": 2.4,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 414,
+      "drgCode": "KJ15",
+      "drgName": "因内分泌、营养、代谢疾病的其他手术，不伴合并症或并发症",
+      "weight": 1.77,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 415,
+      "drgCode": "KR11",
+      "drgName": "内分泌腺体肿瘤，伴严重合并症或并发症",
+      "weight": 0.9,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 416,
+      "drgCode": "KR15",
+      "drgName": "内分泌腺体肿瘤，不伴严重合并症或并发症",
+      "weight": 0.55,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 417,
+      "drgCode": "KS13",
+      "drgName": "糖尿病，伴合并症或并发症",
+      "weight": 0.63,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 418,
+      "drgCode": "KS15",
+      "drgName": "糖尿病，不伴合并症或并发症",
+      "weight": 0.49,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 419,
+      "drgCode": "KT13",
+      "drgName": "内分泌、营养、代谢疾病，伴合并症或并发症",
+      "weight": 0.49,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 420,
+      "drgCode": "KT15",
+      "drgName": "内分泌、营养、代谢疾病，不伴合并症或并发症",
+      "weight": 0.31,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 421,
+      "drgCode": "KU11",
+      "drgName": "营养失调，伴严重合并症或并发症",
+      "weight": 1.12,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 422,
+      "drgCode": "KU13",
+      "drgName": "营养失调，伴一般合并症或并发症",
+      "weight": 0.78,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 423,
+      "drgCode": "KU15",
+      "drgName": "营养失调，不伴合并症或并发症",
+      "weight": 0.58,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 424,
+      "drgCode": "KV11",
+      "drgName": "先天性代谢异常，伴严重合并症或并发症",
+      "weight": 0.79,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 425,
+      "drgCode": "KV15",
+      "drgName": "先天性代谢异常，不伴严重合并症或并发症",
+      "weight": 0.53,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 426,
+      "drgCode": "KZ13",
+      "drgName": "其他代谢疾病，伴合并症或并发症",
+      "weight": 0.65,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 427,
+      "drgCode": "KZ15",
+      "drgName": "其他代谢疾病，不伴合并症或并发症",
+      "weight": 0.41,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 428,
+      "drgCode": "LA19",
+      "drgName": "肾脏肿瘤手术",
+      "weight": 3.69,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 429,
+      "drgCode": "LA21",
+      "drgName": "膀胱肿瘤手术，伴严重合并症或并发症",
+      "weight": 2.72,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 430,
+      "drgCode": "LA23",
+      "drgName": "膀胱肿瘤手术，伴一般合并症或并发症",
+      "weight": 2.33,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 431,
+      "drgCode": "LA25",
+      "drgName": "膀胱肿瘤手术，不伴合并症或并发症",
+      "weight": 1.83,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 432,
+      "drgCode": "LB19",
+      "drgName": "肾脏结石手术",
+      "weight": 1.73,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 433,
+      "drgCode": "LB29",
+      "drgName": "肾脏其他手术",
+      "weight": 1.99,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 434,
+      "drgCode": "LC19",
+      "drgName": "输尿管手术",
+      "weight": 1.23,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 435,
+      "drgCode": "LD19",
+      "drgName": "膀胱其他手术",
+      "weight": 1.18,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 436,
+      "drgCode": "LE19",
+      "drgName": "尿道手术",
+      "weight": 1.09,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 437,
+      "drgCode": "LF11",
+      "drgName": "肾透析相关手术，伴严重合并症或并发症",
+      "weight": 1.7,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 438,
+      "drgCode": "LF15",
+      "drgName": "肾透析相关手术，不伴严重合并症或并发症",
+      "weight": 1.13,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 439,
+      "drgCode": "LJ11",
+      "drgName": "泌尿系统其他手术，伴严重合并症或并发症",
+      "weight": 1.05,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 440,
+      "drgCode": "LJ13",
+      "drgName": "泌尿系统其他手术，伴一般合并症或并发症",
+      "weight": 0.61,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 441,
+      "drgCode": "LJ15",
+      "drgName": "泌尿系统其他手术，不伴合并症或并发症",
+      "weight": 0.36,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 442,
+      "drgCode": "LL11",
+      "drgName": "肾透析，伴严重合并症或并发症",
+      "weight": 1.36,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 443,
+      "drgCode": "LL13",
+      "drgName": "肾透析，伴一般合并症或并发症",
+      "weight": 0.94,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 444,
+      "drgCode": "LL15",
+      "drgName": "肾透析，不伴合并症或并发症",
+      "weight": 0.76,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 445,
+      "drgCode": "LR13",
+      "drgName": "肾功能不全，伴合并症或并发症",
+      "weight": 0.65,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 446,
+      "drgCode": "LR15",
+      "drgName": "肾功能不全，不伴合并症或并发症",
+      "weight": 0.5,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 447,
+      "drgCode": "LS11",
+      "drgName": "肾炎及肾病，伴严重合并症或并发症",
+      "weight": 0.66,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 448,
+      "drgCode": "LS15",
+      "drgName": "肾炎及肾病，不伴严重合并症或并发症",
+      "weight": 0.46,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 449,
+      "drgCode": "LT11",
+      "drgName": "肾及尿路肿瘤，伴严重合并症或并发症",
+      "weight": 1.16,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 450,
+      "drgCode": "LT15",
+      "drgName": "肾及尿路肿瘤，不伴严重合并症或并发症",
+      "weight": 0.71,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 451,
+      "drgCode": "LU11",
+      "drgName": "肾及尿路感染，伴严重合并症或并发症",
+      "weight": 0.79,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 452,
+      "drgCode": "LU13",
+      "drgName": "肾及尿路感染，伴一般合并症或并发症",
+      "weight": 0.5,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 453,
+      "drgCode": "LU15",
+      "drgName": "肾及尿路感染，不伴合并症或并发症",
+      "weight": 0.32,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 454,
+      "drgCode": "LV19",
+      "drgName": "代谢性肾病",
+      "weight": 0.63,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 455,
+      "drgCode": "LW11",
+      "drgName": "肾、尿路体征及症状，伴严重合并症或并发症",
+      "weight": 0.59,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 456,
+      "drgCode": "LW15",
+      "drgName": "肾、尿路体征及症状，不伴严重合并症或并发症",
+      "weight": 0.39,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 457,
+      "drgCode": "LX11",
+      "drgName": "尿路结石、阻塞及尿道狭窄，伴严重合并症或并发症",
+      "weight": 0.51,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 458,
+      "drgCode": "LX15",
+      "drgName": "尿路结石、阻塞及尿道狭窄，不伴严重合并症或并发症",
+      "weight": 0.28,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 459,
+      "drgCode": "LZ13",
+      "drgName": "肾及泌尿系统其他疾病，伴合并症或并发症",
+      "weight": 0.6,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 460,
+      "drgCode": "LZ15",
+      "drgName": "肾及泌尿系统其他疾病，不伴合并症或并发症",
+      "weight": 0.41,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 461,
+      "drgCode": "MA19",
+      "drgName": "男性生殖器官恶性肿瘤手术",
+      "weight": 4.35,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 462,
+      "drgCode": "MB19",
+      "drgName": "前列腺手术",
+      "weight": 1.61,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 463,
+      "drgCode": "MC19",
+      "drgName": "阴茎手术",
+      "weight": 0.63,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 464,
+      "drgCode": "MD19",
+      "drgName": "睾丸手术",
+      "weight": 0.78,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 465,
+      "drgCode": "MJ19",
+      "drgName": "其他男性生殖系统手术",
+      "weight": 0.28,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 466,
+      "drgCode": "MR13",
+      "drgName": "男性生殖系统恶性肿瘤，伴合并症或并发症",
+      "weight": 0.99,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 467,
+      "drgCode": "MR15",
+      "drgName": "男性生殖系统恶性肿瘤，不伴合并症或并发症",
+      "weight": 0.67,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 468,
+      "drgCode": "MS13",
+      "drgName": "男性生殖系统炎症，伴合并症或并发症",
+      "weight": 0.51,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 469,
+      "drgCode": "MS15",
+      "drgName": "男性生殖系统炎症，不伴合并症或并发症",
+      "weight": 0.32,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 470,
+      "drgCode": "MZ19",
+      "drgName": "其他男性生殖系统疾病",
+      "weight": 0.62,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 471,
+      "drgCode": "NA19",
+      "drgName": "女性生殖器官恶性肿瘤的广泛切除手术",
+      "weight": 3.37,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 472,
+      "drgCode": "NA21",
+      "drgName": "女性生殖器官恶性肿瘤除广泛切除术以外的手术，伴严重合并症或并发症",
+      "weight": 3.05,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 473,
+      "drgCode": "NA25",
+      "drgName": "女性生殖器官恶性肿瘤除广泛切除术以外的手术，不伴严重合并症或并发症",
+      "weight": 2.38,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 474,
+      "drgCode": "NB19",
+      "drgName": "女性生殖系统重建手术",
+      "weight": 1.73,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 475,
+      "drgCode": "NC19",
+      "drgName": "子宫（除子宫腔内病变以外）手术",
+      "weight": 1.74,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 476,
+      "drgCode": "ND19",
+      "drgName": "附件手术",
+      "weight": 1.33,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 477,
+      "drgCode": "NE19",
+      "drgName": "子宫腔内病变手术",
+      "weight": 0.63,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 478,
+      "drgCode": "NF19",
+      "drgName": "外阴、阴道、宫颈手术",
+      "weight": 0.54,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 479,
+      "drgCode": "NG19",
+      "drgName": "辅助生殖技术",
+      "weight": 0.84,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 480,
+      "drgCode": "NJ13",
+      "drgName": "女性生殖系统其他手术，伴合并症或并发症",
+      "weight": 2.44,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 481,
+      "drgCode": "NJ15",
+      "drgName": "女性生殖系统其他手术，不伴合并症或并发症",
+      "weight": 1.23,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 482,
+      "drgCode": "NR13",
+      "drgName": "女性生殖系统恶性肿瘤，伴合并症或并发症",
+      "weight": 1.43,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 483,
+      "drgCode": "NR15",
+      "drgName": "女性生殖系统恶性肿瘤，不伴合并症或并发症",
+      "weight": 0.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 484,
+      "drgCode": "NS19",
+      "drgName": "女性生殖系统感染",
+      "weight": 0.37,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 485,
+      "drgCode": "NZ19",
+      "drgName": "女性生殖系统其他疾病",
+      "weight": 0.37,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 486,
+      "drgCode": "OC15",
+      "drgName": "阴道助产手术，不伴严重合并症或并发症",
+      "weight": 0.71,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 487,
+      "drgCode": "OD11",
+      "drgName": "与妊娠相关的子宫及附件手术，伴严重合并症或并发症",
+      "weight": 1.73,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 488,
+      "drgCode": "OD29",
+      "drgName": "与妊娠相关的外阴、阴道及宫颈手术",
+      "weight": 0.58,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 489,
+      "drgCode": "OS19",
+      "drgName": "产褥期相关疾病",
+      "weight": 0.38,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 490,
+      "drgCode": "OZ11",
+      "drgName": "妊娠期相关疾病，伴严重合并症或并发症",
+      "weight": 0.45,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 491,
+      "drgCode": "PB19",
+      "drgName": "新生儿（出生年龄＜29 天）心血管手术",
+      "weight": 11.77,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 492,
+      "drgCode": "PC19",
+      "drgName": "新生儿（出生年龄＜29 天）除心血管外复杂手术",
+      "weight": 4.51,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 493,
+      "drgCode": "PD13",
+      "drgName": "新生儿（出生年龄＜29 天）腹部手术，伴合并症或并发症",
+      "weight": 4.71,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 494,
+      "drgCode": "PD15",
+      "drgName": "新生儿（出生年龄＜29 天）腹部手术，不伴合并症或并发症",
+      "weight": 2.36,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 495,
+      "drgCode": "PJ19",
+      "drgName": "新生儿（出生年龄＜29 天）其他手术",
+      "weight": 2.69,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 496,
+      "drgCode": "PK11",
+      "drgName": "新生儿伴呼吸机支持，伴严重合并症或并发症",
+      "weight": 3.2,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 497,
+      "drgCode": "PK15",
+      "drgName": "新生儿伴呼吸机支持，不伴严重合并症或并发症",
+      "weight": 2.05,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 498,
+      "drgCode": "PR11",
+      "drgName": "新生儿呼吸窘迫综合征，伴严重合并症或并发症",
+      "weight": 2.09,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 499,
+      "drgCode": "PR15",
+      "drgName": "新生儿呼吸窘迫综合征，不伴严重合并症或并发症",
+      "weight": 1.03,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 500,
+      "drgCode": "PS11",
+      "drgName": "极度发育不全（出生体重＜1500g），伴严重合并症或并发症",
+      "weight": 5.08,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 501,
+      "drgCode": "PS15",
+      "drgName": "极度发育不全（出生体重＜1500g），不伴严重合并症或并发症",
+      "weight": 3.51,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 502,
+      "drgCode": "PS29",
+      "drgName": "早产儿（出生体重 1500-1999g）",
+      "weight": 1.97,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 503,
+      "drgCode": "PS39",
+      "drgName": "早产儿（出生体重 2000-2499g）",
+      "weight": 1.01,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 504,
+      "drgCode": "PS43",
+      "drgName": "早产儿（出生体重>2499g），伴合并症或并发症",
+      "weight": 1.06,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 505,
+      "drgCode": "PS45",
+      "drgName": "早产儿（出生体重>2499g），不伴合并症或并发症",
+      "weight": 0.69,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 506,
+      "drgCode": "PV19",
+      "drgName": "源于新生儿(29 天≤出生年龄＜1 周岁)诊断的婴儿疾病",
+      "weight": 0.76,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 507,
+      "drgCode": "QB19",
+      "drgName": "脾切除术",
+      "weight": 3.16,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 508,
+      "drgCode": "QJ13",
+      "drgName": "非特指部位、组织、器官的良性肿瘤手术，伴合并症或并发症",
+      "weight": 1.18,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 509,
+      "drgCode": "QJ15",
+      "drgName": "非特指部位、组织、器官的良性肿瘤手术，不伴合并症或并发症",
+      "weight": 0.93,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 510,
+      "drgCode": "QR11",
+      "drgName": "移植物抗宿主病，伴严重合并症或并发症",
+      "weight": 3.01,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 511,
+      "drgCode": "QR15",
+      "drgName": "移植物抗宿主病，不伴严重合并症或并发症",
+      "weight": 1.37,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 512,
+      "drgCode": "QR21",
+      "drgName": "网状内皮及免疫性疾病，伴严重合并症或并发症",
+      "weight": 1.21,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 513,
+      "drgCode": "QR23",
+      "drgName": "网状内皮及免疫性疾病，伴一般合并症或并发症",
+      "weight": 0.7,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 514,
+      "drgCode": "QR25",
+      "drgName": "网状内皮及免疫性疾病，不伴合并症或并发症",
+      "weight": 0.49,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 515,
+      "drgCode": "QS13",
+      "drgName": "红细胞病及营养性贫血，伴合并症或并发症",
+      "weight": 0.62,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 516,
+      "drgCode": "QS15",
+      "drgName": "红细胞病及营养性贫血，不伴合并症或并发症",
+      "weight": 0.43,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 517,
+      "drgCode": "QS29",
+      "drgName": "溶血性贫血",
+      "weight": 0.38,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 518,
+      "drgCode": "QS31",
+      "drgName": "重型再生障碍性贫血，伴严重合并症或并发症",
+      "weight": 1.9,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 519,
+      "drgCode": "QS33",
+      "drgName": "重型再生障碍性贫血，伴一般合并症或并发症",
+      "weight": 1.26,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 520,
+      "drgCode": "QS35",
+      "drgName": "重型再生障碍性贫血，不伴合并症或并发症",
+      "weight": 0.82,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 521,
+      "drgCode": "QS41",
+      "drgName": "其他再生障碍性贫血，伴严重合并症或并发症",
+      "weight": 0.99,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 522,
+      "drgCode": "QS43",
+      "drgName": "其他再生障碍性贫血，伴一般合并症或并发症",
+      "weight": 0.65,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 523,
+      "drgCode": "QS45",
+      "drgName": "其他再生障碍性贫血，不伴合并症或并发症",
+      "weight": 0.54,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 524,
+      "drgCode": "QS51",
+      "drgName": "其他贫血，伴严重合并症或并发症",
+      "weight": 0.89,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 525,
+      "drgCode": "QS53",
+      "drgName": "其他贫血，伴一般合并症或并发症",
+      "weight": 0.62,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 526,
+      "drgCode": "QS55",
+      "drgName": "其他贫血，不伴合并症或并发症",
+      "weight": 0.47,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 527,
+      "drgCode": "QT11",
+      "drgName": "血栓与止血，伴严重合并症或并发症",
+      "weight": 0.92,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 528,
+      "drgCode": "QT13",
+      "drgName": "血栓与止血，伴一般合并症或并发症",
+      "weight": 0.69,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 529,
+      "drgCode": "QT15",
+      "drgName": "血栓与止血，不伴合并症或并发症",
+      "weight": 0.47,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 530,
+      "drgCode": "RA11",
+      "drgName": "淋巴瘤、白血病等伴重大手术，伴严重合并症或并发症",
+      "weight": 4.9,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 531,
+      "drgCode": "RA13",
+      "drgName": "淋巴瘤、白血病等伴重大手术，伴一般合并症或并发症",
+      "weight": 3.36,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 532,
+      "drgCode": "RA15",
+      "drgName": "淋巴瘤、白血病等伴重大手术，不伴合并症或并发症",
+      "weight": 2.86,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 533,
+      "drgCode": "RA29",
+      "drgName": "淋巴瘤、白血病等伴其他手术",
+      "weight": 1.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 534,
+      "drgCode": "RA39",
+      "drgName": "骨髓增生性疾病或恶性增生性疾病等伴重大手术",
+      "weight": 3.97,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 535,
+      "drgCode": "RA49",
+      "drgName": "骨髓增生性疾病或恶性增生性疾病等伴其他手术",
+      "weight": 2.08,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 536,
+      "drgCode": "RK11",
+      "drgName": "急性白血病化学治疗和/或其他治疗，伴严重合并症或并发症",
+      "weight": 4.58,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 537,
+      "drgCode": "RK13",
+      "drgName": "急性白血病化学治疗和/或其他治疗，伴一般合并症或并发症",
+      "weight": 3.52,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 538,
+      "drgCode": "RK15",
+      "drgName": "急性白血病化学治疗和/或其他治疗，不伴合并症或并发症",
+      "weight": 1.43,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 539,
+      "drgCode": "RK21",
+      "drgName": "淋巴瘤、多发骨髓瘤化学治疗和/或其他治疗，伴严重合并症或并发症",
+      "weight": 2.29,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 540,
+      "drgCode": "RK25",
+      "drgName": "淋巴瘤、多发骨髓瘤化学治疗和/或其他治疗，不伴严重合并症或并发症",
+      "weight": 1.48,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 541,
+      "drgCode": "RL11",
+      "drgName": "恶性及增生性疾病放射治疗（体外照射），伴严重合并症或并发症",
+      "weight": 5.08,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 542,
+      "drgCode": "RL15",
+      "drgName": "恶性及增生性疾病放射治疗（体外照射），不伴严重合并症或并发症",
+      "weight": 4.11,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 543,
+      "drgCode": "RL21",
+      "drgName": "恶性及增生性疾病放射治疗（近距离照射），伴严重合并症或并发症",
+      "weight": 3.06,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 544,
+      "drgCode": "RL23",
+      "drgName": "恶性及增生性疾病放射治疗（近距离照射），伴一般合并症或并发症",
+      "weight": 2.42,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 545,
+      "drgCode": "RL25",
+      "drgName": "恶性及增生性疾病放射治疗（近距离照射），不伴合并症或并发症",
+      "weight": 1.75,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 546,
+      "drgCode": "RM11",
+      "drgName": "恶性及增生性疾病的介入、消融治疗，伴严重合并症或并发症",
+      "weight": 2.28,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 547,
+      "drgCode": "RM15",
+      "drgName": "恶性及增生性疾病的介入、消融治疗，不伴严重合并症或并发症",
+      "weight": 1.94,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 548,
+      "drgCode": "RN11",
+      "drgName": "恶性及增生性疾病的化学治疗和/或其他治疗，伴严重合并症或并发症",
+      "weight": 0.61,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 549,
+      "drgCode": "RN13",
+      "drgName": "恶性及增生性疾病的化学治疗和/或其他治疗，伴一般合并症或并发症",
+      "weight": 0.45,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 550,
+      "drgCode": "RN15",
+      "drgName": "恶性及增生性疾病的化学治疗和/或其他治疗，不伴合并症或并发症",
+      "weight": 0.36,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 551,
+      "drgCode": "RN21",
+      "drgName": "恶性及增生性疾病的靶向、免疫治疗，伴严重合并症或并发症",
+      "weight": 0.54,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 552,
+      "drgCode": "RN25",
+      "drgName": "恶性及增生性疾病的靶向、免疫治疗，不伴严重合并症或并发症",
+      "weight": 0.42,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 553,
+      "drgCode": "RP11",
+      "drgName": "恶性及增生性疾病的终末期治疗，伴严重合并症或并发症",
+      "weight": 0.69,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 554,
+      "drgCode": "RP15",
+      "drgName": "恶性及增生性疾病的终末期治疗，不伴严重合并症或并发症",
+      "weight": 0.52,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 555,
+      "drgCode": "RR13",
+      "drgName": "急性白血病，伴合并症或并发症",
+      "weight": 2.2,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 556,
+      "drgCode": "RR15",
+      "drgName": "急性白血病，不伴合并症或并发症",
+      "weight": 0.9,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 557,
+      "drgCode": "RS13",
+      "drgName": "淋巴瘤及其他类型白血病，伴合并症或并发症",
+      "weight": 1.33,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 558,
+      "drgCode": "RS15",
+      "drgName": "淋巴瘤及其他类型白血病，不伴合并症或并发症",
+      "weight": 0.82,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 559,
+      "drgCode": "RS21",
+      "drgName": "浆细胞病，伴严重合并症或并发症",
+      "weight": 1.57,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 560,
+      "drgCode": "RS23",
+      "drgName": "浆细胞病，伴一般合并症或并发症",
+      "weight": 1.21,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 561,
+      "drgCode": "RS25",
+      "drgName": "浆细胞病，不伴合并症或并发症",
+      "weight": 0.93,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 562,
+      "drgCode": "RT11",
+      "drgName": "非特指恶性肿瘤，伴严重合并症或并发症",
+      "weight": 1.23,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 563,
+      "drgCode": "RT13",
+      "drgName": "非特指恶性肿瘤，伴一般合并症或并发症",
+      "weight": 0.98,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 564,
+      "drgCode": "RT15",
+      "drgName": "非特指恶性肿瘤，不伴合并症或并发症",
+      "weight": 0.82,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 565,
+      "drgCode": "RT29",
+      "drgName": "非特指良性肿瘤",
+      "weight": 1.82,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 566,
+      "drgCode": "RU19",
+      "drgName": "恶性及增生性疾病的其他治疗",
+      "weight": 0.51,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 567,
+      "drgCode": "RW19",
+      "drgName": "恶性及增生性疾病治疗后的随诊检查",
+      "weight": 0.38,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 568,
+      "drgCode": "RW21",
+      "drgName": "恶性及增生性疾病维持性治疗，伴严重合并症或并发症",
+      "weight": 0.81,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 569,
+      "drgCode": "RW25",
+      "drgName": "恶性及增生性疾病维持性治疗，不伴严重合并症或并发症",
+      "weight": 0.5,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 570,
+      "drgCode": "SB11",
+      "drgName": "全身性感染疾病的手术，伴严重合并症或并发症",
+      "weight": 3.45,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 571,
+      "drgCode": "SB13",
+      "drgName": "全身性感染疾病的手术，伴一般合并症或并发症",
+      "weight": 1.79,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 572,
+      "drgCode": "SB15",
+      "drgName": "全身性感染疾病的手术，不伴合并症或并发症",
+      "weight": 1.2,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 573,
+      "drgCode": "SR11",
+      "drgName": "败血症，伴严重合并症或并发症",
+      "weight": 1.54,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 574,
+      "drgCode": "SR13",
+      "drgName": "败血症，伴一般合并症或并发症",
+      "weight": 0.97,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 575,
+      "drgCode": "SR15",
+      "drgName": "败血症，不伴合并症或并发症",
+      "weight": 0.42,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 576,
+      "drgCode": "SS19",
+      "drgName": "手术后及创伤后感染",
+      "weight": 0.53,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 577,
+      "drgCode": "ST13",
+      "drgName": "原因不明的发热，伴合并症或并发症",
+      "weight": 0.7,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 578,
+      "drgCode": "ST15",
+      "drgName": "原因不明的发热，不伴合并症或并发症",
+      "weight": 0.42,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 579,
+      "drgCode": "SU11",
+      "drgName": "病毒性疾病，伴严重合并症或并发症",
+      "weight": 0.6,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 580,
+      "drgCode": "SU15",
+      "drgName": "病毒性疾病，不伴严重合并症或并发症",
+      "weight": 0.35,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 581,
+      "drgCode": "SV11",
+      "drgName": "细菌性疾病，伴严重合并症或并发症",
+      "weight": 1.11,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 582,
+      "drgCode": "SV13",
+      "drgName": "细菌性疾病，伴一般合并症或并发症",
+      "weight": 0.73,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 583,
+      "drgCode": "SV15",
+      "drgName": "细菌性疾病，不伴合并症或并发症",
+      "weight": 0.42,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 584,
+      "drgCode": "SZ13",
+      "drgName": "其他感染性或寄生虫性疾病，伴合并症或并发症",
+      "weight": 0.64,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 585,
+      "drgCode": "SZ15",
+      "drgName": "其他感染性或寄生虫性疾病，不伴合并症或并发症",
+      "weight": 0.39,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 586,
+      "drgCode": "TB19",
+      "drgName": "精神病患者的手术",
+      "weight": 0.98,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 587,
+      "drgCode": "TR19",
+      "drgName": "精神分裂症",
+      "weight": 1.5,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 588,
+      "drgCode": "TR29",
+      "drgName": "偏执及急性精神病",
+      "weight": 1.19,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 589,
+      "drgCode": "TS19",
+      "drgName": "心境障碍",
+      "weight": 1.38,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 590,
+      "drgCode": "TS29",
+      "drgName": "神经症及相关障碍",
+      "weight": 0.6,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 591,
+      "drgCode": "TT13",
+      "drgName": "进食及睡眠障碍，伴合并症或并发症",
+      "weight": 0.79,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 592,
+      "drgCode": "TT15",
+      "drgName": "进食及睡眠障碍，不伴合并症或并发症",
+      "weight": 0.7,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 593,
+      "drgCode": "TT29",
+      "drgName": "人格障碍",
+      "weight": 0.71,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 594,
+      "drgCode": "TU19",
+      "drgName": "儿童期精神发育障碍",
+      "weight": 1.15,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 595,
+      "drgCode": "TV19",
+      "drgName": "焦虑障碍",
+      "weight": 0.8,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 596,
+      "drgCode": "TW11",
+      "drgName": "器质性及症状性精神障碍，伴严重合并症或并发症",
+      "weight": 1.36,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 597,
+      "drgCode": "TW15",
+      "drgName": "器质性及症状性精神障碍，不伴严重合并症或并发症",
+      "weight": 0.91,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 598,
+      "drgCode": "TX19",
+      "drgName": "性心理及性功能障碍",
+      "weight": 0.35,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 599,
+      "drgCode": "TY19",
+      "drgName": "强迫及相关障碍",
+      "weight": 1.56,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 600,
+      "drgCode": "UR19",
+      "drgName": "酒精中毒及戒除",
+      "weight": 0.78,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 601,
+      "drgCode": "US19",
+      "drgName": "兴奋剂滥用与依赖",
+      "weight": 1.08,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 602,
+      "drgCode": "VB13",
+      "drgName": "损伤的皮肤移植，伴合并症或并发症",
+      "weight": 2.41,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 603,
+      "drgCode": "VB15",
+      "drgName": "损伤的皮肤移植，不伴合并症或并发症",
+      "weight": 1.18,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 604,
+      "drgCode": "VC13",
+      "drgName": "与损伤有关的清创术，伴合并症或并发症",
+      "weight": 1.53,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 605,
+      "drgCode": "VC15",
+      "drgName": "与损伤有关的清创术，不伴合并症或并发症",
+      "weight": 0.8,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 606,
+      "drgCode": "VJ11",
+      "drgName": "其他损伤的手术，伴严重合并症或并发症",
+      "weight": 2.79,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 607,
+      "drgCode": "VJ13",
+      "drgName": "其他损伤的手术，伴一般合并症或并发症",
+      "weight": 1.41,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 608,
+      "drgCode": "VJ15",
+      "drgName": "其他损伤的手术，不伴合并症或并发症",
+      "weight": 0.91,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 609,
+      "drgCode": "VR19",
+      "drgName": "损伤",
+      "weight": 0.43,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 610,
+      "drgCode": "VS19",
+      "drgName": "过敏反应",
+      "weight": 0.39,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 611,
+      "drgCode": "VS21",
+      "drgName": "药物中毒或毒性反应，伴严重合并症或并发症",
+      "weight": 0.74,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 612,
+      "drgCode": "VS25",
+      "drgName": "药物中毒或毒性反应，不伴严重合并症或并发症",
+      "weight": 0.29,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 613,
+      "drgCode": "VT13",
+      "drgName": "医疗后遗症，伴合并症或并发症",
+      "weight": 0.66,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 614,
+      "drgCode": "VT15",
+      "drgName": "医疗后遗症，不伴合并症或并发症",
+      "weight": 0.34,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 615,
+      "drgCode": "VZ11",
+      "drgName": "其他损伤、中毒及毒性反应疾病，伴严重合并症或并发症",
+      "weight": 1.0,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 616,
+      "drgCode": "VZ15",
+      "drgName": "其他损伤、中毒及毒性反应疾病，不伴严重合并症或并发症",
+      "weight": 0.41,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 617,
+      "drgCode": "WB19",
+      "drgName": "烧伤面积≥50%，或三度面积≥20%的烧伤，伴有手术操作",
+      "weight": 12.98,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 618,
+      "drgCode": "WB29",
+      "drgName": "烧伤面积≥30%，＜50%，或三度面积≥10%，＜20%的烧伤，伴有手术操作",
+      "weight": 4.95,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 619,
+      "drgCode": "WB39",
+      "drgName": "烧伤面积＜30%或其他烧伤，伴有手术操作",
+      "weight": 2.08,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 620,
+      "drgCode": "WJ19",
+      "drgName": "烧伤相关其他手术",
+      "weight": 3.46,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 621,
+      "drgCode": "WR19",
+      "drgName": "烧伤面积≥30%的烧伤",
+      "weight": 2.95,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 622,
+      "drgCode": "WR29",
+      "drgName": "烧伤面积＜30%的烧伤或其他烧伤",
+      "weight": 0.74,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 623,
+      "drgCode": "XJ13",
+      "drgName": "其他接触健康服务的诊断伴手术操作，伴合并症或并发症",
+      "weight": 1.26,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 624,
+      "drgCode": "XJ15",
+      "drgName": "其他接触健康服务的诊断伴手术操作，不伴合并症或并发症",
+      "weight": 1.1,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 625,
+      "drgCode": "XR19",
+      "drgName": "精神心理康复",
+      "weight": 1.19,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 626,
+      "drgCode": "XR21",
+      "drgName": "神经、骨骼及肌肉康复，伴严重合并症或并发症",
+      "weight": 2.44,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 627,
+      "drgCode": "XR23",
+      "drgName": "神经、骨骼及肌肉康复，伴一般合并症或并发症",
+      "weight": 1.78,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 628,
+      "drgCode": "XR25",
+      "drgName": "神经、骨骼及肌肉康复，不伴合并症或并发症",
+      "weight": 1.04,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 629,
+      "drgCode": "XR31",
+      "drgName": "功能障碍康复，伴严重合并症或并发症",
+      "weight": 1.45,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 630,
+      "drgCode": "XR33",
+      "drgName": "功能障碍康复，伴一般合并症或并发症",
+      "weight": 0.87,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 631,
+      "drgCode": "XR35",
+      "drgName": "功能障碍康复，不伴合并症或并发症",
+      "weight": 0.65,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 632,
+      "drgCode": "XS11",
+      "drgName": "体征及症状，伴严重合并症或并发症",
+      "weight": 0.77,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 633,
+      "drgCode": "XS15",
+      "drgName": "体征及症状，不伴严重合并症或并发症",
+      "weight": 0.47,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 634,
+      "drgCode": "XS21",
+      "drgName": "随访（不含恶性肿瘤诊断)，伴严重合并症或并发症",
+      "weight": 0.53,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 635,
+      "drgCode": "XS23",
+      "drgName": "随访（不含恶性肿瘤诊断)，伴一般合并症或并发症",
+      "weight": 0.41,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 636,
+      "drgCode": "XS25",
+      "drgName": "随访（不含恶性肿瘤诊断)，不伴合并症或并发症",
+      "weight": 0.29,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 637,
+      "drgCode": "XT19",
+      "drgName": "其他后期照护",
+      "weight": 0.25,
+      "isLowRisk": true
+    },
+    {
+      "sourceRow": 638,
+      "drgCode": "XT29",
+      "drgName": "非特指的先天畸形",
+      "weight": 0.66,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 639,
+      "drgCode": "XT33",
+      "drgName": "其他影响健康状态的因素，伴合并症或并发症",
+      "weight": 0.77,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 640,
+      "drgCode": "XT35",
+      "drgName": "其他影响健康状态的因素，不伴合并症或并发症",
+      "weight": 0.46,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 641,
+      "drgCode": "YC11",
+      "drgName": "HIV 相关疾病的手术，伴严重合并症或并发症",
+      "weight": 2.22,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 642,
+      "drgCode": "YC13",
+      "drgName": "HIV 相关疾病的手术，伴一般合并症或并发症",
+      "weight": 1.56,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 643,
+      "drgCode": "YC15",
+      "drgName": "HIV 相关疾病的手术，不伴合并症或并发症",
+      "weight": 1.3,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 644,
+      "drgCode": "YR11",
+      "drgName": "HIV 相关疾病，伴严重合并症或并发症",
+      "weight": 1.18,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 645,
+      "drgCode": "YR13",
+      "drgName": "HIV 相关疾病，伴一般合并症或并发症",
+      "weight": 0.88,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 646,
+      "drgCode": "YR15",
+      "drgName": "HIV 相关疾病，不伴合并症或并发症",
+      "weight": 0.63,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 647,
+      "drgCode": "YR21",
+      "drgName": "HIV 其他相关情况，伴严重合并症或并发症",
+      "weight": 0.72,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 648,
+      "drgCode": "YR25",
+      "drgName": "HIV 其他相关情况，不伴严重合并症或并发症",
+      "weight": 0.48,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 649,
+      "drgCode": "ZB19",
+      "drgName": "多发性严重创伤开颅术",
+      "weight": 5.9,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 650,
+      "drgCode": "ZC11",
+      "drgName": "多发性严重创伤的脊柱、髋、股或肢体手术，伴严重合并症或并发症",
+      "weight": 4.44,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 651,
+      "drgCode": "ZC15",
+      "drgName": "多发性严重创伤的脊柱、髋、股或肢体手术，不伴严重合并症或并发症",
+      "weight": 3.02,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 652,
+      "drgCode": "ZD19",
+      "drgName": "严重复合伤的腹部手术",
+      "weight": 4.42,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 653,
+      "drgCode": "ZJ11",
+      "drgName": "与多发伤有关的其他手术操作，伴严重合并症或并发症",
+      "weight": 3.85,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 654,
+      "drgCode": "ZJ15",
+      "drgName": "与多发伤有关的其他手术操作，不伴严重合并症或并发症",
+      "weight": 2.68,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 655,
+      "drgCode": "ZZ11",
+      "drgName": "多发性重要创伤无手术，伴严重合并症或并发症",
+      "weight": 1.18,
+      "isLowRisk": false
+    },
+    {
+      "sourceRow": 656,
+      "drgCode": "ZZ15",
+      "drgName": "多发性重要创伤无手术，不伴严重合并症或并发症",
+      "weight": 0.79,
+      "isLowRisk": false
+    }
+  ]
+}

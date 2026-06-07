@@ -347,6 +347,7 @@ import {
 } from '@/views/workstation-v4/frontpage/components'
 import ICDSearchPanel from './components/ICDSearchPanel.vue'
 import QCAlertPanel from './components/QCAlertPanel.vue'
+import '@/views/workstation-v4/frontpage/components/drg-dip-workbench.css'
 // 复用 composables
 import {
   useMedicalTextExtraction,
@@ -541,7 +542,7 @@ onUnmounted(() => {
 .ws-v2 {
   display: flex;
   height: 100vh;
-  background: #f5f7fa;
+  background: #f5f9fc;
   overflow: hidden;
 }
 
@@ -579,6 +580,7 @@ onUnmounted(() => {
 /* ==================== 嵌入模式 ====================  */
 .ws-v2-embedded {
   height: calc(100vh - 64px);
+  background: #f5f9fc;
 }
 
 /* ==================== 主内容区 ==================== */
@@ -587,6 +589,7 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: #f5f9fc;
 }
 
 /* ==================== 工作台布局 ==================== */
@@ -632,19 +635,19 @@ onUnmounted(() => {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
-  background: #fafafa;
+  background: #f5f9fc;
 }
 
 /* 分隔线 */
 .resize-handle {
   width: 6px;
   cursor: col-resize;
-  background: #e8e8e8;
+  background: #e2e8f0;
   transition: background 0.15s;
   flex-shrink: 0;
 }
 .resize-handle:hover {
-  background: #1677ff;
+  background: #2563eb;
 }
 
 /* ==================== 底部测试用例栏 ==================== */
@@ -699,7 +702,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  background: #f5f9fc;
 }
 
 /* ==================== 滚动条 ==================== */
