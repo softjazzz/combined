@@ -105,6 +105,13 @@ class Settings(BaseSettings):
         "api.deepseek.com",
     ]
 
+    # SQLBot 问数嵌入配置（默认关闭，保持独立部署和只读数据源边界）
+    SQLBOT_ENABLED: bool = False
+    SQLBOT_BASE_URL: Optional[str] = None
+    SQLBOT_EMBED_URL: Optional[str] = None
+    SQLBOT_APP_ID: Optional[str] = None
+    SQLBOT_TIMEOUT_SECONDS: int = 30
+
     # LLM API Configuration (unified naming; compatible with legacy SICHUAN_* env vars)
     LLM_API_ENDPOINT: Optional[AnyHttpUrl] = Field(
         default="https://dashscope.aliyuncs.com/compatible-mode/v1",

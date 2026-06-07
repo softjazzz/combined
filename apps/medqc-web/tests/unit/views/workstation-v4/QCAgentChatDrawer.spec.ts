@@ -2,13 +2,20 @@ import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { chatMock } = vi.hoisted(() => ({
+const { chatMock, getSqlbotConfigMock } = vi.hoisted(() => ({
   chatMock: vi.fn(),
+  getSqlbotConfigMock: vi.fn(),
 }))
 
 vi.mock('@/api/qcAgent', () => ({
   qcAgentApi: {
     chat: chatMock,
+  },
+}))
+
+vi.mock('@/api/sqlbot', () => ({
+  sqlbotApi: {
+    getConfig: getSqlbotConfigMock,
   },
 }))
 
@@ -83,9 +90,14 @@ function mountDrawer(props: Record<string, unknown> = {}) {
 describe('QCAgentChatDrawer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    getSqlbotConfigMock.mockResolvedValue({
+      enabled: false,
+      display_mode: 'disabled',
+      message: 'SQLBot 未启用。请配置 SQLBOT_ENABLED=true 和 SQLBOT_EMBED_URL 后再使用问数能力。',
+    })
   })
 
-  it('renders medical intelligence workspace empty state and capability shortcuts', async () => {
+  it('renders conversational empty state and lightweight prompt chips', async () => {
     const wrapper = mountDrawer({
       userContext: {
         visit_id: '2298532',
@@ -93,20 +105,64 @@ describe('QCAgentChatDrawer', () => {
     })
 
     expect(wrapper.text()).toContain('单病历只读分析，支持质控、编码、入组模拟')
-    expect(wrapper.text()).toContain('定位病历、匹配文书、执行规则、输出建议')
-    expect(wrapper.text()).toContain('输入诊断/手术名称，查询 ICD 候选并给出病历编码建议')
-    expect(wrapper.text()).toContain('输入主诊断、手术、年龄和费用，执行 DRG/DIP 模拟')
+    expect(wrapper.text()).toContain('只读模式')
+    expect(wrapper.text()).toContain('我可以帮你做单病历只读分析。')
+    expect(wrapper.text()).toContain('查房记录质控')
+    expect(wrapper.text()).toContain('ICD 编码查询')
+    expect(wrapper.text()).toContain('当前病历编码建议')
+    expect(wrapper.text()).toContain('DRG/DIP 模拟入组')
+    expect(wrapper.text()).toContain('统计今天病案问题集中点')
+    expect(wrapper.text()).toContain('问数')
 
     const buttons = wrapper.findAll('button')
-    await buttons.find((button) => button.text().includes('ICD 诊断编码查询'))?.trigger('click')
+    await buttons.find((button) => button.text().includes('ICD 编码查询'))?.trigger('click')
     expect(
       (wrapper.find('[data-testid="qc-agent-message-input"]').element as HTMLTextAreaElement).value,
     ).toContain('2型糖尿病')
 
-    await buttons.find((button) => button.text().includes('DIP 入组预测'))?.trigger('click')
+    await buttons.find((button) => button.text().includes('DRG/DIP 模拟入组'))?.trigger('click')
     expect(
       (wrapper.find('[data-testid="qc-agent-message-input"]').element as HTMLTextAreaElement).value,
-    ).toContain('DIP 入组')
+    ).toContain('DRG/DIP 模拟入组')
+  })
+
+  it('shows SQLBot unconfigured panel without calling qc-agent chat', async () => {
+    const wrapper = mountDrawer()
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('统计今天病案问题集中点'))
+      ?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="qc-agent-sqlbot-panel"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('SQLBot 未配置')
+    expect(wrapper.text()).toContain('SQLBot 未启用')
+    expect(chatMock).not.toHaveBeenCalled()
+  })
+
+  it('opens SQLBot iframe when embed config is enabled', async () => {
+    getSqlbotConfigMock.mockResolvedValueOnce({
+      enabled: true,
+      display_mode: 'iframe',
+      embed_url: 'https://sqlbot.example.com/embed/app-1',
+      app_id: 'app-1',
+      message: 'SQLBot 已配置。',
+    })
+    const wrapper = mountDrawer()
+    await flushPromises()
+
+    await wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('问数'))
+      ?.trigger('click')
+    await flushPromises()
+
+    const iframe = wrapper.find('iframe[title="SQLBot 问数"]')
+    expect(iframe.exists()).toBe(true)
+    expect(iframe.attributes('src')).toBe('https://sqlbot.example.com/embed/app-1')
+    expect(chatMock).not.toHaveBeenCalled()
   })
 
   it('sends message with safe user_context', async () => {
@@ -191,10 +247,11 @@ describe('QCAgentChatDrawer', () => {
     expect(wrapper.text()).toContain(
       '已执行 4 条规则，暂未发现问题；另有 16 条规则因当前只读执行边界未执行。',
     )
-    expect(wrapper.text()).toContain('已发现问题')
-    expect(wrapper.text()).toContain('已执行通过')
+    expect(wrapper.text()).toContain('已识别：质控任务 · 文书质控')
+    expect(wrapper.text()).toContain('发现问题')
+    expect(wrapper.text()).toContain('高风险')
+    expect(wrapper.text()).toContain('执行规则')
     expect(wrapper.text()).toContain('未执行规则')
-    expect(wrapper.text()).toContain('选中规则')
     expect(wrapper.text()).toContain('部分执行')
     expect(wrapper.text()).toContain('get_record_context')
     expect(wrapper.text()).toContain('已执行规则')
@@ -207,7 +264,10 @@ describe('QCAgentChatDrawer', () => {
     )
     expect(wrapper.text()).toContain('暂未接入只读程序化执行器')
     expect(wrapper.text()).toContain('需接入受控 LLM 规则执行器后判断。')
-    expect(wrapper.text()).toContain('查看脱敏响应摘要')
+    expect(wrapper.text()).toContain('查看执行计划')
+    expect(wrapper.text()).toContain('继续检查出院记录')
+    expect(wrapper.text()).toContain('解释规则')
+    expect(wrapper.text()).not.toContain('查看脱敏响应摘要')
     expect(wrapper.text()).not.toContain('不应进入请求')
   })
 

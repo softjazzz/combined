@@ -18,12 +18,13 @@
           </div>
         </div>
         <SafetyCertificateOutlined class="qc-agent-drawer__title-icon" />
+        <span class="qc-agent-drawer__safe">只读模式</span>
       </div>
     </template>
 
     <div class="qc-agent-panel">
       <section class="qc-agent-context">
-        <div>
+        <div class="qc-agent-context__main">
           <div class="qc-agent-context__label">
             当前上下文
           </div>
@@ -47,26 +48,58 @@
         </div>
       </section>
 
-      <section class="qc-agent-shortcuts">
-        <div
-          v-for="group in shortcutGroups"
-          :key="group.key"
-          class="qc-agent-shortcut-group"
-        >
-          <div class="qc-agent-shortcut-group__title">
-            {{ group.title }}
+      <section
+        v-if="showSqlbotPanel"
+        class="qc-agent-sqlbot"
+        data-testid="qc-agent-sqlbot-panel"
+      >
+        <div class="qc-agent-sqlbot__head">
+          <div>
+            <div class="qc-agent-sqlbot__eyebrow">
+              SQLBot 问数
+            </div>
+            <div class="qc-agent-sqlbot__title">
+              病案数据分析入口
+            </div>
           </div>
-          <div class="qc-agent-shortcut-group__actions">
-            <a-button
-              v-for="shortcut in group.items"
-              :key="shortcut.label"
-              size="small"
-              class="qc-agent-shortcuts__button"
-              @click="applyShortcut(shortcut)"
+          <div class="qc-agent-sqlbot__actions">
+            <span
+              :class="[
+                'qc-agent-sqlbot__status',
+                { 'qc-agent-sqlbot__status--enabled': sqlbotEnabled },
+              ]"
             >
-              {{ shortcut.label }}
-            </a-button>
+              {{ sqlbotStatusText }}
+            </span>
+            <button
+              v-if="sqlbotPanelOpen"
+              type="button"
+              class="qc-agent-sqlbot__close"
+              @click="sqlbotPanelOpen = false"
+            >
+              收起
+            </button>
           </div>
+        </div>
+        <div
+          v-if="sqlbotLoading"
+          class="qc-agent-sqlbot__placeholder"
+        >
+          正在读取 SQLBot 配置...
+        </div>
+        <iframe
+          v-else-if="sqlbotEnabled && sqlbotConfig?.embed_url"
+          class="qc-agent-sqlbot__iframe"
+          :src="sqlbotConfig.embed_url"
+          title="SQLBot 问数"
+        />
+        <div
+          v-else
+          class="qc-agent-sqlbot__placeholder"
+        >
+          <strong>SQLBot 未配置</strong>
+          <span>{{ sqlbotConfig?.message || sqlbotError || sqlbotFallbackMessage }}</span>
+          <small>配置完成后，这里会以独立嵌入面板打开问数能力；现有质控、编码和入组流程不受影响。</small>
         </div>
       </section>
 
@@ -76,27 +109,29 @@
       >
         <div
           v-if="!hasMessages"
-          class="qc-agent-empty"
+          class="qc-agent-message qc-agent-message--assistant qc-agent-message--welcome"
         >
-          <div
-            v-for="item in emptyCapabilityCards"
-            :key="item.title"
-            class="qc-agent-empty-card"
-          >
-            <div class="qc-agent-empty-card__title">
-              {{ item.title }}
+          <div class="qc-agent-message__avatar">
+            AI
+          </div>
+          <div class="qc-agent-message__bubble">
+            <div class="qc-agent-welcome__title">
+              我可以帮你做单病历只读分析。
             </div>
-            <div class="qc-agent-empty-card__desc">
-              {{ item.desc }}
+            <div class="qc-agent-welcome__desc">
+              你可以直接输入质控、编码或入组请求，系统会调用受控工具并返回结构化结果。
             </div>
-            <ul class="qc-agent-empty-card__list">
-              <li
-                v-for="point in item.points"
-                :key="point"
+            <div class="qc-agent-prompt-chips">
+              <button
+                v-for="suggestion in promptSuggestions"
+                :key="suggestion.label"
+                type="button"
+                class="qc-agent-prompt-chip"
+                @click="applyShortcut(suggestion)"
               >
-                {{ point }}
-              </li>
-            </ul>
+                {{ suggestion.label }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -105,12 +140,32 @@
           :key="message.id"
           :class="['qc-agent-message', `qc-agent-message--${message.role}`]"
         >
+          <div
+            v-if="message.role !== 'user'"
+            class="qc-agent-message__avatar"
+          >
+            {{ message.role === 'system' ? '!' : 'AI' }}
+          </div>
           <div class="qc-agent-message__bubble">
             <template v-if="message.response">
               <AgentResponseCard
                 :response="message.response"
                 @confirm-candidate="handleConfirmCandidate"
               />
+              <div
+                v-if="nextActionsForResponse(message.response).length"
+                class="qc-agent-next-actions"
+              >
+                <button
+                  v-for="action in nextActionsForResponse(message.response)"
+                  :key="action.label"
+                  type="button"
+                  class="qc-agent-next-action"
+                  @click="applyActionMessage(action)"
+                >
+                  {{ action.label }}
+                </button>
+              </div>
             </template>
             <template v-else>
               {{ message.content }}
@@ -156,7 +211,7 @@
             @click="handleSend"
           >
             <SendOutlined />
-            {{ sendButtonText }}
+            发送
           </a-button>
         </div>
       </section>
@@ -165,9 +220,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, ref } from 'vue'
+import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { SafetyCertificateOutlined, SendOutlined } from '@ant-design/icons-vue'
 
+import { sqlbotApi, type SQLBotConfigResponse } from '@/api/sqlbot'
 import type {
   QCAgentCandidate,
   QCAgentChatResponse,
@@ -182,7 +238,7 @@ import type {
 } from '@/api/qcAgent'
 import { sanitizeQcAgentPayload, useQcAgentChat } from '../composables/useQcAgentChat'
 
-type AgentCapability = 'qc' | 'coding' | 'grouping'
+type AgentCapability = 'qc' | 'coding' | 'grouping' | 'analytics'
 type NormalizedResultType =
   | 'qc_result'
   | 'icd_search_result'
@@ -211,6 +267,12 @@ interface CommandAction {
   kind: AgentCapability | 'record' | 'clear'
 }
 
+interface AssistantAction {
+  label: string
+  capability: AgentCapability
+  message: string
+}
+
 const open = defineModel<boolean>('open', { default: false })
 
 const props = defineProps<{
@@ -224,6 +286,10 @@ const emit = defineEmits<{
 
 const selectedCapability = ref<AgentCapability>('qc')
 const draftMessage = ref('')
+const sqlbotConfig = ref<SQLBotConfigResponse | null>(null)
+const sqlbotLoading = ref(false)
+const sqlbotError = ref('')
+const sqlbotPanelOpen = ref(false)
 
 const { messages, loading, error, hasMessages, lastResponse, chat, confirmCandidate, clear } =
   useQcAgentChat()
@@ -232,6 +298,7 @@ const capabilityItems: Array<{ key: AgentCapability; label: string }> = [
   { key: 'qc', label: '质控' },
   { key: 'coding', label: '编码' },
   { key: 'grouping', label: 'DRG/DIP' },
+  { key: 'analytics', label: '问数' },
 ]
 
 const commandActions: CommandAction[] = [
@@ -239,6 +306,7 @@ const commandActions: CommandAction[] = [
   { label: '编码', kind: 'coding' },
   { label: '入组', kind: 'grouping' },
   { label: '病历', kind: 'record' },
+  { label: '问数', kind: 'analytics' },
   { label: '清空', kind: 'clear' },
 ]
 
@@ -327,24 +395,25 @@ const shortcutGroups: ShortcutGroup[] = [
       },
     ],
   },
+  {
+    key: 'analytics',
+    title: '问数',
+    items: [
+      {
+        label: '统计今天病案问题集中点',
+        capability: 'analytics',
+        build: () => '统计今天病案问题集中点',
+      },
+    ],
+  },
 ]
 
-const emptyCapabilityCards = [
-  {
-    title: '质控',
-    desc: '定位病历、匹配文书、执行规则、输出建议',
-    points: ['查房/出院/病程记录质控', '执行计划与证据摘要', '未执行规则边界说明'],
-  },
-  {
-    title: '编码',
-    desc: '输入诊断/手术名称，查询 ICD 候选并给出病历编码建议',
-    points: ['医保版/国临版候选', '编码映射与置信度', '当前病历诊断/手术建议'],
-  },
-  {
-    title: '入组',
-    desc: '输入主诊断、手术、年龄和费用，执行 DRG/DIP 模拟',
-    points: ['DRG 实时入组', 'DIP 预测路径', '分组结果与风险提示'],
-  },
+const promptSuggestions: ShortcutItem[] = [
+  shortcutGroups[0].items[0],
+  { ...shortcutGroups[1].items[0], label: 'ICD 编码查询' },
+  shortcutGroups[1].items[2],
+  { ...shortcutGroups[2].items[2], label: 'DRG/DIP 模拟入组' },
+  shortcutGroups[3].items[0],
 ]
 
 const safeUserContext = computed(() => sanitizeQcAgentPayload(props.userContext || {}))
@@ -367,11 +436,23 @@ const currentCapability = computed<AgentCapability>(() => {
   return selectedCapability.value
 })
 
-const sendButtonText = computed(() => {
-  if (currentCapability.value === 'qc') return '执行质控'
-  if (currentCapability.value === 'coding') return '查询编码'
-  if (currentCapability.value === 'grouping') return '模拟入组'
-  return '执行分析'
+const sqlbotEnabled = computed(() =>
+  Boolean(sqlbotConfig.value?.enabled && sqlbotConfig.value?.embed_url),
+)
+
+const showSqlbotPanel = computed(
+  () => selectedCapability.value === 'analytics' || sqlbotPanelOpen.value,
+)
+
+const sqlbotStatusText = computed(() => {
+  if (sqlbotLoading.value) return '读取中'
+  return sqlbotEnabled.value ? '已配置' : '待接入'
+})
+
+const sqlbotFallbackMessage = '请配置 SQLBOT_ENABLED=true 和 SQLBOT_EMBED_URL 后再使用问数能力。'
+
+onMounted(() => {
+  void loadSqlbotConfig()
 })
 
 function visitIdFromContext() {
@@ -380,11 +461,23 @@ function visitIdFromContext() {
 
 function selectCapability(capability: AgentCapability) {
   selectedCapability.value = capability
+  if (capability === 'analytics') {
+    void openSqlbotPanel()
+  }
 }
 
 function applyShortcut(shortcut: ShortcutItem) {
   selectedCapability.value = shortcut.capability
+  if (shortcut.capability === 'analytics') {
+    void openSqlbotPanel(shortcut.build(visitIdFromContext()))
+    return
+  }
   draftMessage.value = shortcut.build(visitIdFromContext())
+}
+
+function applyActionMessage(action: AssistantAction) {
+  selectedCapability.value = action.capability
+  draftMessage.value = action.message
 }
 
 function handleCommandAction(kind: CommandAction['kind']) {
@@ -399,6 +492,11 @@ function handleCommandAction(kind: CommandAction['kind']) {
       : '根据 visit_id 查看病历可分析内容'
     return
   }
+  if (kind === 'analytics') {
+    selectedCapability.value = 'analytics'
+    void openSqlbotPanel('统计今天病案问题集中点')
+    return
+  }
   selectedCapability.value = kind
   const defaultShortcut = shortcutGroups.find((group) => group.key === kind)?.items[0]
   if (defaultShortcut) draftMessage.value = defaultShortcut.build(visitIdFromContext())
@@ -408,12 +506,127 @@ async function handleSend() {
   const message = draftMessage.value.trim()
   if (!message) return
   selectedCapability.value = capabilityFromText(message)
+  if (selectedCapability.value === 'analytics') {
+    await openSqlbotPanel(message)
+    return
+  }
   draftMessage.value = ''
   await chat(message, { userContext: safeUserContext.value })
 }
 
+async function loadSqlbotConfig(force = false) {
+  if (sqlbotConfig.value && !force) return sqlbotConfig.value
+  sqlbotLoading.value = true
+  sqlbotError.value = ''
+  try {
+    sqlbotConfig.value = await sqlbotApi.getConfig()
+  } catch {
+    sqlbotError.value = 'SQLBot 配置读取失败。'
+    sqlbotConfig.value = {
+      enabled: false,
+      display_mode: 'disabled',
+      message: 'SQLBot 配置读取失败，请确认后端服务和登录态正常。',
+    }
+  } finally {
+    sqlbotLoading.value = false
+  }
+  return sqlbotConfig.value
+}
+
+async function openSqlbotPanel(fallbackMessage?: string) {
+  selectedCapability.value = 'analytics'
+  const config = await loadSqlbotConfig()
+  if (config?.enabled && config.embed_url) {
+    sqlbotPanelOpen.value = true
+    draftMessage.value = ''
+    return
+  }
+  sqlbotPanelOpen.value = false
+  draftMessage.value = fallbackMessage || '统计今天病案问题集中点'
+}
+
 async function handleConfirmCandidate(candidate: QCAgentCandidate) {
   await confirmCandidate(candidate, { userContext: safeUserContext.value })
+}
+
+function nextActionsForResponse(response: QCAgentChatResponse): AssistantAction[] {
+  const resultType = normalizeResultType(response)
+  const visitId = visitIdFromContext()
+  const visitText = visitId ? `visit_id=${visitId}` : '当前病历'
+
+  if (resultType === 'qc_result') {
+    const firstRule = firstIssueRuleId(response.result)
+    return [
+      {
+        label: '查看执行计划',
+        capability: 'qc',
+        message: visitId ? `对 visit_id=${visitId} 说明可执行的质控计划` : '说明可执行的质控计划',
+      },
+      {
+        label: '继续检查出院记录',
+        capability: 'qc',
+        message: `对 ${visitText} 的出院记录做完整性质控`,
+      },
+      {
+        label: firstRule ? `解释 ${firstRule}` : '解释规则',
+        capability: 'qc',
+        message: firstRule
+          ? `解释 ${firstRule} 的质控依据和处理建议`
+          : '解释本次质控结果里的主要规则依据',
+      },
+    ]
+  }
+
+  if (resultType === 'icd_search_result' || resultType === 'coding_suggestion_result') {
+    const firstCode = firstCandidateCode(response.result)
+    return [
+      {
+        label: '继续查相近编码',
+        capability: 'coding',
+        message: firstCode ? `继续查询 ${firstCode} 的相近编码` : '继续查相近 ICD 编码',
+      },
+      {
+        label: '用于 DRG/DIP 入组',
+        capability: 'grouping',
+        message: firstCode
+          ? `用主诊断 ${firstCode} 做 DRG/DIP 模拟入组`
+          : '用当前编码建议做 DRG/DIP 模拟入组',
+      },
+      {
+        label: '当前病历编码建议',
+        capability: 'coding',
+        message: visitId
+          ? `给 visit_id=${visitId} 推荐诊断和手术编码`
+          : '给当前病历推荐诊断和手术编码',
+      },
+    ]
+  }
+
+  if (resultType === 'drg_grouping_result' || resultType === 'dip_grouping_result') {
+    return [
+      {
+        label: '解释入组依据',
+        capability: 'grouping',
+        message: '解释本次 DRG/DIP 入组依据和风险提示',
+      },
+      {
+        label: '查看编码建议',
+        capability: 'coding',
+        message: visitId
+          ? `给 visit_id=${visitId} 推荐诊断和手术编码`
+          : '给当前病历推荐诊断和手术编码',
+      },
+      {
+        label: '重新模拟',
+        capability: 'grouping',
+        message: visitId
+          ? `重新对 visit_id=${visitId} 做 DRG/DIP 模拟入组`
+          : '重新做 DRG/DIP 模拟入组',
+      },
+    ]
+  }
+
+  return []
 }
 
 function handleClose() {
@@ -422,6 +635,7 @@ function handleClose() {
 }
 
 function capabilityFromText(text: string): AgentCapability {
+  if (text.includes('问数') || text.includes('统计') || text.includes('集中点')) return 'analytics'
   if (/\b(?:DRG|DIP)\b/i.test(text) || text.includes('入组')) return 'grouping'
   if (text.includes('编码') || /\bICD\b/i.test(text)) return 'coding'
   return 'qc'
@@ -603,6 +817,32 @@ function executionStats(result: QCAgentRunResult | undefined) {
   }
 }
 
+function highRiskIssueCount(result: QCAgentRunResult | undefined) {
+  const issueSource = safeArray(result?.issues?.length ? result?.issues : result?.results)
+  return issueSource.filter((issue) => {
+    if (issue.passed === true || issue.status === 'passed') return false
+    const severity = String(issue.severity || '').toLowerCase()
+    return ['high', 'critical', '高风险', '严重'].some((keyword) => severity.includes(keyword))
+  }).length
+}
+
+function firstIssueRuleId(result: QCAgentRunResult | undefined) {
+  const issueSource = safeArray(result?.issues?.length ? result?.issues : result?.results)
+  return issueSource.find((issue) => issue.rule_id)?.rule_id || ''
+}
+
+function firstCandidateCode(result: QCAgentRunResult | undefined) {
+  const directCode = safeArray(result?.candidates).find((candidate) => candidate.code)?.code
+  if (directCode) return directCode
+  const diagnosisCode = safeArray(result?.diagnosis_candidates)
+    .flatMap((item) => safeArray(item.candidates))
+    .find((candidate) => candidate.code)?.code
+  if (diagnosisCode) return diagnosisCode
+  return safeArray(result?.procedure_candidates)
+    .flatMap((item) => safeArray(item.candidates))
+    .find((candidate) => candidate.code)?.code
+}
+
 function conclusionText(result: QCAgentRunResult | undefined) {
   const stats = executionStats(result)
   if (stats.issueCount > 0) return `发现 ${stats.issueCount} 条问题，需复核处理。`
@@ -610,21 +850,6 @@ function conclusionText(result: QCAgentRunResult | undefined) {
     return `已执行 ${stats.passedCount} 条规则，暂未发现问题；另有 ${stats.skippedCount} 条规则因当前只读执行边界未执行。`
   }
   return `已执行 ${stats.passedCount} 条规则，未发现问题。`
-}
-
-function rawSummary(response: QCAgentChatResponse) {
-  return JSON.stringify(
-    sanitizeQcAgentPayload({
-      status: response.status,
-      parsed_intent: response.parsed_intent,
-      plan: response.plan,
-      result_type: normalizeResultType(response),
-      result: response.result,
-      warnings: response.warnings,
-    }),
-    null,
-    2,
-  )
 }
 
 function fieldRow(label: string, value: unknown) {
@@ -725,6 +950,7 @@ function renderQCResult(result: QCAgentRunResult | undefined) {
   const executedRules = safeArray(result?.executed_rules)
   const skippedRules = safeArray(result?.skipped_rules)
   const stats = executionStats(result)
+  const highRiskCount = highRiskIssueCount(result)
 
   return [
     h('div', { class: 'qc-agent-conclusion' }, [
@@ -732,10 +958,9 @@ function renderQCResult(result: QCAgentRunResult | undefined) {
       h('div', { class: 'qc-agent-conclusion__text' }, conclusionText(result)),
     ]),
     h('div', { class: 'qc-agent-summary-grid' }, [
-      metricItem('已发现问题', stats.issueCount),
-      metricItem('已执行通过', stats.passedCount),
-      metricItem('未执行规则', stats.skippedCount),
-      metricItem('选中规则', stats.selectedRuleCount),
+      metricItem('发现问题', stats.issueCount),
+      metricItem('高风险', highRiskCount),
+      metricItem('执行规则', stats.executedRuleCount),
     ]),
     h('div', { class: 'qc-agent-block' }, [
       h('div', { class: 'qc-agent-block__title' }, '已发现问题'),
@@ -1013,6 +1238,38 @@ function renderStateNotice(response: QCAgentChatResponse) {
   return null
 }
 
+function recognizedTaskText(response: QCAgentChatResponse, resultType: NormalizedResultType) {
+  const capability = currentCapabilityLabelFromResponse(response, resultType)
+  const parts = [capability]
+  if (resultType === 'qc_result') parts.push('文书质控')
+  if (resultType === 'icd_search_result') parts.push('ICD 查询')
+  if (resultType === 'coding_suggestion_result') parts.push('当前病历编码建议')
+  if (resultType === 'drg_grouping_result') parts.push('DRG 模拟入组')
+  if (resultType === 'dip_grouping_result') parts.push('DIP 入组预测')
+  const visitId = String(
+    response.parsed_intent?.visit_id || response.result?.record_summary?.visit_id || '',
+  ).trim()
+  if (visitId) parts.push(`visit_id=${visitId}`)
+  return `已识别：${parts.filter(Boolean).join(' · ')}`
+}
+
+function currentCapabilityLabelFromResponse(
+  response: QCAgentChatResponse,
+  resultType: NormalizedResultType,
+) {
+  const capability = capabilityFromResponse(response)
+  if (capability === 'coding') return '编码任务'
+  if (capability === 'grouping') return '入组任务'
+  if (capability === 'qc') return '质控任务'
+  if (resultType === 'icd_search_result' || resultType === 'coding_suggestion_result') {
+    return '编码任务'
+  }
+  if (resultType === 'drg_grouping_result' || resultType === 'dip_grouping_result') {
+    return '入组任务'
+  }
+  return '只读分析'
+}
+
 const AgentResponseCard = defineComponent({
   name: 'AgentResponseCard',
   props: {
@@ -1043,34 +1300,41 @@ const AgentResponseCard = defineComponent({
 
       return h('div', { class: 'qc-agent-result-card' }, [
         h('div', { class: 'qc-agent-result-card__header' }, [
-          h('div', { class: 'qc-agent-result-card__badges' }, [
+          h('div', { class: 'qc-agent-result-card__identity' }, [
             h(
-              'span',
-              { class: `qc-agent-status qc-agent-status--${response.status}` },
-              statusLabel(response.status),
+              'div',
+              { class: 'qc-agent-result-card__eyebrow' },
+              recognizedTaskText(response, resultType),
             ),
-            h('span', { class: 'qc-agent-result-type' }, resultTypeLabel(resultType)),
-            response.status === 'completed' && resultType === 'qc_result'
-              ? h(
-                  'span',
-                  {
-                    class: [
-                      'qc-agent-execution-tag',
-                      stats.isPartial
-                        ? 'qc-agent-execution-tag--partial'
-                        : 'qc-agent-execution-tag--complete',
-                    ],
-                  },
-                  stats.isPartial ? '部分执行' : '完整执行',
-                )
-              : null,
-            resultType === 'drg_grouping_result' && result?.fallback
-              ? h(
-                  'span',
-                  { class: 'qc-agent-execution-tag qc-agent-execution-tag--partial' },
-                  '降级模式',
-                )
-              : null,
+            h('div', { class: 'qc-agent-result-card__badges' }, [
+              h(
+                'span',
+                { class: `qc-agent-status qc-agent-status--${response.status}` },
+                statusLabel(response.status),
+              ),
+              h('span', { class: 'qc-agent-result-type' }, resultTypeLabel(resultType)),
+              response.status === 'completed' && resultType === 'qc_result'
+                ? h(
+                    'span',
+                    {
+                      class: [
+                        'qc-agent-execution-tag',
+                        stats.isPartial
+                          ? 'qc-agent-execution-tag--partial'
+                          : 'qc-agent-execution-tag--complete',
+                      ],
+                    },
+                    stats.isPartial ? '部分执行' : '完整执行',
+                  )
+                : null,
+              resultType === 'drg_grouping_result' && result?.fallback
+                ? h(
+                    'span',
+                    { class: 'qc-agent-execution-tag qc-agent-execution-tag--partial' },
+                    '降级模式',
+                  )
+                : null,
+            ]),
           ]),
           h(
             'span',
@@ -1083,10 +1347,6 @@ const AgentResponseCard = defineComponent({
         resultContent,
         renderPlan(response),
         renderWarnings(response),
-        h('details', { class: 'qc-agent-raw' }, [
-          h('summary', '查看脱敏响应摘要'),
-          h('pre', rawSummary(response)),
-        ]),
       ])
     }
   },
@@ -1733,6 +1993,378 @@ const AgentResponseCard = defineComponent({
   border-radius: 8px;
   color: #334155;
   font-weight: 700;
+}
+
+.qc-agent-drawer__safe {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  background: #f0fdf4;
+  padding: 3px 8px;
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-agent-panel {
+  gap: 10px;
+  padding: 12px 14px;
+  background: #f5f9fc;
+}
+
+.qc-agent-context {
+  gap: 10px;
+  border-radius: 14px;
+  padding: 9px 12px;
+  box-shadow: none;
+}
+
+.qc-agent-context__main {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.qc-agent-context__label {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.qc-agent-context__value {
+  min-width: 0;
+  margin-top: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-agent-capability {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.qc-agent-workspace {
+  min-height: 420px;
+  gap: 14px;
+  padding: 4px 2px 10px;
+}
+
+.qc-agent-message {
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.qc-agent-message__avatar {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dbeafe;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.qc-agent-message--user {
+  justify-content: flex-end;
+}
+
+.qc-agent-message--user .qc-agent-message__bubble {
+  max-width: min(78%, 520px);
+  border: 1px solid #bfdbfe;
+  border-radius: 18px 18px 4px;
+  background: #eaf2ff;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.65;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
+}
+
+.qc-agent-message--assistant,
+.qc-agent-message--system {
+  justify-content: flex-start;
+}
+
+.qc-agent-message--assistant .qc-agent-message__bubble,
+.qc-agent-message--system .qc-agent-message__bubble {
+  width: auto;
+  max-width: min(92%, 650px);
+  border: 1px solid #e2e8f0;
+  border-radius: 18px 18px 18px 4px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.65;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.qc-agent-message--system .qc-agent-message__bubble {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.qc-agent-message--welcome .qc-agent-message__bubble {
+  width: min(92%, 650px);
+}
+
+.qc-agent-welcome__title {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.qc-agent-welcome__desc {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.qc-agent-sqlbot {
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(37, 99, 235, 0.08);
+}
+
+.qc-agent-sqlbot__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 14px;
+}
+
+.qc-agent-sqlbot__eyebrow {
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.qc-agent-sqlbot__title {
+  margin-top: 2px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.qc-agent-sqlbot__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.qc-agent-sqlbot__status {
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff7ed;
+  padding: 4px 9px;
+  color: #c2410c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-agent-sqlbot__status--enabled {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.qc-agent-sqlbot__close {
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #f8fbff;
+  padding: 4px 10px;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.qc-agent-sqlbot__iframe {
+  display: block;
+  width: 100%;
+  height: min(62vh, 620px);
+  min-height: 420px;
+  border: 0;
+  border-radius: 0 0 16px 16px;
+  background: #f8fbff;
+}
+
+.qc-agent-sqlbot__placeholder {
+  display: flex;
+  min-height: 150px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 22px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.qc-agent-sqlbot__placeholder strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.qc-agent-sqlbot__placeholder small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.qc-agent-prompt-chips,
+.qc-agent-next-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.qc-agent-prompt-chip,
+.qc-agent-next-action {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #f8fbff;
+  padding: 6px 10px;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.qc-agent-prompt-chip:hover,
+.qc-agent-next-action:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.qc-agent-next-actions {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+}
+
+.qc-agent-result-card {
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.qc-agent-result-card__header {
+  align-items: flex-start;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 10px;
+}
+
+.qc-agent-result-card__identity {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.qc-agent-result-card__eyebrow {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.qc-agent-status,
+.qc-agent-result-type,
+.qc-agent-execution-tag {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.qc-agent-conclusion,
+.qc-agent-state-note {
+  border-color: #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  padding: 9px 10px;
+}
+
+.qc-agent-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.qc-agent-result-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.qc-agent-summary-item,
+.qc-agent-field,
+.qc-agent-grouping-card {
+  border: 1px solid #edf2f7;
+  background: #f8fbff;
+}
+
+.qc-agent-summary-item strong {
+  font-size: 20px;
+}
+
+.qc-agent-block__title {
+  font-size: 13px;
+}
+
+.qc-agent-candidate,
+.qc-agent-issue,
+.qc-agent-executed-rule,
+.qc-agent-skipped-rule,
+.qc-agent-code-card,
+.qc-agent-coding-item {
+  border-color: #e2e8f0;
+  background: #ffffff;
+}
+
+.qc-agent-issue,
+.qc-agent-code-card,
+.qc-agent-coding-item {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.03);
+}
+
+.qc-agent-commandbar {
+  position: sticky;
+  bottom: 0;
+  border-radius: 16px;
+  padding: 10px;
+  box-shadow: 0 -12px 28px rgba(15, 23, 42, 0.06);
+}
+
+.qc-agent-commandbar :deep(textarea) {
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.qc-agent-commandbar__button {
+  border-radius: 999px;
+  padding-inline: 10px;
+}
+
+.qc-agent-commandbar :deep(.ant-btn-primary) {
+  height: 30px;
+  border-radius: 999px;
+  font-weight: 800;
 }
 
 @media (max-width: 860px) {

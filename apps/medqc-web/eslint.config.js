@@ -10,6 +10,7 @@ export default [
       'dist/**',
       'coverage/**',
       'node_modules/**',
+      'third_party/**',
       '**/*.d.ts',
       'src/views/drg-grouper/sichuan2024Grouper.js',
       'src/views/drg-grouper/cnDrg2023Grouper.js',
