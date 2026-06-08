@@ -65,14 +65,20 @@ class CodingQCReport:
 # D1：编码格式校验（规则层）
 # ============================================================
 
-# ICD-10 格式（国临版2.0）：字母 + 2位数字 + 可选（.1-7位数字/x混合），如 I21.001、I10.x02、J06.900x003
-ICD10_PATTERN = re.compile(r'^[A-Za-z]\d{2}(\.[\dx]{1,7})?$', re.IGNORECASE)
+# ICD-10/医保诊断编码格式：普通 ICD-10、剑号星号组合码、病理形态学 M 码、肿瘤诊断+M 码。
+ICD10_BASE = r'[A-Za-z]\d{2}(?:\.[A-Za-z0-9]{1,9})?'
+MORPHOLOGY_BASE = r'M\d{4,5}/\d'
+ICD10_PATTERN = re.compile(
+    rf'^(?:'
+    rf'{ICD10_BASE}(?:\*)?(?:\+{ICD10_BASE}(?:\*)?)?'
+    rf'|{MORPHOLOGY_BASE}'
+    rf'|{ICD10_BASE}{MORPHOLOGY_BASE}'
+    rf')$',
+    re.IGNORECASE,
+)
 
-# ICD-9-CM-3 格式：2位数字.2-4位数字，如 36.0701
-ICD9CM3_PATTERN = re.compile(r'^\d{2}\.\d{2,4}$')
-
-# 特殊格式：带 x 的扩展编码，如 36.0700x003
-ICD9CM3_EXT_PATTERN = re.compile(r'^\d{2}\.\d{2,4}(x\d{3})?$')
+# ICD-9-CM-3 手术操作编码格式：2位数字 + 小数点 + 数字/x 扩展，如 36.0701、54.3x01、54.4x00x035。
+ICD9CM3_PATTERN = re.compile(r'^\d{2}\.\d[0-9x]{1,9}$', re.IGNORECASE)
 
 
 def check_icd10_format(code: str) -> Optional[CodingIssue]:
@@ -85,8 +91,8 @@ def check_icd10_format(code: str) -> Optional[CodingIssue]:
             dimension="format",
             severity="error",
             code=code,
-            description=f"ICD-10 编码 '{code}' 格式不正确，标准格式为字母+数字，如 I21.001",
-            suggestion="请修正编码格式，ICD-10 编码应以大写字母开头，后跟2位数字，小数点后1-4位数字",
+            description=f"ICD-10/诊断编码 '{code}' 格式不正确，标准格式如 I21.001、E11.401+G63.2* 或 M81400/3",
+            suggestion="请核对诊断编码格式；本地编码库支持 ICD-10 扩展码、剑号星号组合码和病理形态学 M 码",
             source="rule",
         )
     return None
@@ -97,13 +103,13 @@ def check_icd9cm3_format(code: str) -> Optional[CodingIssue]:
     if not code or not code.strip():
         return None
     code = code.strip()
-    if not ICD9CM3_PATTERN.match(code) and not ICD9CM3_EXT_PATTERN.match(code):
+    if not ICD9CM3_PATTERN.match(code):
         return CodingIssue(
             dimension="format",
             severity="error",
             code=code,
-            description=f"ICD-9-CM-3 编码 '{code}' 格式不正确，标准格式为 XX.XXXX，如 36.0701",
-            suggestion="请修正编码格式，手术编码应为2位数字+小数点+2-4位数字",
+            description=f"ICD-9-CM-3 编码 '{code}' 格式不正确，标准格式如 36.0701、54.3x01 或 54.4x00x035",
+            suggestion="请核对手术操作编码格式；本地编码库支持数字小数码和 x 扩展码",
             source="rule",
         )
     return None

@@ -39,6 +39,18 @@ class TestICD10Format:
         """E11.9 一位小数应通过。"""
         assert check_icd10_format("E11.9") is None
 
+    def test_valid_cross_asterisk_code(self):
+        """E11.401+G63.2* 剑号星号组合码应通过。"""
+        assert check_icd10_format("E11.401+G63.2*") is None
+
+    def test_valid_morphology_code(self):
+        """M80451/3 病理形态学编码应通过。"""
+        assert check_icd10_format("M80451/3") is None
+
+    def test_valid_tumor_with_morphology_code(self):
+        """C22.101M81600/3 肿瘤诊断拼接 M 码应通过。"""
+        assert check_icd10_format("C22.101M81600/3") is None
+
     def test_invalid_missing_letter(self):
         """21.001 缺字母前缀应报错。"""
         issue = check_icd10_format("21.001")
@@ -71,6 +83,11 @@ class TestICD9CM3Format:
     def test_valid_extended(self):
         """36.0700x003 扩展格式应通过。"""
         assert check_icd9cm3_format("36.0700x003") is None
+
+    def test_valid_local_icd9_x_codes(self):
+        """本地 ICD-9-CM-3 库中的 x 扩展编码应通过。"""
+        assert check_icd9cm3_format("54.3x01") is None
+        assert check_icd9cm3_format("54.4x00x035") is None
 
     def test_invalid_no_dot(self):
         """360701 缺分隔点应报错。"""
@@ -105,9 +122,13 @@ class TestCodingQCEngineFormat:
             "diagnoses": [
                 {"code": "I21.001", "name": "急性心梗"},
                 {"code": "E11.900", "name": "2型糖尿病"},
+                {"code": "E11.401+G63.2*", "name": "2型糖尿病性周围神经病"},
+                {"code": "M80451/3", "name": "小细胞-腺癌"},
             ],
             "surgeries": [
                 {"code": "36.0701", "name": "PCI"},
+                {"code": "54.3x01", "name": "腹壁病损切除术"},
+                {"code": "54.4x00x035", "name": "盆腔病损切除术"},
             ],
         }
         issues = self.engine.check_format(fp)
