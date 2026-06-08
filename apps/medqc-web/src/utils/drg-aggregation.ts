@@ -444,18 +444,18 @@ export function mapCaseRecordsToPaymentMonitoringRows(
 ): PaymentMonitoringRow[] {
   // 科室 key 映射
   const deptKeyMap: Record<string, string> = {
-    '心内科': 'cardiology',
-    '心血管内科': 'cardiology',
-    '心血管内科专业': 'cardiology',
-    '呼吸内科': 'respiratory',
-    '呼吸内科专业': 'respiratory',
-    '神经内科': 'neurology',
-    '神经内科专业': 'neurology',
-    '骨科': 'orthopedics',
-    '骨科专业': 'orthopedics',
-    '普外科': 'general-surgery',
-    '普通外科专业': 'general-surgery',
-    '儿科': 'pediatrics',
+    心内科: 'cardiology',
+    心血管内科: 'cardiology',
+    心血管内科专业: 'cardiology',
+    呼吸内科: 'respiratory',
+    呼吸内科专业: 'respiratory',
+    神经内科: 'neurology',
+    神经内科专业: 'neurology',
+    骨科: 'orthopedics',
+    骨科专业: 'orthopedics',
+    普外科: 'general-surgery',
+    普通外科专业: 'general-surgery',
+    儿科: 'pediatrics',
   }
 
   return records
@@ -476,6 +476,8 @@ export function mapCaseRecordsToPaymentMonitoringRows(
         actualCost: r.total_cost,
         payment,
         baselinePayment,
+        weight: r.weight,
+        dipScore: r.dip_score,
         ruleHint: r.drg_name || r.dip_name || r.primary_diagnosis_name || '',
         controlTip: '',
       } as PaymentMonitoringRow

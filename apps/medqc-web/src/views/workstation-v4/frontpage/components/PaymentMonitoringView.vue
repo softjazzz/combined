@@ -31,6 +31,14 @@
           </div>
           <button
             type="button"
+            class="standard-config-button"
+            @click="configDrawerOpen = true"
+          >
+            <SettingOutlined />
+            付费标准配置
+          </button>
+          <button
+            type="button"
             class="backend-sync-button"
             :disabled="backendLoading"
             @click="runBackendPaymentSimulation"
@@ -83,6 +91,144 @@
         class="dataset-upload-surface"
         @data-changed="handleDatasetChanged"
       />
+
+      <section class="standard-summary-panel">
+        <div class="standard-summary-main">
+          <span class="standard-status">地方付费标准库</span>
+          <strong>{{ paymentStandardForm.regionName }} · {{ paymentStandardForm.schemeName }}</strong>
+          <p>
+            DIP 点值 {{ paymentStandardForm.dipPointValue }} 元/分，DRG 基准费率
+            {{ paymentStandardForm.baseRate }} 元，医院系数
+            {{ paymentStandardForm.hospitalCoefficient }}，地区系数
+            {{ paymentStandardForm.regionCoefficient }}。
+          </p>
+        </div>
+        <div class="standard-summary-meta">
+          <span>极高组 &gt;= {{ formatRatioPercent(paymentStandardForm.highRateThreshold) }}</span>
+          <span>极低组 &lt;= {{ formatRatioPercent(paymentStandardForm.lowRateThreshold) }}</span>
+        </div>
+      </section>
+
+      <a-drawer
+        v-model:open="configDrawerOpen"
+        title="地方付费标准配置"
+        placement="right"
+        :width="560"
+        destroy-on-close
+      >
+        <div class="standard-config-drawer">
+          <div class="drawer-intro">
+            <strong>模拟地方付费标准库</strong>
+            <p>当前配置仅用于本页后端模拟测算，不写入正式医保结算清单或正式 DRG/DIP 结果。</p>
+          </div>
+
+          <div class="config-form-grid">
+            <label class="config-field config-field-wide">
+              <span>地区名称</span>
+              <a-input
+                v-model:value="paymentStandardForm.regionName"
+                placeholder="例如：泸州"
+              />
+            </label>
+
+            <label class="config-field config-field-wide">
+              <span>方案名称</span>
+              <a-input
+                v-model:value="paymentStandardForm.schemeName"
+                placeholder="例如：2025 DIP 付费方案"
+              />
+            </label>
+
+            <label class="config-field">
+              <span>DIP 点值（元/分）</span>
+              <a-input-number
+                v-model:value="paymentStandardForm.dipPointValue"
+                :min="1"
+                :precision="2"
+                class="config-number"
+              />
+            </label>
+
+            <label class="config-field">
+              <span>DRG 基准费率（元）</span>
+              <a-input-number
+                v-model:value="paymentStandardForm.baseRate"
+                :min="1"
+                :precision="2"
+                class="config-number"
+              />
+            </label>
+
+            <label class="config-field">
+              <span>医院系数</span>
+              <a-input-number
+                v-model:value="paymentStandardForm.hospitalCoefficient"
+                :min="0.1"
+                :step="0.01"
+                :precision="2"
+                class="config-number"
+              />
+            </label>
+
+            <label class="config-field">
+              <span>地区系数</span>
+              <a-input-number
+                v-model:value="paymentStandardForm.regionCoefficient"
+                :min="0.1"
+                :step="0.01"
+                :precision="2"
+                class="config-number"
+              />
+            </label>
+
+            <label class="config-field">
+              <span>费用极高组阈值</span>
+              <a-input-number
+                v-model:value="paymentStandardForm.highRateThreshold"
+                :min="0.1"
+                :step="0.05"
+                :precision="2"
+                class="config-number"
+              />
+            </label>
+
+            <label class="config-field">
+              <span>费用极低组阈值</span>
+              <a-input-number
+                v-model:value="paymentStandardForm.lowRateThreshold"
+                :min="0.1"
+                :step="0.05"
+                :precision="2"
+                class="config-number"
+              />
+            </label>
+          </div>
+
+          <div class="config-preview">
+            <span>测算公式</span>
+            <strong>DIP 支付 = DIP 分值 x 点值 x 医院系数 x 地区系数</strong>
+            <strong>DRG 支付 = DRG 权重 x 基准费率 x 医院系数 x 地区系数</strong>
+          </div>
+
+          <div class="drawer-actions">
+            <button
+              type="button"
+              class="secondary-action"
+              @click="resetPaymentStandardConfig"
+            >
+              恢复默认
+            </button>
+            <button
+              type="button"
+              class="primary-action"
+              :disabled="backendLoading"
+              @click="savePaymentStandardConfig"
+            >
+              应用并重新测算
+            </button>
+          </div>
+        </div>
+      </a-drawer>
 
       <div
         v-if="!drgMockEnabled && !hasUploadedData"
@@ -362,6 +508,7 @@ import {
   FileExcelOutlined,
   FilePdfOutlined,
   FileWordOutlined,
+  SettingOutlined,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import {
@@ -398,6 +545,32 @@ const backendRows = ref<PaymentMonitoringRow[]>([])
 const backendResult = ref<PaymentMonitoringResult | null>(null)
 const backendLoading = ref(false)
 const backendError = ref('')
+const configDrawerOpen = ref(false)
+
+type LocalPaymentStandardConfig = {
+  regionName: string
+  schemeName: string
+  dipPointValue: number
+  baseRate: number
+  hospitalCoefficient: number
+  regionCoefficient: number
+  highRateThreshold: number
+  lowRateThreshold: number
+}
+
+const PAYMENT_STANDARD_STORAGE_KEY = 'medqc.localPaymentStandard.v1'
+const DEFAULT_PAYMENT_STANDARD: LocalPaymentStandardConfig = {
+  regionName: '泸州',
+  schemeName: '2025 DIP 付费方案',
+  dipPointValue: 75,
+  baseRate: 7000,
+  hospitalCoefficient: 1,
+  regionCoefficient: 1,
+  highRateThreshold: 1.2,
+  lowRateThreshold: 0.8,
+}
+
+const paymentStandardForm = ref<LocalPaymentStandardConfig>({ ...DEFAULT_PAYMENT_STANDARD })
 
 // 数据源：优先从上传数据 Store 映射，无上传数据时回退到本地降级数据
 const sourceRows = computed<PaymentMonitoringRow[]>(() => {
@@ -467,14 +640,14 @@ const selectedGroupLabel = computed(() => {
 })
 
 const dataScopeLabel = computed(() => {
-  if (backendRows.value.length) return '后端模拟'
+  if (backendRows.value.length) return '地方标准库测算'
   if (hasUploadedData.value) return '上传数据'
   return drgMockEnabled.value ? '降级数据' : '真实优先'
 })
 
 const backendStatusText = computed(() => {
   if (backendRows.value.length && backendResult.value) {
-    return `${backendResult.value.safety_warning} 当前使用后端付费模拟结果，不写入正式结算结果。`
+    return `${backendResult.value.safety_warning} 当前按 ${paymentStandardForm.value.regionName} ${paymentStandardForm.value.schemeName} 测算，不写入正式结算结果。`
   }
   if (backendError.value) {
     return `后端付费监测暂不可用：${backendError.value}。当前展示降级数据，不写入正式结算结果。`
@@ -563,11 +736,16 @@ function formatYuan(value: number): string {
   })
 }
 
+function formatRatioPercent(value: number): string {
+  return `${(value * 100).toFixed(0)}%`
+}
+
 function getGroupCaseCount(groupType: Exclude<PaymentGroupType, 'all'>): number {
   return selectedDeptRows.value.filter((row) => resolveGroupType(row) === groupType).length
 }
 
 function buildPaymentSimulationInput(rows: PaymentMonitoringRow[]): PaymentMonitoringRecordInput[] {
+  const standard = paymentStandardForm.value
   return rows.map((row) => ({
     case_id: String(row.id),
     visit_id: row.caseNo,
@@ -578,10 +756,25 @@ function buildPaymentSimulationInput(rows: PaymentMonitoringRow[]): PaymentMonit
     group_name: row.ruleHint,
     drg_code: row.drg.includes(':') ? undefined : row.drg,
     dip_code: row.drg.includes(':') ? row.drg : undefined,
+    weight: row.drg.includes(':')
+      ? undefined
+      : (row.weight ?? roundNumber(row.baselinePayment / standard.baseRate, 4)),
+    rw: row.drg.includes(':')
+      ? undefined
+      : (row.weight ?? roundNumber(row.baselinePayment / standard.baseRate, 4)),
+    score: row.drg.includes(':')
+      ? (row.dipScore ?? roundNumber(row.baselinePayment / standard.dipPointValue, 2))
+      : undefined,
+    dip_score: row.drg.includes(':')
+      ? (row.dipScore ?? roundNumber(row.baselinePayment / standard.dipPointValue, 2))
+      : undefined,
     actual_cost: row.actualCost,
-    expected_payment: row.payment,
-    baseline_payment: row.baselinePayment,
   }))
+}
+
+function roundNumber(value: number, precision: number): number {
+  const factor = 10 ** precision
+  return Math.round(value * factor) / factor
 }
 
 function getRecordText(record: Record<string, unknown>, key: string, fallback = ''): string {
@@ -623,6 +816,8 @@ function mapBackendRecordToRow(
       expectedPayment > 0
         ? Math.max(expectedPayment, actualCost / Math.max(costRatio, 0.01))
         : actualCost,
+    weight: getRecordNumber(record, 'weight'),
+    dipScore: getRecordNumber(record, 'score'),
     ruleHint: groupName,
     controlTip:
       getRecordText(record, 'risk_level') === 'high'
@@ -631,12 +826,61 @@ function mapBackendRecordToRow(
   }
 }
 
+function buildPaymentStandardPayload(): Record<string, unknown> {
+  const standard = paymentStandardForm.value
+  return {
+    config_version_id: `local-payment-${Date.now()}`,
+    region: standard.regionName,
+    standard_name: standard.schemeName,
+    base_rate: standard.baseRate,
+    dip_point_value: standard.dipPointValue,
+    hospital_coefficient: standard.hospitalCoefficient,
+    region_coefficient: standard.regionCoefficient,
+    high_rate_threshold: standard.highRateThreshold,
+    low_rate_threshold: standard.lowRateThreshold,
+  }
+}
+
+function loadPaymentStandardConfig() {
+  if (typeof window === 'undefined') return
+  const raw = window.localStorage.getItem(PAYMENT_STANDARD_STORAGE_KEY)
+  if (!raw) return
+  try {
+    const parsed = JSON.parse(raw) as Partial<LocalPaymentStandardConfig>
+    paymentStandardForm.value = {
+      ...DEFAULT_PAYMENT_STANDARD,
+      ...parsed,
+    }
+  } catch {
+    window.localStorage.removeItem(PAYMENT_STANDARD_STORAGE_KEY)
+  }
+}
+
+function persistPaymentStandardConfig() {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(
+    PAYMENT_STANDARD_STORAGE_KEY,
+    JSON.stringify(paymentStandardForm.value),
+  )
+}
+
+function resetPaymentStandardConfig() {
+  paymentStandardForm.value = { ...DEFAULT_PAYMENT_STANDARD }
+}
+
+async function savePaymentStandardConfig() {
+  persistPaymentStandardConfig()
+  configDrawerOpen.value = false
+  await runBackendPaymentSimulation()
+}
+
 async function runBackendPaymentSimulation() {
   backendLoading.value = true
   backendError.value = ''
   try {
     const result = await simulatePaymentMonitoring({
       records: buildPaymentSimulationInput(sourceRows.value),
+      payment_standard: buildPaymentStandardPayload(),
     })
     backendResult.value = result
     backendRows.value = result.records.map(mapBackendRecordToRow)
@@ -660,6 +904,11 @@ function buildExportPayload() {
     meta: [
       ['导出时间', now],
       ['数据模式', drgMockEnabled.value ? '降级数据模式' : '真实优先模式'],
+      [
+        '地方付费标准',
+        `${paymentStandardForm.value.regionName} ${paymentStandardForm.value.schemeName}`,
+      ],
+      ['DIP点值', `${paymentStandardForm.value.dipPointValue} 元/分`],
       ['科室筛选', selectedDeptLabel.value],
       ['监测分组', selectedGroupLabel.value],
       [
@@ -778,6 +1027,7 @@ function renderPaymentTrendChart() {
 }
 
 onMounted(() => {
+  loadPaymentStandardConfig()
   drgMockEnabled.value = isDrgMockModeEnabled()
   unsubscribeDrgMockMode = onDrgMockModeChange((enabled) => {
     drgMockEnabled.value = enabled
@@ -927,6 +1177,29 @@ onUnmounted(() => {
   opacity: 0.72;
 }
 
+.standard-config-button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #dbe5f0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 14px;
+  transition: all 0.18s ease;
+}
+
+.standard-config-button:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
 .filter-chip {
   display: inline-flex;
   min-height: 36px;
@@ -988,6 +1261,186 @@ onUnmounted(() => {
 
 .dataset-upload-surface {
   margin: 0;
+}
+
+.standard-summary-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #dbe5f0;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 14px 16px;
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.1);
+}
+
+.standard-summary-main {
+  min-width: 0;
+}
+
+.standard-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #eaf2ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 18px;
+  padding: 2px 8px;
+}
+
+.standard-summary-main strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 22px;
+}
+
+.standard-summary-main p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.standard-summary-meta {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.standard-summary-meta span {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  padding: 5px 8px;
+}
+
+.standard-config-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.drawer-intro {
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #eff6ff;
+  padding: 12px 14px;
+}
+
+.drawer-intro strong {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 22px;
+}
+
+.drawer-intro p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.config-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.config-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-field-wide {
+  grid-column: 1 / -1;
+}
+
+.config-field span {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 18px;
+}
+
+.config-number {
+  width: 100%;
+}
+
+.config-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 12px 14px;
+}
+
+.config-preview span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 18px;
+}
+
+.config-preview strong {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 14px;
+}
+
+.primary-action,
+.secondary-action {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0 14px;
+}
+
+.primary-action {
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.secondary-action {
+  border: 1px solid #dbe5f0;
+  background: #ffffff;
+  color: #334155;
 }
 
 .data-warning {
@@ -1411,6 +1864,15 @@ onUnmounted(() => {
   .detail-layout {
     grid-template-columns: 1fr;
   }
+
+  .standard-summary-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .standard-summary-meta {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 767px) {
@@ -1431,8 +1893,22 @@ onUnmounted(() => {
   }
 
   .filter-control,
+  .standard-config-button,
   .date-chip,
   .export-button {
+    width: 100%;
+  }
+
+  .config-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .drawer-actions {
+    flex-direction: column-reverse;
+  }
+
+  .primary-action,
+  .secondary-action {
     width: 100%;
   }
 

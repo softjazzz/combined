@@ -6,7 +6,10 @@
           <span class="heading-icon"><ProfileOutlined /></span>
           <div>
             <h2>分组条件</h2>
-            <p>CN-DRG 2023 绩效监测口径，录入病案特征、诊断、手术和费用信息。</p>
+            <p>
+              CN-DRG 绩效监测：复用 CHS-DRG 四川 2.0 分组路径，叠加 2024 绩效监测 DRG
+              权重与低风险组列表。
+            </p>
           </div>
         </div>
       </header>
@@ -186,7 +189,7 @@
             </label>
           </div>
           <p class="field-help">
-            费用信息用于页面模拟摘要，不参与本地 CN-DRG 算法判定。
+            费用信息用于页面费用摘要，不参与本地 CN-DRG 分组判定。
           </p>
         </div>
       </div>
@@ -224,11 +227,11 @@
         <div class="panel-title">
           <span class="heading-icon"><BarChartOutlined /></span>
           <div>
-            <h2>模拟结果</h2>
+            <h2>分组结果</h2>
             <p>结构化展示 CN-DRG 编码、权重、费用和风险提示。</p>
           </div>
         </div>
-        <span class="simulate-chip"><AlertOutlined />仅模拟</span>
+        <span class="simulate-chip"><AlertOutlined />真实分组器和权重</span>
       </header>
 
       <div class="result-body">
@@ -247,7 +250,7 @@
         >
           <LoadingOutlined class="spin-icon" />
           <h3>正在执行分组</h3>
-          <p>系统正在使用本地 CN-DRG 目录生成模拟结果。</p>
+          <p>系统正在执行 CN-DRG 绩效监测分组。</p>
         </div>
 
         <div
@@ -261,8 +264,8 @@
                 <CloseCircleOutlined v-else />
               </span>
               <div>
-                <h3>{{ result.status === '分组成功' ? 'CN-DRG 模拟结果' : '未能入组' }}</h3>
-                <p>CN-DRG 2023</p>
+                <h3>{{ result.status === '分组成功' ? 'CN-DRG 绩效监测结果' : '未能入组' }}</h3>
+                <p>CN-DRG 绩效监测</p>
               </div>
             </div>
 
@@ -320,7 +323,9 @@
             </div>
             <div class="result-row">
               <span>权重来源</span>
-              <strong>{{ result.weightSource || 'CN-DRG 2023 本地目录' }}</strong>
+              <strong>{{
+                result.weightSource || '2024年度三级公立医院绩效监测DRG权重和低风险组列表'
+              }}</strong>
             </div>
             <div class="result-row">
               <span>正式结果</span>
@@ -349,7 +354,7 @@
           <span class="heading-icon"><ApartmentOutlined /></span>
           <div>
             <h3>入组路径解释</h3>
-            <p>按校验、MDC、ADRG、DRG 四步解释模拟过程。</p>
+            <p>按校验、MDC、ADRG、DRG 四步解释分组过程。</p>
           </div>
         </div>
       </header>
@@ -389,7 +394,7 @@
           <span class="heading-icon"><TableOutlined /></span>
           <div>
             <h3>编码映射</h3>
-            <p>展示本次输入编码与模拟口径，不改写数据源。</p>
+            <p>展示本次输入编码与分组口径，不改写数据源。</p>
           </div>
         </div>
       </header>
@@ -508,7 +513,7 @@ const pathSteps = computed(() => [
     title: '确定 DRG',
     description: result.value?.drg
       ? `${result.value.drg}，权重 ${result.value.rw ?? '--'}`
-      : '输出最终 DRG 模拟结果。',
+      : '输出最终 DRG 分组结果。',
     status: result.value?.status === '分组成功' ? '完成' : result.value ? '未入组' : '待执行',
   },
 ])

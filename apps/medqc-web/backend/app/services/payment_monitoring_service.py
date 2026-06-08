@@ -54,10 +54,13 @@ class PaymentMonitoringService:
             "config_version_id": runtime_config.get("config_version_id"),
             "payment_standard": {
                 "base_rate": runtime_config.get("base_rate"),
+                "dip_point_value": runtime_config.get("dip_point_value"),
                 "hospital_coefficient": runtime_config.get("hospital_coefficient"),
                 "region_coefficient": runtime_config.get("region_coefficient"),
                 "high_rate_threshold": runtime_config.get("high_rate_threshold"),
                 "low_rate_threshold": runtime_config.get("low_rate_threshold"),
+                "standard_name": runtime_config.get("standard_name"),
+                "region": runtime_config.get("region"),
             },
             "overview": {
                 "case_count": len(normalized_records),
@@ -78,14 +81,17 @@ class PaymentMonitoringService:
         actual_cost = _float(record.get("actual_cost"), _float(record.get("total_fee"), _float(record.get("total_cost"))))
         weight = _float(record.get("weight"), _float(record.get("rw"), 0.0))
         score = _float(record.get("score"), _float(record.get("dip_score"), 0.0))
+        group_type = _text(record.get("group_type"), "DRG" if record.get("drg_code") else "DIP").upper()
         expected_payment = _float(
             record.get("expected_payment"),
             _float(record.get("insurance_payment"), _float(record.get("baseline_payment"), 0.0)),
         )
+        if expected_payment <= 0 and group_type == "DIP" and score > 0:
+            expected_payment = self._dip_payment_from_score(score, runtime_config)
         if expected_payment <= 0 and weight > 0:
             expected_payment = self._payment_from_unit(weight, runtime_config)
         if expected_payment <= 0 and score > 0:
-            expected_payment = self._payment_from_unit(score, runtime_config)
+            expected_payment = self._dip_payment_from_score(score, runtime_config)
 
         profit_loss = round(expected_payment - actual_cost, 2)
         cost_ratio = round(actual_cost / expected_payment, 4) if expected_payment > 0 else 0.0
@@ -96,7 +102,7 @@ class PaymentMonitoringService:
             "case_id": _text(record.get("case_id"), _text(record.get("visit_id"), _text(record.get("admission_id")))),
             "patient_name": _text(record.get("patient_name"), "未命名患者"),
             "department": _text(record.get("department"), _text(record.get("department_name"), "未知科室")),
-            "group_type": _text(record.get("group_type"), "DRG" if record.get("drg_code") else "DIP"),
+            "group_type": group_type,
             "group_code": _text(record.get("group_code"), _text(record.get("drg_code"), _text(record.get("dip_code")))),
             "group_name": _text(record.get("group_name"), _text(record.get("drg_name"), _text(record.get("dip_name")))),
             "weight": weight,
@@ -115,6 +121,16 @@ class PaymentMonitoringService:
         return round(
             unit
             * _float(runtime_config.get("base_rate"), 0)
+            * _float(runtime_config.get("hospital_coefficient"), 1)
+            * _float(runtime_config.get("region_coefficient"), 1),
+            2,
+        )
+
+    def _dip_payment_from_score(self, score: float, runtime_config: Dict[str, Any]) -> float:
+        point_value = _float(runtime_config.get("dip_point_value"), _float(runtime_config.get("base_rate"), 0))
+        return round(
+            score
+            * point_value
             * _float(runtime_config.get("hospital_coefficient"), 1)
             * _float(runtime_config.get("region_coefficient"), 1),
             2,
