@@ -192,7 +192,7 @@
         <div class="panel-head panel-head--between">
           <div>
             <h2>原始病历内容</h2>
-            <p>高亮内容会随抽取结果更新</p>
+            <p>支持直接粘贴或编辑病历，执行抽取后生成高亮预览</p>
           </div>
           <div class="reading-meta">
             <span>当前病案</span>
@@ -202,11 +202,30 @@
         </div>
 
         <div class="reader-body">
-          <div class="reader-scroll">
-            <div
-              class="medical-text"
-              v-html="highlightedMedicalText"
+          <div class="medical-editor-wrap">
+            <textarea
+              v-model="medicalText"
+              class="medical-text-editor"
+              :disabled="extracting || grouping"
+              spellcheck="false"
+              placeholder="请粘贴完整入院记录、病程记录、手术记录或出院小结等病历文本..."
+              @input="handleMedicalTextEdited"
             />
+          </div>
+
+          <div class="reader-preview">
+            <div class="reader-preview__head">
+              <span>抽取高亮预览</span>
+              <em>{{
+                hasExtractedData ? '已根据抽取结果高亮' : '执行抽取后显示诊断和手术高亮'
+              }}</em>
+            </div>
+            <div class="reader-scroll">
+              <div
+                class="medical-text"
+                v-html="highlightedMedicalText"
+              />
+            </div>
           </div>
         </div>
       </article>
@@ -813,6 +832,14 @@ const handleCaseChange = (idx: number) => {
   groupingCorrections.value = null
   admissionId.value = testCases[idx].admissionId
   void loadPreGroupingHistory(testCases[idx].admissionId)
+}
+
+const handleMedicalTextEdited = () => {
+  if (!extractedData.value && !drgResult.value && !groupingCorrections.value) return
+  extractedData.value = null
+  drgResult.value = null
+  groupingCorrections.value = null
+  preGroupingHistory.value = []
 }
 
 async function createBackendPreGroupingSimulation() {
@@ -1614,11 +1641,80 @@ onMounted(() => {
   overflow: hidden;
 }
 
+.medical-editor-wrap {
+  border-bottom: 1px solid var(--line);
+  background: #ffffff;
+  padding: 16px;
+}
+
+.medical-text-editor {
+  display: block;
+  width: 100%;
+  min-height: 300px;
+  resize: vertical;
+  border: 1px solid #dbe5f3;
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--text);
+  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.9;
+  outline: none;
+  padding: 18px 20px;
+  white-space: pre-wrap;
+  box-sizing: border-box;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.medical-text-editor:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.medical-text-editor:disabled {
+  cursor: not-allowed;
+  background: #f8fbff;
+  color: #64748b;
+}
+
+.medical-text-editor::placeholder {
+  color: #94a3b8;
+}
+
+.reader-preview {
+  background: #fbfdff;
+}
+
+.reader-preview__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  border-bottom: 1px solid var(--line);
+  padding: 0 18px;
+}
+
+.reader-preview__head span {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.reader-preview__head em {
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+}
+
 .reader-scroll {
-  min-height: 430px;
-  max-height: calc(100vh - 336px);
+  min-height: 210px;
+  max-height: 360px;
   overflow: auto;
-  padding: 22px 24px;
+  padding: 18px 20px;
 }
 
 .medical-text {
