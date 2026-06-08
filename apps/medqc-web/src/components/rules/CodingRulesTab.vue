@@ -551,23 +551,16 @@ async function runCodingQcAudit() {
     const response = await ApiService.post<CodingQcResult>('/api/v1/qc/coding-qc/check', {
       skip_llm: true,
       frontpage: {
-        diagnoses: {
-          discharge_main_diagnosis_text: '急性阑尾炎伴腹膜炎',
-          discharge_main_icd: 'K35.900',
-          discharge_other_diagnoses_texts: ['腹膜炎', '胃恶性肿瘤'],
-          discharge_other_icds: ['K65.900', 'C16.900'],
-          pathology_diagnosis_code: '',
-        },
-        procedures: {
-          main_procedure_name: '冠状动脉支架置入术',
-          main_procedure_code: '36.0601',
-          other_procedure_names: [],
-          other_procedure_codes: [],
-        },
-        costs: {
-          categories: {
-            pathology_fee: 280,
-          },
+        sex: '男',
+        age: 62,
+        diagnoses: [
+          { code: 'C16.900', name: '胃恶性肿瘤' },
+          { code: 'K35.901', name: '急性阑尾炎' },
+          { code: 'K65.001', name: '急性腹膜炎' },
+        ],
+        surgeries: [{ code: '36.0701', name: '经皮冠状动脉支架植入术' }],
+        fees: {
+          pathology_diagnosis_fee: 0,
         },
       },
     })
