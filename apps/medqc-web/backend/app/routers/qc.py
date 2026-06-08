@@ -1,5 +1,6 @@
 import uuid
 import json
+import re
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -981,10 +982,11 @@ async def check_coding_qc(
 
 def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optional[Dict[str, Any]]:
     """从 PG 数据库直接读取诊断和手术编码数据，组装为质控引擎所需的 frontpage 格式。"""
+    from sqlalchemy import text
     from sqlalchemy.orm import Session
     from ..database.connection import engine as db_engine
     from ..database.models.cdm import (
-        MedicalRecordFrontpage, Diagnosis, MrSurgery
+        MedicalRecordFrontpage, Diagnosis, MrCost, MrSurgery
     )
 
     try:
@@ -1001,30 +1003,73 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
                 diag_query = diag_query.filter_by(patient_id=patient_id)
             diag_rows = diag_query.all()
 
+            if not diag_rows:
+                mr_diag_sql = (
+                    "SELECT * FROM mr_diagnosis "
+                    "WHERE visit_id = :visit_id "
+                    "AND COALESCE(is_deleted, '0') <> '1' "
+                )
+                mr_diag_params: Dict[str, Any] = {"visit_id": visit_id}
+                if patient_id:
+                    mr_diag_sql += "AND patient_id = :patient_id "
+                    mr_diag_params["patient_id"] = patient_id
+                mr_diag_sql += "ORDER BY diagnosis_id"
+                diag_rows = [
+                    dict(row)
+                    for row in session.execute(text(mr_diag_sql), mr_diag_params).mappings().all()
+                ]
+
             # 查询手术列表
             surg_query = session.query(MrSurgery).filter_by(visit_id=visit_id)
             if patient_id:
                 surg_query = surg_query.filter_by(patient_id=patient_id)
             surg_rows = surg_query.all()
 
+            # 查询费用信息，供病理诊断费一致性规则使用
+            cost_query = session.query(MrCost).filter_by(visit_id=visit_id)
+            if patient_id:
+                cost_query = cost_query.filter_by(patient_id=patient_id)
+            cost = cost_query.first()
+
             if not fp and not diag_rows and not surg_rows:
                 return None
 
             # 组装诊断（出院主诊断排第一）
+            def _row_value(row: Any, key: str) -> Any:
+                if isinstance(row, dict):
+                    return row.get(key)
+                return getattr(row, key, None)
+
             def _parse_diag_no(v: Any) -> int:
+                text_value = str(v or "").strip()
+                if not text_value:
+                    return 9999
+                text_value = text_value.rsplit("||", 1)[-1]
+                match = re.search(r"\d+", text_value)
+                if match:
+                    return int(match.group(0))
                 try:
-                    return int(str(v).strip())
+                    return int(text_value)
                 except Exception:
                     return 9999
 
-            def _diag_sort_key(row: Any) -> tuple[int, int]:
-                diag_type = str(getattr(row, "diagnosis_type", "") or "").strip()
+            def _diag_sort_key(row: Any) -> tuple[int, int, str]:
+                diag_type = str(_row_value(row, "diagnosis_type") or "").strip()
                 diag_type_l = diag_type.lower()
-                diag_no = _parse_diag_no(getattr(row, "diagnosis_no", None))
+                diag_no = _parse_diag_no(_row_value(row, "diagnosis_no"))
+                diag_main = str(_row_value(row, "diagnosis_main") or "").strip().lower()
+                diagnosis_code = str(_row_value(row, "diagnosis_code") or "").strip().upper()
+                diagnosis_id = str(_row_value(row, "diagnosis_id") or "")
 
                 is_discharge = ("出院" in diag_type) or ("discharge" in diag_type_l)
+                is_pathology = (
+                    ("病理" in diag_type)
+                    or ("pathology" in diag_type_l)
+                    or diagnosis_code.startswith("M")
+                )
                 is_main = (
-                    ("主诊断" in diag_type)
+                    diag_main in {"是", "1", "y", "yes", "true", "t", "main"}
+                    or ("主诊断" in diag_type)
                     or ("主要诊断" in diag_type)
                     or ("出院主要" in diag_type)
                     or ("discharge_main" in diag_type_l)
@@ -1039,29 +1084,30 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
                 )
 
                 if is_discharge and is_main:
-                    return (0, diag_no)
-                if diag_no == 1 and is_main:
-                    return (1, diag_no)
-                if diag_no == 1:
-                    return (2, diag_no)
-                if is_main:
-                    return (3, diag_no)
-                if is_discharge and diag_no == 1:
-                    return (4, diag_no)
+                    return (0, diag_no, diagnosis_id)
                 if is_discharge and is_other:
-                    return (5, diag_no)
+                    return (1, diag_no, diagnosis_id)
                 if is_discharge:
-                    return (6, diag_no)
-                return (7, diag_no)
+                    return (2, diag_no, diagnosis_id)
+                if is_pathology:
+                    return (3, diag_no, diagnosis_id)
+                if diag_no == 1 and is_main:
+                    return (4, diag_no, diagnosis_id)
+                if diag_no == 1:
+                    return (5, diag_no, diagnosis_id)
+                if is_main:
+                    return (6, diag_no, diagnosis_id)
+                return (7, diag_no, diagnosis_id)
 
             sorted_diag_rows = sorted(diag_rows, key=_diag_sort_key)
 
             diagnoses = []
             for d in sorted_diag_rows:
                 diagnoses.append({
-                    "code": d.diagnosis_code or "",
-                    "name": d.diagnosis_name or "",
-                    "type": d.diagnosis_type or "",
+                    "code": _row_value(d, "diagnosis_code") or "",
+                    "name": _row_value(d, "diagnosis_name") or "",
+                    "type": _row_value(d, "diagnosis_type") or "",
+                    "admission_condition": _row_value(d, "admission_condition") or "",
                 })
 
             # 组装手术（主手术排第一）
@@ -1083,13 +1129,15 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
                 "age": fp.age_year if fp else "",
                 "diagnoses": diagnoses,
                 "surgeries": surgeries,
+                "fees": {
+                    "pathology_diagnostic_fee": (
+                        cost.pathological_diagnostic_fee if cost else ""
+                    ),
+                },
                 "clinical_summary": "",
             }
 
     except Exception as e:
         logger.warning(f"从 PG 读取编码质控数据失败: {e}")
         return None
-
-
-
 
