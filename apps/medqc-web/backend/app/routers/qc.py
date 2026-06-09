@@ -1100,6 +1100,22 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
                 return (7, diag_no, diagnosis_id)
 
             sorted_diag_rows = sorted(diag_rows, key=_diag_sort_key)
+            has_discharge_diagnosis = any(
+                "出院" in str(_row_value(row, "diagnosis_type") or "")
+                or "discharge" in str(_row_value(row, "diagnosis_type") or "").lower()
+                for row in sorted_diag_rows
+            )
+            if has_discharge_diagnosis:
+                sorted_diag_rows = [
+                    row
+                    for row in sorted_diag_rows
+                    if (
+                        "出院" in str(_row_value(row, "diagnosis_type") or "")
+                        or "discharge" in str(_row_value(row, "diagnosis_type") or "").lower()
+                        or "病理" in str(_row_value(row, "diagnosis_type") or "")
+                        or str(_row_value(row, "diagnosis_code") or "").strip().upper().startswith("M")
+                    )
+                ]
 
             diagnoses = []
             for d in sorted_diag_rows:
@@ -1140,4 +1156,3 @@ def _load_frontpage_from_pg(patient_id: Optional[str], visit_id: str) -> Optiona
     except Exception as e:
         logger.warning(f"从 PG 读取编码质控数据失败: {e}")
         return None
-
