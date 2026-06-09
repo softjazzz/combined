@@ -1375,7 +1375,7 @@ export const templateCases: CaseRecord[] = [
   },
 ]
 
-const MONEY_FIELDS = [
+const ACTUAL_COST_FIELDS = [
   'total_cost',
   'drug_fee',
   'material_fee',
@@ -1385,9 +1385,18 @@ const MONEY_FIELDS = [
   'bed_fee',
   'nursing_fee',
   'other_fee',
-  'baseline_payment',
-  'insurance_payment',
 ] as const
+
+const PAYMENT_FIELDS = ['baseline_payment', 'insurance_payment'] as const
+
+const DEPARTMENT_COST_FACTORS: Record<string, number> = {
+  呼吸内科专业: 0.98,
+  心血管内科专业: 1.08,
+  普通外科专业: 1.14,
+  骨科专业: 1.2,
+  儿科: 0.86,
+  神经内科专业: 1.04,
+}
 
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10)
@@ -1423,7 +1432,10 @@ export function buildTemplateCases(count = TEMPLATE_DOWNLOAD_RECORD_COUNT): Case
     const los = source.los ?? 5
     const dischargeDate = shiftDate(startDate, index % 365)
     const admissionDate = shiftDate(dischargeDate, -los)
-    const factor = 0.88 + ((index * 17) % 27) / 100
+    const baseFactor = 0.88 + ((index * 17) % 27) / 100
+    const departmentCostFactor = DEPARTMENT_COST_FACTORS[source.department] ?? 1
+    const actualCostFactor = baseFactor * departmentCostFactor
+    const paymentFactor = baseFactor * (0.98 + ((index * 7) % 9) / 100)
     const record: CaseRecord = {
       ...source,
       admission_id: buildGeneratedAdmissionId(index, dischargeDate),
@@ -1437,8 +1449,15 @@ export function buildTemplateCases(count = TEMPLATE_DOWNLOAD_RECORD_COUNT): Case
       los,
     }
 
-    for (const field of MONEY_FIELDS) {
-      const scaledValue = scaleMoney(source[field], factor)
+    for (const field of ACTUAL_COST_FIELDS) {
+      const scaledValue = scaleMoney(source[field], actualCostFactor)
+      if (typeof scaledValue === 'number') {
+        record[field] = scaledValue
+      }
+    }
+
+    for (const field of PAYMENT_FIELDS) {
+      const scaledValue = scaleMoney(source[field], paymentFactor)
       if (typeof scaledValue === 'number') {
         record[field] = scaledValue
       }

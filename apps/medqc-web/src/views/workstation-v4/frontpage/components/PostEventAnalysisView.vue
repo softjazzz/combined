@@ -1838,35 +1838,44 @@ const updateCharts = async () => {
 
   // 2. Department Comparison (Profit/Cost)
   if (deptChart && stats.value.department_stats) {
-    const depts = stats.value.department_stats.map((d: any) => d.dept_name)
-    const profits = stats.value.department_stats.map((d: any) => d.total_profit)
-    const cmis = stats.value.department_stats.map((d: any) => d.avg_cmi)
+    const rows = (stats.value.department_stats || []).slice(0, 10)
+    const depts = rows.map((d: any) => d.dept_name)
+    const caseCounts = rows.map((d: any) => safeNumber(d.case_count))
+    const cmis = rows.map((d: any) => safeNumber(d.avg_cmi))
+    const costRates = rows.map((d: any) =>
+      safeNumber(d.cost_rate ?? d.cost_index ?? d.cost_consumption_index, 1),
+    )
 
     deptChart.setOption({
       tooltip: { trigger: 'axis' },
-      legend: { data: ['总盈亏', '平均CMI'] },
+      legend: { data: ['病例数', '平均CMI', '费用指数'] },
       xAxis: { data: depts, axisLabel: { interval: 0, rotate: 30 } },
       yAxis: [
-        { type: 'value', name: '盈亏' },
-        { type: 'value', name: 'CMI' },
+        { type: 'value', name: '病例数' },
+        { type: 'value', name: '指数', min: 0 },
       ],
       series: [
         {
-          name: '总盈亏',
+          name: '病例数',
           type: 'bar',
-          data: profits,
-          itemStyle: {
-            color: (params: any) => {
-              return params.value >= 0 ? '#22c55e' : '#ef4444'
-            },
-          },
+          data: caseCounts,
+          itemStyle: { color: '#3b82f6' },
         },
         {
           name: '平均CMI',
           type: 'line',
           data: cmis,
           yAxisIndex: 1,
+          smooth: true,
           itemStyle: { color: '#f59e0b' },
+        },
+        {
+          name: '费用指数',
+          type: 'line',
+          data: costRates,
+          yAxisIndex: 1,
+          smooth: true,
+          itemStyle: { color: '#ef4444' },
         },
       ],
     })
