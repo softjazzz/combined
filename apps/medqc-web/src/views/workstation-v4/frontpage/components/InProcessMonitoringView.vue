@@ -25,8 +25,8 @@
           <span class="filter-chip">近 7 日</span>
           <span class="filter-chip">全部科室</span>
           <span class="filter-chip threshold-chip">阈值 {{ stats.control_threshold.toFixed(2) }}</span>
-          <span :class="drgMockEnabled ? 'mode-chip mode-chip--mock' : 'mode-chip mode-chip--real'">
-            {{ drgMockEnabled ? '降级数据' : '真实优先' }}
+          <span :class="dataModeClass">
+            {{ dataModeLabel }}
           </span>
           <button
             type="button"
@@ -60,6 +60,11 @@
           </a-dropdown>
         </div>
       </header>
+
+      <DatasetUploadPanel
+        class="dataset-upload-surface"
+        @data-changed="handleDatasetChanged"
+      />
 
       <section class="kpi-strip">
         <article class="kpi-card">
@@ -393,7 +398,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import {
   ArrowLeftOutlined,
@@ -417,8 +422,11 @@ import type {
   MonitoringControlTip,
   MonitoringStats,
 } from '@/api/panel'
+import { useDrgDatasetStore } from '@/stores/drgDataset'
+import { buildInProcessMonitoringDataset } from '@/utils/drg-aggregation'
 import { isDrgMockModeEnabled, onDrgMockModeChange } from '@/utils/drgMockMode'
 import { exportDrgMockReport, type DrgExportFormat } from '@/utils/drgMockExport'
+import DatasetUploadPanel from '@/components/drg/DatasetUploadPanel.vue'
 
 const FALLBACK_CMI: CmiTrend = {
   labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
@@ -761,6 +769,8 @@ const drgAlerts = ref<DrgAlert[]>([...REALISTIC_ALERTS])
 const detailOpen = ref(false)
 const selectedAlert = ref<DrgAlert | null>(null)
 const drgMockEnabled = ref(isDrgMockModeEnabled())
+const drgDatasetStore = useDrgDatasetStore()
+const hasUploadedData = computed(() => drgDatasetStore.hasUploadedData)
 
 let cmiChart: echarts.ECharts | null = null
 let costChart: echarts.ECharts | null = null
@@ -775,6 +785,14 @@ const controlTips = computed(() =>
   stats.value.control_tips?.length ? stats.value.control_tips : FALLBACK_TIPS,
 )
 const mockScopeNote = computed(() => stats.value.mock_scope_note || REALISTIC_STATS.mock_scope_note)
+const dataModeLabel = computed(() => {
+  if (hasUploadedData.value) return '模板上传数据'
+  return drgMockEnabled.value ? '降级数据' : '真实优先'
+})
+const dataModeClass = computed(() => [
+  'mode-chip',
+  hasUploadedData.value || !drgMockEnabled.value ? 'mode-chip--real' : 'mode-chip--mock',
+])
 
 const filteredAlerts = computed(() => {
   if (filterType.value === 'all') return drgAlerts.value
@@ -788,7 +806,7 @@ function buildExportPayload() {
     filenameBase: `drg_mid_${Date.now()}`,
     meta: [
       ['导出时间', now],
-      ['数据模式', drgMockEnabled.value ? '降级数据模式' : '真实优先模式'],
+      ['数据模式', dataModeLabel.value],
       [
         '筛选状态',
         filterType.value === 'all' ? '全部' : filterType.value === 'warning' ? '预警' : '正常',
@@ -992,6 +1010,8 @@ function renderCmiChart(data: CmiTrend) {
   if (!cmiChartRef.value) return
   cmiChart?.dispose()
   cmiChart = echarts.init(cmiChartRef.value)
+  const yMax = Math.max(1.2, data.benchmark, ...data.values) + 0.1
+  const yMin = Math.max(0, Math.min(0.8, ...data.values) - 0.1)
   cmiChart.setOption({
     grid: { left: 45, right: 20, top: 25, bottom: 30 },
     tooltip: { trigger: 'axis' },
@@ -1003,8 +1023,8 @@ function renderCmiChart(data: CmiTrend) {
     },
     yAxis: {
       type: 'value',
-      min: 0.8,
-      max: 1.2,
+      min: yMin,
+      max: yMax,
       axisLine: { show: false },
       splitLine: { lineStyle: { color: '#eef2f7' } },
       axisLabel: { color: '#64748b' },
@@ -1038,6 +1058,7 @@ function renderCostChart(data: DeptCostIndex) {
   if (!costChartRef.value) return
   costChart?.dispose()
   costChart = echarts.init(costChartRef.value)
+  const yMax = Math.max(1.5, data.benchmark, ...data.values) + 0.1
   costChart.setOption({
     grid: { left: 55, right: 20, top: 25, bottom: 35 },
     tooltip: { trigger: 'axis' },
@@ -1050,7 +1071,7 @@ function renderCostChart(data: DeptCostIndex) {
     yAxis: {
       type: 'value',
       min: 0,
-      max: 1.5,
+      max: yMax,
       axisLine: { show: false },
       splitLine: { lineStyle: { color: '#eef2f7' } },
       axisLabel: { color: '#64748b' },
@@ -1079,8 +1100,22 @@ function renderFallbackCharts() {
   renderCostChart(FALLBACK_COST)
 }
 
+function applyUploadedDataset() {
+  const dataset = buildInProcessMonitoringDataset(drgDatasetStore.records)
+  stats.value = dataset.stats
+  drgAlerts.value = dataset.alerts
+  renderCmiChart(dataset.cmiTrend)
+  renderCostChart(dataset.costIndex)
+}
+
 async function loadData() {
   loading.value = true
+  if (hasUploadedData.value) {
+    applyUploadedDataset()
+    loading.value = false
+    return
+  }
+
   const mockMode = isDrgMockModeEnabled()
   drgMockEnabled.value = mockMode
   if (mockMode) {
@@ -1113,6 +1148,11 @@ async function loadData() {
   }
 }
 
+function handleDatasetChanged() {
+  filterType.value = 'all'
+  loadData()
+}
+
 function openDetail(item: DrgAlert) {
   selectedAlert.value = item
   detailOpen.value = true
@@ -1132,6 +1172,13 @@ onMounted(() => {
   loadData()
   window.addEventListener('resize', handleResize)
 })
+
+watch(
+  () => drgDatasetStore.meta?.uploadedAt,
+  () => {
+    loadData()
+  },
+)
 
 onUnmounted(() => {
   unsubscribeDrgMockMode?.()
@@ -1297,6 +1344,10 @@ onUnmounted(() => {
 .secondary-button:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+}
+
+.dataset-upload-surface {
+  margin: 0;
 }
 
 .kpi-strip {

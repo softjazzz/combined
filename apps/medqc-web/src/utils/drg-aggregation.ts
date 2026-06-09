@@ -7,6 +7,13 @@
 
 import type { CaseRecord } from '@/types/drg-dataset'
 import type {
+  CmiTrend,
+  DeptCostIndex,
+  DrgAlert,
+  MonitoringControlTip,
+  MonitoringStats,
+} from '@/api/panel'
+import type {
   AnalysisOverview,
   AnalysisTableItem,
   AnalysisDataResponse,
@@ -482,6 +489,221 @@ export function mapCaseRecordsToPaymentMonitoringRows(
         controlTip: '',
       } as PaymentMonitoringRow
     })
+}
+
+// ==================== InProcessMonitoring 映射 ====================
+
+function getGroupingCode(record: CaseRecord): string {
+  return record.drg_code || record.dip_code || '未入组'
+}
+
+function getGroupingName(record: CaseRecord): string {
+  return record.drg_name || record.dip_name || record.primary_diagnosis_name || '未知诊断'
+}
+
+function inferBaselinePayment(record: CaseRecord): number {
+  if (typeof record.baseline_payment === 'number' && record.baseline_payment > 0) {
+    return record.baseline_payment
+  }
+  if (typeof record.insurance_payment === 'number' && record.insurance_payment > 0) {
+    return record.insurance_payment
+  }
+  if (typeof record.dip_score === 'number' && record.dip_score > 0) {
+    return Math.round(record.dip_score * 75)
+  }
+  if (typeof record.weight === 'number' && record.weight > 0) {
+    return Math.round(record.weight * 7000)
+  }
+  return record.total_cost > 0 ? record.total_cost : 1
+}
+
+function getCostRatio(record: CaseRecord): number {
+  return round(safeDivide(record.total_cost, inferBaselinePayment(record), 1), 2)
+}
+
+function getMonitorLevel(record: CaseRecord): DrgAlert['monitor_level'] {
+  if (record.ungrouped_reason || (!record.drg_code && !record.dip_code)) return 'warning'
+  const ratio = getCostRatio(record)
+  if (ratio >= 1.2) return 'critical'
+  if (ratio >= 1) return 'warning'
+  return 'info'
+}
+
+function buildControlTip(record: CaseRecord, ratio: number): string {
+  if (record.ungrouped_reason || (!record.drg_code && !record.dip_code)) {
+    return `未入组病例：${record.ungrouped_reason || '缺少 DRG/DIP 分组结果'}，建议优先复核主诊断、主要手术和并发症编码。`
+  }
+  if (ratio >= 1.2) {
+    return '费用比超过重点阈值，建议优先复核高值耗材、药品、检查和住院日。'
+  }
+  if (ratio >= 1) {
+    return '费用接近或超过支付标准，建议跟踪费用构成和路径偏差。'
+  }
+  return '费用处于可控区间，可继续观察。'
+}
+
+function toDateLabel(dateStr: string | undefined): string {
+  if (!dateStr) return '未知'
+  const match = dateStr.match(/(?:\d{4})[-/](\d{1,2})[-/](\d{1,2})/)
+  if (!match) return toMonth(dateStr)
+  return `${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`
+}
+
+function buildInProcessAlerts(records: CaseRecord[]): DrgAlert[] {
+  return records
+    .map<DrgAlert>((record, index) => {
+      const baselinePayment = inferBaselinePayment(record)
+      const actualCost = record.total_cost
+      const ratio = round(safeDivide(actualCost, baselinePayment, 1), 2)
+      const monitorLevel = getMonitorLevel(record)
+      const paymentGap = Math.round(actualCost - baselinePayment)
+
+      return {
+        id: index + 1,
+        case_no: `#${record.admission_id}`,
+        dept: record.department || '未知科室',
+        diagnosis: record.primary_diagnosis_name || getGroupingName(record),
+        drg: getGroupingCode(record),
+        ratio,
+        status: monitorLevel === 'info' ? 'normal' : 'warning',
+        los: record.los ?? 0,
+        est_cost: actualCost,
+        baseline_payment: baselinePayment,
+        actual_cost: actualCost,
+        payment_gap: paymentGap,
+        monitor_level: monitorLevel,
+        control_tip: buildControlTip(record, ratio),
+      }
+    })
+    .sort((a, b) => {
+      const levelScore = (item: DrgAlert) =>
+        item.monitor_level === 'critical' ? 3 : item.monitor_level === 'warning' ? 2 : 1
+      return levelScore(b) - levelScore(a) || b.ratio - a.ratio
+    })
+}
+
+function buildInProcessTrend(records: CaseRecord[]): CmiTrend {
+  const groups = new Map<string, CaseRecord[]>()
+  for (const record of records) {
+    const label = toDateLabel(record.discharge_date || record.admission_date)
+    if (!groups.has(label)) groups.set(label, [])
+    groups.get(label)!.push(record)
+  }
+
+  const labels = [...groups.keys()].sort().slice(-7)
+  if (labels.length === 0) {
+    return { labels: ['暂无数据'], values: [1], benchmark: 1 }
+  }
+
+  return {
+    labels,
+    values: labels.map((label) => {
+      const group = groups.get(label) || []
+      return round(
+        safeDivide(
+          group.reduce((sum, record) => sum + getCostRatio(record), 0),
+          group.length,
+          1,
+        ),
+        2,
+      )
+    }),
+    benchmark: 1,
+  }
+}
+
+function buildInProcessDeptCostIndex(records: CaseRecord[]): DeptCostIndex {
+  const groups = new Map<string, CaseRecord[]>()
+  for (const record of records) {
+    const dept = record.department || '未知科室'
+    if (!groups.has(dept)) groups.set(dept, [])
+    groups.get(dept)!.push(record)
+  }
+
+  const rows = [...groups.entries()]
+    .map(([department, group]) => {
+      const totalCost = group.reduce((sum, record) => sum + record.total_cost, 0)
+      const totalBaseline = group.reduce((sum, record) => sum + inferBaselinePayment(record), 0)
+      return {
+        department,
+        value: round(safeDivide(totalCost, totalBaseline, 1), 2),
+      }
+    })
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8)
+
+  return {
+    departments: rows.length ? rows.map((row) => row.department) : ['暂无数据'],
+    values: rows.length ? rows.map((row) => row.value) : [1],
+    benchmark: 1,
+  }
+}
+
+function buildInProcessControlTips(
+  alerts: DrgAlert[],
+  records: CaseRecord[],
+): MonitoringControlTip[] {
+  const criticalCount = alerts.filter((item) => item.monitor_level === 'critical').length
+  const warningCount = alerts.filter((item) => item.monitor_level === 'warning').length
+  const ungroupedCount = records.filter((record) => !record.drg_code && !record.dip_code).length
+
+  return [
+    {
+      title: '高费用病例优先复核',
+      indicator: '费用比 ≥ 1.20',
+      current_value: `${criticalCount} 例`,
+      target_value: '0 例',
+      suggestion: '优先核查高值耗材、药品、检查和住院日，降低重点病例费用放大。',
+      level: criticalCount > 0 ? 'critical' : 'info',
+    },
+    {
+      title: '边界病例持续跟踪',
+      indicator: '1.00 ~ 1.20',
+      current_value: `${warningCount} 例`,
+      target_value: '稳定在阈值内',
+      suggestion: '对照地方付费标准和临床路径提前修正费用偏差。',
+      level: warningCount > 0 ? 'warning' : 'info',
+    },
+    {
+      title: '未入组病例补码',
+      indicator: 'DRG/DIP 缺失',
+      current_value: `${ungroupedCount} 例`,
+      target_value: '完成分组',
+      suggestion: '补充主诊断、主要手术、并发症和分组结果后再进入正式监控。',
+      level: ungroupedCount > 0 ? 'warning' : 'info',
+    },
+  ]
+}
+
+/**
+ * 构建 InProcessMonitoringView 所需数据结构（上传数据 adapter）。
+ */
+export function buildInProcessMonitoringDataset(records: CaseRecord[]): {
+  stats: MonitoringStats
+  alerts: DrgAlert[]
+  cmiTrend: CmiTrend
+  costIndex: DeptCostIndex
+} {
+  const alerts = buildInProcessAlerts(records)
+  const criticalCount = alerts.filter((item) => item.monitor_level === 'critical').length
+  const warningCount = alerts.filter((item) => item.status === 'warning').length
+  const groupedCount = records.filter((record) => record.drg_code || record.dip_code).length
+
+  return {
+    stats: {
+      total_alerts: records.length,
+      severe_alerts: criticalCount,
+      pending_suggestions: warningCount,
+      today_new: warningCount,
+      simulated_groups: groupedCount,
+      control_threshold: 1.2,
+      mock_scope_note: `基于模板上传数据生成事中监控（${records.length} 例）`,
+      control_tips: buildInProcessControlTips(alerts, records),
+    },
+    alerts,
+    cmiTrend: buildInProcessTrend(records),
+    costIndex: buildInProcessDeptCostIndex(records),
+  }
 }
 
 // ==================== PostEvent 映射 ====================
