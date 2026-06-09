@@ -10,8 +10,12 @@ import { ref, computed } from 'vue'
 import type { CaseRecord, DatasetMeta, ValidationResult } from '@/types/drg-dataset'
 import type { AnalysisDimension, AnalysisDataResponse } from '@/types/drg-analysis'
 import { buildAnalysisResponse } from '@/utils/drg-aggregation'
-import { parseDatasetWorkbook, validateCaseRecords, exportDatasetTemplate } from '@/utils/drg-template'
-import { templateCases } from '@/data/drg/template-cases'
+import {
+  parseDatasetWorkbook,
+  validateCaseRecords,
+  exportDatasetTemplate,
+} from '@/utils/drg-template'
+import { buildTemplateCases } from '@/data/drg/template-cases'
 
 export const useDrgDatasetStore = defineStore('drgDataset', () => {
   // ==================== State ====================
@@ -112,7 +116,7 @@ export const useDrgDatasetStore = defineStore('drgDataset', () => {
    * 下载模板（含样例数据）
    */
   async function downloadTemplate() {
-    await exportDatasetTemplate(templateCases)
+    await exportDatasetTemplate(buildTemplateCases())
   }
 
   return {
