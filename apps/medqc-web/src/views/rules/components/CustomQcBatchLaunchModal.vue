@@ -234,24 +234,80 @@ async function handleConfirm() {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  font-family: 'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter,
+    'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 .summary-card {
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 12px;
-  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  background: rgba(255, 255, 255, 0.86);
   padding: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .summary-label {
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.60);
   font-size: 12px;
+  font-weight: 500;
 }
 
 .summary-value {
-  color: #0f172a;
+  color: #0066cc;
   font-size: 18px;
   font-weight: 700;
   margin-top: 4px;
+}
+
+:deep(.ant-modal-content),
+:deep(.ant-modal-header) {
+  font-family: 'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter,
+    'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+:deep(.ant-modal-content) {
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.14);
+}
+
+:deep(.ant-modal-title) {
+  color: #1d1d1f;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+:deep(.ant-btn) {
+  border-radius: 8px;
+  font-family: 'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter,
+    'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-weight: 600;
+}
+
+:deep(.ant-btn-primary) {
+  background: #0066cc;
+  border-color: #0066cc;
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.18);
+}
+
+:deep(.ant-btn-primary:not(:disabled):hover) {
+  background: #0057b8;
+  border-color: #0057b8;
+}
+
+:deep(.ant-input),
+:deep(.ant-picker),
+:deep(.ant-select-selector) {
+  border-radius: 8px !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  font-family: 'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter,
+    'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+:deep(.ant-input:hover),
+:deep(.ant-picker:hover),
+:deep(.ant-select:not(.ant-select-disabled):hover .ant-select-selector) {
+  border-color: rgba(0, 102, 204, 0.22) !important;
 }
 </style>
