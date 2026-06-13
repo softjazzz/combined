@@ -25,14 +25,12 @@ from poc_luxian_0609_pack_strategy_lab import (  # noqa: E402
     DEFAULT_VISIT_ID,
     LabConfig,
     Luxian0609PackStrategyLab,
-    _compact_rule_result,
-    _load_customer_point_count,
-    _rule_id,
     _safe_text,
 )
 
 
 DEFAULT_OUTPUT_DIR = ROOT / ".runtime-logs" / "qc-pack-poc"
+CUSTOMER_RULE_CATALOG_PATH = ROOT / "backend" / "app" / "data" / "luxian_0609_rules_v1.json"
 SURGERY_EVENT_RULE_IDS = {
     "CL-108",
     "CL-173",
@@ -94,6 +92,43 @@ EVENT_REQUIRED_RULE_IDS = {
     **{rule_id: "abnormal_lab" for rule_id in ABNORMAL_LAB_RULE_IDS},
     **{rule_id: "abnormal_imaging" for rule_id in ABNORMAL_IMAGING_RULE_IDS},
 }
+CUSTOMER_GATE_FAMILY_BY_ID = {
+    "LX0609-003": "surgery_event",
+    "LX0609-004": "critical_status",
+    "LX0609-008": "critical_status",
+    "LX0609-009": "critical_status",
+    "LX0609-010": "abnormal_imaging",
+    "LX0609-011": "abnormal_imaging",
+    "LX0609-012": "abnormal_imaging",
+    "LX0609-013": "pathology_event",
+    "LX0609-014": "abnormal_lab",
+    "LX0609-015": "abnormal_lab",
+    "LX0609-019": "pathology_event",
+    "LX0609-024": "surgery_event",
+    "LX0609-025": "surgery_event",
+    "LX0609-028": "surgery_event",
+    "LX0609-029": "surgery_event",
+    "LX0609-030": "surgery_event",
+    "LX0609-031": "surgery_event",
+    "LX0609-032": "surgery_event",
+    "LX0609-033": "surgery_event",
+    "LX0609-034": "surgery_event",
+    "LX0609-035": "surgery_event",
+    "LX0609-036": "surgery_event",
+    "LX0609-037": "surgery_event",
+    "LX0609-038": "surgery_event",
+    "LX0609-039": "surgery_event",
+    "LX0609-040": "surgery_event",
+    "LX0609-041": "transfusion_event",
+    "LX0609-042": "transfusion_event",
+    "LX0609-043": "transfusion_event",
+    "LX0609-044": "transfusion_event",
+    "LX0609-045": "transfusion_event",
+    "LX0609-046": "transfusion_event",
+    "LX0609-047": "transfusion_event",
+    "LX0609-048": "transfusion_event",
+    "LX0609-049": "transfusion_event",
+}
 
 
 def _now_stamp() -> str:
@@ -127,6 +162,33 @@ def _rule_text(rule: dict[str, Any]) -> str:
     return " ".join(parts).lower()
 
 
+def _customer_rule_id(rule: dict[str, Any]) -> str:
+    return _safe_text(rule.get("rule_id") or rule.get("rule_code") or rule.get("id")).upper()
+
+
+def _as_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [_safe_text(item).upper() for item in value if _safe_text(item)]
+    if _safe_text(value):
+        return [_safe_text(value).upper()]
+    return []
+
+
+def _mapped_execution_rule_ids(rule: dict[str, Any]) -> list[str]:
+    mapped = _as_list(rule.get("mapped_rule_ids"))
+    primary = _safe_text(rule.get("primary_execution_rule_id")).upper()
+    if primary and primary not in mapped:
+        mapped.insert(0, primary)
+    return mapped
+
+
+def _load_customer_rules() -> list[dict[str, Any]]:
+    data = json.loads(CUSTOMER_RULE_CATALOG_PATH.read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        raise RuntimeError(f"客户质控点目录格式错误: {CUSTOMER_RULE_CATALOG_PATH}")
+    return [dict(item) for item in data]
+
+
 def _contains_any(text: str, keywords: Sequence[str]) -> bool:
     return any(keyword.lower() in text for keyword in keywords)
 
@@ -138,30 +200,6 @@ def _has_effective_text(value: Any) -> bool:
     label_chars = set("记录时间科室病房记录者手术医生签名术前小结手术项目编码等级医师助麻醉方式诊断经过切口愈合开始结束失血量其他内容:")
     non_label_chars = [char for char in text if char not in label_chars]
     return len(non_label_chars) >= 8
-
-
-def _load_latest_baseline_report(output_dir: Path) -> Path | None:
-    candidates = sorted(
-        output_dir.glob("luxian_0609_pack_strategy_*.json"),
-        key=lambda item: item.stat().st_mtime,
-        reverse=True,
-    )
-    for path in candidates:
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if "baseline_current" in dict(data.get("strategies") or {}):
-            return path
-    return None
-
-
-def _result_map(strategy_summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {
-        _safe_text(item.get("rule_id")).upper(): dict(item)
-        for item in strategy_summary.get("rule_results") or []
-        if _safe_text(item.get("rule_id"))
-    }
 
 
 @dataclass(frozen=True)
@@ -261,9 +299,23 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
 
     @staticmethod
     def classify_gate_family(rule: dict[str, Any]) -> str:
-        rid = _rule_id(rule)
+        rid = _customer_rule_id(rule)
+        if rid in CUSTOMER_GATE_FAMILY_BY_ID:
+            return CUSTOMER_GATE_FAMILY_BY_ID[rid]
         if rid in EVENT_REQUIRED_RULE_IDS:
             return EVENT_REQUIRED_RULE_IDS[rid]
+        mapped_families = {
+            EVENT_REQUIRED_RULE_IDS[item]
+            for item in _mapped_execution_rule_ids(rule)
+            if item in EVENT_REQUIRED_RULE_IDS
+        }
+        if len(mapped_families) == 1:
+            return next(iter(mapped_families))
+        if len(mapped_families) > 1:
+            priority = ("surgery_event", "transfusion_event", "critical_status", "pathology_event", "abnormal_lab", "abnormal_imaging")
+            for family in priority:
+                if family in mapped_families:
+                    return family
         text = _rule_text(rule)
         if _contains_any(text, ("细菌培养", "检验", "危急值", "血常规", "肾功", "肌酐")):
             return "abnormal_lab"
@@ -273,7 +325,7 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
 
     @staticmethod
     def decide_gate(rule: dict[str, Any], facts: TriggerFacts) -> GateDecision:
-        rid = _rule_id(rule)
+        rid = _customer_rule_id(rule)
         family = Luxian0609TriggerGateLab.classify_gate_family(rule)
         action = "pass_to_llm"
         status = "pass_to_llm"
@@ -327,10 +379,10 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
         )
 
     @staticmethod
-    def build_gate_result(rule: dict[str, Any], decision: GateDecision, strategy_name: str) -> dict[str, Any]:
+    def build_gate_result(rule: dict[str, Any], decision: GateDecision) -> dict[str, Any]:
         return {
             "rule_id": decision.rule_id,
-            "rule_name": _safe_text(rule.get("name") or rule.get("rule_name") or rule.get("description")),
+            "rule_name": _safe_text(rule.get("name") or rule.get("description")),
             "status": decision.status,
             "is_compliant": True,
             "confidence": 0.99,
@@ -338,7 +390,6 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
             "evidence": decision.evidence,
             "suggestion": "本次未触发该规则；无需进入 LLM 判断缺陷。",
             "metadata": {
-                "strategy": strategy_name,
                 "trigger_gate": True,
                 "gate_family": decision.gate_family,
                 "gate_action": decision.action,
@@ -350,17 +401,18 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
             },
         }
 
-    def build_gate_plan(self, rules: list[dict[str, Any]], facts: TriggerFacts) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-        pass_rules: list[dict[str, Any]] = []
+    def build_gate_plan(self, customer_rules: list[dict[str, Any]], facts: TriggerFacts) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+        pass_points: list[dict[str, Any]] = []
         gated_results: list[dict[str, Any]] = []
         gate_rows: list[dict[str, Any]] = []
 
-        for rule in rules:
+        for rule in customer_rules:
             decision = self.decide_gate(rule, facts)
             gate_rows.append(
                 {
                     "rule_id": decision.rule_id,
-                    "rule_name": _safe_text(rule.get("name") or rule.get("rule_name") or rule.get("description")),
+                    "rule_name": _safe_text(rule.get("name") or rule.get("description")),
+                    "mapped_execution_rule_ids": _mapped_execution_rule_ids(rule),
                     "gate_family": decision.gate_family,
                     "action": decision.action,
                     "status": decision.status,
@@ -369,125 +421,18 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
                 }
             )
             if decision.action == "pass_to_llm":
-                pass_rules.append(rule)
+                pass_points.append(rule)
             else:
-                gated_results.append(self.build_gate_result(rule, decision, self.config.strategies[0]))
-        return pass_rules, gated_results, gate_rows
+                gated_results.append(self.build_gate_result(rule, decision))
+        return pass_points, gated_results, gate_rows
 
-    @staticmethod
-    def merge_strategy_summary(
-        *,
-        strategy_name: str,
-        llm_summary: dict[str, Any],
-        gated_results: list[dict[str, Any]],
-        original_llm_rule_count: int,
-    ) -> dict[str, Any]:
-        compact_gated = [_compact_rule_result(item) for item in gated_results]
-        merged_rule_results = sorted(
-            list(llm_summary.get("rule_results") or []) + compact_gated,
-            key=lambda item: str(item.get("rule_id") or ""),
-        )
-        status_counter: Counter[str] = Counter()
-        for item in merged_rule_results:
-            status_counter[str(item.get("status") or "unknown")] += 1
-
-        summary = dict(llm_summary)
-        summary["strategy"] = f"trigger_gate_{strategy_name}"
-        summary["base_strategy"] = strategy_name
-        summary["trigger_gate_enabled"] = True
-        summary["original_llm_rule_count"] = original_llm_rule_count
-        summary["pass_to_llm_rule_count"] = int(llm_summary.get("llm_rule_count") or len(llm_summary.get("rule_results") or []))
-        summary["gated_rule_count"] = len(gated_results)
-        summary["final_result_count"] = len(merged_rule_results)
-        summary["accepted_rule_count"] = len(merged_rule_results)
-        summary["terminal_status_count"] = dict(status_counter)
-        summary["rule_results"] = merged_rule_results
-        return summary
-
-    @staticmethod
-    def compare_with_baseline(
-        *,
-        baseline_report_path: Path | None,
-        baseline_strategy: str,
-        merged_summary: dict[str, Any],
-        gate_rows: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        if baseline_report_path is None or not baseline_report_path.exists():
-            return {
-                "baseline_report_path": None,
-                "different_decision_count": 0,
-                "impacted_gated_rule_count": 0,
-                "differences": [],
-            }
-
-        baseline_report = json.loads(baseline_report_path.read_text(encoding="utf-8"))
-        baseline_summary = dict((baseline_report.get("strategies") or {}).get(baseline_strategy) or {})
-        baseline_map = _result_map(baseline_summary)
-        merged_map = _result_map(merged_summary)
-        gate_by_rule = {str(item.get("rule_id") or "").upper(): item for item in gate_rows}
-        differences: list[dict[str, Any]] = []
-
-        for rule_id in sorted(set(baseline_map) | set(merged_map)):
-            left = baseline_map.get(rule_id)
-            right = merged_map.get(rule_id)
-            gate_row = gate_by_rule.get(rule_id) or {}
-            if not right and gate_row.get("action") == "pass_to_llm":
-                continue
-            left_status = _safe_text((left or {}).get("status")) or "missing"
-            right_status = _safe_text((right or {}).get("status")) or "missing"
-            left_compliant = bool((left or {}).get("is_compliant") is True)
-            right_compliant = bool((right or {}).get("is_compliant") is True)
-            if (left_status, left_compliant) == (right_status, right_compliant):
-                continue
-            differences.append(
-                {
-                    "rule_id": rule_id,
-                    "rule_name": _safe_text(((left or right or {}).get("rule_name"))),
-                    "baseline_status": left_status,
-                    "baseline_is_compliant": left_compliant,
-                    "trigger_gate_status": right_status,
-                    "trigger_gate_is_compliant": right_compliant,
-                    "gate_action": gate_row.get("action") or "",
-                    "gate_family": gate_row.get("gate_family") or "",
-                    "baseline_findings": _clip((left or {}).get("findings"), 180),
-                    "trigger_gate_findings": _clip((right or {}).get("findings"), 180),
-                    "gate_reason": _clip(gate_row.get("reason"), 180),
-                }
-            )
-
-        impacted = [item for item in differences if item.get("gate_action") and item.get("gate_action") != "pass_to_llm"]
-        return {
-            "baseline_report_path": str(baseline_report_path),
-            "baseline_strategy": baseline_strategy,
-            "different_decision_count": len(differences),
-            "impacted_gated_rule_count": len(impacted),
-            "differences": differences,
-        }
-
-    async def run_trigger_gate(self, baseline_report_path: Path | None, baseline_strategy: str) -> dict[str, Any]:
+    async def run_trigger_gate(self) -> dict[str, Any]:
         started = time.perf_counter()
         self._record = self.load_record()
         document_bundle = self.load_document_bundle()
         facts = self.build_trigger_facts(self._record, document_bundle)
-        rules, missing_configured_rule_ids = self.load_rules()
-        program_rules, llm_rules, program_fallback_rule_ids = self.split_executor_types(rules)
-        pass_rules, gated_results, gate_rows = self.build_gate_plan(llm_rules, facts)
-
-        strategy_name = self.config.strategies[0]
-        llm_summary = await self.run_strategy(strategy_name, pass_rules)
-        llm_summary["llm_rule_count"] = len(pass_rules)
-        merged_summary = self.merge_strategy_summary(
-            strategy_name=strategy_name,
-            llm_summary=llm_summary,
-            gated_results=gated_results,
-            original_llm_rule_count=len(llm_rules),
-        )
-        comparison = self.compare_with_baseline(
-            baseline_report_path=baseline_report_path,
-            baseline_strategy=baseline_strategy,
-            merged_summary=merged_summary,
-            gate_rows=gate_rows,
-        )
+        customer_rules = _load_customer_rules()
+        pass_points, gated_results, gate_rows = self.build_gate_plan(customer_rules, facts)
         gate_counter = Counter(str(item.get("action") or "unknown") for item in gate_rows)
         family_counter = Counter(str(item.get("gate_family") or "unknown") for item in gate_rows)
 
@@ -496,15 +441,9 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
             "dry_run": self.config.dry_run,
             "visit_id": self.config.visit_id,
             "rule_set_key": self.config.rule_set_key,
-            "customer_qc_point_count": _load_customer_point_count(),
-            "configured_execution_rule_count": len(rules) + len(missing_configured_rule_ids),
-            "loaded_execution_rule_count": len(rules),
-            "missing_configured_rule_ids": missing_configured_rule_ids,
-            "llm_rule_count_before_gate": len(llm_rules),
-            "program_rule_count": len(program_rules),
-            "program_rule_ids": [_rule_id(rule) for rule in program_rules],
-            "program_fallback_rule_ids": program_fallback_rule_ids,
-            "pass_to_llm_rule_count": len(pass_rules),
+            "analysis_scope": "customer_qc_points_only",
+            "customer_qc_point_count": len(customer_rules),
+            "pass_to_llm_qc_point_count": len(pass_points),
             "gated_rule_count": len(gated_results),
             "gate_action_count": dict(gate_counter),
             "gate_family_count": dict(family_counter),
@@ -529,27 +468,29 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
                 "evidence": facts.evidence,
             },
             "gate_rows": gate_rows,
-            "strategies": {merged_summary["strategy"]: merged_summary},
-            "baseline_comparison": comparison,
+            "gated_results": gated_results,
+            "notes": [
+                "本报告只按 49 条 LX0609 客户质控点输出。",
+                "mapped_execution_rule_ids 仅作为内部归类辅助，不作为本报告的质控结论主体。",
+                "本轮不对 SC/CL/LX/LXE 底层执行规则做差异评价。",
+            ],
             "elapsed_ms": int((time.perf_counter() - started) * 1000),
         }
 
 
 def render_markdown(report: dict[str, Any]) -> str:
     facts = report.get("trigger_facts") or {}
-    comparison = report.get("baseline_comparison") or {}
     lines: list[str] = []
-    lines.append("# 泸县0609 Trigger Gate 旁路 POC 报告")
+    lines.append("# 泸县0609 49条质控点 Trigger Gate 旁路 POC 报告")
     lines.append("")
     lines.append(f"- 生成时间：{report.get('generated_at')}")
     lines.append(f"- dry-run：{'是' if report.get('dry_run') else '否'}")
     lines.append(f"- 病历：`{report.get('visit_id')}`")
     lines.append(f"- 规则集：`{report.get('rule_set_key')}`")
-    lines.append(f"- 模型：`{report.get('model') or '-'}`")
-    lines.append(f"- LLM 规则数：{report.get('llm_rule_count_before_gate')}")
-    lines.append(f"- 进入 LLM：{report.get('pass_to_llm_rule_count')}")
-    lines.append(f"- gate 拦截：{report.get('gated_rule_count')}")
-    lines.append(f"- baseline 报告：`{comparison.get('baseline_report_path') or '-'}`")
+    lines.append(f"- 分析范围：`{report.get('analysis_scope')}`")
+    lines.append(f"- 客户质控点数：{report.get('customer_qc_point_count')}")
+    lines.append(f"- 建议继续进入执行链路的质控点：{report.get('pass_to_llm_qc_point_count')}")
+    lines.append(f"- gate 判定不适用的质控点：{report.get('gated_rule_count')}")
     lines.append("")
     lines.append("## 触发事实")
     lines.append("")
@@ -572,9 +513,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.append(f"- 动作分布：`{json.dumps(report.get('gate_action_count') or {}, ensure_ascii=False)}`")
     lines.append(f"- 规则族分布：`{json.dumps(report.get('gate_family_count') or {}, ensure_ascii=False)}`")
     lines.append("")
-    lines.append("## 被 gate 拦截的规则")
+    lines.append("## 被 gate 拦截的客户质控点")
     lines.append("")
-    lines.append("| 规则 | 名称 | 规则族 | 状态 | 原因 | 证据 |")
+    lines.append("| 质控点 | 名称 | 触发族 | 状态 | 原因 | 证据 |")
     lines.append("| --- | --- | --- | --- | --- | --- |")
     gated = [item for item in report.get("gate_rows") or [] if item.get("action") != "pass_to_llm"]
     if gated:
@@ -587,35 +528,28 @@ def render_markdown(report: dict[str, Any]) -> str:
     else:
         lines.append("| - | - | - | - | - | - |")
     lines.append("")
-    lines.append("## 进入 LLM 的目标规则族")
+    lines.append("## 继续进入执行链路的客户质控点")
     lines.append("")
     pass_rows = [item for item in report.get("gate_rows") or [] if item.get("action") == "pass_to_llm"]
     pass_counter = Counter(str(item.get("gate_family") or "unknown") for item in pass_rows)
-    lines.append(f"- pass_to_llm 规则族：`{json.dumps(dict(pass_counter), ensure_ascii=False)}`")
+    lines.append(f"- pass_to_llm 触发族：`{json.dumps(dict(pass_counter), ensure_ascii=False)}`")
     lines.append("")
-    lines.append("## 与 baseline_current 的差异")
-    lines.append("")
-    lines.append(f"- 结论不同规则数：{comparison.get('different_decision_count')}")
-    lines.append(f"- 其中 gate 直接影响规则数：{comparison.get('impacted_gated_rule_count')}")
-    lines.append("")
-    diffs = list(comparison.get("differences") or [])
-    if diffs:
-        lines.append("| 规则 | 名称 | baseline | trigger_gate | gate 动作 | 原因 |")
-        lines.append("| --- | --- | --- | --- | --- | --- |")
-        for item in diffs[:80]:
+    if pass_rows:
+        lines.append("| 质控点 | 名称 | 触发族 | 动作 |")
+        lines.append("| --- | --- | --- | --- |")
+        for item in pass_rows:
             lines.append(
                 "| "
-                f"{item.get('rule_id')} | {_clip(item.get('rule_name'), 32)} | `{item.get('baseline_status')}` | "
-                f"`{item.get('trigger_gate_status')}` | `{item.get('gate_action') or '-'}` | {_clip(item.get('gate_reason') or item.get('trigger_gate_findings'), 90)} |"
+                f"{item.get('rule_id')} | {_clip(item.get('rule_name'), 40)} | `{item.get('gate_family')}` | `{item.get('action')}` |"
             )
-    else:
-        lines.append("- 无可比较差异，或未找到 baseline 报告。")
     lines.append("")
     lines.append("## 说明")
     lines.append("")
     lines.append("- 本报告由旁路脚本生成，不创建正式任务，不写正式质控结果。")
-    lines.append("- `not_applicable` 表示规则触发事件不存在；`pass_to_llm` 表示触发存在或当前 POC 不做硬拦截。")
-    lines.append("- dry-run 模式不会调用模型，只验证门控计划和 baseline 受影响范围。")
+    lines.append("- 报告主体只使用 49 条 `LX0609-xxx` 客户质控点。")
+    lines.append("- `mapped_execution_rule_ids` 只作为内部映射参考，不作为报告主体。")
+    lines.append("- `not_applicable` 表示该客户质控点的业务触发事件不存在；`pass_to_llm` 表示触发存在或当前 POC 不做硬拦截。")
+    lines.append("- dry-run 模式不会调用模型，只验证 49 条质控点的门控计划。")
     return "\n".join(lines) + "\n"
 
 
@@ -629,13 +563,11 @@ def write_report(report: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:
     return json_path, md_path
 
 
-def parse_args() -> tuple[LabConfig, Path | None, str]:
+def parse_args() -> LabConfig:
     parser = argparse.ArgumentParser(description="泸县0609质控 Trigger Gate 旁路 POC")
     parser.add_argument("--visit-id", default=DEFAULT_VISIT_ID)
     parser.add_argument("--rule-set-key", default=DEFAULT_RULE_SET_KEY)
     parser.add_argument("--strategy", default="baseline_current")
-    parser.add_argument("--baseline-strategy", default="baseline_current")
-    parser.add_argument("--baseline-report", default="")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--low-confidence-threshold", type=float, default=0.45)
     parser.add_argument("--network-retry", type=int, default=1)
@@ -644,7 +576,6 @@ def parse_args() -> tuple[LabConfig, Path | None, str]:
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
-    baseline_report = Path(args.baseline_report) if str(args.baseline_report).strip() else _load_latest_baseline_report(output_dir)
     config = LabConfig(
         visit_id=str(args.visit_id),
         rule_set_key=str(args.rule_set_key),
@@ -655,21 +586,21 @@ def parse_args() -> tuple[LabConfig, Path | None, str]:
         max_rules=max(0, int(args.max_rules)),
         network_retry=max(0, int(args.network_retry)),
     )
-    return config, baseline_report, str(args.baseline_strategy)
+    return config
 
 
 async def main_async() -> int:
-    config, baseline_report, baseline_strategy = parse_args()
+    config = parse_args()
     lab = Luxian0609TriggerGateLab(config)
-    report = await lab.run_trigger_gate(baseline_report, baseline_strategy)
+    report = await lab.run_trigger_gate()
     json_path, md_path = write_report(report, config.output_dir)
     print(f"Trigger Gate JSON: {json_path}")
     print(f"Trigger Gate Markdown: {md_path}")
     print(
         "gate: "
-        f"pass_to_llm={report.get('pass_to_llm_rule_count')} "
-        f"gated={report.get('gated_rule_count')} "
-        f"baseline_diff={(report.get('baseline_comparison') or {}).get('different_decision_count')}"
+        f"customer_points={report.get('customer_qc_point_count')} "
+        f"pass_to_llm={report.get('pass_to_llm_qc_point_count')} "
+        f"gated={report.get('gated_rule_count')}"
     )
     return 0
 
