@@ -25,6 +25,7 @@ from poc_luxian_0609_pack_strategy_lab import (  # noqa: E402
     DEFAULT_VISIT_ID,
     LabConfig,
     Luxian0609PackStrategyLab,
+    _rule_id,
     _safe_text,
 )
 
@@ -97,15 +98,17 @@ CUSTOMER_GATE_FAMILY_BY_ID = {
     "LX0609-004": "critical_status",
     "LX0609-008": "critical_status",
     "LX0609-009": "critical_status",
-    "LX0609-010": "abnormal_imaging",
-    "LX0609-011": "abnormal_imaging",
-    "LX0609-012": "abnormal_imaging",
+    "LX0609-010": "ct_mri_report_event",
+    "LX0609-011": "ct_mri_report_event",
+    "LX0609-012": "positive_ct_mri_report",
     "LX0609-013": "pathology_event",
-    "LX0609-014": "abnormal_lab",
-    "LX0609-015": "abnormal_lab",
+    "LX0609-014": "culture_report_event",
+    "LX0609-015": "positive_culture_event",
     "LX0609-019": "pathology_event",
     "LX0609-024": "surgery_event",
     "LX0609-025": "surgery_event",
+    "LX0609-026": "chemo_order_or_record_event",
+    "LX0609-027": "discharge_record_event",
     "LX0609-028": "surgery_event",
     "LX0609-029": "surgery_event",
     "LX0609-030": "surgery_event",
@@ -190,7 +193,8 @@ def _load_customer_rules() -> list[dict[str, Any]]:
 
 
 def _contains_any(text: str, keywords: Sequence[str]) -> bool:
-    return any(keyword.lower() in text for keyword in keywords)
+    normalized = text.lower()
+    return any(keyword.lower() in normalized for keyword in keywords)
 
 
 def _has_effective_text(value: Any) -> bool:
@@ -211,6 +215,7 @@ class TriggerFacts:
     has_pathology_event: bool
     has_abnormal_lab_signal: bool
     has_abnormal_imaging_signal: bool
+    event_flags: dict[str, bool]
     evidence: dict[str, str]
 
 
@@ -222,6 +227,131 @@ class GateDecision:
     status: str
     reason: str
     evidence: str
+
+
+def _execution_result_map(strategy_summary: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        _safe_text(item.get("rule_id")).upper(): dict(item)
+        for item in strategy_summary.get("rule_results") or []
+        if _safe_text(item.get("rule_id"))
+    }
+
+
+def _customer_status_from_items(items: list[dict[str, Any]]) -> tuple[str, bool, float]:
+    if not items:
+        return ("not_executed", False, 0.0)
+    statuses = [_safe_text(item.get("status")) or "unknown" for item in items]
+    confidences = [float(item.get("confidence") or 0.0) for item in items]
+    if "non_compliant" in statuses:
+        return ("non_compliant", False, max(confidences or [0.0]))
+    if "uncertain" in statuses:
+        return ("uncertain", False, max(confidences or [0.0]))
+    if "data_gap" in statuses:
+        return ("data_gap", False, max(confidences or [0.0]))
+    if "not_applicable" in statuses and all(status == "not_applicable" for status in statuses):
+        return ("not_applicable", True, max(confidences or [0.0]))
+    if statuses and all(status == "compliant" for status in statuses):
+        return ("compliant", True, max(confidences or [0.0]))
+    return (statuses[0], bool(items[0].get("is_compliant") is True), max(confidences or [0.0]))
+
+
+def _build_customer_result_from_items(
+    customer_rule: dict[str, Any],
+    *,
+    source: str,
+    items: list[dict[str, Any]],
+    fallback_status: str = "not_executed",
+    fallback_reason: str = "该客户质控点映射的底层规则未在本轮 POC 中执行。",
+) -> dict[str, Any]:
+    rule_id = _customer_rule_id(customer_rule)
+    mapped_ids = _mapped_execution_rule_ids(customer_rule)
+    if not items:
+        return {
+            "rule_id": rule_id,
+            "rule_name": _safe_text(customer_rule.get("name") or customer_rule.get("description")),
+            "status": fallback_status,
+            "is_compliant": False,
+            "confidence": 0.0,
+            "findings": fallback_reason,
+            "evidence": "",
+            "suggestion": "",
+            "source": source,
+            "mapped_execution_rule_ids": mapped_ids,
+            "matched_execution_rule_ids": [],
+        }
+
+    status, is_compliant, confidence = _customer_status_from_items(items)
+    findings = "；".join(_clip(item.get("findings"), 120) for item in items if _safe_text(item.get("findings")))
+    evidence = "；".join(_clip(item.get("evidence"), 120) for item in items if _safe_text(item.get("evidence")))
+    return {
+        "rule_id": rule_id,
+        "rule_name": _safe_text(customer_rule.get("name") or customer_rule.get("description")),
+        "status": status,
+        "is_compliant": is_compliant,
+        "confidence": confidence,
+        "findings": findings,
+        "evidence": evidence,
+        "suggestion": "；".join(_clip(item.get("suggestion"), 80) for item in items if _safe_text(item.get("suggestion"))),
+        "source": source,
+        "mapped_execution_rule_ids": mapped_ids,
+        "matched_execution_rule_ids": [_safe_text(item.get("rule_id")).upper() for item in items if _safe_text(item.get("rule_id"))],
+    }
+
+
+def _build_customer_results_from_execution(
+    customer_rules: list[dict[str, Any]],
+    execution_results: dict[str, dict[str, Any]],
+    *,
+    source: str,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for rule in customer_rules:
+        mapped_ids = _mapped_execution_rule_ids(rule)
+        matched = [execution_results[item] for item in mapped_ids if item in execution_results]
+        rows.append(_build_customer_result_from_items(rule, source=source, items=matched))
+    return rows
+
+
+def _compare_customer_results(left: list[dict[str, Any]], right: list[dict[str, Any]]) -> dict[str, Any]:
+    left_map = {str(item.get("rule_id") or ""): item for item in left}
+    right_map = {str(item.get("rule_id") or ""): item for item in right}
+    differences: list[dict[str, Any]] = []
+    distribution: Counter[str] = Counter()
+    for rule_id in sorted(set(left_map) | set(right_map)):
+        left_item = left_map.get(rule_id) or {}
+        right_item = right_map.get(rule_id) or {}
+        left_key = (_safe_text(left_item.get("status")) or "missing", bool(left_item.get("is_compliant") is True))
+        right_key = (_safe_text(right_item.get("status")) or "missing", bool(right_item.get("is_compliant") is True))
+        if left_key == right_key:
+            continue
+        distribution[f"{left_key[0]} -> {right_key[0]}"] += 1
+        differences.append(
+            {
+                "rule_id": rule_id,
+                "rule_name": _safe_text((left_item or right_item).get("rule_name")),
+                "baseline_status": left_key[0],
+                "trigger_gate_status": right_key[0],
+                "baseline_findings": _clip(left_item.get("findings"), 180),
+                "trigger_gate_findings": _clip(right_item.get("findings"), 180),
+                "trigger_gate_source": _safe_text(right_item.get("source")),
+            }
+        )
+    return {
+        "different_decision_count": len(differences),
+        "difference_distribution": dict(distribution),
+        "differences": differences,
+    }
+
+
+def _first_provider_errors(strategy_summary: dict[str, Any], limit: int = 3) -> list[str]:
+    errors: list[str] = []
+    for item in strategy_summary.get("diagnostics") or []:
+        error = _safe_text(item.get("provider_error"))
+        if error and error not in errors:
+            errors.append(error)
+        if len(errors) >= limit:
+            break
+    return errors
 
 
 class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
@@ -262,6 +392,14 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
         pathology_signal = _contains_any(medical_text, ("病理报告", "病理检查", "病理诊断", "病理标本", "病理取材", "送病理"))
         lab_signal = _contains_any(medical_text, ("血常规", "肾功", "肌酐", "尿素", "细菌培养", "金黄色葡萄球菌", "mrsa", "异常"))
         imaging_signal = _contains_any(medical_text, ("ct", "mri", "螺旋ct", "彩超", "dr正侧位", "影像"))
+        ct_mri_signal = _contains_any(medical_text, ("ct", "mri", "螺旋ct"))
+        positive_ct_mri_signal = _contains_any(medical_text, ("钙化灶", "含气不良", "痰栓", "退变", "异常", "阳性"))
+        culture_signal = _contains_any(medical_text, ("细菌培养", "培养结果", "分泌物一般细菌培养"))
+        positive_culture_signal = _contains_any(medical_text, ("金黄色葡萄球菌", "mrsa", "阳性菌", "耐药"))
+        malignant_tumor_signal = _contains_any(medical_text, ("恶性肿瘤", "癌", "淋巴结清扫", "肿瘤"))
+        chemo_signal = _contains_any(medical_text, ("化疗", "化学治疗", "化疗医嘱", "化疗记录"))
+        discharge_docs = docs_by_type.get("discharge_record") or []
+        has_discharge_record = any(bool(doc.get("has_content") is True) for doc in discharge_docs)
 
         evidence = {
             "surgery_event": "手术记录为空壳；未见本次住院有效手术名称、手术时间或手术经过。"
@@ -282,18 +420,56 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
             "abnormal_imaging": "病程/查房中存在 CT、彩超、DR 等检查影像信号。"
             if imaging_signal
             else "未见明确影像检查信号。",
+            "ct_mri_report_event": "病程/查房中存在 CT/MRI 相关检查信号。"
+            if ct_mri_signal
+            else "未见 CT/MRI 检查或报告信号。",
+            "positive_ct_mri_report": "CT/MRI 相关内容存在阳性或重要异常描述。"
+            if ct_mri_signal and positive_ct_mri_signal
+            else "未见 CT/MRI 阳性或重要异常描述。",
+            "culture_report_event": "病历中存在细菌培养报告或培养结果信号。"
+            if culture_signal
+            else "未见细菌培养报告信号。",
+            "positive_culture_event": "细菌培养存在金黄色葡萄球菌/MRSA 等阳性菌信号。"
+            if positive_culture_signal
+            else "未见细菌培养阳性菌信号。",
+            "malignant_tumor_event": "病历存在恶性肿瘤相关诊断或治疗信号。"
+            if malignant_tumor_signal
+            else "未见恶性肿瘤诊断或肿瘤相关治疗信号。",
+            "chemo_order_or_record_event": "病历存在化疗医嘱或化疗记录信号。"
+            if chemo_signal
+            else "未见化疗医嘱或化疗记录信号。",
+            "discharge_record_event": "病历存在出院记录。"
+            if has_discharge_record
+            else "未见出院记录，无法评价出院记录类质控点。",
+        }
+        event_flags = {
+            "surgery_event": bool(effective_surgery_docs),
+            "transfusion_event": bool(transfusion_docs)
+            or (
+                not negated_transfusion_only
+                and _contains_any(transfusion_signal_text, ("输血记录", "输血医嘱", "输血申请", "红细胞", "血浆", "血小板", "输注"))
+            ),
+            "critical_status": critical_signal,
+            "pathology_event": pathology_signal,
+            "abnormal_lab": lab_signal,
+            "abnormal_imaging": imaging_signal,
+            "ct_mri_report_event": ct_mri_signal,
+            "positive_ct_mri_report": bool(ct_mri_signal and positive_ct_mri_signal),
+            "culture_report_event": culture_signal,
+            "positive_culture_event": positive_culture_signal,
+            "malignant_tumor_event": malignant_tumor_signal,
+            "chemo_order_or_record_event": chemo_signal,
+            "discharge_record_event": has_discharge_record,
         }
         return TriggerFacts(
             has_effective_surgery=bool(effective_surgery_docs),
             has_empty_shell_surgery_record=empty_shell_surgery,
-            has_transfusion_event=bool(transfusion_docs) or (
-                not negated_transfusion_only
-                and _contains_any(transfusion_signal_text, ("输血记录", "输血医嘱", "输血申请", "红细胞", "血浆", "血小板", "输注"))
-            ),
+            has_transfusion_event=event_flags["transfusion_event"],
             has_critical_status=critical_signal,
             has_pathology_event=pathology_signal,
             has_abnormal_lab_signal=lab_signal,
             has_abnormal_imaging_signal=imaging_signal,
+            event_flags=event_flags,
             evidence=evidence,
         )
 
@@ -368,6 +544,29 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
                 reason = "未发现影像阳性或重要检查触发信号。"
             else:
                 reason = "发现影像/检查触发信号，需要进入 LLM 判断病程记录是否反映和分析。"
+        elif family in {
+            "ct_mri_report_event",
+            "positive_ct_mri_report",
+            "culture_report_event",
+            "positive_culture_event",
+            "malignant_tumor_event",
+            "chemo_order_or_record_event",
+        }:
+            evidence = facts.evidence.get(family, "")
+            if not facts.event_flags.get(family):
+                action = "not_applicable"
+                status = "not_applicable"
+                reason = f"未发现 `{family}` 触发事件，该客户质控点不适用。"
+            else:
+                reason = f"发现 `{family}` 触发事件，需要进入 LLM 判断文书记录和分析是否充分。"
+        elif family == "discharge_record_event":
+            evidence = facts.evidence.get(family, "")
+            if not facts.event_flags.get(family):
+                action = "data_gap"
+                status = "data_gap"
+                reason = "未见出院记录，当前病历无法评价出院记录类质控点，应标记为数据不足而非直接判缺陷。"
+            else:
+                reason = "发现出院记录，需要进入 LLM 判断相关出院计划是否充分。"
 
         return GateDecision(
             rule_id=rid,
@@ -435,6 +634,112 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
         pass_points, gated_results, gate_rows = self.build_gate_plan(customer_rules, facts)
         gate_counter = Counter(str(item.get("action") or "unknown") for item in gate_rows)
         family_counter = Counter(str(item.get("gate_family") or "unknown") for item in gate_rows)
+        execution: dict[str, Any] = {
+            "enabled": not self.config.dry_run,
+            "baseline_strategy": self.config.strategies[0],
+            "baseline_customer_results": [],
+            "trigger_gate_customer_results": [],
+            "comparison": {
+                "different_decision_count": 0,
+                "difference_distribution": {},
+                "differences": [],
+            },
+            "baseline_summary": {},
+            "trigger_gate_summary": {},
+        }
+
+        if not self.config.dry_run:
+            rules, missing_configured_rule_ids = self.load_rules()
+            _, llm_rules, program_fallback_rule_ids = self.split_executor_types(rules)
+            llm_by_id = {_rule_id(rule): rule for rule in llm_rules}
+            pass_execution_rule_ids = {
+                mapped_id
+                for point in pass_points
+                for mapped_id in _mapped_execution_rule_ids(point)
+            }
+            trigger_llm_rules = [
+                rule
+                for rule_id, rule in llm_by_id.items()
+                if rule_id in pass_execution_rule_ids
+            ]
+
+            strategy_name = self.config.strategies[0]
+            baseline_summary = await self.run_strategy(strategy_name, llm_rules)
+            trigger_summary = await self.run_strategy(strategy_name, trigger_llm_rules)
+            baseline_execution_map = _execution_result_map(baseline_summary)
+            trigger_execution_map = _execution_result_map(trigger_summary)
+            baseline_customer_results = _build_customer_results_from_execution(
+                customer_rules,
+                baseline_execution_map,
+                source="baseline_current",
+            )
+            gate_by_rule_id = {str(item.get("rule_id") or ""): item for item in gated_results}
+            trigger_customer_results: list[dict[str, Any]] = []
+            for rule in customer_rules:
+                rule_id = _customer_rule_id(rule)
+                if rule_id in gate_by_rule_id:
+                    gate_item = dict(gate_by_rule_id[rule_id])
+                    gate_item["source"] = "trigger_gate"
+                    gate_item["mapped_execution_rule_ids"] = _mapped_execution_rule_ids(rule)
+                    gate_item["matched_execution_rule_ids"] = []
+                    trigger_customer_results.append(gate_item)
+                    continue
+                mapped_ids = _mapped_execution_rule_ids(rule)
+                matched = [trigger_execution_map[item] for item in mapped_ids if item in trigger_execution_map]
+                trigger_customer_results.append(
+                    _build_customer_result_from_items(
+                        rule,
+                        source="trigger_gate_baseline",
+                        items=matched,
+                    )
+                )
+
+            execution = {
+                "enabled": True,
+                "baseline_strategy": strategy_name,
+                "configured_execution_rule_count": len(rules) + len(missing_configured_rule_ids),
+                "loaded_execution_rule_count": len(rules),
+                "missing_configured_rule_ids": missing_configured_rule_ids,
+                "program_fallback_rule_ids": program_fallback_rule_ids,
+                "baseline_llm_rule_count": len(llm_rules),
+                "trigger_gate_llm_rule_count": len(trigger_llm_rules),
+                "trigger_gate_selected_execution_rule_ids": sorted(_rule_id(rule) for rule in trigger_llm_rules),
+                "baseline_summary": {
+                    key: baseline_summary.get(key)
+                    for key in (
+                        "pack_count",
+                        "fallback_pack_count",
+                        "fallback_rate",
+                        "final_result_count",
+                        "terminal_status_count",
+                        "elapsed_ms",
+                        "tokens",
+                        "provider_error_count",
+                        "parse_error_count",
+                        "fallback_reason_distribution",
+                    )
+                },
+                "baseline_provider_errors": _first_provider_errors(baseline_summary),
+                "trigger_gate_summary": {
+                    key: trigger_summary.get(key)
+                    for key in (
+                        "pack_count",
+                        "fallback_pack_count",
+                        "fallback_rate",
+                        "final_result_count",
+                        "terminal_status_count",
+                        "elapsed_ms",
+                        "tokens",
+                        "provider_error_count",
+                        "parse_error_count",
+                        "fallback_reason_distribution",
+                    )
+                },
+                "trigger_gate_provider_errors": _first_provider_errors(trigger_summary),
+                "baseline_customer_results": baseline_customer_results,
+                "trigger_gate_customer_results": trigger_customer_results,
+                "comparison": _compare_customer_results(baseline_customer_results, trigger_customer_results),
+            }
 
         return {
             "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -465,14 +770,16 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
                 "has_pathology_event": facts.has_pathology_event,
                 "has_abnormal_lab_signal": facts.has_abnormal_lab_signal,
                 "has_abnormal_imaging_signal": facts.has_abnormal_imaging_signal,
+                "event_flags": facts.event_flags,
                 "evidence": facts.evidence,
             },
             "gate_rows": gate_rows,
             "gated_results": gated_results,
+            "execution": execution,
             "notes": [
                 "本报告只按 49 条 LX0609 客户质控点输出。",
                 "mapped_execution_rule_ids 仅作为内部归类辅助，不作为本报告的质控结论主体。",
-                "本轮不对 SC/CL/LX/LXE 底层执行规则做差异评价。",
+                "非 dry-run 时会复用底层执行规则真实调用模型，但最终报告聚合回 49 条客户质控点。",
             ],
             "elapsed_ms": int((time.perf_counter() - started) * 1000),
         }
@@ -480,6 +787,7 @@ class Luxian0609TriggerGateLab(Luxian0609PackStrategyLab):
 
 def render_markdown(report: dict[str, Any]) -> str:
     facts = report.get("trigger_facts") or {}
+    execution = report.get("execution") or {}
     lines: list[str] = []
     lines.append("# 泸县0609 49条质控点 Trigger Gate 旁路 POC 报告")
     lines.append("")
@@ -503,6 +811,13 @@ def render_markdown(report: dict[str, Any]) -> str:
         ("pathology_event", facts.get("has_pathology_event")),
         ("abnormal_lab", facts.get("has_abnormal_lab_signal")),
         ("abnormal_imaging", facts.get("has_abnormal_imaging_signal")),
+        ("ct_mri_report_event", (facts.get("event_flags") or {}).get("ct_mri_report_event")),
+        ("positive_ct_mri_report", (facts.get("event_flags") or {}).get("positive_ct_mri_report")),
+        ("culture_report_event", (facts.get("event_flags") or {}).get("culture_report_event")),
+        ("positive_culture_event", (facts.get("event_flags") or {}).get("positive_culture_event")),
+        ("malignant_tumor_event", (facts.get("event_flags") or {}).get("malignant_tumor_event")),
+        ("chemo_order_or_record_event", (facts.get("event_flags") or {}).get("chemo_order_or_record_event")),
+        ("discharge_record_event", (facts.get("event_flags") or {}).get("discharge_record_event")),
     ]
     evidence = facts.get("evidence") or {}
     for key, exists in fact_rows:
@@ -543,6 +858,49 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"{item.get('rule_id')} | {_clip(item.get('rule_name'), 40)} | `{item.get('gate_family')}` | `{item.get('action')}` |"
             )
     lines.append("")
+    lines.append("## 真实执行对比")
+    lines.append("")
+    if not execution.get("enabled"):
+        lines.append("- 当前为 dry-run，仅生成门控计划，没有调用模型，也没有生成真实质控结果。")
+    else:
+        baseline_summary = execution.get("baseline_summary") or {}
+        trigger_summary = execution.get("trigger_gate_summary") or {}
+        comparison = execution.get("comparison") or {}
+        lines.append(f"- baseline LLM 规则数：{execution.get('baseline_llm_rule_count')}")
+        lines.append(f"- trigger_gate LLM 规则数：{execution.get('trigger_gate_llm_rule_count')}")
+        lines.append("")
+        lines.append("| 策略 | pack数 | fallback pack数 | fallback率 | 返回底层规则数 | 耗时(ms) | token | 终态分布 |")
+        lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
+        lines.append(
+            "| baseline_current | "
+            f"{baseline_summary.get('pack_count')} | {baseline_summary.get('fallback_pack_count')} | "
+            f"{baseline_summary.get('fallback_rate')} | {baseline_summary.get('final_result_count')} | "
+            f"{baseline_summary.get('elapsed_ms')} | {baseline_summary.get('tokens')} | "
+            f"`{json.dumps(baseline_summary.get('terminal_status_count') or {}, ensure_ascii=False)}` |"
+        )
+        lines.append(
+            "| trigger_gate_baseline | "
+            f"{trigger_summary.get('pack_count')} | {trigger_summary.get('fallback_pack_count')} | "
+            f"{trigger_summary.get('fallback_rate')} | {trigger_summary.get('final_result_count')} | "
+            f"{trigger_summary.get('elapsed_ms')} | {trigger_summary.get('tokens')} | "
+            f"`{json.dumps(trigger_summary.get('terminal_status_count') or {}, ensure_ascii=False)}` |"
+        )
+        lines.append("")
+        lines.append(f"- 49条客户质控点结论差异数：{comparison.get('different_decision_count')}")
+        lines.append(f"- 差异分布：`{json.dumps(comparison.get('difference_distribution') or {}, ensure_ascii=False)}`")
+        differences = list(comparison.get("differences") or [])
+        if differences:
+            lines.append("")
+            lines.append("| 质控点 | 名称 | baseline | trigger_gate | trigger_gate 来源 |")
+            lines.append("| --- | --- | --- | --- | --- |")
+            for item in differences[:80]:
+                lines.append(
+                    "| "
+                    f"{item.get('rule_id')} | {_clip(item.get('rule_name'), 34)} | "
+                    f"`{item.get('baseline_status')}` | `{item.get('trigger_gate_status')}` | "
+                    f"`{item.get('trigger_gate_source')}` |"
+                )
+    lines.append("")
     lines.append("## 说明")
     lines.append("")
     lines.append("- 本报告由旁路脚本生成，不创建正式任务，不写正式质控结果。")
@@ -550,6 +908,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.append("- `mapped_execution_rule_ids` 只作为内部映射参考，不作为报告主体。")
     lines.append("- `not_applicable` 表示该客户质控点的业务触发事件不存在；`pass_to_llm` 表示触发存在或当前 POC 不做硬拦截。")
     lines.append("- dry-run 模式不会调用模型，只验证 49 条质控点的门控计划。")
+    lines.append("- 非 dry-run 模式会执行 `baseline_current` 与 `trigger_gate_baseline`，但仍不创建正式任务、不写正式质控结果。")
     return "\n".join(lines) + "\n"
 
 
@@ -572,6 +931,7 @@ def parse_args() -> LabConfig:
     parser.add_argument("--low-confidence-threshold", type=float, default=0.45)
     parser.add_argument("--network-retry", type=int, default=1)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--execute", action="store_true", help="真实调用模型执行 baseline_current 与 trigger_gate_baseline；默认只 dry-run")
     parser.add_argument("--max-rules", type=int, default=0, help="调试用；0 表示不限制规则数")
     args = parser.parse_args()
 
@@ -582,7 +942,7 @@ def parse_args() -> LabConfig:
         strategies=[str(args.strategy)],
         output_dir=output_dir,
         low_confidence_threshold=float(args.low_confidence_threshold),
-        dry_run=bool(args.dry_run),
+        dry_run=bool(args.dry_run or not args.execute),
         max_rules=max(0, int(args.max_rules)),
         network_retry=max(0, int(args.network_retry)),
     )
