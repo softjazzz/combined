@@ -2,29 +2,39 @@
   <section class="table-shell">
     <div class="table-shell-head">
       <div>
-        <p class="table-shell-eyebrow">
-          规则工作区
-        </p>
-        <h3 class="table-shell-title">
-          规则执行工作台
-        </h3>
+        <h3 class="table-shell-title">规则执行工作台</h3>
       </div>
       <div class="table-shell-right">
+        <label class="rule-set-picker">
+          <Layers class="rule-set-icon" />
+          <span class="rule-set-label">规则集：</span>
+          <a-select
+            :value="selectedRuleSetValue"
+            class="rule-set-select"
+            popup-class-name="semantic-rule-select-dropdown"
+            @change="handleRuleSetSelectChange"
+          >
+            <a-select-option
+              v-for="item in normalizedRuleSetOptions"
+              :key="item.value"
+              :value="item.value"
+            >
+              {{ item.label }}
+            </a-select-option>
+          </a-select>
+        </label>
         <div class="table-shell-meta">
+          <List class="workbench-icon" />
           <span class="table-shell-count">{{ total }}</span>
           <span class="table-shell-label">当前结果</span>
         </div>
         <div class="table-shell-actions">
-          <a-button
-            class="table-secondary-btn"
-            @click="emit('openQcEvaluation')"
-          >
+          <a-button type="primary" class="table-primary-btn" @click="emit('openQcEvaluation')">
+            <Play class="button-icon" />
             开始质控评估
           </a-button>
-          <a-button
-            class="table-secondary-btn"
-            @click="emit('openCustomWorkspace')"
-          >
+          <a-button class="table-secondary-btn" @click="emit('openCustomWorkspace')">
+            <SlidersHorizontal class="button-icon" />
             自定义规则工作台
           </a-button>
         </div>
@@ -41,7 +51,7 @@
           @update:value="emit('update:keywordInput', String($event || ''))"
         >
           <template #prefix>
-            <SearchOutlined class="text-slate-400" />
+            <Search class="query-icon" />
           </template>
         </a-input>
 
@@ -50,13 +60,10 @@
           class="query-select"
           placeholder="缺陷级别"
           allow-clear
+          popup-class-name="semantic-rule-select-dropdown"
           @update:value="emit('update:defectLevel', String($event || ''))"
         >
-          <a-select-option
-            v-for="item in defectOptions"
-            :key="item"
-            :value="item"
-          >
+          <a-select-option v-for="item in defectOptions" :key="item" :value="item">
             {{ item }}
           </a-select-option>
         </a-select>
@@ -66,13 +73,10 @@
           class="query-select"
           placeholder="复杂度"
           allow-clear
+          popup-class-name="semantic-rule-select-dropdown"
           @update:value="emit('update:complexity', String($event || ''))"
         >
-          <a-select-option
-            v-for="item in complexityOptions"
-            :key="item"
-            :value="item"
-          >
+          <a-select-option v-for="item in complexityOptions" :key="item" :value="item">
             {{ item }}
           </a-select-option>
         </a-select>
@@ -82,13 +86,10 @@
           class="query-select"
           placeholder="适用文书"
           allow-clear
+          popup-class-name="semantic-rule-select-dropdown"
           @update:value="emit('update:documentType', String($event || ''))"
         >
-          <a-select-option
-            v-for="item in documentOptions"
-            :key="item"
-            :value="item"
-          >
+          <a-select-option v-for="item in documentOptions" :key="item" :value="item">
             {{ getDocTypeZh(item) }}
           </a-select-option>
         </a-select>
@@ -103,7 +104,7 @@
         :pagination="pagination"
         row-key="rule_id"
         :custom-row="buildCustomRow"
-        :scroll="{ x: 1200, y: tableScrollY }"
+        :scroll="{ x: 980 }"
         :locale="{ emptyText: '暂无匹配规则' }"
         @change="handleTableChange"
       >
@@ -119,63 +120,57 @@
           </template>
 
           <template v-if="column.key === 'applicable_documents'">
-            <span class="doc-secondary">
+            <span class="doc-type-pill">
               {{ getDocTypeZh((record.applicable_documents || [])[0] || '未知文书') }}
             </span>
           </template>
 
           <template v-if="column.key === 'name'">
             <div class="rule-main">
-              <button
-                class="rule-main-title"
-                @click="emit('viewDetail', record as SemanticRuleItem)"
-              >
-                {{ record.name }}
-              </button>
-              <span
-                class="rule-main-desc"
-                :title="record.description"
-              >
-                {{ record.description || '暂无描述' }}
-              </span>
-            </div>
-          </template>
-
-          <template v-if="column.key === 'complexity'">
-            <span
-              class="status-pill status-secondary"
-              :class="getSecondaryStatusClass(record)"
-            >
-              {{ getSecondaryStatusLabel(record) }}
-            </span>
-          </template>
-
-          <template v-if="column.key === 'defect_level'">
-            <span
-              class="status-pill status-primary"
-              :class="getPrimaryStatusClass(record)"
-            >
-              {{ getPrimaryStatusLabel(record) }}
-            </span>
-          </template>
-
-          <template v-if="column.key === 'actions'">
-            <div class="table-actions">
-              <a-button
-                type="primary"
-                size="small"
-                class="action-primary"
-                @click="emit('viewDetail', record as SemanticRuleItem)"
-              >
-                {{ rowAction.primaryLabel }}
-              </a-button>
-              <a-button
-                size="small"
-                class="action-secondary"
-                @click="emit('startTest', record as SemanticRuleItem)"
-              >
-                {{ rowAction.secondaryLabel }}
-              </a-button>
+              <div class="rule-main-content">
+                <button
+                  class="rule-main-title"
+                  @click="emit('viewDetail', record as SemanticRuleItem)"
+                >
+                  {{ record.name }}
+                </button>
+                <div v-if="isLuxianWrapper(record as SemanticRuleItem)" class="rule-main-tags">
+                  <span class="mini-tag mini-tag-blue">
+                    {{ formatImplementationStatus(record.implementation_status) }}
+                  </span>
+                  <span class="mini-tag">
+                    {{ formatDependencyType(record.dependency_type) }}
+                  </span>
+                  <span v-if="record.data_status" class="mini-tag mini-tag-amber">
+                    {{ formatDataStatus(record.data_status) }}
+                  </span>
+                  <span v-if="record.primary_execution_rule_id" class="mini-tag mini-tag-green">
+                    主执行 {{ record.primary_execution_rule_id }}
+                  </span>
+                </div>
+                <div v-if="record.mapped_rule_ids?.length" class="mapped-rules">
+                  映射规则：{{ record.mapped_rule_ids.join('、') }}
+                </div>
+              </div>
+              <div class="rule-inline-actions">
+                <a-button
+                  type="primary"
+                  size="small"
+                  class="action-primary"
+                  @click="emit('viewDetail', record as SemanticRuleItem)"
+                >
+                  <FileSearch class="button-icon" />
+                  {{ rowAction.primaryLabel }}
+                </a-button>
+                <a-button
+                  size="small"
+                  class="action-secondary"
+                  @click="emit('startTest', record as SemanticRuleItem)"
+                >
+                  <ClipboardCheck class="button-icon" />
+                  {{ rowAction.secondaryLabel }}
+                </a-button>
+              </div>
             </div>
           </template>
         </template>
@@ -187,17 +182,34 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { TablePaginationConfig } from 'ant-design-vue'
-import { SearchOutlined } from '@ant-design/icons-vue'
+import {
+  ClipboardCheck,
+  FileSearch,
+  Layers,
+  List,
+  Play,
+  Search,
+  SlidersHorizontal,
+} from 'lucide-vue-next'
 import ProQueryBar from '@/components/pro/ProQueryBar.vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
-import type { SemanticRuleItem } from '../types'
-import { getDocTypeZh } from '../types'
-import { buildSemanticRuleRowActionModel, buildSemanticRuleRowStatusModel } from '../service'
+import type { SemanticRuleItem, SichuanRuleSetOption } from '../types'
+import {
+  getDataStatusZh,
+  getDependencyTypeZh,
+  getDocTypeZh,
+  getImplementationStatusZh,
+} from '../types'
+import { buildSemanticRuleRowActionModel } from '../service'
+
+const DEFAULT_RULE_SET_SELECT_VALUE = '__default_sc_rules__'
 
 const props = defineProps<{
   loading: boolean
   rules: SemanticRuleItem[]
   total: number
+  ruleSetKey: string
+  ruleSetOptions: SichuanRuleSetOption[]
   keywordInput: string
   complexity: string
   defectLevel: string
@@ -210,6 +222,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:keywordInput': [value: string]
+  'update:ruleSetKey': [value: string]
+  ruleSetChange: [value: string]
   'update:complexity': [value: string]
   'update:defectLevel': [value: string]
   'update:documentType': [value: string]
@@ -224,45 +238,49 @@ const columns = computed(() => [
   { title: '序号', key: 'index', width: 64, fixed: 'left' as const, align: 'center' as const },
   { title: '编号', key: 'rule_id', width: 110, fixed: 'left' as const },
   { title: '适用文书', key: 'applicable_documents', width: 150 },
-  { title: '规则名称', key: 'name', width: 520 },
-  { title: '复杂度', key: 'complexity', width: 116, align: 'center' as const },
-  { title: '缺陷级别', key: 'defect_level', width: 124, align: 'center' as const },
-  { title: '操作', key: 'actions', width: 210, fixed: 'right' as const, align: 'right' as const },
+  { title: '规则名称', key: 'name', width: 760 },
 ])
 
-const tableScrollY = computed(() => 'calc((100vh - 440px) * 2)')
 const rowAction = buildSemanticRuleRowActionModel()
+const normalizedRuleSetOptions = computed(() =>
+  props.ruleSetOptions.map((item) => ({
+    value: item.rule_set_key || DEFAULT_RULE_SET_SELECT_VALUE,
+    label: item.rule_set_name,
+  })),
+)
+const selectedRuleSetValue = computed(() => props.ruleSetKey || DEFAULT_RULE_SET_SELECT_VALUE)
 
 function getRowNumber(index: number): number {
   const page = Number(props.pagination.current || 1)
-  const pageSize = Number(props.pagination.pageSize || 20)
+  const pageSize = Number(props.pagination.pageSize || 10)
   return (page - 1) * pageSize + index + 1
-}
-
-function getRowStatus(rule: Record<string, any>) {
-  return buildSemanticRuleRowStatusModel(rule as SemanticRuleItem)
-}
-
-function getPrimaryStatusClass(rule: Record<string, any>): string {
-  const status = getRowStatus(rule)
-  return `status-${status.primaryTone}`
-}
-
-function getSecondaryStatusClass(rule: Record<string, any>): string {
-  const status = getRowStatus(rule)
-  return `status-${status.secondaryTone}`
-}
-
-function getPrimaryStatusLabel(rule: Record<string, any>): string {
-  return getRowStatus(rule).primaryLabel
-}
-
-function getSecondaryStatusLabel(rule: Record<string, any>): string {
-  return getRowStatus(rule).secondaryLabel
 }
 
 function handleTableChange(pagination: TablePaginationConfig) {
   emit('tableChange', pagination)
+}
+
+function handleRuleSetSelectChange(value: string | number) {
+  const normalized = String(value || '')
+  const nextValue = normalized === DEFAULT_RULE_SET_SELECT_VALUE ? '' : normalized
+  emit('update:ruleSetKey', nextValue)
+  emit('ruleSetChange', nextValue)
+}
+
+function isLuxianWrapper(rule: SemanticRuleItem): boolean {
+  return rule.rule_id.startsWith('LX0609-')
+}
+
+function formatImplementationStatus(value?: string): string {
+  return getImplementationStatusZh(value)
+}
+
+function formatDependencyType(value?: string): string {
+  return getDependencyTypeZh(value)
+}
+
+function formatDataStatus(value?: string): string {
+  return getDataStatusZh(value)
 }
 
 function buildCustomRow(record: SemanticRuleItem) {
@@ -287,66 +305,179 @@ function buildCustomRow(record: SemanticRuleItem) {
 
 <style scoped>
 .table-shell {
-  margin-top: 16px;
-  border-radius: 24px;
-  border: 1px solid rgba(226, 232, 240, 0.88);
-  background: #ffffff;
-  box-shadow: 0 14px 34px rgba(148, 163, 184, 0.12);
+  --semantic-font-sans:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --semantic-font-display:
+    'Source Han Sans SC', 'SF Pro Display', 'San Francisco', 'PingFang SC', Inter,
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --semantic-table-bg: rgba(255, 255, 255, 0.82);
+  --semantic-table-hover-bg: rgba(0, 0, 0, 0.025);
+
+  margin-top: 0;
+  border-radius: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  font-family: var(--semantic-font-sans);
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
   overflow: hidden;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.table-shell :deep(.ant-btn),
+.table-shell :deep(.ant-input),
+.table-shell :deep(.ant-input-affix-wrapper),
+.table-shell :deep(.ant-select),
+.table-shell :deep(.ant-select-dropdown),
+.table-shell :deep(.ant-select-item),
+.table-shell :deep(.ant-tag),
+.table-shell :deep(.ant-table),
+.table-shell :deep(.ant-pagination) {
+  font-family: var(--semantic-font-sans);
+}
+
+.table-shell:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
 }
 
 .table-shell-head {
-  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
-}
-
-.table-shell-eyebrow {
-  margin: 0;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  gap: 16px;
+  padding: 18px 22px 15px;
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .table-shell-title {
-  margin: 2px 0 0;
+  margin: 0;
+  font-family: var(--semantic-font-display);
   font-size: 17px;
   font-weight: 600;
-  color: #0f2747;
+  color: #1d1d1f;
   line-height: 1.2;
+  letter-spacing: 0;
 }
 
 .table-shell-right {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  justify-content: flex-end;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.rule-set-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(180deg, rgba(249, 250, 252, 0.98), rgba(239, 241, 246, 0.94));
+  border: 1px solid rgba(29, 29, 31, 0.12);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 1px rgba(0, 0, 0, 0.035);
+  color: #1d1d1f;
+  cursor: pointer;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  font-synthesis-weight: none;
+  height: 36px;
+  min-height: 36px;
+  letter-spacing: 0;
+  line-height: 20px;
+  padding: 0 11px 0 10px;
+  text-rendering: geometricprecision;
+  white-space: nowrap;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.rule-set-select {
+  width: 170px;
+}
+
+.rule-set-icon {
+  color: rgba(29, 29, 31, 0.68);
+  flex: none;
+  height: 16px;
+  stroke-width: 2.1;
+  width: 16px;
+}
+
+.rule-set-label {
+  color: rgba(29, 29, 31, 0.66);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 20px;
+}
+
+.workbench-icon,
+.button-icon,
+.query-icon {
+  flex: none;
+  height: 15px;
+  stroke-width: 2;
+  width: 15px;
+}
+
+.query-icon {
+  color: rgba(29, 29, 31, 0.38);
 }
 
 .table-shell-meta {
   display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
   border-radius: 999px;
-  border: 1px solid #dbe7f5;
-  background: #f8fbff;
-  padding: 8px 12px;
+  border: 1px solid rgba(0, 102, 204, 0.16);
+  background: linear-gradient(180deg, rgba(241, 248, 255, 0.96), rgba(230, 243, 255, 0.88));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 1px rgba(0, 102, 204, 0.04);
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .table-shell-count {
-  font-size: 20px;
+  font-family: var(--semantic-font-display);
+  font-size: 13px;
   line-height: 1;
-  color: #0f2747;
+  color: #0066cc;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .table-shell-label {
-  color: #6b7280;
-  font-size: 11px;
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .table-shell-actions {
@@ -354,58 +485,183 @@ function buildCustomRow(record: SemanticRuleItem) {
   gap: 8px;
 }
 
+.table-primary-btn,
 .table-secondary-btn {
-  height: 28px;
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  height: 36px;
   border-radius: 10px;
-  font-size: 12px;
-  color: #334155;
-  border-color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 14px;
+}
+
+.table-primary-btn {
+  background: #0066cc;
+  border-color: #0066cc;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 4px 10px rgba(0, 102, 204, 0.16);
+}
+
+.table-secondary-btn {
+  background: rgba(255, 255, 255, 0.94);
+  color: rgba(29, 29, 31, 0.68);
+  border-color: rgba(29, 29, 31, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 1px rgba(0, 0, 0, 0.035);
+}
+
+.rule-set-picker:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(242, 244, 248, 0.96));
+  border-color: rgba(29, 29, 31, 0.16);
+  color: #1d1d1f;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 2px 5px rgba(0, 0, 0, 0.055);
+}
+
+.table-shell-meta:hover {
+  border-color: rgba(0, 102, 204, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 2px 5px rgba(0, 102, 204, 0.07);
+}
+
+.table-secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(29, 29, 31, 0.15);
+  color: #1d1d1f;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 2px 5px rgba(0, 0, 0, 0.055);
+}
+
+.table-primary-btn:hover,
+.table-primary-btn:focus {
+  background: #0057b8;
+  border-color: #0057b8;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 5px 12px rgba(0, 102, 204, 0.18);
+}
+
+:deep(.rule-set-select .ant-select-selector) {
+  height: 32px !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+:deep(.rule-set-select.ant-select-focused .ant-select-selector),
+:deep(.rule-set-select .ant-select-selector:focus),
+:deep(.rule-set-select .ant-select-selector:active) {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+:deep(.rule-set-select .ant-select-selection-item) {
+  padding-inline-end: 20px !important;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  font-synthesis-weight: none;
+  letter-spacing: 0;
+  line-height: 32px !important;
+  overflow: hidden;
+  text-rendering: geometricprecision;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:deep(.rule-set-select .ant-select-selection-search-input),
+:deep(.rule-set-select .ant-select-selection-placeholder) {
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+}
+
+:deep(.rule-set-select .ant-select-arrow) {
+  color: rgba(29, 29, 31, 0.72);
+  right: 0;
 }
 
 .query-input {
   width: 320px;
   min-width: 240px;
-  border-radius: 12px;
-  height: 30px;
+  border-radius: 8px;
+  height: 34px;
   font-size: 13px;
 }
 
 .query-select {
-  width: 150px;
-  height: 30px;
+  width: 152px;
+  height: 34px;
   font-size: 13px;
 }
 
 .table-shell-body {
-  padding: 8px 16px 14px;
-  min-height: calc((100vh - 440px) * 2 + 56px);
+  padding: 0;
+  min-height: calc(100vh - 360px);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .index-cell {
-  color: #475569;
+  color: rgba(29, 29, 31, 0.42);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .rule-code-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 82px;
-  border-radius: 12px;
-  border: 1px solid #c9ddf7;
-  background: #edf4ff;
-  padding: 6px 10px;
-  color: #0f3d78;
-  font-size: 13px;
-  font-weight: 700;
+  min-width: 84px;
+  border-radius: 8px;
+  border: 1px solid rgba(60, 111, 170, 0.2);
+  background: rgba(226, 237, 248, 0.72);
+  padding: 5px 10px;
+  color: #1f6fb2;
+  font-family: 'SF Pro Text', 'Cascadia Code', 'Roboto Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
-.doc-secondary {
-  color: #64748b;
+.doc-type-pill {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: rgba(29, 29, 31, 0.62);
+  display: inline-flex;
   font-size: 12px;
+  font-weight: 500;
+  min-height: 20px;
+  padding: 0;
 }
 
 .rule-main {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+}
+
+.rule-main-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: 8px;
 }
@@ -415,105 +671,215 @@ function buildCustomRow(record: SemanticRuleItem) {
   background: transparent;
   text-align: left;
   cursor: pointer;
-  color: #0f2747;
+  color: #1d1d1f;
   font-size: 14px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.4;
   padding: 0;
 }
 
 .rule-main-title:hover {
-  color: #1d4ed8;
+  color: #0066cc;
 }
 
-.rule-main-desc {
-  color: #6b7280;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.rule-main-tags,
+.mapped-rules,
+.rule-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mapped-rules {
+  color: rgba(29, 29, 31, 0.42);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.rule-inline-actions {
+  flex: none;
+  justify-content: flex-end;
+  align-items: center;
+  align-self: flex-start;
+  min-width: 180px;
+  padding-top: 2px;
+}
+
+.mini-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 21px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  padding: 0 8px;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mini-tag-blue {
+  border-color: rgba(60, 111, 170, 0.2);
+  background: rgba(226, 237, 248, 0.72);
+  color: #1f6fb2;
+}
+
+.mini-tag-green {
+  border-color: rgba(60, 111, 170, 0.2);
+  background: rgba(226, 237, 248, 0.72);
+  color: #1f6fb2;
+}
+
+.mini-tag-amber {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.6);
 }
 
 .status-pill {
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  min-width: 90px;
+  min-width: 78px;
   height: 24px;
-  border-radius: 8px;
+  border-radius: 999px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   border: 1px solid transparent;
 }
 
 .status-primary.status-danger {
-  color: #b91c1c;
-  background: #fee2e2;
-  border-color: #fecaca;
+  color: #dc3545;
+  background: rgba(220, 53, 69, 0.1);
+  border-color: rgba(220, 53, 69, 0.2);
 }
 
 .status-primary.status-warning {
-  color: #b45309;
-  background: #ffedd5;
-  border-color: #fed7aa;
+  color: #9a6200;
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.18);
 }
 
 .status-primary.status-safe {
-  color: #047857;
-  background: #dcfce7;
-  border-color: #bbf7d0;
+  color: #247a3d;
+  background: rgba(40, 167, 69, 0.1);
+  border-color: rgba(40, 167, 69, 0.18);
 }
 
 .status-primary.status-neutral {
-  color: #475569;
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  color: rgba(29, 29, 31, 0.62);
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 .status-secondary {
-  color: #64748b;
-  background: #f8fafc;
-  border-color: #cbd5e1;
-}
-
-.table-actions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  width: 100%;
+  color: rgba(29, 29, 31, 0.6);
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 .action-primary {
-  height: 24px;
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+  height: 28px;
   border-radius: 8px;
   font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  border-color: rgba(0, 102, 204, 0.4);
+  color: #0066cc;
+  box-shadow: none;
 }
 
 .action-secondary {
-  height: 24px;
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+  height: 28px;
   border-radius: 8px;
   font-size: 12px;
+  font-weight: 600;
+  color: rgba(29, 29, 31, 0.62);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+:deep(.modern-table),
+:deep(.modern-table .ant-table),
+:deep(.modern-table .ant-table-container),
+:deep(.modern-table .ant-table-content),
+:deep(.modern-table .ant-table-body) {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:deep(.modern-table .ant-table-cell),
+:deep(.modern-table .ant-table-cell-fix-left),
+:deep(.modern-table .ant-table-cell-fix-right) {
+  background: var(--semantic-table-bg);
 }
 
 :deep(.modern-table .ant-table-thead > tr > th) {
-  background: #f8fafc;
-  color: #475569;
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(29, 29, 31, 0.42);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   font-size: 11px;
   font-weight: 600;
-  padding: 10px 10px;
+  letter-spacing: 0.05em;
+  padding: 11px 16px;
 }
 
 :deep(.modern-table .ant-table-tbody > tr > td) {
-  padding: 12px 10px;
+  background: var(--semantic-table-bg);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 14px 16px;
   vertical-align: top;
-  font-size: 12px;
-  color: #374151;
+  font-size: 13px;
+  color: rgba(29, 29, 31, 0.74);
 }
 
 :deep(.modern-table .ant-table-row:hover > td) {
-  background: #eff6ff;
+  background: var(--semantic-table-hover-bg) !important;
+}
+
+:deep(.modern-table .ant-table-row:hover > .ant-table-cell-fix-left),
+:deep(.modern-table .ant-table-row:hover > .ant-table-cell-fix-right) {
+  background: var(--semantic-table-hover-bg) !important;
+}
+
+:deep(.modern-table .ant-table-tbody > tr:hover > td),
+:deep(.modern-table .ant-table-tbody > tr:hover > td.ant-table-cell-fix-left),
+:deep(.modern-table .ant-table-tbody > tr:hover > td.ant-table-cell-fix-right) {
+  background: var(--semantic-table-hover-bg) !important;
+}
+
+:deep(.modern-table .ant-table-tbody > tr:hover .action-primary),
+:deep(.modern-table .ant-table-tbody > tr:hover .action-secondary) {
+  background: rgba(255, 255, 255, 0.66);
+}
+
+:deep(.modern-table .ant-table-cell-fix-right-first::after),
+:deep(.modern-table .ant-table-cell-fix-right-last::after) {
+  box-shadow: inset -10px 0 8px -8px rgba(0, 0, 0, 0.1);
+}
+
+:deep(.modern-table .ant-table-tbody > tr:hover > .ant-table-cell-fix-right-first::after),
+:deep(.modern-table .ant-table-tbody > tr:hover > .ant-table-cell-fix-right-last::after) {
+  box-shadow: inset -10px 0 8px -8px rgba(0, 0, 0, 0.08);
+}
+
+:deep(.modern-table .ant-table-tbody > tr:hover .action-primary:hover),
+:deep(.modern-table .ant-table-tbody > tr:hover .action-secondary:hover) {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+:deep(.modern-table .ant-table-body::-webkit-scrollbar-track) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:deep(.modern-table .ant-table-body::-webkit-scrollbar-thumb) {
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 999px;
 }
 
 :deep(.modern-table .semantic-rule-row) {
@@ -525,8 +891,11 @@ function buildCustomRow(record: SemanticRuleItem) {
     flex-direction: column;
     align-items: flex-end;
   }
+  .rule-set-picker {
+    justify-content: flex-end;
+  }
   .table-shell-body {
-    min-height: calc(100vh - 320px);
+    min-height: calc(100vh - 300px);
   }
 }
 
@@ -539,6 +908,12 @@ function buildCustomRow(record: SemanticRuleItem) {
     width: 100%;
     flex-direction: row;
     justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .rule-set-picker,
+  .rule-set-select {
+    width: 100%;
   }
   .query-input {
     width: 100%;
@@ -549,5 +924,55 @@ function buildCustomRow(record: SemanticRuleItem) {
   .table-shell-body {
     min-height: calc(100vh - 260px);
   }
+}
+</style>
+
+<style>
+.semantic-rule-select-dropdown {
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricprecision;
+}
+
+.semantic-rule-select-dropdown .ant-select-item {
+  min-height: 34px;
+  padding: 7px 12px;
+  color: rgba(29, 29, 31, 0.78);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: 0;
+}
+
+.semantic-rule-select-dropdown
+  .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.semantic-rule-select-dropdown
+  .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+  font-weight: 600;
+}
+
+.semantic-rule-select-dropdown .ant-select-item-option-content {
+  font-size: inherit;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-weight: inherit;
+  line-height: inherit;
 }
 </style>

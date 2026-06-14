@@ -6,7 +6,7 @@
           <span class="heading-icon"><PartitionOutlined /></span>
           <div>
             <h2>分组条件</h2>
-            <p>DIP 泸州版，录入诊断、手术和费用信息执行病种模拟。</p>
+            <p>DIP 泸州版，录入诊断、手术和费用信息执行病种试算。</p>
           </div>
         </div>
       </header>
@@ -14,7 +14,7 @@
       <div class="condition-body">
         <div class="form-section">
           <div class="section-title">
-            <span class="section-title-main"><InfoCircleOutlined />模拟口径</span>
+            <span class="section-title-main"><InfoCircleOutlined />试算口径</span>
           </div>
           <div class="field-grid">
             <label class="field-card">
@@ -179,7 +179,7 @@
             </label>
           </div>
           <p class="field-help">
-            费用信息用于页面模拟摘要，不参与本地 DIP 病种匹配。
+            费用信息用于页面试算摘要，不参与本地 DIP 病种匹配。
           </p>
         </div>
       </div>
@@ -190,7 +190,7 @@
           type="button"
           @click="fillTestCase"
         >
-          填入示例
+          填入样例
         </button>
         <button
           class="secondary-button"
@@ -217,11 +217,11 @@
         <div class="panel-title">
           <span class="heading-icon"><BarChartOutlined /></span>
           <div>
-            <h2>模拟结果</h2>
+            <h2>试算结果</h2>
             <p>结构化展示 DIP 编码、分值、病种属性和费用摘要。</p>
           </div>
         </div>
-        <span class="simulate-chip"><AlertOutlined />仅模拟</span>
+        <span class="simulate-chip"><AlertOutlined />只读试算</span>
       </header>
 
       <div class="result-body">
@@ -240,7 +240,7 @@
         >
           <LoadingOutlined class="spin-icon" />
           <h3>正在执行入组</h3>
-          <p>系统正在按泸州 DIP 病种库匹配模拟结果。</p>
+          <p>系统正在按泸州 DIP 病种库匹配试算结果。</p>
         </div>
 
         <div
@@ -254,7 +254,7 @@
                 <CloseCircleOutlined v-else />
               </span>
               <div>
-                <h3>{{ result.status === '分组成功' ? 'DIP 模拟结果' : '未能入组' }}</h3>
+                <h3>{{ result.status === '分组成功' ? 'DIP 试算结果' : '未能入组' }}</h3>
                 <p>泸州版 DIP</p>
               </div>
             </div>
@@ -328,7 +328,7 @@
           <span class="heading-icon"><ApartmentOutlined /></span>
           <div>
             <h3>入组路径解释</h3>
-            <p>按诊断校验、手术匹配、病种确定、分值读取解释模拟过程。</p>
+            <p>按诊断校验、手术匹配、病种确定、分值读取解释试算过程。</p>
           </div>
         </div>
       </header>
@@ -546,7 +546,7 @@ function fillTestCase() {
   formData.zdList = ['K80.501']
   formData.ssList = ['51.8803']
   result.value = null
-  message.success('已填入示例病案')
+  message.success('已填入样例病案')
 }
 
 function formatMoney(value: number) {

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 RiskLevel = Literal["low", "medium", "high"]
@@ -47,12 +47,132 @@ class QCAgentChatRequest(BaseModel):
     dry_run: bool = False
 
 
+class QCAgentParsedIntent(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    task_type: Optional[str] = None
+    capability: Optional[str] = None
+    result_type: Optional[str] = None
+    confidence: Optional[float] = None
+    visit_id: str = ""
+    patient_id: str = ""
+    mr_no: str = ""
+    patient_name: str = ""
+    department: str = ""
+    document_alias: Optional[str] = None
+    document_type: Optional[str] = None
+    qc_point_type: Optional[str] = None
+    rule_ids: List[str] = Field(default_factory=list)
+    source: Optional[str] = None
+    icd_query: str = ""
+    code_type: Optional[str] = None
+    version: Optional[str] = None
+    include_procedures: Optional[bool] = None
+    pdx_code: str = ""
+    adx_codes: List[str] = Field(default_factory=list)
+    proc_codes: List[str] = Field(default_factory=list)
+    primary_diagnosis_code: str = ""
+    secondary_diagnosis_codes: List[str] = Field(default_factory=list)
+    procedure_codes: List[str] = Field(default_factory=list)
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
+    los: Optional[int] = None
+    total_fee: Optional[float] = None
+    total_cost: Optional[float] = None
+    intent_router: Optional[str] = None
+    unsupported: bool = False
+
+
+class QCAgentPlanStep(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    tool_name: str = ""
+    status: str = ""
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    elapsed_ms: Optional[int] = None
+    error: Optional[str] = None
+
+
+class QCAgentCard(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    card_type: str
+    title: str = ""
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    items: List[Dict[str, Any]] = Field(default_factory=list)
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
+class QCAgentResultEnvelope(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    result_type: str
+    title: str = ""
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    cards: List[QCAgentCard] = Field(default_factory=list)
+    actions: List[Dict[str, Any]] = Field(default_factory=list)
+    raw_kind: str = ""
+
+
+class QCRulesResult(QCAgentResultEnvelope):
+    result_type: Literal["qc_rules_catalog"] = "qc_rules_catalog"
+
+
+class DocumentQCResult(QCAgentResultEnvelope):
+    result_type: Literal["document_qc_report"] = "document_qc_report"
+
+
+class ICDCandidatesResult(QCAgentResultEnvelope):
+    result_type: Literal["icd_candidates"] = "icd_candidates"
+
+
+class RecordICDSuggestionsResult(QCAgentResultEnvelope):
+    result_type: Literal["record_icd_suggestions"] = "record_icd_suggestions"
+
+
+class DIPGroupResult(QCAgentResultEnvelope):
+    result_type: Literal["dip_grouping_result"] = "dip_grouping_result"
+
+
+class DRGGroupResult(QCAgentResultEnvelope):
+    result_type: Literal["drg_grouping_result"] = "drg_grouping_result"
+
+
+class QCAgentHealthResponse(BaseModel):
+    intent_router_enabled: bool
+    endpoint_configured: bool
+    api_key_configured: bool
+    model: str = ""
+    last_check_status: str = "unknown"
+    last_error_summary: str = ""
+    degraded_reason: str = ""
+    can_chat_execute: bool = False
+
+
+class QCAgentSessionCreateRequest(BaseModel):
+    session_id: Optional[str] = None
+    user_context: Optional[Dict[str, Any]] = None
+    title: Optional[str] = None
+
+
+class QCAgentSessionResponse(BaseModel):
+    session_id: str
+    status: str = "active"
+    current_visit_id: str = ""
+    current_patient_id: str = ""
+    title: str = ""
+    messages: List[Dict[str, Any]] = Field(default_factory=list)
+    pending_confirmation: Optional[Dict[str, Any]] = None
+
+
 class QCAgentChatResponse(BaseModel):
     status: Literal["completed", "needs_clarification", "needs_confirmation", "unsupported"]
-    parsed_intent: Dict[str, Any] = Field(default_factory=dict)
-    plan: List[Dict[str, Any]] = Field(default_factory=list)
+    parsed_intent: QCAgentParsedIntent = Field(default_factory=QCAgentParsedIntent)
+    plan: List[QCAgentPlanStep] = Field(default_factory=list)
     candidates: List[Dict[str, Any]] = Field(default_factory=list)
-    result: Optional[Dict[str, Any]] = None
+    result: Optional[QCAgentResultEnvelope] = None
+    legacy_result: Optional[Dict[str, Any]] = None
     warnings: List[str] = Field(default_factory=list)
     run_id: str
     session_id: Optional[str] = None

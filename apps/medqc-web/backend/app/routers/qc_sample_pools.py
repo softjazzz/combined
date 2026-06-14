@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from ..core.response import get_trace_id, success_response
@@ -26,6 +27,8 @@ from ..services.sample_validation_rule_sets import (
     FORMAL_FAST_SCREEN_FULL_MODE,
     FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
     get_sample_programmatic_rule_set,
+    list_sample_validation_rule_sets,
+    resolve_sample_validation_rule_set_by_key,
     resolve_sample_validation_pseudo_draft,
 )
 from ..services.qc_rule_sets import get_sichuan_rule_set
@@ -44,6 +47,12 @@ _FAST_SCREEN_FULL_RULE_ID_SET = {str(item).strip().upper() for item in get_fast_
 _SHEET2_EXACT_REVIEW_ACCEPTANCE_JSON = (
     Path(__file__).resolve().parents[3] / "docs" / "0418" / "QC" / "sheet2_exact_review_acceptance_package.json"
 )
+_LUXIAN_0609_REPORT_DIR = Path(__file__).resolve().parents[3] / "docs" / "0602"
+_LUXIAN_0609_REPORT_FILES = {
+    "md": ("泸县0609质控点评估报告.md", "text/markdown; charset=utf-8"),
+    "csv": ("luxian_0609_qc_eval.csv", "text/csv; charset=utf-8"),
+    "json": ("luxian_0609_qc_eval.json", "application/json; charset=utf-8"),
+}
 
 
 def _service() -> CustomQCSamplePoolService:
@@ -244,6 +253,38 @@ async def get_sheet2_exact_review_acceptance_package(
     )
 
 
+@router.get("/rule-sets")
+async def list_sample_validation_rule_set_catalog(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    return success_response(
+        data={"items": list_sample_validation_rule_sets()},
+        message="获取客户样本验证规则集成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.get("/reports/luxian-0609")
+async def download_luxian_0609_evaluation_report(
+    request: Request,
+    format: str = Query(default="md", description="导出格式：md/csv/json"),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    normalized_format = str(format or "md").strip().lower()
+    if normalized_format not in _LUXIAN_0609_REPORT_FILES:
+        raise HTTPException(status_code=422, detail="仅支持导出 md、csv 或 json 格式")
+    filename, media_type = _LUXIAN_0609_REPORT_FILES[normalized_format]
+    file_path = _LUXIAN_0609_REPORT_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="泸县0609质控点评估报告尚未生成")
+    return FileResponse(
+        path=str(file_path),
+        media_type=media_type,
+        filename=filename,
+    )
+
+
 @router.get("/{pool_id}")
 async def get_sample_pool(
     request: Request,
@@ -429,7 +470,16 @@ async def run_sample_pool_intrinsic_validation(
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
 
+    requested_rule_set_key = str(payload.rule_set_key or "").strip()
+    resolved_rule_set = None
     validation_mode = str(payload.validation_mode or "customer").strip().lower() or "customer"
+    if requested_rule_set_key:
+        try:
+            resolved = resolve_sample_validation_rule_set_by_key(requested_rule_set_key)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        validation_mode = str(resolved["validation_mode"])
+        resolved_rule_set = resolved["rule_set"]
     if validation_mode not in {"customer", "sc", "programmatic", FORMAL_FAST_SCREEN_FULL_MODE}:
         raise HTTPException(status_code=422, detail="未知验证模式，仅支持 customer、sc、programmatic 或 formal_fast_screen_full")
     is_formal_fast_screen_full = validation_mode == FORMAL_FAST_SCREEN_FULL_MODE
@@ -462,7 +512,7 @@ async def run_sample_pool_intrinsic_validation(
         }
     )
     record_rule_map: Dict[str, list[str]] = {}
-    if not is_formal_fast_screen_full:
+    if not is_formal_fast_screen_full and resolved_rule_set is None:
         for item in runnable_items:
             record_id = str(item.get("matched_visit_id") or "").strip()
             if not record_id:
@@ -475,11 +525,17 @@ async def run_sample_pool_intrinsic_validation(
     if not record_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有已匹配的病历")
 
-    if validation_mode == "customer":
-        requested_rule_set_key = str(payload.rule_set_key or CUSTOMER_LUXIAN_RULE_SET_KEY).strip() or CUSTOMER_LUXIAN_RULE_SET_KEY
-        if requested_rule_set_key != CUSTOMER_LUXIAN_RULE_SET_KEY:
-            raise HTTPException(status_code=422, detail=f"未知客户规则包: {requested_rule_set_key}")
-        customer_rule_set = get_customer_luxian_rule_set()
+    if resolved_rule_set is not None:
+        rule_ids = [str(rule_id).strip() for rule_id in resolved_rule_set.rule_ids if str(rule_id).strip()]
+        rule_set_key = resolved_rule_set.key
+        rule_set_name = resolved_rule_set.name
+        rule_set_version = resolved_rule_set.version
+    elif validation_mode == "customer":
+        effective_rule_set_key = requested_rule_set_key or CUSTOMER_LUXIAN_RULE_SET_KEY
+        if effective_rule_set_key == CUSTOMER_LUXIAN_RULE_SET_KEY:
+            customer_rule_set = get_customer_luxian_rule_set()
+        else:
+            raise HTTPException(status_code=422, detail=f"未知客户规则包: {effective_rule_set_key}")
         rule_ids = sorted({str(rule_id).strip() for rule_id in customer_rule_set.rule_ids if str(rule_id).strip()})
         rule_set_key = customer_rule_set.key
         rule_set_name = customer_rule_set.name
@@ -503,10 +559,12 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_name = programmatic_rule_set.name
         rule_set_version = programmatic_rule_set.version
     else:
-        requested_rule_set_key = str(payload.rule_set_key or FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY).strip() or FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY
+        requested_rule_set_key = requested_rule_set_key or FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY
         if requested_rule_set_key != FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY:
             raise HTTPException(status_code=422, detail=f"正式质控 84 条仅支持规则集: {FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY}")
         formal_rule_set = get_sichuan_rule_set(FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY)
+        if not formal_rule_set:
+            raise HTTPException(status_code=422, detail=f"未知规则集: {FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY}")
         rule_ids = [str(rule_id).strip() for rule_id in formal_rule_set.rule_ids if str(rule_id).strip()]
         rule_set_key = formal_rule_set.key
         rule_set_name = formal_rule_set.name
@@ -526,7 +584,7 @@ async def run_sample_pool_intrinsic_validation(
     workspace = _workspace_service()
     requested_scope = "final" if is_formal_fast_screen_full else str(pool.get("scene") or "running").strip().lower() or "running"
     effective_scope = requested_scope
-    records = workspace.collect_records(
+    record_count = workspace.count_records(
         scope=effective_scope,
         department=payload.department,
         doctor=payload.doctor,
@@ -536,10 +594,10 @@ async def run_sample_pool_intrinsic_validation(
         keyword=None,
         record_ids=record_ids,
     )
-    if not records and is_formal_fast_screen_full:
+    if record_count == 0 and is_formal_fast_screen_full:
         raise HTTPException(status_code=422, detail="选中病历未同步为终末病历，无法发起正式终末质控")
-    if not records and record_ids and effective_scope != "all":
-        fallback_records = workspace.collect_records(
+    if record_ids and effective_scope != "all" and record_count < len(record_ids):
+        fallback_record_count = workspace.count_records(
             scope="all",
             department=payload.department,
             doctor=payload.doctor,
@@ -549,22 +607,25 @@ async def run_sample_pool_intrinsic_validation(
             keyword=None,
             record_ids=record_ids,
         )
-        if fallback_records:
-            records = fallback_records
+        if fallback_record_count > record_count:
+            record_count = fallback_record_count
             effective_scope = "all"
-    if not records:
+    if record_count == 0:
         raise HTTPException(status_code=422, detail="样本池匹配病历未同步到当前 PG，无法执行")
 
     pseudo_draft = resolve_sample_validation_pseudo_draft(
         validation_mode=validation_mode,
         pool_name=str(pool.get("name") or ""),
         rule_count=len(rule_ids),
+        rule_set_key=rule_set_key,
+        rule_set_name=rule_set_name,
     )
     job_filters = {
         "rule_ids": rule_ids,
         "rule_set_key": rule_set_key,
         "rule_set_name": rule_set_name,
         "rule_set_version": rule_set_version,
+        "rule_count": len(rule_ids),
         "execution_strategy": execution_strategy,
         "quality_profile": "throughput_v1",
         "bucket_strategy": "fixed_packs",
@@ -597,7 +658,7 @@ async def run_sample_pool_intrinsic_validation(
         scope=effective_scope,
         filters=job_filters,
         record_ids=record_ids,
-        total_records=len(records),
+        total_records=record_count,
         draft_ids=rule_ids,
         execution_mode="multi",
         run_mode="parallel",
@@ -611,7 +672,7 @@ async def run_sample_pool_intrinsic_validation(
             "job_id": job["id"],
             "sample_item_count": len(runnable_items),
             "selected_record_count": len(requested_record_ids),
-            "record_count": len(record_ids),
+            "record_count": record_count,
             "rule_count": len(rule_ids),
             "record_ids": record_ids,
             "rule_ids": rule_ids,

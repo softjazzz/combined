@@ -3,21 +3,12 @@
     <div class="payment-monitoring-shell">
       <header class="payment-header">
         <div class="payment-title-block">
-          <button
-            type="button"
-            class="back-button"
-            aria-label="返回"
-            @click="$router.back()"
-          >
+          <button type="button" class="back-button" aria-label="返回" @click="$router.back()">
             <ArrowLeftOutlined />
           </button>
           <div>
-            <div class="payment-eyebrow">
-              DRG/DIP · PAYMENT
-            </div>
-            <h2 class="payment-title">
-              付费监测
-            </h2>
+            <div class="payment-eyebrow">DRG/DIP · PAYMENT</div>
+            <h2 class="payment-title">付费监测</h2>
             <p class="payment-subtitle">
               按分组支付、实际费用、盈亏风险和控费边界复核病例付费表现。
             </p>
@@ -29,11 +20,7 @@
             <span>数据口径</span>
             <strong>{{ dataScopeLabel }}</strong>
           </div>
-          <button
-            type="button"
-            class="standard-config-button"
-            @click="configDrawerOpen = true"
-          >
+          <button type="button" class="standard-config-button" @click="configDrawerOpen = true">
             <SettingOutlined />
             付费标准配置
           </button>
@@ -45,11 +32,7 @@
           >
             {{ backendLoading ? '测算中' : '后端测算' }}
           </button>
-          <a-select
-            v-model:value="deptFilter"
-            class="filter-control"
-            size="middle"
-          >
+          <a-select v-model:value="deptFilter" class="filter-control" size="middle">
             <a-select-option
               v-for="option in activeDeptOptions"
               :key="option.value"
@@ -65,21 +48,12 @@
           <a-dropdown>
             <template #overlay>
               <a-menu @click="handleExport">
-                <a-menu-item key="excel">
-                  <FileExcelOutlined /> 导出 Excel
-                </a-menu-item>
-                <a-menu-item key="pdf">
-                  <FilePdfOutlined /> 导出 PDF
-                </a-menu-item>
-                <a-menu-item key="word">
-                  <FileWordOutlined /> 导出 Word
-                </a-menu-item>
+                <a-menu-item key="excel"> <FileExcelOutlined /> 导出 Excel </a-menu-item>
+                <a-menu-item key="pdf"> <FilePdfOutlined /> 导出 PDF </a-menu-item>
+                <a-menu-item key="word"> <FileWordOutlined /> 导出 Word </a-menu-item>
               </a-menu>
             </template>
-            <button
-              type="button"
-              class="export-button"
-            >
+            <button type="button" class="export-button">
               <DownloadOutlined />
               导出报告
             </button>
@@ -87,15 +61,14 @@
         </div>
       </header>
 
-      <DatasetUploadPanel
-        class="dataset-upload-surface"
-        @data-changed="handleDatasetChanged"
-      />
+      <DatasetUploadPanel class="dataset-upload-surface" @data-changed="handleDatasetChanged" />
 
       <section class="standard-summary-panel">
         <div class="standard-summary-main">
           <span class="standard-status">地方付费标准库</span>
-          <strong>{{ paymentStandardForm.regionName }} · {{ paymentStandardForm.schemeName }}</strong>
+          <strong
+            >{{ paymentStandardForm.regionName }} · {{ paymentStandardForm.schemeName }}</strong
+          >
           <p>
             DIP 点值 {{ paymentStandardForm.dipPointValue }} 元/分，DRG 基准费率
             {{ paymentStandardForm.baseRate }} 元，医院系数
@@ -125,10 +98,7 @@
           <div class="config-form-grid">
             <label class="config-field config-field-wide">
               <span>地区名称</span>
-              <a-input
-                v-model:value="paymentStandardForm.regionName"
-                placeholder="例如：泸州"
-              />
+              <a-input v-model:value="paymentStandardForm.regionName" placeholder="例如：泸州" />
             </label>
 
             <label class="config-field config-field-wide">
@@ -211,11 +181,7 @@
           </div>
 
           <div class="drawer-actions">
-            <button
-              type="button"
-              class="secondary-action"
-              @click="resetPaymentStandardConfig"
-            >
+            <button type="button" class="secondary-action" @click="resetPaymentStandardConfig">
               恢复默认
             </button>
             <button
@@ -230,10 +196,7 @@
         </div>
       </a-drawer>
 
-      <div
-        v-if="!drgMockEnabled && !hasUploadedData"
-        class="data-warning"
-      >
+      <div v-if="!drgMockEnabled && !hasUploadedData" class="data-warning">
         {{ backendStatusText }}
       </div>
 
@@ -269,10 +232,7 @@
         <article class="kpi-card kpi-card-red">
           <div class="kpi-content">
             <span class="kpi-label">预计盈亏</span>
-            <div
-              class="kpi-value-row"
-              :class="overview.profit >= 0 ? 'is-profit' : 'is-loss'"
-            >
+            <div class="kpi-value-row" :class="overview.profit >= 0 ? 'is-profit' : 'is-loss'">
               <strong>{{ formatWanSigned(overview.profit) }}</strong>
               <span>万元</span>
             </div>
@@ -306,16 +266,9 @@
               <h3>费用与支付趋势</h3>
               <p>实际费用、预计医保支付与支付率同屏观察</p>
             </div>
-            <a-segmented
-              v-model:value="trendScope"
-              :options="trendScopeOptions"
-              size="small"
-            />
+            <a-segmented v-model:value="trendScope" :options="trendScopeOptions" size="small" />
           </div>
-          <div
-            ref="paymentTrendRef"
-            class="trend-chart"
-          />
+          <div ref="paymentTrendRef" class="trend-chart" />
         </div>
 
         <div class="analysis-panel risk-panel">
@@ -324,13 +277,7 @@
               <h3>亏损风险洞察</h3>
               <p>按当前科室筛选汇总亏损金额 Top4</p>
             </div>
-            <button
-              type="button"
-              class="text-action"
-              @click="statusFilter = 'loss'"
-            >
-              详情
-            </button>
+            <button type="button" class="text-action" @click="statusFilter = 'loss'">详情</button>
           </div>
 
           <div class="risk-table">
@@ -341,11 +288,7 @@
               <span>亏损金额</span>
               <span>占比</span>
             </div>
-            <div
-              v-for="item in lossRiskInsights"
-              :key="item.caseNo"
-              class="risk-row"
-            >
+            <div v-for="item in lossRiskInsights" :key="item.caseNo" class="risk-row">
               <span class="risk-rank">{{ item.rank }}</span>
               <div class="risk-reason">
                 <strong>{{ item.reason }}</strong>
@@ -357,12 +300,7 @@
               <span class="risk-amount">{{ formatWan(item.lossAmount) }}</span>
               <span class="risk-percent">{{ item.percent.toFixed(1) }}%</span>
             </div>
-            <div
-              v-if="!lossRiskInsights.length"
-              class="risk-empty"
-            >
-              当前筛选下暂无亏损病例。
-            </div>
+            <div v-if="!lossRiskInsights.length" class="risk-empty">当前筛选下暂无亏损病例。</div>
           </div>
         </div>
       </section>
@@ -375,24 +313,11 @@
               <p>{{ tableSummaryLabel }}</p>
             </div>
             <div class="detail-filters">
-              <a-segmented
-                v-model:value="groupFilter"
-                :options="paymentMonitoringGroupOptions"
-              />
-              <a-select
-                v-model:value="statusFilter"
-                class="status-filter"
-                size="small"
-              >
-                <a-select-option value="all">
-                  全部状态
-                </a-select-option>
-                <a-select-option value="profit">
-                  盈余
-                </a-select-option>
-                <a-select-option value="loss">
-                  亏损
-                </a-select-option>
+              <a-segmented v-model:value="groupFilter" :options="paymentMonitoringGroupOptions" />
+              <a-select v-model:value="statusFilter" class="status-filter" size="small">
+                <a-select-option value="all"> 全部状态 </a-select-option>
+                <a-select-option value="profit"> 盈余 </a-select-option>
+                <a-select-option value="loss"> 亏损 </a-select-option>
               </a-select>
             </div>
           </div>
@@ -412,10 +337,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr
-                  v-for="item in filteredRows"
-                  :key="item.id"
-                >
+                <tr v-for="item in filteredRows" :key="item.id">
                   <td>
                     <div class="case-cell">
                       <span>{{ item.caseNo }}</span>
@@ -450,12 +372,7 @@
                   </td>
                 </tr>
                 <tr v-if="!filteredRows.length">
-                  <td
-                    colspan="8"
-                    class="empty-cell"
-                  >
-                    当前筛选下暂无数据
-                  </td>
+                  <td colspan="8" class="empty-cell">当前筛选下暂无数据</td>
                 </tr>
               </tbody>
             </table>
@@ -485,9 +402,7 @@
               </span>
             </button>
           </div>
-          <div class="advice-footnote">
-            数据截至：{{ trendDateRangeLabel }}
-          </div>
+          <div class="advice-footnote">数据截至：{{ trendDateRangeLabel }}</div>
         </aside>
       </section>
     </div>
@@ -1002,8 +917,8 @@ function renderPaymentTrendChart() {
         data: paymentMonitoringTrend.map((point) => point.actualCost),
         type: 'line',
         smooth: true,
-        lineStyle: { color: '#3b82f6', width: 2 },
-        itemStyle: { color: '#3b82f6' },
+        lineStyle: { color: '#0066cc', width: 2 },
+        itemStyle: { color: '#0066cc' },
       },
       {
         name: '医保支付',
@@ -1053,13 +968,22 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+@import './drg-dip-workbench.css';
+
 .payment-monitoring-page {
   height: 100%;
   width: 100%;
   overflow-y: auto;
-  background: #f5f9fc;
-  color: #0f172a;
-  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .payment-monitoring-shell {
@@ -1076,9 +1000,13 @@ onUnmounted(() => {
 .analysis-panel,
 .detail-panel,
 .advice-panel {
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 14px 34px rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
 }
 
 .payment-header {
@@ -1104,10 +1032,10 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  border: 1px solid #dbe5f0;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
   background: #ffffff;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   cursor: pointer;
   transition:
     color 0.18s ease,
@@ -1117,28 +1045,28 @@ onUnmounted(() => {
 
 .back-button:hover {
   border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #2563eb;
+  background: rgba(0, 102, 204, 0.06);
+  color: #0066cc;
 }
 
 .payment-eyebrow {
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 16px;
 }
 
 .payment-title {
   margin: 2px 0 0;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 26px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 34px;
 }
 
 .payment-subtitle {
   margin: 2px 0 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
   line-height: 20px;
 }
@@ -1156,20 +1084,20 @@ onUnmounted(() => {
   height: 36px;
   align-items: center;
   justify-content: center;
-  border: 1px solid #bfdbfe;
+  border: 1px solid rgba(0, 102, 204, 0.16);
   border-radius: 10px;
-  background: #eff6ff;
-  color: #2563eb;
+  background: rgba(0, 102, 204, 0.06);
+  color: #0066cc;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   padding: 0 14px;
   transition: all 0.18s ease;
 }
 
 .backend-sync-button:hover:not(:disabled) {
   border-color: #93c5fd;
-  background: #dbeafe;
+  background: rgba(0, 102, 204, 0.1);
 }
 
 .backend-sync-button:disabled {
@@ -1183,21 +1111,21 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid #dbe5f0;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
   background: #ffffff;
-  color: #334155;
+  color: rgba(29, 29, 31, 0.68);
   cursor: pointer;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   padding: 0 14px;
   transition: all 0.18s ease;
 }
 
 .standard-config-button:hover {
   border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #2563eb;
+  background: rgba(0, 102, 204, 0.06);
+  color: #0066cc;
 }
 
 .filter-chip {
@@ -1219,7 +1147,7 @@ onUnmounted(() => {
 }
 
 .filter-chip strong {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
   font-weight: 700;
 }
@@ -1246,7 +1174,7 @@ onUnmounted(() => {
   gap: 8px;
   border: 0;
   border-radius: 8px;
-  background: #2563eb;
+  background: #0066cc;
   padding: 0 14px;
   color: #ffffff;
   font-size: 13px;
@@ -1284,9 +1212,9 @@ onUnmounted(() => {
   align-items: center;
   border-radius: 999px;
   background: #eaf2ff;
-  color: #2563eb;
+  color: #0066cc;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 18px;
   padding: 2px 8px;
 }
@@ -1294,9 +1222,9 @@ onUnmounted(() => {
 .standard-summary-main strong {
   display: block;
   margin-top: 8px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 22px;
 }
 
@@ -1340,9 +1268,9 @@ onUnmounted(() => {
 }
 
 .drawer-intro strong {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 22px;
 }
 
@@ -1373,7 +1301,7 @@ onUnmounted(() => {
 .config-field span {
   color: #334155;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 18px;
 }
 
@@ -1394,12 +1322,12 @@ onUnmounted(() => {
 .config-preview span {
   color: #64748b;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 18px;
 }
 
 .config-preview strong {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
   font-weight: 700;
   line-height: 20px;
@@ -1422,13 +1350,13 @@ onUnmounted(() => {
   border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   padding: 0 14px;
 }
 
 .primary-action {
-  border: 1px solid #2563eb;
-  background: #2563eb;
+  border: 1px solid #0066cc;
+  background: #0066cc;
   color: #ffffff;
 }
 
@@ -1473,7 +1401,7 @@ onUnmounted(() => {
 }
 
 .kpi-card-blue {
-  border-left: 3px solid #2563eb;
+  border-left: 3px solid #0066cc;
 }
 
 .kpi-card-green {
@@ -1505,12 +1433,12 @@ onUnmounted(() => {
   align-items: baseline;
   gap: 6px;
   margin-top: 8px;
-  color: #0f172a;
+  color: #1d1d1f;
 }
 
 .kpi-value-row strong {
   font-size: 28px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 34px;
 }
 
@@ -1544,7 +1472,7 @@ onUnmounted(() => {
   flex: 0 0 auto;
   border-radius: 50%;
   background: #eff6ff;
-  color: #2563eb;
+  color: #0066cc;
   font-size: 18px;
 }
 
@@ -1575,9 +1503,9 @@ onUnmounted(() => {
 .panel-heading h3,
 .detail-toolbar h3 {
   margin: 0;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 24px;
 }
 
@@ -1597,7 +1525,7 @@ onUnmounted(() => {
 .text-action {
   border: 0;
   background: transparent;
-  color: #2563eb;
+  color: #0066cc;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
@@ -1633,7 +1561,7 @@ onUnmounted(() => {
 .risk-rank {
   color: #ef4444;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .risk-reason {
@@ -1761,7 +1689,7 @@ onUnmounted(() => {
 
 .case-cell span,
 .rate-cell span {
-  color: #0f172a;
+  color: #1d1d1f;
   font-weight: 700;
 }
 
@@ -1773,12 +1701,12 @@ onUnmounted(() => {
 
 .money-profit {
   color: #10b981;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .money-loss {
   color: #ef4444;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .advice-panel {
@@ -1819,8 +1747,8 @@ onUnmounted(() => {
   justify-content: center;
   border-radius: 50%;
   background: #eaf2ff;
-  color: #2563eb;
-  font-weight: 800;
+  color: #0066cc;
+  font-weight: 700;
 }
 
 .advice-copy {
@@ -1831,9 +1759,9 @@ onUnmounted(() => {
 }
 
 .advice-copy strong {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 18px;
 }
 
@@ -1847,6 +1775,163 @@ onUnmounted(() => {
   margin-top: 16px;
   color: #64748b;
   font-size: 12px;
+}
+
+.payment-monitoring-page {
+  --workstation-canvas: #f5f5f7;
+  --workstation-surface: rgba(255, 255, 255, 0.86);
+  --workstation-surface-strong: rgba(255, 255, 255, 0.94);
+  --workstation-border: rgba(0, 0, 0, 0.08);
+  --workstation-text: #1d1d1f;
+  --workstation-muted: rgba(29, 29, 31, 0.6);
+  --workstation-subtle: rgba(29, 29, 31, 0.38);
+  --workstation-primary: #0066cc;
+  --workstation-primary-soft: rgba(0, 102, 204, 0.1);
+
+  background: var(--workstation-canvas);
+  color: var(--workstation-text);
+  font-family:
+    'San Francisco', 'SF Pro Text', 'Source Han Sans SC', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.payment-header,
+.standard-summary-panel,
+.analysis-panel,
+.detail-panel,
+.advice-panel,
+.kpi-card {
+  border: 1px solid var(--workstation-border);
+  background: var(--workstation-surface);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+}
+
+.payment-header,
+.analysis-panel,
+.detail-panel,
+.advice-panel {
+  border-radius: 20px;
+}
+
+.standard-summary-panel,
+.kpi-card {
+  border-radius: 16px;
+}
+
+.payment-header:hover,
+.standard-summary-panel:hover,
+.analysis-panel:hover,
+.detail-panel:hover,
+.advice-panel:hover,
+.kpi-card:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+}
+
+.payment-eyebrow,
+.filter-chip span,
+.payment-subtitle,
+.standard-summary-main p,
+.panel-heading p,
+.detail-toolbar p,
+.kpi-content p,
+.advice-footnote,
+.risk-reason small {
+  color: var(--workstation-muted);
+}
+
+.payment-title,
+.filter-chip strong,
+.standard-summary-main strong,
+.config-preview strong,
+.panel-heading h3,
+.detail-toolbar h3,
+.kpi-value-row,
+.risk-reason strong,
+.advice-copy strong {
+  color: var(--workstation-text);
+}
+
+.back-button,
+.standard-config-button,
+.secondary-action,
+.standard-summary-meta span,
+.filter-chip {
+  border-color: var(--workstation-border);
+  background: var(--workstation-surface-strong);
+  color: var(--workstation-muted);
+}
+
+.back-button:hover,
+.standard-config-button:hover,
+.secondary-action:hover {
+  border-color: rgba(0, 102, 204, 0.22);
+  background: var(--workstation-primary-soft);
+  color: var(--workstation-primary);
+}
+
+.backend-sync-button,
+.scope-chip,
+.standard-status,
+.text-action,
+.case-link,
+.link-button,
+.priority-action {
+  color: var(--workstation-primary);
+}
+
+.backend-sync-button,
+.scope-chip,
+.standard-status {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: var(--workstation-primary-soft);
+}
+
+.export-button,
+.primary-action {
+  border-color: var(--workstation-primary);
+  background: var(--workstation-primary);
+  box-shadow: 0 4px 10px rgba(0, 102, 204, 0.16);
+}
+
+.export-button:hover,
+.primary-action:hover {
+  background: #0057b8;
+}
+
+.kpi-card-blue {
+  border-left-color: var(--workstation-primary);
+}
+
+.kpi-icon {
+  background: var(--workstation-primary-soft);
+  color: var(--workstation-primary);
+}
+
+.risk-head,
+.risk-row,
+.case-list th,
+.case-list td {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.risk-head,
+.case-list th {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--workstation-subtle);
+}
+
+.risk-row:hover,
+.case-list tbody tr:hover {
+  background: rgba(0, 0, 0, 0.025);
 }
 
 @media (max-width: 1279px) {

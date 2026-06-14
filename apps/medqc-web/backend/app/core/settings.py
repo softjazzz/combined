@@ -112,6 +112,12 @@ class Settings(BaseSettings):
     SQLBOT_APP_ID: Optional[str] = None
     SQLBOT_TIMEOUT_SECONDS: int = 30
 
+    # QC Agent LLM intent router
+    # 仅用于把自然语言解析为受限工具意图，不允许直接执行工具或返回原始模型内容。
+    QC_AGENT_LLM_INTENT_ENABLED: bool = True
+    QC_AGENT_LLM_INTENT_TIMEOUT_SECONDS: int = 8
+    QC_AGENT_LLM_INTENT_MIN_CONFIDENCE: float = 0.55
+
     # LLM API Configuration (unified naming; compatible with legacy SICHUAN_* env vars)
     LLM_API_ENDPOINT: Optional[AnyHttpUrl] = Field(
         default="https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -152,6 +158,8 @@ class Settings(BaseSettings):
     LLM_VISIBLE_PROVIDERS: List[str] = Field(default_factory=list)
     DEEPSEEK_API_ENDPOINT: str = "https://api.deepseek.com"
     DEEPSEEK_API_KEY: Optional[str] = None
+    DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    DASHSCOPE_API_KEY: Optional[str] = None
     SILICONFLOW_API_ENDPOINT: str = "https://api.siliconflow.cn/v1"
     SILICONFLOW_API_KEY: Optional[str] = None
     OLLAMA_API_ENDPOINT: str = "http://127.0.0.1:11434/v1"

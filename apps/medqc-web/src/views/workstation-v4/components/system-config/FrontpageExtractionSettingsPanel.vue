@@ -305,6 +305,10 @@ onMounted(() => {
 <style scoped>
 .ds-root {
   max-width: 1100px;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 .ds-split {
@@ -323,26 +327,43 @@ onMounted(() => {
 .ds-section-title {
   font-size: 16px;
   font-weight: 700;
-  color: #0f172a;
+  color: #1d1d1f;
   margin: 0 0 6px;
 }
 
 .ds-section-desc {
   margin: 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
   line-height: 1.7;
 }
 
 .ds-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
   overflow: hidden;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.ds-card:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
 }
 
 .ds-divide > * {
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .ds-divide > *:last-child {
@@ -356,9 +377,8 @@ onMounted(() => {
 .ds-group__title {
   font-size: 13px;
   font-weight: 700;
-  color: #64748b;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: rgba(29, 29, 31, 0.56);
+  letter-spacing: 0;
   padding: 10px 18px;
 }
 
@@ -376,14 +396,14 @@ onMounted(() => {
 
 .ds-row__label {
   font-size: 14px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-weight: 600;
 }
 
 .ds-row__hint {
   margin-top: 2px;
   font-size: 12px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.42);
 }
 
 .ds-card__footer {
@@ -391,8 +411,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
+  background: rgba(245, 245, 247, 0.68);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .ds-actions {
@@ -403,6 +423,45 @@ onMounted(() => {
 
 .ds-footer-meta {
   font-size: 12px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.42);
+}
+
+.ds-root :deep(.ant-btn) {
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.ds-root :deep(.ant-btn-primary) {
+  background: #0066cc;
+  border-color: #0066cc;
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18);
+}
+
+.ds-root :deep(.ant-switch-checked) {
+  background: #0066cc;
+}
+
+.ds-root :deep(.ant-alert) {
+  border-color: rgba(0, 102, 204, 0.14);
+  border-radius: 12px;
+  background: rgba(0, 102, 204, 0.06);
+  color: #1d1d1f;
+}
+
+.ds-root :deep(.ant-alert-message) {
+  color: #1d1d1f;
+  font-weight: 600;
+}
+
+.ds-root :deep(.ant-alert-description) {
+  color: rgba(29, 29, 31, 0.6);
+}
+
+.ds-root :deep(.ant-input-number),
+.ds-root :deep(.ant-select-selector) {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: none !important;
 }
 </style>

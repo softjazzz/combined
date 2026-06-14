@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex h-full flex-col overflow-hidden rounded-[22px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(247,250,252,0.98)_100%)] shadow-[0_14px_32px_rgba(15,23,42,0.05)]"
+    class="icd-detail-panel flex h-full flex-col overflow-hidden rounded-[22px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.98)_0%,rgba(247,250,252,0.98)_100%)] shadow-[0_14px_32px_rgba(15,23,42,0.05)]"
   >
     <div
       v-if="!selectedCode"
@@ -9,12 +9,7 @@
       <div
         class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-100 bg-[linear-gradient(180deg,#f0f6ff,#dbeafe)] shadow-[0_10px_24px_rgba(148,163,184,0.12)]"
       >
-        <svg
-          class="h-8 w-8 text-blue-300"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
+        <svg class="h-8 w-8 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -23,11 +18,9 @@
           />
         </svg>
       </div>
-      <h4 class="mb-2 text-[15px] font-semibold text-slate-700">
-        选择编码查看详情
-      </h4>
+      <h4 class="mb-2 text-[15px] font-semibold text-slate-700">选择编码查看详情</h4>
       <p class="text-[13px] leading-relaxed text-slate-400">
-        从左侧搜索结果或树形目录中选择任意编码，<br>即可在这里查看完整信息。
+        从左侧搜索结果或树形目录中选择任意编码，<br />即可在这里查看完整信息。
       </p>
     </div>
 
@@ -40,12 +33,10 @@
             <div class="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">
               知识侧栏
             </div>
-            <div class="mt-1 text-[12px] text-slate-500">
-              版本映射、层级归属、包含项与排除项
-            </div>
+            <div class="mt-1 text-[12px] text-slate-500">版本映射、层级归属、包含项与排除项</div>
           </div>
           <span
-            class="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-blue-700"
+            class="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-[#0057b8]"
           >
             {{ selectedCode.type === 'icd10' ? '诊断' : '手术' }}
           </span>
@@ -53,22 +44,22 @@
 
         <div class="mb-3 flex items-start justify-between">
           <span
-            class="rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700"
+            class="rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-[#0057b8]"
           >
             {{ selectedCode.type === 'icd10' ? 'ICD-10 诊断' : 'ICD-9-CM-3 手术' }}
           </span>
 
           <div class="flex items-center gap-2">
             <button
-              class="group flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-600 shadow-sm transition-all hover:border-blue-300 hover:text-blue-600"
+              class="group flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-slate-600 shadow-sm transition-all hover:border-blue-300 hover:text-[#0066cc]"
               @click="$emit('copy', selectedCode.code)"
             >
-              <CopyOutlined class="text-slate-400 transition-colors group-hover:text-blue-500" />
+              <CopyOutlined class="text-slate-400 transition-colors group-hover:text-[#0066cc]" />
               复制
             </button>
             <button
               v-if="allowApply"
-              class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 px-3 py-1.5 text-[12px] font-semibold text-white shadow-[0_10px_20px_rgba(59,130,246,0.18)] transition-all hover:from-blue-700 hover:to-blue-600"
+              class="flex cursor-pointer items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#0066cc] to-[#0057b8] px-3 py-1.5 text-[12px] font-semibold text-white shadow-[0_8px_18px_rgba(0,102,204,0.18)] transition-all hover:from-[#0057b8] hover:to-[#0057b8]"
               @click="$emit('apply', selectedCode)"
             >
               <CheckCircleOutlined />
@@ -77,7 +68,7 @@
           </div>
         </div>
 
-        <div class="mb-2 font-mono text-[28px] font-extrabold tracking-tight text-blue-700">
+        <div class="mb-2 font-mono text-[28px] font-extrabold tracking-tight text-[#0057b8]">
           {{ selectedCode.code }}
         </div>
         <h2 class="text-[18px] font-bold leading-snug text-slate-900">
@@ -103,7 +94,8 @@
                 :class="
                   i === selectedCode.category_path.length - 1 ? 'font-medium text-slate-700' : ''
                 "
-              >{{ item }}</span>
+                >{{ item }}</span
+              >
             </div>
           </div>
         </div>
@@ -119,12 +111,12 @@
             <div class="mb-1 flex items-center gap-3">
               <span class="font-mono font-semibold text-slate-700">{{ selectedCode.code }}</span>
               <span class="text-slate-400">→</span>
-              <span class="font-mono font-semibold text-blue-700">
+              <span class="font-mono font-semibold text-[#0057b8]">
                 {{ selectedCode.mapped_code }}
               </span>
             </div>
             <div class="flex items-center gap-1 text-[12px]">
-              <span class="text-blue-600">
+              <span class="text-[#0066cc]">
                 {{ selectedCode.is_diff ? '编码有差异' : '编码一致' }}
               </span>
               <span
@@ -143,10 +135,7 @@
             <span class="mr-1 text-blue-500">●</span> 包含
           </h4>
           <ul class="list-disc space-y-1 pl-4 text-[13px] text-slate-600 marker:text-blue-400">
-            <li
-              v-for="(item, i) in selectedCode.inclusions"
-              :key="i"
-            >
+            <li v-for="(item, i) in selectedCode.inclusions" :key="i">
               {{ item }}
             </li>
           </ul>
@@ -158,10 +147,7 @@
             <span class="mr-1 text-blue-500">●</span> 排除
           </h4>
           <ul class="list-disc space-y-1 pl-4 text-[13px] text-slate-600 marker:text-blue-300">
-            <li
-              v-for="(item, i) in selectedCode.exclusions"
-              :key="i"
-            >
+            <li v-for="(item, i) in selectedCode.exclusions" :key="i">
               {{ item }}
             </li>
           </ul>
@@ -170,8 +156,8 @@
         <div
           v-if="
             !selectedCode.category_path?.length &&
-              !selectedCode.mapped_code &&
-              !selectedCode.inclusions?.length
+            !selectedCode.mapped_code &&
+            !selectedCode.inclusions?.length
           "
         >
           <div class="mb-5 h-px w-full bg-slate-100" />
@@ -233,5 +219,81 @@ defineEmits<{
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #cbd5e1;
+}
+
+.icd-detail-panel {
+  border-color: rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+}
+
+.icd-detail-panel .text-slate-900,
+.icd-detail-panel .text-slate-800,
+.icd-detail-panel .text-slate-700 {
+  color: #1d1d1f !important;
+}
+
+.icd-detail-panel .text-slate-600,
+.icd-detail-panel .text-slate-500,
+.icd-detail-panel .text-slate-400 {
+  color: rgba(29, 29, 31, 0.6) !important;
+}
+
+.icd-detail-panel .border-slate-100,
+.icd-detail-panel .border-slate-200,
+.icd-detail-panel .border-slate-200\/80 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.icd-detail-panel .bg-slate-50\/80,
+.icd-detail-panel .bg-white {
+  background: rgba(255, 255, 255, 0.82) !important;
+}
+
+.icd-detail-panel .bg-blue-50,
+.icd-detail-panel .bg-blue-50\/50,
+.icd-detail-panel .bg-blue-50\/80,
+.icd-detail-panel .bg-\[linear-gradient\(180deg\,\#f0f6ff\,\#dbeafe\)\] {
+  background: rgba(0, 102, 204, 0.08) !important;
+}
+
+.icd-detail-panel .border-blue-100,
+.icd-detail-panel .border-blue-100\/80 {
+  border-color: rgba(0, 102, 204, 0.16) !important;
+}
+
+.icd-detail-panel .text-\[\#0057b8\],
+.icd-detail-panel .text-\[\#0066cc\],
+.icd-detail-panel .text-blue-500,
+.icd-detail-panel .text-blue-400,
+.icd-detail-panel .text-blue-300 {
+  color: #0066cc !important;
+}
+
+.icd-detail-panel button {
+  border-radius: 8px;
+  transition:
+    border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.icd-detail-panel button:hover {
+  transform: translateY(-1px);
+}
+
+.icd-detail-panel .from-\[\#0066cc\],
+.icd-detail-panel .to-\[\#0057b8\] {
+  --tw-gradient-from: #0066cc var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: #0057b8 var(--tw-gradient-to-position) !important;
 }
 </style>

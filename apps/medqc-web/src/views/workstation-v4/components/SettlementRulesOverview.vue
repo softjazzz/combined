@@ -7,20 +7,13 @@
           <span class="summary-pill">阻断优先</span>
         </div>
         <div class="progress-list">
-          <div
-            v-for="item in severities"
-            :key="item.label"
-            class="progress-row"
-          >
+          <div v-for="item in severities" :key="item.label" class="progress-row">
             <div class="progress-meta">
               <span>{{ item.label }}</span>
               <strong>{{ item.value }}</strong>
             </div>
             <div class="progress-track">
-              <div
-                class="progress-fill"
-                :style="{ width: item.progress }"
-              />
+              <div class="progress-fill" :style="{ width: item.progress }" />
             </div>
           </div>
         </div>
@@ -32,11 +25,7 @@
           <span class="summary-pill summary-pill-neutral">核心环节</span>
         </div>
         <div class="control-list">
-          <div
-            v-for="item in controls"
-            :key="item.title"
-            class="control-row"
-          >
+          <div v-for="item in controls" :key="item.title" class="control-row">
             <div>
               <strong>{{ item.title }}</strong>
               <p>{{ item.desc }}</p>
@@ -52,11 +41,7 @@
           <span class="summary-pill">四类规则</span>
         </div>
         <div class="distribution-list">
-          <div
-            v-for="item in categories"
-            :key="item.label"
-            class="distribution-row"
-          >
+          <div v-for="item in categories" :key="item.label" class="distribution-row">
             <span>{{ item.label }}</span>
             <strong>{{ item.value }}</strong>
           </div>
@@ -70,9 +55,7 @@
           <h3>结算规则明细</h3>
           <span class="table-chip">围绕提交与审核链路</span>
         </div>
-        <div class="table-meta">
-          规则、字段、风险和处置建议统一放在同一张表中。
-        </div>
+        <div class="table-meta">规则、字段、风险和处置建议统一放在同一张表中。</div>
       </div>
 
       <div class="table-scroll">
@@ -88,10 +71,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr
-              v-for="rule in rules"
-              :key="rule.code"
-            >
+            <tr v-for="rule in rules" :key="rule.code">
               <td>
                 <span class="rule-code">{{ rule.code }}</span>
               </td>
@@ -130,11 +110,7 @@
       </div>
 
       <div class="action-grid">
-        <article
-          v-for="item in actions"
-          :key="item.title"
-          class="action-card"
-        >
+        <article v-for="item in actions" :key="item.title" class="action-card">
           <div class="action-top">
             <div>
               <h4>{{ item.title }}</h4>
@@ -143,10 +119,7 @@
             <span class="action-status">{{ item.status }}</span>
           </div>
           <div class="action-tags">
-            <span
-              v-for="tag in item.tags"
-              :key="tag"
-            >{{ tag }}</span>
+            <span v-for="tag in item.tags" :key="tag">{{ tag }}</span>
           </div>
         </article>
       </div>
@@ -250,16 +223,36 @@ const actions = [
 .rules-workbench {
   display: grid;
   gap: 16px;
-  color: #0f172a;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 .summary-card,
 .table-shell,
 .action-shell {
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 250, 252, 0.97));
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
   padding: 16px;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.summary-card:hover,
+.table-shell:hover,
+.action-shell:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
 }
 .summary-grid {
   display: grid;
@@ -277,9 +270,9 @@ const actions = [
 .summary-head h3,
 .table-title-row h3 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 850;
-  color: #0f172a;
+  font-size: 17px;
+  font-weight: 600;
+  color: #1d1d1f;
 }
 .table-title-row {
   display: flex;
@@ -292,17 +285,17 @@ const actions = [
   align-items: center;
   border-radius: 999px;
   padding: 6px 10px;
-  border: 1px solid rgba(191, 219, 254, 0.95);
-  background: rgba(239, 246, 255, 0.9);
-  color: #1d4ed8;
+  border: 1px solid rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.07);
+  color: #0066cc;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .summary-pill-neutral,
 .table-chip-neutral {
-  border-color: rgba(226, 232, 240, 0.92);
-  background: rgba(248, 250, 252, 0.96);
-  color: #64748b;
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.6);
 }
 .progress-list,
 .control-list,
@@ -316,9 +309,9 @@ const actions = [
 .control-row,
 .distribution-row,
 .action-card {
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
   padding: 14px;
 }
 .progress-meta,
@@ -327,7 +320,7 @@ const actions = [
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #334155;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
 }
 .progress-meta strong,
@@ -335,27 +328,27 @@ const actions = [
 .control-row strong,
 .action-top h4,
 .rule-name {
-  color: #0f172a;
-  font-weight: 800;
+  color: #1d1d1f;
+  font-weight: 600;
 }
 .progress-track {
   margin-top: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #e2e8f0;
+  background: rgba(0, 0, 0, 0.06);
   overflow: hidden;
 }
 .progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #2563eb, #60a5fa);
+  background: #0066cc;
 }
 .control-row p,
 .action-top p,
 .rule-desc,
 .rule-note {
   margin: 6px 0 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -367,23 +360,23 @@ const actions = [
   border-radius: 999px;
   padding: 0 10px;
   white-space: nowrap;
-  border: 1px solid rgba(191, 219, 254, 0.95);
-  background: rgba(239, 246, 255, 0.92);
-  color: #1d4ed8;
+  border: 1px solid rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.07);
+  color: #0066cc;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .table-meta {
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
   font-weight: 600;
 }
 .table-scroll {
   margin-top: 14px;
   overflow-x: auto;
-  border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.88);
-  background: #fff;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9);
 }
 .rules-table {
   width: 100%;
@@ -393,22 +386,28 @@ const actions = [
 }
 .rules-table thead th {
   padding: 13px 16px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.88);
-  background: rgba(248, 250, 252, 0.98);
-  color: #64748b;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.025);
+  color: rgba(29, 29, 31, 0.56);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 .rules-table tbody td {
   padding: 15px 16px;
-  border-bottom: 1px solid rgba(241, 245, 249, 0.95);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   vertical-align: top;
+}
+.rules-table tbody tr {
+  transition: background-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.rules-table tbody tr:hover {
+  background: rgba(0, 102, 204, 0.045);
 }
 .rule-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.42);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .pill {
   display: inline-flex;
@@ -416,17 +415,17 @@ const actions = [
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 .pill-neutral {
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  background: rgba(248, 250, 252, 0.96);
-  color: #475569;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.6);
 }
 .pill-strong {
-  border: 1px solid rgba(191, 219, 254, 0.95);
-  background: rgba(239, 246, 255, 0.92);
-  color: #1d4ed8;
+  border: 1px solid rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.07);
+  color: #0066cc;
 }
 .action-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -442,11 +441,11 @@ const actions = [
   align-items: center;
   border-radius: 999px;
   padding: 5px 10px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: rgba(248, 250, 252, 0.96);
-  color: #475569;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.6);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
 }
 @media (max-width: 1180px) {
   .summary-grid,

@@ -1,43 +1,33 @@
 <template>
-  <div class="outpatient-emergency-page min-h-screen bg-slate-50/50 p-6">
+  <div class="outpatient-emergency-page min-h-screen p-5 lg:p-6">
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-        <div class="text-slate-500 text-xs font-medium mb-1">
-          门急诊病历总量
-        </div>
-        <div class="text-2xl font-bold text-blue-600 font-mono">
+      <div class="apple-metric-card">
+        <div class="text-slate-500 text-xs font-medium mb-1">门急诊病历总量</div>
+        <div class="apple-metric-value apple-primary">
           {{ formatInteger(overviewStats.total_records) }}
         </div>
       </div>
-      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-        <div class="text-slate-500 text-xs font-medium mb-1">
-          待处理
-        </div>
-        <div class="text-2xl font-bold text-amber-600 font-mono">
+      <div class="apple-metric-card">
+        <div class="text-slate-500 text-xs font-medium mb-1">待处理</div>
+        <div class="apple-metric-value apple-warning">
           {{ formatInteger(overviewStats.pending_count) }}
         </div>
       </div>
-      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-        <div class="text-slate-500 text-xs font-medium mb-1">
-          缺陷总数
-        </div>
-        <div class="text-2xl font-bold text-rose-600 font-mono">
+      <div class="apple-metric-card">
+        <div class="text-slate-500 text-xs font-medium mb-1">缺陷总数</div>
+        <div class="apple-metric-value apple-danger">
           {{ formatInteger(overviewStats.total_defects) }}
         </div>
       </div>
-      <div class="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
-        <div class="text-slate-500 text-xs font-medium mb-1">
-          通过率
-        </div>
-        <div class="text-2xl font-bold text-emerald-600 font-mono">
+      <div class="apple-metric-card">
+        <div class="text-slate-500 text-xs font-medium mb-1">通过率</div>
+        <div class="apple-metric-value apple-success">
           {{ formatRate(overviewStats.pass_rate) }}%
         </div>
       </div>
     </div>
 
-    <div
-      class="bg-white rounded-2xl border border-slate-100 shadow-sm flex flex-col h-[calc(100vh-180px)]"
-    >
+    <div class="apple-workbench flex flex-col h-[calc(100vh-180px)]">
       <div
         class="px-6 py-4 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
       >
@@ -46,18 +36,12 @@
             <a-input
               v-model:value="searchKeyword"
               placeholder="搜索病案号/姓名/医生..."
-              class="w-64 !rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400 focus:!border-blue-500 !pl-10"
+              class="w-64 apple-input !pl-10"
               @press-enter="handleSearch"
             />
             <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           </div>
-          <a-button
-            type="primary"
-            class="!rounded-xl"
-            @click="handleSearch"
-          >
-            查询
-          </a-button>
+          <a-button type="primary" class="!rounded-xl" @click="handleSearch"> 查询 </a-button>
 
           <a-select
             v-model:value="selectedDepartment"
@@ -82,32 +66,19 @@
             :bordered="false"
             allow-clear
           >
-            <a-select-option value="pending">
-              待处理
-            </a-select-option>
-            <a-select-option value="reviewing">
-              审核中
-            </a-select-option>
-            <a-select-option value="approved">
-              已通过
-            </a-select-option>
-            <a-select-option value="rejected">
-              已驳回
-            </a-select-option>
+            <a-select-option value="pending"> 待处理 </a-select-option>
+            <a-select-option value="reviewing"> 审核中 </a-select-option>
+            <a-select-option value="approved"> 已通过 </a-select-option>
+            <a-select-option value="rejected"> 已驳回 </a-select-option>
           </a-select>
 
           <a-range-picker
             v-model:value="dateRange"
-            class="!rounded-xl !bg-slate-50 !border-slate-200 hover:!border-blue-400"
+            class="apple-picker !rounded-xl"
             :bordered="false"
           />
 
-          <a-button
-            class="!rounded-xl !border-slate-200"
-            @click="resetFilters"
-          >
-            重置
-          </a-button>
+          <a-button class="!rounded-xl !border-slate-200" @click="resetFilters"> 重置 </a-button>
         </div>
 
         <div class="flex items-center gap-2">
@@ -139,15 +110,10 @@
           >
             批量派发整改
           </a-button>
-          <a-button
-            class="!rounded-xl"
-            @click="handleExportDefects"
-          >
-            导出缺陷
-          </a-button>
+          <a-button class="!rounded-xl" @click="handleExportDefects"> 导出缺陷 </a-button>
           <a-tooltip title="刷新数据">
             <a-button
-              class="!rounded-xl !border-slate-200 text-slate-500 hover:text-blue-600 !h-9 !w-9 !p-0 flex items-center justify-center"
+              class="apple-icon-button !h-9 !w-9 !p-0 flex items-center justify-center"
               @click="handleRefresh"
             >
               <ReloadOutlined :spin="loading" />
@@ -165,18 +131,14 @@
 
       <div
         v-if="selectedRowKeys.length"
-        class="px-6 py-2 bg-blue-50/60 border-b border-blue-100 text-sm text-slate-700 flex items-center justify-between"
+        class="px-6 py-2 bg-[rgba(0,102,204,0.06)] border-b border-[rgba(0,102,204,0.12)] text-sm text-slate-700 flex items-center justify-between"
       >
-        <span>已选择
-          <span class="font-semibold text-blue-700">{{ selectedRowKeys.length }}</span>
-          条门急诊病历</span>
-        <a-button
-          type="link"
-          class="!px-0"
-          @click="selectedRowKeys = []"
+        <span
+          >已选择
+          <span class="font-semibold text-[#0066cc]">{{ selectedRowKeys.length }}</span>
+          条门急诊病历</span
         >
-          清空选择
-        </a-button>
+        <a-button type="link" class="!px-0" @click="selectedRowKeys = []"> 清空选择 </a-button>
       </div>
 
       <div class="flex-1 overflow-hidden px-6 py-2">
@@ -194,7 +156,7 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'recordNumber'">
               <a
-                class="font-mono font-bold text-slate-700 hover:text-blue-600"
+                class="font-mono font-semibold text-slate-700 hover:text-[#0066cc]"
                 @click="openDetail(record as AdminRecordItem)"
               >
                 {{ record.record_id || record.id }}
@@ -645,35 +607,146 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.outpatient-emergency-page {
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.apple-metric-card {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 16px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.045);
+  backdrop-filter: blur(18px);
+}
+
+.apple-metric-value {
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 31px;
+}
+
+.apple-primary {
+  color: #0066cc;
+}
+
+.apple-warning {
+  color: #b7791f;
+}
+
+.apple-danger {
+  color: #d92d20;
+}
+
+.apple-success {
+  color: #0f8f67;
+}
+
+.apple-workbench {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.06),
+    0 10px 30px rgba(0, 0, 0, 0.045);
+  backdrop-filter: blur(18px);
+}
+
+.apple-input {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+.apple-picker {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+.apple-icon-button {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px !important;
+  color: rgba(29, 29, 31, 0.6) !important;
+}
+
+.apple-icon-button:hover {
+  border-color: rgba(0, 102, 204, 0.24) !important;
+  color: #0066cc !important;
+}
+
+:deep(.ant-btn-primary) {
+  border-color: #0066cc !important;
+  background: #0066cc !important;
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.18) !important;
+}
+
+:deep(.ant-btn-link) {
+  color: #0066cc;
+}
+
+:deep(.ant-input:hover),
+:deep(.ant-input:focus),
+:deep(.ant-picker:hover),
+:deep(.ant-picker-focused) {
+  border-color: rgba(0, 102, 204, 0.32) !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+}
+
 :deep(.custom-select .ant-select-selector) {
-  background-color: #f8fafc !important;
-  border-radius: 0.75rem !important;
-  border: 1px solid #e2e8f0 !important;
+  background-color: rgba(255, 255, 255, 0.72) !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
   height: 36px !important;
   display: flex;
   align-items: center;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 :deep(.custom-select:hover .ant-select-selector) {
-  border-color: #60a5fa !important;
+  border-color: rgba(0, 102, 204, 0.32) !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
 }
 
 :deep(.modern-table .ant-table-thead > tr > th) {
-  background: #f8fafc;
-  color: #64748b;
+  background: rgba(245, 245, 247, 0.76);
+  color: rgba(29, 29, 31, 0.6);
   font-weight: 600;
   font-size: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 :deep(.modern-table .ant-table-tbody > tr > td) {
   padding: 12px 16px;
-  border-bottom: 1px solid #f8fafc;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   font-size: 13px;
 }
 
 :deep(.modern-table .ant-table-tbody > tr:hover > td) {
-  background: #f8fafc;
+  background: rgba(0, 0, 0, 0.035);
+}
+
+:deep(.ant-tag-blue) {
+  color: #0066cc;
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.08);
+}
+
+:deep(.ant-pagination-item-active) {
+  border-color: #0066cc;
+}
+
+:deep(.ant-pagination-item-active a) {
+  color: #0066cc;
 }
 </style>

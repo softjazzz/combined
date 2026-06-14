@@ -97,10 +97,11 @@ def _failure_counts_from_pack_metrics(pack_metrics: dict[str, Any]) -> dict[str,
     for diagnostic in list(pack_metrics.get("pack_diagnostics") or []):
         if not isinstance(diagnostic, dict):
             continue
-        raw_error = _safe_text(diagnostic.get("raw_error_summary") or diagnostic.get("pack_retry_reason"))
+        raw_error = _safe_text(diagnostic.get("raw_error_summary"))
         classified = _classify_error(raw_error)
         counts["upstream_http_error_count"] += classified["upstream_http_error_count"]
-        counts["parse_error_count"] += classified["parse_error_count"]
+        final_parse_error = bool(diagnostic.get("parse_error") is True)
+        counts["parse_error_count"] += max(classified["parse_error_count"], 1 if final_parse_error else 0)
         counts["provider_connection_error_count"] += classified["provider_connection_error_count"]
         counts["timeout_count"] += max(_safe_int(diagnostic.get("timeout_count")), classified["timeout_count"])
         counts["rate_limit_count"] += max(_safe_int(diagnostic.get("rate_limit_count")), classified["rate_limit_count"])

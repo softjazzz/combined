@@ -4,11 +4,9 @@
   >
     <div class="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
       <div>
-        <h3 class="text-[15px] font-bold text-slate-900">
-          我的待办汇总
-        </h3>
+        <h3 class="text-[15px] font-bold text-slate-900">我的待办汇总</h3>
       </div>
-      <div class="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-600">
+      <div class="rounded-md bg-[#eaf2ff] px-2 py-0.5 text-[11px] font-semibold text-[#0066cc]">
         个人执行项
       </div>
     </div>
@@ -19,14 +17,11 @@
         class="rounded-[12px] border border-slate-100 p-3.5 bg-slate-50/50"
       >
         <div class="flex items-center gap-2">
-          <span
-            class="h-2 w-2 rounded-full"
-            :class="card.dotColor"
-          />
+          <span class="h-2 w-2 rounded-full" :class="card.dotColor" />
           <span class="text-[12px] font-medium text-slate-600">{{ card.label }}</span>
         </div>
         <div
-          class="mt-2 text-[24px] font-extrabold text-slate-900 font-mono"
+          class="mt-2 text-[24px] font-bold text-[#1d1d1f] font-mono"
           style="font-variant-numeric: tabular-nums"
         >
           {{ card.value }}
@@ -55,7 +50,7 @@ const cards = computed(() => [
   {
     label: '待处理',
     value: props.summary.pending_total || 0,
-    dotColor: 'bg-blue-400',
+    dotColor: 'bg-[#0066cc]',
     desc: '待进入处理流程',
   },
   {

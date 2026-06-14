@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const postMock = vi.fn()
 
-vi.mock('@/utils/http', () => ({
-  http: {
+vi.mock('@/services/apiService', () => ({
+  apiClient: {
     post: postMock,
   },
 }))

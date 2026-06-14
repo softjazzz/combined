@@ -6,22 +6,18 @@
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2.5">
           <div
-            class="flex h-6 w-6 items-center justify-center rounded-md bg-[linear-gradient(135deg,#e0e7ff,#c7d2fe)] text-blue-600 shadow-sm"
+            class="flex h-6 w-6 items-center justify-center rounded-md bg-[#eaf2ff] text-[#0066cc] shadow-sm"
           >
             <CheckSquareFilled class="text-[12px]" />
           </div>
           <div>
-            <div class="text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-600">
-              My Urgent Queue
-            </div>
-            <h3 class="text-[16px] font-extrabold text-slate-900 tracking-tight">
-              我的特急待办
-            </h3>
+            <div class="text-[11px] font-semibold text-[#0066cc]">我的紧急队列</div>
+            <h3 class="text-[16px] font-semibold text-[#1d1d1f]">我的特急待办</h3>
           </div>
         </div>
         <div>
           <span
-            class="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-extrabold text-slate-500 font-mono shadow-sm"
+            class="rounded-full border border-black/10 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-black/60 font-mono shadow-sm"
             style="font-variant-numeric: tabular-nums"
           >
             {{ items.length }} 项
@@ -31,26 +27,20 @@
 
       <div class="mt-3 grid grid-cols-3 gap-2">
         <div class="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <div class="text-[11px] text-slate-400">
-            待处理
-          </div>
-          <div class="mt-1 text-[18px] font-black text-slate-900 font-mono">
+          <div class="text-[11px] text-slate-400">待处理</div>
+          <div class="mt-1 text-[18px] font-bold text-[#1d1d1f] font-mono">
             {{ summary.pending_total || 0 }}
           </div>
         </div>
         <div class="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <div class="text-[11px] text-slate-400">
-            进行中
-          </div>
-          <div class="mt-1 text-[18px] font-black text-blue-600 font-mono">
+          <div class="text-[11px] text-slate-400">进行中</div>
+          <div class="mt-1 text-[18px] font-bold text-[#0066cc] font-mono">
             {{ summary.in_progress_total || 0 }}
           </div>
         </div>
         <div class="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <div class="text-[11px] text-slate-400">
-            已超时
-          </div>
-          <div class="mt-1 text-[18px] font-black text-red-600 font-mono">
+          <div class="text-[11px] text-slate-400">已超时</div>
+          <div class="mt-1 text-[18px] font-bold text-red-600 font-mono">
             {{ summary.overdue_total || 0 }}
           </div>
         </div>
@@ -62,7 +52,7 @@
         <div
           v-for="item in items"
           :key="item.id"
-          class="group relative flex cursor-pointer items-start gap-3 px-4 py-3 transition-all duration-300 hover:bg-blue-50/20"
+          class="group relative flex cursor-pointer items-start gap-3 px-4 py-3 transition-all duration-300 hover:bg-black/[0.025]"
           @click="emit('open', item)"
         >
           <div
@@ -89,7 +79,7 @@
                   {{ formatDateTime(item.due_at) }}
                 </div>
                 <div
-                  class="flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 -translate-x-2 group-hover:translate-x-0 text-blue-500"
+                  class="flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 -translate-x-2 group-hover:translate-x-0 text-[#0066cc]"
                 >
                   <ArrowRightOutlined class="text-[12px]" />
                 </div>
@@ -106,7 +96,7 @@
               <div class="flex items-center gap-2 shrink-0">
                 <span
                   v-if="item.active_defect_count > 0"
-                  class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[10.5px] font-black text-red-600 ring-1 ring-inset ring-red-500/20 shadow-sm transition-transform group-hover:scale-105"
+                  class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[10.5px] font-semibold text-red-600 ring-1 ring-inset ring-red-500/20 shadow-sm transition-transform group-hover:scale-105"
                 >
                   <CloseCircleFilled class="mr-1 text-[10px]" />
                   {{ item.active_defect_count }} 缺陷
@@ -130,21 +120,14 @@
         </div>
       </div>
 
-      <div
-        v-if="!items.length"
-        class="py-16 flex flex-col items-center justify-center text-center"
-      >
+      <div v-if="!items.length" class="py-16 flex flex-col items-center justify-center text-center">
         <div
           class="h-12 w-12 rounded-full bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center text-slate-300 mb-3 shadow-inner"
         >
           <CheckOutlined class="text-[20px]" />
         </div>
-        <div class="text-[13.5px] font-medium text-slate-500">
-          太棒了，当前没有需要跟进的待办
-        </div>
-        <div class="text-[12px] text-slate-400 mt-1">
-          您可以通过其他纬度筛选工作
-        </div>
+        <div class="text-[13.5px] font-medium text-slate-500">太棒了，当前没有需要跟进的待办</div>
+        <div class="text-[12px] text-slate-400 mt-1">您可以通过其他纬度筛选工作</div>
       </div>
     </div>
   </section>
@@ -180,14 +163,14 @@ const emit = defineEmits<{
 }>()
 
 function priorityStripeClass(priority?: string) {
-  if (priority === 'critical') return 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]'
+  if (priority === 'critical') return 'bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.08)]'
   if (priority === 'high') return 'bg-orange-400'
   if (priority === 'medium') return 'bg-amber-300'
-  return 'bg-blue-400'
+  return 'bg-[#0066cc]'
 }
 
 function taskStatusClass(status?: string) {
-  if (status === 'in_progress') return 'bg-blue-50 text-blue-600'
+  if (status === 'in_progress') return 'bg-[#eaf2ff] text-[#0066cc]'
   if (status === 'overdue') return 'bg-red-50 text-red-600'
   return 'bg-amber-50 text-amber-600'
 }

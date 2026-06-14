@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full">
+  <div class="ai-profile-dashboard h-full">
     <div
       v-if="!profile && !profileLoading"
       class="h-full flex flex-col items-center justify-start text-center p-6 pt-16"
@@ -9,9 +9,7 @@
       >
         <ScanOutlined class="text-4xl text-blue-500" />
       </div>
-      <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-3">
-        AI 深度画像分析
-      </h3>
+      <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-3">AI 深度画像分析</h3>
       <p class="text-sm text-slate-500 dark:text-slate-400 mb-8 max-w-sm leading-relaxed">
         对病历全文进行深度阅读，构建诊断发生发展时间轴，验证手术闭环完整性，并自动发现首页填报差异。
       </p>
@@ -31,18 +29,8 @@
       class="h-full flex flex-col items-center justify-center bg-slate-50/50 dark:bg-slate-900/50"
     >
       <div class="relative w-28 h-28 mb-8">
-        <svg
-          class="w-full h-full animate-spin text-blue-500/20"
-          viewBox="0 0 100 100"
-          fill="none"
-        >
-          <circle
-            cx="50"
-            cy="50"
-            r="45"
-            stroke="currentColor"
-            stroke-width="8"
-          />
+        <svg class="w-full h-full animate-spin text-blue-500/20" viewBox="0 0 100 100" fill="none">
+          <circle cx="50" cy="50" r="45" stroke="currentColor" stroke-width="8" />
           <path
             d="M50 5 a45 45 0 0 1 45 45"
             stroke="currentColor"
@@ -58,9 +46,7 @@
           </div>
         </div>
       </div>
-      <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-2">
-        AI 智能分析中...
-      </h3>
+      <h3 class="text-xl font-bold text-slate-800 dark:text-white mb-2">AI 智能分析中...</h3>
       <p class="text-sm text-slate-500 dark:text-slate-400 mb-8 text-center max-w-[280px]">
         正在深度阅读病历记录并构建诊断时间轴映射...
       </p>
@@ -83,10 +69,7 @@
         </div>
       </div>
     </div>
-    <div
-      v-else
-      class="h-full overflow-hidden flex flex-col"
-    >
+    <div v-else class="h-full overflow-hidden flex flex-col">
       <!-- Dashboard grid -->
       <div class="h-full p-4 overflow-y-auto custom-scrollbar flex flex-col">
         <!-- Stats Cards Removed as per request -->
@@ -106,33 +89,33 @@
                 class="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-100 dark:border-red-900/30 cursor-pointer hover:shadow-md transition-all"
               >
                 <div class="flex justify-between items-start mb-1">
-                  <span class="font-medium text-red-700 dark:text-red-300 text-sm">高血压3级 极高危</span>
+                  <span class="font-medium text-red-700 dark:text-red-300 text-sm"
+                    >高血压3级 极高危</span
+                  >
                   <ExclamationCircleOutlined class="text-red-500" />
                 </div>
-                <div class="text-xs text-red-500/80">
-                  I10.x00
-                </div>
+                <div class="text-xs text-red-500/80">I10.x00</div>
               </div>
               <div
                 class="p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-100 dark:border-slate-700 cursor-pointer hover:shadow-md transition-all"
               >
                 <div class="flex justify-between items-start mb-1">
-                  <span class="font-medium text-slate-700 dark:text-slate-200 text-sm">2型糖尿病</span>
+                  <span class="font-medium text-slate-700 dark:text-slate-200 text-sm"
+                    >2型糖尿病</span
+                  >
                 </div>
-                <div class="text-xs text-slate-500">
-                  E11.900
-                </div>
+                <div class="text-xs text-slate-500">E11.900</div>
               </div>
               <div
                 class="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-100 dark:border-yellow-900/30 cursor-pointer hover:shadow-md transition-all"
               >
                 <div class="flex justify-between items-start mb-1">
-                  <span class="font-medium text-yellow-700 dark:text-yellow-300 text-sm">冠心病 (待查)</span>
+                  <span class="font-medium text-yellow-700 dark:text-yellow-300 text-sm"
+                    >冠心病 (待查)</span
+                  >
                   <QuestionCircleOutlined class="text-yellow-500" />
                 </div>
-                <div class="text-xs text-yellow-500/80">
-                  疑似诊断
-                </div>
+                <div class="text-xs text-yellow-500/80">疑似诊断</div>
               </div>
             </div>
           </div>
@@ -167,13 +150,10 @@
                 :src="bodySchematicPng"
                 class="h-[85%] object-contain opacity-90 drop-shadow-lg"
                 alt="Body Map"
-              >
+              />
 
               <!-- Dynamic Hotspots with Staggered Animation -->
-              <template
-                v-for="(marker, index) in currentBodyMarkers"
-                :key="index"
-              >
+              <template v-for="(marker, index) in currentBodyMarkers" :key="index">
                 <!-- Marker Container with Staggered Entry -->
                 <div
                   class="absolute cursor-pointer z-20 transition-all duration-500"
@@ -223,7 +203,7 @@
                         ? '#ef4444'
                         : marker.severity === 'moderate'
                           ? '#eab308'
-                          : '#60a5fa'
+                          : '#0066cc'
                     "
                     stroke-width="2"
                     stroke-dasharray="5,5"
@@ -281,9 +261,7 @@
               </div>
 
               <div class="mb-4">
-                <div class="text-xs text-slate-400 mb-1">
-                  识别问题
-                </div>
+                <div class="text-xs text-slate-400 mb-1">识别问题</div>
                 <p class="text-base font-medium text-slate-700 dark:text-slate-200 leading-relaxed">
                   {{ currentBodyMarkers[activeMarkerIndex].condition }}
                 </p>
@@ -293,13 +271,11 @@
               <div
                 v-if="
                   getRelatedTimelineEvents(currentBodyMarkers[activeMarkerIndex].condition).length >
-                    0
+                  0
                 "
                 class="flex-1 overflow-y-auto custom-scrollbar min-h-0"
               >
-                <div class="text-xs font-semibold text-slate-500 mb-2">
-                  相关诊疗事件
-                </div>
+                <div class="text-xs font-semibold text-slate-500 mb-2">相关诊疗事件</div>
                 <div class="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3">
                   <ul class="space-y-3">
                     <li
@@ -333,9 +309,7 @@
               class="bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/60 dark:border-slate-700/80 p-8 h-full flex flex-col items-center justify-center text-center text-slate-400 border-dashed"
             >
               <ScanOutlined class="text-4xl mb-3 opacity-20" />
-              <p class="text-sm">
-                点击左侧人体部位<br>查看详细分析
-              </p>
+              <p class="text-sm">点击左侧人体部位<br />查看详细分析</p>
             </div>
           </div>
 
@@ -360,7 +334,7 @@
                     class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-200 flex items-center gap-1"
                     :class="
                       sortOrder === 'asc'
-                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        ? 'bg-white dark:bg-slate-700 text-[#0066cc] dark:text-blue-400 shadow-sm'
                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
                     "
                     @click="sortOrder = 'asc'"
@@ -371,7 +345,7 @@
                     class="px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-200 flex items-center gap-1"
                     :class="
                       sortOrder === 'desc'
-                        ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                        ? 'bg-white dark:bg-slate-700 text-[#0066cc] dark:text-blue-400 shadow-sm'
                         : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-800/50'
                     "
                     @click="sortOrder = 'desc'"
@@ -382,7 +356,8 @@
               </div>
               <span
                 class="bg-slate-50 dark:bg-slate-700/50 text-slate-500 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200 dark:border-slate-600"
-              >{{ profile.diagnosis_timeline.length }} 个事件</span>
+                >{{ profile.diagnosis_timeline.length }} 个事件</span
+              >
             </div>
             <!-- Kanban-style Multi-column Timeline -->
             <div
@@ -391,7 +366,7 @@
               <!-- Column 1: Diagnosis -->
               <div class="flex flex-col gap-3">
                 <div
-                  class="sticky top-0 z-10 bg-blue-50/90 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 font-bold px-3 py-2 border-l-4 border-blue-500 rounded-r-md shadow-sm backdrop-blur flex items-center gap-2 text-sm"
+                  class="sticky top-0 z-10 bg-blue-50/90 text-[#0057b8] dark:bg-blue-900/50 dark:text-blue-300 font-bold px-3 py-2 border-l-4 border-blue-500 rounded-r-md shadow-sm backdrop-blur flex items-center gap-2 text-sm"
                 >
                   <HeartOutlined /> 诊断
                 </div>
@@ -520,10 +495,7 @@
                     <ExclamationCircleOutlined class="text-yellow-600 text-xs" />
                     <span class="text-xs text-yellow-600 font-medium">异常指标</span>
                   </div>
-                  <div
-                    v-else
-                    class="flex items-center gap-1"
-                  >
+                  <div v-else class="flex items-center gap-1">
                     <CheckCircleOutlined class="text-green-500 text-xs" />
                     <span class="text-xs text-slate-500">正常</span>
                   </div>
@@ -540,10 +512,7 @@
             :footer="null"
           >
             <a-tabs default-active-key="1">
-              <a-tab-pane
-                key="1"
-                tab="诊断发生发展时间轴"
-              >
+              <a-tab-pane key="1" tab="诊断发生发展时间轴">
                 <div class="max-h-[500px] overflow-y-auto p-4">
                   <a-timeline mode="left">
                     <a-timeline-item
@@ -570,10 +539,7 @@
                   </a-timeline>
                 </div>
               </a-tab-pane>
-              <a-tab-pane
-                key="2"
-                tab="首页填报差异验证"
-              >
+              <a-tab-pane key="2" tab="首页填报差异验证">
                 <div class="max-h-[500px] overflow-y-auto p-4">
                   <div
                     v-if="!profile?.discrepancies || profile.discrepancies.length === 0"
@@ -582,11 +548,7 @@
                     <CheckCircleOutlined class="text-4xl text-green-500 mb-2" />
                     <div>未发现显著填报问题</div>
                   </div>
-                  <a-list
-                    v-else
-                    item-layout="horizontal"
-                    :data-source="profile.discrepancies"
-                  >
+                  <a-list v-else item-layout="horizontal" :data-source="profile.discrepancies">
                     <template #renderItem="{ item }">
                       <a-list-item
                         class="border-b border-slate-100 dark:border-slate-700 px-2 py-3"
@@ -612,7 +574,7 @@
                               <div class="mb-1">
                                 <span class="text-slate-400">问题:</span> {{ item.description }}
                               </div>
-                              <div class="text-blue-600 dark:text-blue-400">
+                              <div class="text-[#0066cc] dark:text-blue-400">
                                 <span class="text-slate-400"> 建议:</span> {{ item.suggestion }}
                               </div>
                             </div>
@@ -851,7 +813,7 @@ const getSeverityBadgeClass = (severity: string): string => {
     case 'moderate':
       return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
     case 'mild':
-      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+      return 'bg-blue-100 text-[#0057b8] dark:bg-blue-900/30 dark:text-blue-400'
     default:
       return 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-400'
   }
@@ -1122,5 +1084,108 @@ onUnmounted(() => {
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+.ai-profile-dashboard {
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.ai-profile-dashboard :deep(.dark\:bg-slate-900\/50),
+.ai-profile-dashboard :deep(.dark\:bg-slate-900),
+.ai-profile-dashboard :deep(.dark\:bg-slate-800),
+.ai-profile-dashboard :deep(.dark\:bg-slate-800\/80),
+.ai-profile-dashboard :deep(.dark\:bg-slate-700\/30),
+.ai-profile-dashboard :deep(.dark\:bg-blue-900\/20) {
+  background: rgba(255, 255, 255, 0.86) !important;
+}
+
+.ai-profile-dashboard :deep(.bg-white),
+.ai-profile-dashboard :deep(.bg-slate-50\/50),
+.ai-profile-dashboard :deep(.bg-slate-50),
+.ai-profile-dashboard :deep(.bg-slate-100\/60),
+.ai-profile-dashboard :deep(.bg-slate-200) {
+  background: rgba(255, 255, 255, 0.86) !important;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.ai-profile-dashboard :deep(.border-slate-100),
+.ai-profile-dashboard :deep(.border-slate-200),
+.ai-profile-dashboard :deep(.border-slate-200\/60),
+.ai-profile-dashboard :deep(.dark\:border-slate-700),
+.ai-profile-dashboard :deep(.dark\:border-slate-700\/80),
+.ai-profile-dashboard :deep(.dark\:border-blue-800\/50) {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.ai-profile-dashboard :deep(.text-slate-900),
+.ai-profile-dashboard :deep(.text-slate-800),
+.ai-profile-dashboard :deep(.text-slate-700),
+.ai-profile-dashboard :deep(.dark\:text-white),
+.ai-profile-dashboard :deep(.dark\:text-slate-100),
+.ai-profile-dashboard :deep(.dark\:text-slate-200),
+.ai-profile-dashboard :deep(.dark\:text-slate-300) {
+  color: #1d1d1f !important;
+}
+
+.ai-profile-dashboard :deep(.text-slate-600),
+.ai-profile-dashboard :deep(.text-slate-500),
+.ai-profile-dashboard :deep(.text-slate-400),
+.ai-profile-dashboard :deep(.dark\:text-slate-400),
+.ai-profile-dashboard :deep(.dark\:text-slate-500) {
+  color: rgba(29, 29, 31, 0.6) !important;
+}
+
+.ai-profile-dashboard :deep(.text-blue-500),
+.ai-profile-dashboard :deep(.text-blue-400),
+.ai-profile-dashboard :deep(.text-\[\#0066cc\]) {
+  color: #0066cc !important;
+}
+
+.ai-profile-dashboard :deep(.bg-blue-500),
+.ai-profile-dashboard :deep(.hover\:bg-blue-600:hover) {
+  background: #0066cc !important;
+}
+
+.ai-profile-dashboard :deep(.from-blue-400),
+.ai-profile-dashboard :deep(.from-\[\#0066cc\]) {
+  --tw-gradient-from: #0066cc var(--tw-gradient-from-position) !important;
+  --tw-gradient-to: rgba(0, 102, 204, 0) var(--tw-gradient-to-position) !important;
+}
+
+.ai-profile-dashboard :deep(.to-indigo-500),
+.ai-profile-dashboard :deep(.to-\[\#0057b8\]) {
+  --tw-gradient-to: #0057b8 var(--tw-gradient-to-position) !important;
+}
+
+.ai-profile-dashboard :deep(.rounded-xl),
+.ai-profile-dashboard :deep(.rounded-2xl) {
+  border-radius: 16px !important;
+}
+
+.ai-profile-dashboard :deep(.shadow-lg),
+.ai-profile-dashboard :deep(.shadow-\[0_2px_12px_rgba\(0\,0\,0\,0\.04\)\]) {
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035) !important;
+}
+
+.ai-profile-dashboard button {
+  border-radius: 8px;
+  font-weight: 600;
+  transition:
+    border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.ai-profile-dashboard button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18);
 }
 </style>

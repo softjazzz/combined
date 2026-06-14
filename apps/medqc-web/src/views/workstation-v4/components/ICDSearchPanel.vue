@@ -1,5 +1,5 @@
 <template>
-  <div class="flex h-full flex-col bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] font-sans">
+  <div class="icd-workstation flex h-full flex-col font-sans">
     <ICDSearchHero
       :code-version="codeVersion"
       :code-type="codeType"
@@ -11,13 +11,9 @@
       @search="handleSearch"
     />
 
-    <div class="mx-auto flex w-full max-w-7xl flex-1 gap-5 px-6 py-5 min-h-0">
-      <div
-        class="flex flex-1 flex-col overflow-y-auto rounded-[22px] border border-slate-200/80 bg-white/95 shadow-[0_14px_32px_rgba(15,23,42,0.05)] custom-scrollbar"
-      >
-        <div
-          class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.95))] px-4 py-3 backdrop-blur"
-        >
+    <div class="icd-workspace mx-auto flex w-full max-w-7xl flex-1 gap-5 px-6 py-5 min-h-0">
+      <div class="icd-result-shell flex flex-1 flex-col overflow-y-auto custom-scrollbar">
+        <div class="icd-result-head sticky top-0 z-10 flex items-center justify-between px-4 py-3">
           <div class="min-w-0">
             <div class="text-[12px] font-semibold text-slate-700">
               {{ searchQuery.length >= 2 ? '编码搜索结果' : '编码目录浏览' }}
@@ -29,7 +25,7 @@
           </div>
           <div class="flex items-center gap-2">
             <span
-              class="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-blue-700"
+              class="rounded-full border border-blue-100 bg-blue-50/80 px-2.5 py-1 text-[11px] font-semibold text-[#0057b8]"
             >
               {{ codeType === 'icd10' ? 'ICD-10' : 'ICD-9' }}
             </span>
@@ -46,9 +42,7 @@
           class="flex flex-col items-center justify-center py-20 text-slate-400"
         >
           <a-spin />
-          <p class="mt-3 text-sm">
-            搜索中...
-          </p>
+          <p class="mt-3 text-sm">搜索中...</p>
         </div>
 
         <div
@@ -60,15 +54,13 @@
               v-for="item in searchResults"
               :key="item.code + item.type"
               :class="[
-                'group flex cursor-pointer items-start gap-3 rounded-[16px] px-3 py-3 transition-all duration-150',
-                selectedCode?.code === item.code
-                  ? 'border border-blue-100/80 bg-blue-50/70 shadow-[0_8px_18px_rgba(59,130,246,0.08)]'
-                  : 'border border-transparent hover:border-slate-200/80 hover:bg-slate-50',
+                'icd-result-row group flex cursor-pointer items-start gap-3 px-3 py-3 transition-all duration-150',
+                selectedCode?.code === item.code ? 'is-selected' : '',
               ]"
               @click="selectCode(item)"
             >
               <div
-                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-blue-100 bg-blue-50 text-[12px] font-black text-blue-700"
+                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] border border-blue-100 bg-blue-50 text-[12px] font-semibold text-[#0057b8]"
               >
                 {{ item.type === 'icd10' ? '诊' : '术' }}
               </div>
@@ -77,9 +69,10 @@
                   <span
                     :class="[
                       'font-mono text-[13px] font-semibold',
-                      selectedCode?.code === item.code ? 'text-blue-700' : 'text-slate-500',
+                      selectedCode?.code === item.code ? 'text-[#0057b8]' : 'text-slate-500',
                     ]"
-                  >{{ item.code }}</span>
+                    >{{ item.code }}</span
+                  >
                   <span
                     class="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-500"
                   >
@@ -93,17 +86,8 @@
               </div>
             </div>
           </div>
-          <div
-            v-if="searchTotal > searchResults.length"
-            class="py-3 text-center"
-          >
-            <a-button
-              type="link"
-              size="small"
-              @click="loadMoreResults"
-            >
-              加载更多
-            </a-button>
+          <div v-if="searchTotal > searchResults.length" class="py-3 text-center">
+            <a-button type="link" size="small" @click="loadMoreResults"> 加载更多 </a-button>
           </div>
         </div>
 
@@ -112,15 +96,10 @@
           class="flex flex-col items-center justify-center py-20 text-slate-400"
         >
           <SearchOutlined style="font-size: 40px; opacity: 0.3" />
-          <p class="mt-3 text-sm">
-            未找到匹配 "{{ searchQuery }}" 的编码
-          </p>
+          <p class="mt-3 text-sm">未找到匹配 "{{ searchQuery }}" 的编码</p>
         </div>
 
-        <div
-          v-else
-          class="flex-1 p-3"
-        >
+        <div v-else class="flex-1 p-3">
           <a-spin :spinning="treeLoading">
             <div
               v-if="treeData.length > 0"
@@ -128,9 +107,7 @@
             >
               <div class="mb-3 flex items-center justify-between px-1">
                 <div>
-                  <div class="text-[12px] font-semibold text-slate-500">
-                    编码目录
-                  </div>
+                  <div class="text-[12px] font-semibold text-slate-500">编码目录</div>
                   <div class="mt-0.5 text-[11px] text-slate-400">
                     支持逐级展开定位章节、类目与叶子编码
                   </div>
@@ -181,21 +158,20 @@
                         'min-w-[70px] shrink-0 font-mono text-[13px]',
                         data.isLeaf ? 'font-medium text-slate-500' : 'font-semibold text-slate-600',
                       ]"
-                    >{{ data.code_range || data.code }}</span>
+                      >{{ data.code_range || data.code }}</span
+                    >
                     <span
                       :class="[
                         'truncate text-[14px]',
                         data.isLeaf ? 'text-slate-600' : 'font-semibold text-slate-800',
                       ]"
-                    >{{ title }}</span>
+                      >{{ title }}</span
+                    >
                   </div>
                 </template>
               </a-tree>
             </div>
-            <div
-              v-else
-              class="flex flex-col items-center justify-center py-20 text-slate-400"
-            >
+            <div v-else class="flex flex-col items-center justify-center py-20 text-slate-400">
               <svg
                 class="h-10 w-10 opacity-30"
                 fill="none"
@@ -209,17 +185,13 @@
                   d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
                 />
               </svg>
-              <p class="mt-3 text-sm">
-                暂无编码数据
-              </p>
+              <p class="mt-3 text-sm">暂无编码数据</p>
             </div>
           </a-spin>
         </div>
       </div>
 
-      <div
-        class="w-[420px] shrink-0 rounded-[24px] border border-slate-200/80 bg-white/95 p-3 shadow-[0_14px_32px_rgba(15,23,42,0.05)]"
-      >
+      <div class="icd-detail-shell w-[420px] shrink-0 p-3">
         <ICDDetailPanel
           :selected-code="selectedCode"
           :allow-apply="allowApply"
@@ -230,11 +202,7 @@
       </div>
     </div>
 
-    <ICDRecentBar
-      :recent-codes="recentCodes"
-      @select="selectCode"
-      @clear="recentCodes = []"
-    />
+    <ICDRecentBar :recent-codes="recentCodes" @select="selectCode" @clear="recentCodes = []" />
   </div>
 </template>
 
@@ -338,7 +306,7 @@ function highlightMatch(text: string, query: string): string {
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   return text.replace(
     new RegExp(`(${escaped})`, 'gi'),
-    '<mark class="rounded bg-blue-100 px-0.5 font-medium text-blue-700">$1</mark>',
+    '<mark class="rounded bg-blue-100 px-0.5 font-medium text-[#0057b8]">$1</mark>',
   )
 }
 
@@ -468,6 +436,103 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.icd-workstation {
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'SF Pro Text', 'SF Pro Display', 'San Francisco', 'PingFang SC',
+    'Microsoft YaHei UI', system-ui, sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.icd-workspace {
+  background: transparent;
+}
+
+.icd-result-shell,
+.icd-detail-shell {
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 16px 36px rgba(15, 23, 42, 0.06);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.icd-result-head {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.icd-workstation :deep(.text-slate-900),
+.icd-workstation :deep(.text-slate-800),
+.icd-workstation :deep(.text-slate-700) {
+  color: #1d1d1f !important;
+}
+
+.icd-workstation :deep(.text-slate-600),
+.icd-workstation :deep(.text-slate-500) {
+  color: rgba(29, 29, 31, 0.6) !important;
+}
+
+.icd-workstation :deep(.text-slate-400) {
+  color: rgba(29, 29, 31, 0.38) !important;
+}
+
+.icd-workstation :deep(.text-\[\#0057b8\]),
+.icd-workstation :deep(.text-blue-500) {
+  color: #0066cc !important;
+}
+
+.icd-workstation :deep(.border-slate-200),
+.icd-workstation :deep(.border-slate-200\/80),
+.icd-workstation :deep(.border-blue-100) {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.icd-workstation :deep(.bg-white),
+.icd-workstation :deep(.bg-white\/90),
+.icd-workstation :deep(.bg-white\/94) {
+  background-color: rgba(255, 255, 255, 0.82) !important;
+}
+
+.icd-workstation :deep(.bg-blue-50),
+.icd-workstation :deep(.bg-blue-50\/80) {
+  background-color: rgba(0, 102, 204, 0.08) !important;
+}
+
+.icd-workstation :deep(.font-semibold) {
+  font-weight: 650 !important;
+}
+
+.icd-result-row {
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: rgba(29, 29, 31, 0.76);
+}
+
+.icd-result-row:hover {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(245, 245, 247, 0.72);
+}
+
+.icd-result-row.is-selected {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 3px 10px rgba(0, 102, 204, 0.08);
+}
+
 .icd-tree-modern :deep(.ant-tree-switcher) {
   display: flex !important;
   align-items: center;
@@ -478,16 +543,19 @@ onMounted(() => {
 .icd-tree-modern :deep(.ant-tree-node-content-wrapper) {
   padding: 6px 10px !important;
   border-radius: 12px !important;
-  transition: background 0.15s !important;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease !important;
 }
 
 .icd-tree-modern :deep(.ant-tree-node-content-wrapper:hover) {
-  background: #f8fafc !important;
+  background: rgba(0, 0, 0, 0.04) !important;
 }
 
 .icd-tree-modern :deep(.ant-tree-node-selected .ant-tree-node-content-wrapper),
 .icd-tree-modern :deep(.ant-tree-node-content-wrapper.ant-tree-node-selected) {
-  background: rgba(59, 130, 246, 0.08) !important;
+  background: rgba(0, 102, 204, 0.08) !important;
+  color: #0066cc !important;
 }
 
 .icd-tree-modern :deep(.ant-tree-treenode) {
@@ -507,11 +575,11 @@ onMounted(() => {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
+  background: rgba(29, 29, 31, 0.16);
   border-radius: 3px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
+  background: rgba(29, 29, 31, 0.24);
 }
 </style>

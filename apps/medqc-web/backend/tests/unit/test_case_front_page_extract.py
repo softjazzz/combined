@@ -242,7 +242,8 @@ async def test_extract_frontpage_promote_ed_diag_and_keep_codes(monkeypatch):
     diagnoses = data["diagnoses"]
     procedures = data["procedures"]
 
-    assert diagnoses["discharge_main_diagnosis_text"] == "冠状动脉粥样硬化性心脏病 不稳定型心绞痛"
+    assert diagnoses["discharge_main_diagnosis_text"] == "冠状动脉粥样硬化性心脏病"
+    assert diagnoses["discharge_other_diagnoses_texts"] == ["不稳定型心绞痛", "高血压病3级 极高危"]
     assert diagnoses["discharge_main_icd"] == "LLM_MAIN"
     assert procedures["main_procedure_code"] == "LLM_PROC"
 
@@ -282,9 +283,13 @@ async def test_extract_frontpage_fallback_parse_from_medical_text(monkeypatch):
     assert resp["success"] is True
     diagnoses = resp["data"]["diagnoses"]
     procedures = resp["data"]["procedures"]
-    assert diagnoses["discharge_main_diagnosis_text"] == "冠状动脉粥样硬化性心脏病 不稳定型心绞痛"
+    assert diagnoses["discharge_main_diagnosis_text"] == "冠状动脉粥样硬化性心脏病"
     assert diagnoses["discharge_main_icd"] == "FALLBACK_MAIN"
-    assert diagnoses["discharge_other_diagnoses_texts"] == ["高血压病3级 极高危", "2型糖尿病"]
+    assert diagnoses["discharge_other_diagnoses_texts"] == [
+        "不稳定型心绞痛",
+        "高血压病3级 极高危",
+        "2型糖尿病",
+    ]
     assert procedures["main_procedure_text"] == "冠状动脉造影"
     assert procedures["main_procedure_code"] == "FALLBACK_PROC"
 
@@ -321,7 +326,8 @@ async def test_extract_frontpage_legacy_dict_payload_is_coerced(monkeypatch):
     assert resp["success"] is True
     diagnoses = resp["data"]["diagnoses"]
     procedures = resp["data"]["procedures"]
-    assert diagnoses["discharge_main_diagnosis_text"] == "冠状动脉粥样硬化性心脏病 不稳定型心绞痛"
+    assert diagnoses["discharge_main_diagnosis_text"] == "冠状动脉粥样硬化性心脏病"
+    assert diagnoses["discharge_other_diagnoses_texts"] == ["不稳定型心绞痛", "高血压病3级 极高危"]
     assert diagnoses["discharge_main_icd"] == "LLM_MAIN"
     assert procedures["main_procedure_code"] == "LLM_PROC"
 
@@ -362,10 +368,10 @@ async def test_extract_pre_group_admission_first(monkeypatch):
     diagnoses = resp["data"]["diagnoses"]
     procedures = resp["data"]["procedures"]
     assert diagnoses["admission_main_diagnosis_text"] == "冠状动脉粥样硬化性心脏病 不稳定型心绞痛"
-    assert diagnoses["admission_main_icd"] == "FALLBACK_MAIN"
-    assert diagnoses["discharge_main_icd"] == "FALLBACK_MAIN"
+    assert diagnoses["admission_main_icd"] == "I25.103"
+    assert diagnoses["discharge_main_icd"] == "I25.103"
     assert procedures["main_procedure_text"] == "冠状动脉造影"
-    assert procedures["main_procedure_code"] == "FALLBACK_PROC"
+    assert procedures["main_procedure_code"] == "88.5701"
 
 
 @pytest.mark.asyncio

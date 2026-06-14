@@ -7,8 +7,8 @@
       class="group relative overflow-hidden rounded-[16px] border p-4 text-left shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-all duration-200"
       :class="
         activeKey === card.key
-          ? 'border-blue-400 bg-blue-50/30'
-          : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+          ? 'border-[#0066cc]/35 bg-[#eaf2ff]/60'
+          : 'border-black/10 bg-white/85 hover:border-black/15 hover:bg-white'
       "
       @click="emit('select', card.key)"
     >
@@ -25,7 +25,7 @@
             {{ card.label }}
           </div>
           <div
-            class="mt-1.5 text-[24px] font-black tracking-tight text-slate-900 font-mono"
+            class="mt-1.5 text-[24px] font-bold text-[#1d1d1f] font-mono"
             style="font-variant-numeric: tabular-nums"
           >
             {{ card.value }}
@@ -38,11 +38,7 @@
           class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
           :class="card.iconTint"
         >
-          <component
-            :is="card.icon"
-            class="text-[16px]"
-            :class="card.iconColor"
-          />
+          <component :is="card.icon" class="text-[16px]" :class="card.iconColor" />
         </div>
       </div>
     </button>

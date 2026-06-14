@@ -186,7 +186,7 @@
             </label>
           </div>
           <p class="field-help">
-            费用信息用于页面模拟摘要，不参与本地 DRG 算法判定。
+            费用信息用于页面试算摘要，不参与本地 DRG 算法判定。
           </p>
         </div>
       </div>
@@ -197,7 +197,7 @@
           type="button"
           @click="fillTestCase"
         >
-          填入示例
+          填入样例
         </button>
         <button
           class="secondary-button"
@@ -224,11 +224,11 @@
         <div class="panel-title">
           <span class="heading-icon"><BarChartOutlined /></span>
           <div>
-            <h2>模拟结果</h2>
+            <h2>试算结果</h2>
             <p>结构化展示 DRG 编码、权重、费用和风险提示。</p>
           </div>
         </div>
-        <span class="simulate-chip"><AlertOutlined />仅模拟</span>
+        <span class="simulate-chip"><AlertOutlined />只读试算</span>
       </header>
 
       <div class="result-body">
@@ -247,7 +247,7 @@
         >
           <LoadingOutlined class="spin-icon" />
           <h3>正在执行分组</h3>
-          <p>系统正在读取本地 CHS-DRG 分组器并生成模拟结果。</p>
+          <p>系统正在读取本地 CHS-DRG 分组器并生成试算结果。</p>
         </div>
 
         <div
@@ -261,7 +261,7 @@
                 <CloseCircleOutlined v-else />
               </span>
               <div>
-                <h3>{{ result.status === '分组成功' ? 'DRG 模拟结果' : '未能入组' }}</h3>
+                <h3>{{ result.status === '分组成功' ? 'DRG 试算结果' : '未能入组' }}</h3>
                 <p>CHS-DRG 四川 2.0</p>
               </div>
             </div>
@@ -349,7 +349,7 @@
           <span class="heading-icon"><ApartmentOutlined /></span>
           <div>
             <h3>入组路径解释</h3>
-            <p>按校验、MDC、ADRG、DRG 四步解释模拟过程。</p>
+            <p>按校验、MDC、ADRG、DRG 四步解释试算过程。</p>
           </div>
         </div>
       </header>
@@ -389,7 +389,7 @@
           <span class="heading-icon"><TableOutlined /></span>
           <div>
             <h3>编码映射</h3>
-            <p>展示本次输入编码与模拟口径，不改写数据源。</p>
+            <p>展示本次输入编码与试算口径，不改写数据源。</p>
           </div>
         </div>
       </header>
@@ -512,7 +512,7 @@ const pathSteps = computed(() => [
     title: '确定 DRG',
     description: result.value?.drg
       ? `${result.value.drg}，权重 ${result.value.rw ?? '--'}`
-      : '输出最终 DRG 模拟结果。',
+      : '输出最终 DRG 试算结果。',
     status: result.value?.status === '分组成功' ? '完成' : result.value ? '未入组' : '待执行',
   },
 ])
@@ -573,7 +573,7 @@ function fillTestCase() {
   formData.zdList = ['K80.501', 'K80.100x001', 'K83.109', 'K72.905', 'E11.900']
   formData.ssList = ['51.8803', '51.8701', '51.2300']
   result.value = null
-  message.success('已填入示例病案')
+  message.success('已填入样例病案')
 }
 
 function formatMoney(value: number) {

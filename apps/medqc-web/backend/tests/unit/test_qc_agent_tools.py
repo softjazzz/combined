@@ -39,6 +39,23 @@ from app.services.qc_agent.tools import (
 )
 
 
+def _mock_llm_intent(monkeypatch, intent, warnings=None):
+    def _fake_resolve(message, context):
+        return ({**intent, "confidence": intent.get("confidence", 0.99)}, list(warnings or []))
+
+    monkeypatch.setattr("app.services.qc_agent.orchestrator.resolve_intent_with_llm", _fake_resolve)
+
+
+def _mock_llm_intent_by_message(monkeypatch, mapping):
+    def _fake_resolve(message, context):
+        intent = mapping.get(message)
+        if intent is None:
+            raise AssertionError(f"未配置测试 LLM intent: {message}")
+        return ({**intent, "confidence": intent.get("confidence", 0.99)}, [])
+
+    monkeypatch.setattr("app.services.qc_agent.orchestrator.resolve_intent_with_llm", _fake_resolve)
+
+
 class FakeWorkspace:
     def __init__(self) -> None:
         self.calls = []
@@ -1182,6 +1199,20 @@ def test_list_qc_rules_filters_ward_round_and_discharge_aliases():
     assert all("discharge" in rule["document_aliases"] for rule in discharge.public_data["rules"])
 
 
+def test_list_qc_rules_filters_admission_sc_rules_without_course_or_lab_noise():
+    observation = list_qc_rules({"document_alias": "admission", "source": "sc146", "limit": 100})
+
+    assert observation.public_data["returned"] > 0
+    rule_ids = {rule["rule_id"] for rule in observation.public_data["rules"]}
+    assert "SC-001" in rule_ids
+    assert "SC-020" in rule_ids
+    assert "SC-027" not in rule_ids
+    assert "SC-032" not in rule_ids
+    assert "SC-048" not in rule_ids
+    assert all(rule["source"] == "sc146" for rule in observation.public_data["rules"])
+    assert all(rule["rule_id"].startswith("SC-") for rule in observation.public_data["rules"])
+
+
 def test_list_qc_rules_filters_qc_point_types():
     for qc_point_type in ("timeliness", "completeness", "consistency"):
         observation = list_qc_rules({"qc_point_type": qc_point_type, "limit": 50})
@@ -1239,6 +1270,66 @@ def test_search_icd_codes_returns_local_candidates_without_vector_fields():
     assert first["type"] == "diagnosis"
     assert "confidence" in first
     assert "match_type" in first
+    _assert_no_sensitive_keys(public_data)
+    _assert_no_raw_context(public_data)
+
+
+def test_search_icd_codes_uses_semantic_topk_for_natural_diagnosis_query(monkeypatch):
+    class FakeSemanticService:
+        def search_diagnosis(self, query, prefer_insurance=False, top_k=5, min_score=0.0):
+            assert query == "高血压三级"
+            assert prefer_insurance is True
+            return [
+                {
+                    "code": "I10.x05",
+                    "name": "高血压3级",
+                    "score": 0.91,
+                    "source": "semantic",
+                    "version": "insurance",
+                }
+            ][:top_k]
+
+    monkeypatch.setattr(
+        "app.services.icd_semantic_retrieval_service.get_icd_semantic_retrieval_service",
+        lambda: FakeSemanticService(),
+    )
+
+    observation = search_icd_codes(
+        SearchICDCodesInput(query="高血压三级", code_type="diagnosis", version="insurance", limit=5)
+    )
+
+    assert observation.status == "success"
+    public_data = observation.public_data
+    assert public_data["query"] == "高血压三级"
+    assert public_data["returned"] > 0
+    assert public_data["candidates"][0]["code"] == "I10.x05"
+    assert public_data["candidates"][0]["name"] == "高血压3级"
+    assert public_data["candidates"][0]["match_type"] == "semantic"
+    _assert_no_sensitive_keys(public_data)
+    _assert_no_raw_context(public_data)
+
+
+def test_search_icd_codes_falls_back_to_local_similarity_when_semantic_unavailable(monkeypatch):
+    class BrokenSemanticService:
+        def search_diagnosis(self, query, prefer_insurance=False, top_k=5, min_score=0.0):
+            raise RuntimeError("semantic index offline")
+
+    monkeypatch.setattr(
+        "app.services.icd_semantic_retrieval_service.get_icd_semantic_retrieval_service",
+        lambda: BrokenSemanticService(),
+    )
+
+    observation = search_icd_codes(
+        SearchICDCodesInput(query="重度高血压", code_type="diagnosis", version="clinical", limit=5)
+    )
+
+    assert observation.status == "success"
+    public_data = observation.public_data
+    assert public_data["query"] == "重度高血压"
+    assert public_data["returned"] > 0
+    assert public_data["candidates"][0]["code"]
+    assert public_data["candidates"][0]["match_type"] == "local_similarity"
+    assert any("本地相似度兜底" in item for item in public_data["warnings"])
     _assert_no_sensitive_keys(public_data)
     _assert_no_raw_context(public_data)
 
@@ -1758,7 +1849,16 @@ def test_api_predict_dip_and_drg_group_outputs_are_sanitized(client, qc_agent_au
     _assert_no_raw_context(drg_body)
 
 
-def test_api_chat_direct_visit_id_completes_document_qc(client, qc_agent_auth):
+def test_api_chat_direct_visit_id_completes_document_qc(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "run_document_qc",
+            "visit_id": "V001",
+            "document_alias": "ward_round",
+            "qc_point_type": "completeness",
+        },
+    )
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
     response = client.post(
@@ -1783,7 +1883,15 @@ def test_api_chat_direct_visit_id_completes_document_qc(client, qc_agent_auth):
     _assert_no_raw_context(body)
 
 
-def test_api_chat_explicit_rule_ids_take_priority(client, qc_agent_auth):
+def test_api_chat_explicit_rule_ids_take_priority(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "run_document_qc",
+            "visit_id": "V001",
+            "document_alias": "ward_round",
+        },
+    )
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
     response = client.post(
@@ -1803,7 +1911,116 @@ def test_api_chat_explicit_rule_ids_take_priority(client, qc_agent_auth):
     _assert_no_raw_context(body)
 
 
-def test_api_chat_routes_icd_diagnosis_search(client, qc_agent_auth):
+def test_api_chat_lists_ward_round_rules_without_record_selection(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {"capability": "list_qc_rules", "document_alias": "ward_round", "source": "sc146"},
+    )
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "列一下查房记录相关质控规则"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["capability"] == "list_qc_rules"
+    assert body["parsed_intent"]["document_alias"] == "ward_round"
+    assert body["parsed_intent"]["source"] == "sc146"
+    assert [item["tool_name"] for item in body["plan"]] == ["list_qc_rules"]
+    assert body["result"]["returned"] > 0
+    assert {rule["source"] for rule in body["result"]["rules"]} == {"sc146"}
+    assert all(rule["rule_id"].startswith("SC-") for rule in body["result"]["rules"])
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_can_list_agent_builtin_rules_when_explicitly_requested(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {"capability": "list_qc_rules", "document_alias": "ward_round", "source": "agent_builtin"},
+    )
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "列一下内置可执行查房记录规则"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["capability"] == "list_qc_rules"
+    assert body["parsed_intent"]["document_alias"] == "ward_round"
+    assert body["parsed_intent"]["source"] == "agent_builtin"
+    assert body["result"]["returned"] > 0
+    assert {rule["source"] for rule in body["result"]["rules"]} == {"agent_builtin"}
+    assert all(rule["rule_id"].startswith("WR-") for rule in body["result"]["rules"])
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_lists_admission_sc_rules_without_course_noise(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {"capability": "list_qc_rules", "document_alias": "admission", "source": "sc146"},
+    )
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "入院记录有哪些质控规则"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["capability"] == "list_qc_rules"
+    assert body["parsed_intent"]["document_alias"] == "admission"
+    assert body["parsed_intent"]["source"] == "sc146"
+    rule_ids = {rule["rule_id"] for rule in body["result"]["rules"]}
+    assert "SC-001" in rule_ids
+    assert "SC-020" in rule_ids
+    assert "SC-027" not in rule_ids
+    assert "SC-032" not in rule_ids
+    assert all(rule["source"] == "sc146" for rule in body["result"]["rules"])
+    assert all(rule["rule_id"].startswith("SC-") for rule in body["result"]["rules"])
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_can_list_all_ward_round_rule_sources_when_requested(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {"capability": "list_qc_rules", "document_alias": "ward_round", "source": "all"},
+    )
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "列一下全部规则库里的查房记录相关质控规则"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["capability"] == "list_qc_rules"
+    assert body["parsed_intent"]["document_alias"] == "ward_round"
+    assert body["parsed_intent"]["source"] is None
+    assert body["result"]["returned"] > 0
+    assert any(rule["source"] != "agent_builtin" for rule in body["result"]["rules"])
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_routes_icd_diagnosis_search(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "search_icd_codes",
+            "icd_query": "2型糖尿病",
+            "code_type": "diagnosis",
+            "version": "insurance",
+        },
+    )
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
     response = client.post(
@@ -1823,7 +2040,110 @@ def test_api_chat_routes_icd_diagnosis_search(client, qc_agent_auth):
     _assert_no_raw_context(body)
 
 
-def test_api_chat_routes_icd_procedure_search(client, qc_agent_auth):
+def test_api_chat_routes_natural_coding_question(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "search_icd_codes",
+            "icd_query": "2型糖尿病",
+            "code_type": "diagnosis",
+            "version": "insurance",
+        },
+    )
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "二型糖尿病怎么编码"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["task_type"] == "coding"
+    assert body["parsed_intent"]["capability"] == "search_icd_codes"
+    assert body["parsed_intent"]["icd_query"] == "2型糖尿病"
+    assert body["parsed_intent"]["code_type"] == "diagnosis"
+    assert [item["tool_name"] for item in body["plan"]] == ["search_icd_codes"]
+    assert body["result"]["candidates"]
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_routes_bare_diagnosis_coding_query(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "search_icd_codes",
+            "icd_query": "高血压三级",
+            "code_type": "diagnosis",
+            "version": "insurance",
+        },
+    )
+
+    class FakeSemanticService:
+        def search_diagnosis(self, query, prefer_insurance=False, top_k=5, min_score=0.0):
+            assert query == "高血压三级"
+            return [
+                {
+                    "code": "I10.x05",
+                    "name": "高血压3级",
+                    "score": 0.91,
+                    "source": "semantic",
+                    "version": "insurance",
+                }
+            ][:top_k]
+
+    monkeypatch.setattr(
+        "app.services.icd_semantic_retrieval_service.get_icd_semantic_retrieval_service",
+        lambda: FakeSemanticService(),
+    )
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "高血压三级"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["parsed_intent"]["task_type"] == "coding"
+    assert body["parsed_intent"]["capability"] == "search_icd_codes"
+    assert body["parsed_intent"]["icd_query"] == "高血压三级"
+    assert body["parsed_intent"]["code_type"] == "diagnosis"
+    assert [item["tool_name"] for item in body["plan"]] == ["search_icd_codes"]
+    assert body["result"]["query"] == "高血压三级"
+    assert body["result"]["candidates"][0]["code"] == "I10.x05"
+    assert body["result"]["candidates"][0]["match_type"] == "semantic"
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_does_not_route_greeting_to_icd_search(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(monkeypatch, {"capability": "unsupported"})
+    client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
+
+    response = client.post(
+        "/api/v1/qc-agent/chat",
+        json={"message": "你好"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["parsed_intent"]["capability"] == "unsupported"
+    assert body["plan"] == []
+    _assert_no_raw_context(body)
+
+
+def test_api_chat_routes_icd_procedure_search(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "search_icd_codes",
+            "icd_query": "腹腔镜胆囊切除术",
+            "code_type": "procedure",
+            "version": "insurance",
+        },
+    )
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
     response = client.post(
@@ -1841,7 +2161,15 @@ def test_api_chat_routes_icd_procedure_search(client, qc_agent_auth):
     _assert_no_raw_context(body)
 
 
-def test_api_chat_routes_record_icd_suggestions(client, qc_agent_auth):
+def test_api_chat_routes_record_icd_suggestions(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "suggest_record_icd_codes",
+            "visit_id": "2298532",
+            "include_procedures": True,
+        },
+    )
     client.app.dependency_overrides[get_qc_agent_registry] = lambda: _registry_with_workspace(Visit2298532Workspace())
 
     response = client.post(
@@ -1862,7 +2190,17 @@ def test_api_chat_routes_record_icd_suggestions(client, qc_agent_auth):
     _assert_no_raw_context(body)
 
 
-def test_api_chat_routes_dip_grouping(client, qc_agent_auth):
+def test_api_chat_routes_dip_grouping(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "predict_dip_group",
+            "pdx_code": "E11.900",
+            "patient_age": 65,
+            "los": 7,
+            "total_fee": 8000,
+        },
+    )
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
     response = client.post(
@@ -1876,14 +2214,22 @@ def test_api_chat_routes_dip_grouping(client, qc_agent_auth):
     assert body["parsed_intent"]["task_type"] == "grouping"
     assert body["parsed_intent"]["capability"] == "predict_dip_group"
     assert [item["tool_name"] for item in body["plan"]] == ["predict_dip_group"]
-    assert body["plan"][0]["arguments"]["pdx_code"] == "I10.X01"
+    assert body["plan"][0]["arguments"]["pdx_code"] == "E11.900"
     assert body["plan"][0]["arguments"]["patient_age"] == 65
     assert body["plan"][0]["arguments"]["los"] == 7
     assert body["result"]["dip_code"]
     _assert_no_raw_context(body)
 
 
-def test_api_chat_routes_drg_grouping_with_controlled_fallback(client, qc_agent_auth):
+def test_api_chat_routes_drg_grouping_with_controlled_fallback(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "predict_drg_group",
+            "primary_diagnosis_code": "K80.101",
+            "procedure_codes": ["51.2101"],
+        },
+    )
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
     response = client.post(
@@ -1904,7 +2250,8 @@ def test_api_chat_routes_drg_grouping_with_controlled_fallback(client, qc_agent_
     _assert_no_raw_context(body)
 
 
-def test_api_chat_grouping_missing_params_needs_clarification(client, qc_agent_auth):
+def test_api_chat_grouping_missing_params_needs_clarification(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(monkeypatch, {"capability": "predict_dip_group"})
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
     response = client.post(
@@ -1922,6 +2269,10 @@ def test_api_chat_grouping_missing_params_needs_clarification(client, qc_agent_a
 
 
 def test_api_chat_empty_record_context_needs_clarification(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {"capability": "run_document_qc", "visit_id": "V003", "document_alias": "ward_round"},
+    )
     monkeypatch.setattr(
         "app.services.qc_agent.tools._read_cdm_detail_documents",
         _empty_cdm_documents,
@@ -1943,6 +2294,10 @@ def test_api_chat_empty_record_context_needs_clarification(client, qc_agent_auth
 
 
 def test_api_chat_cdm_detail_documents_continue_to_document_qc(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {"capability": "run_document_qc", "visit_id": "V003", "document_alias": "ward_round"},
+    )
     monkeypatch.setattr(
         "app.services.qc_agent.tools._read_cdm_detail_documents",
         _cdm_course_documents,
@@ -1969,7 +2324,11 @@ def test_api_chat_cdm_detail_documents_continue_to_document_qc(client, qc_agent_
     _assert_no_raw_context(body)
 
 
-def test_api_chat_missing_target_document_needs_clarification(client, qc_agent_auth):
+def test_api_chat_missing_target_document_needs_clarification(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {"capability": "run_document_qc", "visit_id": "V001", "document_alias": "consultation"},
+    )
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
     response = client.post(
@@ -2021,7 +2380,16 @@ def test_qc_agent_pi_harness_summarizes_http_error_envelope():
     assert result["sensitive_leak_found"] is False
 
 
-def test_api_chat_search_no_candidate_needs_clarification(client, qc_agent_auth):
+def test_api_chat_search_no_candidate_needs_clarification(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "run_document_qc",
+            "patient_name": "赵六",
+            "document_alias": "course",
+            "qc_point_type": "timeliness",
+        },
+    )
     workspace = SearchResultWorkspace([])
     client.app.dependency_overrides[get_qc_agent_registry] = lambda: _registry_with_workspace(workspace)
 
@@ -2038,7 +2406,17 @@ def test_api_chat_search_no_candidate_needs_clarification(client, qc_agent_auth)
     _assert_no_raw_context(body)
 
 
-def test_api_chat_search_multi_candidate_needs_confirmation(client, qc_agent_auth):
+def test_api_chat_search_multi_candidate_needs_confirmation(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "run_document_qc",
+            "patient_name": "张三",
+            "department": "中医科",
+            "document_alias": "ward_round",
+            "qc_point_type": "completeness",
+        },
+    )
     workspace = SearchResultWorkspace(
         [
             {
@@ -2077,7 +2455,16 @@ def test_api_chat_search_multi_candidate_needs_confirmation(client, qc_agent_aut
     _assert_no_raw_context(body)
 
 
-def test_api_chat_search_single_candidate_continues(client, qc_agent_auth):
+def test_api_chat_search_single_candidate_continues(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent(
+        monkeypatch,
+        {
+            "capability": "run_document_qc",
+            "patient_name": "张三",
+            "document_alias": "course",
+            "qc_point_type": "timeliness",
+        },
+    )
     workspace = SearchResultWorkspace(
         [
             {
@@ -2108,7 +2495,26 @@ def test_api_chat_search_single_candidate_continues(client, qc_agent_auth):
     _assert_no_raw_context(body)
 
 
-def test_api_chat_document_alias_mapping_and_ambiguous_message(client, qc_agent_auth):
+def test_api_chat_document_alias_mapping_and_ambiguous_message(client, qc_agent_auth, monkeypatch):
+    _mock_llm_intent_by_message(
+        monkeypatch,
+        {
+            "质控 visit_id=V001 的出院记录": {
+                "capability": "run_document_qc",
+                "visit_id": "V001",
+                "document_alias": "discharge",
+            },
+            "质控 visit_id=V001 的会诊记录": {
+                "capability": "run_document_qc",
+                "visit_id": "V001",
+                "document_alias": "consultation",
+            },
+            "对 visit_id=V001 做质控": {
+                "capability": "run_document_qc",
+                "visit_id": "V001",
+            },
+        },
+    )
     client.app.dependency_overrides[get_qc_agent_registry] = _registry_with_fake_workspace
 
     discharge = client.post(

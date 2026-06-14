@@ -12,6 +12,8 @@ const {
   getManualSamplePoolSyncJob,
   getManualSamplePoolRecords,
   importManualSamplePoolByUpload,
+  exportLuxian0609EvaluationReport,
+  listManualSampleValidationRuleSets,
   matchManualSamplePool,
   runManualSamplePool,
   syncManualSamplePoolRecords,
@@ -27,6 +29,7 @@ const {
     error: vi.fn(),
     warning: vi.fn(),
     info: vi.fn(),
+    loading: vi.fn(),
   },
   listManualSamplePools: vi.fn(),
   getSheet2ExactReviewAcceptancePackage: vi.fn(),
@@ -34,6 +37,8 @@ const {
   getManualSamplePoolSyncJob: vi.fn(),
   getManualSamplePoolRecords: vi.fn(),
   importManualSamplePoolByUpload: vi.fn(),
+  exportLuxian0609EvaluationReport: vi.fn(),
+  listManualSampleValidationRuleSets: vi.fn(),
   matchManualSamplePool: vi.fn(),
   runManualSamplePool: vi.fn(),
   syncManualSamplePoolRecords: vi.fn(),
@@ -56,6 +61,8 @@ vi.mock('@/services/manual-case-sample-service', () => ({
   getManualSamplePoolSyncJob,
   getManualSamplePoolRecords,
   importManualSamplePoolByUpload,
+  exportLuxian0609EvaluationReport,
+  listManualSampleValidationRuleSets,
   matchManualSamplePool,
   runManualSamplePool,
   syncManualSamplePoolRecords,
@@ -83,6 +90,12 @@ vi.mock('@ant-design/icons-vue', () => ({
     },
   }),
 }))
+
+function slotNodes(slot?: () => unknown) {
+  const nodes = slot?.()
+  if (!nodes) return []
+  return Array.isArray(nodes) ? nodes.flat().filter(Boolean) : [nodes]
+}
 
 const AButtonStub = defineComponent({
   name: 'AButtonStub',
@@ -210,14 +223,18 @@ const ASegmentedStub = defineComponent({
 const ADropdownStub = defineComponent({
   name: 'ADropdownStub',
   setup(_, { slots }) {
-    return () => h('div', { class: 'a-dropdown-stub' }, [slots.default?.(), slots.overlay?.()])
+    return () =>
+      h('div', { class: 'a-dropdown-stub' }, [
+        ...slotNodes(slots.default),
+        h('div', { class: 'a-dropdown-overlay-stub' }, slotNodes(slots.overlay)),
+      ])
   },
 })
 
 const AMenuStub = defineComponent({
   name: 'AMenuStub',
   setup(_, { slots }) {
-    return () => h('div', { class: 'a-menu-stub' }, slots.default?.())
+    return () => h('div', { class: 'a-menu-stub' }, slotNodes(slots.default))
   },
 })
 
@@ -255,7 +272,7 @@ const ASubMenuStub = defineComponent({
     return () =>
       h('div', { class: 'a-sub-menu-stub' }, [
         h('div', { class: 'a-sub-menu-title' }, props.title),
-        slots.default?.(),
+        ...slotNodes(slots.default),
       ])
   },
 })
@@ -270,7 +287,7 @@ const AMenuDividerStub = defineComponent({
 const ACollapseStub = defineComponent({
   name: 'ACollapseStub',
   setup(_, { slots }) {
-    return () => h('div', { class: 'a-collapse-stub' }, slots.default?.())
+    return () => h('div', { class: 'a-collapse-stub' }, slotNodes(slots.default))
   },
 })
 
@@ -286,7 +303,7 @@ const ACollapsePanelStub = defineComponent({
     return () =>
       h('section', { class: 'a-collapse-panel-stub' }, [
         h('button', { type: 'button', class: 'collapse-header' }, props.header),
-        slots.default?.(),
+        ...slotNodes(slots.default),
       ])
   },
 })
@@ -381,7 +398,7 @@ const ATableStub = defineComponent({
       default: () => ({}),
     },
   },
-  setup(props) {
+  setup(props, { attrs }) {
     const toggle = (recordId: string, checked: boolean) => {
       const selectedKeys = Array.isArray((props.rowSelection as any).selectedRowKeys)
         ? [...(props.rowSelection as any).selectedRowKeys]
@@ -392,11 +409,14 @@ const ATableStub = defineComponent({
       ;(props.rowSelection as any).onChange?.(nextKeys)
     }
 
-    return () =>
-      h(
+    return () => {
+      const dataSource =
+        (props.dataSource as Array<any>) ||
+        ((attrs['data-source'] || attrs.dataSource || []) as Array<any>)
+      return h(
         'div',
         { class: 'a-table-stub' },
-        (props.dataSource as Array<any>).map((record) =>
+        dataSource.map((record) =>
           h('div', { class: 'record-row', 'data-record-id': record.id }, [
             h('label', [
               h('input', {
@@ -422,6 +442,7 @@ const ATableStub = defineComponent({
           ]),
         ),
       )
+    }
   },
 })
 
@@ -480,7 +501,16 @@ const ADrawerStub = defineComponent({
   },
   emits: ['close'],
   setup(props, { slots }) {
-    return () => (props.open ? h('div', { class: 'a-drawer-stub' }, slots.default?.()) : null)
+    return () =>
+      h(
+        'div',
+        {
+          class: 'a-drawer-stub',
+          'data-open': props.open ? 'true' : 'false',
+          style: props.open ? '' : 'display:none;',
+        },
+        props.open ? slotNodes(slots.default) : [],
+      )
   },
 })
 
@@ -490,7 +520,12 @@ const QCReviewDrawerStub = defineComponent({
     visible: Boolean,
   },
   setup(props) {
-    return () => (props.visible ? h('div', { class: 'qc-review-drawer-stub' }) : null)
+    return () =>
+      h('div', {
+        class: 'qc-review-drawer-stub',
+        'data-open': props.visible ? 'true' : 'false',
+        style: props.visible ? '' : 'display:none;',
+      })
   },
 })
 
@@ -500,7 +535,12 @@ const SemanticRulesBatchResultDrawerStub = defineComponent({
     open: Boolean,
   },
   setup(props) {
-    return () => (props.open ? h('div', { class: 'batch-result-drawer-stub' }) : null)
+    return () =>
+      h('div', {
+        class: 'batch-result-drawer-stub',
+        'data-open': props.open ? 'true' : 'false',
+        style: props.open ? '' : 'display:none;',
+      })
   },
 })
 
@@ -591,6 +631,112 @@ function buildExactReviewAcceptance() {
   }
 }
 
+function buildRuleSets() {
+  return [
+    {
+      rule_set_key: 'luxian_0609_qc_v1',
+      rule_set_name: '泸县0609质控点验证 v1',
+      rule_set_version: '2026-06-09',
+      scope: 'running',
+      rule_ids: ['SC-002', 'CL-081'],
+      rule_count: 59,
+      validation_mode: 'customer',
+      advanced: false,
+      display_group: 'main',
+      coverage_summary: {
+        已达正式口径: 6,
+        证据待补强: 10,
+        跨文书待完善: 14,
+        跨表联查待接入: 15,
+        待实现规则: 4,
+      },
+      coverage_status:
+        '正式上线闸门未通过：通过 3 项，失败 6 项，未验证 0 项；当前 6 条达到 formal_ready，其余规则仍需补证据、跨文书或跨表执行链路。',
+      release_gate_summary: {
+        release_ready: false,
+        passed_checks: 3,
+        failed_checks: 6,
+        unverified_checks: 0,
+        blocking_count: 6,
+      },
+      evaluation_summary: {
+        rule_count: 49,
+        rules_with_all_case_types: 0,
+        rules_missing_case_types: 49,
+        hit_count: 0,
+        manual_confirmed_correct_count: 0,
+        false_positive_count: 0,
+        false_negative_count: 0,
+        unknown_count: 0,
+        evidence_missing_count: 0,
+        launch_status: { not_ready: 49 },
+      },
+      work_package_summary: {
+        package_count: 49,
+        phase_counts: {
+          阶段3样本验证集建设: 6,
+          阶段2证据链补强: 10,
+          阶段2跨文书执行链路: 14,
+          阶段2跨表数据联查: 15,
+          阶段2新增规则实现: 4,
+        },
+        priority_counts: { P0: 14, P1: 22, P2: 13 },
+      },
+      page_closure_summary: {
+        page_verified: false,
+        capability_count: 8,
+        passed_capabilities: 4,
+        partial_capabilities: 4,
+        failed_capabilities: 0,
+        blocking_count: 4,
+        status_counts: { pass: 4, partial: 4 },
+      },
+    },
+    {
+      rule_set_key: 'sc_content_full_v1',
+      rule_set_name: 'SC 内涵质控全量 v1',
+      rule_set_version: '2026-04-20',
+      scope: 'final',
+      rule_ids: ['SC-001'],
+      rule_count: 84,
+      validation_mode: 'formal_fast_screen_full',
+      advanced: false,
+      display_group: 'main',
+      coverage_status: 'SC146 中 84 条内涵规则全量基线',
+    },
+    {
+      rule_set_key: 'sc_sample_running_v1',
+      rule_set_name: 'SC 样本规则模式',
+      rule_set_version: 'running-batch-1',
+      scope: 'running',
+      rule_count: 0,
+      validation_mode: 'sc',
+      advanced: true,
+      display_group: 'advanced',
+    },
+    {
+      rule_set_key: 'sample_programmatic_gate_v1',
+      rule_set_name: '样本硬门槛程序规则包 v1',
+      rule_set_version: '2026-04-27',
+      scope: 'running',
+      rule_count: 17,
+      validation_mode: 'programmatic',
+      advanced: true,
+      display_group: 'advanced',
+    },
+    {
+      rule_set_key: 'customer_luxian_full_v1',
+      rule_set_name: '客户专项规则包 v1（历史）',
+      rule_set_version: '2026-04-30',
+      scope: 'running',
+      rule_count: 0,
+      validation_mode: 'customer',
+      advanced: true,
+      display_group: 'advanced',
+    },
+  ]
+}
+
 async function mountView() {
   const wrapper = mount(CustomerSampleValidationView, {
     global: {
@@ -617,21 +763,71 @@ async function mountView() {
         ADrawer: ADrawerStub,
         QCReviewDrawer: QCReviewDrawerStub,
         SemanticRulesBatchResultDrawer: SemanticRulesBatchResultDrawerStub,
+        'q-c-review-drawer': QCReviewDrawerStub,
+        'semantic-rules-batch-result-drawer': SemanticRulesBatchResultDrawerStub,
+        'a-button': AButtonStub,
+        'a-tag': ATagStub,
+        'a-card': ACardStub,
+        'a-spin': ASpinStub,
+        'a-select': ASelectStub,
+        'a-select-option': defineComponent({
+          name: 'ASelectOptionStub',
+          props: {
+            value: {
+              type: [String, Number],
+              default: undefined,
+            },
+          },
+          setup(_, { slots }) {
+            return () => h('option', slotNodes(slots.default))
+          },
+        }),
+        'a-segmented': ASegmentedStub,
+        'a-dropdown': ADropdownStub,
+        'a-menu': AMenuStub,
+        'a-menu-item': AMenuItemStub,
+        'a-sub-menu': ASubMenuStub,
+        'a-menu-divider': AMenuDividerStub,
+        'a-collapse': ACollapseStub,
+        'a-collapse-panel': ACollapsePanelStub,
+        'a-input': AInputStub,
+        'a-textarea': ATextareaStub,
+        'a-switch': ASwitchStub,
+        'a-table': ATableStub,
+        'a-modal': AModalStub,
+        'a-upload-dragger': AUploadDraggerStub,
+        'a-drawer': ADrawerStub,
       },
     },
   })
   await flushPromises()
   await nextTick()
+  await flushPromises()
+  await nextTick()
   return wrapper
+}
+
+async function selectRuleSet(wrapper: ReturnType<typeof mount>, ruleSetKey: string) {
+  const button = wrapper.find(`[data-rule-set-key="${ruleSetKey}"]`)
+  expect(button.exists()).toBe(true)
+  await button.trigger('click')
+  await flushPromises()
 }
 
 describe('CustomerSampleValidationView', () => {
   afterEach(() => {
+    vi.unstubAllGlobals()
     vi.useRealTimers()
   })
 
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:luxian-0609-report'),
+      revokeObjectURL: vi.fn(),
+    })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     listManualSamplePools.mockResolvedValue({
       success: true,
       data: { items: [buildPool()], total: 1, page: 1, page_size: 50 },
@@ -639,6 +835,10 @@ describe('CustomerSampleValidationView', () => {
     getSheet2ExactReviewAcceptancePackage.mockResolvedValue({
       success: true,
       data: buildExactReviewAcceptance(),
+    })
+    listManualSampleValidationRuleSets.mockResolvedValue({
+      success: true,
+      data: { items: buildRuleSets() },
     })
     getLatestManualSamplePoolSyncJob.mockResolvedValue({ success: true, data: null })
     getManualSamplePoolSyncJob.mockResolvedValue({
@@ -680,7 +880,8 @@ describe('CustomerSampleValidationView', () => {
         record_ids: ['V001'],
         rule_ids: ['SC-023'],
         validation_mode: 'customer',
-        rule_set_name: '客户专项规则包 v1',
+        rule_set_key: 'luxian_0609_qc_v1',
+        rule_set_name: '泸县0609质控点验证 v1',
       },
     })
     syncManualSamplePoolRecords.mockResolvedValue({
@@ -696,6 +897,59 @@ describe('CustomerSampleValidationView', () => {
       data: { id: 'job-2', status: 'completed' },
     })
     exportSichuanWorkspaceBatchJob.mockResolvedValue({ success: true, data: new Blob() })
+    exportLuxian0609EvaluationReport.mockResolvedValue({
+      success: true,
+      data: new Blob(['report']),
+    })
+  })
+
+  it('默认选中泸县0609规则集并展示规则集摘要', async () => {
+    const wrapper = await mountView()
+
+    expect(listManualSampleValidationRuleSets).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('验证规则集')
+    expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
+    expect(wrapper.text()).toContain('59')
+    expect(wrapper.text()).toContain('场景 运行中病历')
+    expect(wrapper.text()).toContain('闸门未过 3/9')
+    expect(wrapper.text()).toContain('三类样本齐备 0')
+    expect(wrapper.text()).toContain('误报 0')
+    expect(wrapper.text()).toContain('漏报 0')
+    expect(wrapper.text()).toContain('不可判定 0')
+    expect(wrapper.text()).toContain('页面待闭环 4/8')
+    expect(wrapper.text()).toContain('已达正式口径 6')
+    expect(wrapper.text()).toContain('证据待补强 10')
+    expect(wrapper.text()).toContain('跨文书待完善 14')
+    expect(wrapper.text()).toContain('跨表联查待接入 15')
+    expect(wrapper.text()).toContain('待实现规则 4')
+  })
+
+  it('规则集目录接口失败时使用内置 fallback', async () => {
+    listManualSampleValidationRuleSets.mockResolvedValueOnce({
+      success: false,
+      message: 'rule sets unavailable',
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
+    expect(wrapper.text()).toContain('SC 内涵质控全量 v1')
+    expect(wrapper.text()).toContain('内置目录')
+  })
+
+  it('可从更多操作导出泸县0609专项评估报告', async () => {
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('导出泸县0609报告')
+    const exportItem = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('Markdown 评估报告'))
+    expect(exportItem).toBeTruthy()
+    await exportItem!.trigger('click')
+    await flushPromises()
+
+    expect(exportLuxian0609EvaluationReport).toHaveBeenCalledWith('md')
+    expect(message.success).toHaveBeenCalledWith('泸县0609质控点评估报告已导出')
   })
 
   it('按病历勾选并透传并发病历数', async () => {
@@ -711,7 +965,9 @@ describe('CustomerSampleValidationView', () => {
     expect(parallelSelect).toBeTruthy()
     await parallelSelect!.setValue('2')
 
-    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起泸县0609验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -722,6 +978,7 @@ describe('CustomerSampleValidationView', () => {
         record_ids: ['V001'],
         max_parallel_records: 2,
         validation_mode: 'customer',
+        rule_set_key: 'luxian_0609_qc_v1',
       },
       undefined,
     )
@@ -731,7 +988,9 @@ describe('CustomerSampleValidationView', () => {
   it('客户样本复现模式未选择病历时保持整池提交行为', async () => {
     const wrapper = await mountView()
 
-    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起泸县0609验证'))
     expect(runButton).toBeTruthy()
     expect(runButton!.attributes('disabled')).toBeUndefined()
     await runButton!.trigger('click')
@@ -743,6 +1002,7 @@ describe('CustomerSampleValidationView', () => {
         record_ids: [],
         max_parallel_records: 4,
         validation_mode: 'customer',
+        rule_set_key: 'luxian_0609_qc_v1',
       },
       undefined,
     )
@@ -1017,7 +1277,9 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起泸县0609验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1055,7 +1317,9 @@ describe('CustomerSampleValidationView', () => {
     await recordCheckboxes[0].setValue(true)
     await recordCheckboxes[1].setValue(true)
 
-    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起泸县0609验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1067,6 +1331,7 @@ describe('CustomerSampleValidationView', () => {
         record_ids: ['V001'],
         max_parallel_records: 4,
         validation_mode: 'customer',
+        rule_set_key: 'luxian_0609_qc_v1',
       },
       undefined,
     )
@@ -1078,13 +1343,18 @@ describe('CustomerSampleValidationView', () => {
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
-    const runButton = wrapper.findAll('button').find((node) => node.text().includes('发起样本验证'))
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起泸县0609验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
 
     expect(message.success).toHaveBeenCalledWith(
-      '已创建客户专项规则包 v1验证任务，覆盖 1 条样本 / 1 份病历 / 5 条规则，并发 4 份病历',
+      expect.objectContaining({
+        content:
+          '任务已创建，正在打开进度。luxian_0609_qc_v1 / 泸县0609质控点验证 v1，覆盖 1 条样本 / 1 份病历 / 5 条规则，并发 4 份病历',
+      }),
     )
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-2')
     expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
@@ -1111,6 +1381,7 @@ describe('CustomerSampleValidationView', () => {
         record_ids: ['V001'],
         max_parallel_records: 4,
         validation_mode: 'sc',
+        rule_set_key: '',
       },
       undefined,
     )
@@ -1162,6 +1433,7 @@ describe('CustomerSampleValidationView', () => {
         record_ids: ['V008'],
         max_parallel_records: 4,
         validation_mode: 'programmatic',
+        rule_set_key: 'sample_programmatic_gate_v1',
       },
       undefined,
     )
@@ -1204,12 +1476,9 @@ describe('CustomerSampleValidationView', () => {
       },
     })
 
-    const modeButton = wrapper.findAll('button').find((node) => node.text() === '正式84条质控')
-    expect(modeButton).toBeTruthy()
-    await modeButton!.trigger('click')
-    await flushPromises()
+    await selectRuleSet(wrapper, 'sc_content_full_v1')
 
-    expect(wrapper.text()).toContain('正式终末全量内涵 84 条')
+    expect(wrapper.text()).toContain('SC 内涵质控全量 v1')
     expect(getManualSamplePoolRecords).toHaveBeenLastCalledWith(
       'pool-1',
       expect.objectContaining({
@@ -1222,7 +1491,7 @@ describe('CustomerSampleValidationView', () => {
 
     const runButton = wrapper
       .findAll('button')
-      .find((node) => node.text().includes('发起正式84条质控'))
+      .find((node) => node.text().includes('发起SC全量验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1238,21 +1507,21 @@ describe('CustomerSampleValidationView', () => {
       { timeout: 90000 },
     )
     expect(message.success).toHaveBeenCalledWith(
-      '已创建sc_content_full_v1 / 内涵质控全量 v1验证任务，覆盖 1 条样本 / 1 份病历 / 84 条规则，并发 4 份病历',
+      expect.objectContaining({
+        content:
+          '任务已创建，正在打开进度。sc_content_full_v1 / 内涵质控全量 v1，覆盖 1 条样本 / 1 份病历 / 84 条规则，并发 4 份病历',
+      }),
     )
   })
 
   it('正式84条未选择病历时禁用主按钮且不会提交整池', async () => {
     const wrapper = await mountView()
 
-    const modeButton = wrapper.findAll('button').find((node) => node.text() === '正式84条质控')
-    expect(modeButton).toBeTruthy()
-    await modeButton!.trigger('click')
-    await flushPromises()
+    await selectRuleSet(wrapper, 'sc_content_full_v1')
 
     const runButton = wrapper
       .findAll('button')
-      .find((node) => node.text().includes('请选择病历后发起正式84条质控'))
+      .find((node) => node.text().includes('请选择病历后发起SC全量验证'))
     expect(runButton).toBeTruthy()
     expect(runButton!.attributes('disabled')).toBeDefined()
     await runButton!.trigger('click')
@@ -1289,17 +1558,14 @@ describe('CustomerSampleValidationView', () => {
       },
     })
 
-    const modeButton = wrapper.findAll('button').find((node) => node.text() === '正式84条质控')
-    expect(modeButton).toBeTruthy()
-    await modeButton!.trigger('click')
-    await flushPromises()
+    await selectRuleSet(wrapper, 'sc_content_full_v1')
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
     const runButton = wrapper
       .findAll('button')
-      .find((node) => node.text().includes('发起正式84条质控'))
+      .find((node) => node.text().includes('发起SC全量验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await nextTick()
@@ -1393,17 +1659,14 @@ describe('CustomerSampleValidationView', () => {
       },
     })
 
-    const modeButton = wrapper.findAll('button').find((node) => node.text() === '正式84条质控')
-    expect(modeButton).toBeTruthy()
-    await modeButton!.trigger('click')
-    await flushPromises()
+    await selectRuleSet(wrapper, 'sc_content_full_v1')
 
     const recordCheckboxes = wrapper.findAll('input.record-checkbox')
     await recordCheckboxes[0].setValue(true)
 
     const runButton = wrapper
       .findAll('button')
-      .find((node) => node.text().includes('发起正式84条质控'))
+      .find((node) => node.text().includes('发起SC全量验证'))
     expect(runButton).toBeTruthy()
     await runButton!.trigger('click')
     await flushPromises()
@@ -1419,7 +1682,9 @@ describe('CustomerSampleValidationView', () => {
       { timeout: 90000 },
     )
     expect(message.info).toHaveBeenCalledWith('请求等待较久，正在确认后台任务状态')
-    expect(message.success).toHaveBeenCalledWith('任务已创建，正在打开进度')
+    expect(message.success).toHaveBeenCalledWith(
+      expect.objectContaining({ content: '任务已创建，正在打开进度' }),
+    )
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-timeout')
     expect(message.error).not.toHaveBeenCalledWith('创建客户样本验证任务失败')
     expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
@@ -1465,10 +1730,7 @@ describe('CustomerSampleValidationView', () => {
   it('正式终末全量内涵 84 条同步样本病历时不限制内涵和首批', async () => {
     const wrapper = await mountView()
 
-    const modeButton = wrapper.findAll('button').find((node) => node.text() === '正式84条质控')
-    expect(modeButton).toBeTruthy()
-    await modeButton!.trigger('click')
-    await flushPromises()
+    await selectRuleSet(wrapper, 'sc_content_full_v1')
 
     const syncButton = wrapper
       .findAll('button')

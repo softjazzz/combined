@@ -1,6 +1,6 @@
 <template>
   <div
-    class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm p-1.5 flex gap-1 border border-slate-100 dark:border-slate-700"
+    class="bg-white/90 rounded-2xl shadow-sm p-1.5 flex gap-1 border border-black/[0.08] backdrop-blur-[18px]"
   >
     <button
       v-for="tab in tabs"
@@ -8,29 +8,23 @@
       :class="[
         'flex-1 py-2.5 text-sm font-medium rounded-xl transition-all text-center',
         activeTab === tab.key
-          ? 'bg-blue-500 text-white shadow-sm'
-          : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700',
+          ? 'bg-[#0066cc] text-white shadow-[0_5px_14px_rgba(0,102,204,0.18)]'
+          : 'text-[rgba(29,29,31,0.6)] hover:bg-black/[0.04]',
       ]"
       @click="$emit('update:activeTab', tab.key)"
     >
       {{ tab.label }}
     </button>
 
-    <div class="w-px bg-slate-100 dark:bg-slate-700 my-2 mx-1" />
+    <div class="w-px bg-black/[0.08] my-2 mx-1" />
 
     <button
-      class="px-3 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-slate-700 rounded-xl transition-all flex items-center justify-center"
+      class="px-3 text-[rgba(29,29,31,0.38)] hover:text-[#0066cc] hover:bg-[rgba(0,102,204,0.06)] rounded-xl transition-all flex items-center justify-center"
       :title="isExpanded ? '恢复分栏' : '展开工作台'"
       @click="$emit('toggleExpand')"
     >
-      <MenuUnfoldOutlined
-        v-if="isExpanded"
-        class="text-lg"
-      />
-      <ArrowsAltOutlined
-        v-else
-        class="text-lg"
-      />
+      <MenuUnfoldOutlined v-if="isExpanded" class="text-lg" />
+      <ArrowsAltOutlined v-else class="text-lg" />
     </button>
   </div>
 </template>

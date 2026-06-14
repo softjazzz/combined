@@ -1,21 +1,13 @@
 <template>
-  <div
-    class="in-process-page h-full w-full overflow-y-auto bg-[#f5f9fc] px-5 py-5 text-slate-700 lg:px-6"
-  >
+  <div class="in-process-page h-full w-full overflow-y-auto px-5 py-5 lg:px-6">
     <div class="mx-auto flex max-w-[1600px] flex-col gap-4">
       <header class="page-header">
         <div class="header-title">
-          <button
-            type="button"
-            class="back-button"
-            @click="$router.back()"
-          >
+          <button type="button" class="back-button" @click="$router.back()">
             <ArrowLeftOutlined />
           </button>
           <div>
-            <div class="breadcrumb">
-              工作台 / 事中监控
-            </div>
+            <div class="breadcrumb">工作台 / 事中监控</div>
             <h2>事中监控</h2>
             <p>跟踪在院病例费用消耗、分组变化和干预优先级。</p>
           </div>
@@ -24,55 +16,36 @@
         <div class="header-actions">
           <span class="filter-chip">近 7 日</span>
           <span class="filter-chip">全部科室</span>
-          <span class="filter-chip threshold-chip">阈值 {{ stats.control_threshold.toFixed(2) }}</span>
+          <span class="filter-chip threshold-chip"
+            >阈值 {{ stats.control_threshold.toFixed(2) }}</span
+          >
           <span :class="dataModeClass">
             {{ dataModeLabel }}
           </span>
-          <button
-            type="button"
-            class="secondary-button"
-            :disabled="loading"
-            @click="loadData"
-          >
-            <LoadingOutlined
-              v-if="loading"
-              class="animate-spin"
-            />
+          <button type="button" class="secondary-button" :disabled="loading" @click="loadData">
+            <LoadingOutlined v-if="loading" class="animate-spin" />
             <span v-else>刷新</span>
           </button>
           <a-dropdown>
             <template #overlay>
               <a-menu @click="handleExport">
-                <a-menu-item key="excel">
-                  <FileExcelOutlined /> 导出 Excel
-                </a-menu-item>
-                <a-menu-item key="pdf">
-                  <FilePdfOutlined /> 导出 PDF
-                </a-menu-item>
-                <a-menu-item key="word">
-                  <FileWordOutlined /> 导出 Word
-                </a-menu-item>
+                <a-menu-item key="excel"> <FileExcelOutlined /> 导出 Excel </a-menu-item>
+                <a-menu-item key="pdf"> <FilePdfOutlined /> 导出 PDF </a-menu-item>
+                <a-menu-item key="word"> <FileWordOutlined /> 导出 Word </a-menu-item>
               </a-menu>
             </template>
-            <button class="primary-button">
-              <DownloadOutlined /> 导出
-            </button>
+            <button class="primary-button"><DownloadOutlined /> 导出</button>
           </a-dropdown>
         </div>
       </header>
 
-      <DatasetUploadPanel
-        class="dataset-upload-surface"
-        @data-changed="handleDatasetChanged"
-      />
+      <DatasetUploadPanel class="dataset-upload-surface" @data-changed="handleDatasetChanged" />
 
       <section class="kpi-strip">
         <article class="kpi-card">
           <span class="kpi-icon kpi-icon--blue"><InfoCircleOutlined /></span>
           <div>
-            <div class="kpi-label">
-              监测病例
-            </div>
+            <div class="kpi-label">监测病例</div>
             <div class="kpi-value">
               {{ stats.total_alerts }}
             </div>
@@ -83,9 +56,7 @@
         <article class="kpi-card">
           <span class="kpi-icon kpi-icon--red"><CloseCircleOutlined /></span>
           <div>
-            <div class="kpi-label">
-              重点预警
-            </div>
+            <div class="kpi-label">重点预警</div>
             <div class="kpi-value">
               {{ stats.severe_alerts }}
             </div>
@@ -96,9 +67,7 @@
         <article class="kpi-card">
           <span class="kpi-icon kpi-icon--amber"><WarningOutlined /></span>
           <div>
-            <div class="kpi-label">
-              待处理建议
-            </div>
+            <div class="kpi-label">待处理建议</div>
             <div class="kpi-value">
               {{ stats.pending_suggestions }}
             </div>
@@ -109,9 +78,7 @@
         <article class="kpi-card">
           <span class="kpi-icon kpi-icon--green"><RiseOutlined /></span>
           <div>
-            <div class="kpi-label">
-              今日干预
-            </div>
+            <div class="kpi-label">今日干预</div>
             <div class="kpi-value">
               {{ stats.today_new }}
             </div>
@@ -128,20 +95,10 @@
               <p>{{ mockScopeNote }}</p>
             </div>
             <div class="panel-tools">
-              <a-select
-                v-model:value="filterType"
-                class="status-select"
-                size="small"
-              >
-                <a-select-option value="all">
-                  全部病例
-                </a-select-option>
-                <a-select-option value="warning">
-                  仅看预警
-                </a-select-option>
-                <a-select-option value="normal">
-                  仅看正常
-                </a-select-option>
+              <a-select v-model:value="filterType" class="status-select" size="small">
+                <a-select-option value="all"> 全部病例 </a-select-option>
+                <a-select-option value="warning"> 仅看预警 </a-select-option>
+                <a-select-option value="normal"> 仅看正常 </a-select-option>
               </a-select>
             </div>
           </div>
@@ -151,10 +108,7 @@
             <span>消耗比均值</span>
             <span>阈值 {{ stats.control_threshold.toFixed(2) }}</span>
           </div>
-          <div
-            ref="cmiChartRef"
-            class="trend-chart"
-          />
+          <div ref="cmiChartRef" class="trend-chart" />
 
           <div class="case-list">
             <table>
@@ -169,10 +123,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr
-                  v-for="item in filteredAlerts"
-                  :key="item.id"
-                >
+                <tr v-for="item in filteredAlerts" :key="item.id">
                   <td>
                     <div class="patient-cell">
                       <strong>{{ item.diagnosis }}</strong>
@@ -194,19 +145,12 @@
                     <span class="reason-text">{{ item.control_tip }}</span>
                   </td>
                   <td>
-                    <span
-                      :class="levelClass(item.monitor_level)"
-                      class="status-pill"
-                    >
+                    <span :class="levelClass(item.monitor_level)" class="status-pill">
                       {{ levelLabel(item.monitor_level) }}
                     </span>
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      class="link-button"
-                      @click="openDetail(item)"
-                    >
+                    <button type="button" class="link-button" @click="openDetail(item)">
                       查看建议
                     </button>
                   </td>
@@ -222,11 +166,7 @@
               <h3>干预优先级</h3>
               <p>按费用比和监测等级排序处理</p>
             </div>
-            <button
-              type="button"
-              class="text-link"
-              @click="filterType = 'warning'"
-            >
+            <button type="button" class="text-link" @click="filterType = 'warning'">
               查看全部
             </button>
           </div>
@@ -239,10 +179,7 @@
               class="priority-row"
               @click="openDetail(item)"
             >
-              <span
-                class="rank"
-                :class="index < 3 ? 'rank--hot' : ''"
-              >
+              <span class="rank" :class="index < 3 ? 'rank--hot' : ''">
                 {{ index + 1 }}
               </span>
               <span class="priority-main">
@@ -257,15 +194,8 @@
           </div>
 
           <div class="suggestion-block">
-            <div
-              v-for="tip in controlTips"
-              :key="tip.title"
-              class="suggestion-row"
-            >
-              <span
-                class="suggestion-dot"
-                :class="`suggestion-dot--${tip.level}`"
-              />
+            <div v-for="tip in controlTips" :key="tip.title" class="suggestion-row">
+              <span class="suggestion-dot" :class="`suggestion-dot--${tip.level}`" />
               <div>
                 <strong>{{ tip.title }}</strong>
                 <p>{{ tip.suggestion }}</p>
@@ -284,10 +214,7 @@
             </div>
             <span class="panel-meta">模拟分组 {{ stats.simulated_groups }} 组</span>
           </div>
-          <div
-            ref="costChartRef"
-            class="cost-chart"
-          />
+          <div ref="costChartRef" class="cost-chart" />
         </div>
 
         <div class="panel">
@@ -336,12 +263,7 @@
       </section>
     </div>
 
-    <a-modal
-      v-model:open="detailOpen"
-      title="模拟分组详情"
-      :footer="null"
-      width="760px"
-    >
+    <a-modal v-model:open="detailOpen" title="模拟分组详情" :footer="null" width="760px">
       <template v-if="selectedAlert">
         <a-alert
           :type="
@@ -356,11 +278,7 @@
           class="mb-4"
         />
 
-        <a-descriptions
-          bordered
-          size="small"
-          :column="2"
-        >
+        <a-descriptions bordered size="small" :column="2">
           <a-descriptions-item label="病例号">
             {{ selectedAlert.case_no }}
           </a-descriptions-item>
@@ -385,9 +303,7 @@
           <a-descriptions-item label="费用比">
             {{ formatRatio(selectedAlert.ratio) }}
           </a-descriptions-item>
-          <a-descriptions-item label="住院天数">
-            {{ selectedAlert.los }} 天
-          </a-descriptions-item>
+          <a-descriptions-item label="住院天数"> {{ selectedAlert.los }} 天 </a-descriptions-item>
           <a-descriptions-item label="监测等级">
             {{ levelLabel(selectedAlert.monitor_level) }}
           </a-descriptions-item>
@@ -1035,8 +951,8 @@ function renderCmiChart(data: CmiTrend) {
         type: 'line',
         smooth: true,
         symbolSize: 8,
-        lineStyle: { color: '#3b82f6', width: 3 },
-        itemStyle: { color: '#3b82f6' },
+        lineStyle: { color: '#0066cc', width: 3 },
+        itemStyle: { color: '#0066cc' },
         areaStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(59, 130, 246, 0.28)' },
@@ -1189,16 +1105,31 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+@import './drg-dip-workbench.css';
+
 .in-process-page {
-  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .page-header,
 .panel,
 .kpi-card {
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
 }
 
 .page-header {
@@ -1224,17 +1155,17 @@ onUnmounted(() => {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 8px;
-  color: #64748b;
-  background: #ffffff;
+  color: rgba(29, 29, 31, 0.6);
+  background: rgba(255, 255, 255, 0.72);
   transition: all 0.16s ease;
 }
 
 .back-button:hover {
   border-color: #bfdbfe;
-  color: #2563eb;
-  background: #eff6ff;
+  color: #0066cc;
+  background: rgba(0, 102, 204, 0.06);
 }
 
 .breadcrumb {
@@ -1245,9 +1176,9 @@ onUnmounted(() => {
 
 .page-header h2 {
   margin: 4px 0 0;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 24px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 32px;
 }
 
@@ -1255,7 +1186,7 @@ onUnmounted(() => {
 .panel-head p,
 .kpi-card p {
   margin: 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
 }
 
 .page-header p {
@@ -1287,7 +1218,7 @@ onUnmounted(() => {
 }
 
 .threshold-chip {
-  color: #1d4ed8;
+  color: #0057b8;
   background: #eff6ff;
   border-color: #bfdbfe;
 }
@@ -1319,14 +1250,14 @@ onUnmounted(() => {
 }
 
 .primary-button {
-  border: 1px solid #2563eb;
+  border: 1px solid #0066cc;
   color: #ffffff;
-  background: #2563eb;
+  background: #0066cc;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
 }
 
 .primary-button:hover {
-  background: #1d4ed8;
+  background: #0057b8;
 }
 
 .secondary-button {
@@ -1336,7 +1267,7 @@ onUnmounted(() => {
 }
 
 .secondary-button:hover {
-  color: #2563eb;
+  color: #0066cc;
   border-color: #bfdbfe;
   background: #eff6ff;
 }
@@ -1377,7 +1308,7 @@ onUnmounted(() => {
 }
 
 .kpi-icon--blue {
-  color: #2563eb;
+  color: #0066cc;
   background: #eaf2ff;
 }
 
@@ -1405,9 +1336,9 @@ onUnmounted(() => {
 
 .kpi-value {
   margin-top: 4px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 28px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 34px;
 }
 
@@ -1450,9 +1381,9 @@ onUnmounted(() => {
 
 .panel-head h3 {
   margin: 0;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 17px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 24px;
 }
 
@@ -1500,7 +1431,7 @@ onUnmounted(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #2563eb;
+  background: #0066cc;
   content: '';
   transform: translateY(-50%);
 }
@@ -1563,8 +1494,8 @@ onUnmounted(() => {
 }
 
 .patient-cell strong {
-  color: #0f172a;
-  font-weight: 800;
+  color: #1d1d1f;
+  font-weight: 700;
 }
 
 .patient-cell span,
@@ -1575,7 +1506,7 @@ onUnmounted(() => {
 
 .ratio-cell strong {
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .reason-text {
@@ -1602,7 +1533,7 @@ onUnmounted(() => {
 .link-button,
 .text-link {
   border: 0;
-  color: #2563eb;
+  color: #0066cc;
   background: transparent;
   font-size: 13px;
   font-weight: 700;
@@ -1610,7 +1541,7 @@ onUnmounted(() => {
 
 .link-button:hover,
 .text-link:hover {
-  color: #1d4ed8;
+  color: #0057b8;
 }
 
 .priority-panel {
@@ -1649,7 +1580,7 @@ onUnmounted(() => {
   color: #64748b;
   background: #f1f5f9;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .rank--hot {
@@ -1666,9 +1597,9 @@ onUnmounted(() => {
 
 .priority-main strong {
   overflow: hidden;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1684,12 +1615,12 @@ onUnmounted(() => {
 .priority-value {
   color: #ef4444;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   text-align: right;
 }
 
 .priority-action {
-  color: #2563eb;
+  color: #0066cc;
   font-size: 12px;
   font-weight: 700;
   text-align: right;
@@ -1718,7 +1649,7 @@ onUnmounted(() => {
   height: 7px;
   margin-top: 7px;
   border-radius: 50%;
-  background: #2563eb;
+  background: #0066cc;
 }
 
 .suggestion-dot--critical {
@@ -1731,9 +1662,9 @@ onUnmounted(() => {
 
 .suggestion-row strong {
   display: block;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 20px;
 }
 
@@ -1787,9 +1718,9 @@ onUnmounted(() => {
 }
 
 .change-main strong {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .change-main span {
@@ -1812,7 +1743,7 @@ onUnmounted(() => {
 }
 
 .change-tag--down {
-  color: #2563eb;
+  color: #0066cc;
   background: #dbeafe;
 }
 
@@ -1820,6 +1751,144 @@ onUnmounted(() => {
   color: #64748b;
   font-size: 12px;
   text-align: right;
+}
+
+.in-process-page {
+  --workstation-canvas: #f5f5f7;
+  --workstation-surface: rgba(255, 255, 255, 0.86);
+  --workstation-surface-strong: rgba(255, 255, 255, 0.94);
+  --workstation-border: rgba(0, 0, 0, 0.08);
+  --workstation-text: #1d1d1f;
+  --workstation-muted: rgba(29, 29, 31, 0.6);
+  --workstation-subtle: rgba(29, 29, 31, 0.38);
+  --workstation-primary: #0066cc;
+  --workstation-primary-soft: rgba(0, 102, 204, 0.1);
+
+  background: var(--workstation-canvas) !important;
+  color: var(--workstation-text) !important;
+  font-family:
+    'San Francisco', 'SF Pro Text', 'Source Han Sans SC', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.page-header,
+.panel,
+.kpi-card {
+  border-color: var(--workstation-border);
+  background: var(--workstation-surface);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+}
+
+.page-header {
+  border-radius: 20px;
+}
+
+.panel,
+.kpi-card {
+  border-radius: 16px;
+}
+
+.page-header:hover,
+.panel:hover,
+.kpi-card:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+}
+
+.breadcrumb,
+.page-header p,
+.panel-head p,
+.kpi-card p,
+.panel-meta,
+.patient-cell span,
+.ratio-cell span,
+.suggestion-row p,
+.change-main span,
+.change-time {
+  color: var(--workstation-muted);
+}
+
+.page-header h2,
+.panel-head h3,
+.kpi-value,
+.patient-cell strong,
+.priority-main strong,
+.suggestion-row strong,
+.change-main strong {
+  color: var(--workstation-text);
+}
+
+.back-button,
+.secondary-button,
+.filter-chip,
+.mode-chip {
+  border-color: var(--workstation-border);
+  background: var(--workstation-surface-strong);
+  color: var(--workstation-muted);
+}
+
+.back-button:hover,
+.secondary-button:hover {
+  border-color: rgba(0, 102, 204, 0.22);
+  background: var(--workstation-primary-soft);
+  color: var(--workstation-primary);
+}
+
+.threshold-chip,
+.kpi-icon--blue,
+.change-tag--down {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: var(--workstation-primary-soft);
+  color: var(--workstation-primary);
+}
+
+.primary-button {
+  border-color: var(--workstation-primary);
+  background: var(--workstation-primary);
+  box-shadow: 0 4px 10px rgba(0, 102, 204, 0.16);
+}
+
+.primary-button:hover {
+  background: #0057b8;
+}
+
+.chart-toolbar span::before,
+.suggestion-dot {
+  background: var(--workstation-primary);
+}
+
+.case-list,
+.case-list th,
+.case-list td,
+.priority-row,
+.change-row,
+.panel-head {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.case-list th {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--workstation-subtle);
+}
+
+.case-list tbody tr:hover,
+.priority-row:hover,
+.change-row:hover {
+  background: rgba(0, 0, 0, 0.025);
+}
+
+.link-button,
+.text-link,
+.priority-action {
+  color: var(--workstation-primary);
 }
 
 @media (max-width: 1280px) {

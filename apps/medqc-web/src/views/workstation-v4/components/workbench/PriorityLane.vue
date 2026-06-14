@@ -2,9 +2,7 @@
   <section class="priority-lane p-4">
     <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
       <div class="min-w-0 xl:max-w-[520px]">
-        <h3 class="priority-lane__title">
-          优先处理池
-        </h3>
+        <h3 class="priority-lane__title">优先处理池</h3>
       </div>
 
       <div class="priority-lane__segments">
@@ -33,10 +31,7 @@
       暂无高优病历，建议切换科室或放宽筛选条件。
     </div>
 
-    <div
-      v-else
-      class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5"
-    >
+    <div v-else class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
       <article
         v-for="card in cards"
         :key="card.id"
@@ -65,16 +60,11 @@
             </div>
           </div>
 
-          <div
-            class="priority-lane__risk text-right"
-            :class="riskBadgeClass(card.riskType)"
-          >
+          <div class="priority-lane__risk text-right" :class="riskBadgeClass(card.riskType)">
             <div class="text-[11px] font-bold">
               {{ riskLabel(card.riskType) }}
             </div>
-            <div class="mt-1 text-[16px] font-extrabold">
-              {{ card.hospitalDays }} 天
-            </div>
+            <div class="mt-1 text-[16px] font-extrabold">{{ card.hospitalDays }} 天</div>
             <div class="mt-0.5 text-[10px] font-semibold opacity-70">
               {{ riskHint(card.riskType) }}
             </div>
@@ -189,9 +179,9 @@ function riskBadgeClass(riskType: string) {
 
 .priority-lane__title {
   font-size: 22px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--workstation-text-primary, #0f172a);
+  color: var(--workstation-text-primary, #1d1d1f);
 }
 
 .priority-lane__segments {
@@ -231,11 +221,10 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__segment--active {
-  border-color: rgba(147, 197, 253, 0.88);
-  background: #1e6fff;
-  color: var(--workstation-brand-600, rgb(30 90 224));
-  color: #fff;
-  box-shadow: 0 10px 22px rgba(47, 111, 237, 0.22);
+  border-color: rgba(0, 102, 204, 0.18);
+  background: rgba(0, 102, 204, 0.1);
+  color: var(--workstation-primary, #0066cc);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
@@ -268,10 +257,10 @@ function riskBadgeClass(riskType: string) {
 }
 
 .priority-lane__card:first-child {
-  border-color: rgba(47, 111, 237, 0.78);
+  border-color: rgba(0, 102, 204, 0.26);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.98),
-    0 14px 30px rgba(47, 111, 237, 0.12);
+    0 10px 24px rgba(0, 102, 204, 0.08);
 }
 
 .priority-lane__card--stack {
@@ -287,15 +276,15 @@ function riskBadgeClass(riskType: string) {
   justify-content: center;
   border-radius: 999px;
   background: #eaf2ff;
-  color: var(--workstation-brand-600, #1e5ae0);
+  color: var(--workstation-primary, #0066cc);
   font-size: 14px;
 }
 
 .priority-lane__card-name {
   font-size: 16px;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--workstation-text-primary, #0f172a);
+  color: var(--workstation-text-primary, #1d1d1f);
 }
 
 .priority-lane__meta {
@@ -387,17 +376,17 @@ function riskBadgeClass(riskType: string) {
 
 .priority-lane__action--primary {
   border: 0 !important;
-  background: #1e6fff !important;
+  background: #0066cc !important;
   color: #fff !important;
-  box-shadow: 0 10px 20px rgba(47, 111, 237, 0.22) !important;
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18) !important;
 }
 
 .priority-lane__card:hover .priority-lane__action--primary,
 .priority-lane__action--primary:hover {
-  background: var(--workstation-brand-600, #1e5ae0) !important;
+  background: #0057b8 !important;
   border-color: transparent !important;
   color: #fff !important;
-  box-shadow: 0 14px 26px rgba(47, 111, 237, 0.26) !important;
+  box-shadow: 0 8px 18px rgba(0, 102, 204, 0.22) !important;
 }
 
 .priority-lane__action--secondary {
@@ -416,7 +405,7 @@ function riskBadgeClass(riskType: string) {
 
 .priority-lane__segment-label {
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0;
   opacity: 0.9;
 }
@@ -424,7 +413,7 @@ function riskBadgeClass(riskType: string) {
 .priority-lane__segment-count {
   font-size: 13px;
   line-height: 1;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0;
 }
 

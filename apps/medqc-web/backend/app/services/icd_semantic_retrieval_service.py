@@ -114,10 +114,66 @@ class IcdSemanticRetrievalService:
             return configured
         return "tfidf"
 
+    def _resolve_index_dir(self) -> Path:
+        settings = get_settings()
+        configured = Path(str(settings.ICD_SEMANTIC_INDEX_DIR or "backend/data/vector"))
+        backend_dir = Path(__file__).resolve().parents[2]
+        repo_dir = backend_dir.parent
+        candidates = []
+        if configured.is_absolute():
+            candidates.append(configured)
+        else:
+            candidates.extend(
+                [
+                    Path.cwd() / configured,
+                    backend_dir / configured,
+                    repo_dir / configured,
+                ]
+            )
+            if configured.name == "vector":
+                candidates.append(backend_dir / "data" / "vector")
+        for path in candidates:
+            if path.exists():
+                return path
+        return candidates[0] if candidates else configured
+
+    def _load_prebuilt_tfidf_index(self) -> bool:
+        index_dir = self._resolve_index_dir()
+        meta_path = index_dir / "icd10_meta.json"
+        vectorizer_path = index_dir / "icd10_vectorizer.pkl"
+        matrix_path = index_dir / "icd10_matrix.pkl"
+        if not (meta_path.exists() and vectorizer_path.exists() and matrix_path.exists()):
+            return False
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            docs = []
+            for row in list(meta.get("docs") or []):
+                code = str(row.get("code") or "").strip()
+                name = str(row.get("name") or "").strip()
+                normalized = str(row.get("norm") or row.get("normalized") or name).strip()
+                if code and name:
+                    docs.append(_IcdDoc(code=code, name=name, normalized=normalized))
+            with vectorizer_path.open("rb") as f:
+                vectorizer = pickle.load(f)
+            with matrix_path.open("rb") as f:
+                matrix = pickle.load(f)
+        except Exception:
+            logger.exception("Failed to load prebuilt ICD semantic tfidf index: %s", index_dir)
+            return False
+        if not docs:
+            return False
+        self._docs_clinical = docs
+        self._vectorizer_clinical = vectorizer
+        self._matrix_clinical = matrix
+        logger.info("ICD semantic prebuilt tfidf loaded: clinical=%d path=%s", len(docs), index_dir)
+        return True
+
     def _build_tfidf_index(self) -> None:
         if not _SKLEARN_OK:
             logger.warning("ICD semantic retrieval tfidf unavailable: sklearn not installed")
             return
+
+        clinical_loaded = self._load_prebuilt_tfidf_index()
 
         from ..routers import icd_search as icd_mod
 
@@ -135,7 +191,8 @@ class IcdSemanticRetrievalService:
                 docs.append(_IcdDoc(code=code, name=name, normalized=_normalize_text(name)))
             return docs
 
-        self._docs_clinical = to_docs(clinical)
+        if not clinical_loaded:
+            self._docs_clinical = to_docs(clinical)
         self._docs_insurance = to_docs(insurance)
 
         def fit(docs: List[_IcdDoc]) -> Tuple[Any, Any]:
@@ -146,7 +203,8 @@ class IcdSemanticRetrievalService:
             mat = vec.fit_transform(corpus)
             return vec, mat
 
-        self._vectorizer_clinical, self._matrix_clinical = fit(self._docs_clinical)
+        if not clinical_loaded:
+            self._vectorizer_clinical, self._matrix_clinical = fit(self._docs_clinical)
         self._vectorizer_insurance, self._matrix_insurance = fit(self._docs_insurance)
         logger.info(
             "ICD semantic tfidf ready: clinical=%d insurance=%d",
@@ -155,8 +213,7 @@ class IcdSemanticRetrievalService:
         )
 
     def _load_embedding_index(self) -> bool:
-        settings = get_settings()
-        index_dir = Path(settings.ICD_SEMANTIC_INDEX_DIR)
+        index_dir = self._resolve_index_dir()
         meta_path = index_dir / "icd10_meta.json"
         vec_path = index_dir / "icd10_vectors.npy"
         faiss_path = index_dir / "icd10.faiss"
@@ -280,7 +337,7 @@ class IcdSemanticRetrievalService:
                 if s < min_score:
                     continue
                 doc = self._meta_docs[int(idx)]
-                out.append({"code": doc["code"], "name": doc["name"], "score": s, "source": "semantic"})
+                out.append({"code": doc["code"], "name": doc["name"], "score": s, "source": "semantic", "version": "clinical"})
             return out
 
         # hnsw ANN
@@ -295,7 +352,7 @@ class IcdSemanticRetrievalService:
                 if s < min_score:
                     continue
                 doc = self._meta_docs[int(idx)]
-                out.append({"code": doc["code"], "name": doc["name"], "score": s, "source": "semantic"})
+                out.append({"code": doc["code"], "name": doc["name"], "score": s, "source": "semantic", "version": "clinical"})
             return out
 
         # brute-force fallback on stored vectors
@@ -309,7 +366,7 @@ class IcdSemanticRetrievalService:
             if s < min_score:
                 continue
             doc = self._meta_docs[int(idx)]
-            out.append({"code": doc["code"], "name": doc["name"], "score": s, "source": "semantic"})
+            out.append({"code": doc["code"], "name": doc["name"], "score": s, "source": "semantic", "version": "clinical"})
         return out
 
     def _search_tfidf(self, query: str, prefer_insurance: bool, top_k: int, min_score: float) -> List[Dict[str, Any]]:
@@ -335,7 +392,15 @@ class IcdSemanticRetrievalService:
             if score < min_score:
                 continue
             doc = docs[int(idx)]
-            out.append({"code": doc.code, "name": doc.name, "score": score, "source": "semantic"})
+            out.append(
+                {
+                    "code": doc.code,
+                    "name": doc.name,
+                    "score": score,
+                    "source": "semantic",
+                    "version": "insurance" if prefer_insurance else "clinical",
+                }
+            )
             if len(out) >= max(1, top_k):
                 break
         return out

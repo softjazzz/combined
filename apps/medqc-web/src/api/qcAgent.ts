@@ -149,10 +149,13 @@ export interface QCAgentRunResult {
   selected_rules?: Array<Record<string, unknown>>
   executed_rules?: QCAgentExecutedRule[]
   skipped_rules?: QCAgentSkippedRule[]
+  rules?: Array<Record<string, unknown>>
+  filters?: Record<string, unknown>
   warnings?: string[]
   query?: string
   code_type?: 'diagnosis' | 'procedure' | 'all' | string
   version?: 'insurance' | 'clinical' | string
+  total?: number
   returned?: number
   candidates?: QCAgentICDCandidate[]
   diagnosis_candidates?: QCAgentCodingSuggestionItem[]

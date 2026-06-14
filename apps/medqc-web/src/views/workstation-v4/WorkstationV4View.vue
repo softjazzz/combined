@@ -1,7 +1,5 @@
 <template>
-  <div
-    class="workstation-shell relative h-full flex overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_48%,#edf2f7_100%)]"
-  >
+  <div class="workstation-shell relative h-full flex overflow-hidden">
     <!-- ====== 列表模式 ====== -->
     <template v-if="viewMode === 'list'">
       <WorkstationV4ListView
@@ -64,6 +62,7 @@
           @prev="goToPrevRecord"
           @next="goToNextRecord"
           @open-icd="icdDrawerVisible = true"
+          @open-ai-profile="openAiProfilePanel"
           @generate-frontpage="handleGenerateFrontpage"
           @preview-doc="openDocPreview"
           @show-concat="showConcatRecord"
@@ -232,7 +231,7 @@
     <a-modal
       v-model:open="pasteFrontpageModalVisible"
       title="粘贴病历生成首页"
-      width="760px"
+      width="920px"
       :confirm-loading="frontpageGenerating"
       :mask-closable="!frontpageGenerating"
       @cancel="handlePasteFrontpageCancel"
@@ -243,6 +242,29 @@
           :options="pasteFrontpageSceneOptions"
           :disabled="frontpageGenerating"
         />
+        <div class="paste-frontpage-presets">
+          <div class="paste-frontpage-presets__head">
+            <span>演示病历</span>
+            <small>覆盖首页自动生成、医保清单与卫健委首页上报字段</small>
+          </div>
+          <div class="paste-frontpage-presets__grid">
+            <button
+              v-for="preset in pasteFrontpagePresets"
+              :key="preset.id"
+              type="button"
+              class="paste-frontpage-preset"
+              :class="{ active: selectedPastePresetId === preset.id }"
+              :disabled="frontpageGenerating"
+              @click="applyPasteFrontpagePreset(preset.id)"
+            >
+              <span class="paste-frontpage-preset__title">{{ preset.title }}</span>
+              <span class="paste-frontpage-preset__subtitle">{{ preset.subtitle }}</span>
+              <span class="paste-frontpage-preset__tags">
+                <span v-for="tag in preset.tags" :key="tag">{{ tag }}</span>
+              </span>
+            </button>
+          </div>
+        </div>
         <a-textarea
           v-model:value="pastedMedicalText"
           placeholder="粘贴完整病历原文..."
@@ -251,6 +273,19 @@
           show-count
           :disabled="frontpageGenerating"
         />
+        <div v-if="frontpageGenerating" class="paste-frontpage-progress">
+          <FrontpageWorkspacePanel
+            :generating="frontpageGenerating"
+            :post-processing="frontpagePostProcessing"
+            :draft="frontpageDraft"
+            :frontpage-tab="frontpageTab"
+            :module-cards="frontpageModuleCards"
+            :completed-count="completedModules.length"
+            :total-count="ALL_MODULE_KEYS.length"
+            :sheet-loading="false"
+            :sheet-data="null"
+          />
+        </div>
       </div>
 
       <template #footer>
@@ -261,9 +296,7 @@
           >
             清空
           </a-button>
-          <a-button @click="handlePasteFrontpageCancel">
-            取消
-          </a-button>
+          <a-button @click="handlePasteFrontpageCancel"> 取消 </a-button>
           <a-button
             type="primary"
             :loading="frontpageGenerating"
@@ -297,6 +330,7 @@ import WorkstationV4AssistView from './components/WorkstationV4AssistView.vue'
 import WorkstationV4RulesView from './components/WorkstationV4RulesView.vue'
 import RecordDetailWorkspace from './components/RecordDetailWorkspace.vue'
 import FrontpageWorkspace from './components/FrontpageWorkspace.vue'
+import FrontpageWorkspacePanel from './components/FrontpageWorkspacePanel.vue'
 import SettlementWorkspace from './components/SettlementWorkspace.vue'
 import { useWorkstationRouteEffects } from './workstationRouteEffects'
 import { runBatchExtract } from './workstationBatchController'
@@ -337,6 +371,7 @@ import { useFrontpageDraft } from './composables/useFrontpageDraft'
 import { useQcPipeline } from './composables/useQcPipeline'
 import { usePatientRecords } from './composables/usePatientRecords'
 import { useNotifications } from './composables/useNotifications'
+import { pasteFrontpagePresets } from './data/pasteFrontpagePresets'
 import {
   canGenerateFrontpageDraft,
   canGenerateSettlementDraft,
@@ -1072,6 +1107,7 @@ const frontpageSheetLoading = ref(false)
 const pasteFrontpageModalVisible = ref(false)
 const pastedMedicalText = ref('')
 const pasteFrontpageScene = ref<FrontpageReportScene>('combined')
+const selectedPastePresetId = ref('')
 const pasteFrontpageSceneOptions = [
   { label: '联合草稿', value: 'combined' },
   { label: '病案首页', value: 'nhc_frontpage' },
@@ -1133,6 +1169,15 @@ function openPasteFrontpageModal() {
   pasteFrontpageModalVisible.value = true
 }
 
+function applyPasteFrontpagePreset(presetId: string) {
+  const preset = pasteFrontpagePresets.find((item) => item.id === presetId)
+  if (!preset) return
+  selectedPastePresetId.value = preset.id
+  pastedMedicalText.value = preset.text
+  pasteFrontpageScene.value = preset.scene
+  message.success(`已填入${preset.title}`)
+}
+
 function handlePasteFrontpageCancel() {
   if (frontpageGenerating.value) return
   pasteFrontpageModalVisible.value = false
@@ -1145,15 +1190,25 @@ async function handleGenerateFrontpageFromText() {
   }
 
   detailMainTab.value = 'frontpage'
+  let previewReleased = false
+  const releasePreview = () => {
+    if (previewReleased) return
+    previewReleased = true
+    frontpageTab.value = defaultPreviewTab.value
+    pasteFrontpageModalVisible.value = false
+    pastedMedicalText.value = ''
+    selectedPastePresetId.value = ''
+  }
   const generated = await generateFrontpageFromText(
     pastedMedicalText.value,
     pasteFrontpageScene.value,
+    {
+      onPreviewReady: releasePreview,
+    },
   )
   if (!generated) return
 
-  frontpageTab.value = defaultPreviewTab.value
-  pasteFrontpageModalVisible.value = false
-  pastedMedicalText.value = ''
+  releasePreview()
 }
 // 缁撶畻娓呭崟鐢熸垚锛氫粎瀵瑰凡鍑洪櫌涓旀棤缁撶畻鏁版嵁鐨勭梾鍘嗗彲鐢?
 const hasExistingSettlement = computed(

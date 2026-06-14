@@ -79,6 +79,7 @@ describe('WorkstationV4HomeEntry qc agent entry', () => {
     expect(wrapper.find('[data-testid="qc-overview-view"]').exists()).toBe(true)
     const entry = wrapper.find('[data-testid="qc-agent-home-entry"]')
     expect(entry.exists()).toBe(true)
+    expect(entry.text()).toContain('智能助手')
 
     await entry.trigger('click')
 

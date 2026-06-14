@@ -1,9 +1,6 @@
 <template>
   <div class="qc-result-tab">
-    <div
-      v-if="!props.activeTab"
-      class="qc-result-tab__tabs"
-    >
+    <div v-if="!props.activeTab" class="qc-result-tab__tabs">
       <button
         v-for="tab in qcTabs"
         :key="tab.key"
@@ -11,15 +8,9 @@
         :class="['qc-result-tab__tab', { 'qc-result-tab__tab--active': currentTab === tab.key }]"
         @click="internalTab = tab.key"
       >
-        <component
-          :is="tab.icon"
-          class="qc-result-tab__tab-icon"
-        />
+        <component :is="tab.icon" class="qc-result-tab__tab-icon" />
         <span>{{ tab.label }}</span>
-        <span
-          v-if="getTabCount(tab.key) > 0"
-          class="qc-result-tab__tab-badge"
-        >{{
+        <span v-if="getTabCount(tab.key) > 0" class="qc-result-tab__tab-badge">{{
           getTabCount(tab.key)
         }}</span>
       </button>
@@ -28,9 +19,7 @@
     <div class="qc-result-tab__body custom-scrollbar">
       <div class="qc-overview">
         <div>
-          <div class="qc-overview__eyebrow">
-            当前质控
-          </div>
+          <div class="qc-overview__eyebrow">当前质控</div>
           <div class="qc-overview__title">
             {{ currentTabConfig.label }}
           </div>
@@ -38,10 +27,7 @@
             {{ currentTabConfig.desc }}
           </div>
         </div>
-        <div
-          v-if="!isTabEmpty || totalIssueCount > 0"
-          class="qc-overview__status"
-        >
+        <div v-if="!isTabEmpty || totalIssueCount > 0" class="qc-overview__status">
           <span class="qc-overview__status-label">{{
             currentIssues.length > 0 ? '当前问题' : '当前状态'
           }}</span>
@@ -51,16 +37,25 @@
         </div>
       </div>
 
+      <div v-if="currentTab === 'coding' && !isTabEmpty" class="qc-coding-summary">
+        <div class="qc-coding-summary__item">
+          <span>基础编码校验</span>
+          <strong>{{ codingBaseIssueCount }}</strong>
+        </div>
+        <div class="qc-coding-summary__item qc-coding-summary__item--semantic">
+          <span>编码内涵质控</span>
+          <strong>{{ codingSemanticIssueCount }}</strong>
+        </div>
+        <div class="qc-coding-summary__item">
+          <span>LLM 语义审查</span>
+          <strong>{{ codingLlmIssueCount }}</strong>
+        </div>
+      </div>
+
       <template v-if="isTabEmpty">
-        <div
-          v-if="!isTabLoading"
-          class="qc-start"
-        >
+        <div v-if="!isTabLoading" class="qc-start">
           <div class="qc-start__icon-wrap">
-            <component
-              :is="currentTabConfig.icon"
-              class="qc-start__icon"
-            />
+            <component :is="currentTabConfig.icon" class="qc-start__icon" />
           </div>
           <div class="qc-start__title">
             {{ currentTabConfig.label }}
@@ -68,29 +63,16 @@
           <div class="qc-start__desc">
             {{ currentTabConfig.desc }}
           </div>
-          <a-button
-            type="primary"
-            size="small"
-            class="qc-start__btn"
-            @click="startCurrentTab"
-          >
+          <a-button type="primary" size="small" class="qc-start__btn" @click="startCurrentTab">
             <template #icon>
               <ThunderboltOutlined />
             </template>
             开始分析
           </a-button>
         </div>
-        <div
-          v-else
-          class="qc-start"
-        >
+        <div v-else class="qc-start">
           <a-spin />
-          <div
-            class="qc-start__title"
-            style="margin-top: 16px"
-          >
-            正在分析...
-          </div>
+          <div class="qc-start__title" style="margin-top: 16px">正在分析...</div>
           <div class="qc-start__desc">
             {{ currentTabConfig.loadingHint }}
           </div>
@@ -99,16 +81,9 @@
 
       <template v-else-if="currentIssues.length > 0">
         <div class="qc-issue-list custom-scrollbar">
-          <section
-            v-for="(group, gIdx) in groupedIssues"
-            :key="gIdx"
-            class="qc-group"
-          >
+          <section v-for="(group, gIdx) in groupedIssues" :key="gIdx" class="qc-group">
             <header class="qc-group__header">
-              <span
-                class="qc-group__dot"
-                :style="{ background: severityColor(group.severity) }"
-              />
+              <span class="qc-group__dot" :style="{ background: severityColor(group.severity) }" />
               <span class="qc-group__title">{{ group.title }} ({{ group.items.length }})</span>
             </header>
 
@@ -121,22 +96,15 @@
                 <span :class="['qc-issue__badge', `qc-issue__badge--${issue.severity}`]">{{
                   severityLabel(issue.severity)
                 }}</span>
-                <p
-                  class="qc-issue__desc"
-                  title="定位到相关字段"
-                  @click="locateIssue(issue)"
-                >
+                <p class="qc-issue__desc" title="定位到相关字段" @click="locateIssue(issue)">
                   {{ issue.description }}
                 </p>
               </div>
 
-              <div
-                v-if="issue.suggestion"
-                class="qc-issue__ai-suggestion"
-              >
+              <div v-if="issue.suggestion" class="qc-issue__ai-suggestion">
                 <div class="qc-issue__ai-label">
                   <ThunderboltOutlined class="qc-issue__ai-icon" />
-                  <span>AI 修正建议</span>
+                  <span>修正建议</span>
                 </div>
                 <p class="qc-issue__ai-text">
                   {{ issue.suggestion }}
@@ -145,11 +113,7 @@
 
               <div class="qc-issue__action-bar">
                 <div class="qc-issue__action-group">
-                  <button
-                    type="button"
-                    class="qc-issue__ghost-btn"
-                    @click="locateIssue(issue)"
-                  >
+                  <button type="button" class="qc-issue__ghost-btn" @click="locateIssue(issue)">
                     <svg
                       class="qc-issue__btn-icon"
                       fill="none"
@@ -191,21 +155,11 @@
                     </svg>
                     文书依据
                   </button>
-                  <a-dropdown
-                    v-if="issue.id"
-                    :trigger="['click']"
-                  >
-                    <button
-                      type="button"
-                      class="qc-issue__ghost-btn"
-                    >
-                      操作 <DownOutlined />
-                    </button>
+                  <a-dropdown v-if="issue.id" :trigger="['click']">
+                    <button type="button" class="qc-issue__ghost-btn">操作 <DownOutlined /></button>
                     <template #overlay>
                       <a-menu @click="({ key }: any) => handleDefectAction(key, issue)">
-                        <a-menu-item key="urge">
-                          <SendOutlined /> 催办
-                        </a-menu-item>
+                        <a-menu-item key="urge"> <SendOutlined /> 催办 </a-menu-item>
                         <a-menu-item key="mark_remediated">
                           <EditOutlined /> 标记已整改
                         </a-menu-item>
@@ -233,48 +187,24 @@
         </div>
       </template>
 
-      <div
-        v-else
-        class="qc-empty"
-      >
-        <CheckCircleOutlined
-          class="qc-empty__icon"
-          style="color: #52c41a"
-        />
-        <div class="qc-empty__title">
-          未发现质控问题
-        </div>
-        <a-button
-          type="link"
-          size="small"
-          style="margin-top: 8px"
-          @click="startCurrentTab"
-        >
+      <div v-else class="qc-empty">
+        <CheckCircleOutlined class="qc-empty__icon" style="color: #52c41a" />
+        <div class="qc-empty__title">未发现质控问题</div>
+        <a-button type="link" size="small" style="margin-top: 8px" @click="startCurrentTab">
           <ReloadOutlined /> 重新分析
         </a-button>
       </div>
     </div>
 
-    <footer
-      v-if="totalIssueCount > 0"
-      class="qc-result-tab__footer"
-    >
-      <span>共 <strong>{{ totalIssueCount }}</strong> 个问题</span>
+    <footer v-if="totalIssueCount > 0" class="qc-result-tab__footer">
+      <span
+        >共 <strong>{{ totalIssueCount }}</strong> 个问题</span
+      >
       <div class="qc-result-tab__footer-actions">
-        <a-button
-          type="link"
-          size="small"
-          :loading="isTabLoading"
-          @click="startCurrentTab"
-        >
+        <a-button type="link" size="small" :loading="isTabLoading" @click="startCurrentTab">
           <ReloadOutlined /> 刷新
         </a-button>
-        <a-button
-          type="link"
-          size="small"
-          :loading="exporting"
-          @click="handleExportDefects"
-        >
+        <a-button type="link" size="small" :loading="exporting" @click="handleExportDefects">
           <DownloadOutlined /> 导出
         </a-button>
       </div>
@@ -416,6 +346,29 @@ const groupedIssues = computed(() => {
   return Object.values(groups)
 })
 
+const codingBaseIssueCount = computed(
+  () =>
+    currentIssues.value.filter(
+      (issue) => issue.category === 'coding' && issue.group.startsWith('基础编码校验'),
+    ).length,
+)
+
+const codingSemanticIssueCount = computed(
+  () =>
+    currentIssues.value.filter(
+      (issue) => issue.category === 'coding' && issue.group.startsWith('编码内涵质控'),
+    ).length,
+)
+
+const codingLlmIssueCount = computed(
+  () =>
+    currentIssues.value.filter(
+      (issue) =>
+        issue.category === 'coding' &&
+        (issue.id.startsWith('coding-llm') || issue.group.includes('LLM')),
+    ).length,
+)
+
 const totalIssueCount = computed(() => issues.value.filter((i) => !i.dismissed).length)
 
 function getTabCount(tab: string) {
@@ -554,6 +507,30 @@ function inferLocateTarget(issue: QCIssue): LocateTarget {
   return 'basic'
 }
 
+function getCodingIssueGroup(issue: Record<string, any>, source: 'rule' | 'llm') {
+  const dimension = String(issue?.dimension || '').toLowerCase()
+  const ruleId = String(issue?.rule_id || '').toUpperCase()
+  if (dimension === 'format') return '基础编码校验 / 格式规范'
+  if (dimension === 'existence') return '基础编码校验 / 编码库匹配'
+
+  if (
+    source === 'llm' ||
+    ruleId.startsWith('CQ-TENDER') ||
+    ['merge', 'exclusion', 'primary', 'consistency', 'additional'].includes(dimension)
+  ) {
+    const labels: Record<string, string> = {
+      merge: '编码内涵质控 / 合并编码',
+      exclusion: '编码内涵质控 / 互斥编码',
+      primary: '编码内涵质控 / 主诊断选择',
+      consistency: '编码内涵质控 / 逻辑一致性',
+      additional: '编码内涵质控 / 附加编码',
+    }
+    return labels[dimension] || '编码内涵质控'
+  }
+
+  return '编码质控'
+}
+
 async function handleDefectAction(action: string, issue: QCIssue) {
   try {
     switch (action) {
@@ -683,7 +660,7 @@ async function fetchCodingQCFromBackend() {
         id: `coding-rule-${(idx += 1)}`,
         category: 'coding',
         severity: toIssueSeverity(issue.severity),
-        group: issue.dimension === 'format' ? '编码格式校验' : '编码存在性验证',
+        group: getCodingIssueGroup(issue, 'rule'),
         description: issue.description,
         suggestion: issue.suggestion,
         evidence: issue.evidence,
@@ -703,7 +680,8 @@ async function fetchCodingQCFromBackend() {
         id: `coding-llm-${(idx += 1)}`,
         category: 'coding',
         severity: toIssueSeverity(issue.severity),
-        group: dimensionLabels[issue.dimension] || 'LLM 语义审查',
+        group:
+          getCodingIssueGroup(issue, 'llm') || dimensionLabels[issue.dimension] || 'LLM 语义审查',
         description: issue.description,
         suggestion: issue.suggestion,
         evidence: issue.evidence,
@@ -1133,6 +1111,47 @@ watch(
   line-height: 1;
   font-weight: 800;
   color: #0f172a;
+}
+
+.qc-coding-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: -4px 0 12px;
+  flex-shrink: 0;
+}
+
+.qc-coding-summary__item {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.qc-coding-summary__item span {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.qc-coding-summary__item strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 18px;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.qc-coding-summary__item--semantic {
+  border-color: rgba(37, 99, 235, 0.24);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.9), rgba(255, 255, 255, 0.92));
+}
+
+.qc-coding-summary__item--semantic strong {
+  color: #2563eb;
 }
 
 .qc-start {

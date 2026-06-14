@@ -1,26 +1,16 @@
 <template>
-  <div
-    class="sync-config-page workstation-shell min-h-screen flex flex-col font-sans text-slate-800"
-  >
+  <div class="sync-config-page workstation-shell min-h-screen flex flex-col">
     <div
       class="flex-1 p-5 lg:p-6 overflow-hidden flex flex-col min-h-0 container mx-auto max-w-[1680px] w-full"
     >
-      <a-tabs
-        v-model:active-key="activeTab"
-        class="system-config-tabs flex-1 min-h-0"
-      >
-        <a-tab-pane
-          key="dataSync"
-          tab="数据同步配置"
-        >
+      <a-tabs v-model:active-key="activeTab" class="system-config-tabs flex-1 min-h-0">
+        <a-tab-pane key="dataSync" tab="数据同步配置">
           <div class="system-config-tab-shell flex flex-col h-full min-h-0 gap-4">
             <section class="wv4-analysis-overview">
               <div class="wv4-analysis-overview__header">
                 <div>
-                  <h2 class="wv4-analysis-overview__title">
-                    系统配置
-                  </h2>
-                  <p class="mt-1 text-sm font-medium text-slate-500">
+                  <h2 class="wv4-analysis-overview__title">系统配置</h2>
+                  <p class="system-config-subtitle mt-1">
                     统一管理数据同步、首页抽取和模型连接配置，危险执行需先预检确认。
                   </p>
                 </div>
@@ -74,13 +64,8 @@
               </div>
 
               <div class="wv4-analysis-overview__controls system-config-overview-controls">
-                <a-space
-                  size="small"
-                  wrap
-                >
-                  <a-tag class="wv4-status-chip wv4-status-chip--brand">
-                    Workstation V4
-                  </a-tag>
+                <a-space size="small" wrap>
+                  <a-tag class="wv4-status-chip wv4-status-chip--brand"> Workstation V4 </a-tag>
                   <a-tag :class="['wv4-status-chip', `wv4-status-chip--${envTone}`]">
                     环境：{{ envLabel }}
                   </a-tag>
@@ -108,60 +93,42 @@
 
             <div class="wv4-analysis-kpis">
               <article class="wv4-analysis-kpi-card wv4-analysis-kpi-card--brand">
-                <div class="wv4-analysis-kpi-card__label">
-                  连接状态
-                </div>
-                <div class="wv4-analysis-kpi-card__value">
-                  {{ connectedCount }} / 2
-                </div>
+                <div class="wv4-analysis-kpi-card__label">连接状态</div>
+                <div class="wv4-analysis-kpi-card__value">{{ connectedCount }} / 2</div>
                 <div class="wv4-analysis-kpi-card__desc">
                   健康度 {{ healthPercent }}% · {{ healthLabel }}
                 </div>
               </article>
 
               <article class="wv4-analysis-kpi-card wv4-analysis-kpi-card--warning">
-                <div class="wv4-analysis-kpi-card__label">
-                  待处理记录
-                </div>
+                <div class="wv4-analysis-kpi-card__label">待处理记录</div>
                 <div class="wv4-analysis-kpi-card__value">
                   {{ state.stats.pendingRecords.toLocaleString() }}
                 </div>
-                <div class="wv4-analysis-kpi-card__desc">
-                  以 PG 状态统计聚合
-                </div>
+                <div class="wv4-analysis-kpi-card__desc">以 PG 状态统计聚合</div>
               </article>
 
               <article class="wv4-analysis-kpi-card wv4-analysis-kpi-card--danger">
-                <div class="wv4-analysis-kpi-card__label">
-                  异常记录
-                </div>
+                <div class="wv4-analysis-kpi-card__label">异常记录</div>
                 <div class="wv4-analysis-kpi-card__value">
                   {{ state.stats.failedRecords.toLocaleString() }}
                 </div>
-                <div class="wv4-analysis-kpi-card__desc">
-                  建议先排查失败后再执行
-                </div>
+                <div class="wv4-analysis-kpi-card__desc">建议先排查失败后再执行</div>
               </article>
 
               <article class="wv4-analysis-kpi-card wv4-analysis-kpi-card--success">
-                <div class="wv4-analysis-kpi-card__label">
-                  最近同步时间
-                </div>
+                <div class="wv4-analysis-kpi-card__label">最近同步时间</div>
                 <div class="wv4-analysis-kpi-card__value system-config-kpi-time">
                   {{ lastSyncTimeLabel }}
                 </div>
-                <div class="wv4-analysis-kpi-card__desc">
-                  来源：状态接口聚合
-                </div>
+                <div class="wv4-analysis-kpi-card__desc">来源：状态接口聚合</div>
               </article>
             </div>
 
             <section class="system-config-execution-area flex-1 min-h-0">
               <aside class="system-config-side-panel">
                 <div>
-                  <div class="system-config-side-kicker">
-                    配置流程
-                  </div>
+                  <div class="system-config-side-kicker">配置流程</div>
                   <h3>同步执行面板</h3>
                   <p>
                     左侧说明当前配置状态，右侧完成连接配置、预检和同步执行。所有正式写入前必须先完成预检确认。
@@ -184,9 +151,7 @@
                 </div>
 
                 <div class="system-config-danger-box">
-                  <div class="system-config-side-kicker">
-                    风险操作
-                  </div>
+                  <div class="system-config-side-kicker">风险操作</div>
                   <h4>危险操作集中确认</h4>
                   <p>
                     执行同步会影响本地数据表。当前页面只提供预检、确认和执行入口，不跳过后端安全校验。
@@ -211,19 +176,13 @@
           </div>
         </a-tab-pane>
 
-        <a-tab-pane
-          key="frontpageExtraction"
-          tab="首页抽取设置"
-        >
+        <a-tab-pane key="frontpageExtraction" tab="首页抽取设置">
           <div class="system-config-tab-shell system-config-tab-shell--panel">
             <FrontpageExtractionSettingsPanel />
           </div>
         </a-tab-pane>
 
-        <a-tab-pane
-          key="llmConfig"
-          tab="模型配置"
-        >
+        <a-tab-pane key="llmConfig" tab="模型配置">
           <div class="system-config-tab-shell system-config-tab-shell--panel">
             <LLMApiConfig />
           </div>
@@ -408,7 +367,34 @@ onUnmounted(() => {
 </style>
 <style scoped>
 .sync-config-page {
-  background: #f5f9fc;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.sync-config-page :deep(.ant-btn),
+.sync-config-page :deep(.ant-input),
+.sync-config-page :deep(.ant-input-affix-wrapper),
+.sync-config-page :deep(.ant-select),
+.sync-config-page :deep(.ant-tabs),
+.sync-config-page :deep(.ant-table),
+.sync-config-page :deep(.ant-tag),
+.sync-config-page :deep(.ant-select-dropdown),
+.sync-config-page :deep(.ant-select-item),
+.sync-config-page :deep(.ant-picker),
+.sync-config-page :deep(.ant-input-number),
+.sync-config-page :deep(label),
+.sync-config-page :deep(button) {
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 .system-config-tabs {
@@ -420,9 +406,14 @@ onUnmounted(() => {
 .system-config-tabs :deep(.ant-tabs-nav) {
   margin-bottom: 16px;
   flex-shrink: 0;
-  border-radius: 14px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  background: rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
   padding: 8px 12px;
 }
 
@@ -442,6 +433,15 @@ onUnmounted(() => {
 
 .system-config-tabs :deep(.ant-tabs-tab) {
   font-weight: 600;
+  color: rgba(29, 29, 31, 0.56);
+}
+
+.system-config-tabs :deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+  color: #0066cc;
+}
+
+.system-config-tabs :deep(.ant-tabs-ink-bar) {
+  background: #0066cc;
 }
 
 .system-config-tab-shell {
@@ -462,35 +462,95 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
+.sync-config-page :deep(.wv4-analysis-overview),
+.sync-config-page :deep(.wv4-analysis-kpi-card) {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.sync-config-page :deep(.wv4-analysis-overview:hover),
+.sync-config-page :deep(.wv4-analysis-kpi-card:hover) {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
+}
+
+.sync-config-page :deep(.wv4-analysis-overview__title) {
+  color: #1d1d1f;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 31px;
+}
+
+.sync-config-page :deep(.wv4-analysis-overview p),
+.sync-config-page :deep(.wv4-analysis-kpi-card__desc) {
+  color: rgba(29, 29, 31, 0.58);
+}
+
+.system-config-subtitle {
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.sync-config-page :deep(.wv4-analysis-kpi-card__label) {
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sync-config-page :deep(.wv4-analysis-kpi-card__value) {
+  color: #1d1d1f;
+  font-weight: 700;
+}
+
+.sync-config-page :deep(.wv4-analysis-kpi-card--brand .wv4-analysis-kpi-card__value) {
+  color: #0066cc;
+}
+
 .system-config-overview-hint {
   font-size: 12px;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.56);
 }
 
 .wv4-overview-btn {
   height: 34px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 12px;
   font-weight: 600;
   padding-inline: 14px;
 }
 
 .wv4-overview-btn--ghost {
-  border-color: rgba(191, 219, 254, 0.95);
-  color: #2563eb;
-  background: rgba(239, 246, 255, 0.8);
+  border-color: rgba(0, 102, 204, 0.16);
+  color: #0066cc;
+  background: rgba(0, 102, 204, 0.06);
 }
 
 .wv4-overview-btn--primary {
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.18);
+  background: #0066cc;
+  border-color: #0066cc;
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18);
 }
 
 .wv4-status-chip {
   height: 24px;
-  border-radius: 8px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: rgba(248, 250, 252, 0.96);
-  color: #475569;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
   font-weight: 600;
   line-height: 22px;
@@ -498,49 +558,63 @@ onUnmounted(() => {
 }
 
 .wv4-status-chip--brand {
-  border-color: rgba(191, 219, 254, 0.95);
-  background: rgba(239, 246, 255, 0.95);
-  color: #1d4ed8;
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.06);
+  color: #0066cc;
 }
 
 .wv4-status-chip--green,
 .wv4-status-chip--success {
-  border-color: rgba(167, 243, 208, 0.95);
-  background: rgba(236, 253, 245, 0.95);
+  border-color: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.08);
   color: #047857;
 }
 
 .wv4-status-chip--gold,
 .wv4-status-chip--warning {
-  border-color: rgba(253, 230, 138, 0.95);
-  background: rgba(255, 251, 235, 0.95);
+  border-color: rgba(245, 158, 11, 0.2);
+  background: rgba(245, 158, 11, 0.08);
   color: #b45309;
 }
 
 .wv4-status-chip--red,
 .wv4-status-chip--danger {
-  border-color: rgba(254, 202, 202, 0.95);
-  background: rgba(254, 242, 242, 0.95);
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.08);
   color: #b91c1c;
 }
 
 .wv4-status-chip--neutral {
-  border-color: rgba(226, 232, 240, 0.95);
-  background: rgba(248, 250, 252, 0.95);
-  color: #475569;
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.6);
 }
 
 .system-config-execution-area {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 14px;
-  border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
   box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.98),
-    0 12px 28px rgba(15, 23, 42, 0.04);
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
   padding: 14px;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.system-config-execution-area:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
 }
 
 .system-config-side-panel {
@@ -549,23 +623,23 @@ onUnmounted(() => {
   gap: 16px;
   min-height: 0;
   border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  background: #f8fbff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(250, 250, 252, 0.76);
   padding: 18px;
 }
 
 .system-config-side-kicker {
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.42);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.12em;
 }
 
 .system-config-side-panel h3,
 .system-config-danger-box h4 {
   margin: 4px 0 0;
-  color: #0f172a;
-  font-weight: 900;
+  color: #1d1d1f;
+  font-weight: 700;
 }
 
 .system-config-side-panel h3 {
@@ -579,7 +653,7 @@ onUnmounted(() => {
 .system-config-side-panel p,
 .system-config-danger-box p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.58);
   font-size: 13px;
   line-height: 22px;
 }
@@ -594,29 +668,29 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.82);
   padding: 10px 12px;
 }
 
 .system-config-state-row span {
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.56);
   font-size: 13px;
   font-weight: 700;
 }
 
 .system-config-state-row strong {
-  color: #2563eb;
+  color: #0066cc;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .system-config-danger-box {
   margin-top: auto;
-  border: 1px solid #fed7aa;
+  border: 1px solid rgba(245, 158, 11, 0.18);
   border-radius: 14px;
-  background: #fff7ed;
+  background: rgba(255, 247, 237, 0.72);
   padding: 14px;
 }
 
@@ -634,14 +708,87 @@ onUnmounted(() => {
 
 .system-config-execution-card {
   border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 28px rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 1px 4px rgba(0, 0, 0, 0.045);
 }
 
 .system-config-kpi-time {
   font-size: 24px;
   line-height: 1.2;
+}
+
+.sync-config-page :deep(.rounded-xl),
+.sync-config-page :deep(.rounded-lg),
+.sync-config-page :deep(.rounded) {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.sync-config-page :deep(.bg-white),
+.sync-config-page :deep(.bg-slate-50),
+.sync-config-page :deep(.bg-slate-50\/40),
+.sync-config-page :deep(.bg-slate-50\/70),
+.sync-config-page :deep(.bg-slate-50\/80),
+.sync-config-page :deep(.bg-slate-100),
+.sync-config-page :deep(.bg-slate-100\/60),
+.sync-config-page :deep(.bg-slate-100\/80) {
+  background-color: rgba(255, 255, 255, 0.86) !important;
+}
+
+.sync-config-page :deep(.border-slate-100),
+.sync-config-page :deep(.border-slate-200),
+.sync-config-page :deep(.border-slate-200\/50),
+.sync-config-page :deep(.border-slate-200\/80),
+.sync-config-page :deep(.border-\[\#E5E7EB\]\/60) {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.sync-config-page :deep(.text-slate-900),
+.sync-config-page :deep(.text-slate-800),
+.sync-config-page :deep(.text-slate-700) {
+  color: #1d1d1f !important;
+}
+
+.sync-config-page :deep(.text-slate-600),
+.sync-config-page :deep(.text-slate-500) {
+  color: rgba(29, 29, 31, 0.6) !important;
+}
+
+.sync-config-page :deep(.text-slate-400) {
+  color: rgba(29, 29, 31, 0.38) !important;
+}
+
+.sync-config-page :deep(.bg-\[\#0066cc\]),
+.sync-config-page :deep(.hover\:bg-\[\#0057b8\]:hover) {
+  background-color: #0066cc !important;
+}
+
+.sync-config-page :deep(.focus\:border-\[\#0066cc\]:focus) {
+  border-color: rgba(0, 102, 204, 0.38) !important;
+}
+
+.sync-config-page :deep(.focus\:ring-\[\#0066cc\]\/10:focus) {
+  --tw-ring-color: rgba(0, 102, 204, 0.1) !important;
+}
+
+.sync-config-page :deep(.hover\:bg-blue-50\/30:hover) {
+  background-color: rgba(0, 102, 204, 0.045) !important;
+}
+
+.sync-config-page :deep(.shadow-\[0_4px_12px_rgba\(37\,99\,235\,0\.22\)\]) {
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.16) !important;
+}
+
+.sync-config-page :deep(.font-mono) {
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.sync-config-page :deep(.uppercase) {
+  letter-spacing: 0.02em;
 }
 
 @media (max-width: 1536px) {

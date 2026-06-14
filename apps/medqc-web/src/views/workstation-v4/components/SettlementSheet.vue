@@ -1,19 +1,11 @@
 <template>
   <!-- 医疗保障基金结算清单 - 按官方 PDF 格式像素级还原 -->
-  <div
-    v-if="data"
-    class="ss-wrapper"
-  >
+  <div v-if="data" class="ss-wrapper">
     <!-- ===== 标题 ===== -->
-    <h1 class="ss-title">
-      医 疗 保 障 基 金 结 算 清 单
-    </h1>
+    <h1 class="ss-title">医 疗 保 障 基 金 结 算 清 单</h1>
 
     <!-- 顶部3行：机构名称、代码、医保结算等级、编号、病案号、申报时间 -->
-    <table
-      class="ss-tbl"
-      style="border-top: none"
-    >
+    <table class="ss-tbl" style="border-top: none">
       <tr>
         <td style="width: 38%; border-top: none">
           定点医疗机构名称<u class="fill">{{ v('designated_medical_institution') }}</u>
@@ -39,9 +31,7 @@
     </table>
 
     <!-- ===== 一、基本信息 ===== -->
-    <div class="ss-sec-hd">
-      一、基本信息
-    </div>
+    <div class="ss-sec-hd">一、基本信息</div>
     <table class="ss-tbl">
       <tr>
         <td style="width: 14%">
@@ -54,7 +44,8 @@
           出生日期<u class="fill">{{ v('patient_birthday') }}</u>
         </td>
         <td style="width: 14%">
-          年龄<u class="fill">{{ v('patient_age') }}</u>岁
+          年龄<u class="fill">{{ v('patient_age') }}</u
+          >岁
         </td>
         <td style="width: 12%">
           国籍<u class="fill">{{ v('nationality') || v('patient_nationality') }}</u>
@@ -125,48 +116,32 @@
           新生儿入院类型<u class="fill">{{ v('newborn_admission_type') }}</u>
         </td>
         <td colspan="2">
-          新生儿出生体重<u class="fill">{{ v('newborn_birthweight') }}</u>克
+          新生儿出生体重<u class="fill">{{ v('newborn_birthweight') }}</u
+          >克
         </td>
         <td colspan="2">
-          新生儿入院体重<u class="fill">{{ v('newborn_admitweigth') }}</u>克
+          新生儿入院体重<u class="fill">{{ v('newborn_admitweigth') }}</u
+          >克
         </td>
       </tr>
     </table>
 
     <!-- ===== 二、门诊慢特病诊疗信息 ===== -->
-    <div class="ss-sec-hd">
-      二、门诊慢特病诊疗信息
-    </div>
+    <div class="ss-sec-hd">二、门诊慢特病诊疗信息</div>
     <table class="ss-tbl">
       <tr>
-        <td style="width: 50%">
-          诊断科别<u class="fill" />
-        </td>
-        <td style="width: 50%">
-          就诊日期<u class="fill" />
-        </td>
+        <td style="width: 50%">诊断科别<u class="fill" /></td>
+        <td style="width: 50%">就诊日期<u class="fill" /></td>
       </tr>
     </table>
     <table class="ss-tbl">
       <tr class="hd-row">
-        <td style="width: 30%">
-          诊断名称
-        </td>
-        <td style="width: 20%">
-          诊断代码
-        </td>
-        <td style="width: 30%">
-          手术及操作名称
-        </td>
-        <td style="width: 20%">
-          手术及操作代码
-        </td>
+        <td style="width: 30%">诊断名称</td>
+        <td style="width: 20%">诊断代码</td>
+        <td style="width: 30%">手术及操作名称</td>
+        <td style="width: 20%">手术及操作代码</td>
       </tr>
-      <tr
-        v-for="n in 4"
-        :key="'op' + n"
-        class="data-row"
-      >
+      <tr v-for="n in 4" :key="'op' + n" class="data-row">
         <td>&nbsp;</td>
         <td />
         <td />
@@ -175,9 +150,7 @@
     </table>
 
     <!-- ===== 三、住院诊疗信息 ===== -->
-    <div class="ss-sec-hd">
-      三、住院诊疗信息
-    </div>
+    <div class="ss-sec-hd">三、住院诊疗信息</div>
     <table class="ss-tbl">
       <tr>
         <td colspan="6">
@@ -216,7 +189,8 @@
           出院科别<u class="fill">{{ v('discharge_dept_name') }}</u>
         </td>
         <td colspan="2">
-          实际住院<u class="fill">{{ v('hospital_duration') }}</u>天
+          实际住院<u class="fill">{{ v('hospital_duration') }}</u
+          >天
         </td>
       </tr>
     </table>
@@ -242,29 +216,11 @@
     </table>
 
     <!-- 诊断表格（含西医+中医） -->
-    <table
-      v-if="data.diagnoses && data.diagnoses.length"
-      class="ss-tbl"
-    >
+    <table v-if="data.diagnoses && data.diagnoses.length" class="ss-tbl">
       <tr class="hd-row">
-        <td
-          rowspan="2"
-          style="width: 6%"
-        >
-          序号
-        </td>
-        <td
-          colspan="3"
-          style="width: 47%"
-        >
-          出院西医诊断
-        </td>
-        <td
-          colspan="3"
-          style="width: 47%"
-        >
-          出院中医诊断
-        </td>
+        <td rowspan="2" style="width: 6%">序号</td>
+        <td colspan="3" style="width: 47%">出院西医诊断</td>
+        <td colspan="3" style="width: 47%">出院中医诊断</td>
       </tr>
       <tr class="hd-row">
         <td>疾病名称</td>
@@ -274,11 +230,7 @@
         <td>疾病代码</td>
         <td>入院病情</td>
       </tr>
-      <tr
-        v-for="(d, i) in paddedDiagnoses"
-        :key="'d' + i"
-        class="data-row"
-      >
+      <tr v-for="(d, i) in paddedDiagnoses" :key="'d' + i" class="data-row">
         <td class="center">
           {{ i === 0 ? '主要' : d.western_name || d.tcm_name ? '其他' : '' }}
         </td>
@@ -302,68 +254,22 @@
     <!-- 手术信息 -->
     <table class="ss-tbl">
       <tr class="hd-row">
-        <td
-          rowspan="2"
-          style="width: 5%"
-        >
-          序号
-        </td>
-        <td
-          rowspan="2"
-          style="width: 20%"
-        >
-          手术及操作名称
-        </td>
-        <td
-          rowspan="2"
-          style="width: 14%"
-        >
-          手术及操作代码
-        </td>
-        <td
-          rowspan="2"
-          style="width: 12%"
-        >
-          手术及操作日期
-        </td>
-        <td colspan="2">
-          术者
-        </td>
-        <td
-          rowspan="2"
-          style="width: 8%"
-        >
-          切口等级
-        </td>
-        <td
-          rowspan="2"
-          style="width: 9%"
-        >
-          麻醉方式
-        </td>
-        <td colspan="2">
-          麻醉医师
-        </td>
+        <td rowspan="2" style="width: 5%">序号</td>
+        <td rowspan="2" style="width: 20%">手术及操作名称</td>
+        <td rowspan="2" style="width: 14%">手术及操作代码</td>
+        <td rowspan="2" style="width: 12%">手术及操作日期</td>
+        <td colspan="2">术者</td>
+        <td rowspan="2" style="width: 8%">切口等级</td>
+        <td rowspan="2" style="width: 9%">麻醉方式</td>
+        <td colspan="2">麻醉医师</td>
       </tr>
       <tr class="hd-row">
-        <td style="width: 8%">
-          姓名
-        </td>
-        <td style="width: 8%">
-          代码
-        </td>
-        <td style="width: 8%">
-          姓名
-        </td>
-        <td style="width: 8%">
-          代码
-        </td>
+        <td style="width: 8%">姓名</td>
+        <td style="width: 8%">代码</td>
+        <td style="width: 8%">姓名</td>
+        <td style="width: 8%">代码</td>
       </tr>
-      <tr
-        v-for="(s, i) in paddedSurgeries"
-        :key="'s' + i"
-        class="data-row"
-      >
+      <tr v-for="(s, i) in paddedSurgeries" :key="'s' + i" class="data-row">
         <td class="center">
           {{ s.name ? (i === 0 ? '主要' : '其他') : '' }}
         </td>
@@ -406,20 +312,26 @@
       </tr>
       <tr>
         <td colspan="3">
-          呼吸机使用时间<u class="fill">{{ ventilatorDuration.days }}</u>天<u class="fill">{{ ventilatorDuration.hours }}</u>小时<u class="fill">{{ ventilatorDuration.minutes }}</u>分钟
+          呼吸机使用时间<u class="fill">{{ ventilatorDuration.days }}</u
+          >天<u class="fill">{{ ventilatorDuration.hours }}</u
+          >小时<u class="fill">{{ ventilatorDuration.minutes }}</u
+          >分钟
         </td>
       </tr>
       <tr>
         <td colspan="3">
-          颅脑损伤患者昏迷时间：入院前<u class="fill">{{ v('coma_timebefadm_d') }}</u>天<u class="fill">{{ v('coma_timebefadm_h') }}</u>小时<u class="fill">{{ v('coma_timebefadm_min') }}</u>分钟
+          颅脑损伤患者昏迷时间：入院前<u class="fill">{{ v('coma_timebefadm_d') }}</u
+          >天<u class="fill">{{ v('coma_timebefadm_h') }}</u
+          >小时<u class="fill">{{ v('coma_timebefadm_min') }}</u
+          >分钟
         </td>
       </tr>
       <tr>
-        <td
-          colspan="3"
-          style="padding-left: 100px"
-        >
-          入院后<u class="fill">{{ v('coma_timeaftadm_d') }}</u>天<u class="fill">{{ v('coma_timeaftadm_h') }}</u>小时<u class="fill">{{ v('coma_timeaftadm_min') }}</u>分钟
+        <td colspan="3" style="padding-left: 100px">
+          入院后<u class="fill">{{ v('coma_timeaftadm_d') }}</u
+          >天<u class="fill">{{ v('coma_timeaftadm_h') }}</u
+          >小时<u class="fill">{{ v('coma_timeaftadm_min') }}</u
+          >分钟
         </td>
       </tr>
     </table>
@@ -428,23 +340,15 @@
     <table class="ss-tbl">
       <tr class="hd-row">
         <td style="width: 30%">
-          重症监护病房类型<br><span style="font-size: 10px">(CCU、NICU、EICU、SICU、PICU、<br>RICU、其他)</span>
+          重症监护病房类型<br /><span style="font-size: 10px"
+            >(CCU、NICU、EICU、SICU、PICU、<br />RICU、其他)</span
+          >
         </td>
-        <td style="width: 25%">
-          进重症监护室时间<br>（_年_月_日_时_分）
-        </td>
-        <td style="width: 25%">
-          出重症监护室时间<br>（_年_月_日_时_分）
-        </td>
-        <td style="width: 20%">
-          合计（小时）
-        </td>
+        <td style="width: 25%">进重症监护室时间<br />（_年_月_日_时_分）</td>
+        <td style="width: 25%">出重症监护室时间<br />（_年_月_日_时_分）</td>
+        <td style="width: 20%">合计（小时）</td>
       </tr>
-      <tr
-        v-for="(icu, i) in paddedIcuRows"
-        :key="'icu' + i"
-        class="data-row"
-      >
+      <tr v-for="(icu, i) in paddedIcuRows" :key="'icu' + i" class="data-row">
         <td>{{ icu.icu_type || '\u00A0' }}</td>
         <td>{{ icu.icu_enter_time || '\u00A0' }}</td>
         <td>{{ icu.icu_leave_time || '\u00A0' }}</td>
@@ -469,19 +373,22 @@
         <td colspan="3">
           特级护理天数*<u class="fill">{{ v('intensive_care_days') }}</u> &nbsp; 一级护理天数*<u
             class="fill"
-          >{{ v('primary_care_days') }}</u>
+            >{{ v('primary_care_days') }}</u
+          >
         </td>
         <td colspan="3">
           二级护理天数*<u class="fill">{{ v('secondary_care_days') }}</u> &nbsp; 三级护理天数*<u
             class="fill"
-          >{{ v('tertiary_care_days') }}</u>
+            >{{ v('tertiary_care_days') }}</u
+          >
         </td>
       </tr>
       <tr>
         <td colspan="6">
           离院方式 □ 1.医嘱离院 &nbsp; 2.医嘱转院、转社区、转卫生院机构，拟接收机构名称<u
             class="fill"
-          >{{ v('receiving_institution_name') }}</u>
+            >{{ v('receiving_institution_name') }}</u
+          >
           &nbsp; 拟接收机构代码<u class="fill" />
         </td>
       </tr>
@@ -510,9 +417,7 @@
     </table>
 
     <!-- ===== 四、医疗收费信息 ===== -->
-    <div class="ss-sec-hd">
-      四、医疗收费信息
-    </div>
+    <div class="ss-sec-hd">四、医疗收费信息</div>
     <table class="ss-tbl">
       <tr>
         <td style="width: 40%">
@@ -528,30 +433,14 @@
     <!-- 费用明细表 -->
     <table class="ss-tbl cost-tbl">
       <tr class="hd-row">
-        <td style="width: 28%">
-          项目名称
-        </td>
-        <td style="width: 15%">
-          金额
-        </td>
-        <td style="width: 15%">
-          甲类
-        </td>
-        <td style="width: 14%">
-          乙类
-        </td>
-        <td style="width: 14%">
-          自费
-        </td>
-        <td style="width: 14%">
-          其他
-        </td>
+        <td style="width: 28%">项目名称</td>
+        <td style="width: 15%">金额</td>
+        <td style="width: 15%">甲类</td>
+        <td style="width: 14%">乙类</td>
+        <td style="width: 14%">自费</td>
+        <td style="width: 14%">其他</td>
       </tr>
-      <tr
-        v-for="item in costRows"
-        :key="item.type"
-        :class="{ 'cat-row': item.isCat }"
-      >
+      <tr v-for="item in costRows" :key="item.type" :class="{ 'cat-row': item.isCat }">
         <td :class="{ bold: item.isCat }">
           {{ item.type }}
         </td>
@@ -572,9 +461,7 @@
         </td>
       </tr>
       <tr class="total-row">
-        <td class="bold">
-          金额合计
-        </td>
+        <td class="bold">金额合计</td>
         <td class="num bold">
           {{ totalCharge }}
         </td>
@@ -596,39 +483,17 @@
     <!-- 基金支付 / 个人支付（按 PDF 竖排结构） -->
     <table class="ss-tbl fund-tbl">
       <tr class="hd-row">
-        <td
-          colspan="3"
-          style="width: 50%"
-        >
-          基金支付
-        </td>
-        <td
-          colspan="2"
-          style="width: 50%"
-        >
-          个人支付
-        </td>
+        <td colspan="3" style="width: 50%">基金支付</td>
+        <td colspan="2" style="width: 50%">个人支付</td>
       </tr>
       <tr>
-        <td
-          rowspan="8"
-          class="center bold vert-label"
-          style="width: 5%"
-        >
-          基<br>金<br>支<br>付
+        <td rowspan="8" class="center bold vert-label" style="width: 5%">
+          基<br />金<br />支<br />付
         </td>
-        <td style="width: 25%">
-          基金支付类型
-        </td>
-        <td style="width: 20%">
-          金额
-        </td>
-        <td
-          rowspan="8"
-          class="center bold vert-label"
-          style="width: 5%"
-        >
-          个<br>人<br>支<br>付
+        <td style="width: 25%">基金支付类型</td>
+        <td style="width: 20%">金额</td>
+        <td rowspan="8" class="center bold vert-label" style="width: 5%">
+          个<br />人<br />支<br />付
         </td>
         <td style="width: 45%">
           <div class="fund-item">
@@ -652,7 +517,8 @@
         <td />
         <td>
           <div class="fund-item">
-            <span>个人账户支付</span><span class="num">{{ fmtMoney(data.personal_account_expend) }}</span>
+            <span>个人账户支付</span
+            ><span class="num">{{ fmtMoney(data.personal_account_expend) }}</span>
           </div>
         </td>
       </tr>
@@ -661,7 +527,8 @@
         <td class="num" />
         <td>
           <div class="fund-item">
-            <span>个人现金支付</span><span class="num">{{ fmtMoney(data.cash_payment_amount) }}</span>
+            <span>个人现金支付</span
+            ><span class="num">{{ fmtMoney(data.cash_payment_amount) }}</span>
           </div>
         </td>
       </tr>
@@ -705,9 +572,7 @@
         </td>
       </tr>
     </table>
-    <div class="ss-footer">
-      （注："*"代表选填数据指标）
-    </div>
+    <div class="ss-footer">（注："*"代表选填数据指标）</div>
   </div>
 </template>
 
@@ -1121,6 +986,37 @@ u.fill {
   margin-top: 6px;
   padding-left: 4px;
   font-weight: bold;
+}
+
+/* Apple-light 医疗工作台收敛：保留结算清单表格结构，仅统一纸张外观与字体。 */
+.ss-wrapper {
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 2px 12px rgba(0, 0, 0, 0.055);
+  transition:
+    border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.ss-wrapper:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  transform: translateY(-2px);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+}
+
+.ss-title {
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei UI',
+    sans-serif;
 }
 
 /* 打印样式 */

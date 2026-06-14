@@ -1,0 +1,1326 @@
+{
+  "summary": {
+    "rule_set_key": "luxian_0609_qc_v1",
+    "range": "LX0609-031..LX0609-040",
+    "generated_at": "2026-06-10T12:20:32+0800",
+    "total_rules": 10,
+    "total_cases": 20,
+    "passed_rules": 9,
+    "failed_rules": 1,
+    "failures": [
+      {
+        "rule_id": "LX0609-035",
+        "failure_reasons": [
+          "negative 期望 is_compliant=False 且 not_applicable!=true，实际 http=200 is_compliant=True not_applicable=False"
+        ]
+      }
+    ]
+  },
+  "results": [
+    {
+      "rule_id": "LX0609-031",
+      "rule_name": "手术记录：手术记录非手术者签字（质控术者及签名医生）",
+      "found": true,
+      "positive": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": true,
+        "http_status": 200,
+        "elapsed_seconds": 2.73,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-031",
+            "rule_name": "手术记录：手术记录非手术者签字（质控术者及签名医生）",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "经核查，该病历中的手术记录由第一助手（模拟医师乙）书写，但主刀医师（模拟医师甲）已在记录中明确签署姓名并确认内容一致。根据质控规则 LX0609-031，虽非术者书写，但已满足‘主刀医生签名确认’的合规要求，不存在‘无主刀医师签名’或‘非手术医生书写且未签名’的情形。文书结构完整，关键字段（术者、记录者、签名医生）齐全且逻辑自洽。",
+            "evidence": "【当前文书】第一助手：模拟医师乙",
+            "suggestion": "",
+            "confidence": 0.95,
+            "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"经核查，该病历中的手术记录由第一助手（模拟医师乙）书写，但主刀医师（模拟医师甲）已在记录中明确签署姓名并确认内容一致。根据质控规则 LX0609-031，虽非术者书写，但已满足‘主刀医生签名确认’的合规要求，不存在‘无主刀医师签名’或‘非手术医生书写且未签名’的情形。文书结构完整，关键字段（术者、记录者、签名医生）齐全且逻辑自洽。\",\n  \"issues\": [],\n  \"evidence\": \"文书标题：手术记录；记录时间：2026-06-09 16:20；关键原文：'记录者：模拟医师乙。记录者身份：第一助手。... 主刀医师审阅意见：记录内容与手术经过一致，同意归档。主刀医师签名：模拟医师甲。签名医生：模拟医师甲。'\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.95\n}",
+            "status": "compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [197, 207],
+            "token_usage": {
+              "total_tokens": 1509
+            },
+            "metadata": {
+              "tokens_used": 1509,
+              "prompt_tokens": 1267,
+              "completion_tokens": 242,
+              "input_tokens": 1267,
+              "output_tokens": 242,
+              "api_time": 2.666750907897949,
+              "first_result_latency": 2.666750907897949,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "ac299082-508c-4eeb-b947-47adc4388f4f"
+        }
+      },
+      "negative": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": false,
+        "http_status": 200,
+        "elapsed_seconds": 4.358,
+        "is_compliant": false,
+        "not_applicable": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 1,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-031",
+            "rule_name": "手术记录：手术记录非手术者签字（质控术者及签名医生）",
+            "is_compliant": false,
+            "issues": [
+              {
+                "description": "手术记录非手术者签字且缺主刀医师签名",
+                "evidence": "文书标题：手术记录；记录时间：2026-06-09 17:10；关键原文：'记录者：模拟医师丁。记录者身份：病区值班医师，未参加本次手术。签名医生：模拟医师丁。... 主刀医师签名：未见。'"
+              }
+            ],
+            "findings": "手术记录存在严重合规问题。根据病历文本，该份《手术记录》由非手术人员（模拟医师丁，身份为病区值班医师且未参加手术）书写并签名，而主刀医师（模拟医师甲）未在手术记录上签字确认。这直接违反了规则 LX0609-031 中关于‘手术记录非手术者签字’及‘无主刀医师签名’的质控要求。",
+            "evidence": "【当前文书】术者：模拟医师甲",
+            "suggestion": "1. 立即联系主刀医师（模拟医师甲）对手术记录进行审阅并补签姓名及日期。\n2. 若主刀医师无法补签，应由主刀医师重新书写或修改手术记录，确保由手术者或其授权的第一助手书写，并由主刀医师最终签名确认。\n3. 严禁由未参与手术的值班医师代签手术记录。",
+            "confidence": 1.0,
+            "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"手术记录存在严重合规问题。根据病历文本，该份《手术记录》由非手术人员（模拟医师丁，身份为病区值班医师且未参加手术）书写并签名，而主刀医师（模拟医师甲）未在手术记录上签字确认。这直接违反了规则 LX0609-031 中关于‘手术记录非手术者签字’及‘无主刀医师签名’的质控要求。\",\n  \"issues\": [\n    {\n      \"description\": \"手术记录非手术者签字且缺主刀医师签名\",\n      \"evidence\": \"文书标题：手术记录；记录时间：2026-06-09 17:10；关键原文：'记录者：模拟医师丁。记录者身份：病区值班医师，未参加本次手术。签名医生：模拟医师丁。... 主刀医师签名：未见。'\"\n    }\n  ],\n  \"evidence\": \"文书标题：手术记录\\n记录时间：2026-06-09 17:10\\n术者：模拟医师甲。\\n第一助手：模拟医师乙。\\n记录者：模拟医师丁。记录者身份：病区值班医师，未参加本次手术。\\n签名医生：模拟医师丁。\\n主刀医师签名：未见。\",\n  \"suggestion\": \"1. 立即联系主刀医师（模拟医师甲）对手术记录进行审阅并补签姓名及日期。\\n2. 若主刀医师无法补签，应由主刀医师重新书写或修改手术记录，确保由手术者或其授权的第一助手书写，并由主刀医师最终签名确认。\\n3. 严禁由未参与手术的值班医师代签手术记录。\",\n  \"confidence\": 1.0\n}",
+            "status": "non_compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [164, 172],
+            "token_usage": {
+              "total_tokens": 1522
+            },
+            "metadata": {
+              "tokens_used": 1522,
+              "prompt_tokens": 1116,
+              "completion_tokens": 406,
+              "input_tokens": 1116,
+              "output_tokens": 406,
+              "api_time": 4.297037124633789,
+              "first_result_latency": 4.297037124633789,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "b31914dc-907b-4304-a7ef-35ad3290b2e4"
+        }
+      },
+      "passed": true,
+      "failure_reasons": []
+    },
+    {
+      "rule_id": "LX0609-032",
+      "rule_name": "手术安全核查表：无手术安全核查表（有手术记录）",
+      "found": true,
+      "positive": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": true,
+        "http_status": 200,
+        "elapsed_seconds": 2.643,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-032",
+            "rule_name": "手术安全核查表：无手术安全核查表（有手术记录）",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "经核查，该病历包含完整的手术记录（2026-06-09 13:30）及手术安全核查表（2026-06-09 10:20）。手术安全核查表中明确记录了患者身份、手术部位、麻醉实施前核查、手术开始前核查及离室前核查情况，并有医师、麻醉师及护士三方签名。不存在‘有手术记录但无手术安全核查表’的情形，符合质控规则 LX0609-032 的要求。",
+            "evidence": "【当前文书】文书标题：手术安全核查表",
+            "suggestion": "",
+            "confidence": 1.0,
+            "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"经核查，该病历包含完整的手术记录（2026-06-09 13:30）及手术安全核查表（2026-06-09 10:20）。手术安全核查表中明确记录了患者身份、手术部位、麻醉实施前核查、手术开始前核查及离室前核查情况，并有医师、麻醉师及护士三方签名。不存在‘有手术记录但无手术安全核查表’的情形，符合质控规则 LX0609-032 的要求。\",\n  \"issues\": [],\n  \"evidence\": \"文书标题：手术安全核查表，记录时间：2026-06-09 10:20；关键内容：'麻醉实施前核查：已完成。手术开始前核查：已完成。...手术医师签名：模拟医师甲；麻醉医师签名：模拟医师乙；巡回护士签名：模拟护士甲'。文书标题：手术记录，记录时间：2026-06-09 13:30。\",\n  \"suggestion\": \"\",\n  \"confidence\": 1.0\n}",
+            "status": "compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [201, 213],
+            "token_usage": {
+              "total_tokens": 1395
+            },
+            "metadata": {
+              "tokens_used": 1395,
+              "prompt_tokens": 1130,
+              "completion_tokens": 265,
+              "input_tokens": 1130,
+              "output_tokens": 265,
+              "api_time": 2.5681822299957275,
+              "first_result_latency": 2.5681822299957275,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "6f085cda-f9a8-4989-a37f-f58098a10388"
+        }
+      },
+      "negative": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": false,
+        "http_status": 200,
+        "elapsed_seconds": 4.341,
+        "is_compliant": false,
+        "not_applicable": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 1,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-032",
+            "rule_name": "手术安全核查表：无手术安全核查表（有手术记录）",
+            "is_compliant": false,
+            "issues": [
+              {
+                "description": "缺失手术安全核查表及三方核查记录",
+                "evidence": "文书标题：文书清单核对；记录时间：2026-06-09 13:10；原文：'未见手术安全核查表，未见麻醉实施前、手术开始前、患者离室前三方核查签名记录'。同时存在手术记录（文书标题：手术记录；记录时间：2026-06-09 12:40）。"
+              }
+            ],
+            "findings": "病历中存在手术记录（2026-06-09 12:40），但缺失关键的手术安全核查表。根据‘文书清单核对’记录，明确注明‘未见手术安全核查表，未见麻醉实施前、手术开始前、患者离室前三方核查签名记录’。该情况完全符合规则 LX0609-032 定义的‘无手术安全核查表（有手术记录）’的严重缺陷情形。",
+            "evidence": "【当前文书】文书标题：手术记录",
+            "suggestion": "立即补录《手术安全核查表》。需由手术医师、麻醉医师和巡回护士在术前、术中、术后三个时间点共同完成核查并签署姓名及时间，确保与手术记录中的手术名称、时间及人员信息一致。若为历史归档问题，需按医院规定进行补充说明或修正流程。",
+            "confidence": 0.98,
+            "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"病历中存在手术记录（2026-06-09 12:40），但缺失关键的手术安全核查表。根据‘文书清单核对’记录，明确注明‘未见手术安全核查表，未见麻醉实施前、手术开始前、患者离室前三方核查签名记录’。该情况完全符合规则 LX0609-032 定义的‘无手术安全核查表（有手术记录）’的严重缺陷情形。\",\n  \"issues\": [\n    {\n      \"description\": \"缺失手术安全核查表及三方核查记录\",\n      \"evidence\": \"文书标题：文书清单核对；记录时间：2026-06-09 13:10；原文：'未见手术安全核查表，未见麻醉实施前、手术开始前、患者离室前三方核查签名记录'。同时存在手术记录（文书标题：手术记录；记录时间：2026-06-09 12:40）。\"\n    }\n  ],\n  \"evidence\": \"1. 手术记录存在：'文书标题：手术记录...记录时间：2026-06-09 12:40...主刀医师签名：模拟医师甲。'\\n2. 核查表缺失确认：'文书标题：文书清单核对...原文：未见手术安全核查表，未见麻醉实施前、手术开始前、患者离室前三方核查签名记录。'\",\n  \"suggestion\": \"立即补录《手术安全核查表》。需由手术医师、麻醉医师和巡回护士在术前、术中、术后三个时间点共同完成核查并签署姓名及时间，确保与手术记录中的手术名称、时间及人员信息一致。若为历史归档问题，需按医院规定进行补充说明或修正流程。\",\n  \"confidence\": 0.98\n}",
+            "status": "non_compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [195, 204],
+            "token_usage": {
+              "total_tokens": 1478
+            },
+            "metadata": {
+              "tokens_used": 1478,
+              "prompt_tokens": 1056,
+              "completion_tokens": 422,
+              "input_tokens": 1056,
+              "output_tokens": 422,
+              "api_time": 4.169475555419922,
+              "first_result_latency": 4.169475555419922,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "4ed30a44-0020-4c96-be8a-8e7a69e2da9f"
+        }
+      },
+      "passed": true,
+      "failure_reasons": []
+    },
+    {
+      "rule_id": "LX0609-033",
+      "rule_name": "手术知情同意书：无手术知情同意书(有手术记录）",
+      "found": true,
+      "positive": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": true,
+        "http_status": 200,
+        "elapsed_seconds": 3.106,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-033",
+            "rule_name": "手术知情同意书：无手术知情同意书(有手术记录）",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "经核查，该病历包含完整的手术记录（2026-06-09 16:10）及对应的手术知情同意书（2026-06-09 09:10）。手术知情同意书中明确记载了拟行手术名称、风险告知情况，且具备经治医师签名（模拟医师甲）、患者签名（模拟患者033A）及家属签名（模拟家属033A），签署时间为2026-06-09 09:18。文书齐全且签名要素符合规则要求，未发现‘无手术知情同意书’或‘缺双方签名’的情形，符合质控规则 LX0609-033。",
+            "evidence": "【当前文书】文书标题：手术知情同意书",
+            "suggestion": "",
+            "confidence": 0.95,
+            "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"经核查，该病历包含完整的手术记录（2026-06-09 16:10）及对应的手术知情同意书（2026-06-09 09:10）。手术知情同意书中明确记载了拟行手术名称、风险告知情况，且具备经治医师签名（模拟医师甲）、患者签名（模拟患者033A）及家属签名（模拟家属033A），签署时间为2026-06-09 09:18。文书齐全且签名要素符合规则要求，未发现‘无手术知情同意书’或‘缺双方签名’的情形，符合质控规则 LX0609-033。\",\n  \"issues\": [],\n  \"evidence\": \"文书标题：手术知情同意书，记录时间：2026-06-09 09:10；关键原文：'经治医师签名：模拟医师甲。患者签名：模拟患者033A。家属签名：模拟家属033A。签署时间：2026-06-09 09:18。'；文书标题：手术记录，记录时间：2026-06-09 16:10，确认存在手术操作记录。\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.95\n}",
+            "status": "compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [112, 124],
+            "token_usage": {
+              "total_tokens": 1489
+            },
+            "metadata": {
+              "tokens_used": 1489,
+              "prompt_tokens": 1164,
+              "completion_tokens": 325,
+              "input_tokens": 1164,
+              "output_tokens": 325,
+              "api_time": 3.0386152267456055,
+              "first_result_latency": 3.0386152267456055,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "4ceab7b7-b42b-48b7-845f-c0bcb77b25cc"
+        }
+      },
+      "negative": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": false,
+        "http_status": 200,
+        "elapsed_seconds": 5.443,
+        "is_compliant": false,
+        "not_applicable": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 1,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-033",
+            "rule_name": "手术知情同意书：无手术知情同意书(有手术记录）",
+            "is_compliant": false,
+            "issues": [
+              {
+                "description": "缺失手术知情同意书",
+                "evidence": "文书标题：文书清单核对；记录时间：2026-06-09 17:40；原文：'未见本次左经皮肾镜碎石取石术对应的手术知情同意书，未见患者对手术方式及手术风险的书面同意签名'。同时存在手术记录（文书标题：手术记录，记录时间：2026-06-09 17:20），证实有手术行为但无对应同意书。"
+              }
+            ],
+            "findings": "病历中存在手术记录，但缺失对应的手术知情同意书。根据‘文书清单核对’记录，明确提到‘未见本次左经皮肾镜碎石取石术对应的手术知情同意书，未见患者对手术方式及手术风险的书面同意签名’。虽然存在麻醉知情同意书和手术安全核查表，但规则明确要求必须存在‘手术知情同意书’（含医师和患者双方签名），当前病历中该关键文书缺失，符合规则 LX0609-033 定义的‘无手术知情同意书 (有手术记录）’严重缺陷情形。",
+            "evidence": "【当前文书】文书标题：手术记录",
+            "suggestion": "立即补录《手术知情同意书》，内容需包含手术名称、风险告知、替代方案等核心要素，并由主刀医师（模拟医师甲）及患者本人（模拟患者033B）签署姓名及日期。确保签署时间在手术开始前或符合医院规定的时间窗口内，并归档至病历系统中。",
+            "confidence": 0.95,
+            "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"病历中存在手术记录，但缺失对应的手术知情同意书。根据‘文书清单核对’记录，明确提到‘未见本次左经皮肾镜碎石取石术对应的手术知情同意书，未见患者对手术方式及手术风险的书面同意签名’。虽然存在麻醉知情同意书和手术安全核查表，但规则明确要求必须存在‘手术知情同意书’（含医师和患者双方签名），当前病历中该关键文书缺失，符合规则 LX0609-033 定义的‘无手术知情同意书 (有手术记录）’严重缺陷情形。\",\n  \"issues\": [\n    {\n      \"description\": \"缺失手术知情同意书\",\n      \"evidence\": \"文书标题：文书清单核对；记录时间：2026-06-09 17:40；原文：'未见本次左经皮肾镜碎石取石术对应的手术知情同意书，未见患者对手术方式及手术风险的书面同意签名'。同时存在手术记录（文书标题：手术记录，记录时间：2026-06-09 17:20），证实有手术行为但无对应同意书。\"\n    }\n  ],\n  \"evidence\": \"1. 手术记录存在：'文书标题：手术记录...手术名称：左经皮肾镜碎石取石术...主刀医师签名：模拟医师甲'。\\n2. 缺失确认：'文书标题：文书清单核对...未见本次左经皮肾镜碎石取石术对应的手术知情同意书，未见患者对手术方式及手术风险的书面同意签名'。\",\n  \"suggestion\": \"立即补录《手术知情同意书》，内容需包含手术名称、风险告知、替代方案等核心要素，并由主刀医师（模拟医师甲）及患者本人（模拟患者033B）签署姓名及日期。确保签署时间在手术开始前或符合医院规定的时间窗口内，并归档至病历系统中。\",\n  \"confidence\": 0.95\n}",
+            "status": "non_compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [416, 425],
+            "token_usage": {
+              "total_tokens": 1651
+            },
+            "metadata": {
+              "tokens_used": 1651,
+              "prompt_tokens": 1193,
+              "completion_tokens": 458,
+              "input_tokens": 1193,
+              "output_tokens": 458,
+              "api_time": 5.3624231815338135,
+              "first_result_latency": 5.3624231815338135,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "93c8f540-a44e-4b52-bddd-1cb785d4b316"
+        }
+      },
+      "passed": true,
+      "failure_reasons": []
+    },
+    {
+      "rule_id": "LX0609-034",
+      "rule_name": "麻醉知情同意书：无麻醉知情同意书（有麻醉记录）",
+      "found": true,
+      "positive": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": true,
+        "http_status": 200,
+        "elapsed_seconds": 3.244,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-034",
+            "rule_name": "麻醉知情同意书：无麻醉知情同意书（有麻醉记录）",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "经核查，该病历中已存在《麻醉知情同意书》（记录时间：2026-06-09 09:20），且文书内容完整。关键字段显示：拟行麻醉方式为椎管内麻醉，麻醉医师签名（模拟医师乙）与患者签名（模拟患者034A）均已签署，签署时间为2026-06-09 09:28。同时，病历中存在对应的《麻醉记录单》（记录时间：2026-06-09 13:30），记录了麻醉开始、结束时间及生命体征等信息。根据质控规则 LX0609-034，不存在‘有麻醉记录但无麻醉知情同意书’或‘同意书无双方签名’的情形，符合质控要求。",
+            "evidence": "【当前文书】文书标题：麻醉知情同意书",
+            "suggestion": "",
+            "confidence": 0.95,
+            "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"经核查，该病历中已存在《麻醉知情同意书》（记录时间：2026-06-09 09:20），且文书内容完整。关键字段显示：拟行麻醉方式为椎管内麻醉，麻醉医师签名（模拟医师乙）与患者签名（模拟患者034A）均已签署，签署时间为2026-06-09 09:28。同时，病历中存在对应的《麻醉记录单》（记录时间：2026-06-09 13:30），记录了麻醉开始、结束时间及生命体征等信息。根据质控规则 LX0609-034，不存在‘有麻醉记录但无麻醉知情同意书’或‘同意书无双方签名’的情形，符合质控要求。\",\n  \"issues\": [],\n  \"evidence\": \"文书标题：麻醉知情同意书... 麻醉医师签名：模拟医师乙。患者签名：模拟患者034A。签署时间：2026-06-09 09:28。\\n文书标题：麻醉记录单... 麻醉方式：椎管内麻醉。麻醉开始时间：2026-06-09 13:30。\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.95\n}",
+            "status": "compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [105, 117],
+            "token_usage": {
+              "total_tokens": 1412
+            },
+            "metadata": {
+              "tokens_used": 1412,
+              "prompt_tokens": 1102,
+              "completion_tokens": 310,
+              "input_tokens": 1102,
+              "output_tokens": 310,
+              "api_time": 3.1281368732452393,
+              "first_result_latency": 3.1281368732452393,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "26a05228-bf15-41a7-bafa-e0563a65fe04"
+        }
+      },
+      "negative": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": false,
+        "http_status": 200,
+        "elapsed_seconds": 3.75,
+        "is_compliant": false,
+        "not_applicable": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 1,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-034",
+            "rule_name": "麻醉知情同意书：无麻醉知情同意书（有麻醉记录）",
+            "is_compliant": false,
+            "issues": [
+              {
+                "description": "无麻醉知情同意书（有麻醉记录）",
+                "evidence": "文书标题：麻醉记录单，记录时间：2026-06-09 13:10，内容包含'麻醉方式：全身麻醉...麻醉医师签名：模拟医师乙'；文书标题：住院病历汇总 - 文书清单核对，记录时间：2026-06-09 16:40，原文'未见麻醉知情同意书，未见患者对全身麻醉风险的书面同意及麻醉医师签名文书'。"
+              }
+            ],
+            "findings": "病历中存在麻醉记录单（2026-06-09 13:10），显示实施了全身麻醉，但缺失对应的《麻醉知情同意书》。病历汇总中的‘文书清单核对’部分明确记载‘未见麻醉知情同意书，未见患者对全身麻醉风险的书面同意及麻醉医师签名文书’。根据规则 LX0609-034，存在麻醉记录而无麻醉知情同意书属于严重缺陷。",
+            "evidence": "【当前文书】麻醉方式：全身麻醉",
+            "suggestion": "立即补签或完善《麻醉知情同意书》，确保包含患者（或授权委托人）及麻醉医师的双向签名，并签署真实有效的日期和时间，以符合医疗核心制度要求。",
+            "confidence": 0.98,
+            "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"病历中存在麻醉记录单（2026-06-09 13:10），显示实施了全身麻醉，但缺失对应的《麻醉知情同意书》。病历汇总中的‘文书清单核对’部分明确记载‘未见麻醉知情同意书，未见患者对全身麻醉风险的书面同意及麻醉医师签名文书’。根据规则 LX0609-034，存在麻醉记录而无麻醉知情同意书属于严重缺陷。\",\n  \"issues\": [\n    {\n      \"description\": \"无麻醉知情同意书（有麻醉记录）\",\n      \"evidence\": \"文书标题：麻醉记录单，记录时间：2026-06-09 13:10，内容包含'麻醉方式：全身麻醉...麻醉医师签名：模拟医师乙'；文书标题：住院病历汇总 - 文书清单核对，记录时间：2026-06-09 16:40，原文'未见麻醉知情同意书，未见患者对全身麻醉风险的书面同意及麻醉医师签名文书'。\"\n    }\n  ],\n  \"evidence\": \"1. 麻醉记录单 (2026-06-09 13:10): '麻醉方式：全身麻醉...麻醉医师签名：模拟医师乙'\\n2. 住院病历汇总 - 文书清单核对 (2026-06-09 16:40): '未见麻醉知情同意书，未见患者对全身麻醉风险的书面同意及麻醉医师签名文书'\",\n  \"suggestion\": \"立即补签或完善《麻醉知情同意书》，确保包含患者（或授权委托人）及麻醉医师的双向签名，并签署真实有效的日期和时间，以符合医疗核心制度要求。\",\n  \"confidence\": 0.98\n}",
+            "status": "non_compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [251, 260],
+            "token_usage": {
+              "total_tokens": 1440
+            },
+            "metadata": {
+              "tokens_used": 1440,
+              "prompt_tokens": 1030,
+              "completion_tokens": 410,
+              "input_tokens": 1030,
+              "output_tokens": 410,
+              "api_time": 3.6893458366394043,
+              "first_result_latency": 3.6893458366394043,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "73c05a10-2fed-42de-a62f-86a7aebf1e61"
+        }
+      },
+      "passed": true,
+      "failure_reasons": []
+    },
+    {
+      "rule_id": "LX0609-035",
+      "rule_name": "麻醉知情同意书：麻醉知情同意书填写不规范（无患者或医生签名、签名时间未精确到分钟）",
+      "found": true,
+      "positive": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": true,
+        "http_status": 200,
+        "elapsed_seconds": 2.645,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-035",
+            "rule_name": "麻醉知情同意书：麻醉知情同意书填写不规范（无患者或医生签名、签名时间未精确到分钟）",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "经核查，病历中包含《麻醉知情同意书》。文书中明确记录了患者签名（模拟患者035A）、家属签名（模拟家属035A）及麻醉医师签名（模拟医师乙）。签署时间记录为'2026-06-09 09:36'，精确到分钟，符合质控规则关于‘无患者或医生签名、签名时间未精确到分钟’的合规要求。未发现缺失签名或时间格式不规范的情况。",
+            "evidence": "【当前文书】麻醉医师签名：模拟医师乙",
+            "suggestion": "",
+            "confidence": 1.0,
+            "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"经核查，病历中包含《麻醉知情同意书》。文书中明确记录了患者签名（模拟患者035A）、家属签名（模拟家属035A）及麻醉医师签名（模拟医师乙）。签署时间记录为'2026-06-09 09:36'，精确到分钟，符合质控规则关于‘无患者或医生签名、签名时间未精确到分钟’的合规要求。未发现缺失签名或时间格式不规范的情况。\",\n  \"issues\": [],\n  \"evidence\": \"文书标题：麻醉知情同意书... 患者签名：模拟患者035A。家属签名：模拟家属035A。麻醉医师签名：模拟医师乙。... 签署时间：2026-06-09 09:36。\",\n  \"suggestion\": \"\",\n  \"confidence\": 1.0\n}",
+            "status": "compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [193, 205],
+            "token_usage": {
+              "total_tokens": 1309
+            },
+            "metadata": {
+              "tokens_used": 1309,
+              "prompt_tokens": 1096,
+              "completion_tokens": 213,
+              "input_tokens": 1096,
+              "output_tokens": 213,
+              "api_time": 2.5236053466796875,
+              "first_result_latency": 2.5236053466796875,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "037cf4f2-957b-436c-9c01-a4dffd3c7df8"
+        }
+      },
+      "negative": {
+        "has_raw_text": true,
+        "passed": false,
+        "expected_is_compliant": false,
+        "http_status": 200,
+        "elapsed_seconds": 4.49,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "uncertain",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-035",
+            "rule_name": "麻醉知情同意书：麻醉知情同意书填写不规范（无患者或医生签名、签名时间未精确到分钟）",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "LLM 返回了非结构化结果，请查看原始输出。",
+            "evidence": "【当前文书】文书标题：住院病历汇总",
+            "suggestion": "",
+            "confidence": 0.7,
+            "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"麻醉知情同意书存在严重填写不规范问题。根据病历文本，在《麻醉知情同意书》中，患者签名字段明确记录为“未签”，仅有家属签名和医师签名。质控规则 LX0609-035 明确要求“无患者或医生签名”即触发不合规。此外，签署时间仅记录为\"2026-06-09\"，未精确到分钟，不符合“签名时间未精确到分钟”的缺陷描述。虽然备注中提到“待术后补签”，但在当前文书状态下，该同意书因缺少患者有效签名且时间格式不完整，判定为不合格。\",\n  \"issues\": [\n    {\n      \"description\": \"患者未签名\",\n      \"evidence\": \"文书标题：麻醉知情同意书；关键原文：'患者签名：未签'\"\n    },\n    {\n      \"description\": \"签署时间未精确到分钟\",\n      \"evidence\": \"文书标题：麻醉知情同意书；关键原文：'签署时间：2026-06-09'\"\n    }\n  ],\n  \"evidence\": \"文书标题：麻醉知情同意书\\n记录时间：2026-06-09 09:25\\n拟行麻醉方式：全身麻醉。\\n患者签名：未签。\\n家属签名：模拟家属035B。\\n麻醉医师签名：模拟医师乙。\\n签署时间：2026-06-09。\\n备注：患者手部疼痛，待术后补签。\",\n  \"suggestion\": \"1. 立即联系患者或授权委托人完成《麻醉知情同意书》的患者本人签名，确保法律效力。2. 修正签署时间，必须补充具体的分钟数（例如：2026-06-09 09:25），确保时间精确到分钟。3. 若确因客观原因无法当场补签，需在病历中详细记录原因及后续补签计划，但原则上手术前必须完成规范签署。\",\n  \"confidence\": 0.98\n}",
+            "status": "uncertain",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [0, 11],
+            "token_usage": {
+              "total_tokens": 1559
+            },
+            "metadata": {
+              "tokens_used": 1559,
+              "prompt_tokens": 1090,
+              "completion_tokens": 469,
+              "input_tokens": 1090,
+              "output_tokens": 469,
+              "api_time": 4.3724305629730225,
+              "first_result_latency": 4.3724305629730225,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "dd7e5140-83ef-4ba2-8dd7-90bf7d253e42"
+        }
+      },
+      "passed": false,
+      "failure_reasons": [
+        "negative 期望 is_compliant=False 且 not_applicable!=true，实际 http=200 is_compliant=True not_applicable=False"
+      ]
+    },
+    {
+      "rule_id": "LX0609-036",
+      "rule_name": "麻醉访视：无麻醉术前/麻醉术后访视记录（局麻除外）；",
+      "found": true,
+      "positive": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": true,
+        "http_status": 200,
+        "elapsed_seconds": 3.307,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-036",
+            "rule_name": "麻醉访视：无麻醉术前/麻醉术后访视记录（局麻除外）；",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "经核查，该病历中拟行麻醉方式为全身麻醉（非局麻）。病历中已包含完整的《麻醉术前访视记录》（记录时间：2026-06-09 09:20）和《麻醉术后访视记录》（记录时间：2026-06-10 09:00），且内容涵盖了ASA分级、气道评估、术后生命体征及并发症观察等关键要素。所有必要文书齐全，符合质控规则LX0609-036关于‘无麻醉术前/麻醉术后访视记录（局麻除外）’的合规要求，未触发缺陷判定。",
+            "evidence": "【当前文书】气道评估：Mallampati II级",
+            "suggestion": "",
+            "confidence": 1.0,
+            "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"经核查，该病历中拟行麻醉方式为全身麻醉（非局麻）。病历中已包含完整的《麻醉术前访视记录》（记录时间：2026-06-09 09:20）和《麻醉术后访视记录》（记录时间：2026-06-10 09:00），且内容涵盖了ASA分级、气道评估、术后生命体征及并发症观察等关键要素。所有必要文书齐全，符合质控规则LX0609-036关于‘无麻醉术前/麻醉术后访视记录（局麻除外）’的合规要求，未触发缺陷判定。\",\n  \"issues\": [],\n  \"evidence\": \"1. 麻醉方式确认：《麻醉术前访视记录》中‘拟行麻醉方式：全身麻醉’；《麻醉记录单》中‘麻醉方式：全身麻醉’。\\n2. 术前访视存在：《麻醉术前访视记录》，记录时间2026-06-09 09:20，包含ASA分级II级、Mallampati II级评估及麻醉计划说明。\\n3. 术后访视存在：《麻醉术后访视记录》，记录时间2026-06-10 09:00，包含意识状态、呼吸情况、疼痛评分及并发症描述。\",\n  \"suggestion\": \"\",\n  \"confidence\": 1.0\n}",
+            "status": "compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [195, 214],
+            "token_usage": {
+              "total_tokens": 1464
+            },
+            "metadata": {
+              "tokens_used": 1464,
+              "prompt_tokens": 1131,
+              "completion_tokens": 333,
+              "input_tokens": 1131,
+              "output_tokens": 333,
+              "api_time": 3.238492250442505,
+              "first_result_latency": 3.238492250442505,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "6300b9f4-8230-4f79-88c1-93d02e8d2187"
+        }
+      },
+      "negative": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": false,
+        "http_status": 200,
+        "elapsed_seconds": 3.443,
+        "is_compliant": false,
+        "not_applicable": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 1,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-036",
+            "rule_name": "麻醉访视：无麻醉术前/麻醉术后访视记录（局麻除外）；",
+            "is_compliant": false,
+            "issues": [
+              {
+                "description": "缺失麻醉术后访视记录",
+                "evidence": "文书标题：文书清单核对；记录时间：2026-06-10 10:00；关键原文：'未见麻醉术后访视记录，未见术后麻醉恢复情况及麻醉并发症访视记录'。同时确认麻醉方式为'椎管内麻醉'（见麻醉记录单、手术记录），不属于局麻豁免范围。"
+              }
+            ],
+            "findings": "病历中存在麻醉方式（椎管内麻醉，非局麻），但缺失麻醉术后访视记录。根据病历文本中的‘文书清单核对’部分明确记载：‘未见麻醉术后访视记录，未见术后麻醉恢复情况及麻醉并发症访视记录’。规则 LX0609-036 要求除局麻外必须存在麻醉术前及术后访视记录，当前情况触发该不合规情形。",
+            "evidence": "【当前文书】拟行麻醉方式：椎管内麻醉",
+            "suggestion": "请补录完整的《麻醉术后访视记录》，内容应包含患者术后苏醒情况、生命体征监测、疼痛评估、并发症观察及处理措施等，并由麻醉医师签名确认。",
+            "confidence": 0.95,
+            "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"病历中存在麻醉方式（椎管内麻醉，非局麻），但缺失麻醉术后访视记录。根据病历文本中的‘文书清单核对’部分明确记载：‘未见麻醉术后访视记录，未见术后麻醉恢复情况及麻醉并发症访视记录’。规则 LX0609-036 要求除局麻外必须存在麻醉术前及术后访视记录，当前情况触发该不合规情形。\",\n  \"issues\": [\n    {\n      \"description\": \"缺失麻醉术后访视记录\",\n      \"evidence\": \"文书标题：文书清单核对；记录时间：2026-06-10 10:00；关键原文：'未见麻醉术后访视记录，未见术后麻醉恢复情况及麻醉并发症访视记录'。同时确认麻醉方式为'椎管内麻醉'（见麻醉记录单、手术记录），不属于局麻豁免范围。\"\n    }\n  ],\n  \"evidence\": \"1. 麻醉方式确认：'拟行麻醉方式：椎管内麻醉'（麻醉术前访视记录）；'麻醉方式：椎管内麻醉'（麻醉记录单）。\\n2. 缺失证据：'未见麻醉术后访视记录'（文书清单核对）。\",\n  \"suggestion\": \"请补录完整的《麻醉术后访视记录》，内容应包含患者术后苏醒情况、生命体征监测、疼痛评估、并发症观察及处理措施等，并由麻醉医师签名确认。\",\n  \"confidence\": 0.95\n}",
+            "status": "non_compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [162, 174],
+            "token_usage": {
+              "total_tokens": 1428
+            },
+            "metadata": {
+              "tokens_used": 1428,
+              "prompt_tokens": 1086,
+              "completion_tokens": 342,
+              "input_tokens": 1086,
+              "output_tokens": 342,
+              "api_time": 3.3932464122772217,
+              "first_result_latency": 3.3932464122772217,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "93b1de8d-dda3-4acd-9cf1-eb1760fc58bb"
+        }
+      },
+      "passed": true,
+      "failure_reasons": []
+    },
+    {
+      "rule_id": "LX0609-037",
+      "rule_name": "麻醉访视：麻醉访视（术前和术后）记录填写不规范（局麻除外）；",
+      "found": true,
+      "positive": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": true,
+        "http_status": 200,
+        "elapsed_seconds": 3.157,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-037",
+            "rule_name": "麻醉访视：麻醉访视（术前和术后）记录填写不规范（局麻除外）；",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "经核查，该病历针对拟行全身麻醉手术（胸腔镜右肺楔形切除术），已完整包含麻醉术前访视记录和麻醉术后访视记录。术前访视记录（2026-06-09 08:50）中明确了麻醉方式（全身麻醉）、ASA分级、气道及心肺评估、麻醉计划等必要字段，并有医师签名及时间；术后访视记录（2026-06-10 08:40）涵盖了意识状态、呼吸循环、疼痛评分等关键内容，亦有医师签名及时间。麻醉方式在术前访视、麻醉记录单及手术记录中保持一致（均为全身麻醉）。不存在缺失文书或关键字段填写不规范的情形，符合质控规则 LX0609-037 要求。",
+            "evidence": "【当前文书】拟行麻醉方式：全身麻醉",
+            "suggestion": "",
+            "confidence": 0.95,
+            "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"经核查，该病历针对拟行全身麻醉手术（胸腔镜右肺楔形切除术），已完整包含麻醉术前访视记录和麻醉术后访视记录。术前访视记录（2026-06-09 08:50）中明确了麻醉方式（全身麻醉）、ASA分级、气道及心肺评估、麻醉计划等必要字段，并有医师签名及时间；术后访视记录（2026-06-10 08:40）涵盖了意识状态、呼吸循环、疼痛评分等关键内容，亦有医师签名及时间。麻醉方式在术前访视、麻醉记录单及手术记录中保持一致（均为全身麻醉）。不存在缺失文书或关键字段填写不规范的情形，符合质控规则 LX0609-037 要求。\",\n  \"issues\": [],\n  \"evidence\": \"1. 麻醉术前访视记录：'拟行麻醉方式：全身麻醉...麻醉医师签名：模拟医师乙。签名时间：2026-06-09 08:58。'\\n2. 麻醉术后访视记录：'术后第1日访视...麻醉医师签名：模拟医师乙。签名时间：2026-06-10 08:46。'\\n3. 麻醉记录单：'麻醉方式：全身麻醉。'\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.95\n}",
+            "status": "compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [157, 168],
+            "token_usage": {
+              "total_tokens": 1449
+            },
+            "metadata": {
+              "tokens_used": 1449,
+              "prompt_tokens": 1118,
+              "completion_tokens": 331,
+              "input_tokens": 1118,
+              "output_tokens": 331,
+              "api_time": 3.108903408050537,
+              "first_result_latency": 3.108903408050537,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "33267867-b489-4b2f-84a7-7fc26531a198"
+        }
+      },
+      "negative": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": false,
+        "http_status": 200,
+        "elapsed_seconds": 5.315,
+        "is_compliant": false,
+        "not_applicable": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 2,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-037",
+            "rule_name": "麻醉访视：麻醉访视（术前和术后）记录填写不规范（局麻除外）；",
+            "is_compliant": false,
+            "issues": [
+              {
+                "description": "麻醉术前访视记录关键内容缺失且签名时间缺项",
+                "evidence": "文书标题：麻醉术前访视记录，记录时间：2026-06-09 09:00。原文说明：'本记录未填写 ASA 分级、气道评估、术前禁食禁饮情况、既往麻醉史及麻醉风险告知结果。' 以及 '签名时间：未填写。'"
+              },
+              {
+                "description": "麻醉术后访视记录关键内容缺失且无医师签名",
+                "evidence": "文书标题：麻醉术后访视记录，记录时间：2026-06-10 09:00。原文说明：'本记录未填写意识状态、呼吸循环情况、恶心呕吐、咽痛声嘶、麻醉相关并发症评估。' 以及 '麻醉医师签名：未签。签名时间：未填写。'"
+              }
+            ],
+            "findings": "病历存在麻醉访视记录填写不规范的问题，不符合质控规则 LX0609-037。具体表现为：1. 麻醉术前访视记录中缺失关键必要字段（ASA 分级、气道评估、禁食禁饮情况、既往麻醉史及风险告知结果），且签名时间未填写；2. 麻醉术后访视记录中缺失关键必要字段（意识状态、呼吸循环情况、并发症评估等），且麻醉医师未签名、签名时间未填写。该患者拟行全身麻醉，不属于局麻除外情形，必须完整填写上述内容。",
+            "evidence": "【当前文书】拟行麻醉方式：全身麻醉",
+            "suggestion": "1. 补充完善《麻醉术前访视记录》：补全 ASA 分级、气道评估、术前禁食禁饮情况、既往麻醉史及麻醉风险告知结果的具体内容，并补填麻醉医师签名及准确的签名时间。\n2. 补充完善《麻醉术后访视记录》：补全术后意识状态、呼吸循环情况、有无恶心呕吐、咽痛声嘶及麻醉相关并发症评估的具体描述，并由麻醉医师补签姓名及准确签名时间。",
+            "confidence": 0.95,
+            "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"病历存在麻醉访视记录填写不规范的问题，不符合质控规则 LX0609-037。具体表现为：1. 麻醉术前访视记录中缺失关键必要字段（ASA 分级、气道评估、禁食禁饮情况、既往麻醉史及风险告知结果），且签名时间未填写；2. 麻醉术后访视记录中缺失关键必要字段（意识状态、呼吸循环情况、并发症评估等），且麻醉医师未签名、签名时间未填写。该患者拟行全身麻醉，不属于局麻除外情形，必须完整填写上述内容。\",\n  \"issues\": [\n    {\n      \"description\": \"麻醉术前访视记录关键内容缺失且签名时间缺项\",\n      \"evidence\": \"文书标题：麻醉术前访视记录，记录时间：2026-06-09 09:00。原文说明：'本记录未填写 ASA 分级、气道评估、术前禁食禁饮情况、既往麻醉史及麻醉风险告知结果。' 以及 '签名时间：未填写。'\"\n    },\n    {\n      \"description\": \"麻醉术后访视记录关键内容缺失且无医师签名\",\n      \"evidence\": \"文书标题：麻醉术后访视记录，记录时间：2026-06-10 09:00。原文说明：'本记录未填写意识状态、呼吸循环情况、恶心呕吐、咽痛声嘶、麻醉相关并发症评估。' 以及 '麻醉医师签名：未签。签名时间：未填写。'\"\n    }\n  ],\n  \"evidence\": \"1. 麻醉术前访视记录 (2026-06-09 09:00): '拟行麻醉方式：全身麻醉... 说明：本记录未填写 ASA 分级、气道评估、术前禁食禁饮情况、既往麻醉史及麻醉风险告知结果。签名时间：未填写。'\\n2. 麻醉术后访视记录 (2026-06-10 09:00): '术后看过患者... 说明：本记录未填写意识状态、呼吸循环情况、恶心呕吐、咽痛声嘶、麻醉相关并发症评估。麻醉医师签名：未签。签名时间：未填写。'\",\n  \"suggestion\": \"1. 补充完善《麻醉术前访视记录》：补全 ASA 分级、气道评估、术前禁食禁饮情况、既往麻醉史及麻醉风险告知结果的具体内容，并补填麻醉医师签名及准确的签名时间。\\n2. 补充完善《麻醉术后访视记录》：补全术后意识状态、呼吸循环情况、有无恶心呕吐、咽痛声嘶及麻醉相关并发症评估的具体描述，并由麻醉医师补签姓名及准确签名时间。\",\n  \"confidence\": 0.95\n}",
+            "status": "non_compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [157, 168],
+            "token_usage": {
+              "total_tokens": 1691
+            },
+            "metadata": {
+              "tokens_used": 1691,
+              "prompt_tokens": 1056,
+              "completion_tokens": 635,
+              "input_tokens": 1056,
+              "output_tokens": 635,
+              "api_time": 5.2697227001190186,
+              "first_result_latency": 5.2697227001190186,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "2c51a288-9cc1-49ef-82f4-f38ee1beed1c"
+        }
+      },
+      "passed": true,
+      "failure_reasons": []
+    },
+    {
+      "rule_id": "LX0609-038",
+      "rule_name": "麻醉记录单：无麻醉记录单（局麻除外）；",
+      "found": true,
+      "positive": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": true,
+        "http_status": 200,
+        "elapsed_seconds": 2.936,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-038",
+            "rule_name": "麻醉记录单：无麻醉记录单（局麻除外）；",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "经核查，该病历中患者拟行全身麻醉手术。病历包含完整的《麻醉知情同意书》，其中明确记录了‘拟行麻醉方式：全身麻醉’，且具备‘患者签名：模拟患者038A'和‘麻醉医师签名：模拟医师乙’，符合双方签名的要求。同时，病历中存在《麻醉记录单》，记录了麻醉开始、结束时间及各项生命体征数据，并有麻醉医师签名。不存在‘无麻醉记录单（局麻除外）’的情形，也未发现同意书签名缺失问题。所有核心质控点均满足规则要求。",
+            "evidence": "【当前文书】拟行麻醉方式：全身麻醉",
+            "suggestion": "",
+            "confidence": 1.0,
+            "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"经核查，该病历中患者拟行全身麻醉手术。病历包含完整的《麻醉知情同意书》，其中明确记录了‘拟行麻醉方式：全身麻醉’，且具备‘患者签名：模拟患者038A'和‘麻醉医师签名：模拟医师乙’，符合双方签名的要求。同时，病历中存在《麻醉记录单》，记录了麻醉开始、结束时间及各项生命体征数据，并有麻醉医师签名。不存在‘无麻醉记录单（局麻除外）’的情形，也未发现同意书签名缺失问题。所有核心质控点均满足规则要求。\",\n  \"issues\": [],\n  \"evidence\": \"1. 《麻醉知情同意书》（2026-06-09 09:00）：拟行麻醉方式：全身麻醉。患者签名：模拟患者038A。麻醉医师签名：模拟医师乙。\\n2. 《麻醉记录单》（2026-06-09 13:20）：麻醉方式：全身麻醉。麻醉医师签名：模拟医师乙。\",\n  \"suggestion\": \"\",\n  \"confidence\": 1.0\n}",
+            "status": "compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [139, 150],
+            "token_usage": {
+              "total_tokens": 1329
+            },
+            "metadata": {
+              "tokens_used": 1329,
+              "prompt_tokens": 1063,
+              "completion_tokens": 266,
+              "input_tokens": 1063,
+              "output_tokens": 266,
+              "api_time": 2.833427667617798,
+              "first_result_latency": 2.833427667617798,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "e35d9d2a-3e8b-4523-98bc-0b6339d99ebe"
+        }
+      },
+      "negative": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": false,
+        "http_status": 200,
+        "elapsed_seconds": 3.995,
+        "is_compliant": false,
+        "not_applicable": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 1,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-038",
+            "rule_name": "麻醉记录单：无麻醉记录单（局麻除外）；",
+            "is_compliant": false,
+            "issues": [
+              {
+                "description": "缺失麻醉记录单",
+                "evidence": "文书标题：病历清单核对；关键原文：'未见麻醉记录单，未见麻醉开始结束时间、麻醉用药及术中生命体征连续记录'。同时确认麻醉方式为'椎管内麻醉'（见《麻醉知情同意书》及《手术记录》），不属于局麻豁免范围。"
+              }
+            ],
+            "findings": "病历中存在麻醉方式（椎管内麻醉，非局麻）且进行了手术，但缺失关键的‘麻醉记录单’。根据病历清单核对记录，明确记载‘未见麻醉记录单，未见麻醉开始结束时间、麻醉用药及术中生命体征连续记录’。虽然存在签署完整的《麻醉知情同意书》，但质控规则 LX0609-038 的核心要求是‘无麻醉记录单（局麻除外）’，本例中患者接受椎管内麻醉，必须提供麻醉记录单，目前该文书缺失，构成轻微缺陷。",
+            "evidence": "【当前文书】拟行麻醉方式：椎管内麻醉",
+            "suggestion": "请立即补录或查找缺失的《麻醉记录单》。该记录单需包含麻醉开始与结束时间、术中麻醉用药详情以及连续的术中生命体征监测数据。若为历史归档遗漏，需按医院规定流程进行补充完善并签字确认。",
+            "confidence": 0.95,
+            "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"病历中存在麻醉方式（椎管内麻醉，非局麻）且进行了手术，但缺失关键的‘麻醉记录单’。根据病历清单核对记录，明确记载‘未见麻醉记录单，未见麻醉开始结束时间、麻醉用药及术中生命体征连续记录’。虽然存在签署完整的《麻醉知情同意书》，但质控规则 LX0609-038 的核心要求是‘无麻醉记录单（局麻除外）’，本例中患者接受椎管内麻醉，必须提供麻醉记录单，目前该文书缺失，构成轻微缺陷。\",\n  \"issues\": [\n    {\n      \"description\": \"缺失麻醉记录单\",\n      \"evidence\": \"文书标题：病历清单核对；关键原文：'未见麻醉记录单，未见麻醉开始结束时间、麻醉用药及术中生命体征连续记录'。同时确认麻醉方式为'椎管内麻醉'（见《麻醉知情同意书》及《手术记录》），不属于局麻豁免范围。\"\n    }\n  ],\n  \"evidence\": \"1. 《麻醉知情同意书》：拟行麻醉方式：椎管内麻醉。\\n2. 《手术记录》：麻醉方式：椎管内麻醉。\\n3. 《病历清单核对》：已见麻醉知情同意书...未见麻醉记录单，未见麻醉开始结束时间、麻醉用药及术中生命体征连续记录。\",\n  \"suggestion\": \"请立即补录或查找缺失的《麻醉记录单》。该记录单需包含麻醉开始与结束时间、术中麻醉用药详情以及连续的术中生命体征监测数据。若为历史归档遗漏，需按医院规定流程进行补充完善并签字确认。\",\n  \"confidence\": 0.95\n}",
+            "status": "non_compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [139, 151],
+            "token_usage": {
+              "total_tokens": 1433
+            },
+            "metadata": {
+              "tokens_used": 1433,
+              "prompt_tokens": 1050,
+              "completion_tokens": 383,
+              "input_tokens": 1050,
+              "output_tokens": 383,
+              "api_time": 3.9407811164855957,
+              "first_result_latency": 3.9407811164855957,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "4cab9c7f-ab1b-43fa-8bd3-49841a5f2a0c"
+        }
+      },
+      "passed": true,
+      "failure_reasons": []
+    },
+    {
+      "rule_id": "LX0609-039",
+      "rule_name": "术前讨论记录：除以紧急抢救生命为目的的急诊手术外，其他住院患者手术无术前讨论或术者未参加。",
+      "found": true,
+      "positive": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": true,
+        "http_status": 200,
+        "elapsed_seconds": 3.852,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-039",
+            "rule_name": "术前讨论记录：除以紧急抢救生命为目的的急诊手术外，其他住院患者手术无术前讨论或术者未参加。",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "经核查，该病历符合质控规则 LX0609-039。患者拟行‘腹腔镜右半结肠切除术’，属于非急诊抢救手术（依据《术前讨论记录》及《手术记录》中明确记载的‘非急诊抢救手术’）。病历中存在完整的《术前讨论记录》，且记录显示术者‘模拟医师甲’全程参加了讨论并发表意见（原文：‘术者模拟医师甲意见：本人参加讨论...'），同时《术前讨论记录》与《手术记录》中的术者信息一致（均为‘模拟医师甲’）。文书齐全，逻辑闭环，未发现无术前讨论或术者未参加的情形。",
+            "evidence": "【当前文书】文书标题：住院病历汇总",
+            "suggestion": "",
+            "confidence": 0.95,
+            "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"经核查，该病历符合质控规则 LX0609-039。患者拟行‘腹腔镜右半结肠切除术’，属于非急诊抢救手术（依据《术前讨论记录》及《手术记录》中明确记载的‘非急诊抢救手术’）。病历中存在完整的《术前讨论记录》，且记录显示术者‘模拟医师甲’全程参加了讨论并发表意见（原文：‘术者模拟医师甲意见：本人参加讨论...'），同时《术前讨论记录》与《手术记录》中的术者信息一致（均为‘模拟医师甲’）。文书齐全，逻辑闭环，未发现无术前讨论或术者未参加的情形。\",\n  \"issues\": [],\n  \"evidence\": \"1. 《术前讨论记录》（2026-06-09）：病例摘要提及‘非急诊抢救手术’；讨论内容明确记录‘术者模拟医师甲意见：本人参加讨论’；签名栏有‘术者签名：模拟医师甲’。\\n2. 《手术记录》（2026-06-10）：手术性质标注为‘择期手术，非急诊抢救’；术者字段为‘模拟医师甲’。\\n3. 《手术医嘱》（2026-06-09）：包含明日手术安排，佐证手术计划存在。\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.95\n}",
+            "status": "compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [0, 11],
+            "token_usage": {
+              "total_tokens": 1431
+            },
+            "metadata": {
+              "tokens_used": 1431,
+              "prompt_tokens": 1107,
+              "completion_tokens": 324,
+              "input_tokens": 1107,
+              "output_tokens": 324,
+              "api_time": 3.807100534439087,
+              "first_result_latency": 3.807100534439087,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "c5497198-125b-43ba-a008-7fa55c995e4f"
+        }
+      },
+      "negative": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": false,
+        "http_status": 200,
+        "elapsed_seconds": 4.318,
+        "is_compliant": false,
+        "not_applicable": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 1,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-039",
+            "rule_name": "术前讨论记录：除以紧急抢救生命为目的的急诊手术外，其他住院患者手术无术前讨论或术者未参加。",
+            "is_compliant": false,
+            "issues": [
+              {
+                "description": "术者未参加术前讨论",
+                "evidence": "文书标题：术前讨论记录；关键原文：'备注：本次讨论记录未见拟任术者模拟医师甲参加意见或签名'；对比文书：手术记录（术者：模拟医师甲）"
+              }
+            ],
+            "findings": "该病历存在严重缺陷。根据质控规则 LX0609-039，除紧急抢救生命为目的的急诊手术外，其他住院患者手术必须有术前讨论记录且术者必须参加。本例患者行择期腹腔镜乙状结肠切除术（非急诊），虽存在《术前讨论记录》，但记录中明确备注‘本次讨论记录未见拟任术者模拟医师甲参加意见或签名’。同时，《手术记录》显示术者为‘模拟医师甲’。术者在术前讨论环节缺席，不符合‘术者未参加’即触发不合规的规则描述。",
+            "evidence": "【当前文书】病例摘要：患者拟行腹腔镜乙状结肠切除术，非急诊抢救手术",
+            "suggestion": "1. 立即补充由拟任术者（模拟医师甲）参与的术前讨论记录，或在原记录中补签术者意见及签名，并注明补签原因及时间。\n2. 若原讨论确实无法追溯，需重新组织包含术者在内的术前讨论，并完善相关文书。\n3. 确保所有择期手术的术前讨论记录中，术者均实际参与并签字确认。",
+            "confidence": 0.98,
+            "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"该病历存在严重缺陷。根据质控规则 LX0609-039，除紧急抢救生命为目的的急诊手术外，其他住院患者手术必须有术前讨论记录且术者必须参加。本例患者行择期腹腔镜乙状结肠切除术（非急诊），虽存在《术前讨论记录》，但记录中明确备注‘本次讨论记录未见拟任术者模拟医师甲参加意见或签名’。同时，《手术记录》显示术者为‘模拟医师甲’。术者在术前讨论环节缺席，不符合‘术者未参加’即触发不合规的规则描述。\",\n  \"issues\": [\n    {\n      \"description\": \"术者未参加术前讨论\",\n      \"evidence\": \"文书标题：术前讨论记录；关键原文：'备注：本次讨论记录未见拟任术者模拟医师甲参加意见或签名'；对比文书：手术记录（术者：模拟医师甲）\"\n    }\n  ],\n  \"evidence\": \"1. 术前讨论记录（2026-06-09 09:10）：'病例摘要：患者拟行腹腔镜乙状结肠切除术，非急诊抢救手术。... 备注：本次讨论记录未见拟任术者模拟医师甲参加意见或签名。'\\n2. 手术记录（2026-06-10 16:00）：'手术名称：腹腔镜乙状结肠切除术。... 术者：模拟医师甲。'\",\n  \"suggestion\": \"1. 立即补充由拟任术者（模拟医师甲）参与的术前讨论记录，或在原记录中补签术者意见及签名，并注明补签原因及时间。\\n2. 若原讨论确实无法追溯，需重新组织包含术者在内的术前讨论，并完善相关文书。\\n3. 确保所有择期手术的术前讨论记录中，术者均实际参与并签字确认。\",\n  \"confidence\": 0.98\n}",
+            "status": "non_compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [204, 231],
+            "token_usage": {
+              "total_tokens": 1521
+            },
+            "metadata": {
+              "tokens_used": 1521,
+              "prompt_tokens": 1076,
+              "completion_tokens": 445,
+              "input_tokens": 1076,
+              "output_tokens": 445,
+              "api_time": 4.285443305969238,
+              "first_result_latency": 4.285443305969238,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "923884cf-90b6-4a5d-8a5c-640c32cf1c96"
+        }
+      },
+      "passed": true,
+      "failure_reasons": []
+    },
+    {
+      "rule_id": "LX0609-040",
+      "rule_name": "术前多学科讨论记录：四级手术术前讨论未多学科讨论。",
+      "found": true,
+      "positive": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": true,
+        "http_status": 200,
+        "elapsed_seconds": 3.618,
+        "is_compliant": true,
+        "not_applicable": false,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 0,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-040",
+            "rule_name": "术前多学科讨论记录：四级手术术前讨论未多学科讨论。",
+            "is_compliant": true,
+            "issues": [],
+            "findings": "经核查，该病历为四级手术（腹腔镜右半肝切除术），已存在完整的术前多学科讨论记录。在《术前多学科讨论记录》中明确记载了‘讨论形式：多学科讨论 MDT'，并详细列出了肝胆外科、麻醉科、影像科、ICU、输血科及护理部等多科室人员参与，且讨论了肝储备评估、麻醉风险、术后监护及备血方案等关键内容，符合四级手术必须开展多学科讨论的质控要求。同时，《术前小结》和《手术记录》中均确认了已完成术前多学科讨论，文书齐全，逻辑闭环，未发现‘四级手术术前讨论未多学科讨论’的不合规情形。",
+            "evidence": "【当前文书】手术级别：四级",
+            "suggestion": "",
+            "confidence": 1.0,
+            "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"经核查，该病历为四级手术（腹腔镜右半肝切除术），已存在完整的术前多学科讨论记录。在《术前多学科讨论记录》中明确记载了‘讨论形式：多学科讨论 MDT'，并详细列出了肝胆外科、麻醉科、影像科、ICU、输血科及护理部等多科室人员参与，且讨论了肝储备评估、麻醉风险、术后监护及备血方案等关键内容，符合四级手术必须开展多学科讨论的质控要求。同时，《术前小结》和《手术记录》中均确认了已完成术前多学科讨论，文书齐全，逻辑闭环，未发现‘四级手术术前讨论未多学科讨论’的不合规情形。\",\n  \"issues\": [],\n  \"evidence\": \"1. 《术前小结》记录时间：2026-06-10 08:30，原文：'手术名称：腹腔镜右半肝切除术。手术级别：四级...已完成术前多学科讨论。'\\n2. 《术前多学科讨论记录》记录时间：2026-06-09 15:00，原文：'拟行手术：腹腔镜右半肝切除术。手术级别：四级。讨论形式：多学科讨论 MDT。参加科室及人员：肝胆外科模拟医师甲、麻醉科模拟医师乙、影像科模拟医师丙、ICU 模拟医师丁、输血科模拟医师戊、护理部模拟护士甲。'\\n3. 《手术记录》记录时间：2026-06-10 18:00，原文：'手术名称：腹腔镜右半肝切除术。手术级别：四级...术中按 MDT 方案备血和监护'\",\n  \"suggestion\": \"\",\n  \"confidence\": 1.0\n}",
+            "status": "compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [161, 168],
+            "token_usage": {
+              "total_tokens": 1531
+            },
+            "metadata": {
+              "tokens_used": 1531,
+              "prompt_tokens": 1140,
+              "completion_tokens": 391,
+              "input_tokens": 1140,
+              "output_tokens": 391,
+              "api_time": 3.5666892528533936,
+              "first_result_latency": 3.5666892528533936,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "8346fa70-9c70-42ea-90db-488eb644b7a5"
+        }
+      },
+      "negative": {
+        "has_raw_text": true,
+        "passed": true,
+        "expected_is_compliant": false,
+        "http_status": 200,
+        "elapsed_seconds": 5.46,
+        "is_compliant": false,
+        "not_applicable": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "issues_count": 2,
+        "response": {
+          "success": true,
+          "data": {
+            "rule_id": "LX0609-040",
+            "rule_name": "术前多学科讨论记录：四级手术术前讨论未多学科讨论。",
+            "is_compliant": false,
+            "issues": [
+              {
+                "description": "四级手术缺失多学科讨论（MDT）记录",
+                "evidence": "文书标题：术前讨论记录，记录时间：2026-06-09 16:00；关键原文：'本记录为胃肠外科本科室术前讨论，未见麻醉科、ICU、影像科、营养科、输血科等其他学科参与，未形成 MDT 多学科讨论意见。'"
+              },
+              {
+                "description": "病历清单确认缺失MDT记录",
+                "evidence": "文书标题：病历清单核对，记录时间：2026-06-10 19:00；关键原文：'未见术前多学科讨论记录，未见 MDT 参加科室及会诊意见。'"
+              }
+            ],
+            "findings": "该病历为四级手术（腹腔镜全胃切除术），根据质控规则LX0609-040，四级手术术前讨论必须进行多学科讨论（MDT）。病历中的《术前讨论记录》明确记载‘本记录为胃肠外科本科室术前讨论，未见麻醉科、ICU、影像科、营养科、输血科等其他学科参与，未形成 MDT 多学科讨论意见’。同时，《病历清单核对》再次确认‘未见术前多学科讨论记录，未见 MDT 参加科室及会诊意见’。虽然存在术前讨论记录，但缺乏必要的相关学科参与和多学科讨论结论，符合‘四级手术术前讨论未多学科讨论’的严重缺陷情形。",
+            "evidence": "【当前文书】文书标题：住院病历汇总",
+            "suggestion": "1. 立即补录或完善术前多学科讨论（MDT）记录，需包含麻醉科、ICU、影像科、营养科等相关科室医师的会诊意见及签名。\n2. 若手术尚未实施，应重新组织多学科讨论并更新相关文书；若手术已实施，需在病程记录中补充说明未进行MDT的原因及补救措施，并按医院规定上报医疗质量管理部门备案。\n3. 确保后续四级手术术前讨论严格按照规范执行，必须体现多学科协作内容。",
+            "confidence": 0.98,
+            "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"该病历为四级手术（腹腔镜全胃切除术），根据质控规则LX0609-040，四级手术术前讨论必须进行多学科讨论（MDT）。病历中的《术前讨论记录》明确记载‘本记录为胃肠外科本科室术前讨论，未见麻醉科、ICU、影像科、营养科、输血科等其他学科参与，未形成 MDT 多学科讨论意见’。同时，《病历清单核对》再次确认‘未见术前多学科讨论记录，未见 MDT 参加科室及会诊意见’。虽然存在术前讨论记录，但缺乏必要的相关学科参与和多学科讨论结论，符合‘四级手术术前讨论未多学科讨论’的严重缺陷情形。\",\n  \"issues\": [\n    {\n      \"description\": \"四级手术缺失多学科讨论（MDT）记录\",\n      \"evidence\": \"文书标题：术前讨论记录，记录时间：2026-06-09 16:00；关键原文：'本记录为胃肠外科本科室术前讨论，未见麻醉科、ICU、影像科、营养科、输血科等其他学科参与，未形成 MDT 多学科讨论意见。'\"\n    },\n    {\n      \"description\": \"病历清单确认缺失MDT记录\",\n      \"evidence\": \"文书标题：病历清单核对，记录时间：2026-06-10 19:00；关键原文：'未见术前多学科讨论记录，未见 MDT 参加科室及会诊意见。'\"\n    }\n  ],\n  \"evidence\": \"1. 《术前讨论记录》(2026-06-09)：拟行手术级别为四级，备注中明确说明仅为本科室讨论，无其他学科参与。\\n2. 《病历清单核对》(2026-06-10)：明确列出‘未见术前多学科讨论记录’。\\n3. 《术前小结》(2026-06-10)：注明‘术前仅见本科室术前讨论’。\",\n  \"suggestion\": \"1. 立即补录或完善术前多学科讨论（MDT）记录，需包含麻醉科、ICU、影像科、营养科等相关科室医师的会诊意见及签名。\\n2. 若手术尚未实施，应重新组织多学科讨论并更新相关文书；若手术已实施，需在病程记录中补充说明未进行MDT的原因及补救措施，并按医院规定上报医疗质量管理部门备案。\\n3. 确保后续四级手术术前讨论严格按照规范执行，必须体现多学科协作内容。\",\n  \"confidence\": 0.98\n}",
+            "status": "non_compliant",
+            "applicability": {
+              "is_applicable": true,
+              "reason": "",
+              "method": "default"
+            },
+            "not_applicable": false,
+            "not_applicable_reason": "",
+            "evidence_verified": true,
+            "evidence_span": [0, 11],
+            "token_usage": {
+              "total_tokens": 1718
+            },
+            "metadata": {
+              "tokens_used": 1718,
+              "prompt_tokens": 1134,
+              "completion_tokens": 584,
+              "input_tokens": 1134,
+              "output_tokens": 584,
+              "api_time": 5.3482654094696045,
+              "first_result_latency": 5.3482654094696045,
+              "cot_mode": "disabled",
+              "requested_enable_thinking": false,
+              "thinking_heuristic_applied": true,
+              "response_has_think_tags": false,
+              "response_has_reasoning_content": false
+            }
+          },
+          "message": "规则测试完成",
+          "trace_id": "03caaa5e-f874-46d9-bc19-1498bb68f8c9"
+        }
+      },
+      "passed": true,
+      "failure_reasons": []
+    }
+  ]
+}

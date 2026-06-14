@@ -1,0 +1,19 @@
+{
+  "version": "2026-06-10",
+  "review_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_golden_review_queue_merged.csv",
+  "summary": {
+    "row_count": 178,
+    "error_count": 0,
+    "status_counts": {
+      "pending": 178
+    },
+    "case_type_counts": {
+      "positive": 106,
+      "negative": 36,
+      "boundary": 36
+    },
+    "accepted_rule_count": 0,
+    "accepted_by_rule": {}
+  },
+  "errors": []
+}

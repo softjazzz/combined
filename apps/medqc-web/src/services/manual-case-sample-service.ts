@@ -6,6 +6,7 @@ import type {
   ManualSamplePoolRecordsResult,
   ManualSamplePoolRunResult,
   ManualSamplePoolSyncJob,
+  ManualSampleValidationRuleSetListResult,
   Sheet2ExactReviewAcceptancePackage,
 } from '@/views/workstation-v4/customer-sample-validation/types'
 
@@ -240,4 +241,35 @@ export async function getSheet2ExactReviewAcceptancePackage() {
     },
     '获取 Sheet2 精确复核验收包失败',
   )
+}
+
+export async function listManualSampleValidationRuleSets() {
+  return requestEnvelope<ManualSampleValidationRuleSetListResult>(
+    {
+      method: 'GET',
+      url: '/api/v1/qc/sample-pools/rule-sets',
+    },
+    '获取样本验证规则集失败',
+  )
+}
+
+export async function exportLuxian0609EvaluationReport(format: 'md' | 'csv' | 'json' = 'md') {
+  try {
+    const response = await ApiService.requestRaw<Blob>({
+      method: 'GET',
+      url: '/api/v1/qc/sample-pools/reports/luxian-0609',
+      params: { format },
+      responseType: 'blob',
+    })
+    return {
+      success: true,
+      data: response.data,
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: toErrorMessage(error, '导出泸县0609质控点评估报告失败'),
+      errorType: classifyRequestError(error),
+    }
+  }
 }

@@ -16,10 +16,42 @@ export interface SemanticRuleItem {
   doc_scope?: string
   rule_version?: string
   prompt_version?: string
+  custom_prompt?: string
   cost_class?: string
   rule_family?: string
   launch_tier?: 'A' | 'B' | 'C' | 'UNKNOWN' | string
   launch_tier_label?: string
+  mapped_rule_ids?: string[]
+  primary_execution_rule_id?: string
+  implementation_status?: string
+  dependency_type?: string
+  data_status?: string
+  trigger_condition?: string
+  non_trigger_condition?: string
+  rule_basis?: string
+  customer_text?: string
+  standardized_rule?: string
+  required_documents_label?: string
+  data_dependencies?: string[]
+  coverage_level?: string
+  included_in_v1?: string
+  example_source?: 'synthetic' | 'golden' | string
+  positive_example?: SemanticRuleExample
+  negative_example?: SemanticRuleExample
+  applicable_document_labels?: string[]
+}
+
+export interface SemanticRuleExampleSection {
+  heading: string
+  content: string
+}
+
+export interface SemanticRuleExample {
+  title: string
+  summary: string
+  raw_text?: string
+  sections: SemanticRuleExampleSection[]
+  focusPoints?: string[]
 }
 
 export interface SichuanRuleSetOption {
@@ -388,6 +420,7 @@ export interface SichuanBatchJobExport {
 }
 
 export interface SemanticRuleWorkspaceQueryState {
+  ruleSetKey: string
   keyword: string
   complexity: string
   defectLevel: string
@@ -419,6 +452,7 @@ export interface SemanticRuleRowActionModel {
 }
 
 export const SEMANTIC_RULE_QUERY_KEYS = [
+  'ruleSetKey',
   'keyword',
   'complexity',
   'defectLevel',
@@ -433,22 +467,73 @@ export const CANONICAL_DOC_TYPE_LABELS: Record<string, string> = {
   admission_record: '入院记录',
   progress_note: '病程记录',
   first_course_record: '首次病程记录',
+  daily_course_record: '日常病程记录',
+  senior_course_record: '上级医师查房记录',
+  rescue_record: '抢救记录',
   discharge_record: '出院记录',
   discharge_summary: '出院小结',
   operation_record: '手术记录',
+  surgery_record: '手术记录',
   preop_summary: '术前小结',
+  presurg_summary: '术前小结',
+  presurg_discussion: '术前讨论记录',
+  postsurg_firstcourse_record: '术后首次病程记录',
+  surgery_safecheck_record: '手术安全核查表',
+  surgery_risk_assessment: '手术风险评估',
   postop_first_record: '术后首次病程',
   examination_report: '辅助检查',
+  exam_item_report: '检查报告',
+  exam_attention_report: '重要检查报告',
+  labtest_item_report: '检验报告',
+  lab_attention_report: '危急值检验报告',
   consultation_record: '会诊记录',
   consent_form: '知情同意书',
   medical_order: '医嘱',
   case_discussion: '疑难病例讨论',
   transfusion_record: '输血记录',
+  bloodtrans_record: '输血记录',
   anesthesia_record: '麻醉记录',
 }
 
 export function getDocTypeZh(value: string): string {
   return CANONICAL_DOC_TYPE_LABELS[value] || value
+}
+
+export const IMPLEMENTATION_STATUS_LABELS: Record<string, string> = {
+  formal_ready: '正式可执行',
+  ready_with_data_gap: '可执行，数据待补',
+  needs_evidence_hardening: '需强化证据',
+  needs_cross_document: '需跨文书补强',
+  needs_data_linkage: '需数据联查',
+  needs_rule_implementation: '待补规则',
+}
+
+export function getImplementationStatusZh(value?: string): string {
+  const text = String(value || '')
+  return IMPLEMENTATION_STATUS_LABELS[text] || text || '待确认'
+}
+
+export const DEPENDENCY_TYPE_LABELS: Record<string, string> = {
+  single_document: '单文书判断',
+  cross_document: '跨文书比对',
+  cross_table: '跨表联查',
+}
+
+export function getDependencyTypeZh(value?: string): string {
+  const text = String(value || '')
+  return DEPENDENCY_TYPE_LABELS[text] || text || '依赖待确认'
+}
+
+export const DATA_STATUS_LABELS: Record<string, string> = {
+  ready: '数据就绪',
+  partial: '部分满足',
+  needs_data_linkage: '需数据联查',
+  data_gap: '数据待补强',
+}
+
+export function getDataStatusZh(value?: string): string {
+  const text = String(value || '')
+  return DATA_STATUS_LABELS[text] || text || '数据状态待确认'
 }
 
 export function getCategoryZh(value: string): string {

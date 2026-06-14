@@ -356,6 +356,22 @@ def create_app() -> FastAPI:
 
             get_smart_upload_async_service()
             get_batch_task_manager()
+            try:
+                from .services.local_icd_service import _get_icd_data
+
+                _get_icd_data()
+                logger.info("✅ 本地 ICD 编码库预热完成")
+            except Exception:
+                logger.warning("本地 ICD 编码库预热失败，将按需加载", exc_info=True)
+
+            try:
+                from .services.llm_config_loader import LLMConfigLoader
+
+                await LLMConfigLoader.load_config(config_name="default", user_id=None)
+                logger.info("✅ LLM 默认配置预热完成")
+            except Exception:
+                logger.warning("LLM 默认配置预热失败，将按需加载", exc_info=True)
+
             # 生产可启用 SC 规则来源持续巡检（巡检接口等价 /rules/source）
             qc_sichuan_router.start_rule_source_monitor()
             logger.info("ℹ️ 跳过启动阶段的四川质控服务初始化（将按需懒加载）")

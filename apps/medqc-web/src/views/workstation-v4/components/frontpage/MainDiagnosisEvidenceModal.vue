@@ -1,19 +1,10 @@
 <template>
   <teleport to="body">
-    <div
-      v-if="visible"
-      class="evidence-overlay"
-      @click.self="emit('close')"
-    >
+    <div v-if="visible" class="evidence-overlay" @click.self="emit('close')">
       <div class="evidence-card">
-        <div class="evidence-title">
-          主诊断 LLM 证据
-        </div>
+        <div class="evidence-title">主诊断 LLM 证据</div>
         <template v-if="mainDiagnosisLlmEvidence || codingAuditLlmEvidence">
-          <div
-            class="evidence-hero"
-            :class="formatSeverityClass(topAlert?.severity)"
-          >
+          <div class="evidence-hero" :class="formatSeverityClass(topAlert?.severity)">
             <div class="evidence-hero__left">
               <span class="evidence-hero__badge">{{
                 formatFindingSeverityLabel(topAlert?.severity)
@@ -35,22 +26,16 @@
 
           <div class="evidence-details">
             <section class="evidence-block">
-              <div class="evidence-block-title">
-                主诊断决策
-              </div>
+              <div class="evidence-block-title">主诊断决策</div>
               <div class="evidence-decision-grid">
                 <div class="evidence-decision-col">
-                  <div class="evidence-meta">
-                    临床主诊断
-                  </div>
+                  <div class="evidence-meta">临床主诊断</div>
                   <div class="evidence-decision-main">
                     {{ mainDiagnosisLlmEvidence?.clinician_main_diagnosis || '-' }}
                   </div>
                 </div>
                 <div class="evidence-decision-col">
-                  <div class="evidence-meta">
-                    LLM 推荐主诊断
-                  </div>
+                  <div class="evidence-meta">LLM 推荐主诊断</div>
                   <div class="evidence-decision-main">
                     {{ mainDiagnosisLlmEvidence?.llm_recommended_main_diagnosis || '-' }}
                   </div>
@@ -79,13 +64,8 @@
             </section>
 
             <section class="evidence-block">
-              <div class="evidence-block-title">
-                审核风险（Top3）
-              </div>
-              <div
-                v-if="riskTimelineItems.length === 0"
-                class="evidence-logic"
-              >
+              <div class="evidence-block-title">审核风险（Top3）</div>
+              <div v-if="riskTimelineItems.length === 0" class="evidence-logic">
                 {{ codingAuditLlmEvidence?.summary || '当前未识别到高风险审核项。' }}
               </div>
               <template v-else>
@@ -95,15 +75,18 @@
                   class="evidence-risk-card"
                 >
                   <div class="evidence-risk-head">
-                    <span class="evidence-risk-type">{{ formatFindingTypeLabel(risk.type) }}（{{
-                      formatFindingSeverityLabel(risk.severity)
-                    }}）</span>
+                    <span class="evidence-risk-type"
+                      >{{ formatFindingTypeLabel(risk.type) }}（{{
+                        formatFindingSeverityLabel(risk.severity)
+                      }}）</span
+                    >
                     <span
                       class="evidence-risk-severity"
                       :class="formatSeverityClass(risk.severity)"
-                    >{{
-                      risk.confidence ? `置信度 ${Math.round(risk.confidence * 100)}%` : '待复核'
-                    }}</span>
+                      >{{
+                        risk.confidence ? `置信度 ${Math.round(risk.confidence * 100)}%` : '待复核'
+                      }}</span
+                    >
                   </div>
                   <div class="evidence-key-reason">
                     {{ risk.reason || risk.summary || '未提供风险摘要。' }}
@@ -146,16 +129,11 @@
             </section>
 
             <section class="evidence-block">
-              <div class="evidence-block-title">
-                关键证据
-              </div>
+              <div class="evidence-block-title">关键证据</div>
               <div class="evidence-logic">
                 {{ codingAuditLlmEvidence?.summary || 'LLM审核暂不可用' }}
               </div>
-              <div
-                v-if="keyEvidenceGroups.length === 0"
-                class="evidence-logic"
-              >
+              <div v-if="keyEvidenceGroups.length === 0" class="evidence-logic">
                 当前未返回可展示的关键证据。
               </div>
               <template v-else>
@@ -170,9 +148,7 @@
                       formatFindingSeverityLabel(group.severity)
                     }}</span>
                   </div>
-                  <div class="evidence-key-meta">
-                    证据条数：{{ group.evidence.length }}
-                  </div>
+                  <div class="evidence-key-meta">证据条数：{{ group.evidence.length }}</div>
                   <div class="evidence-collapsed-snippet">
                     {{ buildEvidenceGroupCollapsedText(group.evidence) }}
                   </div>
@@ -205,25 +181,27 @@
             </section>
           </div>
         </template>
-        <section
-          v-else
-          class="evidence-block"
-        >
-          <div class="evidence-block-title">
-            暂未生成 LLM 证据
-          </div>
-          <div class="evidence-logic">
-            当前病历尚未返回可用的主诊断证据数据，请稍后重试。
+        <section v-else-if="evidenceGenerationPending" class="evidence-block evidence-loading">
+          <div class="evidence-loading__icon">AI</div>
+          <div class="evidence-loading__content">
+            <div class="evidence-block-title">正在生成主诊断 LLM 证据</div>
+            <div class="evidence-logic">
+              AI
+              正在读取诊断、手术和病程片段，构建主诊断依据与编码审核风险。生成完成后这里会自动展示结果。
+            </div>
+            <div class="evidence-loading__steps">
+              <span>提取关键片段</span>
+              <span>判断主诊断一致性</span>
+              <span>生成审核证据</span>
+            </div>
           </div>
         </section>
+        <section v-else class="evidence-block">
+          <div class="evidence-block-title">暂未生成 LLM 证据</div>
+          <div class="evidence-logic">当前病历尚未返回可用的主诊断证据数据，请稍后重试。</div>
+        </section>
         <div class="evidence-actions">
-          <button
-            type="button"
-            class="evidence-close-btn"
-            @click="emit('close')"
-          >
-            关闭
-          </button>
+          <button type="button" class="evidence-close-btn" @click="emit('close')">关闭</button>
         </div>
       </div>
     </div>
@@ -242,6 +220,7 @@ const props = defineProps<{
   keyEvidenceGroups: Array<Record<string, any>>
   totalRiskCount: number
   llmConfidenceText: string
+  evidenceGenerationPending?: boolean
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -329,8 +308,8 @@ function isEvidenceGroupExpanded(index: number) {
 }
 .evidence-title {
   font-size: 18px;
-  font-weight: 800;
-  color: #0f172a;
+  font-weight: 700;
+  color: #1d1d1f;
   margin-bottom: 16px;
 }
 .evidence-hero {
@@ -389,10 +368,56 @@ function isEvidenceGroupExpanded(index: number) {
   background: #fff;
   padding: 16px;
 }
+.evidence-loading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  border-color: rgba(147, 197, 253, 0.75);
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+.evidence-loading__icon {
+  display: flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  border: 1px solid rgba(191, 219, 254, 0.9);
+  background: #eff6ff;
+  color: #0066cc;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.08);
+}
+.evidence-loading__content {
+  min-width: 0;
+  flex: 1;
+}
+.evidence-loading__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.evidence-loading__steps span {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 5px 10px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+.evidence-loading__steps span:first-child {
+  border-color: rgba(147, 197, 253, 0.8);
+  background: #eff6ff;
+  color: #0066cc;
+}
 .evidence-block-title {
   font-size: 15px;
-  font-weight: 800;
-  color: #0f172a;
+  font-weight: 700;
+  color: #1d1d1f;
   margin-bottom: 10px;
 }
 .evidence-decision-grid {
@@ -415,7 +440,7 @@ function isEvidenceGroupExpanded(index: number) {
   margin-top: 6px;
   font-size: 15px;
   font-weight: 700;
-  color: #0f172a;
+  color: #1d1d1f;
 }
 .evidence-recommend-label {
   margin-top: 8px;
@@ -423,7 +448,7 @@ function isEvidenceGroupExpanded(index: number) {
   border-radius: 999px;
   padding: 4px 10px;
   background: #dbeafe;
-  color: #1d4ed8;
+  color: #0057b8;
   font-size: 12px;
   font-weight: 700;
 }
@@ -457,7 +482,7 @@ function isEvidenceGroupExpanded(index: number) {
 .evidence-risk-type {
   font-size: 14px;
   font-weight: 700;
-  color: #0f172a;
+  color: #1d1d1f;
 }
 .evidence-risk-severity {
   font-size: 12px;
@@ -476,7 +501,7 @@ function isEvidenceGroupExpanded(index: number) {
   margin-top: 10px;
   border: none;
   background: transparent;
-  color: #2563eb;
+  color: #0066cc;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -497,6 +522,90 @@ function isEvidenceGroupExpanded(index: number) {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* Apple-light 医疗工作台收敛覆盖：不改变证据内容结构。 */
+.evidence-overlay {
+  background: rgba(29, 29, 31, 0.24);
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.evidence-card {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transition:
+    border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.evidence-card:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  transform: translateY(-2px);
+}
+
+.evidence-hero,
+.evidence-block,
+.evidence-decision-col,
+.evidence-risk-card,
+.evidence-key-card {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.evidence-title,
+.evidence-block-title,
+.evidence-decision-main,
+.evidence-risk-type {
+  color: #1d1d1f;
+  font-weight: 600;
+}
+
+.evidence-meta,
+.evidence-key-meta,
+.evidence-hero__meta {
+  color: rgba(29, 29, 31, 0.56);
+}
+
+.evidence-logic,
+.evidence-quote,
+.evidence-collapsed-snippet,
+.evidence-key-reason,
+.evidence-hero__summary {
+  color: rgba(29, 29, 31, 0.72);
+}
+
+.evidence-recommend-label,
+.evidence-loading__steps span:first-child {
+  border: 1px solid rgba(0, 102, 204, 0.18);
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+}
+
+.evidence-loading__icon {
+  border-color: rgba(0, 102, 204, 0.18);
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.14);
+}
+
+.evidence-toggle-btn {
+  color: #0066cc;
+  font-weight: 600;
+}
+
+.evidence-close-btn {
+  border-radius: 8px;
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(29, 29, 31, 0.72);
+  font-weight: 600;
 }
 @media (max-width: 900px) {
   .evidence-decision-grid {

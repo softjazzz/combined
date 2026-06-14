@@ -1,3 +1,6 @@
+@import './sf-pro.css';
+@import './source-han-sans-sc.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -38,7 +41,9 @@
   html {
     line-height: 1.5;
     -webkit-text-size-adjust: 100%;
-    font-family: 'Inter', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-family:
+      'San Francisco', 'SF Pro Display', 'SF Pro Text', 'Inter', 'Source Han Sans SC',
+      'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
   }
 
   body {
@@ -46,7 +51,9 @@
     line-height: inherit;
     background-color: var(--background-page);
     color: var(--text-primary);
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -68,14 +75,18 @@
   .medical-card {
     background-color: #ffffff;
     border-radius: 0.5rem;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    box-shadow:
+      0 1px 3px 0 rgba(0, 0, 0, 0.1),
+      0 1px 2px 0 rgba(0, 0, 0, 0.06);
     border: 1px solid #e5e7eb;
     padding: 1.5rem;
     transition: all 0.3s ease;
   }
 
   .medical-card:hover {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -1px rgba(0, 0, 0, 0.06);
   }
 
   /* 按钮样式 */
@@ -401,7 +412,6 @@
   }
 }
 
-
 .scale-enter-from,
 .scale-leave-to {
   transform: scale(0.9);
@@ -491,4 +501,3 @@
 .custom-scrollbar::-webkit-scrollbar-corner {
   background: transparent;
 }
-

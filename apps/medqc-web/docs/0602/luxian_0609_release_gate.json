@@ -1,0 +1,805 @@
+{
+  "version": "2026-06-10",
+  "rule_set_key": "luxian_0609_qc_v1",
+  "model": "qwen3.5-35b-a3b",
+  "release_ready": false,
+  "summary": {
+    "rule_count": 49,
+    "passed_checks": 3,
+    "failed_checks": 6,
+    "unverified_checks": 0,
+    "blocking_count": 6
+  },
+  "checks": [
+    {
+      "key": "catalog_complete",
+      "title": "规则目录完整",
+      "status": "pass",
+      "message": "49 条质控点均有正式上线字段。",
+      "evidence": {
+        "rule_count": 49,
+        "missing_required_field_count": 0,
+        "missing_executable_rule_id_count": 0,
+        "executable_rule_id_count": 511
+      }
+    },
+    {
+      "key": "implementation_ready",
+      "title": "规则实现可执行",
+      "status": "fail",
+      "message": "仍有规则处于待补强、跨文书、数据联查或待实现状态。",
+      "evidence": {
+        "implementation_status": {
+          "ready_with_data_gap": 3,
+          "needs_evidence_hardening": 10,
+          "needs_cross_document": 14,
+          "needs_data_linkage": 15,
+          "formal_ready": 3,
+          "needs_rule_implementation": 4
+        },
+        "blocking_rule_count": 43
+      }
+    },
+    {
+      "key": "golden_cases_ready",
+      "title": "Golden cases 齐备",
+      "status": "fail",
+      "message": "Golden cases 尚未补齐，不能计算可信准确性。",
+      "evidence": {
+        "rules_with_all_case_types": 0,
+        "rules_missing_case_types": 49,
+        "case_type_totals": {
+          "positive": 0,
+          "negative": 0,
+          "boundary": 0
+        }
+      }
+    },
+    {
+      "key": "review_queue_quality",
+      "title": "人工复核队列质量",
+      "status": "pass",
+      "message": "复核队列结构校验通过。",
+      "evidence": {
+        "row_count": 178,
+        "error_count": 0,
+        "status_counts": {
+          "pending": 178
+        }
+      }
+    },
+    {
+      "key": "formal_work_packages_ready",
+      "title": "正式上线工作包齐备",
+      "status": "pass",
+      "message": "49 条质控点均已拆成实现、证据、样本、评估和页面验收任务。",
+      "evidence": {
+        "package_count": 49,
+        "phase_counts": {
+          "阶段2-数据缺口待补": 3,
+          "阶段2-证据链补强": 10,
+          "阶段2-跨文书执行链路": 14,
+          "阶段2-跨表数据联查": 15,
+          "阶段3-样本验证集建设": 3,
+          "阶段2-新增规则实现": 4
+        },
+        "priority_counts": {
+          "P0": 14,
+          "P2": 14,
+          "P1": 21
+        },
+        "missing_task_package_count": 0
+      }
+    },
+    {
+      "key": "review_completed",
+      "title": "人工复核完成",
+      "status": "fail",
+      "message": "候选样本仍未完成复核或未覆盖全部规则。",
+      "evidence": {
+        "row_count": 178,
+        "accepted_rule_count": 0,
+        "status_counts": {
+          "pending": 178
+        }
+      }
+    },
+    {
+      "key": "candidate_coverage",
+      "title": "样本覆盖完整",
+      "status": "fail",
+      "message": "仍有规则缺候选样本或候选样本不完整。",
+      "evidence": {
+        "formal_cases_ready": 0,
+        "ready_for_review": 3,
+        "partial_candidates": 7,
+        "no_candidates": 39,
+        "total_candidates": 178
+      }
+    },
+    {
+      "key": "accuracy_evaluation",
+      "title": "准确性评估达标",
+      "status": "fail",
+      "message": "评估结果仍未达到发布候选标准。",
+      "evidence": {
+        "launch_status": {
+          "not_ready": 49
+        },
+        "failed_rule_count": 49,
+        "rules_with_all_case_types": 0
+      }
+    },
+    {
+      "key": "customer_sample_page_verified",
+      "title": "样本验证页面闭环",
+      "status": "fail",
+      "message": "页面已有部分证据，但仍缺少完整闭环验收能力。",
+      "evidence": {
+        "target_page": "/workstation-v4/customer-sample-validation",
+        "expected_rule_set": "luxian_0609_qc_v1",
+        "evidence_file": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_customer_sample_page_evidence.json",
+        "capability_count": 8,
+        "status_counts": {
+          "pass": 4,
+          "partial": 4
+        },
+        "blocking_count": 4
+      }
+    }
+  ],
+  "blockers": [
+    {
+      "key": "implementation_ready",
+      "title": "规则实现可执行",
+      "message": "仍有规则处于待补强、跨文书、数据联查或待实现状态。",
+      "evidence": {
+        "implementation_status": {
+          "ready_with_data_gap": 3,
+          "needs_evidence_hardening": 10,
+          "needs_cross_document": 14,
+          "needs_data_linkage": 15,
+          "formal_ready": 3,
+          "needs_rule_implementation": 4
+        },
+        "blocking_rule_count": 43
+      }
+    },
+    {
+      "key": "golden_cases_ready",
+      "title": "Golden cases 齐备",
+      "message": "Golden cases 尚未补齐，不能计算可信准确性。",
+      "evidence": {
+        "rules_with_all_case_types": 0,
+        "rules_missing_case_types": 49,
+        "case_type_totals": {
+          "positive": 0,
+          "negative": 0,
+          "boundary": 0
+        }
+      }
+    },
+    {
+      "key": "review_completed",
+      "title": "人工复核完成",
+      "message": "候选样本仍未完成复核或未覆盖全部规则。",
+      "evidence": {
+        "row_count": 178,
+        "accepted_rule_count": 0,
+        "status_counts": {
+          "pending": 178
+        }
+      }
+    },
+    {
+      "key": "candidate_coverage",
+      "title": "样本覆盖完整",
+      "message": "仍有规则缺候选样本或候选样本不完整。",
+      "evidence": {
+        "formal_cases_ready": 0,
+        "ready_for_review": 3,
+        "partial_candidates": 7,
+        "no_candidates": 39,
+        "total_candidates": 178
+      }
+    },
+    {
+      "key": "accuracy_evaluation",
+      "title": "准确性评估达标",
+      "message": "评估结果仍未达到发布候选标准。",
+      "evidence": {
+        "launch_status": {
+          "not_ready": 49
+        },
+        "failed_rule_count": 49,
+        "rules_with_all_case_types": 0
+      }
+    },
+    {
+      "key": "customer_sample_page_verified",
+      "title": "样本验证页面闭环",
+      "message": "页面已有部分证据，但仍缺少完整闭环验收能力。",
+      "evidence": {
+        "target_page": "/workstation-v4/customer-sample-validation",
+        "expected_rule_set": "luxian_0609_qc_v1",
+        "evidence_file": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_customer_sample_page_evidence.json",
+        "capability_count": 8,
+        "status_counts": {
+          "pass": 4,
+          "partial": 4
+        },
+        "blocking_count": 4
+      }
+    }
+  ],
+  "inputs": {
+    "catalog": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_formal_rule_catalog.json",
+    "golden_cases": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\泸县0609质控点-golden-cases.json",
+    "evaluation": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_qc_eval.json",
+    "candidate_coverage": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_candidate_coverage.json",
+    "review_queue_quality": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_review_queue_quality.json",
+    "readiness_dashboard": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_readiness_dashboard.json",
+    "formal_work_packages": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_formal_launch_work_packages.json",
+    "customer_sample_page_evidence": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_customer_sample_page_evidence.json"
+  },
+  "evidence": {
+    "catalog": {
+      "rule_count": 49,
+      "implementation_status": {
+        "ready_with_data_gap": 3,
+        "needs_evidence_hardening": 10,
+        "needs_cross_document": 14,
+        "needs_data_linkage": 15,
+        "formal_ready": 3,
+        "needs_rule_implementation": 4
+      },
+      "missing_required_field_count": 0,
+      "missing_required_fields": [],
+      "executable_rule_id_count": 511,
+      "missing_executable_rule_id_count": 0,
+      "missing_executable_rule_ids": [],
+      "blocking_rule_count": 43,
+      "blocking_rules": [
+        {
+          "qc_point_id": "LX0609-003",
+          "implementation_status": "needs_evidence_hardening",
+          "customer_text": "手术后24小时内是否完成"
+        },
+        {
+          "qc_point_id": "LX0609-004",
+          "implementation_status": "needs_evidence_hardening",
+          "customer_text": "抢救结束后6小时内是否完成"
+        },
+        {
+          "qc_point_id": "LX0609-005",
+          "implementation_status": "needs_evidence_hardening",
+          "customer_text": "入院后 48 小时内无主治医师首次查房记录。"
+        },
+        {
+          "qc_point_id": "LX0609-006",
+          "implementation_status": "needs_evidence_hardening",
+          "customer_text": "入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。"
+        },
+        {
+          "qc_point_id": "LX0609-007",
+          "implementation_status": "needs_cross_document",
+          "customer_text": "病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录"
+        },
+        {
+          "qc_point_id": "LX0609-008",
+          "implementation_status": "needs_data_linkage",
+          "customer_text": "病重（下了病重医嘱）患者2天内无查房病程记录；"
+        },
+        {
+          "qc_point_id": "LX0609-009",
+          "implementation_status": "needs_data_linkage",
+          "customer_text": "病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程"
+        },
+        {
+          "qc_point_id": "LX0609-010",
+          "implementation_status": "needs_data_linkage",
+          "customer_text": "CT/MRI检查前有无病程记录（无行CT/MRI检查原因）"
+        },
+        {
+          "qc_point_id": "LX0609-011",
+          "implementation_status": "needs_data_linkage",
+          "customer_text": "CT/MRI影像报告结果出具后24小时内在病程中未记录"
+        },
+        {
+          "qc_point_id": "LX0609-012",
+          "implementation_status": "needs_data_linkage",
+          "customer_text": "CT/MRI影像报告结果出具后24小时内阳性结果未进行分析"
+        },
+        {
+          "qc_point_id": "LX0609-013",
+          "implementation_status": "needs_cross_document",
+          "customer_text": "病理检查结果在手术记录、病程中未记录"
+        },
+        {
+          "qc_point_id": "LX0609-014",
+          "implementation_status": "needs_data_linkage",
+          "customer_text": "细菌培养结果在病程中未记录（报告出具后24小时内）"
+        },
+        {
+          "qc_point_id": "LX0609-015",
+          "implementation_status": "needs_data_linkage",
+          "customer_text": "细菌培养结果有阳性菌，在病程记录中无分析（报告出具后24小时内）。"
+        },
+        {
+          "qc_point_id": "LX0609-018",
+          "implementation_status": "needs_evidence_hardening",
+          "customer_text": "主诉书写不规范（1.只写症状不写诊断，2.≤20字)或不能导出第一诊断。"
+        },
+        {
+          "qc_point_id": "LX0609-019",
+          "implementation_status": "needs_cross_document",
+          "customer_text": "取材情况未在病程记录/手术记录中进行记录。"
+        },
+        {
+          "qc_point_id": "LX0609-020",
+          "implementation_status": "needs_cross_document",
+          "customer_text": "有会诊记录单无请会诊执行记录"
+        },
+        {
+          "qc_point_id": "LX0609-022",
+          "implementation_status": "needs_evidence_hardening",
+          "customer_text": "会诊记录单会诊意见不明确（如出现必要时行**检查或**药物治疗）"
+        },
+        {
+          "qc_point_id": "LX0609-023",
+          "implementation_status": "needs_cross_document",
+          "customer_text": "请会诊执行记录不规范，照抄会诊意见，未进行归纳总结，未明确具体会诊意见执行情况"
+        },
+        {
+          "qc_point_id": "LX0609-024",
+          "implementation_status": "needs_rule_implementation",
+          "customer_text": "恶性肿瘤手术记录未书写淋巴结清扫情况"
+        },
+        {
+          "qc_point_id": "LX0609-025",
+          "implementation_status": "needs_evidence_hardening",
+          "customer_text": "手术记录中未记录植入物名称、种类、规格/型号、材质及数量等信息"
+        }
+      ]
+    },
+    "golden_cases": {
+      "rule_count": 49,
+      "total_cases": 0,
+      "case_type_totals": {
+        "positive": 0,
+        "negative": 0,
+        "boundary": 0
+      },
+      "rules_with_all_case_types": 0,
+      "rules_missing_case_types": 49,
+      "missing_by_rule": [
+        {
+          "qc_point_id": "LX0609-001",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-002",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-003",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-004",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-005",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-006",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-007",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-008",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-009",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-010",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-011",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-012",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-013",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-014",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-015",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-016",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-017",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-018",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-019",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        },
+        {
+          "qc_point_id": "LX0609-020",
+          "missing_case_types": ["positive", "negative", "boundary"]
+        }
+      ]
+    },
+    "evaluation": {
+      "rule_count": 49,
+      "launch_status": {
+        "not_ready": 49
+      },
+      "rules_with_all_case_types": 0,
+      "rules_missing_case_types": 49,
+      "failed_rule_count": 49,
+      "failed_rules": [
+        {
+          "qc_point_id": "LX0609-001",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 ready_with_data_gap，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-002",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 ready_with_data_gap，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-003",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_evidence_hardening，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-004",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_evidence_hardening，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-005",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_evidence_hardening，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-006",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_evidence_hardening，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-007",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_cross_document，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-008",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_data_linkage，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-009",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_data_linkage，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-010",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_data_linkage，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-011",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_data_linkage，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-012",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_data_linkage，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-013",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_cross_document，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-014",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_data_linkage，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-015",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_data_linkage，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-016",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 ready_with_data_gap，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-017",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-018",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_evidence_hardening，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-019",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_cross_document，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        },
+        {
+          "qc_point_id": "LX0609-020",
+          "launch_status": "not_ready",
+          "precision": null,
+          "recall": null,
+          "not_ready_reasons": [
+            "规则状态为 needs_cross_document，不是 formal_ready",
+            "缺少样本类型: positive, negative, boundary",
+            "样本或预测不足，无法计算精确率/召回率"
+          ]
+        }
+      ]
+    },
+    "candidate_coverage": {
+      "rule_count": 49,
+      "formal_cases_ready": 0,
+      "ready_for_review": 3,
+      "partial_candidates": 7,
+      "no_candidates": 39,
+      "total_candidates": 178,
+      "pending_candidates": 178,
+      "accepted_candidates": 0,
+      "rejected_candidates": 0,
+      "coverage_status_counts": {
+        "no_candidates": 39,
+        "partial_candidates": 7,
+        "ready_for_review": 3
+      }
+    },
+    "review_queue_quality": {
+      "row_count": 178,
+      "error_count": 0,
+      "status_counts": {
+        "pending": 178
+      },
+      "case_type_counts": {
+        "positive": 106,
+        "negative": 36,
+        "boundary": 36
+      },
+      "accepted_rule_count": 0,
+      "errors": []
+    },
+    "readiness_dashboard": {
+      "rule_count": 49,
+      "stage_summary": {
+        "resolve_data_gap": 3,
+        "harden_evidence": 6,
+        "review_candidates": 10,
+        "build_evidence_chain": 12,
+        "connect_data": 14,
+        "implement_rule": 4
+      },
+      "implementation_status": {
+        "ready_with_data_gap": 3,
+        "needs_evidence_hardening": 10,
+        "needs_cross_document": 14,
+        "needs_data_linkage": 15,
+        "formal_ready": 3,
+        "needs_rule_implementation": 4
+      },
+      "rules_with_all_case_types": 0,
+      "rules_with_review_candidates": 10,
+      "rules_with_ready_evidence_pack": 10,
+      "formal_candidates": 0
+    },
+    "formal_work_packages": {
+      "package_count": 49,
+      "phase_counts": {
+        "阶段2-数据缺口待补": 3,
+        "阶段2-证据链补强": 10,
+        "阶段2-跨文书执行链路": 14,
+        "阶段2-跨表数据联查": 15,
+        "阶段3-样本验证集建设": 3,
+        "阶段2-新增规则实现": 4
+      },
+      "priority_counts": {
+        "P0": 14,
+        "P2": 14,
+        "P1": 21
+      },
+      "missing_task_package_count": 0,
+      "missing_task_packages": []
+    },
+    "customer_sample_page": {
+      "exists": true,
+      "page_verified": false,
+      "capability_count": 8,
+      "status_counts": {
+        "pass": 4,
+        "partial": 4
+      },
+      "passed_capabilities": 4,
+      "partial_capabilities": 4,
+      "failed_capabilities": 0,
+      "blocking_count": 4,
+      "blocking": [
+        {
+          "key": "status_taxonomy",
+          "title": "结果状态区分",
+          "status": "partial",
+          "missing": [
+            "尚未在客户样本验证页用泸县0609真实任务结果证明已命中、未命中、数据不足、规则不适用、需人工复核五类状态完整展示。"
+          ],
+          "recommendation": "补充包含五类状态的后端 fixture 或端到端任务，并在结果抽屉做断言。"
+        },
+        {
+          "key": "evidence_trace",
+          "title": "证据链追溯",
+          "status": "partial",
+          "missing": ["缺少泸县0609真实结果项到原始文书片段的端到端定位验收证据。"],
+          "recommendation": "为泸县0609结果项补充 evidence/matched_text/document_name，并增加页面测试验证证据片段可见。"
+        },
+        {
+          "key": "grouping_views",
+          "title": "按规则、病历、科室查看",
+          "status": "partial",
+          "missing": ["尚未证明泸县0609结果可按规则、病历、科室三种视角完整查看。"],
+          "recommendation": "补充泸县0609专项结果分组测试，必要时在抽屉中增加科室维度聚合。"
+        },
+        {
+          "key": "record_positioning",
+          "title": "查看病历与原文定位入口",
+          "status": "partial",
+          "missing": ["尚未证明从单条质控结果可直接定位到命中文书原文片段。"],
+          "recommendation": "把批量结果中的文书定位字段与病历详情/文书定位入口打通，并增加端到端测试。"
+        }
+      ]
+    }
+  }
+}

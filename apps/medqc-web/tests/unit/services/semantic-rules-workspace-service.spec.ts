@@ -80,6 +80,7 @@ describe('semantic rules workspace service', () => {
       defectLevel: '严重缺陷',
     })
     expect(parsed).toEqual({
+      ruleSetKey: '',
       keyword: '出院',
       complexity: '',
       defectLevel: '严重缺陷',
@@ -91,6 +92,7 @@ describe('semantic rules workspace service', () => {
     const built = buildSemanticWorkspaceQuery(
       { tab: 'rules' },
       {
+        ruleSetKey: 'luxian_0609_qc_v1',
         keyword: '手术',
         complexity: '高复杂度',
         defectLevel: '',
@@ -101,8 +103,10 @@ describe('semantic rules workspace service', () => {
     )
     expect(built).toEqual({
       tab: 'rules',
+      ruleSetKey: 'luxian_0609_qc_v1',
       keyword: '手术',
       complexity: '高复杂度',
+      pageSize: '20',
     })
   })
 
@@ -130,6 +134,32 @@ describe('semantic rules workspace service', () => {
       applicable_documents: ['admission_record'],
     })
     expect(normalized.rule_id).toBe('SC-001')
+  })
+
+  it('应识别泸县0609包装规则并支持映射规则搜索', () => {
+    const normalized = normalizeSemanticRule({
+      rule_id: 'LX0609-001',
+      rule_code: 'LX0609-001',
+      name: '入院记录24小时内完成',
+      description: '客户质控点',
+      category: '入院记录',
+      mapped_rule_ids: ['SC-002', 'CL-081'],
+      primary_execution_rule_id: 'SC-002',
+      customer_text: '无入院记录或24小时内未完成',
+      standardized_rule: '入院记录应在24小时内完成',
+      applicable_documents: ['admission_record'],
+    })
+
+    expect(normalized.rule_id).toBe('LX0609-001')
+    expect(normalized.primary_execution_rule_id).toBe('SC-002')
+    expect(
+      filterSemanticRules([normalized], {
+        keyword: 'CL-081',
+        complexity: '',
+        defectLevel: '',
+        documentType: '',
+      }),
+    ).toHaveLength(1)
   })
 
   it('应生成固定四卡 KPI 展示模型', () => {

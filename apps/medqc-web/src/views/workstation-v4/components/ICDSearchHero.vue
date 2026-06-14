@@ -1,16 +1,14 @@
 <template>
-  <div
-    class="border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.99)_0%,rgba(250,252,255,0.98)_100%)] px-6 py-4"
-  >
+  <div class="icd-search-hero px-6 py-5">
     <div class="mx-auto flex w-full max-w-7xl flex-col gap-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="min-w-0">
           <div
-            class="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50/60 px-3 py-1 text-[11px] font-semibold text-blue-700"
+            class="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50/60 px-3 py-1 text-[11px] font-semibold text-[#0057b8]"
           >
             编码工作台
           </div>
-          <h1 class="mt-3 text-[22px] font-black tracking-[-0.03em] text-slate-900">
+          <h1 class="mt-3 text-[22px] font-semibold tracking-normal text-slate-900">
             ICD 智能检索
           </h1>
           <p class="mt-2 max-w-[760px] text-[13px] leading-6 text-slate-500">
@@ -47,7 +45,7 @@
             class="search-input"
             @keydown.enter="$emit('search', localQuery)"
             @input="onQueryChange"
-          >
+          />
           <div class="search-hint">
             <span v-if="localQuery.length > 0">Enter 搜索</span>
             <template v-else>
@@ -178,34 +176,56 @@ function selectCodeType(value: string) {
 </script>
 
 <style scoped>
+.icd-search-hero {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.icd-search-hero h1 {
+  color: #1d1d1f !important;
+  font-family:
+    'Source Han Sans SC', 'SF Pro Display', 'SF Pro Text', 'San Francisco', 'PingFang SC',
+    'Microsoft YaHei UI', system-ui, sans-serif;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  line-height: 31px !important;
+}
+
+.icd-search-hero p {
+  color: rgba(29, 29, 31, 0.56) !important;
+}
+
 .metric-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   border-radius: 999px;
-  border: 1px solid rgba(191, 219, 254, 0.95);
-  background: rgba(239, 246, 255, 0.9);
-  padding: 8px 12px;
-  color: #475569;
+  border: 1px solid rgba(0, 102, 204, 0.14);
+  background: rgba(0, 102, 204, 0.07);
+  padding: 7px 11px;
+  color: rgba(29, 29, 31, 0.62);
   font-size: 12px;
   font-weight: 700;
-  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
 }
 
 .metric-pill strong {
-  color: #0f172a;
-  font-weight: 800;
+  color: #0066cc;
+  font-weight: 700;
 }
 
 .metric-dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #2563eb;
+  background: #0066cc;
 }
 
 .metric-dot-light {
-  background: #60a5fa;
+  background: rgba(0, 102, 204, 0.45);
 }
 
 .search-shell {
@@ -221,28 +241,32 @@ function selectCodeType(value: string) {
   z-index: 1;
   width: 18px;
   height: 18px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   transform: translateY(-50%);
 }
 
 .search-input {
   width: 100%;
-  height: 46px;
-  border-radius: 16px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  background: rgba(255, 255, 255, 0.96);
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(29, 29, 31, 0.1);
+  background: rgba(255, 255, 255, 0.94);
   padding: 0 98px 0 46px;
   font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
+  font-weight: 500;
+  color: #1d1d1f;
   outline: none;
-  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 1px rgba(0, 0, 0, 0.035);
   transition: all 0.18s ease;
 }
 
 .search-input:focus {
-  border-color: rgba(59, 130, 246, 0.6);
-  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.12);
+  border-color: rgba(0, 102, 204, 0.42);
+  box-shadow:
+    0 0 0 3px rgba(0, 102, 204, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .search-hint {
@@ -253,15 +277,15 @@ function selectCodeType(value: string) {
   align-items: center;
   gap: 5px;
   transform: translateY(-50%);
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   font-size: 12px;
   font-weight: 600;
 }
 
 .search-hint kbd {
   border-radius: 6px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  background: #f8fafc;
+  border: 1px solid rgba(29, 29, 31, 0.1);
+  background: rgba(245, 245, 247, 0.92);
   padding: 3px 7px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
@@ -271,48 +295,50 @@ function selectCodeType(value: string) {
   display: inline-flex;
   gap: 4px;
   padding: 4px;
-  border-radius: 16px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.08);
+  border-radius: 12px;
+  border: 1px solid rgba(29, 29, 31, 0.08);
+  background: rgba(245, 245, 247, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76);
 }
 
 .seg-btn {
   border: 0;
-  border-radius: 12px;
-  padding: 9px 14px;
-  color: #64748b;
+  border-radius: 9px;
+  padding: 8px 13px;
+  color: rgba(29, 29, 31, 0.56);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   transition: all 0.18s ease;
 }
 
 .seg-btn:hover {
-  color: #334155;
+  color: #1d1d1f;
 }
 
 .seg-btn-active {
-  background: linear-gradient(180deg, #eff6ff, #dbeafe);
-  color: #1d4ed8;
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+  color: #0066cc;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 7px rgba(0, 102, 204, 0.08);
 }
 
 .help-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border-radius: 16px;
-  border: 1px solid rgba(226, 232, 240, 0.92);
-  background: rgba(248, 250, 252, 0.92);
-  padding: 9px 12px;
-  color: #64748b;
+  border-radius: 12px;
+  border: 1px solid rgba(29, 29, 31, 0.08);
+  background: rgba(245, 245, 247, 0.86);
+  padding: 8px 11px;
+  color: rgba(29, 29, 31, 0.56);
   font-size: 12px;
-  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76);
 }
 
 .help-pill__label {
-  color: #334155;
-  font-weight: 800;
+  color: #1d1d1f;
+  font-weight: 600;
 }
 
 @media (max-width: 960px) {

@@ -1,0 +1,87 @@
+{
+  "policy_name": "sc083_code_first_gate_draft",
+  "status": "draft_read_only_not_connected",
+  "rule_id": "SC-083",
+  "source_catalog": "apps/medqc-web/docs/0508/surgery_level_catalog/surgery_level_catalog.csv",
+  "strong_match_types": ["code_exact", "code_normalized"],
+  "candidate_match_types": ["code_prefix_ext", "name_exact_candidate", "name_contains_candidate"],
+  "source_priority": [
+    {
+      "priority": 1,
+      "table": "mr_surgery",
+      "code_field": "surgery_code",
+      "name_field": "surgery_name"
+    },
+    {
+      "priority": 2,
+      "table": "surgery_application",
+      "code_field": "surgery_code",
+      "name_field": "surgery_name"
+    },
+    {
+      "priority": 3,
+      "table": "surgery_record",
+      "code_field": "surgery_code",
+      "name_field": "surgery_name"
+    },
+    {
+      "priority": 4,
+      "table": "surgery_inform_consent",
+      "code_field": "planned_operation_code",
+      "name_field": "planned_operation_name"
+    }
+  ],
+  "required_evidence_for_confirmed": [
+    "visit_max_level=4 from code_exact/code_normalized",
+    "complete preoperative discussion text or structured discussion conclusion",
+    "participant evidence",
+    "discussion conclusion evidence",
+    "explicitly missing MDT/multidisciplinary/required specialty opinion",
+    "customer-confirmed MDT participation standard"
+  ],
+  "decision_matrix": [
+    {
+      "condition": "level4_by_strong_code and complete_discussion_text and participant_evidence and conclusion_evidence and missing_mdt_or_required_specialty_opinion",
+      "default_action": "confirmed_defect_candidate",
+      "requires_second_pass_gate": true
+    },
+    {
+      "condition": "level4_by_strong_code and participant_fragment_only",
+      "default_action": "data_quality_gap",
+      "confirmed_allowed": false
+    },
+    {
+      "condition": "level4_by_strong_code and explicit_mdt_or_required_specialty_discussion_present",
+      "default_action": "rejected_by_system",
+      "confirmed_allowed": false
+    },
+    {
+      "condition": "all_codes_matched_level_lte_3",
+      "default_action": "rejected_by_system_or_not_applicable",
+      "confirmed_allowed": false
+    },
+    {
+      "condition": "code_missing_or_code_unmatched",
+      "default_action": "data_quality_gap",
+      "confirmed_allowed": false
+    },
+    {
+      "condition": "name_candidate_only",
+      "default_action": "data_quality_gap_or_needs_catalog_review",
+      "confirmed_allowed": false
+    },
+    {
+      "condition": "code_prefix_ext_level4",
+      "default_action": "data_quality_gap_or_needs_catalog_review",
+      "confirmed_allowed": false
+    }
+  ],
+  "default_actions": {
+    "name_candidate_only": "data_quality_gap",
+    "code_unmatched": "data_quality_gap",
+    "code_missing": "data_quality_gap",
+    "code_prefix_ext": "data_quality_gap",
+    "level_lte_3_by_code": "rejected_by_system",
+    "level4_code_with_incomplete_discussion": "data_quality_gap"
+  }
+}

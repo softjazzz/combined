@@ -2,11 +2,7 @@
   <div class="post-event-analysis-page">
     <header class="analysis-header">
       <div class="analysis-title-block">
-        <button
-          class="back-icon-button"
-          type="button"
-          aria-label="返回"
-        >
+        <button class="back-icon-button" type="button" aria-label="返回">
           <ArrowLeftOutlined />
         </button>
         <div>
@@ -16,31 +12,19 @@
       </div>
 
       <div class="header-actions">
-        <span
-          v-if="useDemoData || hasUploadedDataset"
-          class="mode-chip"
-        >
+        <span v-if="useDemoData || hasUploadedDataset" class="mode-chip">
           <WarningOutlined />
           {{ drgModeHintText }}
         </span>
         <a-dropdown>
           <template #overlay>
             <a-menu @click="handleExportMenuClick">
-              <a-menu-item key="excel">
-                <FileExcelOutlined /> 导出 Excel
-              </a-menu-item>
-              <a-menu-item key="pdf">
-                <FilePdfOutlined /> 导出 PDF
-              </a-menu-item>
-              <a-menu-item key="word">
-                <FileWordOutlined /> 导出 Word
-              </a-menu-item>
+              <a-menu-item key="excel"> <FileExcelOutlined /> 导出 Excel </a-menu-item>
+              <a-menu-item key="pdf"> <FilePdfOutlined /> 导出 PDF </a-menu-item>
+              <a-menu-item key="word"> <FileWordOutlined /> 导出 Word </a-menu-item>
             </a-menu>
           </template>
-          <a-button
-            type="primary"
-            class="export-button"
-          >
+          <a-button type="primary" class="export-button">
             <template #icon>
               <DownloadOutlined />
             </template>
@@ -59,21 +43,11 @@
           size="small"
           @change="handleDimensionChange"
         >
-          <a-radio-button value="hospital">
-            全院
-          </a-radio-button>
-          <a-radio-button value="department">
-            科室
-          </a-radio-button>
-          <a-radio-button value="ward">
-            病区
-          </a-radio-button>
-          <a-radio-button value="chief_group">
-            主诊组
-          </a-radio-button>
-          <a-radio-button value="person">
-            个人
-          </a-radio-button>
+          <a-radio-button value="hospital"> 全院 </a-radio-button>
+          <a-radio-button value="department"> 科室 </a-radio-button>
+          <a-radio-button value="ward"> 病区 </a-radio-button>
+          <a-radio-button value="chief_group"> 主诊组 </a-radio-button>
+          <a-radio-button value="person"> 个人 </a-radio-button>
         </a-radio-group>
       </div>
 
@@ -83,27 +57,15 @@
           v-model:value="dateRange"
           class="date-range-picker"
         />
-        <a-select
-          v-model:value="analysisType"
-          class="analysis-type-select"
-        >
-          <a-select-option value="quality">
-            质量分析
-          </a-select-option>
-          <a-select-option value="cost">
-            费用分析
-          </a-select-option>
-          <a-select-option value="drg">
-            DRG分析
-          </a-select-option>
+        <a-select v-model:value="analysisType" class="analysis-type-select">
+          <a-select-option value="quality"> 质量分析 </a-select-option>
+          <a-select-option value="cost"> 费用分析 </a-select-option>
+          <a-select-option value="drg"> DRG分析 </a-select-option>
         </a-select>
       </div>
     </section>
 
-    <DatasetUploadPanel
-      class="dataset-upload-compact"
-      @data-changed="handleDatasetChanged"
-    />
+    <DatasetUploadPanel class="dataset-upload-compact" @data-changed="handleDatasetChanged" />
 
     <section class="kpi-strip">
       <article
@@ -153,13 +115,8 @@
             </button>
           </div>
         </div>
-        <div
-          ref="qualityTrendRef"
-          class="trend-chart"
-        />
-        <p class="chart-note">
-          注：折线用于观察 CMI 波动，柱形用于复盘入组例数变化。
-        </p>
+        <div ref="qualityTrendRef" class="trend-chart" />
+        <p class="chart-note">注：折线用于观察 CMI 波动，柱形用于复盘入组例数变化。</p>
       </article>
 
       <aside class="analysis-panel insight-panel">
@@ -210,10 +167,7 @@
           </div>
           <InfoCircleOutlined class="panel-info-icon" />
         </div>
-        <div
-          ref="deptComparisonRef"
-          class="department-chart"
-        />
+        <div ref="deptComparisonRef" class="department-chart" />
         <div class="rank-table">
           <div class="rank-head">
             <span>排名</span>
@@ -222,11 +176,7 @@
             <span>CMI</span>
             <span>费用指数</span>
           </div>
-          <div
-            v-for="row in departmentRows"
-            :key="row.name"
-            class="rank-row"
-          >
+          <div v-for="row in departmentRows" :key="row.name" class="rank-row">
             <span class="rank-no">{{ row.rank }}</span>
             <span class="rank-name">
               {{ row.name }}
@@ -248,21 +198,14 @@
           <InfoCircleOutlined class="panel-info-icon" />
         </div>
         <div class="drg-structure-content">
-          <div
-            ref="drgPieRef"
-            class="drg-chart"
-          />
+          <div ref="drgPieRef" class="drg-chart" />
           <div class="drg-legend-table">
             <div class="drg-legend-head">
               <span>DRG 权重区间</span>
               <span>病例数</span>
               <span>占比</span>
             </div>
-            <div
-              v-for="row in drgStructureRows"
-              :key="row.name"
-              class="drg-legend-row"
-            >
+            <div v-for="row in drgStructureRows" :key="row.name" class="drg-legend-row">
               <span>
                 <i :class="row.dotClass" />
                 {{ row.name }}
@@ -281,12 +224,7 @@
           <h3>改进任务清单</h3>
           <p>根据当前分析结果生成可跟踪的科室改进动作</p>
         </div>
-        <a-button
-          type="link"
-          size="small"
-        >
-          查看全部任务
-        </a-button>
+        <a-button type="link" size="small"> 查看全部任务 </a-button>
       </div>
       <div class="task-table">
         <div class="task-head">
@@ -298,11 +236,7 @@
           <span>状态</span>
           <span>截止</span>
         </div>
-        <div
-          v-for="task in improvementTasks"
-          :key="`${task.owner}-${task.issue}`"
-          class="task-row"
-        >
+        <div v-for="task in improvementTasks" :key="`${task.owner}-${task.issue}`" class="task-row">
           <span>{{ task.owner }}</span>
           <span>
             <a-tag :color="task.tagColor">{{ task.issue }}</a-tag>
@@ -333,61 +267,37 @@
             <p>按药品、耗材、检查、治疗拆解费用构成</p>
           </div>
         </div>
-        <div
-          ref="costStructureRef"
-          class="cost-chart"
-        />
+        <div ref="costStructureRef" class="cost-chart" />
       </article>
     </section>
 
-    <section
-      v-if="advancedChartsAvailable"
-      class="advanced-chart-grid"
-    >
-      <article
-        v-show="stats.charts.profit_waterfall"
-        class="analysis-panel"
-      >
+    <section v-if="advancedChartsAvailable" class="advanced-chart-grid">
+      <article v-show="stats.charts.profit_waterfall" class="analysis-panel">
         <div class="panel-header">
           <div>
             <h3>支付差额瀑布</h3>
             <p>后端专项图表</p>
           </div>
         </div>
-        <div
-          ref="waterfallRef"
-          class="advanced-chart"
-        />
+        <div ref="waterfallRef" class="advanced-chart" />
       </article>
-      <article
-        v-show="stats.charts.dept_profit_ranking"
-        class="analysis-panel"
-      >
+      <article v-show="stats.charts.dept_profit_ranking" class="analysis-panel">
         <div class="panel-header">
           <div>
             <h3>科室盈亏排行</h3>
             <p>后端专项图表</p>
           </div>
         </div>
-        <div
-          ref="deptRankingRef"
-          class="advanced-chart"
-        />
+        <div ref="deptRankingRef" class="advanced-chart" />
       </article>
-      <article
-        v-show="stats.charts.drg_scatter"
-        class="analysis-panel wide"
-      >
+      <article v-show="stats.charts.drg_scatter" class="analysis-panel wide">
         <div class="panel-header">
           <div>
             <h3>DRG 风险散点</h3>
             <p>后端专项图表</p>
           </div>
         </div>
-        <div
-          ref="drgScatterRef"
-          class="advanced-chart large"
-        />
+        <div ref="drgScatterRef" class="advanced-chart large" />
       </article>
     </section>
   </div>
@@ -1823,7 +1733,7 @@ const updateCharts = async () => {
           type: 'bar',
           data: counts,
           yAxisIndex: 0,
-          itemStyle: { color: '#3b82f6' },
+          itemStyle: { color: '#0066cc' },
         },
         {
           name: 'CMI',
@@ -1859,7 +1769,7 @@ const updateCharts = async () => {
           name: '病例数',
           type: 'bar',
           data: caseCounts,
-          itemStyle: { color: '#3b82f6' },
+          itemStyle: { color: '#0066cc' },
         },
         {
           name: '平均CMI',
@@ -2131,21 +2041,34 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+@import './drg-dip-workbench.css';
+
 .post-event-analysis-page {
   min-height: 100%;
   padding: 20px 24px 28px;
   overflow-y: auto;
-  background: #f5f9fc;
-  color: #0f172a;
-  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .analysis-header,
 .analysis-toolbar,
 .analysis-panel {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.04);
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
 }
 
 .analysis-header {
@@ -2171,9 +2094,9 @@ onUnmounted(() => {
   justify-content: center;
   width: 32px;
   height: 32px;
-  color: #64748b;
-  background: #f8fbff;
-  border: 1px solid #e2e8f0;
+  color: rgba(29, 29, 31, 0.6);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 8px;
 }
 
@@ -2181,7 +2104,7 @@ onUnmounted(() => {
   margin: 0;
   font-size: 24px;
   line-height: 32px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
@@ -2189,7 +2112,7 @@ onUnmounted(() => {
 .panel-header p,
 .chart-note {
   margin: 2px 0 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
   line-height: 20px;
 }
@@ -2232,9 +2155,9 @@ onUnmounted(() => {
 }
 
 .control-label {
-  color: #334155;
+  color: rgba(29, 29, 31, 0.68);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -2253,10 +2176,12 @@ onUnmounted(() => {
   align-items: center;
   margin-bottom: 14px;
   padding: 10px 14px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 12px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.035);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
 }
 
 .dataset-upload-compact :deep(.mode-alert) {
@@ -2286,10 +2211,12 @@ onUnmounted(() => {
   gap: 14px;
   min-height: 92px;
   padding: 16px 18px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 12px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
 }
 
 .kpi-icon {
@@ -2309,7 +2236,7 @@ onUnmounted(() => {
 
 .kpi-label {
   display: block;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
   font-weight: 700;
 }
@@ -2319,7 +2246,7 @@ onUnmounted(() => {
   margin-top: 2px;
   font-size: 24px;
   line-height: 30px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
@@ -2333,8 +2260,8 @@ onUnmounted(() => {
 
 .tone-blue .kpi-icon,
 .tone-blue.insight-row .insight-icon {
-  color: #2563eb;
-  background: #eaf2ff;
+  color: #0066cc;
+  background: rgba(0, 102, 204, 0.08);
 }
 
 .tone-green .kpi-icon {
@@ -2410,10 +2337,10 @@ onUnmounted(() => {
 
 .panel-header h3 {
   margin: 0;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 17px;
   line-height: 24px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
@@ -2434,14 +2361,14 @@ onUnmounted(() => {
   height: 28px;
   color: #475569;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   background: transparent;
   border: 0;
   border-radius: 6px;
 }
 
 .metric-tabs button.active {
-  color: #2563eb;
+  color: #0066cc;
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
 }
@@ -2505,9 +2432,9 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .insight-row p {
@@ -2541,7 +2468,7 @@ onUnmounted(() => {
 .drg-legend-head {
   color: #64748b;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .rank-row,
@@ -2565,7 +2492,7 @@ onUnmounted(() => {
   height: 20px;
   color: #ffffff;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   background: #f59e0b;
   border-radius: 6px;
 }
@@ -2582,7 +2509,7 @@ onUnmounted(() => {
   display: block;
   max-width: 100%;
   height: 5px;
-  background: linear-gradient(90deg, #2563eb, #93c5fd);
+  background: linear-gradient(90deg, #0066cc, #93c5fd);
   border-radius: 999px;
 }
 
@@ -2620,7 +2547,7 @@ onUnmounted(() => {
 }
 
 .dot-blue {
-  background: #2563eb;
+  background: #0066cc;
 }
 
 .dot-green {
@@ -2653,6 +2580,128 @@ onUnmounted(() => {
 
 .task-row {
   min-height: 44px;
+}
+
+.post-event-analysis-page {
+  --workstation-canvas: #f5f5f7;
+  --workstation-surface: rgba(255, 255, 255, 0.86);
+  --workstation-surface-strong: rgba(255, 255, 255, 0.94);
+  --workstation-border: rgba(0, 0, 0, 0.08);
+  --workstation-text: #1d1d1f;
+  --workstation-muted: rgba(29, 29, 31, 0.6);
+  --workstation-subtle: rgba(29, 29, 31, 0.38);
+  --workstation-primary: #0066cc;
+  --workstation-primary-soft: rgba(0, 102, 204, 0.1);
+
+  background: var(--workstation-canvas);
+  color: var(--workstation-text);
+  font-family:
+    'San Francisco', 'SF Pro Text', 'Source Han Sans SC', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.analysis-header,
+.analysis-toolbar,
+.analysis-panel,
+.dataset-upload-compact,
+.kpi-card {
+  border-color: var(--workstation-border);
+  background: var(--workstation-surface);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+}
+
+.analysis-header {
+  border-radius: 20px;
+}
+
+.analysis-toolbar,
+.analysis-panel,
+.dataset-upload-compact,
+.kpi-card {
+  border-radius: 16px;
+}
+
+.analysis-header:hover,
+.analysis-toolbar:hover,
+.analysis-panel:hover,
+.dataset-upload-compact:hover,
+.kpi-card:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+}
+
+.analysis-title-block h2,
+.panel-header h3,
+.insight-title-line,
+.kpi-content strong,
+.rank-row,
+.task-row,
+.drg-legend-row {
+  color: var(--workstation-text);
+}
+
+.analysis-title-block p,
+.panel-header p,
+.chart-note,
+.kpi-label,
+.insight-row p,
+.rank-head,
+.task-head,
+.drg-legend-head {
+  color: var(--workstation-muted);
+}
+
+.back-icon-button,
+.metric-tabs,
+.insight-row {
+  border-color: var(--workstation-border);
+  background: var(--workstation-surface-strong);
+  color: var(--workstation-muted);
+}
+
+.back-icon-button:hover {
+  border-color: rgba(0, 102, 204, 0.22);
+  background: var(--workstation-primary-soft);
+  color: var(--workstation-primary);
+}
+
+.tone-blue .kpi-icon,
+.tone-blue.insight-row .insight-icon,
+.metric-tabs button.active {
+  color: var(--workstation-primary);
+  background: var(--workstation-primary-soft);
+}
+
+.metric-tabs button.active {
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.1);
+}
+
+.rank-name i {
+  background: linear-gradient(90deg, var(--workstation-primary), rgba(0, 102, 204, 0.28));
+}
+
+.dot-blue {
+  background: var(--workstation-primary);
+}
+
+.rank-table,
+.task-table,
+.drg-legend-table,
+.rank-head,
+.rank-row,
+.task-head,
+.task-row,
+.drg-legend-head,
+.drg-legend-row {
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 @media (max-width: 1280px) {

@@ -24,6 +24,8 @@ from ..core.http import safe_post_json
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_HOSPITAL_NAME = "泸县人民医院"
+
 
 def get_tender_extraction_contract():
     """Return the tender-level frontpage extraction contract."""
@@ -862,7 +864,7 @@ class FrontPageExtractionService:
                     "contact_phone": "",
                     "contact_address": "",
                 },
-                "hospitalization": {},
+                "hospitalization": {"hospital_name": DEFAULT_HOSPITAL_NAME},
                 "diagnoses": {
                     "ed_diagnosis_texts": [],
                     "discharge_main_diagnosis_text": None,
@@ -886,6 +888,19 @@ class FrontPageExtractionService:
             try:
                 fp_data = await self._prefill_from_cdm(visit_id)
                 cdm_prefilled = True
+                diagnosis_locked = self._is_diagnosis_locked(fp_data.get("diagnoses"))
+                if diagnosis_locked and not fp_data["diagnoses"].get("_diagnosis_code_resolution_done"):
+                    try:
+                        from .local_icd_service import resolve_diagnosis_codes
+
+                        fp_data["diagnoses"] = self._clear_locked_diagnosis_codes(fp_data["diagnoses"])
+                        fp_data["diagnoses"] = resolve_diagnosis_codes(fp_data["diagnoses"])
+                        fp_data["diagnoses"]["_diagnosis_code_resolution_done"] = True
+                        fp_data["diagnoses"]["_diagnosis_code_source"] = "local_icd_lookup"
+                        fp_data["diagnoses"] = self._normalize_diagnoses_structure("", fp_data["diagnoses"])
+                        logger.info("stream: diagnosis 表诊断本地 ICD 已在首次推送前完成")
+                    except Exception:
+                        logger.exception("stream: diagnosis 表诊断首次推送前 ICD 解析失败")
                 logger.info("stream: 三层架构 - SQL 层完成，立即推送已有数据")
 
                 # 立即推送 SQL 已有的数据给前端（毫秒级！）
@@ -904,6 +919,9 @@ class FrontPageExtractionService:
                 if fp_data.get("other_medical_info", {}).get("drug_allergy_flag"):
                     yield ("update", {"module": "other_medical_info", "frontpage": fp_data})
 
+                if diagnosis_locked:
+                    yield ("update", {"module": "diagnoses", "frontpage": fp_data})
+
             except Exception as exc:
                 logger.warning(f"stream: SQL 层异常，回退到纯 LLM 模式: {exc}")
                 fp_data = default_frontpage()
@@ -911,6 +929,23 @@ class FrontPageExtractionService:
 
         if not cdm_prefilled:
             fp_data = default_frontpage()
+
+        diagnosis_locked = self._is_diagnosis_locked(fp_data.get("diagnoses"))
+
+        if diagnosis_locked:
+            try:
+                if not fp_data["diagnoses"].get("_diagnosis_code_resolution_done"):
+                    from .local_icd_service import resolve_diagnosis_codes
+
+                    fp_data["diagnoses"] = self._clear_locked_diagnosis_codes(fp_data["diagnoses"])
+                    fp_data["diagnoses"] = resolve_diagnosis_codes(fp_data["diagnoses"])
+                    fp_data["diagnoses"]["_diagnosis_code_resolution_done"] = True
+                    fp_data["diagnoses"]["_diagnosis_code_source"] = "local_icd_lookup"
+                    fp_data["diagnoses"] = self._normalize_diagnoses_structure("", fp_data["diagnoses"])
+                    logger.info("stream: diagnosis 表诊断本地 ICD 已提前完成")
+                yield ("update", {"module": "diagnoses", "frontpage": fp_data})
+            except Exception:
+                logger.exception("stream: diagnosis 表诊断本地 ICD 提前解析失败")
 
         # =================== 第三层：LLM 精准补缺 ===================
         # 获取 LLM 需要看的文本
@@ -935,6 +970,26 @@ class FrontPageExtractionService:
             # force_llm=True 但无文本 → 记录日志，继续尝试
             logger.warning("stream: force_llm=True 但 LLM 文本为空，无法调用 LLM")
 
+        # 无 visit_id 的粘贴文本入口继续从病历全文抽取诊断；有 visit_id 且 diagnosis 表
+        # 已直读成功时，诊断名称严格锁定为 diagnosis 表，ICD 编码仍走后续编码链路。
+        if llm_text and llm_text.strip() and not diagnosis_locked:
+            try:
+                local_diagnoses = self._normalize_diagnoses_structure(
+                    llm_text,
+                    fp_data.get("diagnoses") if isinstance(fp_data.get("diagnoses"), dict) else {},
+                )
+                if local_diagnoses.get("discharge_main_diagnosis_text"):
+                    fp_data["diagnoses"] = local_diagnoses
+                    fp_data["diagnoses"] = self._normalize_diagnoses_structure(llm_text, fp_data["diagnoses"])
+                    yield ("update", {"module": "diagnoses", "frontpage": fp_data})
+                    logger.info(
+                        "stream: local discharge diagnoses extracted main=%s other_count=%d",
+                        fp_data["diagnoses"].get("discharge_main_diagnosis_text"),
+                        len(fp_data["diagnoses"].get("discharge_other_diagnoses_texts") or []),
+                    )
+            except Exception:
+                logger.exception("stream: local discharge diagnoses prefill failed")
+
         if not self._use_llm:
             if cdm_prefilled:
                 if force_llm:
@@ -954,8 +1009,8 @@ class FrontPageExtractionService:
         need_hosp_llm = force_llm or not cdm_prefilled or not fp_data.get("hospitalization", {}).get("admission_datetime")
         need_staff_llm = force_llm or not fp_data.get("staff", {}).get("attending_physician")
         need_costs_llm = force_llm or not fp_data.get("costs", {}).get("total_cost")
-        # 诊断/手术/其他医疗：始终从病历文书 LLM 提取（不从首页目标表读取）
-        need_diag_llm = True
+        # 诊断：系统病历生成严格读取 diagnosis 表；粘贴文本入口才走病历全文抽取。
+        need_diag_llm = not diagnosis_locked
         need_proc_llm = True
         need_other_llm = True
 
@@ -1058,12 +1113,15 @@ class FrontPageExtractionService:
             if not isinstance(procedures, dict):
                 procedures = {}
 
-            diagnoses = self._apply_external_diagnosis_codes(
-                diagnoses=diagnoses,
-                coding_data=coding_data,
-                validation_info=validation_info,
-            )
-            logger.info("stream: merged external diagnosis codes only")
+            if self._is_diagnosis_locked(diagnoses):
+                logger.info("stream: diagnosis 表诊断已锁定，跳过外部编码服务的诊断覆盖")
+            else:
+                diagnoses = self._apply_external_diagnosis_codes(
+                    diagnoses=diagnoses,
+                    coding_data=coding_data,
+                    validation_info=validation_info,
+                )
+                logger.info("stream: merged external diagnosis codes only")
 
             pp_list = safe_dict_list(coding_data.get("principal_procedures"), "principal_procedures")
             if pp_list:
@@ -1122,7 +1180,10 @@ class FrontPageExtractionService:
         if need_costs_llm:
             prompt = format_prompt_or_none("costs", COSTS_PROMPT)
             add_task("costs", self._extract_json(prompt) if prompt else None)
-        add_task("coding_result", ext_coding_service.extract_coding(llm_text, patient_context))
+        if diagnosis_locked:
+            logger.info("stream: diagnosis 表诊断已锁定，跳过外部全文编码任务")
+        else:
+            add_task("coding_result", ext_coding_service.extract_coding(llm_text, patient_context))
 
         for name, exc in prepared_failures:
             logger.warning("stream: module %s failed before execution: %s", name, exc)
@@ -1243,7 +1304,11 @@ class FrontPageExtractionService:
 
         # Re-apply external coding to the latest normalized diagnoses to avoid order-sensitive misses.
         try:
-            if latest_coding_result and isinstance(fp_data.get("diagnoses"), dict):
+            if (
+                latest_coding_result
+                and isinstance(fp_data.get("diagnoses"), dict)
+                and not self._is_diagnosis_locked(fp_data.get("diagnoses"))
+            ):
                 coding_data_raw = latest_coding_result.get("coding_data", latest_coding_result)
                 coding_data = coding_data_raw if isinstance(coding_data_raw, dict) else {}
                 fp_data["diagnoses"] = self._apply_external_diagnosis_codes(
@@ -1269,19 +1334,31 @@ class FrontPageExtractionService:
         # ===== 主诊断规则裁决（在 ICD 编码前） =====
         try:
             if isinstance(fp_data.get("diagnoses"), dict) and fp_data.get("diagnoses"):
-                clinician_main_before_rules = str(
-                    fp_data["diagnoses"].get("discharge_main_diagnosis_text") or ""
-                ).strip()
-                from .main_diagnosis_rules import apply_main_diagnosis_guideline_rules
-                fp_data["diagnoses"], _rule_trace = apply_main_diagnosis_guideline_rules(
-                    medical_text=llm_text,
-                    diagnoses=fp_data["diagnoses"],
-                    procedures=fp_data.get("procedures") or {},
-                )
-                fp_data.setdefault("evidence", {})["guideline_rule_trace"] = _rule_trace or []
-                if clinician_main_before_rules:
-                    fp_data["evidence"]["clinician_main_diagnosis"] = clinician_main_before_rules
-                yield ("update", {"module": "diagnoses", "frontpage": fp_data})
+                if self._is_diagnosis_locked(fp_data["diagnoses"]):
+                    fp_data.setdefault("evidence", {})["clinician_main_diagnosis"] = str(
+                        fp_data["diagnoses"].get("discharge_main_diagnosis_text") or ""
+                    ).strip()
+                    logger.info("stream: diagnosis 表诊断已锁定，跳过主诊断规则改写")
+                elif str(fp_data["diagnoses"].get("_diagnosis_text_source") or "").endswith("_diagnosis_text"):
+                    fp_data.setdefault("evidence", {})["clinician_main_diagnosis"] = str(
+                        fp_data["diagnoses"].get("discharge_main_diagnosis_text") or ""
+                    ).strip()
+                    fp_data["evidence"].setdefault("guideline_rule_trace", [])
+                    logger.info("stream: 出院记录诊断已作为唯一诊断来源，跳过主诊断规则改写")
+                else:
+                    clinician_main_before_rules = str(
+                        fp_data["diagnoses"].get("discharge_main_diagnosis_text") or ""
+                    ).strip()
+                    from .main_diagnosis_rules import apply_main_diagnosis_guideline_rules
+                    fp_data["diagnoses"], _rule_trace = apply_main_diagnosis_guideline_rules(
+                        medical_text=llm_text,
+                        diagnoses=fp_data["diagnoses"],
+                        procedures=fp_data.get("procedures") or {},
+                    )
+                    fp_data.setdefault("evidence", {})["guideline_rule_trace"] = _rule_trace or []
+                    if clinician_main_before_rules:
+                        fp_data["evidence"]["clinician_main_diagnosis"] = clinician_main_before_rules
+                    yield ("update", {"module": "diagnoses", "frontpage": fp_data})
         except Exception:
             logger.exception("stream: main diagnosis guideline rules failed")
 
@@ -1290,6 +1367,7 @@ class FrontPageExtractionService:
                 isinstance(fp_data.get("diagnoses"), dict)
                 and fp_data["diagnoses"]
                 and not fp_data["diagnoses"].get("discharge_main_icd")
+                and not self._is_diagnosis_locked(fp_data["diagnoses"])
             ):
                 fp_data["diagnoses"] = await self._suggest_diagnosis_codes(fp_data["diagnoses"])
                 fp_data["diagnoses"] = self._normalize_diagnoses_structure(llm_text, fp_data["diagnoses"])
@@ -1312,7 +1390,12 @@ class FrontPageExtractionService:
         try:
             from .local_icd_service import resolve_diagnosis_codes, resolve_procedure_codes
             if isinstance(fp_data.get("diagnoses"), dict) and fp_data["diagnoses"]:
+                if self._is_diagnosis_locked(fp_data["diagnoses"]):
+                    fp_data["diagnoses"] = self._clear_locked_diagnosis_codes(fp_data["diagnoses"])
                 fp_data["diagnoses"] = resolve_diagnosis_codes(fp_data["diagnoses"])
+                if self._is_diagnosis_locked(fp_data["diagnoses"]):
+                    fp_data["diagnoses"]["_diagnosis_code_resolution_done"] = True
+                    fp_data["diagnoses"]["_diagnosis_code_source"] = "local_icd_lookup"
                 fp_data["diagnoses"] = self._normalize_diagnoses_structure(llm_text, fp_data["diagnoses"])
                 yield ("update", {"module": "diagnoses", "frontpage": fp_data})
             if isinstance(fp_data.get("procedures"), dict) and fp_data["procedures"]:
@@ -1326,6 +1409,8 @@ class FrontPageExtractionService:
         fp_data["confidence"] = {**fp_data.get("confidence", {}), **validation_info}
         fp_data["evidence"] = fp_data.get("evidence") or {}
         try:
+            # 诊断来源锁定只表示“诊断名称不得被 LLM 改写”，不应阻止 LLM 生成证据链。
+            # _build_main_and_audit_llm_evidence 只返回证据结构，不会修改 diagnoses。
             merged_evidence = await self._build_main_and_audit_llm_evidence(
                 medical_text=llm_text,
                 diagnoses=fp_data.get("diagnoses"),
@@ -1371,9 +1456,9 @@ class FrontPageExtractionService:
         - mr（病案首页主表）
         - mr_cost（病案首页费用明细）
         - mr_surgery（病案首页手术明细）
-        - diagnosis（诊断表，可能属于首页填写流程）
 
-        诊断/手术/其他医疗信息 → 由第三层 LLM 从病历文书中提取。
+        诊断信息 → 直接读取 diagnosis 表的诊断名称，后续仅补 ICD 编码。
+        手术/其他医疗信息 → 由第三层 LLM 从病历文书中提取。
         """
         logger.info(f"_prefill_from_cdm: visit_id={visit_id}")
 
@@ -1389,7 +1474,7 @@ class FrontPageExtractionService:
                 "work_unit": "", "work_unit_phone": "", "work_unit_zip": "",
                 "contact_name": "", "contact_relation": "", "contact_phone": "", "contact_address": "",
             },
-            "hospitalization": {},
+            "hospitalization": {"hospital_name": DEFAULT_HOSPITAL_NAME},
             "diagnoses": {
                 "ed_diagnosis_texts": [],
                 "discharge_main_diagnosis_text": None,
@@ -1433,7 +1518,7 @@ class FrontPageExtractionService:
                             "admission_dept": reg.get("admission_dept_name") or "",
                             "discharge_dept": reg.get("discharge_dept_name") or "",
                             "payment_method_text": reg.get("insurance_type") or "",
-                            "hospital_name": reg.get("hospital_name") or "",
+                            "hospital_name": reg.get("hospital_name") or DEFAULT_HOSPITAL_NAME,
                             "organization_code": reg.get("organization_code") or "",
                         })
                         # 计算住院天数
@@ -1574,7 +1659,52 @@ class FrontPageExtractionService:
                 except Exception as e:
                     logger.warning(f"  discharge_record 查询失败: {e}")
 
-                # ---- 5. inpat_bill_item 表 → 费用汇总（HIS 计费系统源头数据） ----
+                # ---- 5. diagnosis 表 → 诊断名称清单（名称锁定，编码后续单独生成） ----
+                try:
+                    diag_rows = session.execute(sql_text(
+                        "SELECT * FROM diagnosis WHERE visit_id = :vid"
+                    ), {"vid": visit_id}).mappings().all()
+
+                    if diag_rows:
+                        diagnosis_payload = self._compose_frontpage_diagnoses_from_rows(
+                            [dict(row) for row in diag_rows]
+                        )
+                        if diagnosis_payload.get("discharge_main_diagnosis_text"):
+                            fp_data["diagnoses"] = diagnosis_payload
+                            logger.info(
+                                "  diagnosis 表读取成功: main=%s other_count=%d",
+                                diagnosis_payload.get("discharge_main_diagnosis_text"),
+                                len(diagnosis_payload.get("discharge_other_diagnoses_texts") or []),
+                            )
+                except Exception as e:
+                    logger.warning(f"  diagnosis 表查询失败: {e}")
+
+                # 部分 CDM 数据没有 diagnosis 表行，出院诊断拆在 discharge_record_diagnosis。
+                # 这仍是结构化诊断源，不能退回全文 LLM 扩张诊断。
+                if not self._is_diagnosis_locked(fp_data.get("diagnoses")):
+                    try:
+                        record_diag_rows = session.execute(sql_text(
+                            "SELECT * FROM discharge_record_diagnosis "
+                            "WHERE visit_id = :vid "
+                            "AND diagnosis_type LIKE '%出院诊断%' "
+                            "AND COALESCE(is_deleted, '0') <> '1'"
+                        ), {"vid": visit_id}).mappings().all()
+
+                        if record_diag_rows:
+                            diagnosis_payload = self._compose_frontpage_diagnoses_from_rows(
+                                [dict(row) for row in record_diag_rows]
+                            )
+                            if diagnosis_payload.get("discharge_main_diagnosis_text"):
+                                fp_data["diagnoses"] = diagnosis_payload
+                                logger.info(
+                                    "  discharge_record_diagnosis 表读取成功: main=%s other_count=%d",
+                                    diagnosis_payload.get("discharge_main_diagnosis_text"),
+                                    len(diagnosis_payload.get("discharge_other_diagnoses_texts") or []),
+                                )
+                    except Exception as e:
+                        logger.warning(f"  discharge_record_diagnosis 表查询失败: {e}")
+
+                # ---- 6. inpat_bill_item 表 → 费用汇总（HIS 计费系统源头数据） ----
                 # 从住院费用明细按 item_type 分类汇总，映射到首页 24 项费用
                 try:
                     bill_rows = session.execute(sql_text(
@@ -1708,6 +1838,134 @@ class FrontPageExtractionService:
                 parts.append(f"{label}：{text}")
         return "\n".join(parts)
 
+    def _compose_record_diagnosis_document_text(
+        self,
+        rows: list[dict],
+        *,
+        section_label: str,
+        diagnosis_type_keyword: str,
+    ) -> str:
+        """将诊断文书源表合并为病历文书中的诊断段落。"""
+        main_items: list[str] = []
+        other_items: list[str] = []
+        diagnosis_types: list[str] = []
+        seen: set[str] = set()
+
+        def _sort_key(row: dict) -> tuple[int, int, str]:
+            is_main = str(row.get("diagnosis_main") or "").strip() == "是"
+            raw_no = str(row.get("diagnosis_no") or "").strip()
+            raw_id = str(row.get("diagnosis_id") or "").strip()
+            suffix = raw_id.rsplit("_", 1)[-1] if "_" in raw_id else raw_id
+            try:
+                order_no = int(raw_no or suffix)
+            except (TypeError, ValueError):
+                order_no = 999
+            return (0 if is_main else 1, order_no, raw_id)
+
+        for row in sorted(rows, key=_sort_key):
+            diagnosis_type = str(row.get("diagnosis_type") or "").strip()
+            if diagnosis_type_keyword and diagnosis_type_keyword not in diagnosis_type:
+                continue
+            if diagnosis_type and diagnosis_type not in diagnosis_types:
+                diagnosis_types.append(diagnosis_type)
+
+            name = self._normalize_diag_text(row.get("diagnosis_name"))
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            if str(row.get("diagnosis_main") or "").strip() == "是":
+                main_items.append(name)
+            else:
+                other_items.append(name)
+
+        if not main_items and not other_items:
+            return ""
+
+        lines = [section_label]
+        if diagnosis_types:
+            lines.append(f"诊断类型: {'；'.join(diagnosis_types)}")
+        if main_items:
+            lines.append(f"主诊断: {'；'.join(main_items)}")
+        if other_items:
+            lines.append(f"其他诊断: {'；'.join(other_items)}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _is_diagnosis_locked(diagnoses: Any) -> bool:
+        return isinstance(diagnoses, dict) and diagnoses.get("_diagnosis_source") == "diagnosis_table"
+
+    @staticmethod
+    def _clear_locked_diagnosis_codes(diagnoses: Dict[str, Any]) -> Dict[str, Any]:
+        """诊断名称来自结构化表时，先清空原始编码，后续只能由本地 ICD 查询生成。"""
+        if not isinstance(diagnoses, dict):
+            return diagnoses
+        diagnoses["discharge_main_icd"] = None
+        other_texts = diagnoses.get("discharge_other_diagnoses_texts") or []
+        diagnoses["discharge_other_icds"] = [None] * len(other_texts)
+        diagnoses["ed_diagnosis_codes"] = None
+        diagnoses["_source_diagnosis_codes_ignored"] = True
+        return diagnoses
+
+    def _compose_frontpage_diagnoses_from_rows(self, rows: list[dict]) -> Dict[str, Any]:
+        """将 diagnosis 表诊断名称转换为首页诊断结构；不读取或沿用原表编码。"""
+        if not rows:
+            return {}
+
+        def _is_deleted(row: dict) -> bool:
+            value = str(row.get("is_deleted") or row.get("deleted") or "").strip().lower()
+            return value in {"1", "true", "yes", "y", "是"}
+
+        def _is_main(row: dict) -> bool:
+            main_flag = str(row.get("diagnosis_main") or "").strip()
+            diag_type = str(row.get("diagnosis_type") or "").strip()
+            diag_no = str(row.get("diagnosis_no") or "").strip()
+            return main_flag == "是" or "主要" in diag_type or diag_no == "1"
+
+        def _sort_key(row: dict) -> tuple[int, int, str]:
+            raw_no = str(row.get("diagnosis_no") or "").strip()
+            raw_id = str(row.get("diagnosis_id") or "").strip()
+            suffix = raw_id.rsplit("_", 1)[-1] if "_" in raw_id else raw_id
+            try:
+                order_no = int(raw_no or suffix)
+            except (TypeError, ValueError):
+                order_no = 999
+            return (0 if _is_main(row) else 1, order_no, raw_id)
+
+        sorted_rows = sorted([row for row in rows if not _is_deleted(row)], key=_sort_key)
+        main: Optional[str] = None
+        others: List[str] = []
+        seen: set[str] = set()
+
+        for row in sorted_rows:
+            name = self._normalize_diag_text(row.get("diagnosis_name"))
+            if not name:
+                continue
+            key = self._diagnosis_canonical_key(name) or name
+            if key in seen:
+                continue
+            seen.add(key)
+            if main is None and _is_main(row):
+                main = name
+                continue
+            others.append(name)
+
+        if main is None and others:
+            main = others.pop(0)
+
+        return {
+            "ed_diagnosis_texts": [],
+            "discharge_main_diagnosis_text": main,
+            "discharge_other_diagnoses_texts": others,
+            "ed_diagnosis_codes": None,
+            "discharge_main_icd": None,
+            "discharge_other_icds": [None] * len(others),
+            "admission_condition": None,
+            "discharge_main_outcome": None,
+            "discharge_other_outcomes": None,
+            "_diagnosis_source": "diagnosis_table",
+            "_source_diagnosis_codes_ignored": True,
+        }
+
     async def _get_llm_context_text(self, visit_id: str) -> str:
         """
         三层架构 - 第三层辅助：
@@ -1787,6 +2045,24 @@ class FrontPageExtractionService:
                             )
                         if content.strip():
                             sections.append(f"【出院记录】\n{content}")
+                except Exception:
+                    pass
+
+                # 出院记录诊断在源系统中拆为诊断文书表；这里合并回出院记录诊断段落，
+                # 作为首页生成的诊断来源，不读取正式首页 mr/diagnosis 目标表。
+                try:
+                    rows = session.execute(sql_text(
+                        "SELECT * FROM discharge_record_diagnosis "
+                        "WHERE visit_id = :vid AND COALESCE(is_deleted, '0') <> '1'"
+                    ), {"vid": visit_id}).mappings().all()
+                    if rows:
+                        content = self._compose_record_diagnosis_document_text(
+                            [dict(row) for row in rows],
+                            section_label="出院记录诊断",
+                            diagnosis_type_keyword="出院诊断",
+                        )
+                        if content.strip():
+                            sections.append(f"【出院记录诊断】\n{content}")
                 except Exception:
                     pass
 
@@ -1928,9 +2204,8 @@ class FrontPageExtractionService:
                         for i, row in enumerate(diag_rows, 1):
                             d = dict(row)
                             name = d.get("diagnosis_name", "")
-                            code = d.get("diagnosis_code", "")
                             dtype = d.get("diagnosis_type", "")
-                            sections.append(f"{i}. {name} ({code}) [{dtype}]")
+                            sections.append(f"{i}. {name} [{dtype}]")
                         sections.append("")
                         logger.info(f"  diagnosis 表查询成功: {len(diag_rows)} 条")
                 except Exception as e:
@@ -2266,13 +2541,17 @@ class FrontPageExtractionService:
             clinician_main_before_rules = str(
                 diagnoses.get("discharge_main_diagnosis_text") or ""
             ).strip()
-            from .main_diagnosis_rules import apply_main_diagnosis_guideline_rules
-            diagnoses, _rule_trace_llm = apply_main_diagnosis_guideline_rules(
-                medical_text=medical_text,
-                diagnoses=diagnoses,
-                procedures=procedures or {},
-            )
-            diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
+            if str(diagnoses.get("_diagnosis_text_source") or "").endswith("_diagnosis_text"):
+                _rule_trace_llm = []
+                logger.info("出院记录诊断已作为唯一诊断来源，跳过主诊断规则改写")
+            else:
+                from .main_diagnosis_rules import apply_main_diagnosis_guideline_rules
+                diagnoses, _rule_trace_llm = apply_main_diagnosis_guideline_rules(
+                    medical_text=medical_text,
+                    diagnoses=diagnoses,
+                    procedures=procedures or {},
+                )
+                diagnoses = self._normalize_diagnoses_structure(medical_text, diagnoses)
         # F5/F7: 使用本地 ICD 编码库查询国临版编码（替换 LLM 输出的编码）
         from .local_icd_service import resolve_diagnosis_codes, resolve_procedure_codes
         if diagnoses:
@@ -2602,6 +2881,10 @@ class FrontPageExtractionService:
         if not medical_text or not medical_text.strip():
             return []
 
+        structured = self._extract_discharge_record_diagnoses_from_text(medical_text)
+        if structured:
+            return structured
+
         text = medical_text.replace("\r\n", "\n").replace("\r", "\n")
         lines = text.split("\n")
         stop_header = re.compile(
@@ -2701,6 +2984,65 @@ class FrontPageExtractionService:
 
         return self._unique_texts(flattened)
 
+    def _extract_discharge_record_diagnoses_from_text(self, medical_text: str) -> List[str]:
+        """
+        Parse structured diagnosis block from discharge record sections, for example:
+        出院记录诊断 / 诊断类型: 出院诊断 / 主诊断: ... / 其他诊断: ...
+        """
+        if not medical_text or not medical_text.strip():
+            return []
+
+        text = medical_text.replace("\r\n", "\n").replace("\r", "\n")
+        marker_matches = list(re.finditer(r"出院记录诊断", text))
+        if not marker_matches:
+            return []
+
+        stop_re = re.compile(
+            r"^\s*(?:新建\S*章节|入院记录|病程记录|手术记录|出院医嘱|诊疗经过|出院情况|医师签名|记录时间)\s*[:：]?",
+            re.IGNORECASE,
+        )
+
+        def block_after_marker(start: int) -> str:
+            raw_block = text[start : start + 1800]
+            lines = raw_block.split("\n")
+            collected: List[str] = []
+            for idx, line in enumerate(lines):
+                stripped = line.strip()
+                if idx > 0 and stripped and stop_re.match(stripped):
+                    break
+                collected.append(line)
+            return "\n".join(collected)
+
+        for match in reversed(marker_matches):
+            block = block_after_marker(match.start())
+            if "诊断类型" in block and "出院诊断" not in block:
+                continue
+
+            main_match = re.search(r"主诊断\s*[:：]\s*([^\n\r]+)", block)
+            other_match = re.search(r"其他诊断\s*[:：]\s*([^\n\r]+)", block)
+            if not main_match and not other_match:
+                continue
+
+            results: List[str] = []
+            if main_match:
+                main = self._normalize_diag_text(main_match.group(1))
+                if main:
+                    results.append(main)
+
+            if other_match:
+                other_line = self._normalize_diag_text(other_match.group(1))
+                for item in self._split_compound_diagnosis_line(other_line) or [other_line]:
+                    cleaned = self._normalize_diag_text(item)
+                    if cleaned:
+                        results.append(cleaned)
+
+            results = self._unique_texts(results)
+            if results:
+                logger.info("parsed structured discharge record diagnoses: count=%d", len(results))
+                return results
+
+        return []
+
     def _normalize_diagnoses_structure(
         self, medical_text: str, diagnoses: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
@@ -2718,36 +3060,58 @@ class FrontPageExtractionService:
                 )
             diag = {}
 
-        parsed_from_text = self._unique_texts(
+        if self._is_diagnosis_locked(diag):
+            main = self._normalize_diag_text(diag.get("discharge_main_diagnosis_text"))
+            raw_others = diag.get("discharge_other_diagnoses_texts")
+            others = self._unique_texts(
+                [
+                    self._normalize_diag_text(item)
+                    for item in (raw_others if isinstance(raw_others, list) else [])
+                    if self._normalize_diag_text(item)
+                ]
+            )
+            main_key = self._diagnosis_canonical_key(main) if main else ""
+            filtered_others: List[str] = []
+            seen_other_keys: set[str] = set()
+            for item in others:
+                key = self._diagnosis_canonical_key(item)
+                if not key or key == main_key or key in seen_other_keys:
+                    continue
+                seen_other_keys.add(key)
+                filtered_others.append(item)
+
+            diag["discharge_main_diagnosis_text"] = main or None
+            diag["discharge_other_diagnoses_texts"] = filtered_others
+            diag["_diagnosis_text_source"] = diag.get("_diagnosis_text_source") or "structured_source"
+
+            other_icds = diag.get("discharge_other_icds")
+            if not isinstance(other_icds, list):
+                other_icds = []
+            if len(other_icds) < len(filtered_others):
+                other_icds = other_icds + [None] * (len(filtered_others) - len(other_icds))
+            elif len(other_icds) > len(filtered_others):
+                other_icds = other_icds[: len(filtered_others)]
+            diag["discharge_other_icds"] = other_icds
+            return diag
+
+        # 粘贴病历/全文抽取模式下，首页诊断只认出院记录里的最终出院诊断。
+        # LLM 可能会把入院诊断、病程提及疾病或鉴别诊断扩入列表，这里不参与合并。
+        structured_diagnoses = self._unique_texts(
+            self._extract_discharge_record_diagnoses_from_text(medical_text)
+        )
+        fallback_discharge_diagnoses = [] if structured_diagnoses else self._unique_texts(
             self._extract_discharge_diagnoses_from_text(medical_text)
         )
-        llm_main = self._normalize_diag_text(diag.get("discharge_main_diagnosis_text"))
-        llm_main_parts = self._split_compound_diagnosis_line(llm_main) if llm_main else []
-        llm_others_raw = diag.get("discharge_other_diagnoses_texts")
-        llm_others = self._unique_texts(llm_others_raw if isinstance(llm_others_raw, list) else [])
-
-        # Keep LLM-selected main diagnosis when available, but split compound main
-        # so that only one diagnosis is kept as main.
-        if llm_main_parts:
-            main = llm_main_parts[0]
-        elif llm_main:
-            main = llm_main
-        elif parsed_from_text:
-            main = parsed_from_text[0]
-        else:
-            main = None
-
-        # Use LLM others first; fallback to parsed others.
-        if llm_others or len(llm_main_parts) > 1:
-            split_main_others = llm_main_parts[1:] if len(llm_main_parts) > 1 else []
-            llm_others = self._unique_texts([*split_main_others, *llm_others])
-        if llm_others:
-            other_candidates = self._unique_texts([*llm_others, *parsed_from_text])
-        else:
-            if llm_main:
-                other_candidates = parsed_from_text
-            else:
-                other_candidates = parsed_from_text[1:] if parsed_from_text else []
+        parsed_from_text = structured_diagnoses or fallback_discharge_diagnoses
+        diagnosis_text_source = (
+            "discharge_record_diagnosis_text"
+            if structured_diagnoses
+            else "discharge_diagnosis_text"
+            if fallback_discharge_diagnoses
+            else "missing_discharge_diagnosis_text"
+        )
+        main = parsed_from_text[0] if parsed_from_text else None
+        other_candidates = parsed_from_text[1:] if parsed_from_text else []
 
         others: List[str] = []
         seen_other_keys = set()
@@ -2764,15 +3128,21 @@ class FrontPageExtractionService:
 
         diag["discharge_main_diagnosis_text"] = main or None
         diag["discharge_other_diagnoses_texts"] = others
+        diag["_diagnosis_text_source"] = diagnosis_text_source
 
-        other_icds = diag.get("discharge_other_icds")
-        if not isinstance(other_icds, list):
-            other_icds = []
-        if len(other_icds) < len(others):
-            other_icds = other_icds + [None] * (len(others) - len(other_icds))
-        elif len(other_icds) > len(others):
-            other_icds = other_icds[: len(others)]
-        diag["discharge_other_icds"] = other_icds
+        code_source = str(diag.get("_diagnosis_code_source") or "").strip()
+        if code_source != "local_icd_lookup":
+            diag["discharge_main_icd"] = None
+            diag["discharge_other_icds"] = [None] * len(others)
+        else:
+            other_icds = diag.get("discharge_other_icds")
+            if not isinstance(other_icds, list):
+                other_icds = []
+            if len(other_icds) < len(others):
+                other_icds = other_icds + [None] * (len(others) - len(other_icds))
+            elif len(other_icds) > len(others):
+                other_icds = other_icds[: len(others)]
+            diag["discharge_other_icds"] = other_icds
 
         return diag
 
@@ -2786,6 +3156,7 @@ class FrontPageExtractionService:
 
         text = medical_text.replace("\r\n", "\n").replace("\r", "\n")
         section_heads = [
+            "出院记录诊断",
             "出院诊断",
             "初步诊断",
             "入院诊断",
@@ -2993,7 +3364,7 @@ class FrontPageExtractionService:
             is_main = dtype == "main"
             checks: List[Dict[str, Any]] = []
 
-            source_ok = sec in {"出院诊断", "初步诊断", "入院诊断"}
+            source_ok = sec in {"出院记录诊断", "出院诊断", "初步诊断", "入院诊断"}
             checks.append(
                 {
                     "item": "候选来源为诊断条目",
@@ -3078,7 +3449,14 @@ class FrontPageExtractionService:
                 return len(compact) > max_quote_len and any(t in compact for t in narrative_terms)
 
             # exact-ish match first: prefer concise diagnosis-item lines over long narratives
-            sec_priority = {"出院诊断": 0, "入院诊断": 1, "初步诊断": 2, "门诊诊断": 3, "急诊诊断": 4}
+            sec_priority = {
+                "出院记录诊断": 0,
+                "出院诊断": 0,
+                "入院诊断": 1,
+                "初步诊断": 2,
+                "门诊诊断": 3,
+                "急诊诊断": 4,
+            }
             exact_candidates: List[Tuple[int, int, str, str, int]] = []
             for sec, line, line_no in block_lines:
                 line_key = self._diagnosis_canonical_key(line)
@@ -3226,7 +3604,7 @@ class FrontPageExtractionService:
                     any(term in sq for term in severity_terms) for sq in support_quotes
                 )
                 is_status = _is_status_like(cand)
-                section_score = 2 if section in {"出院诊断", "入院诊断", "初步诊断"} else 0
+                section_score = 2 if section in {"出院记录诊断", "出院诊断", "入院诊断", "初步诊断"} else 0
                 proc_score = 3 if has_proc_support else 0
                 burden_score = 2 if has_burden_support else 0
                 status_penalty = -3 if is_status else 0
@@ -3950,6 +4328,113 @@ class FrontPageExtractionService:
             "top_alert": top_alert,
         }
 
+    def _build_fallback_main_and_audit_evidence(
+        self,
+        medical_text: str,
+        diagnoses: Dict[str, Any],
+        procedures: Optional[Dict[str, Any]],
+        clinician_main_diagnosis: str,
+    ) -> Dict[str, Optional[Dict[str, Any]]]:
+        """LLM 证据解析失败时，使用规则证据给前端返回可展示的降级结果。"""
+        system_main = str(diagnoses.get("discharge_main_diagnosis_text") or "").strip()
+        display_main = clinician_main_diagnosis or system_main or "未提取到"
+        diagnosis_evidence = self._build_diagnosis_evidence(
+            medical_text,
+            diagnoses,
+            procedures,
+            clinician_main_diagnosis=clinician_main_diagnosis,
+        )
+
+        main_evidence = next(
+            (
+                item
+                for item in diagnosis_evidence
+                if isinstance(item, dict) and item.get("diagnosis_type") == "main"
+            ),
+            {},
+        )
+        key_evidence: List[Dict[str, str]] = []
+        quote = str(main_evidence.get("quote") or "").strip() if isinstance(main_evidence, dict) else ""
+        if quote:
+            key_evidence.append(
+                {
+                    "quote": quote,
+                    "source": str(main_evidence.get("quote_location") or main_evidence.get("section") or "病历原文"),
+                    "why_it_supports": str(main_evidence.get("selection_logic") or "该诊断条目支持当前主诊断。"),
+                }
+            )
+        supporting = main_evidence.get("supporting_quotes") if isinstance(main_evidence, dict) else []
+        if isinstance(supporting, list):
+            for item in supporting:
+                text = str(item or "").strip()
+                if not text:
+                    continue
+                key_evidence.append(
+                    {
+                        "quote": text,
+                        "source": "病程/治疗记录",
+                        "why_it_supports": "该片段可作为主诊断相关病程或治疗佐证。",
+                    }
+                )
+                if len(key_evidence) >= 3:
+                    break
+
+        if not key_evidence and system_main:
+            for section, section_text in self._extract_diagnosis_section_blocks(medical_text or ""):
+                if section not in {"出院记录诊断", "出院诊断"}:
+                    continue
+                for raw_line in section_text.split("\n"):
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    if system_main in line or self._diagnosis_canonical_key(system_main) in self._diagnosis_canonical_key(line):
+                        key_evidence.append(
+                            {
+                                "quote": line,
+                                "source": section,
+                                "why_it_supports": "该原文行直接记录当前出院主诊断。",
+                            }
+                        )
+                        break
+                if key_evidence:
+                    break
+
+        confidence = main_evidence.get("confidence") if isinstance(main_evidence, dict) else 0
+        try:
+            confidence_value = float(confidence)
+        except (TypeError, ValueError):
+            confidence_value = 0.72 if key_evidence else 0.55
+        confidence_value = max(0.0, min(1.0, confidence_value))
+
+        return {
+            "main_diagnosis_llm": {
+                "clinician_main_diagnosis": display_main,
+                "llm_recommended_main_diagnosis": system_main or display_main,
+                "is_consistent_with_clinician": True,
+                "recommended_main_diagnosis_action": "keep",
+                "recommended_main_diagnosis_source": "rule_fallback",
+                "recommended_main_diagnosis_source_other_index": None,
+                "recommendation_summary": "",
+                "confidence": round(confidence_value, 2),
+                "conclusion": "LLM 证据 JSON 解析失败，已降级使用病历原文和本地规则证据展示当前主诊断依据。",
+                "key_evidence": key_evidence,
+                "reasoning_summary": "系统已基于诊断条目、病程/治疗片段和本地规则生成可追溯证据；建议人工复核后确认。",
+            },
+            "coding_audit_llm": {
+                "version": "fallback-v1",
+                "summary": "LLM 编码审核证据暂不可用，已返回规则证据降级结果；请人工复核诊断与编码。",
+                "confidence": round(confidence_value, 2),
+                "counts": {
+                    "diagnosis_missing": 0,
+                    "procedure_missing": 0,
+                    "diagnosis_inappropriate": 0,
+                    "diagnosis_insufficient_evidence": 0 if key_evidence else 1,
+                },
+                "findings": [],
+                "top_alert": None,
+            },
+        }
+
     async def _build_main_and_audit_llm_evidence(
         self,
         medical_text: str,
@@ -4024,9 +4509,15 @@ class FrontPageExtractionService:
             llm_recommended_main=llm_recommended_main or "未提取到",
             medical_excerpt=excerpt or "（无病历片段）",
         )
-        result = await self._extract_json(prompt, max_tokens=1700)
+        result = await self._extract_json(prompt, max_tokens=4000)
         if not isinstance(result, dict):
-            return {"main_diagnosis_llm": None, "coding_audit_llm": None}
+            logger.warning("main/audit LLM evidence parse failed, using rule fallback evidence")
+            return self._build_fallback_main_and_audit_evidence(
+                medical_text=medical_text,
+                diagnoses=diagnoses,
+                procedures=procedures,
+                clinician_main_diagnosis=clinician_main,
+            )
 
         main_result = result.get("main_diagnosis_llm")
         audit_result = result.get("coding_audit_llm")
@@ -4056,6 +4547,15 @@ class FrontPageExtractionService:
         normalized_audit = self._normalize_coding_audit_llm_payload(
             audit_result if isinstance(audit_result, dict) else None
         )
+
+        if not normalized_main and not normalized_audit:
+            logger.warning("main/audit LLM evidence normalized empty, using rule fallback evidence")
+            return self._build_fallback_main_and_audit_evidence(
+                medical_text=medical_text,
+                diagnoses=diagnoses,
+                procedures=procedures,
+                clinician_main_diagnosis=clinician_main,
+            )
 
         return {
             "main_diagnosis_llm": normalized_main,

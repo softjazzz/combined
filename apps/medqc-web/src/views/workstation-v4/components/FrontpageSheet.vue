@@ -1,24 +1,15 @@
 <template>
   <div class="fp-sheet-wrap">
-    <div
-      v-if="diagnosisGenerationPending"
-      class="fp-pending"
-      role="status"
-      aria-live="polite"
-    >
+    <div v-if="diagnosisGenerationPending" class="fp-pending" role="status" aria-live="polite">
       <div class="fp-pending__top">
         <div class="fp-pending__title-wrap">
           <span class="fp-pending__icon">⚕</span>
           <div>
-            <div class="fp-pending__title">
-              正在生成诊断编码与证据
-            </div>
-            <div class="fp-pending__sub">
-              AI 正在解析病历并构建证据链，请稍候片刻
-            </div>
+            <div class="fp-pending__title">正在生成诊断编码</div>
+            <div class="fp-pending__sub">系统正在匹配 ICD 编码，诊断内容已先行展示</div>
           </div>
         </div>
-        <span class="fp-pending__badge">AI 处理中</span>
+        <span class="fp-pending__badge">编码中</span>
       </div>
       <div class="fp-pending__bar">
         <span class="fp-pending__bar-inner" />
@@ -28,21 +19,17 @@
     <!-- ===== 原生表格渲染的病案首页 ===== -->
     <div class="fp-wrapper">
       <!-- 标题 -->
-      <h1 class="fp-title">
-        住 院 病 案 首 页
-      </h1>
+      <h1 class="fp-title">住 院 病 案 首 页</h1>
 
       <!-- 顶部：医疗机构、付费方式、病案号 -->
-      <table
-        class="fp-tbl"
-        style="border-top: none"
-      >
+      <table class="fp-tbl" style="border-top: none">
         <tr>
           <td style="width: 50%; border-top: none">
             医疗机构:<u class="fill">{{ d.hospitalization.hospital_name }}</u>
           </td>
           <td style="width: 50%; border-top: none">
-            （组织机构代码:<u class="fill">{{ d.hospitalization.organization_code }}</u>）
+            （组织机构代码:<u class="fill">{{ d.hospitalization.organization_code }}</u
+            >）
           </td>
         </tr>
         <tr>
@@ -55,15 +42,14 @@
             病案号:<u class="fill">{{ d.hospitalization.medical_record_no }}</u>
           </td>
           <td>
-            第<u class="fill">{{ d.hospitalization.admission_times_in_hospital }}</u>次住院
+            第<u class="fill">{{ d.hospitalization.admission_times_in_hospital }}</u
+            >次住院
           </td>
         </tr>
       </table>
 
       <!-- ===== 基本信息 ===== -->
-      <div class="fp-sec-hd">
-        基本信息
-      </div>
+      <div class="fp-sec-hd">基本信息</div>
       <table class="fp-tbl">
         <tr>
           <td style="width: 14%">
@@ -76,7 +62,8 @@
             出生日期<u class="fill">{{ d.basic_info.birth_date }}</u>
           </td>
           <td style="width: 14%">
-            年龄<u class="fill">{{ d.basic_info.age_years }}</u>岁
+            年龄<u class="fill">{{ d.basic_info.age_years }}</u
+            >岁
           </td>
           <td style="width: 12%">
             国籍<u class="fill">{{ d.basic_info.nationality }}</u>
@@ -126,9 +113,7 @@
       </table>
 
       <!-- ===== 住院信息 ===== -->
-      <div class="fp-sec-hd">
-        住院诊疗信息
-      </div>
+      <div class="fp-sec-hd">住院诊疗信息</div>
       <table class="fp-tbl">
         <tr>
           <td colspan="6">
@@ -162,7 +147,8 @@
             病房<u class="fill">{{ d.hospitalization.discharge_ward }}</u>
           </td>
           <td>
-            实际住院<u class="fill">{{ d.hospitalization.actual_hospital_days }}</u>天
+            实际住院<u class="fill">{{ d.hospitalization.actual_hospital_days }}</u
+            >天
           </td>
           <td>&nbsp;</td>
         </tr>
@@ -195,30 +181,14 @@
       <!-- ===== 出院诊断（双列布局） ===== -->
       <table class="fp-tbl">
         <tr class="hd-row">
-          <td style="width: 25%">
-            出院诊断
-          </td>
-          <td style="width: 10%">
-            疾病编码
-          </td>
-          <td style="width: 8%">
-            入院<br>病情
-          </td>
-          <td style="width: 25%">
-            出院诊断
-          </td>
-          <td style="width: 10%">
-            疾病编码
-          </td>
-          <td style="width: 8%">
-            入院<br>病情
-          </td>
+          <td style="width: 25%">出院诊断</td>
+          <td style="width: 10%">疾病编码</td>
+          <td style="width: 8%">入院<br />病情</td>
+          <td style="width: 25%">出院诊断</td>
+          <td style="width: 10%">疾病编码</td>
+          <td style="width: 8%">入院<br />病情</td>
         </tr>
-        <tr
-          v-for="(row, i) in diagnosisPairedRows"
-          :key="'d' + i"
-          class="data-row"
-        >
+        <tr v-for="(row, i) in diagnosisPairedRows" :key="'d' + i" class="data-row">
           <!-- 左列 -->
           <td>
             <div class="fp-diag-cell">
@@ -309,9 +279,7 @@
           </td>
         </tr>
         <tr>
-          <td colspan="3">
-            入院病情：1.有，2.临床未确定，3.情况不明，4.无
-          </td>
+          <td colspan="3">入院病情：1.有，2.临床未确定，3.情况不明，4.无</td>
           <td colspan="3" />
         </tr>
       </table>
@@ -345,68 +313,21 @@
       <!-- ===== 手术信息 ===== -->
       <table class="fp-tbl">
         <tr class="hd-row">
-          <td
-            rowspan="2"
-            style="width: 20%"
-          >
-            手术及操作名称
-          </td>
-          <td
-            rowspan="2"
-            style="width: 12%"
-          >
-            手术及操作编码
-          </td>
-          <td
-            rowspan="2"
-            style="width: 12%"
-          >
-            手术操作日期
-          </td>
-          <td
-            rowspan="2"
-            style="width: 8%"
-          >
-            手术级别
-          </td>
-          <td colspan="3">
-            手术及操作医师
-          </td>
-          <td
-            rowspan="2"
-            style="width: 8%"
-          >
-            切口愈合<br>等级
-          </td>
-          <td
-            rowspan="2"
-            style="width: 8%"
-          >
-            麻醉方式
-          </td>
-          <td
-            rowspan="2"
-            style="width: 8%"
-          >
-            麻醉医师
-          </td>
+          <td rowspan="2" style="width: 20%">手术及操作名称</td>
+          <td rowspan="2" style="width: 12%">手术及操作编码</td>
+          <td rowspan="2" style="width: 12%">手术操作日期</td>
+          <td rowspan="2" style="width: 8%">手术级别</td>
+          <td colspan="3">手术及操作医师</td>
+          <td rowspan="2" style="width: 8%">切口愈合<br />等级</td>
+          <td rowspan="2" style="width: 8%">麻醉方式</td>
+          <td rowspan="2" style="width: 8%">麻醉医师</td>
         </tr>
         <tr class="hd-row">
-          <td style="width: 8%">
-            术者
-          </td>
-          <td style="width: 8%">
-            I助
-          </td>
-          <td style="width: 8%">
-            II助
-          </td>
+          <td style="width: 8%">术者</td>
+          <td style="width: 8%">I助</td>
+          <td style="width: 8%">II助</td>
         </tr>
-        <tr
-          v-for="(s, i) in paddedSurgeries"
-          :key="'s' + i"
-          class="data-row"
-        >
+        <tr v-for="(s, i) in paddedSurgeries" :key="'s' + i" class="data-row">
           <td>{{ s.text || '' }}</td>
           <td class="center mono">
             {{ s.code || '' }}
@@ -439,18 +360,14 @@
       </table>
 
       <!-- ===== 其他医学信息 ===== -->
-      <div class="fp-sec-hd">
-        其他信息
-      </div>
+      <div class="fp-sec-hd">其他信息</div>
       <table class="fp-tbl">
         <tr>
           <td colspan="3">
             药物过敏<u class="fill">{{ d.other_medical_info.drug_allergy_flag }}</u> □ 1.无 &nbsp;
             2.有
           </td>
-          <td colspan="3">
-            死亡患者尸检 □ 1.是 2.否
-          </td>
+          <td colspan="3">死亡患者尸检 □ 1.是 2.否</td>
         </tr>
         <tr>
           <td colspan="3">
@@ -479,9 +396,7 @@
       </table>
 
       <!-- ===== 费用信息（CDM mr_cost） ===== -->
-      <div class="fp-sec-hd">
-        费用信息
-      </div>
+      <div class="fp-sec-hd">费用信息</div>
       <table class="fp-tbl">
         <tr>
           <td style="width: 50%">
@@ -494,9 +409,7 @@
       </table>
 
       <!-- ===== 签名区 ===== -->
-      <div class="fp-sec-hd">
-        签名
-      </div>
+      <div class="fp-sec-hd">签名</div>
       <table class="fp-tbl">
         <tr>
           <td>
@@ -527,23 +440,13 @@
         </tr>
       </table>
 
-      <div class="fp-footer">
-        （注：本首页由 AI 自动提取生成，仅供参考，需人工审核确认）
-      </div>
+      <div class="fp-footer">（注：本首页由 AI 自动提取生成，仅供参考，需人工审核确认）</div>
     </div>
 
     <!-- ===== 诊断证据区域（LLM 主导） ===== -->
-    <section
-      v-if="mainDiagnosisName"
-      class="fp-evidence-section"
-    >
-      <div class="fp-evidence-title">
-        诊断证据
-      </div>
-      <div
-        v-if="riskChipItems.length"
-        class="fp-risk-chip-row"
-      >
+    <section v-if="mainDiagnosisName" class="fp-evidence-section">
+      <div class="fp-evidence-title">诊断证据</div>
+      <div v-if="riskChipItems.length" class="fp-risk-chip-row">
         <span
           v-for="chip in riskChipItems"
           :key="chip.key"
@@ -568,7 +471,9 @@
           @click="openDiagnosisEvidence(mainDiagnosisName)"
         >
           <span class="fp-evidence-btn-name">{{ mainDiagnosisName }}</span>
-          <span class="fp-evidence-btn-tag">LLM证据</span>
+          <span class="fp-evidence-btn-tag" :class="{ pending: evidenceGenerationPending }">
+            {{ evidenceGenerationPending ? '证据生成中' : 'LLM证据' }}
+          </span>
           <span
             v-if="totalRiskCount > 0"
             class="fp-evidence-count"
@@ -588,6 +493,7 @@
       :key-evidence-groups="keyEvidenceGroups"
       :total-risk-count="totalRiskCount"
       :llm-confidence-text="llmConfidenceText"
+      :evidence-generation-pending="evidenceGenerationPending"
       @close="closeDiagnosisEvidence"
     />
   </div>
@@ -663,23 +569,69 @@ interface CodingAuditLLMEvidence {
 
 const props = defineProps<{
   data: any
+  displaySource?: any
   postProcessing?: boolean
 }>()
 
 const diagnosisRows = computed<DiagnosisItem[]>(() => {
-  const arr = props.data?.diagnoses
-  return Array.isArray(arr) ? arr : []
+  const raw = props.data?.diagnoses
+  if (Array.isArray(raw)) return raw
+  if (!raw || typeof raw !== 'object') return []
+
+  const rows: DiagnosisItem[] = []
+  const mainName = String(raw.discharge_main_diagnosis_text || '').trim()
+  if (mainName) {
+    rows.push({
+      diagnosis_type: '主要诊断',
+      diagnosis_name: mainName,
+      diagnosis_code: String(raw.discharge_main_icd || '').trim(),
+      admission_condition: raw.admission_condition || '',
+    } as DiagnosisItem)
+  }
+
+  const otherNames = Array.isArray(raw.discharge_other_diagnoses_texts)
+    ? raw.discharge_other_diagnoses_texts
+    : []
+  const otherCodes = Array.isArray(raw.discharge_other_icds) ? raw.discharge_other_icds : []
+  const admissionDetails = Array.isArray(raw.admission_condition_details)
+    ? raw.admission_condition_details
+    : Array.isArray(raw._admission_condition_details)
+      ? raw._admission_condition_details
+      : []
+
+  otherNames.forEach((name: unknown, index: number) => {
+    const diagnosisName = String(name || '').trim()
+    if (!diagnosisName) return
+    const detail = admissionDetails.find((item: any) => {
+      const text = String(item?.diagnosis || '').trim()
+      return text === diagnosisName || text.includes(diagnosisName)
+    })
+    rows.push({
+      diagnosis_type: '其他诊断',
+      diagnosis_name: diagnosisName,
+      diagnosis_code: String(otherCodes[index] || '').trim(),
+      admission_condition: detail?.admission_condition || '',
+    } as DiagnosisItem)
+  })
+
+  return rows
 })
 
 const diagnosisGenerationPending = computed(() => {
   if (!props.postProcessing) return false
+  const raw = props.data?.diagnoses
+  if (raw && !Array.isArray(raw) && raw._diagnosis_code_resolution_done) return false
   const list = diagnosisRows.value
   if (!list.length) return true
   const meaningful = list.filter((d) => String(d?.diagnosis_name || '').trim().length > 0)
   if (!meaningful.length) return true
   const hasMissingCode = meaningful.some((d) => String(d?.diagnosis_code || '').trim().length === 0)
-  const hasEvidence = !!mainDiagnosisLlmEvidence.value || !!codingAuditLlmEvidence.value
-  return hasMissingCode || !hasEvidence
+  return hasMissingCode
+})
+
+const evidenceGenerationPending = computed(() => {
+  if (!props.postProcessing || !mainDiagnosisName.value) return false
+  return !mainDiagnosisLlmEvidence.value && !codingAuditLlmEvidence.value
 })
 
 function first(arr: any[], fallback: any = undefined) {
@@ -694,12 +646,23 @@ function normalizeDate(value: any): string | null {
   return m ? m[0] : s
 }
 
+function firstValue(...values: any[]): any {
+  for (const value of values) {
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value
+  }
+  return ''
+}
+
+const DEFAULT_HOSPITAL_NAME = '泸县人民医院'
+
 /** 标准化后的首页数据（与之前的 normalizedDraft 相同） */
 const d = computed(() => {
   const src = props.data || {}
   const basic = src.basic || {}
+  const displayBasic = props.displaySource?.basic || {}
   const otherSrc = src.other_medical_info || {}
-  const diags: DiagnosisItem[] = Array.isArray(src.diagnoses) ? src.diagnoses : []
+  const displayOther = props.displaySource?.other_medical_info || {}
+  const diags: DiagnosisItem[] = diagnosisRows.value
   const surgeries: any[] = Array.isArray(src.surgeries) ? src.surgeries : []
   const cost = src.cost || {}
 
@@ -712,40 +675,58 @@ const d = computed(() => {
 
   return {
     basic_info: {
-      patient_name: basic.name || '',
-      gender: basic.sex || '',
-      birth_date: basic.birthday || '',
-      age_years: basic.age || basic.age_year || '',
-      id_number: basic.id_card_no || '',
-      marital_status: basic.marital_status || '',
-      nationality: basic.nationality || '中国',
-      ethnicity: basic.ethnicity || '',
-      occupation: basic.occupation_category || '',
-      nativeplace: basic.nativeplace || '',
-      current_address: basic.currentaddress || '',
-      work_unit: basic.work_unit || '',
-      contact_name: basic.contact_name || '',
-      contact_relation: basic.contact_relationship || '',
-      contact_phone: basic.contact_telephone || '',
-      contact_address: basic.contact_address || '',
+      patient_name: firstValue(basic.name, displayBasic.name),
+      gender: firstValue(basic.sex, displayBasic.sex),
+      birth_date: firstValue(basic.birthday, displayBasic.birthday),
+      age_years: firstValue(basic.age, basic.age_year, displayBasic.age, displayBasic.age_year),
+      id_number: firstValue(basic.id_card_no, displayBasic.id_card_no),
+      marital_status: firstValue(basic.marital_status, displayBasic.marital_status),
+      nationality: firstValue(basic.nationality, displayBasic.nationality, '中国'),
+      ethnicity: firstValue(basic.ethnicity, displayBasic.ethnicity),
+      occupation: firstValue(basic.occupation_category, displayBasic.occupation_category),
+      nativeplace: firstValue(basic.nativeplace, displayBasic.nativeplace),
+      current_address: firstValue(basic.currentaddress, displayBasic.currentaddress),
+      work_unit: firstValue(basic.work_unit, displayBasic.work_unit),
+      contact_name: firstValue(basic.contact_name, displayBasic.contact_name),
+      contact_relation: firstValue(basic.contact_relationship, displayBasic.contact_relationship),
+      contact_phone: firstValue(basic.contact_telephone, displayBasic.contact_telephone),
+      contact_address: firstValue(basic.contact_address, displayBasic.contact_address),
     },
     hospitalization: {
-      hospital_name: basic.institute_county_desc || '',
-      organization_code: basic.institute_code || '',
-      medical_record_no: basic.mr_no || basic.document_id || '',
-      admission_times_in_hospital: basic.visit_cnt || '',
-      payment_method_text: basic.medical_payment_method || '',
-      admission_way_text: basic.admission_route || '',
-      admission_dept: basic.admission_dept_name || '',
-      discharge_dept: basic.discharge_dept_name || '',
-      admission_ward: basic.admission_ward_name || '',
-      discharge_ward: basic.discharge_ward_name || '',
-      transfer_dept: basic.transfer_dept_name || '',
-      admission_datetime: basic.admission_datetime || '',
-      discharge_datetime: basic.discharge_datetime || '',
-      actual_hospital_days: basic.hospital_duration || '',
-      leaving_hospital_way: basic.leaving_hospital_way || '',
-      rehospital_within_month: basic.rehospital_with_month || '',
+      hospital_name: firstValue(
+        basic.institute_county_desc,
+        displayBasic.institute_county_desc,
+        DEFAULT_HOSPITAL_NAME,
+      ),
+      organization_code: firstValue(basic.institute_code, displayBasic.institute_code),
+      medical_record_no: firstValue(
+        basic.mr_no,
+        basic.document_id,
+        displayBasic.mr_no,
+        displayBasic.document_id,
+      ),
+      admission_times_in_hospital: firstValue(basic.visit_cnt, displayBasic.visit_cnt),
+      payment_method_text: firstValue(
+        basic.medical_payment_method,
+        displayBasic.medical_payment_method,
+      ),
+      admission_way_text: firstValue(basic.admission_route, displayBasic.admission_route),
+      admission_dept: firstValue(basic.admission_dept_name, displayBasic.admission_dept_name),
+      discharge_dept: firstValue(basic.discharge_dept_name, displayBasic.discharge_dept_name),
+      admission_ward: firstValue(basic.admission_ward_name, displayBasic.admission_ward_name),
+      discharge_ward: firstValue(basic.discharge_ward_name, displayBasic.discharge_ward_name),
+      transfer_dept: firstValue(basic.transfer_dept_name, displayBasic.transfer_dept_name),
+      admission_datetime: firstValue(basic.admission_datetime, displayBasic.admission_datetime),
+      discharge_datetime: firstValue(basic.discharge_datetime, displayBasic.discharge_datetime),
+      actual_hospital_days: firstValue(basic.hospital_duration, displayBasic.hospital_duration),
+      leaving_hospital_way: firstValue(
+        basic.leaving_hospital_way,
+        displayBasic.leaving_hospital_way,
+      ),
+      rehospital_within_month: firstValue(
+        basic.rehospital_with_month,
+        displayBasic.rehospital_with_month,
+      ),
     },
     diagnoses: {
       discharge_main_diagnosis_text: mainDiag?.diagnosis_name || null,
@@ -778,9 +759,13 @@ const d = computed(() => {
       })),
     },
     other_medical_info: {
-      pathology_text: otherSrc.pathology_text || '',
-      pathology_icd: otherSrc.pathology_icd || '',
-      pathology_no: otherSrc.pathology_no || basic.pathology_id || '',
+      pathology_text: firstValue(otherSrc.pathology_text, displayOther.pathology_text),
+      pathology_icd: firstValue(otherSrc.pathology_icd, displayOther.pathology_icd),
+      pathology_no: firstValue(
+        otherSrc.pathology_no,
+        displayOther.pathology_no,
+        basic.pathology_id,
+      ),
       injury_poison_cause_text: otherSrc.injury_poison_cause_text || '',
       injury_poison_cause_icd: otherSrc.injury_poison_cause_icd || '',
       drug_allergy_flag: otherSrc.drug_allergy_flag || basic.allergy_sign || '',
@@ -1304,7 +1289,7 @@ function closeDiagnosisEvidence() {
   align-items: center;
   justify-content: center;
   background: rgba(37, 99, 235, 0.15);
-  color: #1d4ed8;
+  color: #0057b8;
   font-size: 13px;
   line-height: 1;
   margin-top: 1px;
@@ -1331,7 +1316,7 @@ function closeDiagnosisEvidence() {
   align-items: center;
   border: 1px solid #93c5fd;
   background: #fff;
-  color: #1d4ed8;
+  color: #0057b8;
   border-radius: 999px;
   padding: 2px 10px;
   font-size: 11px;
@@ -1352,7 +1337,7 @@ function closeDiagnosisEvidence() {
   width: 40%;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #2563eb 0%, #38bdf8 100%);
+  background: linear-gradient(90deg, #0066cc 0%, #38bdf8 100%);
   animation: fpPendingSlide 1.4s ease-in-out infinite;
 }
 
@@ -1472,9 +1457,9 @@ u.fill {
   align-items: center;
   padding: 1px 8px;
   border-radius: 999px;
-  border: 1px solid #60a5fa;
+  border: 1px solid rgba(0, 102, 204, 0.22);
   background: #eff6ff;
-  color: #1d4ed8;
+  color: #0057b8;
   font-size: 11px;
   line-height: 1.2;
   white-space: nowrap;
@@ -1487,10 +1472,10 @@ u.fill {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 1px solid #60a5fa;
+  border: 1px solid rgba(0, 102, 204, 0.22);
   border-radius: 999px;
   background: #eff6ff;
-  color: #1d4ed8;
+  color: #0057b8;
   font-size: 11px;
   line-height: 1;
   padding: 2px 7px;
@@ -1551,7 +1536,7 @@ u.fill {
 .fp-evidence-title {
   font-size: 14px;
   font-weight: 700;
-  color: #0f172a;
+  color: #1d1d1f;
   margin-bottom: 8px;
 }
 
@@ -1594,7 +1579,7 @@ u.fill {
 .is-low {
   border-color: #93c5fd !important;
   background: #eff6ff !important;
-  color: #1d4ed8 !important;
+  color: #0057b8 !important;
 }
 
 .fp-evidence-list {
@@ -1630,10 +1615,16 @@ u.fill {
 
 .fp-evidence-btn-tag {
   font-size: 12px;
-  color: #2563eb;
+  color: #0066cc;
   border: 1px solid #93c5fd;
   border-radius: 999px;
   padding: 1px 7px;
+}
+
+.fp-evidence-btn-tag.pending {
+  color: #64748b;
+  border-color: #cbd5e1;
+  background: #f8fafc;
 }
 
 .evidence-overlay {
@@ -1660,7 +1651,7 @@ u.fill {
 .evidence-title {
   font-size: 22px;
   font-weight: 700;
-  color: #0f172a;
+  color: #1d1d1f;
   line-height: 1.45;
   padding-top: 0;
   margin-top: 0;
@@ -1696,7 +1687,7 @@ u.fill {
   margin-top: 6px;
   font-size: 13px;
   line-height: 1.55;
-  color: #0f172a;
+  color: #1d1d1f;
 }
 .evidence-hero__meta {
   margin-top: 6px;
@@ -1741,7 +1732,7 @@ u.fill {
 .evidence-decision-main {
   font-size: 15px;
   font-weight: 700;
-  color: #0f172a;
+  color: #1d1d1f;
   line-height: 1.5;
 }
 
@@ -1800,7 +1791,7 @@ u.fill {
 .evidence-key-reason {
   margin-top: 4px;
   font-size: 13px;
-  color: #0f172a;
+  color: #1d1d1f;
   line-height: 1.6;
 }
 .evidence-collapsed-snippet {
@@ -1852,7 +1843,7 @@ u.fill {
 }
 .evidence-recommend-main {
   font-weight: 700;
-  color: #0f172a;
+  color: #1d1d1f;
 }
 .evidence-recommend-label {
   display: inline-flex;
@@ -1877,7 +1868,7 @@ u.fill {
   margin-top: 3px;
 }
 .evidence-reason-line.is-support {
-  color: #0f172a;
+  color: #1d1d1f;
 }
 .evidence-reason-line.is-risk {
   color: #9a3412;
@@ -1905,7 +1896,7 @@ u.fill {
   gap: 10px;
   font-size: 14px;
   font-weight: 700;
-  color: #0f172a;
+  color: #1d1d1f;
   margin-bottom: 4px;
 }
 
@@ -1960,6 +1951,93 @@ u.fill {
   .evidence-decision-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Apple-light 医疗工作台收敛：保留首页表格结构，仅统一外层纸张与证据面板。 */
+.fp-sheet-wrap {
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.fp-pending,
+.fp-evidence-section,
+.evidence-card,
+.evidence-block,
+.evidence-decision-col,
+.evidence-key-card,
+.evidence-risk-card {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  background: rgba(255, 255, 255, 0.86) !important;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.055);
+}
+
+.fp-wrapper {
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 2px 12px rgba(0, 0, 0, 0.055);
+  transition:
+    border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.fp-wrapper:hover,
+.evidence-card:hover,
+.fp-evidence-section:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  transform: translateY(-2px);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+}
+
+.fp-title {
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei UI',
+    sans-serif;
+}
+
+.fp-pending__icon,
+.fp-pending__badge,
+.fp-recommend-tag,
+.fp-inline-evidence,
+.fp-evidence-btn-tag,
+.evidence-recommend-label {
+  border-color: rgba(0, 102, 204, 0.18);
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+}
+
+.fp-pending__title,
+.fp-evidence-title,
+.evidence-title,
+.evidence-block-title,
+.evidence-decision-main,
+.evidence-risk-type,
+.evidence-recommend-main {
+  color: #1d1d1f;
+}
+
+.fp-pending__sub,
+.evidence-meta,
+.evidence-hero__meta,
+.evidence-key-meta,
+.evidence-check-rule,
+.evidence-raw-tag {
+  color: rgba(29, 29, 31, 0.58);
+}
+
+.evidence-overlay {
+  background: rgba(29, 29, 31, 0.24);
 }
 
 /* 打印样式 */

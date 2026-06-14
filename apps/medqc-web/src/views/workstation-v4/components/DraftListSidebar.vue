@@ -1,17 +1,13 @@
 <template>
-  <div
-    class="draft-list-sidebar w-80 bg-white border-r border-slate-200 dark:bg-slate-900 dark:border-slate-800 flex flex-col h-full flex-shrink-0"
-  >
+  <div class="draft-list-sidebar w-80 border-r flex flex-col h-full flex-shrink-0">
     <!-- Header -->
-    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
+    <div class="draft-list-sidebar__header p-4 border-b flex-shrink-0">
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-base font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+        <h2 class="text-base font-semibold flex items-center gap-2">
           <ProfileOutlined class="text-blue-500" />
           提取队列
         </h2>
-        <span
-          class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full text-xs font-medium dark:bg-blue-900/30 dark:text-blue-400"
-        >
+        <span class="draft-list-sidebar__count px-2 py-0.5 rounded-full text-xs font-medium">
           {{ filteredRecords.length }}
         </span>
       </div>
@@ -25,8 +21,8 @@
           v-model="searchQuery"
           type="text"
           placeholder="搜索姓名、科室或病案号..."
-          class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 transition-all placeholder:text-slate-400"
-        >
+          class="draft-list-sidebar__search w-full rounded-lg pl-9 pr-3 py-1.5 text-sm focus:outline-none transition-all"
+        />
       </div>
 
       <!-- Tags filter -->
@@ -37,8 +33,8 @@
           class="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors"
           :class="[
             currentFilter === tab.value
-              ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700',
+              ? 'draft-list-sidebar__filter--active'
+              : 'draft-list-sidebar__filter--idle',
           ]"
           @click="currentFilter = tab.value"
         >
@@ -55,46 +51,42 @@
         class="group relative rounded-xl p-3 cursor-pointer transition-all border"
         :class="[
           selectedId === record.id
-            ? 'bg-blue-50/80 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800/50 shadow-sm'
-            : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm dark:bg-slate-800/50 dark:border-slate-700/50 dark:hover:border-slate-600',
+            ? 'draft-list-sidebar__item--active shadow-sm'
+            : 'draft-list-sidebar__item--idle hover:shadow-sm',
         ]"
         @click="$emit('select', record.id)"
       >
         <!-- Selection indicator -->
         <div
           v-if="selectedId === record.id"
-          class="absolute left-0 top-3 bottom-3 w-1 bg-blue-500 rounded-r-full"
+          class="draft-list-sidebar__indicator absolute left-0 top-3 bottom-3 w-1 rounded-r-full"
         />
 
         <div class="flex justify-between items-start mb-2">
           <div class="flex items-center gap-2">
-            <span class="text-sm font-bold text-slate-800 dark:text-slate-100">{{
-              record.patientName
-            }}</span>
-            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{
-              record.id
-            }}</span>
+            <span class="text-sm font-semibold text-slate-800">{{ record.patientName }}</span>
+            <span class="text-xs text-slate-500 font-mono">{{ record.id }}</span>
           </div>
 
           <!-- Status Badge -->
           <div class="flex items-center gap-1">
             <template v-if="record.status === 'completed'">
               <span
-                class="flex items-center gap-1 bg-green-50 text-green-600 border border-green-200 px-1.5 py-0.5 rounded text-[10px] font-medium leading-none dark:bg-green-900/30 dark:border-green-800 dark:text-green-400"
+                class="draft-list-sidebar__status draft-list-sidebar__status--success flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium leading-none"
               >
                 <CheckCircleOutlined /> 已提取
               </span>
             </template>
             <template v-else-if="record.status === 'processing'">
               <span
-                class="flex items-center gap-1 bg-blue-50 text-blue-600 border border-blue-200 px-1.5 py-0.5 rounded text-[10px] font-medium leading-none dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400 animate-pulse"
+                class="draft-list-sidebar__status draft-list-sidebar__status--processing flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium leading-none animate-pulse"
               >
                 <SyncOutlined spin /> 提取中
               </span>
             </template>
             <template v-else>
               <span
-                class="flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] font-medium leading-none dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300"
+                class="draft-list-sidebar__status draft-list-sidebar__status--idle flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium leading-none"
               >
                 未提取
               </span>
@@ -102,7 +94,7 @@
           </div>
         </div>
 
-        <div class="text-xs text-slate-600 dark:text-slate-300 mb-2 flex items-center gap-3">
+        <div class="text-xs text-slate-600 mb-2 flex items-center gap-3">
           <span class="flex items-center gap-1.5">
             <BankOutlined class="text-slate-400" />
             {{ record.department }}
@@ -113,9 +105,7 @@
           </span>
         </div>
 
-        <div
-          class="text-xs text-slate-500 dark:text-slate-400 line-clamp-1 flex items-start gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-700/50"
-        >
+        <div class="text-xs text-slate-500 line-clamp-1 flex items-start gap-1.5 pt-2 border-t">
           <span class="text-slate-400 flex-shrink-0 mt-0.5">主诉:</span>
           <span>{{ record.mainDiagnosis || '未知' }}</span>
         </div>
@@ -127,13 +117,11 @@
         class="py-12 flex flex-col items-center justify-center text-center"
       >
         <div
-          class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-3 dark:bg-slate-800"
+          class="draft-list-sidebar__empty-icon w-12 h-12 rounded-full flex items-center justify-center mb-3"
         >
           <InboxOutlined class="text-slate-400 text-xl" />
         </div>
-        <p class="text-sm text-slate-500 dark:text-slate-400">
-          无匹配病案
-        </p>
+        <p class="text-sm text-slate-500">无匹配病案</p>
       </div>
     </div>
   </div>
@@ -207,6 +195,109 @@ const filteredRecords = computed(() => {
 </script>
 
 <style scoped>
+.draft-list-sidebar {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.draft-list-sidebar__header {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.draft-list-sidebar h2 {
+  color: #1d1d1f !important;
+}
+
+.draft-list-sidebar :deep(.anticon),
+.draft-list-sidebar .text-blue-500 {
+  color: #0066cc !important;
+}
+
+.draft-list-sidebar__count,
+.draft-list-sidebar__filter--active {
+  border: 1px solid rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+}
+
+.draft-list-sidebar__search {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9);
+  color: #1d1d1f;
+  font-family: inherit;
+}
+
+.draft-list-sidebar__search:focus {
+  border-color: rgba(0, 102, 204, 0.32);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08);
+}
+
+.draft-list-sidebar__filter--idle {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.62);
+}
+
+.draft-list-sidebar__filter--idle:hover {
+  background: rgba(0, 0, 0, 0.055);
+  color: #1d1d1f;
+}
+
+.draft-list-sidebar__item--active {
+  border-color: rgba(0, 102, 204, 0.18) !important;
+  background: rgba(0, 102, 204, 0.07) !important;
+}
+
+.draft-list-sidebar__item--idle {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+.draft-list-sidebar__item--idle:hover {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+}
+
+.draft-list-sidebar__indicator {
+  background: #0066cc;
+}
+
+.draft-list-sidebar__status {
+  border: 1px solid transparent;
+}
+
+.draft-list-sidebar__status--success {
+  border-color: rgba(16, 185, 129, 0.18);
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
+}
+
+.draft-list-sidebar__status--processing {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+}
+
+.draft-list-sidebar__status--idle {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.58);
+}
+
+.draft-list-sidebar .border-t {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.draft-list-sidebar__empty-icon {
+  background: rgba(0, 0, 0, 0.04);
+}
+
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -222,10 +313,10 @@ const filteredRecords = computed(() => {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
+  background-color: rgba(29, 29, 31, 0.18);
   border-radius: 4px;
 }
 :deep(.dark) .custom-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #475569;
+  background-color: rgba(29, 29, 31, 0.18);
 }
 </style>

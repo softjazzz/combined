@@ -5,9 +5,9 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 
-// 导入样式 - 调整顺序以确保Tailwind样式优先级
-import '@/styles/runtime.css'
 import 'ant-design-vue/dist/reset.css'
+// 导入样式 - 项目样式放在 Ant reset 之后，确保字体与主题 token 生效
+import '@/styles/index.css'
 
 // 创建应用实例
 const app = createApp(App)

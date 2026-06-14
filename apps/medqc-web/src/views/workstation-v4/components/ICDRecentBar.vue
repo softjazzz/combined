@@ -1,17 +1,10 @@
 <template>
-  <div
-    v-if="recentCodes.length > 0"
-    class="icd-recent-bar"
-  >
+  <div v-if="recentCodes.length > 0" class="icd-recent-bar">
     <div class="recent-label">
       <ClockCircleOutlined />
       <div>
-        <div class="recent-label__title">
-          最近查看
-        </div>
-        <div class="recent-label__sub">
-          {{ recentCodes.length }} 个编码
-        </div>
+        <div class="recent-label__title">最近查看</div>
+        <div class="recent-label__sub">{{ recentCodes.length }} 个编码</div>
       </div>
     </div>
 
@@ -27,12 +20,7 @@
       </button>
     </div>
 
-    <button
-      class="recent-clear"
-      @click="$emit('clear')"
-    >
-      清除
-    </button>
+    <button class="recent-clear" @click="$emit('clear')">清除</button>
   </div>
 </template>
 
@@ -61,9 +49,11 @@ defineEmits<{
   align-items: center;
   gap: 14px;
   padding: 12px 22px;
-  border-top: 1px solid rgba(191, 219, 254, 0.85);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(239, 246, 255, 0.92) 100%);
-  box-shadow: 0 -12px 28px rgba(148, 163, 184, 0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.04);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
 }
 
 .recent-label {
@@ -72,18 +62,18 @@ defineEmits<{
   gap: 10px;
   flex-shrink: 0;
   min-width: 116px;
-  color: #334155;
+  color: #1d1d1f;
 }
 
 .recent-label :deep(svg) {
   width: 18px;
   height: 18px;
-  color: #2563eb;
+  color: #0066cc;
 }
 
 .recent-label__title {
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -91,7 +81,7 @@ defineEmits<{
 .recent-label__sub {
   margin-top: 2px;
   font-size: 11px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
 }
 
 .recent-tags {
@@ -115,11 +105,11 @@ defineEmits<{
   max-width: 300px;
   cursor: pointer;
   border-radius: 999px;
-  border: 1px solid rgba(191, 219, 254, 0.95);
-  background: linear-gradient(180deg, #eff6ff, #ffffff);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.92);
   padding: 8px 14px;
-  color: #0f172a;
-  box-shadow: 0 8px 16px rgba(148, 163, 184, 0.12);
+  color: #1d1d1f;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition:
     transform 0.15s ease,
     box-shadow 0.15s ease,
@@ -128,15 +118,15 @@ defineEmits<{
 
 .recent-tag:hover {
   transform: translateY(-1px);
-  border-color: rgba(59, 130, 246, 0.45);
-  box-shadow: 0 12px 22px rgba(59, 130, 246, 0.14);
+  border-color: rgba(0, 102, 204, 0.18);
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.08);
 }
 
 .recent-tag__code {
   flex-shrink: 0;
   font-size: 12px;
-  font-weight: 800;
-  color: #1d4ed8;
+  font-weight: 700;
+  color: #0057b8;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
@@ -146,7 +136,7 @@ defineEmits<{
   white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
-  color: #334155;
+  color: rgba(29, 29, 31, 0.72);
 }
 
 .recent-clear {
@@ -162,7 +152,7 @@ defineEmits<{
 }
 
 .recent-clear:hover {
-  border-color: rgba(59, 130, 246, 0.28);
-  color: #1d4ed8;
+  border-color: rgba(0, 102, 204, 0.18);
+  color: #0057b8;
 }
 </style>

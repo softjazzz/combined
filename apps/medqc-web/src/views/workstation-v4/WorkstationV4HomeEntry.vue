@@ -1,8 +1,5 @@
 <template>
-  <div
-    v-if="showHome"
-    class="wv4-home-entry"
-  >
+  <div v-if="showHome" class="wv4-home-entry">
     <QCOverviewView />
     <button
       type="button"
@@ -10,7 +7,9 @@
       data-testid="qc-agent-home-entry"
       @click="qcAgentOpen = true"
     >
-      质控助手
+      <span class="wv4-home-entry__agent-icon"> AI </span>
+      <span class="wv4-home-entry__agent-text">智能助手</span>
+      <span class="wv4-home-entry__agent-status" aria-hidden="true" />
     </button>
     <QCAgentChatDrawer
       v-model:open="qcAgentOpen"
@@ -48,6 +47,10 @@ const showHome = computed(() => isHomeRole.value && !hasLaunchQuery.value)
 .wv4-home-entry {
   position: relative;
   min-height: calc(100vh - 64px);
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 .wv4-home-entry__agent-button {
@@ -58,31 +61,77 @@ const showHome = computed(() => isHomeRole.value && !hasLaunchQuery.value)
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 104px;
-  height: 38px;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  background: #2563eb;
-  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.18);
+  gap: 8px;
+  min-width: 132px;
+  height: 44px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 102, 204, 0.24);
+  border-radius: 12px;
+  background: rgba(0, 102, 204, 0.92);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 8px 22px rgba(0, 102, 204, 0.22);
   color: #ffffff;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 650;
+  letter-spacing: 0;
   cursor: pointer;
   transition:
-    transform 0.16s ease,
-    box-shadow 0.16s ease,
-    background-color 0.16s ease;
+    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    background-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.wv4-home-entry__agent-icon {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.wv4-home-entry__agent-text {
+  position: relative;
+  z-index: 1;
+}
+
+.wv4-home-entry__agent-status {
+  position: relative;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16);
 }
 
 .wv4-home-entry__agent-button:hover,
 .wv4-home-entry__agent-button:focus-visible {
-  background: #1d4ed8;
-  box-shadow: 0 14px 32px rgba(37, 99, 235, 0.22);
-  transform: translateY(-1px);
+  border-color: rgba(0, 102, 204, 0.32);
+  background: #0057b8;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 10px 26px rgba(0, 102, 204, 0.26);
+  transform: translateY(-2px);
 }
 
 .wv4-home-entry__agent-button:focus-visible {
-  outline: 2px solid #93c5fd;
+  outline: 2px solid rgba(0, 102, 204, 0.24);
   outline-offset: 3px;
 }
 </style>

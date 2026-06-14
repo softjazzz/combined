@@ -1,0 +1,50 @@
+/*
+ * Source Han Sans SC font wiring.
+ *
+ * The font files in public/fonts/source-han-sans-sc/ are provided from the
+ * authorized Source Han Sans SC package. Keep only UI-needed weights to avoid
+ * shipping the full font family.
+ */
+@font-face {
+  font-family: 'Source Han Sans SC';
+  src:
+    local('Source Han Sans SC Regular'),
+    local('SourceHanSansSC-Regular'),
+    url('/fonts/source-han-sans-sc/SourceHanSansSC-Regular.otf') format('opentype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'Source Han Sans SC';
+  src:
+    local('Source Han Sans SC Normal'),
+    local('SourceHanSansSC-Normal'),
+    url('/fonts/source-han-sans-sc/SourceHanSansSC-Normal.otf') format('opentype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 500;
+}
+
+@font-face {
+  font-family: 'Source Han Sans SC';
+  src:
+    local('Source Han Sans SC Medium'),
+    local('SourceHanSansSC-Medium'),
+    url('/fonts/source-han-sans-sc/SourceHanSansSC-Medium.otf') format('opentype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: 'Source Han Sans SC';
+  src:
+    local('Source Han Sans SC Bold'),
+    local('SourceHanSansSC-Bold'),
+    url('/fonts/source-han-sans-sc/SourceHanSansSC-Bold.otf') format('opentype');
+  font-display: swap;
+  font-style: normal;
+  font-weight: 700 900;
+}

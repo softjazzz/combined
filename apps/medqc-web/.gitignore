@@ -88,6 +88,9 @@ venv.bak/
 # Logs
 logs/
 *.log
+.logs-*
+.tmp-*
+.runtime-logs/
 
 # TypeScript
 *.tsbuildinfo

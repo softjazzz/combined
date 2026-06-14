@@ -1,6 +1,6 @@
 # 正式质控双模型 random10 只读验证报告
 
-生成时间：2026-05-21 10:22:14
+生成时间：2026-05-26 00:14:39
 
 ## 模型配置
 
@@ -23,7 +23,7 @@
 - adjudicator_model_source：`env_adjudicator_model`
 - technical_error_internal：0
 - missing_rule_after_retry：0
-- total_tokens：63232
+- total_tokens：63545
 
 ## 稳定性
 
@@ -41,29 +41,29 @@
 
 ## 性能与成本
 
-- 总耗时：486.54s
-- 平均耗时：48.65s/份
-- 最慢耗时：72.04s
-- LLM 调用数：141
-- 一审调用数：131
+- 总耗时：492.70s
+- 平均耗时：49.27s/份
+- 最慢耗时：63.64s
+- LLM 调用数：142
+- 一审调用数：132
 - 二审调用数：10
-- total_tokens：736290
-- 一审 tokens：507556
-- 二审 tokens：228734
+- total_tokens：783024
+- 一审 tokens：514843
+- 二审 tokens：268181
 
 ## 结果分层
 
-- confirmed_defect：5
-- data_quality_gap：81
-- rejected_by_system：99
+- confirmed_defect：0
+- data_quality_gap：100
+- rejected_by_system：84
 - technical_error_internal：0
 
 ## 质量参考
 
-- confirmed 复核 keep：2/5
-- keep rate：40.0%
-- 2262370 / SC-118 状态：rejected_by_system
-- 2328501 / SC-121 状态：data_quality_gap
+- confirmed 复核 keep：0/0
+- keep rate：0.0%
+- 2262370 / SC-118 状态：data_quality_gap
+- 2328501 / SC-121 状态：rejected_by_system
 
 ## 对比 qwen3.5 全链路失败基线
 

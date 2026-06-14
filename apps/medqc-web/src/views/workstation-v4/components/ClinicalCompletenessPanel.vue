@@ -2,49 +2,36 @@
   <section class="clinical-completeness-panel">
     <header class="clinical-completeness-header">
       <div>
-        <p>CLINICAL COMPLETENESS</p>
-        <h2>诊疗完整性校验</h2>
-        <span>自动形成诊断发生发展时间轴、手术操作执行验证，辅助发现首页漏填、错填问题。</span>
+        <p>完整性分析</p>
+        <h2>诊断与手术画像辅助</h2>
+        <span
+          >基于全病历形成疾病诊断画像、手术操作画像、诊断时间轴和执行验证，作为首页书写辅助对照。</span
+        >
       </div>
-      <button
-        type="button"
-        :disabled="loading || !visitId"
-        @click="loadCompleteness(true)"
-      >
+      <button type="button" :disabled="loading || !visitId" @click="loadCompleteness(true)">
         {{ loading ? '分析中' : '重新分析' }}
       </button>
     </header>
 
-    <div
-      v-if="error"
-      class="clinical-state clinical-state--error"
-    >
+    <div v-if="error" class="clinical-state clinical-state--error">
       {{ error }}
     </div>
-    <div
-      v-else-if="loading"
-      class="clinical-state"
-    >
+    <div v-else-if="loading" class="clinical-state">
       正在读取全病历文书并生成诊断/手术完整性分析...
     </div>
-    <div
-      v-else-if="!result"
-      class="clinical-state"
-    >
-      请选择病历后查看诊疗完整性分析。
-    </div>
+    <div v-else-if="!result" class="clinical-state">请选择病历后查看诊疗完整性分析。</div>
 
     <template v-else>
       <div class="clinical-summary-grid">
         <article>
-          <span>诊断证据</span>
+          <span>疾病诊断画像</span>
           <strong>{{ result.diagnoses.length }}</strong>
-          <small>来自入院、病程、出院等文书</small>
+          <small>诊断证据与状态归集</small>
         </article>
         <article>
-          <span>手术/操作</span>
+          <span>手术操作画像</span>
           <strong>{{ result.procedures.length }}</strong>
-          <small>计划与执行闭环验证</small>
+          <small>计划与执行证据归集</small>
         </article>
         <article>
           <span>完整性问题</span>
@@ -61,7 +48,7 @@
       <div class="clinical-grid">
         <section class="clinical-card">
           <div class="clinical-card-title">
-            <h3>诊断发生发展时间轴</h3>
+            <h3>疾病诊断画像</h3>
             <span>{{ result.diagnoses.length }} 项</span>
           </div>
           <div class="clinical-list">
@@ -74,21 +61,18 @@
                 <strong>{{ item.diagnosis_name }}</strong>
                 <span>{{ item.icd_code || '未编码' }} · {{ statusText(item.status) }}</span>
               </div>
-              <small>{{ item.first_mention_time || '-' }} ·
-                {{ item.first_mention_source || '-' }}</small>
+              <small
+                >{{ item.first_mention_time || '-' }} ·
+                {{ item.first_mention_source || '-' }}</small
+              >
             </div>
-            <div
-              v-if="!result.diagnoses.length"
-              class="clinical-empty"
-            >
-              暂未形成诊断证据。
-            </div>
+            <div v-if="!result.diagnoses.length" class="clinical-empty">暂未形成疾病诊断画像。</div>
           </div>
         </section>
 
         <section class="clinical-card">
           <div class="clinical-card-title">
-            <h3>手术操作执行验证</h3>
+            <h3>手术操作画像</h3>
             <span>{{ result.procedures.length }} 项</span>
           </div>
           <div class="clinical-list">
@@ -99,17 +83,65 @@
             >
               <div>
                 <strong>{{ item.procedure_name }}</strong>
-                <span>{{ item.icd9_code || '未编码' }} · {{ procedureStatusText(item.status) }}</span>
+                <span
+                  >{{ item.icd9_code || '未编码' }} · {{ procedureStatusText(item.status) }}</span
+                >
               </div>
               <small>
                 计划 {{ item.plan_time || '-' }} / 执行 {{ item.execution_time || '-' }}
               </small>
             </div>
+            <div v-if="!result.procedures.length" class="clinical-empty">
+              暂未形成手术操作画像。
+            </div>
+          </div>
+        </section>
+
+        <section class="clinical-card">
+          <div class="clinical-card-title">
+            <h3>诊断发生发展时间轴</h3>
+            <span>{{ result.diagnoses.length }} 项</span>
+          </div>
+          <div class="clinical-list clinical-timeline-list">
             <div
-              v-if="!result.procedures.length"
-              class="clinical-empty"
+              v-for="item in result.diagnoses"
+              :key="`timeline-${item.diagnosis_name}-${item.first_mention_time}`"
+              class="clinical-list-item clinical-timeline-item"
             >
-              暂未形成手术或操作证据。
+              <small>{{ item.first_mention_time || '时间待确认' }}</small>
+              <strong>{{ item.diagnosis_name }}</strong>
+              <span
+                >{{ item.first_mention_source || '来源待确认' }} ·
+                {{ statusText(item.status) }}</span
+              >
+            </div>
+            <div v-if="!result.diagnoses.length" class="clinical-empty">
+              暂未形成诊断发生发展时间轴。
+            </div>
+          </div>
+        </section>
+
+        <section class="clinical-card">
+          <div class="clinical-card-title">
+            <h3>手术操作执行与否验证</h3>
+            <span>{{ result.procedures.length }} 项</span>
+          </div>
+          <div class="clinical-list">
+            <div
+              v-for="item in result.procedures"
+              :key="`verify-${item.procedure_name}-${item.execution_time}`"
+              class="clinical-list-item"
+            >
+              <div>
+                <strong>{{ item.procedure_name }}</strong>
+                <span>{{ procedureStatusText(item.status) }}</span>
+              </div>
+              <small>
+                计划来源 {{ item.plan_time || '-' }} / 执行来源 {{ item.execution_time || '-' }}
+              </small>
+            </div>
+            <div v-if="!result.procedures.length" class="clinical-empty">
+              暂未形成手术操作执行验证。
             </div>
           </div>
         </section>
@@ -130,10 +162,7 @@
             <span>{{ issue.suggestion || issue.evidence_summary || issue.issue_type }}</span>
             <i>{{ issueCategoryText(issue.item_category) }} · {{ issue.severity }}</i>
           </div>
-          <div
-            v-if="!result.issues.length"
-            class="clinical-empty"
-          >
+          <div v-if="!result.issues.length" class="clinical-empty">
             当前未发现诊断或手术操作漏填、错填风险。
           </div>
         </div>
@@ -243,14 +272,36 @@ watch(visitId, () => {
 .clinical-completeness-panel {
   min-height: 100%;
   padding: 18px;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 .clinical-completeness-header,
 .clinical-card,
 .clinical-summary-grid article {
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.clinical-completeness-header:hover,
+.clinical-card:hover,
+.clinical-summary-grid article:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
 }
 
 .clinical-completeness-header {
@@ -264,37 +315,37 @@ watch(visitId, () => {
 
 .clinical-completeness-header p {
   margin: 0 0 6px;
-  color: #64748b;
+  color: #0066cc;
   font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.12em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
 .clinical-completeness-header h2 {
   margin: 0;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 24px;
-  font-weight: 900;
-  line-height: 32px;
+  font-weight: 700;
+  line-height: 30px;
 }
 
 .clinical-completeness-header span {
   display: block;
   margin-top: 4px;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .clinical-completeness-header button {
   min-height: 38px;
   border: 0;
   border-radius: 10px;
-  background: #2563eb;
+  background: #0066cc;
   color: #ffffff;
   cursor: pointer;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 600;
   padding: 0 16px;
 }
 
@@ -305,12 +356,12 @@ watch(visitId, () => {
 
 .clinical-state {
   margin-top: 14px;
-  border: 1px dashed #bfdbfe;
+  border: 1px dashed rgba(0, 102, 204, 0.24);
   border-radius: 14px;
-  background: #f8fbff;
-  color: #64748b;
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(29, 29, 31, 0.6);
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 500;
   padding: 20px;
 }
 
@@ -336,16 +387,16 @@ watch(visitId, () => {
 .clinical-summary-grid span,
 .clinical-summary-grid small {
   display: block;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.56);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .clinical-summary-grid strong {
   display: block;
-  color: #2563eb;
+  color: #0066cc;
   font-size: 28px;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 34px;
 }
 
@@ -366,17 +417,17 @@ watch(visitId, () => {
 
 .clinical-card-title h3 {
   margin: 0;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 17px;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .clinical-card-title span {
   border-radius: 999px;
-  background: #eaf2ff;
-  color: #2563eb;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 600;
   padding: 4px 10px;
 }
 
@@ -388,18 +439,18 @@ watch(visitId, () => {
 
 .clinical-list-item,
 .clinical-issue {
-  border: 1px solid #eef2f7;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 12px;
-  background: #f8fbff;
+  background: rgba(255, 255, 255, 0.72);
   padding: 12px;
 }
 
 .clinical-list-item strong,
 .clinical-issue b {
   display: block;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .clinical-list-item span,
@@ -408,10 +459,10 @@ watch(visitId, () => {
 .clinical-issue i {
   display: block;
   margin-top: 3px;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
   font-style: normal;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 18px;
 }
 
@@ -420,11 +471,11 @@ watch(visitId, () => {
 }
 
 .clinical-empty {
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed rgba(0, 0, 0, 0.12);
   border-radius: 12px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.42);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
   padding: 14px;
 }
 

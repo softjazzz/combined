@@ -192,14 +192,22 @@ export function useFrontpageDraft(
       case 'diagnoses': {
         const d = fp.diagnoses || {}
         add('主诊断', d.discharge_main_diagnosis_text, true)
-        add('主诊断编码', d.discharge_main_icd)
+        add(
+          d._diagnosis_code_source === 'local_icd_lookup' ? '主诊断系统编码' : '主诊断编码',
+          d.discharge_main_icd,
+        )
         add('转归', d.discharge_main_outcome)
         const others = d.discharge_other_diagnoses_texts || []
         if (others.length) {
           others.forEach((t: string, i: number) => {
-            const code = d.discharge_other_icds?.[i] || ''
-            add(`其他${i + 1}`, `${t}${code ? ' (' + code + ')' : ''}`, true)
+            add(`其他${i + 1}`, t, true)
           })
+          const generatedOtherCodeCount = Array.isArray(d.discharge_other_icds)
+            ? d.discharge_other_icds.filter((code: string) => String(code || '').trim()).length
+            : 0
+          if (generatedOtherCodeCount > 0) {
+            add('其他诊断系统编码', `已生成 ${generatedOtherCodeCount} 条`)
+          }
         }
         const eds = d.ed_diagnosis_texts || []
         if (eds.length) add('门诊诊断', eds.join('、'), true)
@@ -302,6 +310,70 @@ export function useFrontpageDraft(
       .filter((item): item is CompletedModule => Boolean(item))
   }
 
+  function recordCompletedModule(moduleName: string, frontpage: any) {
+    const existing = completedModules.value.findIndex((m) => m.name === moduleName)
+    const entry: CompletedModule = {
+      name: moduleName,
+      label: MODULE_LABELS[moduleName] || moduleName,
+      preview: getModulePreview(moduleName, frontpage),
+      timestamp: Date.now() - generateStartTime.value,
+    }
+    if (existing >= 0) {
+      completedModules.value[existing] = entry
+    } else {
+      completedModules.value.push(entry)
+    }
+  }
+
+  async function readFrontpageStream(
+    response: Response,
+    options: {
+      onModule?: (moduleName: string) => void
+    } = {},
+  ) {
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(errorText || `HTTP ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+    if (!reader) throw new Error('无法读取响应流')
+
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          const payload = JSON.parse(line.slice(6))
+          if (payload?.success === false || payload?.error) {
+            throw new Error(payload.error || payload.message || '首页生成失败')
+          }
+          if (payload.frontpage) {
+            frontpageDraft.value = payload.frontpage
+            onDraftChanged?.()
+          }
+          if (payload.module) {
+            frontpageModule.value = payload.module
+            recordCompletedModule(payload.module, payload.frontpage)
+            options.onModule?.(payload.module)
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message !== 'Unexpected end of JSON input') {
+            throw error
+          }
+        }
+      }
+    }
+  }
+
   async function loadSavedFrontpageDraft(visitId: string | null) {
     const normalizedVisitId = String(visitId || '').trim()
     if (!normalizedVisitId) {
@@ -377,54 +449,12 @@ export function useFrontpageDraft(
         }),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      if (!reader) throw new Error('无法读取响应流')
-
-      let buffer = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          try {
-            const payload = JSON.parse(line.slice(6))
-            if (payload.frontpage) {
-              frontpageDraft.value = payload.frontpage
-              onDraftChanged?.()
-            }
-            if (payload.module) {
-              frontpageModule.value = payload.module
-              seenModules.add(payload.module)
-              // 记录已完成的模块（去重，同一模块可能多次更新）
-              const existing = completedModules.value.findIndex((m) => m.name === payload.module)
-              const entry: CompletedModule = {
-                name: payload.module,
-                label: MODULE_LABELS[payload.module] || payload.module,
-                preview: getModulePreview(payload.module, payload.frontpage),
-                timestamp: Date.now() - generateStartTime.value,
-              }
-              if (existing >= 0) {
-                completedModules.value[existing] = entry
-              } else {
-                completedModules.value.push(entry)
-              }
-              tryReleaseForPreview()
-            }
-          } catch {
-            // 忽略解析错误
-          }
-        }
-      }
+      await readFrontpageStream(response, {
+        onModule: (moduleName) => {
+          seenModules.add(moduleName)
+          tryReleaseForPreview()
+        },
+      })
 
       if (frontpageDraft.value) {
         message.success('首页生成完成')
@@ -444,6 +474,9 @@ export function useFrontpageDraft(
   async function generateFrontpageFromText(
     medicalText: string,
     scene: FrontpageReportScene = 'combined',
+    options: {
+      onPreviewReady?: () => void
+    } = {},
   ) {
     const normalizedText = medicalText.trim()
     if (!normalizedText) {
@@ -459,24 +492,60 @@ export function useFrontpageDraft(
     frontpageFocusTarget.value = ''
     completedModules.value = []
     generateStartTime.value = Date.now()
+    let releasedForPreview = false
+    const seenModules = new Set<string>()
+
+    const tryReleaseForPreview = () => {
+      if (releasedForPreview || !frontpageDraft.value) return
+      const hasDiagnoses = seenModules.has('diagnoses')
+      const hasProcedures = seenModules.has('procedures')
+      if (hasDiagnoses && hasProcedures) {
+        releasedForPreview = true
+        frontpageGenerating.value = false
+        frontpageModule.value = ''
+        options.onPreviewReady?.()
+      }
+    }
 
     try {
-      const response = await frontpageApi.generateReportDraft({
-        medical_text: normalizedText,
-        scene,
-        patient_id: selectedRecord.value?.patientId,
-        visit_id: undefined,
+      const response = await fetchWithAuthRetry('/api/v1/frontpage/auto-generate-draft-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          medical_text: normalizedText,
+          visit_id: '',
+          scene,
+          report_scene: scene,
+          force_llm: true,
+        }),
       })
-      const draft = response.data?.frontpage || null
-      if (!response.success || !draft) {
-        throw new Error(response.error || response.message || '未能生成首页数据')
+
+      await readFrontpageStream(response, {
+        onModule: (moduleName) => {
+          seenModules.add(moduleName)
+          tryReleaseForPreview()
+        },
+      })
+
+      if (!frontpageDraft.value) {
+        throw new Error('未能生成首页数据')
       }
 
-      frontpageDraft.value = draft
-      frontpageReportResult.value = response.data || null
-      completedModules.value = rebuildCompletedModulesFromDraft(draft)
+      completedModules.value = rebuildCompletedModulesFromDraft(frontpageDraft.value)
+      frontpageReportResult.value = {
+        scene,
+        frontpage: frontpageDraft.value,
+        input_context: {
+          mode: 'medical_text',
+          text_length: normalizedText.length,
+          has_patient_id: Boolean(selectedRecord.value?.patientId),
+        },
+      } as GenerateReportDraftResponse['data']
       onDraftChanged?.()
       message.success('首页生成完成')
+      if (!releasedForPreview) {
+        options.onPreviewReady?.()
+      }
       return true
     } catch (err: any) {
       console.error('粘贴病历生成首页失败:', err)

@@ -36,10 +36,7 @@
         @click="emit('select', item.key)"
       >
         <div class="flex items-center gap-1.5">
-          <span
-            class="h-2 w-2 rounded-full"
-            :class="item.dotBgClass"
-          />
+          <span class="h-2 w-2 rounded-full" :class="item.dotBgClass" />
           <span class="text-[12.5px] font-bold">
             {{ item.label }}
           </span>
@@ -99,9 +96,9 @@ const indicators = computed(() => [
     key: 'my_in_progress_total',
     label: '进行中',
     value: props.kpis.my_in_progress_total,
-    dotBgClass: 'bg-blue-500',
-    activeTextColor: 'text-blue-700',
-    numActiveBgColor: 'bg-blue-50 text-blue-700',
+    dotBgClass: 'bg-[#0066cc]',
+    activeTextColor: 'text-[#0066cc]',
+    numActiveBgColor: 'bg-[#eaf2ff] text-[#0066cc]',
   },
 ])
 </script>

@@ -2,37 +2,26 @@
   <main class="tender-acceptance-page">
     <section class="acceptance-hero">
       <div>
-        <p class="eyebrow">
-          TENDER ACCEPTANCE
-        </p>
+        <p class="eyebrow">功能验收</p>
         <h1>投标功能验收看板</h1>
         <p>按条款汇总功能入口、实现状态和仍需生产联调的缺口，所有演示均为只读或草稿/模拟结果。</p>
       </div>
       <div class="summary-card">
         <span>条款总数</span>
         <strong>{{ clauses.length }}</strong>
-        <small>implemented {{ implementedCount }} / partial {{ partialCount }}</small>
+        <small>已实现 {{ implementedCount }} / 可演示 {{ partialCount }}</small>
       </div>
     </section>
 
     <section class="clause-grid">
-      <article
-        v-for="clause in clauses"
-        :key="clause.id"
-        class="clause-card"
-      >
+      <article v-for="clause in clauses" :key="clause.id" class="clause-card">
         <div class="clause-topline">
           <span>{{ clause.id }}</span>
           <i :class="`status-${clause.status}`">{{ statusLabel[clause.status] }}</i>
         </div>
         <h2>{{ clause.title }}</h2>
         <p>{{ clause.summary }}</p>
-        <RouterLink
-          :to="clause.entry"
-          class="entry-link"
-        >
-          查看入口
-        </RouterLink>
+        <RouterLink :to="clause.entry" class="entry-link"> 查看入口 </RouterLink>
       </article>
     </section>
   </main>
@@ -145,9 +134,11 @@ const partialCount = computed(() => clauses.filter((clause) => clause.status ===
 <style scoped>
 .tender-acceptance-page {
   min-height: 100%;
-  background: #f5f9fc;
-  color: #0f172a;
-  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
   padding: 24px;
 }
 
@@ -156,55 +147,73 @@ const partialCount = computed(() => clauses.filter((clause) => clause.status ===
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  border: 1px solid #e2e8f0;
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 2px 12px rgba(0, 0, 0, 0.055);
   padding: 28px;
+  transition:
+    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.acceptance-hero:hover,
+.clause-card:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
 }
 
 .eyebrow {
   margin: 0 0 8px;
-  color: #64748b;
+  color: #0066cc;
   font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-weight: 650;
+  letter-spacing: 0.06em;
 }
 
 .acceptance-hero h1 {
   margin: 0;
   font-size: 28px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 36px;
 }
 
 .acceptance-hero p {
   margin: 10px 0 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 14px;
   line-height: 22px;
 }
 
 .summary-card {
   min-width: 180px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid rgba(0, 102, 204, 0.16);
   border-radius: 14px;
-  background: #eff6ff;
+  background: rgba(0, 102, 204, 0.07);
   padding: 18px;
 }
 
 .summary-card span,
 .summary-card small {
   display: block;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.56);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .summary-card strong {
   display: block;
-  color: #2563eb;
+  color: #0066cc;
   font-size: 34px;
+  font-weight: 700;
   line-height: 42px;
 }
 
@@ -216,19 +225,28 @@ const partialCount = computed(() => clauses.filter((clause) => clause.status ===
 }
 
 .clause-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.84);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 1px 6px rgba(0, 0, 0, 0.045);
   padding: 18px;
+  transition:
+    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .clause-topline {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.52);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .clause-topline i {
@@ -238,25 +256,25 @@ const partialCount = computed(() => clauses.filter((clause) => clause.status ===
 }
 
 .status-implemented {
-  background: #dcfce7;
+  background: rgba(16, 185, 129, 0.1);
   color: #047857;
 }
 
 .status-partial {
-  background: #eaf2ff;
-  color: #2563eb;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
 }
 
 .clause-card h2 {
   margin: 14px 0 8px;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 650;
 }
 
 .clause-card p {
   min-height: 48px;
   margin: 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
   line-height: 22px;
 }
@@ -264,9 +282,9 @@ const partialCount = computed(() => clauses.filter((clause) => clause.status ===
 .entry-link {
   display: inline-flex;
   margin-top: 16px;
-  color: #2563eb;
+  color: #0066cc;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 650;
   text-decoration: none;
 }
 

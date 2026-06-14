@@ -271,6 +271,71 @@ describe('QCAgentChatDrawer', () => {
     expect(wrapper.text()).not.toContain('不应进入请求')
   })
 
+  it('renders QC rule catalog result without record candidates', async () => {
+    chatMock.mockResolvedValueOnce({
+      status: 'completed',
+      parsed_intent: {
+        capability: 'list_qc_rules',
+        result_type: 'qc_rules',
+        document_alias: 'ward_round',
+      },
+      plan: [{ tool_name: 'list_qc_rules', status: 'success' }],
+      result: {
+        total: 120,
+        returned: 2,
+        filters: {
+          document_alias: 'ward_round',
+          qc_point_type: null,
+        },
+        rules: [
+          {
+            rule_id: 'WR-001',
+            rule_name: '查房记录是否存在',
+            description: '检查是否存在查房记录。',
+            document_aliases: ['ward_round'],
+            qc_point_type: 'completeness',
+            severity: 'warning',
+            execution_mode: 'builtin',
+            requires_llm: false,
+          },
+          {
+            rule_id: 'WR-002',
+            rule_name: '上级医师查房意见',
+            description: '检查是否体现上级医师查房意见。',
+            document_aliases: ['ward_round'],
+            qc_point_type: 'clinical_reasoning',
+            severity: 'warning',
+            execution_mode: 'builtin',
+            requires_llm: false,
+          },
+        ],
+      },
+    })
+    const wrapper = mountDrawer()
+
+    await wrapper
+      .find('[data-testid="qc-agent-message-input"]')
+      .setValue('列一下查房记录相关质控规则')
+    await wrapper.find('[data-testid="qc-agent-send-button"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('已识别：质控任务 · 规则目录')
+    expect(wrapper.text()).toContain('规则目录')
+    expect(wrapper.text()).toContain('2 条匹配规则')
+    expect(wrapper.text()).toContain('规则库共 120 条')
+    expect(wrapper.text()).toContain('质控规则')
+    expect(wrapper.text()).toContain('WR-001')
+    expect(wrapper.text()).toContain('警告')
+    expect(wrapper.text()).toContain('查房记录是否存在')
+    expect(wrapper.text()).toContain('检查是否存在查房记录。')
+    expect(wrapper.text()).toContain('文书')
+    expect(wrapper.text()).toContain('查房记录')
+    expect(wrapper.text()).toContain('完整性')
+    expect(wrapper.text()).toContain('list_qc_rules')
+    expect(wrapper.find('.qc-agent-candidate__button').exists()).toBe(false)
+    expect(wrapper.text()).toContain('按这些规则质控')
+  })
+
   it('renders ICD search result card with candidates and actions', async () => {
     chatMock.mockResolvedValueOnce({
       status: 'completed',
@@ -304,13 +369,15 @@ describe('QCAgentChatDrawer', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('ICD 查询')
-    expect(wrapper.text()).toContain('查询词')
+    expect(wrapper.text()).toContain('ICD 候选检索')
+    expect(wrapper.text()).toContain('候选编码')
     expect(wrapper.text()).toContain('2型糖尿病')
     expect(wrapper.text()).toContain('E11.900')
-    expect(wrapper.text()).toContain('置信度：96%')
-    expect(wrapper.text()).toContain('映射：E11.900x001 2型糖尿病医保版')
+    expect(wrapper.text()).toContain('96%')
+    expect(wrapper.text()).toContain('映射')
+    expect(wrapper.text()).toContain('E11.900x001 2型糖尿病医保版')
     expect(wrapper.text()).toContain('复制编码')
-    expect(wrapper.text()).toContain('用该编码做 DRG/DIP 入组')
+    expect(wrapper.text()).toContain('用于入组')
   })
 
   it('renders coding suggestion result with diagnosis and procedure candidates', async () => {

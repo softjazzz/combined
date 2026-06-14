@@ -10,12 +10,8 @@
     <template #title>
       <div class="qc-agent-drawer__title">
         <div>
-          <div class="qc-agent-drawer__heading">
-            质控助手
-          </div>
-          <div class="qc-agent-drawer__subtitle">
-            单病历只读分析，支持质控、编码、入组模拟
-          </div>
+          <div class="qc-agent-drawer__heading">质控助手</div>
+          <div class="qc-agent-drawer__subtitle">单病历只读分析，支持质控、编码、入组模拟</div>
         </div>
         <SafetyCertificateOutlined class="qc-agent-drawer__title-icon" />
         <span class="qc-agent-drawer__safe">只读模式</span>
@@ -25,9 +21,7 @@
     <div class="qc-agent-panel">
       <section class="qc-agent-context">
         <div class="qc-agent-context__main">
-          <div class="qc-agent-context__label">
-            当前上下文
-          </div>
+          <div class="qc-agent-context__label">当前上下文</div>
           <div class="qc-agent-context__value">
             {{ contextSummary }}
           </div>
@@ -48,19 +42,11 @@
         </div>
       </section>
 
-      <section
-        v-if="showSqlbotPanel"
-        class="qc-agent-sqlbot"
-        data-testid="qc-agent-sqlbot-panel"
-      >
+      <section v-if="showSqlbotPanel" class="qc-agent-sqlbot" data-testid="qc-agent-sqlbot-panel">
         <div class="qc-agent-sqlbot__head">
           <div>
-            <div class="qc-agent-sqlbot__eyebrow">
-              SQLBot 问数
-            </div>
-            <div class="qc-agent-sqlbot__title">
-              病案数据分析入口
-            </div>
+            <div class="qc-agent-sqlbot__eyebrow">SQLBot 问数</div>
+            <div class="qc-agent-sqlbot__title">病案数据分析入口</div>
           </div>
           <div class="qc-agent-sqlbot__actions">
             <span
@@ -81,43 +67,30 @@
             </button>
           </div>
         </div>
-        <div
-          v-if="sqlbotLoading"
-          class="qc-agent-sqlbot__placeholder"
-        >
-          正在读取 SQLBot 配置...
-        </div>
+        <div v-if="sqlbotLoading" class="qc-agent-sqlbot__placeholder">正在读取 SQLBot 配置...</div>
         <iframe
           v-else-if="sqlbotEnabled && sqlbotConfig?.embed_url"
           class="qc-agent-sqlbot__iframe"
           :src="sqlbotConfig.embed_url"
           title="SQLBot 问数"
         />
-        <div
-          v-else
-          class="qc-agent-sqlbot__placeholder"
-        >
+        <div v-else class="qc-agent-sqlbot__placeholder">
           <strong>SQLBot 未配置</strong>
           <span>{{ sqlbotConfig?.message || sqlbotError || sqlbotFallbackMessage }}</span>
-          <small>配置完成后，这里会以独立嵌入面板打开问数能力；现有质控、编码和入组流程不受影响。</small>
+          <small
+            >配置完成后，这里会以独立嵌入面板打开问数能力；现有质控、编码和入组流程不受影响。</small
+          >
         </div>
       </section>
 
-      <section
-        class="qc-agent-workspace"
-        data-testid="qc-agent-chat-messages"
-      >
+      <section class="qc-agent-workspace" data-testid="qc-agent-chat-messages">
         <div
           v-if="!hasMessages"
           class="qc-agent-message qc-agent-message--assistant qc-agent-message--welcome"
         >
-          <div class="qc-agent-message__avatar">
-            AI
-          </div>
+          <div class="qc-agent-message__avatar">AI</div>
           <div class="qc-agent-message__bubble">
-            <div class="qc-agent-welcome__title">
-              我可以帮你做单病历只读分析。
-            </div>
+            <div class="qc-agent-welcome__title">我可以帮你做单病历只读分析。</div>
             <div class="qc-agent-welcome__desc">
               你可以直接输入质控、编码或入组请求，系统会调用受控工具并返回结构化结果。
             </div>
@@ -140,10 +113,7 @@
           :key="message.id"
           :class="['qc-agent-message', `qc-agent-message--${message.role}`]"
         >
-          <div
-            v-if="message.role !== 'user'"
-            class="qc-agent-message__avatar"
-          >
+          <div v-if="message.role !== 'user'" class="qc-agent-message__avatar">
             {{ message.role === 'system' ? '!' : 'AI' }}
           </div>
           <div class="qc-agent-message__bubble">
@@ -174,10 +144,7 @@
         </article>
       </section>
 
-      <section
-        v-if="error"
-        class="qc-agent-error"
-      >
+      <section v-if="error" class="qc-agent-error">
         {{ error }}
       </section>
 
@@ -241,6 +208,7 @@ import { sanitizeQcAgentPayload, useQcAgentChat } from '../composables/useQcAgen
 type AgentCapability = 'qc' | 'coding' | 'grouping' | 'analytics'
 type NormalizedResultType =
   | 'qc_result'
+  | 'qc_rules_result'
   | 'icd_search_result'
   | 'coding_suggestion_result'
   | 'drg_grouping_result'
@@ -577,6 +545,28 @@ function nextActionsForResponse(response: QCAgentChatResponse): AssistantAction[
     ]
   }
 
+  if (resultType === 'qc_rules_result') {
+    return [
+      {
+        label: '按这些规则质控',
+        capability: 'qc',
+        message: visitId
+          ? `对 visit_id=${visitId} 的查房记录按相关规则做质控`
+          : '对查房记录按相关规则做质控',
+      },
+      {
+        label: '查看完整性规则',
+        capability: 'qc',
+        message: '列一下查房记录完整性质控规则',
+      },
+      {
+        label: '出院记录规则',
+        capability: 'qc',
+        message: '列一下出院记录相关质控规则',
+      },
+    ]
+  }
+
   if (resultType === 'icd_search_result' || resultType === 'coding_suggestion_result') {
     const firstCode = firstCandidateCode(response.result)
     return [
@@ -649,7 +639,7 @@ function capabilityFromResponse(response?: QCAgentChatResponse): AgentCapability
   if (capability.includes('dip') || capability.includes('drg')) return 'grouping'
   if (resultType === 'drg_grouping_result' || resultType === 'dip_grouping_result')
     return 'grouping'
-  if (resultType === 'qc_result') return 'qc'
+  if (resultType === 'qc_result' || resultType === 'qc_rules_result') return 'qc'
   return null
 }
 
@@ -660,6 +650,7 @@ function normalizeResultType(response?: QCAgentChatResponse): NormalizedResultTy
   if (response.status === 'unsupported') return 'unsupported'
   const resultType = String(response.parsed_intent?.result_type || '')
   if (resultType === 'document_qc' || resultType === 'qc_result') return 'qc_result'
+  if (resultType === 'qc_rules' || resultType === 'qc_rules_result') return 'qc_rules_result'
   if (resultType === 'icd_candidates' || resultType === 'icd_search_result') {
     return 'icd_search_result'
   }
@@ -674,6 +665,7 @@ function normalizeResultType(response?: QCAgentChatResponse): NormalizedResultTy
   }
   const result = response.result
   if (result?.qc_summary) return 'qc_result'
+  if (result?.rules) return 'qc_rules_result'
   if (result?.candidates) return 'icd_search_result'
   if (result?.diagnosis_candidates || result?.procedure_candidates) {
     return 'coding_suggestion_result'
@@ -693,6 +685,7 @@ function statusLabel(status: string) {
 
 function resultTypeLabel(type: NormalizedResultType) {
   if (type === 'qc_result') return '文书质控'
+  if (type === 'qc_rules_result') return '规则目录'
   if (type === 'icd_search_result') return 'ICD 查询'
   if (type === 'coding_suggestion_result') return '编码建议'
   if (type === 'drg_grouping_result') return 'DRG 模拟'
@@ -878,6 +871,7 @@ function renderPlan(response: QCAgentChatResponse) {
         h('li', { class: 'qc-agent-plan__item' }, [
           h('span', { class: 'qc-agent-plan__dot' }),
           h('span', { class: 'qc-agent-plan__tool' }, item.tool_name || '-'),
+          h('span', { class: 'qc-agent-plan__separator' }, '·'),
           h('span', { class: 'qc-agent-plan__status' }, item.status || ''),
         ]),
       ),
@@ -1063,51 +1057,119 @@ function renderExecutedRule(rule: QCAgentExecutedRule) {
 
 function renderICDSearchResult(result: QCAgentRunResult | undefined) {
   const candidates = safeArray(result?.candidates)
+  const visibleCandidates = candidates.slice(0, 6)
+  const overflowCandidates = candidates.slice(6)
+  const topCandidate = candidates[0]
   return [
-    h('div', { class: 'qc-agent-result-summary' }, [
-      fieldRow('查询词', result?.query),
-      fieldRow('编码类型', codeTypeLabel(result?.code_type)),
-      fieldRow('版本', versionLabel(result?.version)),
-      fieldRow('候选数量', result?.returned ?? candidates.length),
+    h('div', { class: 'qc-agent-icd-overview' }, [
+      h('div', { class: 'qc-agent-icd-overview__main' }, [
+        h('span', { class: 'qc-agent-icd-overview__eyebrow' }, 'ICD 候选检索'),
+        h(
+          'strong',
+          { class: 'qc-agent-icd-overview__query' },
+          textValue(result?.query, '未识别查询词'),
+        ),
+        h('div', { class: 'qc-agent-icd-overview__meta' }, [
+          h('span', codeTypeLabel(result?.code_type)),
+          h('span', versionLabel(result?.version)),
+          h('span', `${textValue(result?.returned ?? candidates.length, '0')} 条候选`),
+        ]),
+      ]),
+      topCandidate
+        ? h('div', { class: 'qc-agent-icd-overview__best' }, [
+            h('span', '首位匹配'),
+            h('strong', topCandidate.code || '-'),
+            h('small', topCandidate.name || '未命名编码'),
+          ])
+        : null,
     ]),
     h('div', { class: 'qc-agent-block' }, [
-      h('div', { class: 'qc-agent-block__title' }, '候选编码列表'),
+      h('div', { class: 'qc-agent-block__head' }, [
+        h('div', { class: 'qc-agent-block__title' }, '候选编码'),
+        h('div', { class: 'qc-agent-block__hint' }, '按名称匹配度排序，结果仅供编码员复核'),
+      ]),
       candidates.length
-        ? h(
-            'div',
-            { class: 'qc-agent-code-list' },
-            candidates.map((candidate) => renderCodeCandidate(candidate, true)),
-          )
+        ? h('div', { class: 'qc-agent-code-list' }, [
+            ...visibleCandidates.map((candidate, index) =>
+              renderCodeCandidate(candidate, true, index + 1),
+            ),
+            overflowCandidates.length
+              ? h('details', { class: 'qc-agent-more-codes' }, [
+                  h('summary', `展开其余 ${overflowCandidates.length} 条候选编码`),
+                  h(
+                    'div',
+                    { class: 'qc-agent-code-list qc-agent-code-list--more' },
+                    overflowCandidates.map((candidate, index) =>
+                      renderCodeCandidate(candidate, true, visibleCandidates.length + index + 1),
+                    ),
+                  ),
+                ])
+              : null,
+          ])
         : h('div', { class: 'qc-agent-empty-note' }, '未返回 ICD 候选编码。'),
     ]),
   ]
 }
 
-function renderCodeCandidate(candidate: QCAgentICDCandidate, withActions = false) {
+function renderCodeCandidate(candidate: QCAgentICDCandidate, withActions = false, rank?: number) {
+  const confidence = formatConfidence(candidate.confidence)
+  const mappingText = `${candidate.mapped_code || '-'} ${candidate.mapped_name || ''}`.trim()
   return h('div', { class: 'qc-agent-code-card' }, [
-    h('div', { class: 'qc-agent-code-card__head' }, [
-      h('span', { class: 'qc-agent-code-card__code' }, candidate.code || '-'),
-      h('em', versionLabel(candidate.version)),
+    h('div', { class: 'qc-agent-code-card__rank' }, rank ? String(rank).padStart(2, '0') : ''),
+    h('div', { class: 'qc-agent-code-card__body' }, [
+      h('div', { class: 'qc-agent-code-card__head' }, [
+        h('div', { class: 'qc-agent-code-card__identity' }, [
+          h('span', { class: 'qc-agent-code-card__code' }, candidate.code || '-'),
+          h('em', versionLabel(candidate.version)),
+        ]),
+        h('span', { class: confidenceClass(candidate.confidence) }, confidence),
+      ]),
+      h('div', { class: 'qc-agent-code-card__name' }, candidate.name || '未命名编码'),
+      h('div', { class: 'qc-agent-code-card__meta' }, [
+        metaPill('类型', codeTypeLabel(candidate.type)),
+        metaPill('匹配', matchTypeLabel(candidate.match_type)),
+      ]),
+      candidate.mapped_code || candidate.mapped_name
+        ? h('div', { class: 'qc-agent-code-card__mapping' }, [
+            h('span', '映射'),
+            h('strong', mappingText),
+          ])
+        : null,
+      withActions
+        ? h('div', { class: 'qc-agent-code-card__actions' }, [
+            h('button', { type: 'button' }, '复制编码'),
+            h('button', { type: 'button' }, '用于入组'),
+            h('button', { type: 'button' }, '查相近编码'),
+          ])
+        : null,
     ]),
-    h('div', { class: 'qc-agent-code-card__name' }, candidate.name || '未命名编码'),
-    h('div', { class: 'qc-agent-code-card__meta' }, [
-      h('span', `类型：${codeTypeLabel(candidate.type)}`),
-      h('span', `置信度：${formatConfidence(candidate.confidence)}`),
-      h('span', `匹配：${candidate.match_type || '-'}`),
-    ]),
-    candidate.mapped_code || candidate.mapped_name
-      ? h('div', { class: 'qc-agent-code-card__mapping' }, [
-          h('strong', '映射：'),
-          h('span', `${candidate.mapped_code || '-'} ${candidate.mapped_name || ''}`.trim()),
-        ])
-      : null,
-    withActions
-      ? h('div', { class: 'qc-agent-code-card__actions' }, [
-          h('button', { type: 'button' }, '复制编码'),
-          h('button', { type: 'button' }, '用该编码做 DRG/DIP 入组'),
-          h('button', { type: 'button' }, '继续查相近编码'),
-        ])
-      : null,
+  ])
+}
+
+function confidenceClass(value: unknown) {
+  const score = typeof value === 'number' && Number.isFinite(value) ? value : 0
+  return [
+    'qc-agent-code-card__confidence',
+    score >= 0.9
+      ? 'qc-agent-code-card__confidence--high'
+      : score >= 0.75
+        ? 'qc-agent-code-card__confidence--medium'
+        : 'qc-agent-code-card__confidence--low',
+  ]
+}
+
+function matchTypeLabel(value: string | undefined) {
+  if (value === 'exact_code') return '编码精确'
+  if (value === 'exact_name') return '名称精确'
+  if (value === 'name_contains') return '名称包含'
+  if (value === 'semantic') return '语义召回'
+  return value || '-'
+}
+
+function metaPill(label: string, value: unknown) {
+  return h('span', { class: 'qc-agent-meta-pill' }, [
+    h('small', label),
+    h('strong', textValue(value)),
   ])
 }
 
@@ -1168,6 +1230,157 @@ function sourceLabel(source: string | undefined) {
   if (source === 'structured_context') return '病案首页/结构化上下文'
   if (source === 'explicit_record_field') return '诊断表/手术表/文书显式字段'
   return source || '-'
+}
+
+function renderQCRulesResult(result: QCAgentRunResult | undefined) {
+  const rules = safeArray(result?.rules)
+  const filters = result?.filters || {}
+  const visibleRules = rules.slice(0, 8)
+  const overflowRules = rules.slice(8)
+  return [
+    h('div', { class: 'qc-agent-rule-overview' }, [
+      h('div', { class: 'qc-agent-rule-overview__main' }, [
+        h('span', '规则目录'),
+        h('strong', `${textValue(result?.returned ?? rules.length, '0')} 条匹配规则`),
+        h('small', `规则库共 ${textValue(result?.total, '0')} 条`),
+      ]),
+      h('div', { class: 'qc-agent-rule-overview__filters' }, [
+        metaPill('文书', ruleFilterLabel(filters.document_alias || filters.document_type)),
+        metaPill('质控点', qcPointLabel(filters.qc_point_type)),
+      ]),
+    ]),
+    h('div', { class: 'qc-agent-block' }, [
+      h('div', { class: 'qc-agent-block__head' }, [
+        h('div', { class: 'qc-agent-block__title' }, '质控规则'),
+        h('div', { class: 'qc-agent-block__hint' }, '仅展示规则摘要，不包含 prompt 或病历正文'),
+      ]),
+      rules.length
+        ? h(
+            'ol',
+            { class: 'qc-agent-catalog-rules' },
+            visibleRules.map((rule, index) => renderCatalogRule(rule, index + 1)),
+          )
+        : h('div', { class: 'qc-agent-empty-note' }, '未返回匹配规则。'),
+      overflowRules.length
+        ? h('details', { class: 'qc-agent-more-rules' }, [
+            h('summary', `展开其余 ${overflowRules.length} 条规则`),
+            h(
+              'ol',
+              { class: 'qc-agent-catalog-rules qc-agent-catalog-rules--more' },
+              overflowRules.map((rule, index) =>
+                renderCatalogRule(rule, visibleRules.length + index + 1),
+              ),
+            ),
+          ])
+        : null,
+    ]),
+  ]
+}
+
+function renderCatalogRule(rule: Record<string, unknown>, rank: number) {
+  const aliases = safeArray(rule.document_aliases as string[] | undefined)
+  const severity = String(rule.severity || '').toLowerCase()
+  return h('li', { class: 'qc-agent-catalog-rule' }, [
+    h('div', { class: 'qc-agent-catalog-rule__rank' }, String(rank).padStart(2, '0')),
+    h('div', { class: 'qc-agent-catalog-rule__body' }, [
+      h('div', { class: 'qc-agent-catalog-rule__head' }, [
+        h('div', { class: 'qc-agent-catalog-rule__identity' }, [
+          h('span', { class: 'qc-agent-catalog-rule__id' }, textValue(rule.rule_id)),
+          h('strong', textValue(rule.rule_name, '未命名规则')),
+        ]),
+        h(
+          'em',
+          { class: ['qc-agent-catalog-rule__severity', severityClass(severity)] },
+          severityLabel(severity),
+        ),
+      ]),
+      rule.description
+        ? h('div', { class: 'qc-agent-catalog-rule__description' }, textValue(rule.description))
+        : null,
+      h('div', { class: 'qc-agent-catalog-rule__meta' }, [
+        metaPill('质控点', qcPointLabel(rule.qc_point_type)),
+        metaPill('文书', aliases.length ? aliases.map(docAliasLabel).join('、') : '未标注'),
+        metaPill('执行', executionModeLabel(rule.execution_mode)),
+        rule.requires_llm ? metaPill('能力', '需 LLM') : null,
+      ]),
+    ]),
+  ])
+}
+
+function ruleFilterLabel(value: unknown) {
+  if (Array.isArray(value)) return value.length ? value.join('、') : '全部'
+  return docAliasLabel(textValue(value, '全部'))
+}
+
+function docAliasLabel(value: unknown) {
+  const text = String(value || '').trim()
+  const labels: Record<string, string> = {
+    admission: '入院记录',
+    first_course: '首次病程',
+    ward_round: '查房记录',
+    course: '病程记录',
+    discharge: '出院记录',
+    consultation: '会诊记录',
+    mdt: '多学科会诊',
+    lab_exam: '检查检验',
+    surgery: '手术记录',
+    anesthesia: '麻醉记录',
+    daily_course: '日常病程',
+  }
+  return labels[text] || text || '全部'
+}
+
+function qcPointLabel(value: unknown) {
+  const text = String(value || '').trim()
+  const labels: Record<string, string> = {
+    completeness: '完整性',
+    timeliness: '时效性',
+    consistency: '一致性',
+    diagnosis_evidence: '诊断依据',
+    clinical_reasoning: '临床推理',
+    treatment_rationality: '治疗合理性',
+    order_consistency: '医嘱一致性',
+    coding: '编码',
+    signature: '签名',
+    critical_value: '危急值',
+    special_risk: '特殊风险',
+    documentation_quality: '文书质量',
+  }
+  return labels[text] || text || '全部'
+}
+
+function executionModeLabel(value: unknown) {
+  const text = String(value || '').trim()
+  const labels: Record<string, string> = {
+    programmatic: '程序化',
+    builtin: '内置',
+    llm: 'LLM 判断',
+    unknown: '未接入',
+  }
+  return labels[text] || text || '未接入'
+}
+
+function severityLabel(value: unknown) {
+  const text = String(value || '')
+    .trim()
+    .toLowerCase()
+  const labels: Record<string, string> = {
+    error: '错误',
+    warning: '警告',
+    info: '提示',
+    critical: '严重',
+    high: '高风险',
+    medium: '中风险',
+    low: '低风险',
+  }
+  return labels[text] || textValue(value, '规则')
+}
+
+function severityClass(value: string) {
+  if (['error', 'critical', 'high'].includes(value))
+    return 'qc-agent-catalog-rule__severity--danger'
+  if (['warning', 'medium'].includes(value)) return 'qc-agent-catalog-rule__severity--warning'
+  return 'qc-agent-catalog-rule__severity--info'
 }
 
 function renderDRGResult(result: QCAgentRunResult | undefined) {
@@ -1242,6 +1455,7 @@ function recognizedTaskText(response: QCAgentChatResponse, resultType: Normalize
   const capability = currentCapabilityLabelFromResponse(response, resultType)
   const parts = [capability]
   if (resultType === 'qc_result') parts.push('文书质控')
+  if (resultType === 'qc_rules_result') parts.push('规则目录')
   if (resultType === 'icd_search_result') parts.push('ICD 查询')
   if (resultType === 'coding_suggestion_result') parts.push('当前病历编码建议')
   if (resultType === 'drg_grouping_result') parts.push('DRG 模拟入组')
@@ -1261,6 +1475,7 @@ function currentCapabilityLabelFromResponse(
   if (capability === 'coding') return '编码任务'
   if (capability === 'grouping') return '入组任务'
   if (capability === 'qc') return '质控任务'
+  if (resultType === 'qc_rules_result') return '质控任务'
   if (resultType === 'icd_search_result' || resultType === 'coding_suggestion_result') {
     return '编码任务'
   }
@@ -1288,15 +1503,17 @@ const AgentResponseCard = defineComponent({
       const resultContent =
         resultType === 'qc_result'
           ? renderQCResult(result)
-          : resultType === 'icd_search_result'
-            ? renderICDSearchResult(result)
-            : resultType === 'coding_suggestion_result'
-              ? renderCodingSuggestionResult(result)
-              : resultType === 'drg_grouping_result'
-                ? renderDRGResult(result)
-                : resultType === 'dip_grouping_result'
-                  ? renderDIPResult(result)
-                  : null
+          : resultType === 'qc_rules_result'
+            ? renderQCRulesResult(result)
+            : resultType === 'icd_search_result'
+              ? renderICDSearchResult(result)
+              : resultType === 'coding_suggestion_result'
+                ? renderCodingSuggestionResult(result)
+                : resultType === 'drg_grouping_result'
+                  ? renderDRGResult(result)
+                  : resultType === 'dip_grouping_result'
+                    ? renderDIPResult(result)
+                    : null
 
       return h('div', { class: 'qc-agent-result-card' }, [
         h('div', { class: 'qc-agent-result-card__header' }, [
@@ -1362,9 +1579,9 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer__heading {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-drawer__subtitle {
@@ -1375,7 +1592,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-drawer__title-icon {
-  color: #2563eb;
+  color: #0066cc;
   font-size: 18px;
 }
 
@@ -1414,7 +1631,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-context__value {
   margin-top: 4px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
   font-weight: 700;
 }
@@ -1433,13 +1650,13 @@ const AgentResponseCard = defineComponent({
   color: #64748b;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-capability--active {
   border-color: #bfdbfe;
   background: #eff6ff;
-  color: #2563eb;
+  color: #0066cc;
 }
 
 .qc-agent-shortcuts {
@@ -1453,7 +1670,7 @@ const AgentResponseCard = defineComponent({
   margin-bottom: 8px;
   color: #334155;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-shortcut-group__actions {
@@ -1466,7 +1683,7 @@ const AgentResponseCard = defineComponent({
   border-color: #dbeafe;
   border-radius: 8px;
   background: #f8fbff;
-  color: #1d4ed8;
+  color: #0057b8;
   font-weight: 700;
 }
 
@@ -1494,9 +1711,9 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-empty-card__title {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-empty-card__desc {
@@ -1541,7 +1758,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-message--user .qc-agent-message__bubble {
-  background: #2563eb;
+  background: #0066cc;
   color: #ffffff;
 }
 
@@ -1549,7 +1766,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-message--system .qc-agent-message__bubble {
   width: 100%;
   background: #ffffff;
-  color: #0f172a;
+  color: #1d1d1f;
 }
 
 .qc-agent-result-card {
@@ -1578,7 +1795,7 @@ const AgentResponseCard = defineComponent({
   border-radius: 999px;
   padding: 3px 9px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-status--completed {
@@ -1599,7 +1816,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-result-type {
   background: #eff6ff;
-  color: #1d4ed8;
+  color: #0057b8;
 }
 
 .qc-agent-execution-tag--partial {
@@ -1631,7 +1848,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-state-note strong {
   color: #9a3412;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-conclusion__text,
@@ -1682,9 +1899,9 @@ const AgentResponseCard = defineComponent({
 .qc-agent-field__value {
   display: block;
   margin-top: 3px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 
@@ -1707,7 +1924,7 @@ const AgentResponseCard = defineComponent({
   margin-bottom: 8px;
   color: #334155;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-plan,
@@ -1728,11 +1945,11 @@ const AgentResponseCard = defineComponent({
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #2563eb;
+  background: #0066cc;
 }
 
 .qc-agent-plan__tool {
-  color: #0f172a;
+  color: #1d1d1f;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
@@ -1809,22 +2026,22 @@ const AgentResponseCard = defineComponent({
   margin-top: 8px;
   border: 0;
   border-radius: 8px;
-  background: #2563eb;
+  background: #0066cc;
   padding: 5px 9px;
   color: #ffffff;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-issue__head span,
 .qc-agent-rule-card__id,
 .qc-agent-skipped-rule__head span,
 .qc-agent-code-card__code {
-  color: #1d4ed8;
+  color: #0057b8;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-issue__head em,
@@ -1837,7 +2054,7 @@ const AgentResponseCard = defineComponent({
   color: #b45309;
   font-size: 12px;
   font-style: normal;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-rule-status--passed {
@@ -1856,9 +2073,9 @@ const AgentResponseCard = defineComponent({
 .qc-agent-code-card__name,
 .qc-agent-coding-item__head strong {
   margin-top: 6px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-issue__evidence,
@@ -1895,6 +2112,139 @@ const AgentResponseCard = defineComponent({
   gap: 2px;
 }
 
+.qc-agent-rule-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 12px;
+}
+
+.qc-agent-rule-overview__main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.qc-agent-rule-overview__main span,
+.qc-agent-rule-overview__main small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qc-agent-rule-overview__main strong {
+  color: #1d1d1f;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.qc-agent-rule-overview__filters,
+.qc-agent-catalog-rule__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qc-agent-catalog-rules {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.qc-agent-catalog-rule {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.qc-agent-catalog-rule__rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #0057b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qc-agent-catalog-rule__body {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.qc-agent-catalog-rule__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.qc-agent-catalog-rule__identity {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.qc-agent-catalog-rule__id {
+  color: #0057b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qc-agent-catalog-rule__identity strong {
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.qc-agent-catalog-rule__severity {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.qc-agent-catalog-rule__severity--danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.qc-agent-catalog-rule__severity--warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.qc-agent-catalog-rule__severity--info {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.qc-agent-catalog-rule__description {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
 .qc-agent-code-card__actions {
   display: flex;
   flex-wrap: wrap;
@@ -1907,7 +2257,7 @@ const AgentResponseCard = defineComponent({
   border-radius: 8px;
   background: #ffffff;
   padding: 4px 8px;
-  color: #2563eb;
+  color: #0066cc;
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
@@ -1918,10 +2268,10 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-more-rules summary {
-  color: #2563eb;
+  color: #0066cc;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-executed-rules--more {
@@ -1944,14 +2294,14 @@ const AgentResponseCard = defineComponent({
   color: #475569;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-raw pre {
   max-height: 220px;
   overflow: auto;
   border-radius: 10px;
-  background: #0f172a;
+  background: #1d1d1f;
   padding: 10px;
   color: #dbeafe;
   font-size: 11px;
@@ -2004,7 +2354,7 @@ const AgentResponseCard = defineComponent({
   padding: 3px 8px;
   color: #15803d;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-panel {
@@ -2037,7 +2387,7 @@ const AgentResponseCard = defineComponent({
   min-width: 0;
   margin-top: 0;
   overflow: hidden;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -2070,9 +2420,9 @@ const AgentResponseCard = defineComponent({
   border: 1px solid #dbeafe;
   border-radius: 50%;
   background: #eff6ff;
-  color: #2563eb;
+  color: #0066cc;
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .qc-agent-message--user {
@@ -2084,7 +2434,7 @@ const AgentResponseCard = defineComponent({
   border: 1px solid #bfdbfe;
   border-radius: 18px 18px 4px;
   background: #eaf2ff;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 14px;
   line-height: 1.65;
   box-shadow: 0 10px 24px rgba(37, 99, 235, 0.08);
@@ -2102,7 +2452,7 @@ const AgentResponseCard = defineComponent({
   border: 1px solid #e2e8f0;
   border-radius: 18px 18px 18px 4px;
   background: #ffffff;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 14px;
   line-height: 1.65;
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
@@ -2119,9 +2469,9 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-welcome__title {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-welcome__desc {
@@ -2148,15 +2498,15 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-sqlbot__eyebrow {
-  color: #2563eb;
+  color: #0066cc;
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.04em;
 }
 
 .qc-agent-sqlbot__title {
   margin-top: 2px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 15px;
   font-weight: 850;
 }
@@ -2175,7 +2525,7 @@ const AgentResponseCard = defineComponent({
   padding: 4px 9px;
   color: #c2410c;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-sqlbot__status--enabled {
@@ -2189,10 +2539,10 @@ const AgentResponseCard = defineComponent({
   border-radius: 999px;
   background: #f8fbff;
   padding: 4px 10px;
-  color: #2563eb;
+  color: #0066cc;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .qc-agent-sqlbot__iframe {
@@ -2218,7 +2568,7 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-sqlbot__placeholder strong {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 15px;
 }
 
@@ -2241,10 +2591,10 @@ const AgentResponseCard = defineComponent({
   border-radius: 999px;
   background: #f8fbff;
   padding: 6px 10px;
-  color: #1d4ed8;
+  color: #0057b8;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   transition:
     border-color 0.18s ease,
     background 0.18s ease,
@@ -2253,7 +2603,7 @@ const AgentResponseCard = defineComponent({
 
 .qc-agent-prompt-chip:hover,
 .qc-agent-next-action:hover {
-  border-color: #2563eb;
+  border-color: #0066cc;
   background: #eff6ff;
   color: #1e40af;
 }
@@ -2282,9 +2632,9 @@ const AgentResponseCard = defineComponent({
 }
 
 .qc-agent-result-card__eyebrow {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.5;
 }
 
@@ -2364,7 +2714,7 @@ const AgentResponseCard = defineComponent({
 .qc-agent-commandbar :deep(.ant-btn-primary) {
   height: 30px;
   border-radius: 999px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 @media (max-width: 860px) {
@@ -2383,6 +2733,385 @@ const AgentResponseCard = defineComponent({
   .qc-agent-result-summary,
   .qc-agent-grouping-card {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+</style>
+
+<style>
+.qc-agent-drawer .qc-agent-result-card {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 590px);
+  color: #1d1d1f;
+}
+
+.qc-agent-drawer .qc-agent-result-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 10px;
+}
+
+.qc-agent-drawer .qc-agent-result-card__identity {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.qc-agent-drawer .qc-agent-result-card__eyebrow {
+  color: #1d1d1f;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.qc-agent-drawer .qc-agent-result-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qc-agent-drawer .qc-agent-status,
+.qc-agent-drawer .qc-agent-result-type,
+.qc-agent-drawer .qc-agent-execution-tag {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #eff6ff;
+  padding: 3px 8px;
+  color: #0066cc;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.qc-agent-drawer .qc-agent-result-card__run {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.qc-agent-drawer .qc-agent-result-card__body {
+  display: grid;
+  gap: 12px;
+}
+
+.qc-agent-drawer .qc-agent-icd-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.98), rgba(255, 255, 255, 0.98));
+  padding: 14px;
+}
+
+.qc-agent-drawer .qc-agent-icd-overview__main {
+  min-width: 0;
+}
+
+.qc-agent-drawer .qc-agent-icd-overview__eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  background: #dbeafe;
+  padding: 3px 8px;
+  color: #0057b8;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.qc-agent-drawer .qc-agent-icd-overview__query {
+  display: block;
+  margin-top: 8px;
+  color: #1d1d1f;
+  font-size: 20px;
+  font-weight: 850;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.qc-agent-drawer .qc-agent-icd-overview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.qc-agent-drawer .qc-agent-icd-overview__meta span {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 4px 9px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.qc-agent-drawer .qc-agent-icd-overview__best {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  border-left: 1px solid #dbeafe;
+  padding-left: 14px;
+}
+
+.qc-agent-drawer .qc-agent-icd-overview__best span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.qc-agent-drawer .qc-agent-icd-overview__best strong {
+  margin-top: 4px;
+  color: #0057b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.qc-agent-drawer .qc-agent-icd-overview__best small {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.qc-agent-drawer .qc-agent-block {
+  display: grid;
+  gap: 9px;
+}
+
+.qc-agent-drawer .qc-agent-block__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.qc-agent-drawer .qc-agent-block__title {
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.qc-agent-drawer .qc-agent-block__hint {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: right;
+}
+
+.qc-agent-drawer .qc-agent-code-list {
+  display: grid;
+  gap: 10px;
+}
+
+.qc-agent-drawer .qc-agent-code-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid #dbe7f3;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 12px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.035);
+}
+
+.qc-agent-drawer .qc-agent-code-card__rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #0066cc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qc-agent-drawer .qc-agent-code-card__body {
+  min-width: 0;
+}
+
+.qc-agent-drawer .qc-agent-code-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.qc-agent-drawer .qc-agent-code-card__identity {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.qc-agent-drawer .qc-agent-code-card__code {
+  color: #0057b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.qc-agent-drawer .qc-agent-code-card__head em {
+  border-radius: 999px;
+  background: #eef6ff;
+  padding: 3px 8px;
+  color: #0066cc;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.qc-agent-drawer .qc-agent-code-card__confidence {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qc-agent-drawer .qc-agent-code-card__confidence--high {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.qc-agent-drawer .qc-agent-code-card__confidence--medium {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.qc-agent-drawer .qc-agent-code-card__confidence--low {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.qc-agent-drawer .qc-agent-code-card__name {
+  margin-top: 7px;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.qc-agent-drawer .qc-agent-code-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.qc-agent-drawer .qc-agent-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  padding: 4px 8px;
+}
+
+.qc-agent-drawer .qc-agent-meta-pill small {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.qc-agent-drawer .qc-agent-meta-pill strong {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qc-agent-drawer .qc-agent-code-card__mapping {
+  display: grid;
+  gap: 3px;
+  margin-top: 9px;
+  border-left: 2px solid #bfdbfe;
+  padding-left: 9px;
+}
+
+.qc-agent-drawer .qc-agent-code-card__mapping span {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.qc-agent-drawer .qc-agent-code-card__mapping strong {
+  color: #334155;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.qc-agent-drawer .qc-agent-code-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.qc-agent-drawer .qc-agent-code-card__actions button {
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 5px 10px;
+  color: #0066cc;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.qc-agent-drawer .qc-agent-code-card__actions button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.qc-agent-drawer .qc-agent-more-codes {
+  border: 1px dashed #bfdbfe;
+  border-radius: 14px;
+  background: #f8fbff;
+  padding: 9px;
+}
+
+.qc-agent-drawer .qc-agent-more-codes summary {
+  color: #0066cc;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.qc-agent-drawer .qc-agent-code-list--more {
+  margin-top: 9px;
+}
+
+@media (max-width: 860px) {
+  .qc-agent-drawer .qc-agent-icd-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .qc-agent-drawer .qc-agent-icd-overview__best {
+    border-top: 1px solid #dbeafe;
+    border-left: 0;
+    padding-top: 10px;
+    padding-left: 0;
+  }
+
+  .qc-agent-drawer .qc-agent-code-card {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 9px;
   }
 }
 </style>

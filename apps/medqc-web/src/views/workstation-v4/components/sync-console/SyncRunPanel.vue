@@ -78,7 +78,7 @@
           "
           class="ml-1"
         >
-          {{ state.preflightResult.risk_level }}
+          {{ riskLevelLabel(state.preflightResult.risk_level) }}
         </a-tag>
       </div>
       <div class="text-[11px] text-slate-500 mt-1">
@@ -236,7 +236,7 @@
                 class="text-[11px] font-medium"
                 :class="statusClass(item.status)"
               >
-                {{ item.status }}
+                {{ statusText(item.status) }}
               </span>
             </div>
             <div class="mt-1 text-[11px] text-slate-500">
@@ -354,26 +354,136 @@ function statusClass(status: string): string {
   }
   return 'text-slate-500'
 }
+
+function statusText(status: string): string {
+  if (status === 'success') return '成功'
+  if (status === 'partial') return '部分完成'
+  if (status === 'failed') return '失败'
+  if (status === 'running') return '执行中'
+  return '未知'
+}
+
+function riskLevelLabel(level?: string): string {
+  if (level === 'high') return '高'
+  if (level === 'medium') return '中'
+  if (level === 'low') return '低'
+  return '低'
+}
 </script>
 
 <style scoped>
 .run-panel {
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  background: rgba(255, 255, 255, 0.9);
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.run-panel :deep(.font-mono) {
+  font-family: 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
+}
+
+.run-panel > div:first-child {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.88);
 }
 
 .view-switch {
-  background: linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%);
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(245, 245, 247, 0.68);
+}
+
+.view-switch button {
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.view-switch button:hover {
+  color: #1d1d1f;
+}
+
+.view-switch :deep(.bg-white) {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.07) !important;
+  color: #0066cc !important;
 }
 
 .sync-banner {
-  border-left: 3px solid #2563eb;
+  border-left: 3px solid #0066cc;
+  background: rgba(0, 102, 204, 0.06);
 }
 
 .preflight-block {
-  background: #f8fafc;
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
 }
 
 .history-toolbar {
-  background: #f8fafc;
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(245, 245, 247, 0.68);
+}
+
+.run-panel :deep(.bg-\[\#FAFAFA\]) {
+  background-color: rgba(245, 245, 247, 0.62) !important;
+}
+
+.run-panel :deep(.border-slate-100),
+.run-panel :deep(.border-slate-200),
+.run-panel :deep(.border-amber-200),
+.run-panel :deep(.border-red-200) {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.run-panel :deep(.bg-amber-50),
+.run-panel :deep(.bg-amber-50\/60) {
+  background-color: rgba(255, 251, 235, 0.8) !important;
+}
+
+.run-panel :deep(.bg-red-50\/60) {
+  background-color: rgba(239, 68, 68, 0.08) !important;
+}
+
+.run-panel :deep(.text-slate-900),
+.run-panel :deep(.text-slate-800),
+.run-panel :deep(.text-slate-700) {
+  color: #1d1d1f !important;
+}
+
+.run-panel :deep(.text-slate-600),
+.run-panel :deep(.text-slate-500) {
+  color: rgba(29, 29, 31, 0.6) !important;
+}
+
+.run-panel :deep(.text-slate-400) {
+  color: rgba(29, 29, 31, 0.38) !important;
+}
+
+.run-panel :deep(.text-emerald-600) {
+  color: #047857 !important;
+}
+
+.run-panel :deep(.text-amber-600),
+.run-panel :deep(.text-amber-700) {
+  color: #b45309 !important;
+}
+
+.run-panel :deep(.text-red-500),
+.run-panel :deep(.text-red-600),
+.run-panel :deep(.text-red-700) {
+  color: #b91c1c !important;
+}
+
+.run-panel :deep(.rounded.border.bg-white) {
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.86) !important;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    background-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.run-panel :deep(.rounded.border.bg-white:hover) {
+  border-color: rgba(0, 0, 0, 0.14) !important;
+  background-color: rgba(255, 255, 255, 0.96) !important;
 }
 </style>

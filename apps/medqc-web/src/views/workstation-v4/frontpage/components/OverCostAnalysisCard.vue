@@ -1,106 +1,88 @@
 <template>
   <div
-    class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700"
+    class="rounded-2xl border border-black/[0.08] bg-white/90 p-5 shadow-[0_1px_4px_rgba(0,0,0,0.045),0_2px_8px_rgba(0,0,0,0.035)] backdrop-blur-[18px]"
   >
     <div class="flex items-center justify-between mb-4">
-      <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+      <h3 class="text-[15px] font-semibold text-[#1d1d1f] flex items-center gap-2">
         <ExclamationCircleOutlined class="text-red-500" />
         超费原因分析
         <span
-          class="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-100 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800"
+          class="text-[11px] px-2 py-0.5 rounded-full bg-red-50/80 text-red-600 border border-red-100/80"
         >
           {{ dimensionLabel }} 视图
         </span>
       </h3>
-      <a-button
-        size="small"
-        type="link"
-        @click="handleExportReport"
-      >
+      <a-button size="small" type="link" @click="handleExportReport">
         <DownloadOutlined /> 导出分析报告
       </a-button>
     </div>
 
     <div
-      class="mb-4 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-700/40 p-3 text-xs text-slate-500 dark:text-slate-400"
+      class="mb-4 rounded-lg border border-black/[0.06] bg-[#f5f5f7] p-3 text-xs text-[rgba(29,29,31,0.6)]"
     >
       会话模式：{{ sessionId ? `正式会话 ${sessionId}` : '演示模式' }}
     </div>
 
     <!-- Summary Stats -->
     <div class="grid grid-cols-3 gap-3 mb-4">
-      <div class="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-center">
-        <div class="text-2xl font-bold text-red-600">
+      <div class="rounded-lg border border-red-100/70 bg-red-50/60 p-3 text-center">
+        <div class="text-[20px] font-semibold text-red-600 leading-7">
           {{ lossCount }}
         </div>
-        <div class="text-xs text-red-500">
-          超费病例
-        </div>
+        <div class="text-xs text-red-500/85">超费病例</div>
       </div>
-      <div class="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3 text-center">
-        <div class="text-2xl font-bold text-orange-600">
+      <div class="rounded-lg border border-orange-100/70 bg-orange-50/55 p-3 text-center">
+        <div class="text-[20px] font-semibold text-orange-600 leading-7">
           ¥{{ totalLossAmount.toLocaleString() }}
         </div>
-        <div class="text-xs text-orange-500">
-          超费金额
-        </div>
+        <div class="text-xs text-orange-500/85">超费金额</div>
       </div>
-      <div class="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 text-center">
-        <div class="text-2xl font-bold text-yellow-600">
+      <div class="rounded-lg border border-amber-100/70 bg-amber-50/55 p-3 text-center">
+        <div class="text-[20px] font-semibold text-amber-600 leading-7">
           {{ avgLossRate.toFixed(1) }}%
         </div>
-        <div class="text-xs text-yellow-500">
-          平均超费率
-        </div>
+        <div class="text-xs text-amber-500/85">平均超费率</div>
       </div>
     </div>
 
     <!-- Reason Distribution -->
     <div class="mb-4">
-      <div class="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
-        超费原因分布
-      </div>
+      <div class="text-xs font-medium text-[rgba(29,29,31,0.66)] mb-2">超费原因分布</div>
       <div class="space-y-2">
         <div
           v-for="reason in reasonDistribution"
           :key="reason.type"
           class="flex items-center gap-2"
         >
-          <div class="w-24 text-xs text-slate-600 dark:text-slate-400 truncate">
+          <div class="w-24 text-xs text-[rgba(29,29,31,0.66)] truncate">
             {{ reason.label }}
           </div>
-          <div class="flex-1 bg-slate-100 dark:bg-slate-700 rounded-full h-4 overflow-hidden">
+          <div class="flex-1 bg-black/[0.06] rounded-full h-4 overflow-hidden">
             <div
               :class="['h-full rounded-full', reason.color]"
               :style="{ width: `${reason.percentage}%` }"
             />
           </div>
-          <div class="w-12 text-xs text-slate-500 text-right">
-            {{ reason.count }}例
-          </div>
+          <div class="w-12 text-xs text-[rgba(29,29,31,0.56)] text-right">{{ reason.count }}例</div>
         </div>
       </div>
     </div>
 
     <!-- Top Loss Cases -->
     <div>
-      <div class="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
-        亏损TOP5病例
-      </div>
+      <div class="text-xs font-medium text-[rgba(29,29,31,0.66)] mb-2">亏损TOP5病例</div>
       <div class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
         <div
           v-for="item in topLossCases"
           :key="item.caseNo"
-          class="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-700/50 rounded-lg text-xs"
+          class="flex items-center justify-between rounded-lg border border-black/[0.05] bg-[#f5f5f7]/75 p-2 text-xs"
         >
           <div class="flex items-center gap-2 min-w-0">
-            <span class="text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">{{
-              item.caseNo
-            }}</span>
-            <span class="text-slate-400 truncate">{{ item.drg }}</span>
+            <span class="text-[#1d1d1f] font-medium whitespace-nowrap">{{ item.caseNo }}</span>
+            <span class="text-[rgba(29,29,31,0.45)] truncate">{{ item.drg }}</span>
           </div>
           <div class="flex items-center gap-3 whitespace-nowrap">
-            <span class="text-slate-500">{{ item.reason }}</span>
+            <span class="text-[rgba(29,29,31,0.56)]">{{ item.reason }}</span>
             <span class="text-red-600 font-medium">-¥{{ item.lossAmount.toLocaleString() }}</span>
           </div>
         </div>
@@ -108,19 +90,10 @@
     </div>
 
     <!-- Recommendations -->
-    <div
-      class="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800"
-    >
-      <div class="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">
-        瓶颈报告
-      </div>
-      <ul class="text-xs text-blue-600/80 dark:text-blue-400/80 space-y-1">
-        <li
-          v-for="item in recommendations"
-          :key="item"
-        >
-          • {{ item }}
-        </li>
+    <div class="mt-4 p-3 bg-[rgba(0,102,204,0.06)] rounded-lg border border-[rgba(0,102,204,0.12)]">
+      <div class="text-xs font-medium text-[#0057b8] mb-1">瓶颈报告</div>
+      <ul class="text-xs text-[#0066cc]/80 space-y-1">
+        <li v-for="item in recommendations" :key="item">• {{ item }}</li>
       </ul>
     </div>
   </div>
@@ -172,7 +145,7 @@ const reportLibrary: Record<DimensionKey, ReportScenario> = {
     reasonDistribution: [
       { type: 'los', label: '住院日偏长', count: 8, percentage: 35, color: 'bg-red-500' },
       { type: 'material', label: '高值耗材', count: 7, percentage: 30, color: 'bg-orange-500' },
-      { type: 'coding', label: '编码偏差', count: 5, percentage: 22, color: 'bg-yellow-500' },
+      { type: 'coding', label: '编码偏差', count: 5, percentage: 22, color: 'bg-amber-400/80' },
       { type: 'path', label: '路径偏离', count: 3, percentage: 13, color: 'bg-slate-400' },
     ],
     topLossCases: [
@@ -193,7 +166,7 @@ const reportLibrary: Record<DimensionKey, ReportScenario> = {
     reasonDistribution: [
       { type: 'case-mix', label: '病种结构偏重', count: 7, percentage: 39, color: 'bg-red-500' },
       { type: 'stay', label: '病区周转慢', count: 5, percentage: 28, color: 'bg-orange-500' },
-      { type: 'material', label: '耗材超阈', count: 3, percentage: 17, color: 'bg-yellow-500' },
+      { type: 'material', label: '耗材超阈', count: 3, percentage: 17, color: 'bg-amber-400/80' },
       { type: 'coding', label: '编码不一致', count: 3, percentage: 16, color: 'bg-slate-400' },
     ],
     topLossCases: [
@@ -214,7 +187,7 @@ const reportLibrary: Record<DimensionKey, ReportScenario> = {
     reasonDistribution: [
       { type: 'turnover', label: '床位周转慢', count: 6, percentage: 43, color: 'bg-red-500' },
       { type: 'stay', label: '护理日偏长', count: 4, percentage: 29, color: 'bg-orange-500' },
-      { type: 'exam', label: '重复检查', count: 2, percentage: 14, color: 'bg-yellow-500' },
+      { type: 'exam', label: '重复检查', count: 2, percentage: 14, color: 'bg-amber-400/80' },
       { type: 'material', label: '耗材偏高', count: 2, percentage: 14, color: 'bg-slate-400' },
     ],
     topLossCases: [
@@ -235,7 +208,7 @@ const reportLibrary: Record<DimensionKey, ReportScenario> = {
     reasonDistribution: [
       { type: 'path', label: '路径不统一', count: 4, percentage: 36, color: 'bg-red-500' },
       { type: 'coding', label: '编码偏差', count: 3, percentage: 27, color: 'bg-orange-500' },
-      { type: 'prep', label: '术前准备长', count: 2, percentage: 18, color: 'bg-yellow-500' },
+      { type: 'prep', label: '术前准备长', count: 2, percentage: 18, color: 'bg-amber-400/80' },
       { type: 'material', label: '耗材差异', count: 2, percentage: 19, color: 'bg-slate-400' },
     ],
     topLossCases: [
@@ -256,7 +229,7 @@ const reportLibrary: Record<DimensionKey, ReportScenario> = {
     reasonDistribution: [
       { type: 'coding', label: '个人编码问题', count: 4, percentage: 44, color: 'bg-red-500' },
       { type: 'stay', label: '住院日超标', count: 2, percentage: 22, color: 'bg-orange-500' },
-      { type: 'material', label: '耗材超标', count: 2, percentage: 22, color: 'bg-yellow-500' },
+      { type: 'material', label: '耗材超标', count: 2, percentage: 22, color: 'bg-amber-400/80' },
       { type: 'exam', label: '检查偏多', count: 1, percentage: 12, color: 'bg-slate-400' },
     ],
     topLossCases: [

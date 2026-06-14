@@ -5,6 +5,8 @@
         :loading="loading"
         :rules="tableRules"
         :total="filteredRules.length"
+        :rule-set-key="queryState.ruleSetKey"
+        :rule-set-options="ruleSetOptions"
         :keyword-input="keywordInput"
         :complexity="queryState.complexity"
         :defect-level="queryState.defectLevel"
@@ -14,6 +16,8 @@
         :document-options="documentOptions"
         :pagination="tablePagination"
         @update:keyword-input="keywordInput = $event"
+        @update:rule-set-key="handleRuleSetChange"
+        @rule-set-change="handleRuleSetChange"
         @update:complexity="queryState.complexity = $event"
         @update:defect-level="queryState.defectLevel = $event"
         @update:document-type="queryState.documentType = $event"
@@ -93,6 +97,8 @@ import CustomQcBatchLaunchModal from '@/views/rules/components/CustomQcBatchLaun
 const {
   loading,
   queryState,
+  ruleSetOptions,
+  handleRuleSetChange,
   keywordInput,
   filteredRules,
   tableRules,
@@ -161,32 +167,25 @@ function handleStartTestFromDetail() {
 <style scoped>
 .semantic-rules-page {
   min-height: 100%;
-  background: linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%);
-  padding: 16px;
-  color: #0f172a;
+  background: transparent;
+  padding: 0;
+  color: #1d1d1f;
   font-size: 14px;
   line-height: 1.5;
   font-family:
-    'PingFang SC',
-    'Microsoft YaHei',
-    'Noto Sans SC',
-    'Hiragino Sans GB',
-    'Source Han Sans SC',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+    'San Francisco', 'SF Pro Text', 'Source Han Sans SC', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
 }
 
 .semantic-rules-content {
   width: 100%;
-  max-width: 1440px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
 }
 
 @media (max-width: 1023px) {
   .semantic-rules-page {
-    padding: 12px;
+    padding: 0;
   }
 }
 </style>

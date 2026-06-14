@@ -1,73 +1,61 @@
 <template>
   <div
-    class="bg-white dark:bg-slate-800 rounded-2xl shadow-sm flex flex-col flex-1 border border-slate-100 dark:border-slate-700 overflow-hidden relative min-h-[500px]"
+    class="bg-white/90 rounded-2xl shadow-sm flex flex-col flex-1 border border-black/[0.08] overflow-hidden relative min-h-[500px] backdrop-blur-[18px]"
   >
     <div
-      class="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-gradient-to-r from-blue-500/5 to-transparent"
+      class="px-6 py-4 border-b border-black/[0.08] flex justify-between items-center bg-[rgba(0,102,204,0.04)]"
     >
       <div class="flex items-center gap-2">
-        <FileTextOutlined class="text-blue-500" />
-        <h3 class="font-semibold text-slate-800 dark:text-white">
-          病历原文
-        </h3>
+        <FileTextOutlined class="text-[#0066cc]" />
+        <h3 class="font-semibold text-[#1d1d1f]">病历原文</h3>
       </div>
       <div class="flex gap-2">
         <button
-          class="text-xs font-medium text-slate-500 hover:text-blue-500 px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded-md"
+          class="text-xs font-medium text-[rgba(29,29,31,0.56)] hover:text-[#0066cc] px-2 py-1 bg-white border border-black/[0.08] rounded-md"
         >
           全屏
         </button>
         <button
-          class="text-xs font-medium text-slate-500 hover:text-blue-500 px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded-md"
+          class="text-xs font-medium text-[rgba(29,29,31,0.56)] hover:text-[#0066cc] px-2 py-1 bg-white border border-black/[0.08] rounded-md"
         >
           放大
         </button>
       </div>
     </div>
 
-    <div
-      v-if="loading"
-      class="p-8"
-    >
-      <a-skeleton
-        active
-        :paragraph="{ rows: 10 }"
-      />
+    <div v-if="loading" class="p-8">
+      <a-skeleton active :paragraph="{ rows: 10 }" />
     </div>
     <div
       v-else-if="medicalText"
-      class="flex-1 p-6 bg-slate-50/30 dark:bg-slate-900/30 overflow-y-auto custom-scrollbar"
+      class="flex-1 p-6 bg-[#f5f5f7]/55 overflow-y-auto custom-scrollbar"
     >
       <pre
-        class="font-mono text-sm leading-relaxed whitespace-pre-wrap text-slate-700 dark:text-slate-300"
-      >{{ medicalText }}</pre>
+        class="font-mono text-sm leading-relaxed whitespace-pre-wrap text-[rgba(29,29,31,0.78)]"
+        >{{ medicalText }}</pre
+      >
     </div>
-    <div
-      v-else
-      class="flex-1 flex flex-col items-center justify-start p-10 pt-16 bg-slate-50/50 dark:bg-slate-800/30"
-    >
+    <div v-else class="flex-1 flex flex-col items-center justify-start p-10 pt-16 bg-[#f5f5f7]/55">
       <div
-        class="w-32 h-32 bg-blue-50 dark:bg-blue-900/20 rounded-full flex items-center justify-center mb-6 relative group cursor-pointer transition-all hover:scale-105"
+        class="w-32 h-32 bg-[rgba(0,102,204,0.06)] border border-[rgba(0,102,204,0.12)] rounded-2xl flex items-center justify-center mb-6 relative group cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-[0_2px_12px_rgba(0,0,0,0.10),0_6px_22px_rgba(0,0,0,0.075)]"
         @click="() => $emit('selectTestCase', 0)"
       >
         <UploadOutlined
-          class="text-6xl text-blue-500/40 group-hover:text-blue-500 transition-colors"
+          class="text-6xl text-[#0066cc]/40 group-hover:text-[#0066cc] transition-colors"
         />
         <div
-          class="absolute -bottom-2 -right-2 bg-white dark:bg-slate-700 p-2 rounded-full shadow-md"
+          class="absolute -bottom-2 -right-2 bg-white p-2 rounded-full shadow-md border border-black/[0.08]"
         >
-          <RobotOutlined class="text-blue-500 text-xl" />
+          <RobotOutlined class="text-[#0066cc] text-xl" />
         </div>
       </div>
-      <h3 class="text-lg font-medium text-slate-700 dark:text-slate-200 mb-2">
-        未加载病历
-      </h3>
-      <p class="text-slate-500 dark:text-slate-400 text-sm mb-6 text-center max-w-xs">
+      <h3 class="text-lg font-medium text-[#1d1d1f] mb-2">未加载病历</h3>
+      <p class="text-[rgba(29,29,31,0.6)] text-sm mb-6 text-center max-w-xs">
         上传扫描的 PDF 或图片以开始 AI 分析流程。
       </p>
       <a-dropdown>
         <button
-          class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-xl font-medium shadow-lg shadow-blue-500/30 transition-all flex items-center gap-2"
+          class="bg-[#0066cc] hover:bg-[#0057b8] text-white px-6 py-3 rounded-xl font-medium shadow-[0_5px_14px_rgba(0,102,204,0.18)] transition-all flex items-center gap-2"
         >
           <PlusOutlined />
           加载测试病历

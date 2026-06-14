@@ -14,6 +14,7 @@ from ..storage.memory import llm_configs
 logger = logging.getLogger(__name__)
 
 SUPPORTED_PROVIDER_CODES = ("alibaba", "deepseek", "siliconflow", "ollama")
+_USER_LLM_CONFIGS_TABLE_UNAVAILABLE = False
 
 
 def get_enabled_provider_codes() -> tuple[str, ...]:
@@ -100,8 +101,24 @@ def build_provider_runtime_config(
         provider_name = "内部 Ollama"
     else:
         code = "alibaba"
-        endpoint = str(settings.LLM_API_ENDPOINT or "").strip()
-        api_key = str(settings.LLM_API_KEY or "").strip() or None
+        endpoint = str(
+            settings.DASHSCOPE_BASE_URL
+            or (
+                settings.LLM_API_ENDPOINT
+                if str(settings.LLM_DEFAULT_PROVIDER or "").strip().lower() == "alibaba"
+                else ""
+            )
+            or ""
+        ).strip()
+        api_key = str(
+            settings.DASHSCOPE_API_KEY
+            or (
+                settings.LLM_API_KEY
+                if str(settings.LLM_DEFAULT_PROVIDER or "").strip().lower() == "alibaba"
+                else None
+            )
+            or ""
+        ).strip() or None
         model = str(model_code or settings.LLM_MODEL or "qwen3.5-35b-a3b").strip()
         provider_name = "阿里云百炼"
 
@@ -165,7 +182,8 @@ class LLMConfigLoader:
         """
         supabase = get_supabase()
 
-        if supabase is not None:
+        global _USER_LLM_CONFIGS_TABLE_UNAVAILABLE
+        if supabase is not None and not _USER_LLM_CONFIGS_TABLE_UNAVAILABLE:
             try:
                 config = await LLMConfigLoader._load_from_database(supabase, config_name, user_id)
                 if config:
@@ -178,7 +196,22 @@ class LLMConfigLoader:
                     )
                     return config
             except Exception as exc:
-                logger.warning("从数据库加载 LLM 配置失败: %s，将回退到 .env 配置", exc)
+                message = str(exc)
+                if (
+                    "user_llm_configs" in message
+                    and (
+                        "UndefinedTable" in message
+                        or "does not exist" in message
+                        or "不存在" in message
+                        or "关系" in message
+                    )
+                ):
+                    _USER_LLM_CONFIGS_TABLE_UNAVAILABLE = True
+                    logger.warning(
+                        "user_llm_configs 表不可用，本进程后续跳过数据库 LLM 配置查询，直接回退 env"
+                    )
+                else:
+                    logger.warning("从数据库加载 LLM 配置失败: %s，将回退到 .env 配置", exc)
 
         memory_config = LLMConfigLoader._load_from_memory(config_name=config_name, user_id=user_id)
         if memory_config:

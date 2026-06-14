@@ -7,22 +7,13 @@
       @update:active-key="onTabChange"
       @change="onTabChange"
     >
-      <a-tab-pane
-        key="fields"
-        tab="提取结果"
-      >
+      <a-tab-pane key="fields" tab="提取结果">
         <slot name="fields" />
       </a-tab-pane>
-      <a-tab-pane
-        key="preview"
-        tab="首页预览/打印"
-      >
+      <a-tab-pane key="preview" tab="首页预览/打印">
         <slot name="preview" />
       </a-tab-pane>
-      <a-tab-pane
-        key="official"
-        tab="系统首页"
-      >
+      <a-tab-pane key="official" tab="系统首页">
         <slot name="official" />
       </a-tab-pane>
     </a-tabs>
@@ -54,10 +45,16 @@ function onTabChange(tab: string) {
 <style scoped>
 .frontpage-workspace-panel__tabs-shell {
   border-radius: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  background: linear-gradient(180deg, rgba(250, 252, 255, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.055);
   padding: 10px 10px 8px;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
 }
 
 :deep(.frontpage-workspace-panel__tabs .ant-tabs-nav) {
@@ -69,8 +66,8 @@ function onTabChange(tab: string) {
 }
 
 :deep(.frontpage-workspace-panel__tabs .ant-tabs-nav-wrap) {
-  background: rgba(248, 250, 252, 0.92);
-  border: 1px solid rgba(226, 232, 240, 0.88);
+  background: rgba(245, 245, 247, 0.86);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 999px;
   padding: 4px;
 }
@@ -83,22 +80,28 @@ function onTabChange(tab: string) {
   margin: 0 !important;
   border-radius: 999px;
   padding: 8px 14px;
-  color: #64748b;
-  transition: all 0.18s ease;
+  color: rgba(29, 29, 31, 0.58);
+  font-weight: 600;
+  transition:
+    background-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 :deep(.frontpage-workspace-panel__tabs .ant-tabs-tab:hover) {
-  color: #1e293b;
+  color: #1d1d1f;
 }
 
 :deep(.frontpage-workspace-panel__tabs .ant-tabs-tab.ant-tabs-tab-active) {
   background: #ffffff;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 2px 8px rgba(0, 102, 204, 0.08);
 }
 
 :deep(.frontpage-workspace-panel__tabs .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn) {
-  color: #0f172a;
-  font-weight: 700;
+  color: #0066cc;
+  font-weight: 650;
 }
 
 :deep(.frontpage-workspace-panel__tabs .ant-tabs-ink-bar) {

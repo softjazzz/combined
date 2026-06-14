@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex flex-col bg-white">
+  <div class="schema-explorer h-full flex flex-col bg-white">
     <div
       class="px-5 py-3 border-b border-[#E5E7EB] flex items-center justify-between shrink-0 relative z-10 h-[52px]"
     >
@@ -12,8 +12,8 @@
           v-model="searchText"
           type="text"
           placeholder="搜索表或字段"
-          class="w-[200px] pl-[32px] pr-3 py-1.5 text-[12px] bg-slate-100/60 border border-transparent rounded-[8px] focus:bg-white focus:border-[#1677FF] focus:ring-[3px] focus:ring-[#1677FF]/10 focus:shadow-sm outline-none transition-all duration-200 text-slate-700 placeholder:text-slate-400 leading-tight"
-        >
+          class="w-[200px] pl-[32px] pr-3 py-1.5 text-[12px] bg-slate-100/60 border border-transparent rounded-[8px] focus:bg-white focus:border-[#0066cc] focus:ring-[3px] focus:ring-[#0066cc]/10 focus:shadow-sm outline-none transition-all duration-200 text-slate-700 placeholder:text-slate-400 leading-tight"
+        />
       </div>
     </div>
 
@@ -32,7 +32,7 @@
               class="w-full text-left px-3 py-1.5 rounded-lg text-[13px] font-mono transition-all duration-200 block truncate"
               :class="
                 selectedTable?.name === table.name
-                  ? 'bg-blue-50/80 text-blue-600 font-semibold shadow-sm'
+                  ? 'bg-blue-50/80 text-[#0066cc] font-semibold shadow-sm'
                   : 'hover:bg-slate-100/80 text-slate-600 hover:text-slate-800'
               "
               @click="handleSelectTable(table.name)"
@@ -49,7 +49,7 @@
             class="px-2 py-3 border-b-[2px] text-[13px] mr-6 transition-all"
             :class="
               activeView === 'schema'
-                ? 'border-[#1677FF] font-semibold text-[#1677FF]'
+                ? 'border-[#0066cc] font-semibold text-[#0066cc]'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             "
             @click="activeView = 'schema'"
@@ -60,7 +60,7 @@
             class="px-2 py-3 border-b-[2px] text-[13px] transition-all"
             :class="
               activeView === 'sample'
-                ? 'border-[#1677FF] font-semibold text-[#1677FF]'
+                ? 'border-[#0066cc] font-semibold text-[#0066cc]'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             "
             @click="activeView = 'sample'"
@@ -70,37 +70,18 @@
         </div>
 
         <div class="flex-1 overflow-auto custom-scrollbar bg-white">
-          <div
-            v-if="loading"
-            class="p-6 text-[12px] text-slate-500"
-          >
-            正在加载结构...
-          </div>
-          <div
-            v-else-if="!selectedTable"
-            class="p-6 text-[12px] text-slate-500"
-          >
+          <div v-if="loading" class="p-6 text-[12px] text-slate-500">正在加载结构...</div>
+          <div v-else-if="!selectedTable" class="p-6 text-[12px] text-slate-500">
             暂无可展示表结构。
           </div>
           <template v-else>
-            <table
-              v-if="activeView === 'schema'"
-              class="w-full text-left border-collapse"
-            >
+            <table v-if="activeView === 'schema'" class="w-full text-left border-collapse">
               <thead class="bg-slate-50/50 sticky top-0 z-10 shadow-[0_1px_0_rgba(226,232,240,1)]">
                 <tr class="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">
-                  <th class="px-5 py-3 font-medium whitespace-nowrap">
-                    字段名
-                  </th>
-                  <th class="px-5 py-3 font-medium whitespace-nowrap">
-                    系统类型
-                  </th>
-                  <th class="px-5 py-3 text-center font-medium whitespace-nowrap">
-                    Null
-                  </th>
-                  <th class="px-5 py-3 font-medium whitespace-nowrap">
-                    约束
-                  </th>
+                  <th class="px-5 py-3 font-medium whitespace-nowrap">字段名</th>
+                  <th class="px-5 py-3 font-medium whitespace-nowrap">系统类型</th>
+                  <th class="px-5 py-3 text-center font-medium whitespace-nowrap">Null</th>
+                  <th class="px-5 py-3 font-medium whitespace-nowrap">约束</th>
                 </tr>
               </thead>
               <tbody class="font-mono text-[13px] text-slate-700">
@@ -122,7 +103,8 @@
                     <span
                       v-if="col.primary_key"
                       class="text-amber-500 font-bold bg-amber-50 px-1.5 py-0.5 rounded text-[11px] whitespace-nowrap"
-                    >PK</span>
+                      >PK</span
+                    >
                     <span v-else>-</span>
                   </td>
                 </tr>
@@ -130,22 +112,13 @@
             </table>
 
             <div v-else>
-              <div
-                v-if="sampleLoading"
-                class="p-6 text-[12px] text-slate-500"
-              >
+              <div v-if="sampleLoading" class="p-6 text-[12px] text-slate-500">
                 正在加载样本数据...
               </div>
-              <div
-                v-else-if="sampleRows.length === 0"
-                class="p-6 text-[12px] text-slate-500"
-              >
+              <div v-else-if="sampleRows.length === 0" class="p-6 text-[12px] text-slate-500">
                 暂无样本数据。
               </div>
-              <table
-                v-else
-                class="w-full text-left border-collapse"
-              >
+              <table v-else class="w-full text-left border-collapse">
                 <thead
                   class="bg-slate-50/50 sticky top-0 z-10 shadow-[0_1px_0_rgba(226,232,240,1)]"
                 >
@@ -310,3 +283,100 @@ onMounted(async () => {
   await loadSchema()
 })
 </script>
+
+<style scoped>
+.schema-explorer {
+  background: rgba(255, 255, 255, 0.9);
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.schema-explorer > div:first-child {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.schema-explorer input {
+  border-color: transparent;
+  background: rgba(0, 0, 0, 0.04);
+  color: #1d1d1f;
+}
+
+.schema-explorer input:focus {
+  border-color: rgba(0, 102, 204, 0.38);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08);
+}
+
+.schema-explorer > div:nth-child(2) > div:first-child {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(245, 245, 247, 0.58);
+}
+
+.schema-explorer button {
+  transition:
+    color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    background-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.schema-explorer button:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1d1d1f;
+}
+
+.schema-explorer :deep(.bg-blue-50\/80) {
+  background-color: rgba(0, 102, 204, 0.08) !important;
+}
+
+.schema-explorer :deep(.font-mono) {
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.schema-explorer > div:nth-child(2) > div:first-child :deep(.font-mono),
+.schema-explorer tbody :deep(.font-mono),
+.schema-explorer tbody.font-mono {
+  font-family: 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
+}
+
+.schema-explorer thead {
+  background: rgba(0, 0, 0, 0.025);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.schema-explorer tbody tr {
+  border-color: rgba(0, 0, 0, 0.06);
+  transition: background-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.schema-explorer tbody tr:hover {
+  background: rgba(0, 102, 204, 0.045);
+}
+
+.schema-explorer :deep(.text-amber-500) {
+  color: #b45309 !important;
+}
+
+.schema-explorer :deep(.bg-amber-50) {
+  background-color: rgba(255, 251, 235, 0.82) !important;
+}
+
+.schema-explorer :deep(.text-slate-900),
+.schema-explorer :deep(.text-slate-800),
+.schema-explorer :deep(.text-slate-700) {
+  color: #1d1d1f !important;
+}
+
+.schema-explorer :deep(.text-slate-600),
+.schema-explorer :deep(.text-slate-500) {
+  color: rgba(29, 29, 31, 0.6) !important;
+}
+
+.schema-explorer :deep(.text-slate-400) {
+  color: rgba(29, 29, 31, 0.38) !important;
+}
+</style>

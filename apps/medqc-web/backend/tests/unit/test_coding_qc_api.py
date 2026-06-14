@@ -24,7 +24,11 @@ class TestCodingQCAPI:
     def setup(self):
         """初始化 TestClient + Mock 引擎。"""
         from app.main import app
+        from app.core.security import create_access_token
+
+        token = create_access_token({"sub": "admin@medqc.com"})
         self.client = TestClient(app)
+        self.client.headers.update({"Authorization": f"Bearer {token}"})
         self.base_url = "/api/v1/qc/coding-qc/check"
 
     # -- 基本功能测试 --

@@ -65,12 +65,8 @@
                 <h3>质控态势趋势</h3>
               </div>
               <div class="qc-home-range-switch">
-                <button type="button">
-                  近7天
-                </button>
-                <button type="button">
-                  近30天
-                </button>
+                <button type="button">近7天</button>
+                <button type="button">近30天</button>
               </div>
             </div>
 
@@ -81,29 +77,11 @@
                 <span><i class="qc-home-dot--amber" />已超时</span>
                 <span><i class="qc-home-dot--cyan" />处理中</span>
               </div>
-              <svg
-                viewBox="0 0 760 250"
-                role="img"
-                aria-label="质控态势趋势"
-              >
+              <svg viewBox="0 0 760 250" role="img" aria-label="质控态势趋势">
                 <defs>
-                  <linearGradient
-                    id="qcLineFill"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="1"
-                  >
-                    <stop
-                      offset="0%"
-                      stop-color="#3b82f6"
-                      stop-opacity="0.16"
-                    />
-                    <stop
-                      offset="100%"
-                      stop-color="#3b82f6"
-                      stop-opacity="0"
-                    />
+                  <linearGradient id="qcLineFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#0066cc" stop-opacity="0.12" />
+                    <stop offset="100%" stop-color="#0066cc" stop-opacity="0" />
                   </linearGradient>
                 </defs>
                 <g class="qc-home-grid-lines">
@@ -147,54 +125,18 @@
                   </text>
                 </g>
                 <g class="qc-home-chart-values">
-                  <circle
-                    cx="722"
-                    cy="56"
-                    r="5"
-                    fill="#3b82f6"
-                  />
-                  <text
-                    x="738"
-                    y="61"
-                    fill="#2563eb"
-                  >
+                  <circle cx="722" cy="56" r="5" fill="#0066cc" />
+                  <text x="738" y="61" fill="#0066cc">
                     {{ Number(homeData.kpis.my_pending_total || 0) }}
                   </text>
-                  <circle
-                    cx="722"
-                    cy="132"
-                    r="5"
-                    fill="#ef4444"
-                  />
-                  <text
-                    x="738"
-                    y="137"
-                    fill="#ef4444"
-                  >{{ highRiskTaskCount }}</text>
-                  <circle
-                    cx="722"
-                    cy="166"
-                    r="5"
-                    fill="#f59e0b"
-                  />
-                  <text
-                    x="738"
-                    y="171"
-                    fill="#f59e0b"
-                  >
+                  <circle cx="722" cy="132" r="5" fill="#ef4444" />
+                  <text x="738" y="137" fill="#ef4444">{{ highRiskTaskCount }}</text>
+                  <circle cx="722" cy="166" r="5" fill="#f59e0b" />
+                  <text x="738" y="171" fill="#f59e0b">
                     {{ Number(homeData.kpis.my_overdue_total || 0) }}
                   </text>
-                  <circle
-                    cx="722"
-                    cy="180"
-                    r="5"
-                    fill="#06b6d4"
-                  />
-                  <text
-                    x="738"
-                    y="185"
-                    fill="#06b6d4"
-                  >{{ inProgressTaskCount }}</text>
+                  <circle cx="722" cy="180" r="5" fill="#06b6d4" />
+                  <text x="738" y="185" fill="#06b6d4">{{ inProgressTaskCount }}</text>
                 </g>
               </svg>
             </div>
@@ -205,9 +147,7 @@
               <div>
                 <h3>风险洞察</h3>
               </div>
-              <a-tag color="processing">
-                AI
-              </a-tag>
+              <a-tag color="processing"> AI </a-tag>
             </div>
 
             <div class="qc-home-insight-layout">
@@ -718,7 +658,11 @@ watch(
 @import '../workstation-v4/styles/workstation-v4-view.css';
 
 .qc-home-shell {
-  background: linear-gradient(180deg, #dcebea 0%, #f8fafc 46%, #edf3f7 100%);
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  background: #f5f5f7;
 }
 
 .qc-home-canvas {
@@ -726,20 +670,21 @@ watch(
   flex-direction: column;
   gap: 18px;
   padding: 20px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 30px;
-  background: rgba(247, 250, 252, 0.78);
-  box-shadow: 0 28px 64px rgba(15, 23, 42, 0.09);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.06);
   backdrop-filter: blur(20px);
 }
 
 .qc-home-hero,
 .qc-home-card,
 .qc-home-task-panel {
-  border: 1px solid rgba(226, 232, 240, 0.86);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 16px 38px rgba(15, 23, 42, 0.055);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.055);
+  backdrop-filter: blur(18px);
 }
 
 .qc-home-hero {
@@ -763,9 +708,9 @@ watch(
   display: inline-flex;
   align-items: center;
   margin-bottom: 8px;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -774,8 +719,8 @@ watch(
 .qc-home-card h3,
 .qc-home-task-panel h3 {
   margin: 0;
-  color: #0f172a;
-  font-weight: 850;
+  color: #1d1d1f;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
@@ -787,7 +732,7 @@ watch(
 .qc-home-hero p,
 .qc-home-task-panel p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 14px;
   line-height: 1.7;
 }
@@ -804,19 +749,19 @@ watch(
   flex-direction: column;
   align-items: flex-end;
   padding: 8px 12px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 16px;
-  background: rgba(248, 250, 252, 0.82);
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .qc-home-hero__meta span {
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 11px;
   font-weight: 700;
 }
 
 .qc-home-hero__meta strong {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 20px;
   line-height: 1.1;
 }
@@ -840,9 +785,9 @@ watch(
   gap: 14px;
   margin-top: 20px;
   padding: 12px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 18px;
-  background: rgba(248, 250, 252, 0.74);
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .qc-home-kpis {
@@ -854,10 +799,10 @@ watch(
 .qc-home-kpi-card {
   min-height: 132px;
   padding: 18px 20px;
-  border: 1px solid rgba(226, 232, 240, 0.86);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.045);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
 }
 
 .qc-home-kpi-card__top {
@@ -865,66 +810,66 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .qc-home-kpi-card__top i {
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background: #38bdf8;
-  box-shadow: 0 0 0 5px rgba(56, 189, 248, 0.12);
+  background: #0066cc;
+  box-shadow: 0 0 0 5px rgba(0, 102, 204, 0.08);
 }
 
 .qc-home-kpi-card strong {
   display: block;
   margin-top: 18px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 34px;
   line-height: 1;
 }
 
 .qc-home-kpi-card p {
   margin: 10px 0 0;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   font-size: 13px;
 }
 
 .qc-home-kpi-card--featured {
-  border-color: rgba(45, 212, 191, 0.26);
-  background: linear-gradient(135deg, #5dd7d0 0%, #18aaa7 58%, #0f766e 100%);
-  box-shadow: 0 22px 42px rgba(20, 184, 166, 0.22);
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(234, 242, 255, 0.82);
+  box-shadow: 0 8px 24px rgba(0, 102, 204, 0.08);
 }
 
 .qc-home-kpi-card--featured .qc-home-kpi-card__top,
 .qc-home-kpi-card--featured p {
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(29, 29, 31, 0.6);
 }
 
 .qc-home-kpi-card--featured strong {
-  color: #fff;
+  color: #0066cc;
 }
 
 .qc-home-kpi-card--featured .qc-home-kpi-card__top i {
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.16);
+  background: #0066cc;
+  box-shadow: 0 0 0 5px rgba(0, 102, 204, 0.08);
 }
 
 .qc-home-kpi-card--danger .qc-home-kpi-card__top i {
-  background: #fb7185;
-  box-shadow: 0 0 0 5px rgba(251, 113, 133, 0.12);
+  background: #ef4444;
+  box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.08);
 }
 
 .qc-home-kpi-card--warning .qc-home-kpi-card__top i {
   background: #f59e0b;
-  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.13);
+  box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.08);
 }
 
 .qc-home-kpi-card--success .qc-home-kpi-card__top i {
   background: #10b981;
-  box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.12);
+  box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.08);
 }
 
 .qc-home-main-grid {
@@ -954,14 +899,14 @@ watch(
 }
 
 .qc-home-score strong {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 28px;
   line-height: 1;
 }
 
 .qc-home-score span {
   margin-top: 4px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   font-size: 12px;
   font-weight: 700;
 }
@@ -978,7 +923,7 @@ watch(
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
   font-weight: 700;
 }
@@ -990,9 +935,9 @@ watch(
   min-height: 190px;
   margin-top: 22px;
   padding: 18px;
-  border: 1px solid rgba(226, 232, 240, 0.82);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 20px;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255, 255, 255, 0.84));
+  background: rgba(255, 255, 255, 0.78);
 }
 
 .qc-home-chart-summary {
@@ -1003,15 +948,15 @@ watch(
 }
 
 .qc-home-chart-summary span {
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .qc-home-chart-summary strong {
   display: block;
   margin-top: 8px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 42px;
   line-height: 1;
 }
@@ -1019,7 +964,7 @@ watch(
 .qc-home-chart-summary p {
   max-width: 210px;
   margin: 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -1040,7 +985,7 @@ watch(
   bottom: 26px;
   left: 0;
   height: 1px;
-  background: linear-gradient(90deg, rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.32));
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0.1));
 }
 
 .qc-home-chart-column {
@@ -1060,7 +1005,7 @@ watch(
   align-items: end;
   justify-content: center;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(226, 232, 240, 0.28), rgba(226, 232, 240, 0.05));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.02));
 }
 
 .qc-home-chart-bar {
@@ -1069,21 +1014,21 @@ watch(
   border-radius: 999px 999px 12px 12px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 12px 22px rgba(15, 23, 42, 0.1);
+    0 8px 18px rgba(0, 0, 0, 0.08);
 }
 
 .qc-home-chart-column span {
   overflow: hidden;
   max-width: 100%;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .qc-home-progress-row__meta strong {
-  color: #0f172a;
+  color: #1d1d1f;
 }
 
 .qc-home-workflow-strip {
@@ -1096,17 +1041,17 @@ watch(
 .qc-home-workflow-item {
   min-height: 74px;
   padding: 13px;
-  border: 1px solid rgba(226, 232, 240, 0.82);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 16px;
-  background: #f8fafc;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .qc-home-workflow-item span {
   display: block;
   overflow: hidden;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1114,7 +1059,7 @@ watch(
 .qc-home-workflow-item strong {
   display: block;
   margin-top: 8px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 22px;
   line-height: 1;
 }
@@ -1122,9 +1067,9 @@ watch(
 .qc-home-risk-summary {
   margin-top: 18px;
   padding: 18px;
-  border: 1px solid rgba(186, 230, 253, 0.8);
+  border: 1px solid rgba(0, 102, 204, 0.12);
   border-radius: 22px;
-  background: linear-gradient(180deg, rgba(240, 249, 255, 0.95), rgba(255, 255, 255, 0.92));
+  background: rgba(234, 242, 255, 0.58);
 }
 
 .qc-home-risk-summary__top {
@@ -1150,7 +1095,7 @@ watch(
   border-radius: 999px;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.9),
-    0 16px 26px rgba(14, 165, 233, 0.13);
+    0 10px 22px rgba(0, 102, 204, 0.08);
 }
 
 .qc-home-risk-donut > div {
@@ -1163,40 +1108,40 @@ watch(
 }
 
 .qc-home-risk-donut strong {
-  color: #0369a1;
+  color: #0066cc;
   font-size: 24px;
   line-height: 1;
 }
 
 .qc-home-risk-donut span {
   margin-top: -20px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   font-size: 10px;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .qc-home-risk-summary span {
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .qc-home-risk-summary strong {
-  color: #0369a1;
+  color: #0066cc;
   font-size: 30px;
   line-height: 1;
 }
 
 .qc-home-risk-summary small {
   margin-top: 6px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .qc-home-risk-summary p {
   margin: 12px 0 0;
-  color: #475569;
+  color: rgba(29, 29, 31, 0.72);
   font-size: 13px;
   line-height: 1.7;
 }
@@ -1209,9 +1154,9 @@ watch(
 
 .qc-home-mini-title {
   margin-bottom: 9px;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .qc-home-ranking-row {
@@ -1220,20 +1165,20 @@ watch(
   justify-content: space-between;
   gap: 12px;
   padding: 9px 0;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.76);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .qc-home-ranking-row span {
   overflow: hidden;
-  color: #475569;
+  color: rgba(29, 29, 31, 0.72);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .qc-home-ranking-row strong {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 14px;
 }
 
@@ -1243,18 +1188,18 @@ watch(
 
 .qc-home-task-panel__head {
   padding: 20px 22px 16px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.76);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .qc-home-shell {
-  background: transparent;
+  background: #f5f5f7;
 }
 
 .qc-home-canvas {
   min-height: calc(100vh - 64px);
   padding: 32px;
-  border-radius: 0 18px 18px 0;
-  background: rgba(255, 255, 255, 0.62);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.68);
 }
 
 .qc-home-hero {
@@ -1289,13 +1234,13 @@ watch(
   align-items: center;
   gap: 10px;
   min-width: 148px;
-  color: #334155;
+  color: rgba(29, 29, 31, 0.78);
 }
 
 .qc-home-profile .ant-avatar {
-  background: linear-gradient(135deg, #dbeafe, #eff6ff);
-  color: #2563eb;
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+  background: rgba(234, 242, 255, 0.92);
+  color: #0066cc;
+  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.08);
 }
 
 .qc-home-profile strong,
@@ -1305,14 +1250,14 @@ watch(
 }
 
 .qc-home-profile strong {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
   line-height: 1.1;
 }
 
 .qc-home-profile span {
   margin-top: 3px;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 11px;
 }
 
@@ -1328,8 +1273,9 @@ watch(
   min-height: 132px;
   padding: 24px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 18px 42px rgba(42, 82, 128, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.055);
 }
 
 .qc-home-kpi-icon {
@@ -1339,9 +1285,9 @@ watch(
   place-items: center;
   border-radius: 999px;
   background: #eef6ff;
-  color: #2563eb;
+  color: #0066cc;
   font-size: 28px;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.08);
 }
 
 .qc-home-kpi-card--danger .qc-home-kpi-icon {
@@ -1355,14 +1301,14 @@ watch(
 }
 
 .qc-home-kpi-card--success .qc-home-kpi-icon {
-  background: #ecfeff;
-  color: #06b6d4;
+  background: #f0fdf4;
+  color: #10b981;
 }
 
 .qc-home-kpi-card__body span {
-  color: #334155;
+  color: rgba(29, 29, 31, 0.78);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .qc-home-kpi-card__body strong {
@@ -1372,14 +1318,14 @@ watch(
 
 .qc-home-kpi-card__body p {
   margin: 10px 0 0;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
 }
 
 .qc-home-kpi-card__body em {
   margin-left: 8px;
   font-style: normal;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .qc-home-kpi-card__body em.is-up {
@@ -1387,7 +1333,7 @@ watch(
 }
 
 .qc-home-kpi-card__body em.is-down {
-  color: #06b6d4;
+  color: #10b981;
 }
 
 .qc-home-main-grid {
@@ -1414,9 +1360,9 @@ watch(
 .qc-home-range-switch {
   display: inline-flex;
   overflow: hidden;
-  border: 1px solid rgba(203, 213, 225, 0.72);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 10px;
-  background: rgba(248, 250, 252, 0.8);
+  background: rgba(0, 0, 0, 0.035);
 }
 
 .qc-home-range-switch button {
@@ -1424,15 +1370,15 @@ watch(
   padding: 0 14px;
   border: 0;
   background: transparent;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .qc-home-range-switch button:first-child {
   background: #fff;
-  color: #2563eb;
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.08);
+  color: #0066cc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .qc-home-line-chart {
@@ -1444,9 +1390,9 @@ watch(
   flex-wrap: wrap;
   gap: 28px;
   margin-bottom: 8px;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .qc-home-line-legend span {
@@ -1462,7 +1408,7 @@ watch(
 }
 
 .qc-home-dot--blue {
-  background: #3b82f6;
+  background: #0066cc;
 }
 
 .qc-home-dot--red {
@@ -1484,7 +1430,7 @@ watch(
 }
 
 .qc-home-grid-lines line {
-  stroke: rgba(148, 163, 184, 0.18);
+  stroke: rgba(0, 0, 0, 0.08);
   stroke-width: 1;
 }
 
@@ -1495,7 +1441,7 @@ watch(
 }
 
 .qc-home-series--blue {
-  stroke: #3b82f6;
+  stroke: #0066cc;
 }
 
 .qc-home-series--red {
@@ -1513,11 +1459,11 @@ watch(
 .qc-home-axis-labels text,
 .qc-home-chart-values text {
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .qc-home-axis-labels text {
-  fill: #94a3b8;
+  fill: rgba(29, 29, 31, 0.38);
 }
 
 .qc-home-card--insight {
@@ -1542,25 +1488,25 @@ watch(
   grid-template-columns: minmax(0, 1fr) auto 16px;
   align-items: center;
   gap: 12px;
-  color: #334155;
+  color: rgba(29, 29, 31, 0.78);
 }
 
 .qc-home-insight-row span {
   overflow: hidden;
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .qc-home-insight-row small {
-  color: #2563eb;
+  color: #0066cc;
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .qc-home-insight-row .anticon {
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   font-size: 12px;
 }
 
@@ -1576,7 +1522,7 @@ watch(
   position: absolute;
   width: 150px;
   height: 78px;
-  border: 1px solid rgba(37, 99, 235, 0.34);
+  border: 1px solid rgba(0, 102, 204, 0.18);
   border-radius: 50%;
 }
 
@@ -1594,10 +1540,12 @@ watch(
   height: 110px;
   place-items: center;
   border-radius: 38px;
-  background: radial-gradient(circle at 30% 22%, #f8fbff, #7fb4ff 58%, #3b82f6);
-  color: rgba(255, 255, 255, 0.92);
+  background: rgba(234, 242, 255, 0.9);
+  color: #0066cc;
   font-size: 54px;
-  box-shadow: 0 22px 42px rgba(37, 99, 235, 0.24);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 102, 204, 0.1),
+    0 10px 24px rgba(0, 0, 0, 0.06);
 }
 
 .qc-home-task-panel {
@@ -1610,34 +1558,32 @@ watch(
 
 .qc-home-task-table__head {
   display: grid;
-  grid-template-columns: minmax(240px, 1.45fr) minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(
-      160px,
-      1fr
-    ) minmax(140px, 0.8fr) minmax(110px, 0.6fr);
+  grid-template-columns:
+    minmax(240px, 1.45fr) minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(160px, 1fr)
+    minmax(140px, 0.8fr) minmax(110px, 0.6fr);
   gap: 16px;
   padding: 0 26px 10px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.78);
-  color: #64748b;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .qc-task-row {
   display: grid;
-  grid-template-columns: minmax(240px, 1.45fr) minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(
-      160px,
-      1fr
-    ) minmax(140px, 0.8fr) minmax(110px, 0.6fr);
+  grid-template-columns:
+    minmax(240px, 1.45fr) minmax(120px, 0.8fr) minmax(110px, 0.7fr) minmax(160px, 1fr)
+    minmax(140px, 0.8fr) minmax(110px, 0.6fr);
   align-items: center;
   gap: 16px;
   min-height: 64px;
   padding: 10px 26px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.72);
-  color: #0f172a;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  color: #1d1d1f;
 }
 
 .qc-task-row:hover {
-  background: rgba(248, 250, 252, 0.72);
+  background: rgba(0, 0, 0, 0.025);
 }
 
 .qc-task-patient {
@@ -1655,13 +1601,13 @@ watch(
   place-items: center;
   overflow: hidden;
   border-radius: 999px;
-  background: linear-gradient(135deg, #dbeafe, #f8fafc);
-  color: #2563eb;
+  background: rgba(234, 242, 255, 0.9);
+  color: #0066cc;
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 700;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.72),
-    0 6px 14px rgba(15, 23, 42, 0.08);
+    0 6px 14px rgba(0, 0, 0, 0.06);
 }
 
 .qc-task-avatar img {
@@ -1676,21 +1622,21 @@ watch(
   min-width: 0;
   align-items: center;
   gap: 10px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 14px;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .qc-task-patient__name span {
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .qc-task-patient__id {
   margin-top: 3px;
   overflow: hidden;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
@@ -1701,15 +1647,15 @@ watch(
 .qc-task-cell {
   min-width: 0;
   overflow: hidden;
-  color: #334155;
+  color: rgba(29, 29, 31, 0.78);
   font-size: 13px;
-  font-weight: 760;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .qc-task-dept {
-  color: #0f172a;
+  color: #1d1d1f;
 }
 
 .qc-task-risk {
@@ -1719,29 +1665,29 @@ watch(
   padding: 0 12px;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .qc-task-risk--high {
-  border: 1px solid rgba(248, 113, 113, 0.36);
-  background: #fff1f2;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(255, 241, 242, 0.8);
   color: #ef4444;
 }
 
 .qc-task-risk--medium {
-  border: 1px solid rgba(251, 146, 60, 0.38);
-  background: #fff7ed;
-  color: #f97316;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+  background: rgba(255, 247, 237, 0.8);
+  color: #b45309;
 }
 
 .qc-task-risk--normal {
-  border: 1px solid rgba(34, 197, 94, 0.28);
-  background: #f0fdf4;
-  color: #16a34a;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: rgba(240, 253, 244, 0.78);
+  color: #047857;
 }
 
 .qc-task-reason {
-  color: #334155;
+  color: rgba(29, 29, 31, 0.78);
 }
 
 .qc-task-deadline {
@@ -1749,9 +1695,9 @@ watch(
   min-width: 0;
   flex-direction: column;
   gap: 4px;
-  color: #334155;
+  color: rgba(29, 29, 31, 0.78);
   font-size: 13px;
-  font-weight: 760;
+  font-weight: 600;
 }
 
 .qc-task-deadline strong {
@@ -1763,7 +1709,7 @@ watch(
 }
 
 .qc-task-deadline .is-progress {
-  color: #2563eb;
+  color: #0066cc;
 }
 
 .qc-task-deadline .is-pending {
@@ -1778,19 +1724,19 @@ watch(
 .qc-task-action button {
   height: 34px;
   min-width: 88px;
-  border: 1px solid rgba(37, 99, 235, 0.52);
+  border: 1px solid rgba(0, 102, 204, 0.28);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.7);
-  color: #2563eb;
+  color: #0066cc;
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 600;
   transition: all 0.18s ease;
 }
 
 .qc-task-action button:hover {
-  background: #2563eb;
+  background: #0066cc;
   color: #fff;
-  box-shadow: 0 10px 18px rgba(37, 99, 235, 0.18);
+  box-shadow: 0 10px 18px rgba(0, 102, 204, 0.14);
 }
 
 @media (max-width: 1180px) {

@@ -142,7 +142,13 @@
 
 ---
 
-## Milestone 2: 3.3.1 + 3.4.1 质控规则与编码内涵质控
+## Milestone 2: 3.3.1 + 3.4.1 质控规则与 ICD 编码规范内涵质控
+
+**3.4.1 scope clarification:**
+
+- `3.4.1` is ICD coding connotation QC, not general medical-record writing connotation QC.
+- It validates ICD coding rules, national/insurance version mapping, diagnosis/procedure code combinations, pathology-code/fee consistency, additional-code requirements, and downstream frontpage/settlement/DRG-DIP coding logic.
+- It must not be accepted by checking whether progress notes, ward-round notes, chief complaint, present illness, or other narrative documents are well written. Those belong to document/formal QC or clinical completeness checks.
 
 ### Task 2.1: Build Rule Coverage Registry
 
@@ -163,7 +169,7 @@
 
 - `py -3.10 -m pytest tests/unit/test_qc_rule_coverage.py -q`
 
-### Task 2.2: Wire Coding Connotation QC Into Formal Review
+### Task 2.2: Wire ICD Coding Connotation QC Into Formal Review
 
 **Files:**
 
@@ -173,10 +179,10 @@
 
 **Steps:**
 
-1. Add deterministic rule checks for tumor pathology code, pathology fee consistency, appendicitis/peritonitis merge, coronary stent additional codes.
+1. Add deterministic ICD coding rule checks for tumor pathology code, pathology fee consistency, appendicitis/peritonitis merge, coronary stent additional codes, diagnosis/procedure mismatch, and national/insurance version mapping mismatch.
 2. Keep LLM semantic review as optional enhancement, not the only evidence.
 3. Return issues in the same shape as formal QC issues.
-4. Add tests for each tender example.
+4. Add tests for each tender example and assert that the tests inspect coding inputs and coding outputs rather than narrative medical-record writing quality.
 
 **Checks:**
 

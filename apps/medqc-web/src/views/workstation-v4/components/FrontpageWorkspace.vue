@@ -1,18 +1,16 @@
 <template>
-  <div class="px-4 pb-5 pt-3 lg:px-5">
+  <div class="frontpage-apple-workspace px-4 pb-5 pt-3 lg:px-5">
     <div
-      class="mx-auto w-full max-w-[1480px] rounded-[18px] border border-slate-200/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(250,252,255,0.98))] p-3 shadow-[0_8px_20px_rgba(15,23,42,0.03)]"
+      class="mx-auto w-full max-w-[1480px] rounded-[18px] border border-slate-200/55 bg-white/86 p-3 shadow-[0_2px_12px_rgba(0,0,0,0.055)]"
     >
       <div
         class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-slate-200/80 bg-white/82 px-4 py-3"
       >
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2">
-            <div class="text-[17px] font-black text-slate-950">
-              病案首页工作区
-            </div>
+            <div class="text-[17px] font-semibold text-slate-950">病案首页工作区</div>
             <span
-              class="rounded-full border border-blue-100 bg-blue-50/85 px-2.5 py-0.5 text-[11px] font-bold text-blue-700"
+              class="rounded-full border border-blue-100 bg-blue-50/85 px-2.5 py-0.5 text-[11px] font-bold text-[#0057b8]"
             >
               {{ sourceLabel }}
             </span>
@@ -45,7 +43,7 @@
           </a-tooltip>
           <a-tooltip title="直接粘贴完整病历原文抽取">
             <a-button
-              class="!h-9 !rounded-full !border-blue-100 !bg-blue-50/70 !px-4 !text-sm !font-semibold !text-blue-700 hover:!border-blue-200 hover:!bg-blue-50"
+              class="!h-9 !rounded-full !border-blue-100 !bg-blue-50/70 !px-4 !text-sm !font-semibold !text-[#0057b8] hover:!border-blue-200 hover:!bg-blue-50"
               :disabled="frontpageGenerating || frontpagePostProcessing"
               @click="emit('paste-frontpage')"
             >
@@ -71,21 +69,19 @@
       <div
         v-if="
           !frontpageGenerating &&
-            !frontpagePostProcessing &&
-            !draft &&
-            !frontpageSheetLoading &&
-            !frontpageSheetData
+          !frontpagePostProcessing &&
+          !draft &&
+          !frontpageSheetLoading &&
+          !frontpageSheetData
         "
-        class="flex min-h-[360px] flex-col items-center justify-center rounded-[16px] border border-dashed border-blue-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(245,249,255,0.98))] px-6 py-12 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_14px_32px_rgba(148,163,184,0.08)]"
+        class="flex min-h-[360px] flex-col items-center justify-center rounded-[16px] border border-dashed border-slate-200/80 bg-white/86 px-6 py-12 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_2px_12px_rgba(0,0,0,0.055)]"
       >
         <div
-          class="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-blue-200/80 bg-[linear-gradient(180deg,#eef4ff,#dbeafe)] shadow-[0_12px_24px_rgba(59,130,246,0.14),inset_0_1px_0_rgba(255,255,255,0.8)]"
+          class="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-blue-100/80 bg-blue-50/80 shadow-[0_4px_12px_rgba(0,102,204,0.12),inset_0_1px_0_rgba(255,255,255,0.8)]"
         >
-          <FileSearchOutlined class="text-[28px] text-blue-600" />
+          <FileSearchOutlined class="text-[28px] text-[#0066cc]" />
         </div>
-        <div class="text-[18px] font-black text-slate-900">
-          暂无病案首页数据
-        </div>
+        <div class="text-[18px] font-semibold text-slate-900">暂无病案首页数据</div>
         <div class="mt-2 max-w-[360px] text-[13px] leading-6 text-slate-500">
           当前病历还没有可展示的病案首页正式数据，可使用上方工具栏生成首页草稿或重新加载系统首页。
         </div>
@@ -116,8 +112,12 @@
             <span>生成场景：{{ sceneLabel(reportResult.scene) }}</span>
             <span>{{ textCoverageLabel(reportResult) }}</span>
             <span>{{ settlementDraftLabel(reportResult) }}</span>
-            <span>总覆盖 {{ reportResult.coverage.present }}/{{ reportResult.coverage.total }}</span>
-            <span v-if="reportResult.coverage.missing">缺失 {{ reportResult.coverage.missing }} 项</span>
+            <span
+              >总覆盖 {{ reportResult.coverage.present }}/{{ reportResult.coverage.total }}</span
+            >
+            <span v-if="reportResult.coverage.missing"
+              >缺失 {{ reportResult.coverage.missing }} 项</span
+            >
           </div>
         </template>
         <template #description>
@@ -136,15 +136,13 @@
       >
         <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div class="text-[14px] font-black text-slate-900">
-              字段覆盖报告
-            </div>
+            <div class="text-[14px] font-semibold text-slate-900">字段覆盖报告</div>
             <div class="mt-0.5 text-[12px] font-medium text-slate-500">
               按首页生成条款分组展示抽取完成度，缺失字段需复核后再进入正式首页。
             </div>
           </div>
           <span
-            class="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700"
+            class="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-[#0057b8]"
           >
             {{ reportResult.coverage.status === 'complete' ? '可复核提交' : '待补全复核' }}
           </span>
@@ -171,19 +169,13 @@
               </span>
             </div>
             <div class="mt-2 flex items-end justify-between">
-              <div class="text-[24px] font-black leading-none text-slate-950">
+              <div class="text-[24px] font-semibold leading-none text-slate-950">
                 {{ item.present }}/{{ item.total }}
               </div>
               <div class="text-right text-[11px] leading-4 text-slate-500">
-                <div v-if="item.missing">
-                  缺失 {{ item.missing }}
-                </div>
-                <div v-if="item.partial">
-                  需复核 {{ item.partial }}
-                </div>
-                <div v-if="!item.missing && !item.partial">
-                  字段完整
-                </div>
+                <div v-if="item.missing">缺失 {{ item.missing }}</div>
+                <div v-if="item.partial">需复核 {{ item.partial }}</div>
+                <div v-if="!item.missing && !item.partial">字段完整</div>
               </div>
             </div>
           </article>
@@ -192,9 +184,7 @@
           v-if="topMissingFields.length"
           class="mt-3 rounded-[12px] border border-rose-100 bg-rose-50/55 px-3 py-2"
         >
-          <div class="mb-1 text-[12px] font-bold text-rose-700">
-            优先补全字段
-          </div>
+          <div class="mb-1 text-[12px] font-bold text-rose-700">优先补全字段</div>
           <div class="flex flex-wrap gap-1.5">
             <span
               v-for="field in topMissingFields"
@@ -297,3 +287,70 @@ function settlementDraftLabel(report?: Record<string, any> | null) {
   return report?.settlement ? '结算草稿已生成' : '结算草稿未生成'
 }
 </script>
+
+<style scoped>
+.frontpage-apple-workspace {
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.frontpage-apple-workspace > div,
+.frontpage-apple-workspace :deep(.bg-white\/86),
+.frontpage-apple-workspace :deep(.bg-white\/82),
+.frontpage-apple-workspace :deep(.bg-white\/88) {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  background: rgba(255, 255, 255, 0.86) !important;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.frontpage-apple-workspace :deep(.text-slate-950),
+.frontpage-apple-workspace :deep(.text-slate-900),
+.frontpage-apple-workspace :deep(.text-slate-800),
+.frontpage-apple-workspace :deep(.text-slate-700) {
+  color: #1d1d1f !important;
+}
+
+.frontpage-apple-workspace :deep(.text-slate-600),
+.frontpage-apple-workspace :deep(.text-slate-500),
+.frontpage-apple-workspace :deep(.text-slate-400) {
+  color: rgba(29, 29, 31, 0.56) !important;
+}
+
+.frontpage-apple-workspace :deep(.text-\[\#0057b8\]),
+.frontpage-apple-workspace :deep(.text-\[\#0066cc\]),
+.frontpage-apple-workspace :deep(.text-blue-500) {
+  color: #0066cc !important;
+}
+
+.frontpage-apple-workspace :deep(.bg-blue-50),
+.frontpage-apple-workspace :deep(.bg-blue-50\/70),
+.frontpage-apple-workspace :deep(.bg-blue-50\/80),
+.frontpage-apple-workspace :deep(.bg-blue-50\/85) {
+  background: rgba(0, 102, 204, 0.08) !important;
+}
+
+.frontpage-apple-workspace :deep(.border-blue-100),
+.frontpage-apple-workspace :deep(.border-blue-100\/80),
+.frontpage-apple-workspace :deep(.border-blue-200\/80),
+.frontpage-apple-workspace :deep(.border-slate-200),
+.frontpage-apple-workspace :deep(.border-slate-200\/55),
+.frontpage-apple-workspace :deep(.border-slate-200\/80) {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.frontpage-apple-workspace :deep(.ant-btn-primary) {
+  border-color: #0066cc !important;
+  background: #0066cc !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(0, 102, 204, 0.16) !important;
+}
+
+.frontpage-apple-workspace :deep(.ant-btn:not(.ant-btn-primary)) {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: rgba(29, 29, 31, 0.72) !important;
+}
+</style>

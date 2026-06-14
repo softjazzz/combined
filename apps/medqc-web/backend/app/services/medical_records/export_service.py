@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from sqlalchemy import MetaData, func, select
+from sqlalchemy import MetaData, func, select, text
 from sqlalchemy.orm import Session
 
 from ...database.connection import Base, engine
 from ...database.models.cdm import MedicalRecordFrontpage, Diagnosis, MrSurgery, MrCost
 from .errors import MedicalRecordsNotFoundError
+
+
+DEFAULT_HOSPITAL_NAME = "泸县人民医院"
 
 
 def _session_factory() -> Session:
@@ -97,6 +100,60 @@ def _sheet_basic_value(obj: Any, col_name: str) -> Any:
     return str(val) if val is not None else None
 
 
+def _row_value(row: Any, key: str) -> Any:
+    if isinstance(row, dict):
+        return row.get(key)
+    return getattr(row, key, None)
+
+
+def _is_main_diagnosis(row: Any) -> bool:
+    diagnosis_type = str(_row_value(row, "diagnosis_type") or "").strip()
+    diagnosis_no = str(_row_value(row, "diagnosis_no") or "").strip()
+    diagnosis_main = str(_row_value(row, "diagnosis_main") or "").strip()
+    return diagnosis_main == "是" or "主要" in diagnosis_type or diagnosis_no == "1"
+
+
+def _build_sheet_diagnosis_item(row: Any, *, main_diag_seen: bool) -> tuple[dict[str, Any] | None, bool]:
+    diagnosis_name = str(_row_value(row, "diagnosis_name") or "").strip()
+    if not diagnosis_name:
+        return None, main_diag_seen
+
+    diagnosis_type = str(_row_value(row, "diagnosis_type") or "").strip()
+    if _is_main_diagnosis(row) and not main_diag_seen:
+        display_type = "主要诊断"
+        main_diag_seen = True
+    else:
+        display_type = "其他诊断"
+
+    item = {
+        "diagnosis_type": display_type,
+        "diagnosis_no": _row_value(row, "diagnosis_no"),
+        "diagnosis_name": diagnosis_name,
+        "diagnosis_code": _row_value(row, "diagnosis_code"),
+        "admission_condition": _row_value(row, "admission_condition"),
+        "discharge_condition": _row_value(row, "discharge_condition"),
+        "source_diagnosis_type": diagnosis_type,
+    }
+    return item, main_diag_seen
+
+
+def _build_pathology_info(row: Any | None) -> dict[str, Any]:
+    if not row:
+        return {}
+    diagnosis_name = str(_row_value(row, "diagnosis_name") or "").strip()
+    diagnosis_code = str(_row_value(row, "diagnosis_code") or "").strip()
+    pathology_id = str(_row_value(row, "pathology_id") or "").strip()
+    if not diagnosis_name and not diagnosis_code and not pathology_id:
+        return {}
+    return {
+        "pathology_text": diagnosis_name,
+        "pathology_icd": diagnosis_code,
+        "pathology_no": pathology_id,
+        "source_diagnosis_type": _row_value(row, "diagnosis_type"),
+        "source_table": _row_value(row, "source_table"),
+    }
+
+
 def get_frontpage_sheet(
     patient_id: str,
     visit_id: str,
@@ -114,6 +171,8 @@ def get_frontpage_sheet(
         basic = {}
         for col in MedicalRecordFrontpage.__table__.columns:
             basic[col.name] = _sheet_basic_value(fp, col.name)
+        if not str(basic.get("institute_county_desc") or "").strip():
+            basic["institute_county_desc"] = DEFAULT_HOSPITAL_NAME
 
         diag_rows = session.query(Diagnosis).filter_by(
             patient_id=patient_id, visit_id=visit_id
@@ -121,24 +180,80 @@ def get_frontpage_sheet(
         diagnoses = []
         main_diag_seen = False
         for diag in diag_rows:
-            diagnosis_type = diag.diagnosis_type
-            if diagnosis_type and "主要" in diagnosis_type:
-                if main_diag_seen:
-                    diagnosis_type = diagnosis_type.replace("主要诊断", "其他诊断")
-                    if "主要" in diagnosis_type:
-                        diagnosis_type = diagnosis_type.replace("主要", "其他")
-                    if "主要" in diagnosis_type:
-                        diagnosis_type = "出院诊断-其他诊断"
-                else:
-                    main_diag_seen = True
-            diagnoses.append({
-                "diagnosis_type": diagnosis_type,
-                "diagnosis_no": diag.diagnosis_no,
-                "diagnosis_name": diag.diagnosis_name,
-                "diagnosis_code": diag.diagnosis_code,
-                "admission_condition": diag.admission_condition,
-                "discharge_condition": diag.discharge_condition,
-            })
+            item, main_diag_seen = _build_sheet_diagnosis_item(diag, main_diag_seen=main_diag_seen)
+            if item:
+                diagnoses.append(item)
+
+        if not diagnoses:
+            mr_diag_rows = session.execute(
+                text(
+                    "SELECT * FROM mr_diagnosis "
+                    "WHERE patient_id = :patient_id AND visit_id = :visit_id "
+                    "AND diagnosis_type LIKE '%出院诊断%' "
+                    "ORDER BY CASE WHEN diagnosis_main = '是' THEN 0 ELSE 1 END, "
+                    "CASE "
+                    "WHEN regexp_replace(COALESCE(diagnosis_no, ''), '^.*\\|\\|', '') ~ '^[0-9]+$' "
+                    "THEN regexp_replace(COALESCE(diagnosis_no, ''), '^.*\\|\\|', '')::int "
+                    "ELSE 999 END, diagnosis_id"
+                ),
+                {"patient_id": patient_id, "visit_id": visit_id},
+            ).mappings().all()
+            main_diag_seen = False
+            for row in mr_diag_rows:
+                item, main_diag_seen = _build_sheet_diagnosis_item(dict(row), main_diag_seen=main_diag_seen)
+                if item:
+                    item["source_table"] = "mr_diagnosis"
+                    diagnoses.append(item)
+
+        if not diagnoses:
+            record_diag_rows = session.execute(
+                text(
+                    "SELECT * FROM discharge_record_diagnosis "
+                    "WHERE patient_id = :patient_id AND visit_id = :visit_id "
+                    "AND diagnosis_type LIKE '%出院诊断%' "
+                    "AND COALESCE(is_deleted, '0') <> '1' "
+                    "ORDER BY CASE WHEN diagnosis_main = '是' THEN 0 ELSE 1 END, "
+                    "CASE "
+                    "WHEN regexp_replace(COALESCE(diagnosis_no, ''), '^.*\\|\\|', '') ~ '^[0-9]+$' "
+                    "THEN regexp_replace(COALESCE(diagnosis_no, ''), '^.*\\|\\|', '')::int "
+                    "ELSE 999 END, diagnosis_id"
+                ),
+                {"patient_id": patient_id, "visit_id": visit_id},
+            ).mappings().all()
+            main_diag_seen = False
+            for row in record_diag_rows:
+                item, main_diag_seen = _build_sheet_diagnosis_item(dict(row), main_diag_seen=main_diag_seen)
+                if item:
+                    diagnoses.append(item)
+
+        pathology_info: dict[str, Any] = {}
+        pathology_row = next(
+            (
+                diag
+                for diag in diag_rows
+                if "病理" in str(_row_value(diag, "diagnosis_type") or "")
+                or str(_row_value(diag, "diagnosis_code") or "").strip().upper().startswith("M")
+            ),
+            None,
+        )
+        if pathology_row:
+            pathology_info = _build_pathology_info(pathology_row)
+        else:
+            mr_pathology_row = session.execute(
+                text(
+                    "SELECT * FROM mr_diagnosis "
+                    "WHERE patient_id = :patient_id AND visit_id = :visit_id "
+                    "AND COALESCE(is_deleted, '0') <> '1' "
+                    "AND (diagnosis_type LIKE '%病理%' OR diagnosis_code LIKE 'M%') "
+                    "ORDER BY CASE WHEN diagnosis_type LIKE '%病理%' THEN 0 ELSE 1 END, diagnosis_id "
+                    "LIMIT 1"
+                ),
+                {"patient_id": patient_id, "visit_id": visit_id},
+            ).mappings().first()
+            if mr_pathology_row:
+                row = dict(mr_pathology_row)
+                row["source_table"] = "mr_diagnosis"
+                pathology_info = _build_pathology_info(row)
 
         surg_rows = session.query(MrSurgery).filter_by(
             patient_id=patient_id, visit_id=visit_id
@@ -175,5 +290,5 @@ def get_frontpage_sheet(
             "diagnoses": diagnoses,
             "surgeries": surgeries,
             "cost": cost_data,
+            "other_medical_info": pathology_info,
         }
-

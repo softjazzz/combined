@@ -1,41 +1,30 @@
 <template>
-  <div class="h-full w-full flex flex-col bg-slate-50 dark:bg-slate-900 overflow-hidden">
+  <div class="upload-workstation">
     <!-- Step 1: 上传 -->
-    <div
-      v-if="currentStep === 'upload'"
-      class="flex-1 flex flex-col p-6 overflow-hidden"
-    >
-      <!-- Header -->
-      <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-3">
-          <button
-            class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-            @click="$emit('back')"
-          >
-            <ArrowLeftOutlined class="text-lg" />
+    <div v-if="currentStep === 'upload'" class="upload-page">
+      <header class="upload-header">
+        <div class="upload-title-block">
+          <button class="upload-back-btn" type="button" @click="$emit('back')">
+            <ArrowLeft class="upload-back-icon" />
           </button>
           <div>
-            <h2 class="text-xl font-semibold text-slate-800 dark:text-white">
-              DRG/DIP 数据分析
-            </h2>
-            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              上传任意格式的 Excel 文件，AI 自动识别字段并生成分析报表
-            </p>
+            <span class="upload-eyebrow">数据导入</span>
+            <h2>DRG/DIP 数据分析</h2>
+            <p>上传任意格式的 Excel 文件，AI 自动识别字段并生成分析报表</p>
           </div>
         </div>
-      </div>
+        <div class="upload-header-meta">
+          <span>只读分析</span>
+          <span>Excel / CSV / ZIP</span>
+        </div>
+      </header>
 
-      <div class="flex-1 flex gap-6 overflow-hidden">
+      <div class="upload-content-grid">
         <!-- Upload Area -->
-        <div class="flex-1 flex flex-col">
+        <div class="upload-main-card">
           <!-- Drag & Drop Zone -->
           <div
-            :class="[
-              'flex-1 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer',
-              isDragging
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                : 'border-slate-300 dark:border-slate-600 hover:border-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800',
-            ]"
+            :class="['upload-dropzone', { 'upload-dropzone--dragging': isDragging }]"
             @dragover.prevent="isDragging = true"
             @dragleave="isDragging = false"
             @drop.prevent="handleDrop"
@@ -47,104 +36,66 @@
               accept=".xlsx,.xls,.csv,.zip"
               class="hidden"
               @change="handleFileSelect"
-            >
+            />
 
-            <div
-              v-if="!selectedFile && !uploading"
-              class="text-center p-8"
-            >
-              <div
-                class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"
-              >
-                <CloudUploadOutlined class="text-4xl text-blue-500" />
+            <div v-if="!selectedFile && !uploading" class="upload-empty">
+              <div class="upload-icon-orb">
+                <UploadCloud class="upload-state-icon" />
               </div>
-              <h3 class="text-lg font-medium text-slate-700 dark:text-white mb-2">
-                拖拽文件到此处或点击上传
-              </h3>
-              <p class="text-sm text-slate-500 dark:text-slate-400">
-                支持 .xlsx, .xls, .csv, .zip（多文件压缩包）格式
-              </p>
-              <p class="text-xs text-slate-400 mt-2">
-                ✨ 无需固定模板，AI 自动识别字段
-              </p>
+              <h3>拖拽文件到此处或点击上传</h3>
+              <p>支持 .xlsx, .xls, .csv, .zip（多文件压缩包）格式</p>
+              <div class="upload-format-row">
+                <span>无需固定模板</span>
+                <span>字段自动识别</span>
+                <span>可生成分析报表</span>
+              </div>
             </div>
 
             <!-- Selected File Preview -->
-            <div
-              v-else-if="selectedFile && !uploading"
-              class="text-center p-8"
-            >
-              <div
-                class="w-20 h-20 mx-auto mb-4 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center"
-              >
-                <FileExcelOutlined class="text-4xl text-green-500" />
+            <div v-else-if="selectedFile && !uploading" class="upload-selected">
+              <div class="upload-icon-orb upload-icon-orb--success">
+                <FileSpreadsheet class="upload-state-icon" />
               </div>
-              <h3 class="text-lg font-medium text-slate-700 dark:text-white mb-2">
+              <h3>
                 {{ selectedFile.name }}
               </h3>
-              <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">
+              <p>
                 {{ formatFileSize(selectedFile.size) }}
               </p>
-              <div class="flex gap-3 justify-center">
-                <button
-                  class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-sm"
-                  @click.stop="clearFile"
-                >
+              <div class="upload-action-row">
+                <button class="upload-secondary-btn" type="button" @click.stop="clearFile">
                   重新选择
                 </button>
-                <button
-                  class="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm flex items-center gap-2"
-                  @click.stop="smartUploadFile"
-                >
-                  <UploadOutlined />
+                <button class="upload-primary-btn" type="button" @click.stop="smartUploadFile">
+                  <UploadCloud class="upload-button-icon" />
                   开始上传分析
                 </button>
               </div>
             </div>
 
             <!-- Uploading State -->
-            <div
-              v-else
-              class="text-center p-8"
-            >
-              <div
-                class="w-20 h-20 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"
-              >
-                <LoadingOutlined class="text-4xl text-blue-500 animate-spin" />
+            <div v-else class="upload-loading">
+              <div class="upload-icon-orb">
+                <LoaderCircle class="upload-state-icon upload-spin" />
               </div>
-              <h3 class="text-lg font-medium text-slate-700 dark:text-white mb-2">
-                正在上传...
-              </h3>
-              <p class="text-sm text-slate-500 dark:text-slate-400">
-                请稍候，正在解析文件结构
-              </p>
+              <h3>正在上传...</h3>
+              <p>请稍候，正在解析文件结构</p>
             </div>
           </div>
         </div>
 
         <!-- Batch History -->
-        <div
-          class="w-80 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden"
-        >
-          <div
-            class="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between"
-          >
-            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">
-              历史批次
-            </h3>
-            <button
-              class="text-blue-500 hover:text-blue-600"
-              @click="() => loadBatches()"
-            >
-              <SyncOutlined :class="{ 'animate-spin': loadingBatches }" />
+        <aside class="upload-history-card">
+          <div class="upload-history-head">
+            <h3>历史批次</h3>
+            <button class="upload-refresh-btn" type="button" @click="() => loadBatches()">
+              <RefreshCw :class="['upload-refresh-icon', { 'upload-spin': loadingBatches }]" />
             </button>
           </div>
 
-          <div class="flex-1 overflow-y-auto">
-            <div
-              v-if="batches.length === 0"
-              class="p-8 text-center text-slate-400"
-            >
+          <div class="upload-history-list">
+            <div v-if="batches.length === 0" class="upload-history-empty">
+              <Inbox class="upload-history-empty-icon" />
               暂无上传记录
             </div>
             <div
@@ -152,28 +103,22 @@
               v-else
               :key="batch.batch_id"
               :class="[
-                'p-4 border-b border-slate-100 dark:border-slate-700 cursor-pointer transition-colors',
-                selectedBatchId === batch.batch_id
-                  ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500'
-                  : 'hover:bg-slate-50 dark:hover:bg-slate-700/30',
+                'upload-history-item',
+                { 'upload-history-item--selected': selectedBatchId === batch.batch_id },
               ]"
               @click="selectBatch(batch)"
             >
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-medium text-slate-700 dark:text-white">{{
-                  batch.batch_id.substring(6, 21)
-                }}</span>
-                <span class="text-xs text-blue-500">{{ batch.count }} 条</span>
+              <div class="upload-history-item-top">
+                <span>{{ batch.batch_id.substring(6, 21) }}</span>
+                <em>{{ batch.count }} 条</em>
               </div>
-              <div class="text-xs text-slate-500">
-                费用: ¥{{ formatNumber(batch.total_cost) }}
-              </div>
-              <div class="text-xs text-slate-400 mt-1">
+              <div class="upload-history-cost">费用: ¥{{ formatNumber(batch.total_cost) }}</div>
+              <div class="upload-history-time">
                 {{ formatDate(batch.created_at) }}
               </div>
             </div>
           </div>
-        </div>
+        </aside>
       </div>
     </div>
 
@@ -190,28 +135,19 @@
     />
 
     <!-- Step 3: 报表生成完成 → 跳转事后分析 -->
-    <div
-      v-else-if="currentStep === 'complete'"
-      class="flex-1 flex flex-col items-center justify-center p-8"
-    >
-      <div class="w-24 h-24 rounded-full bg-green-100 flex items-center justify-center mb-6">
-        <CheckCircleOutlined class="text-5xl text-green-500" />
+    <div v-else-if="currentStep === 'complete'" class="upload-complete">
+      <div class="upload-complete-icon">
+        <CircleCheck class="upload-complete-symbol" />
       </div>
-      <h2 class="text-2xl font-semibold text-slate-800 mb-2">
-        分析完成！
-      </h2>
-      <p class="text-slate-500 mb-6">
+      <h2>分析完成！</h2>
+      <p>
         已处理 {{ analysisResult?.row_count || 0 }} 条病例数据，生成 {{ chartCount }} 个分析图表
       </p>
-      <div class="flex gap-4">
-        <a-button @click="currentStep = 'upload'">
+      <div class="upload-complete-actions">
+        <a-button class="upload-complete-secondary" @click="currentStep = 'upload'">
           继续上传
         </a-button>
-        <a-button
-          type="primary"
-          size="large"
-          @click="goToAnalysis"
-        >
+        <a-button type="primary" size="large" class="upload-complete-primary" @click="goToAnalysis">
           查看分析报表 →
         </a-button>
       </div>
@@ -223,14 +159,14 @@
 import { ref, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import {
-  ArrowLeftOutlined,
-  CloudUploadOutlined,
-  FileExcelOutlined,
-  UploadOutlined,
-  LoadingOutlined,
-  SyncOutlined,
-  CheckCircleOutlined,
-} from '@ant-design/icons-vue'
+  ArrowLeft,
+  CircleCheck,
+  FileSpreadsheet,
+  Inbox,
+  LoaderCircle,
+  RefreshCw,
+  UploadCloud,
+} from 'lucide-vue-next'
 import { getAccessToken } from '@/utils/auth-token'
 import FieldMappingStep from './FieldMappingStep.vue'
 
@@ -454,3 +390,554 @@ onMounted(() => {
   // 无需在 mount 时加载批次，因为没有 session
 })
 </script>
+
+<style scoped>
+.upload-workstation {
+  min-height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'SF Pro Text', 'San Francisco', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.upload-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 24px;
+  overflow: hidden;
+}
+
+.upload-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.upload-title-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.upload-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+  color: rgba(29, 29, 31, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 3px rgba(0, 0, 0, 0.045);
+  transition:
+    color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.upload-back-btn:hover {
+  color: #0066cc;
+  border-color: rgba(0, 102, 204, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 3px 10px rgba(0, 102, 204, 0.08);
+}
+
+.upload-back-icon {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.1;
+}
+
+.upload-eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: #0066cc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+}
+
+.upload-title-block h2 {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 31px;
+  letter-spacing: 0;
+}
+
+.upload-title-block p {
+  margin: 8px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.upload-header-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+}
+
+.upload-header-meta span {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 102, 204, 0.12);
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.06);
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.upload-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.upload-main-card,
+.upload-history-card {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+  overflow: hidden;
+}
+
+.upload-main-card {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  padding: 18px;
+}
+
+.upload-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 420px;
+  border: 1.5px dashed rgba(0, 102, 204, 0.24);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top, rgba(0, 102, 204, 0.07), transparent 34%),
+    rgba(250, 252, 255, 0.7);
+  cursor: pointer;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.upload-dropzone:hover,
+.upload-dropzone--dragging {
+  border-color: rgba(0, 102, 204, 0.42);
+  background:
+    radial-gradient(circle at top, rgba(0, 102, 204, 0.1), transparent 38%),
+    rgba(247, 251, 255, 0.88);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 8px 28px rgba(0, 102, 204, 0.08);
+  transform: translateY(-1px);
+}
+
+.upload-empty,
+.upload-selected,
+.upload-loading {
+  width: min(520px, 100%);
+  padding: 32px;
+  text-align: center;
+}
+
+.upload-icon-orb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(0, 102, 204, 0.16);
+  border-radius: 18px;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 4px 14px rgba(0, 102, 204, 0.08);
+}
+
+.upload-icon-orb--success {
+  border-color: rgba(16, 185, 129, 0.18);
+  background: rgba(16, 185, 129, 0.09);
+  color: #059669;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 4px 14px rgba(16, 185, 129, 0.08);
+}
+
+.upload-state-icon {
+  width: 34px;
+  height: 34px;
+  stroke-width: 1.9;
+}
+
+.upload-empty h3,
+.upload-selected h3,
+.upload-loading h3 {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 24px;
+}
+
+.upload-empty p,
+.upload-selected p,
+.upload-loading p {
+  margin: 8px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.upload-format-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.upload-format-row span {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(29, 29, 31, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: rgba(29, 29, 31, 0.66);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.upload-action-row,
+.upload-complete-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.upload-primary-btn,
+.upload-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.upload-primary-btn {
+  border: 1px solid #0066cc;
+  background: #0066cc;
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 5px 14px rgba(0, 102, 204, 0.18);
+}
+
+.upload-primary-btn:hover {
+  background: #0057b8;
+  border-color: #0057b8;
+}
+
+.upload-secondary-btn {
+  border: 1px solid rgba(29, 29, 31, 0.1);
+  background: rgba(255, 255, 255, 0.94);
+  color: rgba(29, 29, 31, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.upload-secondary-btn:hover {
+  color: #1d1d1f;
+  border-color: rgba(29, 29, 31, 0.16);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.upload-button-icon {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.1;
+}
+
+.upload-history-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.upload-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 16px 13px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.upload-history-head h3 {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 22px;
+}
+
+.upload-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(0, 102, 204, 0.14);
+  border-radius: 9px;
+  background: rgba(0, 102, 204, 0.06);
+  color: #0066cc;
+}
+
+.upload-refresh-icon {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.1;
+}
+
+.upload-history-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.upload-history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 220px;
+  padding: 28px;
+  color: rgba(29, 29, 31, 0.38);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.upload-history-empty-icon {
+  width: 28px;
+  height: 28px;
+  stroke-width: 1.8;
+}
+
+.upload-history-item {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition:
+    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.upload-history-item:hover {
+  background: rgba(0, 0, 0, 0.025);
+}
+
+.upload-history-item--selected {
+  background: rgba(0, 102, 204, 0.08);
+  box-shadow: inset 3px 0 0 #0066cc;
+}
+
+.upload-history-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.upload-history-item-top span {
+  min-width: 0;
+  overflow: hidden;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-history-item-top em {
+  flex: none;
+  color: #0066cc;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.upload-history-cost,
+.upload-history-time {
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.upload-history-time {
+  color: rgba(29, 29, 31, 0.38);
+}
+
+.upload-complete {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 32px;
+  background: #f5f5f7;
+  text-align: center;
+}
+
+.upload-complete-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  border-radius: 26px;
+  background: rgba(16, 185, 129, 0.09);
+  color: #059669;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 10px 28px rgba(16, 185, 129, 0.12);
+}
+
+.upload-complete-symbol {
+  width: 42px;
+  height: 42px;
+  stroke-width: 1.9;
+}
+
+.upload-complete h2 {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 34px;
+}
+
+.upload-complete p {
+  margin: 10px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.upload-complete-secondary,
+.upload-complete-primary {
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.upload-complete-primary {
+  background: #0066cc;
+  border-color: #0066cc;
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18);
+}
+
+.upload-spin {
+  animation: upload-spin 0.9s linear infinite;
+}
+
+@keyframes upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1100px) {
+  .upload-content-grid {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .upload-history-card {
+    min-height: 260px;
+  }
+}
+
+@media (max-width: 720px) {
+  .upload-page {
+    padding: 16px;
+  }
+
+  .upload-header {
+    flex-direction: column;
+  }
+
+  .upload-title-block h2,
+  .upload-complete h2 {
+    font-size: 24px;
+    line-height: 29px;
+  }
+
+  .upload-dropzone {
+    min-height: 360px;
+  }
+}
+</style>

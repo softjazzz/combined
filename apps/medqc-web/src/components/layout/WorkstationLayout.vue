@@ -1,39 +1,70 @@
 <template>
   <a-layout
-    class="workstation-layout min-h-screen"
+    class="workstation-layout workstation-layout--apple min-h-screen"
     :class="{ 'workstation-layout--overview': isQcOverviewRoute }"
   >
     <!-- 侧边栏 -->
     <a-layout-sider
       v-model:collapsed="collapsed"
       collapsible
-      class="sidebar-container shadow-xl relative overflow-hidden border-none bg-slate-900"
-      :theme="isQcOverviewRoute ? 'light' : 'dark'"
-      width="260"
+      class="sidebar-container relative overflow-hidden border-none"
+      theme="light"
+      width="220"
     >
       <!-- Logo区域 -->
       <div
-        class="logo-container relative px-4 py-5 flex items-center justify-center transition-all duration-300 border-b border-slate-800"
-        :class="collapsed ? 'px-2' : 'px-6'"
+        class="logo-container"
+        :class="{ 'logo-container--collapsed': collapsed }"
       >
-        <div class="flex items-center gap-3 overflow-hidden whitespace-nowrap">
+        <div
+          class="brand-card"
+          :class="{ 'brand-card--collapsed': collapsed }"
+        >
           <div
-            class="w-10 h-10 rounded-xl bg-[#1890FF] flex items-center justify-center shadow-lg shadow-blue-500/20 flex-shrink-0 transition-all duration-300"
+            class="brand-mark"
+            aria-hidden="true"
           >
-            <MedicineBoxOutlined class="text-white text-xl" />
+            <svg
+              class="brand-mark-svg"
+              viewBox="0 0 40 40"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M20 5.4 30.2 9.1v9.7c0 7.1-4.2 13.2-10.2 15.8C14 32 9.8 25.9 9.8 18.8V9.1L20 5.4Z"
+                fill="white"
+                fill-opacity=".18"
+                stroke="white"
+                stroke-width="2.2"
+                stroke-linejoin="round"
+              />
+              <path
+                d="M20 13.2v13.6M13.2 20h13.6"
+                stroke="white"
+                stroke-width="3"
+                stroke-linecap="round"
+              />
+              <path
+                d="M15.2 30.2c1.4 1.3 3 2.4 4.8 3.2 1.8-.8 3.4-1.9 4.8-3.2"
+                stroke="white"
+                stroke-opacity=".55"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+            </svg>
           </div>
           <div
             v-if="!collapsed"
-            class="flex flex-col transition-all duration-300 opacity-100"
+            class="brand-copy"
           >
-            <span
-              class="font-bold text-lg leading-tight tracking-tight"
-              :class="isQcOverviewRoute ? 'text-slate-900' : 'text-white'"
-            >病案质控系统</span>
-            <span
-              class="text-xs font-medium tracking-wide"
-              :class="isQcOverviewRoute ? 'text-slate-500' : 'text-slate-400'"
-            >AI-Powered QC Platform</span>
+            <span class="brand-title">病案质控系统</span>
+            <span class="brand-subtitle">
+              <span>质量</span>
+              <i />
+              <span>安全</span>
+              <i />
+              <span>改进</span>
+            </span>
           </div>
         </div>
       </div>
@@ -43,8 +74,8 @@
         <a-menu
           v-model:selected-keys="selectedKeys"
           mode="inline"
-          :theme="isQcOverviewRoute ? 'light' : 'dark'"
-          class="border-none px-3 space-y-1 bg-slate-900"
+          theme="light"
+          class="workstation-sidebar-menu border-none px-3 space-y-1 bg-transparent"
           :open-keys="openKeys"
           @click="handleMenuSelect"
           @open-change="handleMenuOpenChange"
@@ -55,38 +86,38 @@
             class="menu-item-base"
           >
             <template #icon>
-              <DesktopOutlined />
+              <MonitorCog class="sidebar-icon" />
             </template>
             <template #title>
               <span class="font-medium">工作台</span>
             </template>
             <a-menu-item key="/workstation-v4">
               <template #icon>
-                <DesktopOutlined />
+                <House class="sidebar-icon" />
               </template>
               <span>工作台首页</span>
             </a-menu-item>
             <a-menu-item key="/workstation-v4/worklist">
               <template #icon>
-                <AlertOutlined />
+                <FolderKanban class="sidebar-icon" />
               </template>
               <span>病历池</span>
             </a-menu-item>
             <a-menu-item key="/workstation-v4/records/running">
               <template #icon>
-                <PlayCircleOutlined />
+                <PlayCircle class="sidebar-icon" />
               </template>
               <span>运行病历质控</span>
             </a-menu-item>
             <a-menu-item key="/workstation-v4/records/final">
               <template #icon>
-                <CheckCircleOutlined />
+                <CircleCheck class="sidebar-icon" />
               </template>
               <span>终末病历质控</span>
             </a-menu-item>
             <a-menu-item key="/workstation-v4/customer-sample-validation">
               <template #icon>
-                <FileSearchOutlined />
+                <FileSearch class="sidebar-icon" />
               </template>
               <span>客户样本验证</span>
             </a-menu-item>
@@ -95,7 +126,7 @@
               @click="goStageMenu('frontpage_generate')"
             >
               <template #icon>
-                <FileSearchOutlined />
+                <FilePlus2 class="sidebar-icon" />
               </template>
               <span>生成首页</span>
             </a-menu-item>
@@ -104,7 +135,7 @@
               @click="goStageMenu('frontpage_qc')"
             >
               <template #icon>
-                <SafetyCertificateOutlined />
+                <ShieldCheck class="sidebar-icon" />
               </template>
               <span>首页质控</span>
             </a-menu-item>
@@ -113,9 +144,46 @@
               @click="goStageMenu('settlement_qc')"
             >
               <template #icon>
-                <DollarOutlined />
+                <ReceiptText class="sidebar-icon" />
               </template>
               <span>结算清单质控</span>
+            </a-menu-item>
+          </a-sub-menu>
+
+          <!-- 质控规则 -->
+          <a-sub-menu
+            key="qc-rules-sub"
+            class="menu-item-base"
+          >
+            <template #icon>
+              <Shield class="sidebar-icon" />
+            </template>
+            <template #title>
+              <span class="font-medium">质控规则</span>
+            </template>
+            <a-menu-item key="/workstation-v4/rules?tab=coding">
+              <template #icon>
+                <Pill class="sidebar-icon" />
+              </template>
+              <span>编码质控规则</span>
+            </a-menu-item>
+            <a-menu-item key="/workstation-v4/rules?tab=semantic">
+              <template #icon>
+                <Workflow class="sidebar-icon" />
+              </template>
+              <span>全病历质控规则</span>
+            </a-menu-item>
+            <a-menu-item key="/workstation-v4/rules?tab=frontpage">
+              <template #icon>
+                <FileText class="sidebar-icon" />
+              </template>
+              <span>首页质控规则</span>
+            </a-menu-item>
+            <a-menu-item key="/workstation-v4/rules?tab=settlement">
+              <template #icon>
+                <ReceiptText class="sidebar-icon" />
+              </template>
+              <span>医保结算清单规则</span>
             </a-menu-item>
           </a-sub-menu>
 
@@ -125,7 +193,7 @@
             class="menu-item-base"
           >
             <template #icon>
-              <SearchOutlined />
+              <Search class="sidebar-icon" />
             </template>
             <span class="font-medium">ICD 编码查询</span>
           </a-menu-item>
@@ -136,77 +204,40 @@
             class="menu-item-base"
           >
             <template #icon>
-              <ClusterOutlined />
+              <Network class="sidebar-icon" />
             </template>
             <template #title>
               <span class="font-medium">DRG/DIP 分析</span>
             </template>
             <a-menu-item key="/workstation-v4/drg/pre">
               <template #icon>
-                <FileSearchOutlined />
+                <FileChartColumn class="sidebar-icon" />
               </template>
               <span>事前分析</span>
             </a-menu-item>
             <a-menu-item key="/workstation-v4/drg/mid">
               <template #icon>
-                <DashboardOutlined />
+                <Activity class="sidebar-icon" />
               </template>
               <span>事中监控</span>
             </a-menu-item>
             <a-menu-item key="/workstation-v4/drg/payment">
               <template #icon>
-                <DollarOutlined />
+                <BadgeDollarSign class="sidebar-icon" />
               </template>
               <span>付费监测</span>
             </a-menu-item>
             <a-menu-item key="/workstation-v4/drg/post">
               <template #icon>
-                <BarChartOutlined />
+                <ChartNoAxesColumnIncreasing class="sidebar-icon" />
               </template>
               <span>事后分析</span>
             </a-menu-item>
             <a-menu-item key="/workstation-v4/grouper">
               <template #icon>
-                <ForkOutlined />
+                <GitFork class="sidebar-icon" />
               </template>
               <span>分组器</span>
-            </a-menu-item>
-          </a-sub-menu>
-
-          <!-- 质控规则 -->
-          <a-sub-menu
-            key="qc-rules-sub"
-            class="menu-item-base"
-          >
-            <template #icon>
-              <SafetyCertificateOutlined />
-            </template>
-            <template #title>
-              <span class="font-medium">质控规则</span>
-            </template>
-            <a-menu-item key="/workstation-v4/rules?tab=coding">
-              <template #icon>
-                <MedicineBoxOutlined />
-              </template>
-              <span>编码质控规则</span>
-            </a-menu-item>
-            <a-menu-item key="/workstation-v4/rules?tab=semantic">
-              <template #icon>
-                <BranchesOutlined />
-              </template>
-              <span>全病历质控规则</span>
-            </a-menu-item>
-            <a-menu-item key="/workstation-v4/rules?tab=frontpage">
-              <template #icon>
-                <FileSearchOutlined />
-              </template>
-              <span>首页质控规则</span>
-            </a-menu-item>
-            <a-menu-item key="/workstation-v4/rules?tab=settlement">
-              <template #icon>
-                <DollarOutlined />
-              </template>
-              <span>医保结算清单规则</span>
             </a-menu-item>
           </a-sub-menu>
 
@@ -215,7 +246,7 @@
             class="menu-item-base"
           >
             <template #icon>
-              <ThunderboltOutlined />
+              <Bolt class="sidebar-icon" />
             </template>
             <span class="font-medium">自定义质控点</span>
           </a-menu-item>
@@ -226,7 +257,7 @@
             class="menu-item-base"
           >
             <template #icon>
-              <CloudUploadOutlined />
+              <CloudUpload class="sidebar-icon" />
             </template>
             <span class="font-medium">数据上传</span>
           </a-menu-item>
@@ -237,7 +268,7 @@
             class="menu-item-base"
           >
             <template #icon>
-              <SettingOutlined />
+              <Settings class="sidebar-icon" />
             </template>
             <span class="font-medium">系统配置</span>
           </a-menu-item>
@@ -276,7 +307,7 @@
             <a-breadcrumb-item>
               <router-link
                 to="/workstation-v4"
-                class="flex items-center gap-2 text-slate-700 hover:text-blue-600 transition-colors px-2 py-1 rounded-md hover:bg-slate-50"
+                class="flex items-center gap-2 text-slate-700 hover:text-[#0066cc] transition-colors px-2 py-1 rounded-md hover:bg-slate-50"
               >
                 <HomeOutlined class="text-base" />
                 <span class="font-semibold text-sm">工作台</span>
@@ -302,13 +333,13 @@
               <div class="w-72 p-2">
                 <div class="flex justify-between items-center mb-2 px-2">
                   <span class="font-bold text-slate-700">通知中心</span>
-                  <span class="text-xs text-blue-600 cursor-pointer">全部已读</span>
+                  <span class="text-xs text-[#0066cc] cursor-pointer">全部已读</span>
                 </div>
                 <div class="space-y-1">
                   <div
                     class="p-3 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors flex gap-3 items-start"
                   >
-                    <div class="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+                    <div class="w-2 h-2 rounded-full bg-[#0066cc] mt-1.5 shrink-0" />
                     <div>
                       <div class="text-sm text-slate-700 font-medium">
                         系统升级通知
@@ -343,7 +374,7 @@
             >
               <a-avatar
                 :size="36"
-                class="mr-2 bg-[#2563eb] text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white"
+                class="mr-2 bg-[#0066cc] text-white shadow-sm group-hover:shadow-md transition-shadow border-2 border-white"
               >
                 <template #icon>
                   <UserOutlined />
@@ -351,7 +382,7 @@
               </a-avatar>
               <div class="flex flex-col mr-1 hidden sm:flex shrink-0">
                 <span
-                  class="text-sm font-bold text-slate-700 leading-tight group-hover:text-blue-600 transition-colors whitespace-nowrap"
+                  class="text-sm font-bold text-slate-700 leading-tight group-hover:text-[#0066cc] transition-colors whitespace-nowrap"
                 >{{ roleLabel }}</span>
                 <span
                   class="text-[10px] text-slate-400 font-medium tracking-wider leading-tight whitespace-nowrap"
@@ -413,10 +444,15 @@
             name="fade"
             mode="out-in"
           >
-            <component
-              :is="Component"
+            <div
               :key="route.fullPath"
-            />
+              class="workstation-route-view"
+            >
+              <component
+                :is="Component"
+                v-if="Component"
+              />
+            </div>
           </transition>
         </router-view>
       </a-layout-content>
@@ -432,29 +468,38 @@ import { useAuthStore } from '@/stores/auth'
 import {
   MenuUnfoldOutlined,
   MenuFoldOutlined,
-  ThunderboltOutlined,
-  DesktopOutlined,
-  SearchOutlined,
-  CloudUploadOutlined,
-  ClusterOutlined,
-  FileSearchOutlined,
-  DashboardOutlined,
-  PlayCircleOutlined,
-  CheckCircleOutlined,
-  AlertOutlined,
-  DollarOutlined,
-  BarChartOutlined,
   HomeOutlined,
   BellOutlined,
   UserOutlined,
   DownOutlined,
   SettingOutlined,
   LogoutOutlined,
-  MedicineBoxOutlined,
-  SafetyCertificateOutlined,
-  ForkOutlined,
-  BranchesOutlined,
 } from '@ant-design/icons-vue'
+import {
+  Activity,
+  BadgeDollarSign,
+  Bolt,
+  ChartNoAxesColumnIncreasing,
+  CircleCheck,
+  CloudUpload,
+  FileChartColumn,
+  FilePlus2,
+  FileSearch,
+  FileText,
+  FolderKanban,
+  GitFork,
+  House,
+  MonitorCog,
+  Network,
+  Pill,
+  PlayCircle,
+  ReceiptText,
+  Search,
+  Settings,
+  Shield,
+  ShieldCheck,
+  Workflow,
+} from 'lucide-vue-next'
 
 const router = useRouter()
 const route = useRoute()
@@ -573,6 +618,10 @@ watch(
       selectedKeys.value = [`/workstation-v4/rules?tab=${tab}`]
       return
     }
+    if (base === '/workstation-v4/rules') {
+      selectedKeys.value = ['/workstation-v4/rules?tab=coding']
+      return
+    }
     const stage = String(route.query.stage || '').trim()
     if (
       (base === '/workstation-v4' || base === '/workstation-v4/worklist') &&
@@ -602,122 +651,329 @@ watch(
 </script>
 
 <style scoped>
+.logo-container {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 12px 12px 10px;
+  transition: padding 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.logo-container--collapsed {
+  padding: 12px 8px 10px;
+}
+
+.brand-card {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 12px 28px rgba(15, 23, 42, 0.06);
+  display: flex;
+  gap: 12px;
+  min-height: 64px;
+  overflow: hidden;
+  padding: 11px 12px;
+  transition:
+    background 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.brand-card:hover {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 102, 204, 0.18);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.08),
+    0 14px 30px rgba(0, 102, 204, 0.09);
+  transform: translateY(-1px);
+}
+
+.brand-card--collapsed {
+  justify-content: center;
+  min-height: 56px;
+  padding: 9px 8px;
+}
+
+.brand-mark {
+  align-items: center;
+  background:
+    radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.72), transparent 24%),
+    linear-gradient(135deg, #2997ff 0%, #0a84ff 48%, #5ac8fa 100%);
+  border-radius: 15px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.46),
+    0 8px 18px rgba(0, 102, 204, 0.22);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 42px;
+  justify-content: center;
+  position: relative;
+  width: 42px;
+}
+
+.brand-mark::after {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: inherit;
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.brand-mark-svg {
+  height: 29px;
+  width: 29px;
+}
+
+.brand-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.brand-title {
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'SF Pro Display', 'SF Pro Text', 'San Francisco', 'PingFang SC',
+    'Microsoft YaHei UI', system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 760;
+  letter-spacing: -0.01em;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brand-subtitle {
+  align-items: center;
+  color: rgba(29, 29, 31, 0.5);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 6px;
+  letter-spacing: 0.08em;
+  line-height: 16px;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.brand-subtitle i {
+  background: rgba(0, 102, 204, 0.32);
+  border-radius: 999px;
+  display: inline-block;
+  height: 3px;
+  width: 3px;
+}
+
+.sidebar-icon {
+  color: currentColor;
+  height: 17px;
+  stroke-width: 2.15;
+  width: 17px;
+}
+
 /* Ant Design 菜单样式重写 */
 :deep(.ant-menu-dark) {
   background: transparent !important;
 }
 
+.sidebar-container :deep(.ant-menu) {
+  background: transparent !important;
+  font-family:
+    'Source Han Sans SC', 'SF Pro Text', 'SF Pro Display', 'San Francisco', 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
 /* 菜单项通用样式 */
-:deep(.ant-menu-item),
-:deep(.ant-menu-submenu-title) {
-  border-radius: 8px;
-  margin: 4px 0;
-  width: 100%;
-  color: #94a3b8; /* Slate-400 */
-  transition: all 0.2s ease;
+.sidebar-container :deep(.ant-menu-item),
+.sidebar-container :deep(.ant-menu-submenu-title) {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: rgba(29, 29, 31, 0.72);
+  display: flex;
   height: 42px !important;
   line-height: 42px !important;
+  margin: 4px 0;
+  overflow: hidden;
+  position: relative;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+  width: 100%;
+}
+
+.sidebar-container :deep(.ant-menu-item .ant-menu-item-icon),
+.sidebar-container :deep(.ant-menu-submenu-title .ant-menu-item-icon) {
+  align-items: center;
+  color: currentColor;
+  display: inline-flex;
+  justify-content: center;
+  margin-inline-end: 10px;
+  min-width: 18px;
+}
+
+.sidebar-container :deep(.ant-menu-item .ant-menu-item-icon svg),
+.sidebar-container :deep(.ant-menu-submenu-title .ant-menu-item-icon svg) {
+  display: block;
+}
+
+.sidebar-container :deep(.ant-menu-title-content) {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 /* 菜单项悬停 */
-:deep(.ant-menu-item:hover),
-:deep(.ant-menu-submenu-title:hover) {
-  color: #fff !important;
-  background-color: rgba(255, 255, 255, 0.1) !important;
+.sidebar-container :deep(.ant-menu-item:hover),
+.sidebar-container :deep(.ant-menu-submenu-title:hover) {
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: transparent !important;
+  box-shadow: none;
+  color: #1d1d1f !important;
+  transform: translateX(1px);
 }
 
 /* 菜单项选中 */
-:deep(.ant-menu-item-selected) {
-  background-color: rgba(255, 255, 255, 0.08) !important;
-  color: #fff !important;
-  font-weight: 600;
+.sidebar-container :deep(.ant-menu-item-selected),
+.sidebar-container :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title) {
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  background: rgba(0, 102, 204, 0.1) !important;
+  border-color: transparent !important;
   box-shadow: none !important;
+  color: #0066cc !important;
+  font-weight: 700;
   position: relative;
 }
 
-:deep(.ant-menu-item-selected::before) {
+.sidebar-container :deep(.ant-menu-item-selected .ant-menu-title-content),
+.sidebar-container
+  :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-title-content),
+.sidebar-container :deep(.ant-menu-item-selected .ant-menu-item-icon),
+.sidebar-container :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-item-icon) {
+  color: #0066cc !important;
+}
+
+.sidebar-container :deep(.ant-menu-item-selected::before),
+.sidebar-container :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title::before) {
   content: '';
   position: absolute;
-  top: 15%;
+  top: 18%;
   left: 0;
-  width: 3px;
-  height: 70%;
-  background-color: #1890ff;
+  width: 4px;
+  height: 64%;
+  background-color: #0066cc;
   border-radius: 4px;
+  box-shadow: none;
 }
 
 /* 选中项高亮条 */
-:deep(.ant-menu-item-selected::after) {
+.sidebar-container :deep(.ant-menu-item-selected::after) {
   display: none;
 }
 
-/* 子菜单容器 — 深色内嵌 + 左侧蓝色连接线 */
-:deep(.ant-menu-sub.ant-menu-inline) {
-  background: rgba(0, 0, 0, 0.25) !important;
-  border-radius: 0 0 8px 8px;
+/* 子菜单容器 */
+.sidebar-container :deep(.ant-menu-sub.ant-menu-inline) {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.58) !important;
+  border: 1px solid rgba(0, 0, 0, 0.045);
+  border-radius: 12px;
   margin: 0 8px 4px 8px;
   padding: 4px 0 4px 0 !important;
-  border-left: 2px solid rgba(59, 130, 246, 0.4);
   margin-left: 24px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
 }
 
 /* 子菜单项 — 更紧凑、缩进更深、字体更小 */
-:deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item) {
+.sidebar-container :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item) {
+  border: 1px solid transparent !important;
   height: 36px !important;
   line-height: 36px !important;
-  font-size: 13px !important;
+  font-size: 14px !important;
   padding-left: 20px !important;
   margin: 1px 4px !important;
   border-radius: 6px;
-  color: #94a3b8 !important;
+  color: rgba(29, 29, 31, 0.52) !important;
 }
 
 /* 子菜单项图标缩小 */
-:deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item .anticon) {
-  font-size: 14px;
+.sidebar-container :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item .sidebar-icon) {
+  height: 15px;
+  width: 15px;
 }
 
 /* 子菜单项悬停 */
-:deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item:hover) {
-  color: #e2e8f0 !important;
-  background: rgba(255, 255, 255, 0.08) !important;
+.sidebar-container :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item:hover) {
+  color: #1d1d1f !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: transparent !important;
 }
 
 /* 子菜单项选中 */
-:deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected) {
-  background: rgba(24, 144, 255, 0.12) !important;
-  color: #fff !important;
-  font-weight: 600;
+.sidebar-container :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected) {
+  background: rgba(0, 102, 204, 0.1) !important;
+  border-color: transparent !important;
+  color: #0066cc !important;
+  font-weight: 700;
   box-shadow: none;
   position: relative;
 }
 
-:deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected::before) {
+.sidebar-container
+  :deep(
+    .ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected .ant-menu-title-content
+  ),
+.sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected .ant-menu-item-icon) {
+  color: #0066cc !important;
+}
+
+.sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected::before) {
   content: '';
   position: absolute;
   top: 20%;
   left: -4px;
   width: 3px;
   height: 60%;
-  background-color: #1890ff;
+  background-color: #0066cc;
   border-radius: 4px;
+  box-shadow: none;
 }
 
 /* 展开的父菜单标题高亮 */
-:deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
-  color: #e2e8f0 !important;
+.sidebar-container :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
+  color: #1d1d1f !important;
+}
+
+.sidebar-container :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
+  background: rgba(0, 102, 204, 0.07) !important;
+  border-color: transparent !important;
 }
 
 /* 展开箭头 */
-:deep(.ant-menu-submenu-arrow) {
+.sidebar-container :deep(.ant-menu-submenu-arrow) {
   color: #64748b !important;
 }
-:deep(.ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow) {
-  color: #93c5fd !important;
+.sidebar-container :deep(.ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow) {
+  color: #0066cc !important;
 }
 
 /* 图标样式 */
-:deep(.anticon) {
+.sidebar-container :deep(.anticon) {
   font-size: 18px;
   vertical-align: middle;
 }
@@ -730,11 +986,11 @@ watch(
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgba(29, 29, 31, 0.16);
   border-radius: 4px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: rgba(29, 29, 31, 0.24);
 }
 
 /* 头部样式 */
@@ -744,7 +1000,7 @@ watch(
 
 .workstation-layout--overview {
   min-height: 100vh;
-  background: #f5f9fc;
+  background: #f5f5f7;
 }
 
 .workstation-layout--overview :deep(.ant-layout) {
@@ -781,17 +1037,17 @@ watch(
 
 .workstation-layout--overview :deep(.ant-menu-item:hover),
 .workstation-layout--overview :deep(.ant-menu-submenu-title:hover) {
-  background: rgba(59, 130, 246, 0.08) !important;
-  color: #1d4ed8 !important;
+  background: rgba(0, 102, 204, 0.07) !important;
+  color: #0057b8 !important;
 }
 
 .workstation-layout--overview :deep(.ant-menu-item-selected) {
-  background: rgba(37, 99, 235, 0.1) !important;
-  color: #2563eb !important;
+  background: rgba(0, 102, 204, 0.1) !important;
+  color: #0066cc !important;
 }
 
 .workstation-layout--overview :deep(.ant-menu-sub.ant-menu-inline) {
-  border-left-color: rgba(37, 99, 235, 0.22);
+  border-left-color: rgba(0, 102, 204, 0.16);
   background: rgba(248, 250, 252, 0.72) !important;
 }
 
@@ -801,15 +1057,255 @@ watch(
 
 .workstation-layout--overview
   :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected) {
-  background: rgba(37, 99, 235, 0.1) !important;
-  color: #2563eb !important;
+  background: rgba(0, 102, 204, 0.1) !important;
+  color: #0066cc !important;
 }
 
 .workstation-layout--overview :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
-  color: #1d4ed8 !important;
+  color: #0057b8 !important;
 }
 
 .workstation-overview-content {
   background: transparent !important;
+}
+
+/* Apple light workstation shell */
+.workstation-layout--apple {
+  min-height: 100vh;
+  background: #f5f5f7;
+  color: #1d1d1f;
+}
+
+.workstation-layout--apple :deep(.ant-layout) {
+  background: #f5f5f7;
+}
+
+.workstation-layout--apple :deep(.ant-layout-content) {
+  background: #f5f5f7 !important;
+}
+
+.workstation-route-view {
+  display: flex;
+  min-height: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.workstation-layout--apple .sidebar-container {
+  background: rgba(255, 255, 255, 0.86) !important;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(0, 0, 0, 0.08) !important;
+  font-family:
+    'Source Han Sans SC', 'SF Pro Text', 'SF Pro Display', 'San Francisco', 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  box-shadow: none !important;
+}
+
+.workstation-layout--apple .sidebar-container :deep(.ant-layout-sider-trigger) {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.82) !important;
+  color: rgba(29, 29, 31, 0.6);
+}
+
+.workstation-layout--apple .sidebar-container :deep(.ant-menu),
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-light),
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-inline) {
+  background: transparent !important;
+}
+
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-item),
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-submenu-title) {
+  height: 40px !important;
+  line-height: 40px !important;
+  margin: 3px 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px !important;
+  color: rgba(29, 29, 31, 0.72) !important;
+  font-weight: 560;
+  box-shadow: none !important;
+}
+
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-title-content) {
+  color: currentColor;
+  font-size: 15px;
+  font-weight: 560;
+}
+
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-item:hover),
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-submenu-title:hover) {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: #1d1d1f !important;
+  transform: none !important;
+}
+
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-item-selected),
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title) {
+  background: rgba(0, 102, 204, 0.1) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: #0066cc !important;
+  font-weight: 500;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-item-selected .ant-menu-title-content),
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-title-content),
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-item-selected .ant-menu-item-icon),
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-item-icon) {
+  color: #0066cc !important;
+}
+
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-item-selected::before),
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title::before) {
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 18px;
+  background: #0066cc;
+  border-radius: 0 2px 2px 0;
+  box-shadow: none;
+  transform: translateY(-50%);
+}
+
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-sub.ant-menu-inline) {
+  margin: 2px 0 10px 16px !important;
+  padding: 5px 5px 5px 6px !important;
+  border: 1px solid rgba(0, 0, 0, 0.045) !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.58) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 1px 2px rgba(0, 0, 0, 0.025) !important;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item) {
+  height: 34px !important;
+  line-height: 34px !important;
+  margin: 1px 0 !important;
+  padding-left: 14px !important;
+  border-radius: 8px !important;
+  color: rgba(29, 29, 31, 0.48) !important;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item .ant-menu-title-content) {
+  font-size: 14px;
+  font-weight: 520;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item .ant-menu-item-icon),
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item .sidebar-icon) {
+  color: rgba(29, 29, 31, 0.42) !important;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item:hover) {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: #1d1d1f !important;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected) {
+  background: rgba(0, 102, 204, 0.1) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: #0066cc !important;
+  font-weight: 500;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(
+    .ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected .ant-menu-title-content
+  ),
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected .ant-menu-item-icon),
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected .sidebar-icon) {
+  color: #0066cc !important;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-sub.ant-menu-inline > .ant-menu-item.ant-menu-item-selected::before) {
+  left: 0;
+  width: 3px;
+  height: 18px;
+  background: #0066cc;
+  box-shadow: none;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
+  background: rgba(0, 102, 204, 0.07) !important;
+  border-color: transparent !important;
+  color: #1d1d1f !important;
+  font-weight: 620;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-title-content),
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-item-icon) {
+  color: #1d1d1f !important;
+}
+
+.workstation-layout--apple .sidebar-container :deep(.ant-menu-submenu-arrow) {
+  color: rgba(29, 29, 31, 0.38) !important;
+}
+
+.workstation-layout--apple
+  .sidebar-container
+  :deep(.ant-menu-submenu-open > .ant-menu-submenu-title .ant-menu-submenu-arrow) {
+  color: #0066cc !important;
+}
+
+.workstation-layout--apple .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(29, 29, 31, 0.16);
+}
+
+.workstation-layout--apple .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(29, 29, 31, 0.24);
+}
+
+.workstation-layout--apple .header {
+  height: 54px !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: none !important;
+}
+
+.workstation-layout--apple .trigger:hover,
+.workstation-layout--apple .header :deep(.ant-btn-text:hover) {
+  background: rgba(0, 0, 0, 0.05) !important;
 }
 </style>

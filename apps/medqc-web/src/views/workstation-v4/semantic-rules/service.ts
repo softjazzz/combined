@@ -12,6 +12,8 @@ import type {
 } from './types'
 import { SEMANTIC_RULE_QUERY_KEYS, getDocTypeZh } from './types'
 
+const DEFAULT_SEMANTIC_RULE_PAGE_SIZE = 10
+
 function pickResponseData(payload: unknown): Record<string, any> {
   if (!payload || typeof payload !== 'object') return {}
   const maybeData = (payload as Record<string, any>).data
@@ -24,11 +26,46 @@ function parseCount(value: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
+function normalizeComplianceFlag(data: Record<string, any>): boolean {
+  const raw = data.is_compliant
+  if (raw === false) return false
+  if (raw === 0) return false
+  if (typeof raw === 'string') {
+    const value = raw.trim().toLowerCase()
+    if (['false', '0', 'no', 'non_compliant', '不合规', '不符合'].includes(value)) return false
+  }
+
+  const text = [data.findings, data.evidence, data.suggestion, data.llm_raw_output]
+    .map((item) => String(item || ''))
+    .join('\n')
+  if (/"is_compliant"\s*:\s*false/i.test(text)) return false
+  if (
+    /不符合|不合规|不合规情形|缺陷|未[^。；，,]*(分析|记录|完成|签名|说明)|缺失|超时/.test(text)
+  ) {
+    return false
+  }
+
+  if (raw === true) return true
+  if (typeof raw === 'number') return raw !== 0
+  if (typeof raw === 'string') {
+    const value = raw.trim().toLowerCase()
+    if (['true', '1', 'yes', 'compliant', '合规', '符合'].includes(value)) return true
+  }
+
+  const status = String(data.status || '')
+    .trim()
+    .toLowerCase()
+  if (['non_compliant', 'non-compliance', 'failed', 'error'].includes(status)) return false
+  if (['compliant', 'not_applicable', 'not-applicable'].includes(status)) return true
+
+  return true
+}
+
 function pickCanonicalRuleId(raw: Record<string, any>): string {
   const candidates = [raw.rule_id, raw.rule_code, raw.original_id, raw.id]
     .map((item) => String(item || '').trim())
     .filter(Boolean)
-  const canonical = candidates.find((value) => /^(SC|LX|LXE)-/i.test(value))
+  const canonical = candidates.find((value) => /^(LX0609|SC|LXE|LX|CL)-/i.test(value))
   return canonical || candidates[0] || ''
 }
 
@@ -160,6 +197,15 @@ function parseSemanticRuleTestError(
 
 export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleItem {
   const canonicalRuleId = pickCanonicalRuleId(raw)
+  const mappedRuleIds = Array.isArray(raw.mapped_rule_ids)
+    ? raw.mapped_rule_ids.map((item: unknown) => String(item)).filter(Boolean)
+    : []
+  const dataDependencies = Array.isArray(raw.data_dependencies)
+    ? raw.data_dependencies.map((item: unknown) => String(item)).filter(Boolean)
+    : []
+  const applicableDocumentLabels = Array.isArray(raw.applicable_document_labels)
+    ? raw.applicable_document_labels.map((item: unknown) => String(item)).filter(Boolean)
+    : []
   return {
     rule_id: canonicalRuleId,
     rule_code: raw.rule_code ? String(raw.rule_code) : undefined,
@@ -177,6 +223,73 @@ export function normalizeSemanticRule(raw: Record<string, any>): SemanticRuleIte
     requires_cot: Boolean(raw.requires_cot),
     launch_tier: String(raw.launch_tier || 'UNKNOWN'),
     launch_tier_label: String(raw.launch_tier_label || ''),
+    executor_type: raw.executor_type ? String(raw.executor_type) : undefined,
+    execution_domain: raw.execution_domain ? String(raw.execution_domain) : undefined,
+    doc_scope: raw.doc_scope ? String(raw.doc_scope) : undefined,
+    rule_version: raw.rule_version ? String(raw.rule_version) : undefined,
+    prompt_version: raw.prompt_version ? String(raw.prompt_version) : undefined,
+    custom_prompt: raw.custom_prompt ? String(raw.custom_prompt) : undefined,
+    mapped_rule_ids: mappedRuleIds,
+    primary_execution_rule_id: raw.primary_execution_rule_id
+      ? String(raw.primary_execution_rule_id)
+      : undefined,
+    implementation_status: raw.implementation_status
+      ? String(raw.implementation_status)
+      : undefined,
+    dependency_type: raw.dependency_type ? String(raw.dependency_type) : undefined,
+    data_status: raw.data_status ? String(raw.data_status) : undefined,
+    trigger_condition: raw.trigger_condition ? String(raw.trigger_condition) : undefined,
+    non_trigger_condition: raw.non_trigger_condition
+      ? String(raw.non_trigger_condition)
+      : undefined,
+    rule_basis: raw.rule_basis ? String(raw.rule_basis) : undefined,
+    customer_text: raw.customer_text ? String(raw.customer_text) : undefined,
+    standardized_rule: raw.standardized_rule ? String(raw.standardized_rule) : undefined,
+    required_documents_label: raw.required_documents_label
+      ? String(raw.required_documents_label)
+      : undefined,
+    data_dependencies: dataDependencies,
+    coverage_level: raw.coverage_level ? String(raw.coverage_level) : undefined,
+    included_in_v1: raw.included_in_v1 ? String(raw.included_in_v1) : undefined,
+    example_source: raw.example_source ? String(raw.example_source) : undefined,
+    positive_example: normalizeSemanticRuleExample(raw.positive_example, '正例'),
+    negative_example: normalizeSemanticRuleExample(raw.negative_example, '反例'),
+    applicable_document_labels: applicableDocumentLabels,
+  }
+}
+
+function normalizeSemanticRuleExample(
+  value: unknown,
+  fallbackTitle: string,
+): SemanticRuleItem['positive_example'] {
+  if (!value) return undefined
+  if (typeof value === 'string') {
+    const rawText = value.trim()
+    if (!rawText) return undefined
+    return {
+      title: fallbackTitle,
+      summary: '模拟病历文本',
+      raw_text: rawText,
+      sections: [{ heading: '模拟病历', content: rawText }],
+      focusPoints: [],
+    }
+  }
+  if (typeof value !== 'object') return undefined
+  const record = value as Record<string, unknown>
+  const rawText = typeof record.raw_text === 'string' ? record.raw_text.trim() : ''
+  const sections = Array.isArray(record.sections)
+    ? (record.sections as SemanticRuleItem['positive_example']['sections'])
+    : rawText
+      ? [{ heading: '模拟病历', content: rawText }]
+      : []
+  return {
+    title: String(record.title || fallbackTitle),
+    summary: String(record.summary || ''),
+    raw_text: rawText || undefined,
+    sections,
+    focusPoints: Array.isArray(record.focusPoints)
+      ? record.focusPoints.map((item) => String(item))
+      : [],
   }
 }
 
@@ -184,7 +297,7 @@ export async function fetchSichuanRuleSetsFromBackend(): Promise<SichuanRuleSetO
   const response = await ApiService.getRaw('/api/v1/qc/sichuan/workspace/rule-sets', {
     _ts: Date.now(),
   })
-  const payload = pickResponseData(response)
+  const payload = pickResponseData(response.data ?? response)
   const items = Array.isArray(payload.items) ? payload.items : []
   return items.map((item) => ({
     rule_set_key: String(item.rule_set_key || ''),
@@ -273,6 +386,9 @@ export function filterSemanticRules(
       const zhDocType = getDocTypeZh(docType)
       return docType.toLowerCase().includes(keyword) || zhDocType.toLowerCase().includes(keyword)
     })
+    const matchByMappedRule = (rule.mapped_rule_ids || []).some((ruleId) =>
+      ruleId.toLowerCase().includes(keyword),
+    )
 
     return (
       rule.rule_id.toLowerCase().includes(keyword) ||
@@ -280,6 +396,11 @@ export function filterSemanticRules(
       rule.name.toLowerCase().includes(keyword) ||
       rule.description.toLowerCase().includes(keyword) ||
       rule.category.toLowerCase().includes(keyword) ||
+      (rule.customer_text || '').toLowerCase().includes(keyword) ||
+      (rule.standardized_rule || '').toLowerCase().includes(keyword) ||
+      (rule.trigger_condition || '').toLowerCase().includes(keyword) ||
+      (rule.non_trigger_condition || '').toLowerCase().includes(keyword) ||
+      matchByMappedRule ||
       matchByDocType
     )
   })
@@ -287,7 +408,10 @@ export function filterSemanticRules(
 
 export function toSemanticRulePage<T>(items: T[], page: number, pageSize: number): T[] {
   const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1
-  const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.floor(pageSize) : 20
+  const safePageSize =
+    Number.isFinite(pageSize) && pageSize > 0
+      ? Math.floor(pageSize)
+      : DEFAULT_SEMANTIC_RULE_PAGE_SIZE
   const start = (safePage - 1) * safePageSize
   return items.slice(start, start + safePageSize)
 }
@@ -372,12 +496,13 @@ function parsePositiveInt(value: unknown, fallback: number): number {
 
 export function parseSemanticWorkspaceQuery(query: LocationQuery): SemanticRuleWorkspaceQueryState {
   return {
+    ruleSetKey: parseQueryStringValue(query.ruleSetKey),
     keyword: parseQueryStringValue(query.keyword),
     complexity: parseQueryStringValue(query.complexity),
     defectLevel: parseQueryStringValue(query.defectLevel),
     documentType: parseQueryStringValue(query.documentType),
     page: parsePositiveInt(query.page, 1),
-    pageSize: parsePositiveInt(query.pageSize, 20),
+    pageSize: parsePositiveInt(query.pageSize, DEFAULT_SEMANTIC_RULE_PAGE_SIZE),
   }
 }
 
@@ -392,22 +517,30 @@ export function buildSemanticWorkspaceQuery(
   })
 
   if (state.keyword.trim()) nextQuery.keyword = state.keyword.trim()
+  if (state.ruleSetKey) nextQuery.ruleSetKey = state.ruleSetKey
   if (state.complexity) nextQuery.complexity = state.complexity
   if (state.defectLevel) nextQuery.defectLevel = state.defectLevel
   if (state.documentType) nextQuery.documentType = state.documentType
   if (state.page > 1) nextQuery.page = String(state.page)
-  if (state.pageSize !== 20) nextQuery.pageSize = String(state.pageSize)
+  if (state.pageSize !== DEFAULT_SEMANTIC_RULE_PAGE_SIZE)
+    nextQuery.pageSize = String(state.pageSize)
 
   return nextQuery
 }
 
-export async function fetchSemanticRulesFromBackend(): Promise<{
+export async function fetchSemanticRulesFromBackend(ruleSetKey?: string): Promise<{
   rules: SemanticRuleItem[]
   stats: SemanticRuleStats
 }> {
   try {
-    const response = await ApiService.getRaw('/api/v1/qc/sichuan/rules', {
+    const params: Record<string, unknown> = {
       _ts: Date.now(),
+    }
+    if (ruleSetKey) {
+      params.rule_set_key = ruleSetKey
+    }
+    const response = await ApiService.getRaw('/api/v1/qc/sichuan/rules', {
+      ...params,
     })
     const data = pickResponseData(response.data)
     const rules = Array.isArray(data.rules)
@@ -462,7 +595,7 @@ export async function executeSemanticRuleTest(
     })
     const data = pickResponseData(response.data)
     return {
-      is_compliant: Boolean(data.is_compliant ?? true),
+      is_compliant: normalizeComplianceFlag(data),
       confidence: parseCount(data.confidence),
       findings: String(data.findings || ''),
       evidence: String(data.evidence || ''),

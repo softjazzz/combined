@@ -1,0 +1,18 @@
+{
+  "version": "2026-06-10",
+  "sheet_path": "docs\\0602\\luxian_0609_formal_ready_min_review_sheet.csv",
+  "queue_path": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_golden_review_queue_merged.csv",
+  "summary": {
+    "sheet_rows": 9,
+    "queue_rows": 178,
+    "update_rows": 0,
+    "changed_rows": 0,
+    "error_count": 0,
+    "skipped": {
+      "blank_review_status": 9
+    },
+    "changed_status_counts": {}
+  },
+  "errors": [],
+  "changed": []
+}

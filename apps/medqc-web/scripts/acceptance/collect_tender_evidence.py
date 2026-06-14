@@ -30,6 +30,18 @@ REQUIRED_CLAUSES = {
 
 VALID_STATUSES = {"implemented", "partial", "missing"}
 PATH_FIELDS = ("backend_files", "frontend_files", "data_sources", "tests")
+CLINICAL_COMPLETENESS_UI_LABELS = (
+    "疾病诊断画像",
+    "手术操作画像",
+    "诊断发生发展时间轴",
+    "手术操作执行与否验证",
+)
+CLINICAL_COMPLETENESS_API_FIELDS = (
+    '"diagnoses"',
+    '"procedures"',
+    '"issues"',
+    '"safety"',
+)
 REQUIRED_ENTRY_FIELDS = {
     "clause",
     "title",
@@ -89,6 +101,58 @@ def _path_exists(project_root: Path, raw_path: str) -> bool:
     return (project_root / candidate).exists()
 
 
+def _file_text(project_root: Path, raw_path: str) -> str:
+    candidate = Path(raw_path)
+    path = candidate if candidate.is_absolute() else project_root / candidate
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _validate_clinical_completeness_closure(project_root: Path) -> list[EvidenceIssue]:
+    """校验 3.4.3 的字面验收闭环：入口、四块展示、API 字段和只读边界。"""
+    issues: list[EvidenceIssue] = []
+    panel_text = _file_text(
+        project_root,
+        "src/views/workstation-v4/components/ClinicalCompletenessPanel.vue",
+    )
+    detail_text = _file_text(
+        project_root,
+        "src/views/workstation-v4/components/WorkstationV4DetailView.vue",
+    )
+    router_text = _file_text(
+        project_root,
+        "backend/app/routers/clinical_completeness.py",
+    )
+    schema_text = _file_text(
+        project_root,
+        "backend/app/schemas/clinical_timeline.py",
+    )
+
+    if "画像辅助" not in detail_text or "open-ai-profile" not in detail_text:
+        issues.append(
+            EvidenceIssue(
+                "3.4.3",
+                "frontend",
+                "病案首页页签旁缺少画像辅助入口或未绑定画像面板入口",
+            )
+        )
+
+    for label in CLINICAL_COMPLETENESS_UI_LABELS:
+        if label not in panel_text:
+            issues.append(EvidenceIssue("3.4.3", "frontend", f"完整性面板缺少模块: {label}"))
+
+    for field in CLINICAL_COMPLETENESS_API_FIELDS:
+        if field not in router_text and field.strip('"') not in schema_text:
+            issues.append(EvidenceIssue("3.4.3", "api", f"临床完整性 API 缺少字段: {field}"))
+
+    for safety_key in ("writes_formal_frontpage", "writes_settlement", "writes_formal_qc_result"):
+        if safety_key not in router_text:
+            issues.append(EvidenceIssue("3.4.3", "safety", f"缺少只读安全声明: {safety_key}"))
+
+    return issues
+
+
 def validate_coverage_matrix(project_root: Path, matrix: dict[str, Any]) -> EvidenceResult:
     clauses = _as_list(matrix.get("clauses"))
     issues: list[EvidenceIssue] = []
@@ -128,6 +192,9 @@ def validate_coverage_matrix(project_root: Path, matrix: dict[str, Any]) -> Evid
 
         if status == "implemented" and gaps:
             issues.append(EvidenceIssue(clause, "gaps", "implemented 状态不应保留阻断缺口"))
+
+        if clause == "3.4.3" and status == "implemented":
+            issues.extend(_validate_clinical_completeness_closure(project_root))
 
     missing_clauses = sorted(REQUIRED_CLAUSES - seen)
     extra_clauses = sorted(seen - REQUIRED_CLAUSES)

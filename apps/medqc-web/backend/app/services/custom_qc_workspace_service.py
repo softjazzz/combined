@@ -1067,6 +1067,35 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    def count_records(
+        self,
+        *,
+        scope: str,
+        department: Optional[str],
+        doctor: Optional[str],
+        date_field: str,
+        start_date: Optional[str],
+        end_date: Optional[str],
+        keyword: Optional[str],
+        record_ids: Optional[Sequence[str]] = None,
+    ) -> int:
+        session = _session()
+        try:
+            query = self._build_records_query(
+                session,
+                scope=scope,
+                department=department,
+                doctor=doctor,
+                date_field=date_field,
+                start_date=start_date,
+                end_date=end_date,
+                keyword=keyword,
+                record_ids=record_ids,
+            )
+            return int(query.with_entities(func.count(func.distinct(MedicalRecordFrontpage.visit_id))).scalar() or 0)
+        finally:
+            session.close()
+
     def hydrate_records_with_medical_text(
         self,
         records: Sequence[Dict[str, Any]],

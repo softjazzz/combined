@@ -60,6 +60,17 @@ describe('SemanticRulesTableSection', () => {
         loading: false,
         rules: [demoRule],
         total: 1,
+        ruleSetKey: '',
+        ruleSetOptions: [
+          {
+            rule_set_key: '',
+            rule_set_name: 'SC 全病历质控规则',
+            rule_set_version: '当前版本',
+            scope: 'all',
+            rule_ids: [],
+            rule_count: 1,
+          },
+        ],
         keywordInput: '',
         complexity: '',
         defectLevel: '',
@@ -96,7 +107,7 @@ describe('SemanticRulesTableSection', () => {
       },
     })
 
-    const actionsText = wrapper.find('.table-actions').text()
+    const actionsText = wrapper.find('.rule-inline-actions').text()
     expect(actionsText).toContain('查看结果')
     expect(actionsText).toContain('评估')
     expect(wrapper.text()).toContain('开始质控评估')

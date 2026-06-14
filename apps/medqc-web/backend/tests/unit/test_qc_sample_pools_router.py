@@ -182,6 +182,61 @@ def test_sample_validation_pseudo_draft_ids_should_fit_batch_job_columns():
 
 
 @pytest.mark.asyncio
+async def test_list_sample_validation_rule_set_catalog_should_expose_customer_and_formal_sets():
+    response = await qc_sample_pools.list_sample_validation_rule_set_catalog(
+        request=_build_request(),
+        current_user={"id": "tester"},
+    )
+
+    items = response["data"]["items"]
+    by_key = {item["rule_set_key"]: item for item in items if item.get("rule_set_key")}
+
+    assert response["success"] is True
+    assert "luxian_0609_qc_v1" in by_key
+    assert "sc_content_full_v1" in by_key
+    assert by_key["luxian_0609_qc_v1"]["rule_set_name"] == "泸县0609质控点验证 v1"
+    assert by_key["luxian_0609_qc_v1"]["validation_mode"] == "customer"
+    assert by_key["luxian_0609_qc_v1"]["scope"] == "running"
+    assert by_key["luxian_0609_qc_v1"]["advanced"] is False
+    assert {
+        "已达正式口径",
+        "数据缺口待补",
+        "证据待补强",
+        "跨文书待完善",
+        "跨表联查待接入",
+        "待实现规则",
+    }.issubset(
+        set(by_key["luxian_0609_qc_v1"]["coverage_summary"])
+    )
+    assert by_key["luxian_0609_qc_v1"]["coverage_summary"]["已达正式口径"] == 3
+    assert by_key["luxian_0609_qc_v1"]["coverage_summary"]["数据缺口待补"] == 3
+    assert "正式上线闸门未通过" in by_key["luxian_0609_qc_v1"]["coverage_status"]
+    assert by_key["luxian_0609_qc_v1"]["release_gate_summary"]["release_ready"] is False
+    assert by_key["luxian_0609_qc_v1"]["release_gate_summary"]["passed_checks"] >= 3
+    assert by_key["luxian_0609_qc_v1"]["evaluation_summary"]["rule_count"] == 49
+    assert by_key["luxian_0609_qc_v1"]["evaluation_summary"]["rules_missing_case_types"] == 49
+    assert by_key["luxian_0609_qc_v1"]["work_package_summary"]["package_count"] == 49
+    assert by_key["luxian_0609_qc_v1"]["page_closure_summary"]["capability_count"] == 8
+    assert by_key["luxian_0609_qc_v1"]["page_closure_summary"]["passed_capabilities"] == 4
+    assert by_key["sc_content_full_v1"]["rule_set_name"] == "SC 内涵质控全量 v1"
+    assert by_key["sc_content_full_v1"]["validation_mode"] == "formal_fast_screen_full"
+    assert by_key["sc_content_full_v1"]["scope"] == "final"
+    assert by_key["sc_content_full_v1"]["advanced"] is False
+
+
+@pytest.mark.asyncio
+async def test_download_luxian_0609_evaluation_report_should_return_generated_file():
+    response = await qc_sample_pools.download_luxian_0609_evaluation_report(
+        request=_build_request(),
+        format="md",
+        current_user={"id": "tester"},
+    )
+
+    assert response.filename == "泸县0609质控点评估报告.md"
+    assert "text/markdown" in response.media_type
+
+
+@pytest.mark.asyncio
 async def test_sync_sample_pool_records_should_not_persist_default_table_groups(monkeypatch):
     sample_service = _SyncServiceStub()
     monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
@@ -595,6 +650,72 @@ async def test_run_sample_pool_intrinsic_validation_should_use_customer_rule_pac
     assert response["data"]["validation_mode"] == "customer"
     assert response["data"]["rule_set_name"] == "客户专项规则包 v1"
     assert response["data"]["rule_ids"] == ["CL-001", "CL-002"]
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_set_by_key(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+    luxian_rule_set = get_sichuan_rule_set("luxian_0609_qc_v1")
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V001"],
+            sample_item_ids=["item-1"],
+            max_parallel_records=2,
+            rule_set_key="luxian_0609_qc_v1",
+        ),
+        background_tasks=BackgroundTasks(),
+        current_user={"id": "tester"},
+    )
+
+    created = workspace_service.create_batch_job_calls[0]
+    assert luxian_rule_set is not None
+    assert sample_service.get_runnable_items_calls[0]["validation_mode"] == "customer"
+    assert created["draft_ids"] == list(luxian_rule_set.rule_ids)
+    assert created["filters"]["validation_mode"] == "customer"
+    assert created["filters"]["rule_set_key"] == "luxian_0609_qc_v1"
+    assert created["filters"]["rule_set_name"] == "泸县0609质控点验证 v1"
+    assert created["filters"]["rule_set_version"] == luxian_rule_set.version
+    assert created["filters"]["rule_count"] == len(luxian_rule_set.rule_ids)
+    assert "record_rule_map" not in created["filters"]
+    assert response["data"]["validation_mode"] == "customer"
+    assert response["data"]["rule_set_key"] == "luxian_0609_qc_v1"
+    assert response["data"]["rule_count"] == len(luxian_rule_set.rule_ids)
+    assert response["data"]["rule_ids"] == list(luxian_rule_set.rule_ids)
+
+
+@pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_reject_unknown_rule_set_key(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await qc_sample_pools.run_sample_pool_intrinsic_validation(
+            request=_build_request(),
+            pool_id="pool-1",
+            payload=qc_sample_pools.SamplePoolRunRequest(
+                record_ids=["V001"],
+                sample_item_ids=["item-1"],
+                rule_set_key="unknown_rule_set",
+            ),
+            background_tasks=BackgroundTasks(),
+            current_user={"id": "tester"},
+        )
+
+    assert exc_info.value.status_code == 422
+    assert getattr(exc_info.value, "detail", "") == "未知规则集: unknown_rule_set"
+    assert sample_service.get_runnable_items_calls == []
+    assert workspace_service.create_batch_job_calls == []
 
 
 @pytest.mark.asyncio

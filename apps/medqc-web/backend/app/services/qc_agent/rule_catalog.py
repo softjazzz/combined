@@ -53,6 +53,11 @@ VALID_RULE_SOURCES = {
 VALID_LAUNCH_TIERS = {"A", "B", "C", "unknown"}
 VALID_SEVERITIES = {"error", "warning", "info", "unknown"}
 
+_SC146_ADMISSION_RECORD_RULE_IDS = {
+    f"SC-{idx:03d}"
+    for idx in range(1, 21)
+}
+
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SOURCE_ORDER = {
     "agent_builtin": 0,
@@ -700,8 +705,20 @@ def filter_rule_catalog(
     rules = list(get_rule_catalog())
     if normalized["document_alias"]:
         rules = [rule for rule in rules if normalized["document_alias"] in rule.document_aliases]
+        if normalized["document_alias"] == "admission":
+            rules = [
+                rule
+                for rule in rules
+                if rule.source != "sc146" or rule.rule_id in _SC146_ADMISSION_RECORD_RULE_IDS
+            ]
     if normalized["document_type"]:
         rules = [rule for rule in rules if normalized["document_type"] in rule.document_types]
+        if normalized["document_type"] == "admission":
+            rules = [
+                rule
+                for rule in rules
+                if rule.source != "sc146" or rule.rule_id in _SC146_ADMISSION_RECORD_RULE_IDS
+            ]
     if normalized["qc_point_type"]:
         rules = [rule for rule in rules if rule.qc_point_type == normalized["qc_point_type"]]
     if normalized["source"]:

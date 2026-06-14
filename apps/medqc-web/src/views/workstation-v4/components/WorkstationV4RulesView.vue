@@ -1,14 +1,12 @@
 <template>
-  <div class="flex h-full min-w-0 flex-1 overflow-hidden bg-[#f5f9fc] p-4">
+  <div class="rules-sub-page flex h-full min-w-0 flex-1 overflow-hidden bg-[#f5f5f7] p-4">
     <main
-      class="custom-scrollbar flex min-w-0 flex-1 flex-col overflow-y-auto rounded-[18px] border border-slate-200/80 bg-white px-4 pb-4 pt-4 shadow-[0_12px_28px_rgba(15,23,42,0.05)]"
+      class="custom-scrollbar rules-sub-shell flex min-w-0 flex-1 flex-col overflow-y-auto rounded-[22px] border px-5 pb-5 pt-5"
     >
       <section class="wv4-analysis-overview mb-4">
         <div class="wv4-analysis-overview__header">
           <div>
-            <div class="wv4-analysis-overview__eyebrow">
-              Workstation / Rules
-            </div>
+            <div class="wv4-analysis-overview__eyebrow">规则工作台</div>
             <h2 class="wv4-analysis-overview__title">
               {{ rulesSubTabTitle }}
             </h2>
@@ -17,10 +15,7 @@
             </p>
           </div>
           <div class="wv4-analysis-overview__actions">
-            <button
-              class="flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-500 transition-all hover:border-blue-200 hover:text-blue-700 hover:shadow-[0_8px_18px_rgba(37,99,235,0.08)]"
-              @click="emit('back')"
-            >
+            <button class="rules-sub-back-btn" @click="emit('back')">
               <LeftOutlined />
               返回病历列表
             </button>
@@ -71,3 +66,92 @@ const rulesSubTabDesc = computed(() => {
   return map[props.rulesSubTab]
 })
 </script>
+
+<style scoped>
+.rules-sub-page {
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.rules-sub-shell {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 8px 28px rgba(0, 0, 0, 0.06);
+}
+
+.wv4-analysis-overview__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wv4-analysis-overview__eyebrow {
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.wv4-analysis-overview__title {
+  margin: 4px 0 0;
+  color: #1d1d1f;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.wv4-analysis-overview__subtitle {
+  margin: 8px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.rules-sub-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  color: rgba(29, 29, 31, 0.7);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 14px;
+  transition:
+    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.rules-sub-back-btn:hover {
+  border-color: rgba(0, 102, 204, 0.28);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  color: #0066cc;
+  transform: translateY(-1px);
+}
+
+.cw-rules-content {
+  border-radius: 18px;
+}
+
+@media (max-width: 768px) {
+  .wv4-analysis-overview__header {
+    flex-direction: column;
+  }
+}
+</style>

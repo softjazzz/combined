@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex flex-col bg-white overflow-hidden">
+  <div class="sync-policy-panel h-full flex flex-col bg-white overflow-hidden">
     <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between shrink-0">
       <div>
         <h2 class="text-[13px] font-semibold text-slate-900 tracking-tight">
@@ -105,11 +105,11 @@
         </div>
 
         <button
-          class="w-full px-4 py-2 mt-1 rounded-lg text-[13px] font-semibold text-white transition-all shadow-[0_2px_8px_rgba(59,130,246,0.25)] flex items-center justify-center gap-2"
+          class="w-full px-4 py-2 mt-1 rounded-lg text-[13px] font-semibold text-white transition-all shadow-[0_2px_8px_rgba(0,102,204,0.16)] flex items-center justify-center gap-2"
           :class="
             isReadonly || state.templateApplying
               ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-100'
-              : 'bg-[#2563eb] hover:bg-[#1d4ed8] hover:shadow-[0_4px_12px_rgba(37,99,235,0.22)] active:scale-[0.98]'
+              : 'bg-[#0066cc] hover:bg-[#0057b8] hover:shadow-[0_4px_12px_rgba(0,102,204,0.18)] active:scale-[0.98]'
           "
           :disabled="isReadonly || state.templateApplying"
           @click="handleApplyTemplate"
@@ -428,24 +428,46 @@ const handlePolicyDepartmentChange = (value: string[]) => {
   gap: 8px;
 }
 
+.sync-policy-panel {
+  background: rgba(255, 255, 255, 0.9);
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.sync-policy-panel > div:first-child {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.sync-policy-panel > div:nth-child(2) {
+  background: rgba(245, 245, 247, 0.62);
+}
+
+.template-block {
+  border-color: rgba(0, 102, 204, 0.14) !important;
+  background: rgba(255, 255, 255, 0.86) !important;
+}
+
 .template-card {
   text-align: left;
-  border: 1px solid #bfdbfe;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 8px;
   padding: 8px 10px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.92);
   transition: all 0.2s ease;
 }
 
 .template-card:hover {
-  border-color: #60a5fa;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+  border-color: rgba(0, 102, 204, 0.18);
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.08);
 }
 
 .template-card.active {
-  border-color: #2563eb;
-  background: #eff6ff;
-  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.2);
+  border-color: #0066cc;
+  background: rgba(0, 102, 204, 0.08);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08);
 }
 
 .template-card:disabled {
@@ -457,14 +479,43 @@ const handlePolicyDepartmentChange = (value: string[]) => {
   font-size: 12px;
   line-height: 18px;
   font-weight: 700;
-  color: #1f2937;
+  color: #1d1d1f;
 }
 
 .template-desc {
   margin-top: 4px;
   font-size: 11px;
   line-height: 16px;
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.56);
+}
+
+.sync-policy-panel :deep(.rounded),
+.sync-policy-panel :deep(.rounded-lg) {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.sync-policy-panel :deep(.bg-slate-50),
+.sync-policy-panel :deep(.bg-blue-50) {
+  background-color: rgba(255, 255, 255, 0.86) !important;
+}
+
+.sync-policy-panel :deep(.text-slate-900),
+.sync-policy-panel :deep(.text-slate-800),
+.sync-policy-panel :deep(.text-slate-700) {
+  color: #1d1d1f !important;
+}
+
+.sync-policy-panel :deep(.text-slate-600),
+.sync-policy-panel :deep(.text-slate-500) {
+  color: rgba(29, 29, 31, 0.6) !important;
+}
+
+.sync-policy-panel :deep(.text-slate-400) {
+  color: rgba(29, 29, 31, 0.38) !important;
+}
+
+.sync-policy-panel :deep(.text-amber-600) {
+  color: #b45309 !important;
 }
 
 @media (max-width: 1366px) {

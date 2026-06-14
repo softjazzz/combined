@@ -10,19 +10,12 @@
           <ArrowLeftOutlined class="text-lg" />
         </button>
         <div>
-          <h2 class="text-xl font-semibold text-slate-800">
-            字段映射确认
-          </h2>
-          <p class="text-sm text-slate-500 mt-1">
-            AI 已自动识别字段对应关系，请核对后确认
-          </p>
+          <h2 class="text-xl font-semibold text-slate-800">字段映射确认</h2>
+          <p class="text-sm text-slate-500 mt-1">AI 已自动识别字段对应关系，请核对后确认</p>
         </div>
       </div>
       <div class="flex items-center gap-3">
-        <div
-          v-if="confidence > 0"
-          class="flex items-center gap-2"
-        >
+        <div v-if="confidence > 0" class="flex items-center gap-2">
           <span class="text-xs text-slate-500">AI 置信度</span>
           <a-progress
             :percent="Math.round(confidence * 100)"
@@ -30,67 +23,39 @@
             :stroke-color="confidence > 0.8 ? '#52c41a' : confidence > 0.5 ? '#faad14' : '#f5222d'"
           />
         </div>
-        <a-tag
-          v-if="fallback"
-          color="orange"
-        >
-          规则引擎模式
-        </a-tag>
+        <a-tag v-if="fallback" color="orange"> 规则引擎模式 </a-tag>
       </div>
     </div>
 
     <!-- 加载中 -->
-    <div
-      v-if="loading"
-      class="mapping-loading"
-    >
+    <div v-if="loading" class="mapping-loading">
       <a-spin size="large" />
-      <p class="mt-4 text-slate-500">
-        正在进行 AI 字段识别...
-      </p>
-      <p class="text-xs text-slate-400 mt-1">
-        首次分析可能需要 5-10 秒
-      </p>
+      <p class="mt-4 text-slate-500">正在进行 AI 字段识别...</p>
+      <p class="text-xs text-slate-400 mt-1">首次分析可能需要 5-10 秒</p>
     </div>
 
     <!-- 映射内容 -->
-    <div
-      v-else
-      class="mapping-content"
-    >
+    <div v-else class="mapping-content">
       <!-- 数据预览 -->
       <div class="preview-section">
         <h3 class="section-title">
           <FileExcelOutlined class="text-green-500" />
           数据预览
           <a-tag>{{ fileName }}</a-tag>
-          <a-tag color="blue">
-            {{ rowCount }} 行
-          </a-tag>
+          <a-tag color="blue"> {{ rowCount }} 行 </a-tag>
         </h3>
         <div class="preview-table-wrapper">
           <table class="preview-table">
             <thead>
               <tr>
-                <th
-                  v-for="col in columns"
-                  :key="col"
-                  class="preview-th"
-                >
+                <th v-for="col in columns" :key="col" class="preview-th">
                   {{ col }}
                 </th>
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="(row, idx) in sampleData.slice(0, 3)"
-                :key="idx"
-              >
-                <td
-                  v-for="col in columns"
-                  :key="col"
-                  class="preview-td"
-                >
+              <tr v-for="(row, idx) in sampleData.slice(0, 3)" :key="idx">
+                <td v-for="col in columns" :key="col" class="preview-td">
                   {{ row[col] || '-' }}
                 </td>
               </tr>
@@ -102,7 +67,7 @@
       <!-- 字段映射表格 -->
       <div class="mapping-section">
         <h3 class="section-title">
-          <SwapOutlined class="text-blue-500" />
+          <SwapOutlined class="text-[#0066cc]" />
           字段映射
           <span class="mapped-count">
             {{ mappedCount }} / {{ Object.keys(localMappings).length }} 已映射
@@ -123,24 +88,15 @@
             <!-- 源列名 -->
             <div class="source-col">
               <span class="col-name">{{ col }}</span>
-              <span
-                v-if="sampleData[0]"
-                class="col-sample"
-              >
+              <span v-if="sampleData[0]" class="col-sample">
                 {{ String(sampleData[0][col] || '').slice(0, 20) }}
               </span>
             </div>
 
             <!-- 箭头 -->
             <div class="mapping-arrow">
-              <RightOutlined
-                v-if="localMappings[col]"
-                class="text-green-500"
-              />
-              <MinusOutlined
-                v-else
-                class="text-slate-300"
-              />
+              <RightOutlined v-if="localMappings[col]" class="text-green-500" />
+              <MinusOutlined v-else class="text-slate-300" />
             </div>
 
             <!-- 目标字段选择 -->
@@ -162,12 +118,7 @@
                 >
                   <div class="field-option">
                     <span>{{ field.name }}</span>
-                    <a-tag
-                      v-if="field.required"
-                      color="red"
-                      size="small"
-                      class="ml-1"
-                    >
+                    <a-tag v-if="field.required" color="red" size="small" class="ml-1">
                       必填
                     </a-tag>
                     <span class="field-key">{{ key }}</span>
@@ -180,10 +131,7 @@
       </div>
 
       <!-- 缺失必填字段警告 -->
-      <div
-        v-if="missingRequired.length > 0"
-        class="missing-warning"
-      >
+      <div v-if="missingRequired.length > 0" class="missing-warning">
         <a-alert
           type="warning"
           show-icon
@@ -442,7 +390,11 @@ onMounted(async () => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f8fafc;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'SF Pro Text', 'San Francisco', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
   overflow: hidden;
 }
 
@@ -451,9 +403,17 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  background: white;
-  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.86);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
   flex-shrink: 0;
+}
+
+.mapping-header :deep(h2) {
+  color: #1d1d1f;
+  font-size: 20px;
+  line-height: 26px;
 }
 
 .mapping-loading {
@@ -473,7 +433,7 @@ onMounted(async () => {
 .section-title {
   font-size: 15px;
   font-weight: 600;
-  color: #334155;
+  color: #1d1d1f;
   margin-bottom: 12px;
   display: flex;
   align-items: center;
@@ -483,7 +443,7 @@ onMounted(async () => {
 .mapped-count {
   font-weight: 400;
   font-size: 13px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   margin-left: auto;
 }
 
@@ -494,9 +454,9 @@ onMounted(async () => {
 
 .preview-table-wrapper {
   overflow-x: auto;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .preview-table {
@@ -508,19 +468,19 @@ onMounted(async () => {
 
 .preview-th {
   padding: 8px 12px;
-  background: #f1f5f9;
+  background: #f5f5f7;
   font-weight: 600;
-  color: #475569;
+  color: rgba(29, 29, 31, 0.66);
   text-align: left;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   position: sticky;
   top: 0;
 }
 
 .preview-td {
   padding: 6px 12px;
-  color: #64748b;
-  border-bottom: 1px solid #f1f5f9;
+  color: rgba(29, 29, 31, 0.66);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -542,19 +502,19 @@ onMounted(async () => {
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-radius: 8px;
-  background: white;
-  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   transition: all 0.2s;
 }
 
 .mapping-row-mapped {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
+  border-color: rgba(16, 185, 129, 0.18);
+  background: rgba(16, 185, 129, 0.06);
 }
 
 .mapping-row-unmapped {
-  border-color: #e2e8f0;
+  border-color: rgba(0, 0, 0, 0.08);
   opacity: 0.7;
 }
 
@@ -566,13 +526,13 @@ onMounted(async () => {
 .col-name {
   font-weight: 600;
   font-size: 13px;
-  color: #1e293b;
+  color: #1d1d1f;
 }
 
 .col-sample {
   display: block;
   font-size: 11px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -598,7 +558,7 @@ onMounted(async () => {
 
 .field-key {
   font-size: 10px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   margin-left: auto;
 }
 
@@ -613,7 +573,7 @@ onMounted(async () => {
   justify-content: flex-end;
   gap: 12px;
   padding: 16px 0;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
 }
 </style>

@@ -1,0 +1,20 @@
+﻿package_id,package_priority,qc_point_id,source_index,customer_text,implementation_status,risk_level,case_type,case_type_label,candidate_coverage_status,total_count,pending_count,accepted_count,rejected_count,evidence_ready_sample_count,missing_candidate_case_types,package_action
+LX0609-001-positive,P0,LX0609-001,1,入院后24小时内是否完成,formal_ready,P0,positive,阳性,ready_for_review,1,1,0,0,1,,优先人工复核；三类候选齐全，accepted 后即可进入 golden cases 导入。
+LX0609-001-negative,P0,LX0609-001,1,入院后24小时内是否完成,formal_ready,P0,negative,阴性,ready_for_review,12,12,0,0,8,,优先人工复核；三类候选齐全，accepted 后即可进入 golden cases 导入。
+LX0609-001-boundary,P0,LX0609-001,1,入院后24小时内是否完成,formal_ready,P0,boundary,边界,ready_for_review,12,12,0,0,8,,优先人工复核；三类候选齐全，accepted 后即可进入 golden cases 导入。
+LX0609-002-positive,P1,LX0609-002,2,入院后 8 小时内无首次病程记录,formal_ready,P0,positive,阳性,partial_candidates,12,12,0,0,8,"negative,boundary","复核当前阳性候选，同时继续补齐缺失样本类型：negative, boundary。"
+LX0609-006-positive,P1,LX0609-006,6,入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。,needs_evidence_hardening,P0,positive,阳性,partial_candidates,7,7,0,0,7,"negative,boundary","复核当前阳性候选，同时继续补齐缺失样本类型：negative, boundary。"
+LX0609-016-boundary,P1,LX0609-016,16,不合理复制病历内容是指首次病程记录病例特点与入院记录、现病史完全相同,formal_ready,普通,boundary,边界,partial_candidates,12,12,0,0,8,"positive,negative","复核当前边界候选，同时继续补齐缺失样本类型：positive, negative。"
+LX0609-017-positive,P0,LX0609-017,17,2次以上病程记录完全相同（相识度大于70%）,formal_ready,普通,positive,阳性,ready_for_review,12,12,0,0,8,,优先人工复核；三类候选齐全，accepted 后即可进入 golden cases 导入。
+LX0609-017-negative,P0,LX0609-017,17,2次以上病程记录完全相同（相识度大于70%）,formal_ready,普通,negative,阴性,ready_for_review,12,12,0,0,8,,优先人工复核；三类候选齐全，accepted 后即可进入 golden cases 导入。
+LX0609-017-boundary,P0,LX0609-017,17,2次以上病程记录完全相同（相识度大于70%）,formal_ready,普通,boundary,边界,ready_for_review,12,12,0,0,8,,优先人工复核；三类候选齐全，accepted 后即可进入 golden cases 导入。
+LX0609-018-positive,P1,LX0609-018,18,主诉书写不规范（1.只写症状不写诊断，2.≤20字)或不能导出第一诊断。,needs_evidence_hardening,普通,positive,阳性,partial_candidates,53,53,0,0,8,"negative,boundary","复核当前阳性候选，同时继续补齐缺失样本类型：negative, boundary。"
+LX0609-021-positive,P1,LX0609-021,21,会诊申请单会诊目的不明确,formal_ready,普通,positive,阳性,partial_candidates,12,12,0,0,8,negative,复核当前阳性候选，同时继续补齐缺失样本类型：negative。
+LX0609-021-boundary,P1,LX0609-021,21,会诊申请单会诊目的不明确,formal_ready,普通,boundary,边界,partial_candidates,12,12,0,0,8,negative,复核当前边界候选，同时继续补齐缺失样本类型：negative。
+LX0609-022-positive,P1,LX0609-022,22,会诊记录单会诊意见不明确（如出现必要时行**检查或**药物治疗）,needs_evidence_hardening,普通,positive,阳性,partial_candidates,5,5,0,0,5,"negative,boundary","复核当前阳性候选，同时继续补齐缺失样本类型：negative, boundary。"
+LX0609-029-positive,P1,LX0609-029,29,无术前小结（有手术医嘱）,needs_data_linkage,P0,positive,阳性,partial_candidates,2,2,0,0,2,"negative,boundary","复核当前阳性候选，同时继续补齐缺失样本类型：negative, boundary。"
+LX0609-031-positive,P1,LX0609-031,31,手术记录非手术者签字（质控术者及签名医生）,needs_evidence_hardening,普通,positive,阳性,partial_candidates,6,6,0,0,6,"negative,boundary","复核当前阳性候选，同时继续补齐缺失样本类型：negative, boundary。"
+LX0609-032-positive,P1,LX0609-032,32,无手术安全核查表（有手术记录）,formal_ready,P0,positive,阳性,partial_candidates,12,12,0,0,8,boundary,复核当前阳性候选，同时继续补齐缺失样本类型：boundary。
+LX0609-032-negative,P1,LX0609-032,32,无手术安全核查表（有手术记录）,formal_ready,P0,negative,阴性,partial_candidates,12,12,0,0,8,boundary,复核当前阴性候选，同时继续补齐缺失样本类型：boundary。
+LX0609-033-positive,P1,LX0609-033,33,无手术知情同意书(有手术记录）,needs_cross_document,P0,positive,阳性,partial_candidates,1,1,0,0,1,"negative,boundary","复核当前阳性候选，同时继续补齐缺失样本类型：negative, boundary。"
+LX0609-040-positive,P1,LX0609-040,40,四级手术术前讨论未多学科讨论。,needs_cross_document,P0,positive,阳性,partial_candidates,7,7,0,0,7,"negative,boundary","复核当前阳性候选，同时继续补齐缺失样本类型：negative, boundary。"

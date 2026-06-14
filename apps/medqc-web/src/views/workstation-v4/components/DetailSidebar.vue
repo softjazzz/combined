@@ -1,51 +1,38 @@
 <template>
   <aside
-    class="custom-scrollbar w-[220px] min-w-[220px] max-w-[220px] basis-[220px] shrink-0 overflow-y-auto border-r border-slate-200/70 bg-[linear-gradient(180deg,rgba(247,251,255,0.96),rgba(240,247,255,0.98))]"
+    class="detail-apple-sidebar custom-scrollbar w-[220px] min-w-[220px] max-w-[220px] basis-[220px] shrink-0 overflow-y-auto border-r"
   >
-    <div
-      v-if="record"
-      class="flex h-full flex-col"
-    >
+    <div v-if="record" class="flex h-full flex-col">
       <div class="flex-1 px-2.5 pb-4 pt-3">
         <div class="mb-3 flex items-center justify-between px-1">
           <div>
-            <h3 class="m-0 text-[13px] font-black text-slate-900">
-              病历文书
-            </h3>
-            <p class="m-0 mt-0.5 text-[11px] font-semibold text-slate-400">
-              按文书类型分组
-            </p>
+            <h3 class="m-0 text-[13px] font-semibold text-slate-900">病历文书</h3>
+            <p class="m-0 mt-0.5 text-[11px] font-semibold text-slate-400">按文书类型分组</p>
           </div>
-          <SyncOutlined
-            v-if="documentsLoading"
-            spin
-            class="text-[12px] text-sky-600"
-          />
+          <SyncOutlined v-if="documentsLoading" spin class="text-[12px] text-[#0066cc]" />
         </div>
 
         <button
           type="button"
           class="mb-2.5 flex w-full items-center justify-between rounded-[10px] border px-3 py-2 text-left transition-all duration-150"
-          :class="
-            isAllNodeActive
-              ? 'border-sky-200 bg-white text-sky-800 shadow-[0_8px_18px_rgba(14,165,233,0.12)]'
-              : 'border-slate-200/70 bg-white/80 text-slate-600 hover:border-sky-100 hover:bg-white'
-          "
+          :class="isAllNodeActive ? 'detail-doc-entry--active' : 'detail-doc-entry--idle'"
           @click="emit('show-concat')"
         >
           <span class="flex min-w-0 items-center gap-2">
             <span
               class="flex h-7 w-7 items-center justify-center rounded-[8px]"
-              :class="isAllNodeActive ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-500'"
+              :class="isAllNodeActive ? 'detail-doc-icon--active' : 'detail-doc-icon--idle'"
             >
               <FileTextOutlined />
             </span>
             <span class="min-w-0">
-              <span class="block text-[12px] font-black">所有单据</span>
+              <span class="block text-[12px] font-semibold">所有单据</span>
               <span class="block text-[10px] font-semibold text-slate-400">合并查看全文</span>
             </span>
           </span>
-          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-500">
+          <span
+            class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500"
+          >
             {{ totalDocCount }}
           </span>
         </button>
@@ -59,7 +46,7 @@
             >
               <button
                 type="button"
-                class="flex w-full items-center justify-between rounded-[10px] border border-transparent px-2.5 py-2 text-left text-[12px] font-black text-slate-700 transition-all duration-150 hover:border-sky-100 hover:bg-white/75"
+                class="detail-doc-group flex w-full items-center justify-between rounded-[10px] border border-transparent px-2.5 py-2 text-left text-[12px] font-semibold text-slate-700 transition-all duration-150"
                 @click="toggleGroup(group.key)"
               >
                 <span class="flex min-w-0 items-center gap-2">
@@ -70,14 +57,12 @@
                   <span class="truncate">{{ group.label }}</span>
                 </span>
                 <span
-                  class="ml-2 shrink-0 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-black text-slate-500 shadow-[0_1px_0_rgba(148,163,184,0.18)]"
-                >{{ group.count }}</span>
+                  class="ml-2 shrink-0 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-slate-500 shadow-[0_1px_0_rgba(148,163,184,0.18)]"
+                  >{{ group.count }}</span
+                >
               </button>
 
-              <div
-                v-if="isGroupExpanded(group.key)"
-                class="ml-3 mt-0.5 space-y-1 border-l border-slate-200/80 pl-2"
-              >
+              <div v-if="isGroupExpanded(group.key)" class="ml-1 mt-0.5 space-y-1 pl-1">
                 <button
                   v-for="node in group.children"
                   :key="`${group.key}:${node.id}`"
@@ -86,8 +71,8 @@
                   :class="
                     hasDocContent(resolveDocByNode(node))
                       ? isActiveNode(node)
-                        ? 'border-sky-200 bg-white text-sky-800 shadow-[0_6px_14px_rgba(14,165,233,0.12)]'
-                        : 'border-transparent bg-transparent text-slate-600 hover:border-sky-100 hover:bg-white/75'
+                        ? 'detail-doc-entry--active'
+                        : 'detail-doc-entry--idle'
                       : 'cursor-default border-transparent bg-transparent text-slate-400/70'
                   "
                   @click="handleNodeClick(node)"
@@ -97,15 +82,15 @@
                     :class="
                       hasDocContent(resolveDocByNode(node))
                         ? isActiveNode(node)
-                          ? 'bg-sky-100 text-sky-700'
-                          : 'bg-white text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600'
+                          ? 'detail-doc-icon--active'
+                          : 'bg-white text-slate-400 group-hover:bg-blue-50 group-hover:text-[#0066cc]'
                         : 'bg-slate-100 text-slate-300'
                     "
                   >
                     <FileTextOutlined />
                   </span>
                   <span class="min-w-0 flex-1 overflow-hidden">
-                    <span class="mb-0.5 block text-[10px] font-black text-slate-400">
+                    <span class="mb-0.5 block text-[10px] font-semibold text-slate-400">
                       {{ resolveNodeDateLabel(node) || '未标注时间' }}
                     </span>
                     <span class="block truncate text-[12px] font-bold leading-[1.45]">
@@ -133,8 +118,8 @@
                 'group relative flex items-center justify-between rounded-[10px] border px-2 py-1.5 transition-all duration-150',
                 hasDocContent(doc)
                   ? isActive(doc)
-                    ? 'cursor-pointer border-sky-200 bg-white text-sky-800 shadow-[0_6px_14px_rgba(14,165,233,0.12)]'
-                    : 'cursor-pointer border-transparent bg-transparent hover:border-sky-100 hover:bg-white/75'
+                    ? 'cursor-pointer detail-doc-entry--active'
+                    : 'cursor-pointer detail-doc-entry--idle'
                   : 'border-transparent bg-transparent text-slate-300',
               ]"
               @click="hasDocContent(doc) && $emit('preview-doc', doc)"
@@ -142,7 +127,9 @@
               <span
                 v-if="hasDocContent(doc)"
                 class="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-r-full transition-all duration-150"
-                :class="isActive(doc) ? 'bg-sky-500' : 'bg-transparent group-hover:bg-sky-300'"
+                :class="
+                  isActive(doc) ? 'detail-doc-indicator--active' : 'detail-doc-indicator--idle'
+                "
               />
               <span class="flex min-w-0 items-center gap-2">
                 <span
@@ -150,8 +137,8 @@
                   :class="
                     doc.has_content
                       ? isActive(doc)
-                        ? 'bg-sky-100 text-sky-700'
-                        : 'bg-slate-100 text-blue-600 group-hover:bg-blue-50'
+                        ? 'detail-doc-icon--active'
+                        : 'bg-slate-100 text-[#0066cc] group-hover:bg-blue-50'
                       : 'bg-slate-100 text-slate-300'
                   "
                 >
@@ -161,7 +148,7 @@
                   :class="
                     hasDocContent(doc)
                       ? isActive(doc)
-                        ? 'truncate text-[12px] font-bold text-sky-800'
+                        ? 'truncate text-[12px] font-bold text-[#0066cc]'
                         : 'truncate text-[12px] font-semibold text-slate-700'
                       : 'truncate text-[12px]'
                   "
@@ -170,17 +157,11 @@
                 </span>
               </span>
 
-              <span
-                v-if="hasDocContent(doc)"
-                class="ml-2 flex shrink-0 items-center gap-1.5"
-              >
+              <span v-if="hasDocContent(doc)" class="ml-2 flex shrink-0 items-center gap-1.5">
                 <span class="text-[10px] font-semibold text-slate-400">{{ doc.length }}字</span>
-                <EyeOutlined class="text-[11px] text-slate-300 group-hover:text-blue-400" />
+                <EyeOutlined class="text-[11px] text-slate-300 group-hover:text-[#0066cc]" />
               </span>
-              <span
-                v-else
-                class="text-[11px] text-slate-200"
-              >-</span>
+              <span v-else class="text-[11px] text-slate-200">-</span>
             </div>
 
             <div
@@ -406,3 +387,149 @@ function toggleGroup(groupKey: string) {
   expandedGroupKeys.value = [...expandedGroupKeys.value, groupKey]
 }
 </script>
+
+<style scoped>
+.detail-apple-sidebar {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.detail-apple-sidebar h3 {
+  color: #1d1d1f !important;
+  font-size: 14px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0 !important;
+  line-height: 20px !important;
+}
+
+.detail-apple-sidebar p {
+  color: rgba(29, 29, 31, 0.45) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+
+.detail-apple-sidebar button {
+  font-family: inherit;
+  letter-spacing: 0 !important;
+}
+
+.detail-apple-sidebar .font-semibold,
+.detail-apple-sidebar .font-bold {
+  font-weight: 600 !important;
+}
+
+.detail-apple-sidebar .font-semibold {
+  font-weight: 500 !important;
+}
+
+.detail-apple-sidebar .text-slate-900,
+.detail-apple-sidebar .text-slate-800,
+.detail-apple-sidebar .text-slate-700 {
+  color: #1d1d1f !important;
+}
+
+.detail-apple-sidebar .text-slate-600,
+.detail-apple-sidebar .text-slate-500,
+.detail-apple-sidebar .text-slate-400 {
+  color: rgba(29, 29, 31, 0.56) !important;
+}
+
+.detail-apple-sidebar .text-slate-300,
+.detail-apple-sidebar .text-slate-200 {
+  color: rgba(29, 29, 31, 0.28) !important;
+}
+
+.detail-apple-sidebar .text-\[\#0066cc\] {
+  color: #0066cc !important;
+}
+
+.detail-apple-sidebar .border-slate-200\/70,
+.detail-apple-sidebar .border-slate-200\/80 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.detail-apple-sidebar .bg-white,
+.detail-apple-sidebar .bg-white\/75,
+.detail-apple-sidebar .bg-white\/80,
+.detail-apple-sidebar .bg-white\/85 {
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+.detail-apple-sidebar .bg-slate-100,
+.detail-apple-sidebar .bg-blue-50 {
+  background: rgba(0, 102, 204, 0.07) !important;
+}
+
+.detail-apple-sidebar button:hover {
+  background: rgba(0, 0, 0, 0.035) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  color: #1d1d1f !important;
+}
+
+.detail-apple-sidebar .detail-doc-entry--active {
+  border-color: rgba(0, 102, 204, 0.18) !important;
+  background: rgba(0, 102, 204, 0.07) !important;
+  color: #0066cc !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 2px 10px rgba(0, 102, 204, 0.08) !important;
+}
+
+.detail-apple-sidebar .detail-doc-entry--idle,
+.detail-apple-sidebar .detail-doc-group {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: rgba(29, 29, 31, 0.62) !important;
+}
+
+.detail-apple-sidebar .detail-doc-entry--idle:hover,
+.detail-apple-sidebar .detail-doc-group:hover {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  background: rgba(0, 0, 0, 0.035) !important;
+}
+
+.detail-apple-sidebar .detail-doc-icon--active {
+  background: rgba(0, 102, 204, 0.08) !important;
+  color: #0066cc !important;
+}
+
+.detail-apple-sidebar .detail-doc-icon--idle {
+  background: rgba(0, 0, 0, 0.04) !important;
+  color: rgba(29, 29, 31, 0.52) !important;
+}
+
+.detail-apple-sidebar .detail-doc-indicator--active,
+.detail-apple-sidebar .detail-doc-indicator--idle:hover {
+  background: #0066cc !important;
+}
+
+.detail-apple-sidebar button:hover .text-slate-400,
+.detail-apple-sidebar button:hover .text-slate-500,
+.detail-apple-sidebar button:hover .text-slate-600,
+.detail-apple-sidebar button:hover .text-slate-700 {
+  color: #1d1d1f !important;
+}
+
+.detail-apple-sidebar button[class*='shadow-'] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 2px 10px rgba(0, 102, 204, 0.08) !important;
+}
+
+.detail-apple-sidebar .border-l {
+  border-left: 0 !important;
+  margin-left: 4px !important;
+  padding-left: 4px !important;
+}
+
+.detail-apple-sidebar .custom-scrollbar::-webkit-scrollbar-thumb,
+.detail-apple-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(29, 29, 31, 0.18);
+}
+</style>

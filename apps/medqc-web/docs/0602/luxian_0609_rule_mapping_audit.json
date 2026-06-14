@@ -1,0 +1,340 @@
+{
+  "version": "2026-06-10",
+  "summary": {
+    "candidate_rows": 902,
+    "unmapped_rule_ids": 29,
+    "ambiguous_rule_ids": 1,
+    "no_rule_id_candidates": 89,
+    "audit_rows": 30
+  },
+  "rows": [
+    {
+      "rule_id": "SC-009",
+      "candidate_count": 53,
+      "status": "unmapped",
+      "rule_name": "现病史记录不全或描述不清(包括发病的时间､起病缓急､主要症状､一般情况)。",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-010",
+      "candidate_count": 53,
+      "status": "unmapped",
+      "rule_name": "现病史与主诉不符",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-011",
+      "candidate_count": 53,
+      "status": "unmapped",
+      "rule_name": "未描述与本次入院有关的重要的阴性症状以及与鉴别诊断有关的阳性症状",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-012",
+      "candidate_count": 53,
+      "status": "unmapped",
+      "rule_name": "未描述发病后到入院前，在院内、外接受检查与治疗的详细经过及效果或欠缺",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-018",
+      "candidate_count": 53,
+      "status": "unmapped",
+      "rule_name": "体格检查遗漏主要阳性体征及有鉴别诊断意义的阴性体征，或记录不准确",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-019",
+      "candidate_count": 53,
+      "status": "unmapped",
+      "rule_name": "入院前若有辅助检查未记录或记录不完善或抄写不准确或描述不清",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-020",
+      "candidate_count": 53,
+      "status": "unmapped",
+      "rule_name": "入院记录无入院诊断或主次顺序错误或次要诊断有重要遗漏",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-032",
+      "candidate_count": 40,
+      "status": "unmapped",
+      "rule_name": "病程记录重要病情变化(症状及体征)未记录或记录不全",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-033",
+      "candidate_count": 40,
+      "status": "unmapped",
+      "rule_name": "病程记录中对病情变化无分析判断或无具体处理意见",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-036",
+      "candidate_count": 40,
+      "status": "unmapped",
+      "rule_name": "无重要辅助检查结果、无对异常检查结果的分析及处理意见",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-023",
+      "candidate_count": 33,
+      "status": "unmapped",
+      "rule_name": "首次病程记录无病例特点",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-024",
+      "candidate_count": 33,
+      "status": "unmapped",
+      "rule_name": "首次病程记录病例特点未归纳提炼或不全面",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-025",
+      "candidate_count": 33,
+      "status": "unmapped",
+      "rule_name": "首次病程记录无诊断依据、鉴别诊断、诊疗计划任意一项",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-026",
+      "candidate_count": 33,
+      "status": "unmapped",
+      "rule_name": "首次病程记录诊断依据或鉴别诊断不充分、不全面",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-027",
+      "candidate_count": 33,
+      "status": "unmapped",
+      "rule_name": "首次病程记录诊疗计划不全面、不具体",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-070",
+      "candidate_count": 20,
+      "status": "unmapped",
+      "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "LX-016",
+      "candidate_count": 19,
+      "status": "unmapped",
+      "rule_name": "申请会诊医师未在病程记录中记录会诊意见执行情况",
+      "rule_source": "custom_rules_33_updated.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-050",
+      "candidate_count": 8,
+      "status": "unmapped",
+      "rule_name": "上级医师查房无病情分析或欠缺、无诊疗意见或住院期间每周内无副主任医师以上的医师或医疗组长查房记录;上",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-052",
+      "candidate_count": 7,
+      "status": "unmapped",
+      "rule_name": "上级医师查房记录无本人审阅及签名",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-097",
+      "candidate_count": 6,
+      "status": "unmapped",
+      "rule_name": "手术记录缺项或描述不清",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-039",
+      "candidate_count": 3,
+      "status": "unmapped",
+      "rule_name": "病程中无危急值报告及处理记录.或未详细记录时间、内容等关键信息",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-084",
+      "candidate_count": 2,
+      "status": "unmapped",
+      "rule_name": "术前讨论的结论未记入病历",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-085",
+      "candidate_count": 2,
+      "status": "unmapped",
+      "rule_name": "结论记录不完整",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-105",
+      "candidate_count": 2,
+      "status": "unmapped",
+      "rule_name": "术后首次病程记录缺项或描述不清",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-146",
+      "candidate_count": 2,
+      "status": "ambiguous",
+      "rule_name": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": ["LX0609-010", "LX0609-026", "LX0609-049"],
+      "coverage_matrix_matches": [
+        {
+          "source_index": 10,
+          "source_document": "CT/MRI 检查记录",
+          "customer_text": "CT/MRI检查前有无病程记录（无行CT/MRI检查原因）",
+          "recommended_rule_names": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致 / 病程记录未反映CT/MRI等重要检查结果",
+          "coverage_level": "需数据联查",
+          "included_in_v1": "待数据联查",
+          "suggestion": "补充 CT/MRI 检查前病程记录专项规则。"
+        },
+        {
+          "source_index": 26,
+          "source_document": "恶性肿瘤化学治疗记录",
+          "customer_text": "病程中化学治疗记录情况（药物名称、剂量、使用方法、时间）与医嘱不一致",
+          "recommended_rule_names": "病程中对治疗措施、药物、医嘱变化未记录或分析 / 缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+          "coverage_level": "需数据联查",
+          "included_in_v1": "待数据联查",
+          "suggestion": "新增化疗记录-医嘱一致性专项规则。"
+        },
+        {
+          "source_index": 49,
+          "source_document": "输血医嘱",
+          "customer_text": "输血医嘱与收费不一致。",
+          "recommended_rule_names": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致 / 辅助检查、检验的相关医嘱、报告单不完整",
+          "coverage_level": "需数据联查",
+          "included_in_v1": "待数据联查",
+          "suggestion": "新增输血医嘱-收费一致性规则，需接费用数据。"
+        }
+      ],
+      "suggested_action": "按覆盖矩阵补入对应 LX0609，或确认是否因一条规则承载多客户点而需要拆分。"
+    },
+    {
+      "rule_id": "SC-128",
+      "candidate_count": 1,
+      "status": "unmapped",
+      "rule_name": "具有完全民事行为能力的患者，非本人或授权委托人签署知情同意书；无完全民事行为能力的患者，非法定代理人",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-089",
+      "candidate_count": 1,
+      "status": "unmapped",
+      "rule_name": "手术同意书缺项或描述不清",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "LX-021",
+      "candidate_count": 1,
+      "status": "unmapped",
+      "rule_name": "缺术中更改术式的知情同意书",
+      "rule_source": "custom_rules_33_updated.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-062",
+      "candidate_count": 1,
+      "status": "unmapped",
+      "rule_name": "经治医师发生变更时,无交(接)班记录或交(接)班记录未在规定时间内完成(交班记录应当在交班前由交班医",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    },
+    {
+      "rule_id": "SC-063",
+      "candidate_count": 1,
+      "status": "unmapped",
+      "rule_name": "交(接)班记录内容缺项或描述不清(入院日期、交班或接班日期、患者姓名、性别、年龄、主诉、入院情况、入",
+      "rule_source": "sichuan_rules_146.json",
+      "already_mapped_qc_points": [],
+      "coverage_matrix_matches": [],
+      "suggested_action": "规则存在但未进入泸县0609目录；需判断是否属于客户第一批质控点。"
+    }
+  ]
+}

@@ -5,35 +5,32 @@ import { defineConfig, devices } from '@playwright/test'
  * @see https://playwright.dev/docs/test-configuration
  */
 export default defineConfig({
-    testDir: './tests/e2e',
-    fullyParallel: true,
-    forbidOnly: !!process.env.CI,
-    retries: process.env.CI ? 2 : 0,
-    workers: process.env.CI ? 1 : undefined,
-    reporter: [
-        ['html', { outputFolder: 'playwright-report' }],
-        ['list']
-    ],
-    use: {
-        baseURL: 'http://localhost:3000',
-        trace: 'on-first-retry',
-        screenshot: 'only-on-failure',
-        video: 'retain-on-failure',
+  testDir: './tests/e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: [['html', { outputFolder: 'playwright-report' }], ['list']],
+  use: {
+    baseURL: 'http://localhost:3000',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+  },
+  timeout: 60000, // 60s timeout for AI operations
+  expect: {
+    timeout: 10000,
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
     },
-    timeout: 60000, // 60s timeout for AI operations
-    expect: {
-        timeout: 10000,
-    },
-    projects: [
-        {
-            name: 'chromium',
-            use: { ...devices['Desktop Chrome'] },
-        },
-    ],
-    webServer: {
-        command: 'pnpm dev',
-        url: 'http://localhost:3000',
-        reuseExistingServer: !process.env.CI,
-        timeout: 120000,
-    },
+  ],
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120000,
+  },
 })

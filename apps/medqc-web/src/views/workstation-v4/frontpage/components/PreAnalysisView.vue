@@ -19,11 +19,7 @@
           >
             {{ extracting ? '抽取中...' : '执行抽取' }}
           </button>
-          <div
-            class="segmented"
-            role="tablist"
-            aria-label="分组类型"
-          >
+          <div class="segmented" role="tablist" aria-label="分组类型">
             <button
               type="button"
               class="segmented-item"
@@ -100,11 +96,7 @@
           </div>
         </div>
 
-        <div
-          class="case-list"
-          role="tablist"
-          aria-label="病例切换"
-        >
+        <div class="case-list" role="tablist" aria-label="病例切换">
           <button
             v-for="(item, index) in testCases"
             :key="item.name"
@@ -138,46 +130,25 @@
 
         <div class="workflow-block">
           <h3>分析流程</h3>
-          <div
-            class="workflow-node"
-            :class="{ active: !!medicalText }"
-          >
+          <div class="workflow-node" :class="{ active: !!medicalText }">
             <span class="workflow-node__index">01</span>
             <div>
-              <div class="workflow-node__title">
-                病历阅读
-              </div>
-              <div class="workflow-node__desc">
-                确认原始文本与临床场景
-              </div>
+              <div class="workflow-node__title">病历阅读</div>
+              <div class="workflow-node__desc">确认原始文本与临床场景</div>
             </div>
           </div>
-          <div
-            class="workflow-node"
-            :class="{ active: hasExtractedData }"
-          >
+          <div class="workflow-node" :class="{ active: hasExtractedData }">
             <span class="workflow-node__index">02</span>
             <div>
-              <div class="workflow-node__title">
-                结构化抽取
-              </div>
-              <div class="workflow-node__desc">
-                沉淀主诊断、手术与费用字段
-              </div>
+              <div class="workflow-node__title">结构化抽取</div>
+              <div class="workflow-node__desc">沉淀主诊断、手术与费用字段</div>
             </div>
           </div>
-          <div
-            class="workflow-node"
-            :class="{ active: !!drgResult }"
-          >
+          <div class="workflow-node" :class="{ active: !!drgResult }">
             <span class="workflow-node__index">03</span>
             <div>
-              <div class="workflow-node__title">
-                分组预判
-              </div>
-              <div class="workflow-node__desc">
-                输出模拟结果与费用判断
-              </div>
+              <div class="workflow-node__title">分组预判</div>
+              <div class="workflow-node__desc">输出模拟结果与费用判断</div>
             </div>
           </div>
         </div>
@@ -221,10 +192,7 @@
               }}</em>
             </div>
             <div class="reader-scroll">
-              <div
-                class="medical-text"
-                v-html="highlightedMedicalText"
-              />
+              <div class="medical-text" v-html="highlightedMedicalText" />
             </div>
           </div>
         </div>
@@ -259,10 +227,7 @@
             </div>
           </div>
 
-          <div
-            v-if="secondaryDiagnoses.length"
-            class="tag-block"
-          >
+          <div v-if="secondaryDiagnoses.length" class="tag-block">
             <span class="tag-block__label">次诊断</span>
             <div class="tag-list">
               <span
@@ -291,14 +256,8 @@
                   ? '检测到输入变化'
                   : '关键输入未变化'
               }}</span>
-              <div
-                v-if="preGroupingChangedFields.length"
-                class="simulation-version__changes"
-              >
-                <span
-                  v-for="item in preGroupingChangedFields.slice(0, 4)"
-                  :key="item.field"
-                >
+              <div v-if="preGroupingChangedFields.length" class="simulation-version__changes">
+                <span v-for="item in preGroupingChangedFields.slice(0, 4)" :key="item.field">
                   {{ preGroupingFieldLabel(item.field) }}
                 </span>
               </div>
@@ -312,11 +271,7 @@
               <h2>预判结果</h2>
               <p>模拟入组，不写正式结果</p>
             </div>
-            <div
-              class="segmented segmented--compact"
-              role="tablist"
-              aria-label="分组类型"
-            >
+            <div class="segmented segmented--compact" role="tablist" aria-label="分组类型">
               <button
                 type="button"
                 class="segmented-item"
@@ -338,10 +293,7 @@
             </div>
           </div>
 
-          <div
-            v-if="drgResult"
-            class="group-result"
-          >
+          <div v-if="drgResult" class="group-result">
             <div class="group-result__top">
               <span class="group-badge">{{ drgResult.groupingType || groupingType }}</span>
               <h3>{{ drgResult.groupName || drgResult.name || '未返回分组' }}</h3>
@@ -399,18 +351,12 @@
               </template>
             </div>
 
-            <div
-              v-if="groupingCorrections"
-              class="correction-panel"
-            >
+            <div v-if="groupingCorrections" class="correction-panel">
               <div class="correction-panel__head">
                 <span>修正建议</span>
                 <em>{{ groupingCorrections.suggestions.length }} 条</em>
               </div>
-              <div
-                v-if="groupingCorrections.suggestions.length"
-                class="correction-list"
-              >
+              <div v-if="groupingCorrections.suggestions.length" class="correction-list">
                 <div
                   v-for="item in groupingCorrections.suggestions.slice(0, 3)"
                   :key="`${item.suggestion_type}-${item.title}`"
@@ -418,10 +364,7 @@
                 >
                   <strong>{{ item.title }}</strong>
                   <p>{{ item.reason }}</p>
-                  <div
-                    v-if="item.candidates?.length"
-                    class="correction-candidates"
-                  >
+                  <div v-if="item.candidates?.length" class="correction-candidates">
                     <span
                       v-for="candidate in item.candidates.slice(0, 3)"
                       :key="candidate.code || candidate.name"
@@ -431,38 +374,23 @@
                   </div>
                 </div>
               </div>
-              <div
-                v-else
-                class="correction-empty"
-              >
-                当前分组未返回需要调整的编码建议。
-              </div>
+              <div v-else class="correction-empty">当前分组未返回需要调整的编码建议。</div>
               <p class="correction-warning">
                 {{ groupingCorrections.safety_warning }}
               </p>
             </div>
 
-            <div
-              v-if="correctionsLoading && !groupingCorrections"
-              class="correction-empty"
-            >
+            <div v-if="correctionsLoading && !groupingCorrections" class="correction-empty">
               正在生成预入组修正建议...
             </div>
           </div>
 
-          <div
-            v-else
-            class="empty-state"
-          >
+          <div v-else class="empty-state">
             <div class="empty-state__icon">
               {{ groupingType }}
             </div>
-            <div class="empty-state__title">
-              等待分组结果
-            </div>
-            <div class="empty-state__desc">
-              完成抽取后可生成 DRG / DIP 结果与费用建议。
-            </div>
+            <div class="empty-state__title">等待分组结果</div>
+            <div class="empty-state__desc">完成抽取后可生成 DRG / DIP 结果与费用建议。</div>
           </div>
         </article>
 
@@ -473,30 +401,13 @@
               <p>保留可复核的分组路径</p>
             </div>
           </div>
-          <div
-            v-if="drgResult && (drgResult.messages || []).length"
-            class="trace-list"
-          >
-            <div
-              v-for="(item, idx) in drgResult.messages || []"
-              :key="idx"
-              class="trace-item"
-            >
-              <div class="trace-item__title">
-                步骤 {{ idx + 1 }}
-              </div>
-              <div
-                class="trace-item__value"
-                v-html="highlightCodes(item)"
-              />
+          <div v-if="drgResult && (drgResult.messages || []).length" class="trace-list">
+            <div v-for="(item, idx) in drgResult.messages || []" :key="idx" class="trace-item">
+              <div class="trace-item__title">步骤 {{ idx + 1 }}</div>
+              <div class="trace-item__value" v-html="highlightCodes(item)" />
             </div>
           </div>
-          <div
-            v-else
-            class="trace-empty"
-          >
-            暂无轨迹，执行 DRG/DIP 后自动记录。
-          </div>
+          <div v-else class="trace-empty">暂无轨迹，执行 DRG/DIP 后自动记录。</div>
         </article>
       </aside>
     </section>
@@ -1099,15 +1010,17 @@ onMounted(() => {
 </script>
 
 <style scoped>
+@import './drg-dip-workbench.css';
+
 .pre-analysis-shell {
-  --bg: #f5f9fc;
+  --bg: #f5f5f7;
   --surface: #ffffff;
-  --surface-soft: #f8fbff;
-  --line: #e2e8f0;
-  --text: #0f172a;
-  --text-muted: #64748b;
-  --text-subtle: #94a3b8;
-  --accent: #2563eb;
+  --surface-soft: rgba(255, 255, 255, 0.72);
+  --line: rgba(0, 0, 0, 0.08);
+  --text: #1d1d1f;
+  --text-muted: rgba(29, 29, 31, 0.6);
+  --text-subtle: rgba(29, 29, 31, 0.38);
+  --accent: #0066cc;
   --accent-soft: #eaf2ff;
   --ok: #15803d;
   --bad: #dc2626;
@@ -1116,7 +1029,14 @@ onMounted(() => {
   padding: 24px 28px 28px;
   background: var(--bg);
   color: var(--text);
-  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   overflow-y: auto;
   box-sizing: border-box;
 }
@@ -1124,9 +1044,13 @@ onMounted(() => {
 .command-header,
 .surface {
   border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.045);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
 }
 
 .command-header {
@@ -1144,7 +1068,7 @@ onMounted(() => {
 
 .title-block h1 {
   margin: 0;
-  color: #14213d;
+  color: #1d1d1f;
   font-size: 22px;
   line-height: 30px;
   font-weight: 720;
@@ -1154,7 +1078,7 @@ onMounted(() => {
 .eyebrow {
   display: block;
   margin-bottom: 3px;
-  color: #64748b;
+  color: #0066cc;
   font-size: 11px;
   line-height: 16px;
   font-weight: 780;
@@ -1200,10 +1124,10 @@ onMounted(() => {
 }
 
 .btn-primary {
-  border-color: #2563eb;
-  background: #2563eb;
+  border-color: #0066cc;
+  background: #0066cc;
   color: #fff;
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.14);
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.16);
 }
 
 .readonly-badge,
@@ -1247,7 +1171,7 @@ onMounted(() => {
 
 .segmented-item.active {
   background: #eaf2ff;
-  color: #2563eb;
+  color: #0066cc;
 }
 
 .segmented-item:disabled {
@@ -1257,7 +1181,7 @@ onMounted(() => {
 
 .segmented-item.active:disabled {
   background: #dbeafe;
-  color: #2563eb;
+  color: #0066cc;
 }
 
 .segmented--compact .segmented-item {
@@ -1287,7 +1211,7 @@ onMounted(() => {
 .filter-label {
   color: #64748b;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -1312,12 +1236,12 @@ onMounted(() => {
   color: #64748b;
   font-size: 11px;
   line-height: 16px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .case-pill strong {
   overflow: hidden;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 13px;
   line-height: 20px;
   font-weight: 760;
@@ -1344,11 +1268,11 @@ onMounted(() => {
 .current-case span {
   color: #94a3b8;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .current-case strong {
-  color: #2563eb;
+  color: #0066cc;
   font-size: 14px;
   line-height: 1.1;
   font-weight: 790;
@@ -1410,7 +1334,7 @@ onMounted(() => {
 }
 
 .metric-inline--active strong {
-  color: #2563eb;
+  color: #0066cc;
 }
 
 .analysis-layout {
@@ -1486,16 +1410,16 @@ onMounted(() => {
   color: #4f6d9e;
   font-size: 11px;
   line-height: 16px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .case-chip strong {
   display: block;
   margin-top: 2px;
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 14px;
   line-height: 20px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .case-metrics {
@@ -1575,14 +1499,14 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .workflow-node__title {
   color: #1e293b;
   font-size: 13px;
   line-height: 18px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .workflow-node__desc {
@@ -1608,11 +1532,11 @@ onMounted(() => {
 .safety-note span {
   width: fit-content;
   border-radius: 999px;
-  background: #2563eb;
+  background: #0066cc;
   color: #fff;
   padding: 3px 9px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .safety-note strong {
@@ -1666,7 +1590,9 @@ onMounted(() => {
   border-radius: 12px;
   background: #ffffff;
   color: var(--text);
-  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.9;
   outline: none;
@@ -1710,7 +1636,7 @@ onMounted(() => {
 .reader-preview__head span {
   color: #334155;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .reader-preview__head em {
@@ -1797,7 +1723,7 @@ onMounted(() => {
 
 .summary-row strong {
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1865,9 +1791,9 @@ onMounted(() => {
 }
 
 .simulation-version__head strong {
-  color: #2563eb;
+  color: #0066cc;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .simulation-version__head em {
@@ -1894,7 +1820,7 @@ onMounted(() => {
   border-radius: 999px;
   border: 1px solid #dbeafe;
   background: #eff6ff;
-  color: #1d4ed8;
+  color: #0057b8;
   display: inline-flex;
   align-items: center;
   padding: 0 8px;
@@ -1928,7 +1854,7 @@ onMounted(() => {
   background: #dee9ff;
   color: #2255a9;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   padding: 0 8px;
@@ -1978,7 +1904,7 @@ onMounted(() => {
 }
 
 .correction-panel__head span {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 14px;
   font-weight: 850;
 }
@@ -1986,10 +1912,10 @@ onMounted(() => {
 .correction-panel__head em {
   border-radius: 999px;
   background: #eaf2ff;
-  color: #2563eb;
+  color: #0066cc;
   font-size: 12px;
   font-style: normal;
-  font-weight: 800;
+  font-weight: 700;
   padding: 3px 8px;
 }
 
@@ -2030,7 +1956,7 @@ onMounted(() => {
   border: 1px solid #bfdbfe;
   border-radius: 999px;
   background: #eff6ff;
-  color: #1d4ed8;
+  color: #0057b8;
   font-size: 12px;
   font-weight: 760;
   padding: 3px 8px;
@@ -2115,7 +2041,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .empty-state__title {
@@ -2199,5 +2125,368 @@ onMounted(() => {
   .medical-text {
     font-size: 15px;
   }
+}
+
+/* Apple-style workstation language shared with workstation-v4/rules?tab=semantic */
+.pre-analysis-shell {
+  --bg: #f5f5f7;
+  --surface: rgba(255, 255, 255, 0.86);
+  --surface-soft: rgba(255, 255, 255, 0.72);
+  --line: rgba(0, 0, 0, 0.08);
+  --text: #1d1d1f;
+  --text-muted: rgba(29, 29, 31, 0.6);
+  --text-subtle: rgba(29, 29, 31, 0.38);
+  --accent: #0066cc;
+  --accent-soft: rgba(0, 102, 204, 0.08);
+  --ok: #10b981;
+  --bad: #ff453a;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.command-header,
+.surface {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.command-header:hover,
+.surface:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+}
+
+.command-header {
+  border-radius: 20px;
+  padding: 20px 22px 18px;
+}
+
+.surface {
+  border-radius: 20px;
+}
+
+.eyebrow {
+  margin-bottom: 5px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.title-block h1 {
+  color: var(--text);
+  font-family:
+    'SF Pro Display', 'San Francisco', 'Source Han Sans SC', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 31px;
+}
+
+.title-block p,
+.panel-head p,
+.reader-preview__head em,
+.correction-warning,
+.correction-empty,
+.trace-empty,
+.empty-state__desc {
+  color: var(--text-muted);
+}
+
+.header-tools {
+  gap: 8px;
+}
+
+.btn,
+.readonly-badge,
+.stage-badge,
+.segmented,
+.case-pill,
+.current-case,
+.command-metrics,
+.reading-meta,
+.status-pill,
+.summary-row,
+.tag-block,
+.simulation-version,
+.group-result,
+.metric-card,
+.correction-panel,
+.correction-empty,
+.trace-item,
+.trace-empty,
+.empty-state {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.btn {
+  height: 34px;
+  border-radius: 8px;
+  color: rgba(29, 29, 31, 0.66);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.btn-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.16);
+}
+
+.readonly-badge {
+  background: rgba(16, 185, 129, 0.08);
+  color: #0f7a55;
+}
+
+.stage-badge,
+.status-pill,
+.reading-meta strong,
+.metric-inline--active strong,
+.current-case strong,
+.simulation-version__head strong,
+.summary-row__meta,
+.correction-panel__head em {
+  color: var(--accent);
+}
+
+.stage-badge,
+.status-pill,
+.simulation-version__changes span,
+.correction-panel__head em,
+.correction-candidates span,
+.tag-item {
+  border-color: rgba(0, 102, 204, 0.18);
+  background: var(--accent-soft);
+}
+
+.segmented {
+  overflow: hidden;
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.segmented-item {
+  height: 28px;
+  border-radius: 8px;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.segmented-item.active,
+.segmented-item.active:disabled {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.segmented-item:disabled {
+  background: transparent;
+  color: var(--text-subtle);
+}
+
+.pre-analysis-filter-strip {
+  border-color: var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.filter-label,
+.metric-inline span,
+.case-pill span,
+.current-case span,
+.case-chip__id,
+.case-metric span,
+.summary-row__label,
+.tag-block__label,
+.simulation-version__head span,
+.simulation-version__body span,
+.metric-card span,
+.reader-preview__head em {
+  color: var(--text-muted);
+}
+
+.case-pill {
+  border-radius: 12px;
+  min-height: 50px;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    background-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.case-pill:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  background: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+.case-pill.active {
+  border-color: rgba(0, 102, 204, 0.26);
+  background: var(--accent-soft);
+  box-shadow: none;
+}
+
+.case-pill strong,
+.current-case em,
+.panel-head h2,
+.reader-preview__head span,
+.summary-row strong,
+.group-result__top h3,
+.correction-panel__head span,
+.correction-item strong,
+.trace-item__title,
+.empty-state__title,
+.metric-card strong {
+  color: var(--text);
+}
+
+.command-metrics {
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.metric-inline {
+  min-height: 60px;
+  border-left-color: var(--line);
+  background: transparent;
+}
+
+.metric-inline--active {
+  background: rgba(0, 102, 204, 0.06);
+}
+
+.metric-inline strong {
+  color: var(--text);
+  font-family:
+    'SF Pro Display', 'San Francisco', 'Source Han Sans SC', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.analysis-layout {
+  margin-top: 16px;
+  grid-template-columns: minmax(0, 1.58fr) minmax(360px, 0.82fr);
+  gap: 16px;
+}
+
+.reader-panel {
+  min-height: 620px;
+  padding: 20px;
+}
+
+.reader-body,
+.medical-editor-wrap,
+.reader-preview,
+.reader-scroll {
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.reader-body {
+  border-radius: 18px;
+}
+
+.medical-text-editor {
+  border-color: var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text);
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.medical-text-editor:focus {
+  border-color: rgba(0, 102, 204, 0.32);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08);
+}
+
+.medical-text {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.result-column {
+  gap: 12px;
+}
+
+.result-card {
+  padding: 18px;
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+}
+
+.summary-row {
+  border-radius: 14px;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+}
+
+.tag-item,
+.simulation-version__changes span,
+.correction-candidates span {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.group-badge,
+.empty-state__icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.group-result,
+.correction-panel,
+.correction-empty,
+.trace-empty {
+  border-radius: 14px;
+}
+
+.correction-item,
+.metric-card,
+.trace-item {
+  border-color: var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.correction-item p,
+.trace-item__value,
+.group-result__top p {
+  color: var(--text-muted);
+}
+
+.reader-preview__head,
+.medical-editor-wrap,
+.prompt-panel,
+.detail-footer {
+  border-color: var(--line);
 }
 </style>

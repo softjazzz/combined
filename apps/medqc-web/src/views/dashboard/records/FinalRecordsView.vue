@@ -1,15 +1,11 @@
 <template>
-  <div class="final-records-page min-h-screen bg-[#f5f9fc] p-5 lg:p-6">
+  <div class="final-records-page min-h-screen p-5 lg:p-6">
     <!-- 1. 顶部业务标题与 KPI -->
-    <div
-      class="mb-5 rounded-[18px] border border-slate-200/80 bg-white/95 p-5 shadow-[0_14px_34px_rgba(15,23,42,0.05)]"
-    >
+    <div class="apple-hero-panel mb-5 p-5">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div class="text-[11px] font-black uppercase tracking-[0.14em] text-slate-500">
-            WORKLIST / FINAL
-          </div>
-          <h1 class="mt-1 text-[28px] font-black leading-9 tracking-tight text-slate-900">
+          <div class="text-[11px] font-semibold tracking-normal text-slate-500">终末队列</div>
+          <h1 class="mt-1 text-[28px] font-bold leading-8 tracking-normal text-slate-900">
             终末病历质控
           </h1>
           <p class="mt-1 text-sm font-medium text-slate-500">
@@ -17,16 +13,13 @@
           </p>
         </div>
         <div class="flex items-center gap-2">
-          <a-button
-            class="!h-9 !rounded-lg !border-slate-200 !bg-white !text-slate-700 hover:!border-blue-200 hover:!text-blue-700"
-            @click="handleRefresh"
-          >
+          <a-button class="apple-secondary-button !h-9 !rounded-lg" @click="handleRefresh">
             <ReloadOutlined :spin="loading" />
             刷新
           </a-button>
           <a-button
             type="primary"
-            class="!h-9 !rounded-lg !border-0 !bg-blue-600 !text-white shadow-sm shadow-blue-500/20 hover:!bg-blue-500"
+            class="apple-primary-button !h-9 !rounded-lg"
             @click="openBatchLaunchModal"
           >
             <FileSearchOutlined />
@@ -37,19 +30,15 @@
 
       <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-4">
         <div class="queue-kpi-card">
-          <div class="queue-kpi-icon bg-blue-50 text-blue-600">
+          <div class="queue-kpi-icon queue-kpi-icon-primary">
             <FileTextOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">
-              总病历数
-            </div>
+            <div class="queue-kpi-label">总病历数</div>
             <div class="queue-kpi-value">
               {{ formatInteger(overviewStats.total_records) }}
             </div>
-            <div class="queue-kpi-desc">
-              当前筛选范围
-            </div>
+            <div class="queue-kpi-desc">当前筛选范围</div>
           </div>
         </div>
 
@@ -58,15 +47,11 @@
             <CheckCircleOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">
-              已归档
-            </div>
+            <div class="queue-kpi-label">已归档</div>
             <div class="queue-kpi-value">
               {{ formatInteger(overviewStats.archived_count) }}
             </div>
-            <div class="queue-kpi-desc">
-              已完成质控闭环
-            </div>
+            <div class="queue-kpi-desc">已完成质控闭环</div>
           </div>
         </div>
 
@@ -75,41 +60,29 @@
             <ClockCircleOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">
-              待处理
-            </div>
+            <div class="queue-kpi-label">待处理</div>
             <div class="queue-kpi-value">
               {{ formatInteger(overviewStats.pending_count) }}
             </div>
-            <div class="queue-kpi-desc">
-              等待人工复核
-            </div>
+            <div class="queue-kpi-desc">等待人工复核</div>
           </div>
         </div>
 
         <div class="queue-kpi-card">
-          <div class="queue-kpi-icon bg-blue-50 text-blue-600">
+          <div class="queue-kpi-icon queue-kpi-icon-primary">
             <TrophyOutlined />
           </div>
           <div>
-            <div class="queue-kpi-label">
-              质控通过率
-            </div>
-            <div class="queue-kpi-value">
-              {{ formatRate(overviewStats.pass_rate) }}%
-            </div>
-            <div class="queue-kpi-desc">
-              终末质控结果
-            </div>
+            <div class="queue-kpi-label">质控通过率</div>
+            <div class="queue-kpi-value">{{ formatRate(overviewStats.pass_rate) }}%</div>
+            <div class="queue-kpi-desc">终末质控结果</div>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 2. 主内容区：工具栏 + 表格 -->
-    <div
-      class="flex h-[calc(100vh-198px)] flex-col rounded-[18px] border border-slate-200/80 bg-white shadow-[0_12px_28px_rgba(15,23,42,0.04)]"
-    >
+    <div class="apple-workbench flex h-[calc(100vh-198px)] flex-col">
       <ProQueryBar>
         <template #filters>
           <div class="flex items-center gap-2">
@@ -117,24 +90,15 @@
               <a-input
                 v-model:value="searchKeyword"
                 placeholder="搜索病历号、姓名"
-                class="w-64 !rounded-lg !bg-slate-50 !border-slate-200 hover:!border-blue-400 focus:!border-blue-500 !pl-10"
+                class="w-64 apple-input !pl-10"
                 @press-enter="handleSearch"
               />
               <SearchOutlined class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             </div>
-            <a-button
-              type="primary"
-              class="!h-9 !rounded-lg"
-              @click="handleSearch"
-            >
+            <a-button type="primary" class="!h-9 !rounded-lg" @click="handleSearch">
               查询
             </a-button>
-            <a-button
-              class="!h-9 !rounded-lg"
-              @click="handleResetFilters"
-            >
-              重置
-            </a-button>
+            <a-button class="!h-9 !rounded-lg" @click="handleResetFilters"> 重置 </a-button>
           </div>
 
           <a-select
@@ -173,7 +137,7 @@
 
           <a-range-picker
             v-model:value="dateRange"
-            class="!rounded-lg !bg-slate-50 !border-slate-200 hover:!border-blue-400"
+            class="apple-picker !rounded-lg"
             :bordered="false"
           />
         </template>
@@ -181,7 +145,7 @@
         <template #actions>
           <ProTableToolbar>
             <a-button
-              class="!h-9 !rounded-lg !border-slate-200 text-slate-600 hover:text-blue-600"
+              class="!h-9 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#0066cc]"
               @click="openCustomQCExperience()"
             >
               自定义质控点
@@ -189,7 +153,7 @@
 
             <a-button
               type="primary"
-              class="!flex !h-9 items-center gap-1 !rounded-lg border-none bg-blue-600 shadow-sm shadow-blue-500/20 hover:bg-blue-500"
+              class="apple-primary-button !flex !h-9 items-center gap-1 !rounded-lg"
               @click="openBatchLaunchModal"
             >
               <FileSearchOutlined /> 发起批量质控
@@ -206,7 +170,7 @@
             </a-tooltip>
 
             <a-button
-              class="!flex !h-9 items-center gap-1 !rounded-lg !border-slate-200 text-slate-600 hover:text-blue-600"
+              class="!flex !h-9 items-center gap-1 !rounded-lg !border-slate-200 text-slate-600 hover:text-[#0066cc]"
               @click="handleExport"
             >
               <DownloadOutlined /> 导出
@@ -214,7 +178,7 @@
 
             <a-tooltip title="刷新数据">
               <a-button
-                class="flex !h-9 !w-9 items-center justify-center !rounded-lg !border-slate-200 !p-0 text-slate-500 hover:text-blue-600"
+                class="flex !h-9 !w-9 items-center justify-center !rounded-lg !border-slate-200 !p-0 text-slate-500 hover:text-[#0066cc]"
                 @click="handleRefresh"
               >
                 <ReloadOutlined :spin="loading" />
@@ -223,10 +187,7 @@
           </ProTableToolbar>
         </template>
 
-        <template
-          v-if="stageHint"
-          #hint
-        >
+        <template v-if="stageHint" #hint>
           {{ stageHint }}
         </template>
       </ProQueryBar>
@@ -241,12 +202,7 @@
           class="mt-6"
         >
           <template #extra>
-            <a-button
-              type="primary"
-              @click="fetchRecords"
-            >
-              重试
-            </a-button>
+            <a-button type="primary" @click="fetchRecords"> 重试 </a-button>
           </template>
         </a-result>
         <ProStandardTable
@@ -264,7 +220,7 @@
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'recordNumber'">
               <div
-                class="font-mono font-bold text-slate-700 text-sm group-hover:text-blue-600 transition-colors cursor-pointer"
+                class="font-mono font-semibold text-slate-700 text-sm group-hover:text-[#0066cc] transition-colors cursor-pointer"
                 @click="handleView(record as AdminRecordItem)"
               >
                 {{ record.record_id }}
@@ -277,9 +233,9 @@
                   :src="patientAvatarSrc(record as AdminRecordItem)"
                   alt=""
                   class="record-patient-avatar"
-                >
+                />
                 <div class="min-w-0">
-                  <div class="truncate text-sm font-bold text-slate-800">
+                  <div class="truncate text-sm font-semibold text-slate-800">
                     {{ record.patient_name || '-' }}
                   </div>
                   <div class="mt-0.5 truncate text-xs font-medium text-slate-400">
@@ -327,7 +283,9 @@
 
             <template v-if="column.key === 'qcScore'">
               <div class="flex items-center gap-2">
-                <span class="font-mono font-bold text-slate-700">{{ record.score || '-' }}</span>
+                <span class="font-mono font-semibold text-slate-700">{{
+                  record.score || '-'
+                }}</span>
                 <a-progress
                   v-if="record.score"
                   :percent="record.score"
@@ -351,7 +309,7 @@
                 </a-button>
                 <a-button
                   size="small"
-                  class="!h-7 !rounded-full !border-blue-200/90 !text-blue-700 !px-2.5 !text-xs"
+                  class="!h-7 !rounded-full !border-[rgba(0,102,204,0.2)] !text-[#0066cc] !px-2.5 !text-xs"
                   :disabled="!getRecordIdForJump(record)"
                   @click="jumpToWorkstation(record, 'generate_frontpage')"
                 >
@@ -396,7 +354,7 @@
               <div class="flex items-center gap-1">
                 <a-tooltip title="查看详情">
                   <button
-                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-blue-600 transition-all"
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-[#0066cc] transition-all"
                     @click="handleView(record as AdminRecordItem)"
                   >
                     <EyeOutlined />
@@ -404,16 +362,13 @@
                 </a-tooltip>
                 <a-tooltip title="质控报告">
                   <button
-                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all"
+                    class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-[rgba(0,102,204,0.08)] hover:text-[#0066cc] transition-all"
                     @click="handleQCReport(record as AdminRecordItem)"
                   >
                     <FileSearchOutlined />
                   </button>
                 </a-tooltip>
-                <a-tooltip
-                  v-if="record.status === 'pending'"
-                  title="归档能力待后端路由接入"
-                >
+                <a-tooltip v-if="record.status === 'pending'" title="归档能力待后端路由接入">
                   <button
                     class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 transition-all cursor-not-allowed"
                     :disabled="!archiveFeatureEnabled"
@@ -434,12 +389,14 @@
           v-if="selectedRowKeys.length > 0"
           class="absolute bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-5 rounded-[14px] border border-slate-200 bg-white px-5 py-3 text-slate-700 shadow-[0_16px_36px_rgba(15,23,42,0.12)]"
         >
-          <span class="text-sm font-semibold">已选择
-            <span class="mx-1 font-black text-blue-600">{{ selectedRowKeys.length }}</span> 项</span>
+          <span class="text-sm font-semibold"
+            >已选择
+            <span class="mx-1 font-bold text-[#0066cc]">{{ selectedRowKeys.length }}</span> 项</span
+          >
           <div class="h-4 w-px bg-slate-200" />
           <div class="flex items-center gap-2">
             <button
-              class="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-blue-500/20 transition-colors hover:bg-blue-500"
+              class="apple-primary-action flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-colors"
               @click="openBatchLaunchModal"
             >
               <FileSearchOutlined /> 发起批量质控
@@ -457,13 +414,10 @@
 
     <a-collapse
       v-model:active-key="batchTaskPanelOpenKeys"
-      class="mt-4 rounded-2xl overflow-hidden border border-slate-100 bg-white shadow-sm"
+      class="apple-collapse mt-4 overflow-hidden"
       ghost
     >
-      <a-collapse-panel
-        key="final-batch-jobs"
-        header="终末病历批量任务"
-      >
+      <a-collapse-panel key="final-batch-jobs" header="终末病历批量任务">
         <SemanticRulesBatchPanel
           :loading="batchJobLoading"
           :batch-jobs="batchJobs"
@@ -503,15 +457,9 @@
       @cancel="launchModalOpen = false"
     >
       <div class="space-y-4">
-        <a-alert
-          type="info"
-          show-icon
-          message="流程：选择规则集 → 确认病历范围 → 创建任务"
-        />
-        <div class="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
-          <div class="mb-2 text-sm font-semibold text-slate-800">
-            规则集选择
-          </div>
+        <a-alert type="info" show-icon message="流程：选择规则集 → 确认病历范围 → 创建任务" />
+        <div class="rounded-2xl border border-[rgba(0,102,204,0.14)] bg-[rgba(0,102,204,0.06)] p-3">
+          <div class="mb-2 text-sm font-semibold text-slate-800">规则集选择</div>
           <a-radio-group
             v-model:value="launchRuleMode"
             class="flex flex-wrap gap-2"
@@ -523,16 +471,10 @@
               :value="option.value"
             >
               {{ option.label
-              }}<template v-if="option.ruleCount">
-                （{{ option.ruleCount }}）
-              </template>
+              }}<template v-if="option.ruleCount"> （{{ option.ruleCount }}） </template>
             </a-radio-button>
-            <a-radio-button value="manual">
-              手工选择规则
-            </a-radio-button>
-            <a-radio-button value="all">
-              全部四川规则（高级/调试）
-            </a-radio-button>
+            <a-radio-button value="manual"> 手工选择规则 </a-radio-button>
+            <a-radio-button value="all"> 全部四川规则（高级/调试） </a-radio-button>
           </a-radio-group>
           <div class="mt-2 text-xs leading-5 text-slate-600">
             {{ launchRuleModeDescription }}
@@ -540,25 +482,19 @@
         </div>
         <div class="grid grid-cols-3 gap-3">
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div class="text-xs text-slate-500">
-              已选规则
-            </div>
+            <div class="text-xs text-slate-500">已选规则</div>
             <div class="text-lg font-semibold text-slate-800">
               {{ selectedRuleCount }}
             </div>
           </div>
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div class="text-xs text-slate-500">
-              当前筛选病历
-            </div>
+            <div class="text-xs text-slate-500">当前筛选病历</div>
             <div class="text-lg font-semibold text-slate-800">
               {{ pagination.total }}
             </div>
           </div>
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <div class="text-xs text-slate-500">
-              已勾选病历
-            </div>
+            <div class="text-xs text-slate-500">已勾选病历</div>
             <div class="text-lg font-semibold text-slate-800">
               {{ selectedRecordIds.length }}
             </div>
@@ -573,16 +509,10 @@
             placeholder="搜索规则编码/名称/文书域"
           />
           <div class="flex items-center gap-2">
-            <a-button
-              :disabled="launchRuleMode !== 'manual'"
-              @click="selectAllFilteredRules"
-            >
+            <a-button :disabled="launchRuleMode !== 'manual'" @click="selectAllFilteredRules">
               全选当前过滤
             </a-button>
-            <a-button
-              :disabled="launchRuleMode !== 'manual'"
-              @click="clearSelectedRules"
-            >
+            <a-button :disabled="launchRuleMode !== 'manual'" @click="clearSelectedRules">
               清空
             </a-button>
           </div>
@@ -602,17 +532,10 @@
         <a-divider class="!my-2" />
 
         <div class="space-y-2">
-          <div class="text-sm font-medium text-slate-700">
-            病历范围
-          </div>
+          <div class="text-sm font-medium text-slate-700">病历范围</div>
           <a-radio-group v-model:value="launchOnlySelectedRecords">
-            <a-radio :value="false">
-              当前筛选结果（科室/状态/日期/关键词）
-            </a-radio>
-            <a-radio
-              :value="true"
-              :disabled="selectedRecordIds.length === 0"
-            >
+            <a-radio :value="false"> 当前筛选结果（科室/状态/日期/关键词） </a-radio>
+            <a-radio :value="true" :disabled="selectedRecordIds.length === 0">
               仅当前勾选病历（{{ selectedRecordIds.length }}）
             </a-radio>
           </a-radio-group>
@@ -1158,7 +1081,7 @@ const getQCStatusText = (status: string) => {
 
 const getScoreColor = (score: number) => {
   if (score >= 90) return '#10b981' // emerald-500
-  if (score >= 80) return '#3b82f6' // blue-500
+  if (score >= 80) return '#0066cc'
   if (score >= 60) return '#f59e0b' // amber-500
   return '#f43f5e' // rose-500
 }
@@ -1675,16 +1598,81 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.final-records-page {
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.apple-hero-panel,
+.apple-workbench,
+.apple-collapse {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.06),
+    0 10px 30px rgba(0, 0, 0, 0.045);
+  backdrop-filter: blur(18px);
+}
+
+.apple-hero-panel,
+.apple-workbench,
+.apple-collapse {
+  border-radius: 20px;
+}
+
+.apple-primary-button,
+.apple-primary-action {
+  border: 0 !important;
+  background: #0066cc !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.18) !important;
+}
+
+.apple-primary-button:hover,
+.apple-primary-action:hover {
+  background: #005bb8 !important;
+}
+
+.apple-secondary-button {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  color: rgba(29, 29, 31, 0.78) !important;
+}
+
+.apple-secondary-button:hover {
+  border-color: rgba(0, 102, 204, 0.24) !important;
+  color: #0066cc !important;
+}
+
+.apple-input,
+.apple-picker {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
 .queue-kpi-card {
   display: flex;
   min-height: 92px;
   align-items: center;
   gap: 14px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 14px;
-  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
   padding: 16px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.04);
+  transition: all 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.queue-kpi-card:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
 }
 
 .queue-kpi-icon {
@@ -1698,25 +1686,32 @@ onBeforeUnmount(() => {
   font-size: 18px;
 }
 
+.queue-kpi-icon-primary {
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+}
+
 .queue-kpi-label {
-  color: #64748b;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 18px;
 }
 
 .queue-kpi-value {
   margin-top: 2px;
-  color: #0f172a;
-  font-family: Inter, 'Microsoft YaHei', system-ui, sans-serif;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
   font-size: 28px;
-  font-weight: 900;
-  line-height: 34px;
+  font-weight: 700;
+  line-height: 31px;
 }
 
 .queue-kpi-desc {
   margin-top: 2px;
-  color: #94a3b8;
+  color: rgba(29, 29, 31, 0.38);
   font-size: 12px;
   font-weight: 600;
   line-height: 18px;
@@ -1726,25 +1721,26 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 36px;
   flex: 0 0 auto;
-  border: 1px solid rgba(191, 219, 254, 0.9);
+  border: 1px solid rgba(0, 102, 204, 0.14);
   border-radius: 999px;
-  background: #eff6ff;
+  background: rgba(0, 102, 204, 0.08);
   object-fit: cover;
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 8px 18px rgba(0, 102, 204, 0.1);
 }
 
 /* 自定义下拉框样式 */
 :deep(.custom-select .ant-select-selector) {
-  background-color: #f8fafc !important; /* slate-50 */
+  background-color: rgba(255, 255, 255, 0.72) !important;
   border-radius: 8px !important;
-  border: 1px solid #e2e8f0 !important; /* slate-200 */
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
   height: 36px !important;
   display: flex;
   align-items: center;
 }
 
 :deep(.custom-select:hover .ant-select-selector) {
-  border-color: #60a5fa !important; /* blue-400 */
+  border-color: rgba(0, 102, 204, 0.32) !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
 }
 
 :deep(.custom-select .ant-select-selection-placeholder) {
@@ -1764,22 +1760,22 @@ onBeforeUnmount(() => {
 }
 
 :deep(.modern-table .ant-table-thead > tr > th) {
-  background: #f8fafc;
-  color: #64748b;
+  background: rgba(245, 245, 247, 0.76);
+  color: rgba(29, 29, 31, 0.6);
   font-weight: 600;
   font-size: 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 :deep(.modern-table .ant-table-tbody > tr > td) {
   padding: 12px 16px;
-  border-bottom: 1px solid #f8fafc;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   font-size: 13px;
 }
 
 :deep(.modern-table .ant-table-tbody > tr:hover > td) {
-  background: #f8fafc;
+  background: rgba(0, 0, 0, 0.035);
 }
 
 /* 分页样式 */
@@ -1789,12 +1785,28 @@ onBeforeUnmount(() => {
 }
 
 :deep(.ant-pagination-item-active) {
-  background: #2563eb;
-  border-color: #2563eb;
+  border-color: #0066cc;
 }
 
 :deep(.ant-pagination-item-active a) {
-  color: white;
+  color: #0066cc;
+}
+
+:deep(.ant-btn-primary) {
+  border-color: #0066cc !important;
+  background: #0066cc !important;
+}
+
+:deep(.ant-input:hover),
+:deep(.ant-input:focus),
+:deep(.ant-picker:hover),
+:deep(.ant-picker-focused) {
+  border-color: rgba(0, 102, 204, 0.32) !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+}
+
+:deep(.ant-btn-link) {
+  color: #0066cc;
 }
 
 /* 底部批量操作栏动画 */

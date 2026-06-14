@@ -77,6 +77,63 @@ export type ManualSampleValidationMode =
   | 'programmatic'
   | 'formal_fast_screen_full'
 
+export type ManualSampleValidationRuleSet = {
+  rule_set_key: string
+  rule_set_name: string
+  rule_set_version: string
+  scope: string
+  rule_ids?: string[]
+  rule_count: number
+  validation_mode: ManualSampleValidationMode | string
+  requires_synced?: boolean
+  advanced?: boolean
+  display_group?: 'main' | 'advanced' | string
+  coverage_summary?: Record<string, number>
+  coverage_status?: string
+  release_gate_summary?: {
+    release_ready?: boolean
+    passed_checks?: number
+    failed_checks?: number
+    unverified_checks?: number
+    blocking_count?: number
+  }
+  evaluation_summary?: {
+    rule_count?: number
+    rules_with_all_case_types?: number
+    rules_missing_case_types?: number
+    hit_count?: number
+    manual_confirmed_correct_count?: number
+    false_positive_count?: number
+    false_negative_count?: number
+    unknown_count?: number
+    evidence_missing_count?: number
+    launch_status?: Record<string, number>
+  }
+  work_package_summary?: {
+    package_count?: number
+    phase_counts?: Record<string, number>
+    priority_counts?: Record<string, number>
+  }
+  page_closure_summary?: {
+    page_verified?: boolean
+    capability_count?: number
+    passed_capabilities?: number
+    partial_capabilities?: number
+    failed_capabilities?: number
+    blocking_count?: number
+    status_counts?: Record<string, number>
+  }
+  execution_strategy?: string
+  quality_profile?: string
+  bucket_strategy?: string
+  description?: string
+  note?: string
+}
+
+export type ManualSampleValidationRuleSetListResult = {
+  items: ManualSampleValidationRuleSet[]
+}
+
 export type ManualSamplePoolListResult = {
   items: ManualSamplePool[]
   total: number

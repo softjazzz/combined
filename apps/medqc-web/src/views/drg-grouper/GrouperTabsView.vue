@@ -3,7 +3,7 @@
     <header class="grouper-header">
       <div class="header-main">
         <div class="breadcrumb">
-          <HomeOutlined />
+          <Home class="inline-icon" />
           <span>工作台</span>
           <span>/</span>
           <strong>分组器</strong>
@@ -16,7 +16,7 @@
         <section class="grouper-panel condition-panel">
           <header class="panel-heading">
             <div class="panel-title">
-              <span class="heading-icon"><ProfileOutlined /></span>
+              <span class="heading-icon"><ClipboardList class="panel-icon" /></span>
               <div>
                 <h2>分组条件</h2>
                 <p>同一病案输入会同时送入 CHS-DRG 四川 2.0、CN-DRG 绩效监测、DIP 泸州版。</p>
@@ -27,7 +27,7 @@
           <div class="condition-body">
             <div class="form-section">
               <div class="section-title">
-                <span class="section-title-main"><UserOutlined />基本信息</span>
+                <span class="section-title-main"><UserRound class="section-icon" />基本信息</span>
               </div>
               <div class="field-grid">
                 <label class="field-card">
@@ -68,7 +68,7 @@
 
             <div class="form-section">
               <div class="section-title">
-                <span class="section-title-main"><FileSearchOutlined />主诊断</span>
+                <span class="section-title-main"><SearchCheck class="section-icon" />主诊断</span>
                 <span class="optional-chip">必填</span>
               </div>
               <div class="code-list">
@@ -87,7 +87,7 @@
 
             <div class="form-section">
               <div class="section-title">
-                <span class="section-title-main"><FileAddOutlined />其他诊断</span>
+                <span class="section-title-main"><FilePlus2 class="section-icon" />其他诊断</span>
                 <span class="optional-chip">选填</span>
               </div>
               <div class="code-list">
@@ -108,7 +108,7 @@
                     class="icon-button"
                     @click="formData.zdList.splice(index, 1)"
                   >
-                    <DeleteOutlined />
+                    <Trash2 class="button-icon" />
                   </button>
                 </div>
                 <button
@@ -116,14 +116,14 @@
                   class="add-button"
                   @click="addDiagnosis"
                 >
-                  <PlusOutlined /> 添加诊断
+                  <Plus class="button-icon" /> 添加诊断
                 </button>
               </div>
             </div>
 
             <div class="form-section">
               <div class="section-title">
-                <span class="section-title-main"><MedicineBoxOutlined />手术操作</span>
+                <span class="section-title-main"><BriefcaseMedical class="section-icon" />手术操作</span>
                 <span class="optional-chip">选填</span>
               </div>
               <div class="code-list">
@@ -145,7 +145,7 @@
                     class="icon-button"
                     @click="formData.ssList.splice(index, 1)"
                   >
-                    <DeleteOutlined />
+                    <Trash2 class="button-icon" />
                   </button>
                   <span v-else />
                 </div>
@@ -154,14 +154,14 @@
                   class="add-button"
                   @click="addProcedure"
                 >
-                  <PlusOutlined /> 添加手术
+                  <Plus class="button-icon" /> 添加手术
                 </button>
               </div>
             </div>
 
             <div class="form-section">
               <div class="section-title">
-                <span class="section-title-main"><PayCircleOutlined />费用信息（元）</span>
+                <span class="section-title-main"><CircleDollarSign class="section-icon" />费用信息（元）</span>
                 <span class="optional-chip">选填</span>
               </div>
               <div class="field-grid">
@@ -210,7 +210,7 @@
               type="button"
               @click="fillTestCase"
             >
-              填入示例
+              填入样例
             </button>
             <button
               class="secondary-button"
@@ -225,8 +225,14 @@
               :disabled="grouping"
               @click="doGrouping"
             >
-              <LoadingOutlined v-if="grouping" />
-              <ThunderboltOutlined v-else />
+              <LoaderCircle
+                v-if="grouping"
+                class="button-icon spin-icon"
+              />
+              <Zap
+                v-else
+                class="button-icon"
+              />
               {{ grouping ? '三分组器执行中...' : '执行分组' }}
             </button>
           </footer>
@@ -235,7 +241,7 @@
         <section class="grouper-panel result-panel">
           <header class="panel-heading">
             <div class="panel-title">
-              <span class="heading-icon"><BarChartOutlined /></span>
+              <span class="heading-icon"><ChartColumnBig class="panel-icon" /></span>
               <div>
                 <h2>三分组器结果</h2>
                 <p>同屏展示 CHS-DRG、CN-DRG 绩效监测、DIP 的入组结果。</p>
@@ -248,7 +254,7 @@
               v-if="!hasAnyResult && !grouping"
               class="empty-state"
             >
-              <FileSearchOutlined />
+              <FileSearch class="empty-icon" />
               <h3>等待分组</h3>
               <p>填写条件后点击执行分组，系统会一次生成 3 个分组器结果。</p>
             </div>
@@ -257,7 +263,7 @@
               v-else-if="grouping"
               class="empty-state"
             >
-              <LoadingOutlined class="spin-icon" />
+              <LoaderCircle class="empty-icon spin-icon" />
               <h3>正在执行分组</h3>
               <p>系统正在并行调用 CHS-DRG、CN-DRG 绩效监测、DIP 分组器。</p>
             </div>
@@ -273,8 +279,8 @@
               >
                 <div class="result-block-header">
                   <span :class="['result-icon', card.success ? 'success' : 'danger']">
-                    <CheckCircleOutlined v-if="card.success" />
-                    <CloseCircleOutlined v-else />
+                    <CircleCheck v-if="card.success" />
+                    <CircleX v-else />
                   </span>
                   <div>
                     <h3>{{ card.title }}</h3>
@@ -327,7 +333,7 @@
         <section class="grouper-panel path-panel">
           <header class="panel-heading">
             <div class="panel-title">
-              <span class="heading-icon"><ApartmentOutlined /></span>
+              <span class="heading-icon"><GitCompareArrows class="panel-icon" /></span>
               <div>
                 <h3>入组对比</h3>
                 <p>汇总三类分组器的编码、权重或分值、正式写入状态。</p>
@@ -367,7 +373,7 @@
         <section class="grouper-panel mapping-panel">
           <header class="panel-heading">
             <div class="panel-title">
-              <span class="heading-icon"><TableOutlined /></span>
+              <span class="heading-icon"><Table2 class="panel-icon" /></span>
               <div>
                 <h3>编码映射</h3>
                 <p>展示本次输入编码，三类分组器共用同一组诊断和手术输入。</p>
@@ -410,23 +416,24 @@
 import { computed, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import {
-  ApartmentOutlined,
-  BarChartOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
-  DeleteOutlined,
-  FileAddOutlined,
-  FileSearchOutlined,
-  HomeOutlined,
-  LoadingOutlined,
-  MedicineBoxOutlined,
-  PayCircleOutlined,
-  PlusOutlined,
-  ProfileOutlined,
-  TableOutlined,
-  ThunderboltOutlined,
-  UserOutlined,
-} from '@ant-design/icons-vue'
+  BriefcaseMedical,
+  ChartColumnBig,
+  CircleCheck,
+  CircleDollarSign,
+  CircleX,
+  ClipboardList,
+  FilePlus2,
+  FileSearch,
+  GitCompareArrows,
+  Home,
+  LoaderCircle,
+  Plus,
+  SearchCheck,
+  Table2,
+  Trash2,
+  UserRound,
+  Zap,
+} from 'lucide-vue-next'
 import {
   performGrouping as performDrgGrouping,
   getMdcName,
@@ -567,7 +574,7 @@ function fillTestCase() {
   formData.zdList = ['K80.501', 'K80.100x001', 'K83.109', 'K72.905', 'E11.900']
   formData.ssList = ['51.8803', '51.8701', '51.2300']
   clearResults()
-  message.success('已填入示例病案，可一次生成 3 个分组器结果')
+  message.success('已填入样例病案，可一次生成 3 个分组器结果')
 }
 
 async function doGrouping() {

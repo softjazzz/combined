@@ -82,12 +82,13 @@
               class="batch-table-panel__avatar"
               :src="patientAvatarSrc(record)"
               :alt="`${record.patientName || '患者'}头像`"
-            >
+            />
             <span class="batch-table-panel__patient-meta">
               <span class="batch-table-panel__patient-name">
                 {{ record.patientName }}
               </span>
               <span class="batch-table-panel__visit-line">
+                <span class="batch-table-panel__visit-label">住院号：</span>
                 <span class="batch-table-panel__visit-id font-mono">
                   {{ record.visitId }}
                 </span>
@@ -323,9 +324,9 @@ const columns = [
 
 .batch-table-panel__title {
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--workstation-text-primary, #0f172a);
+  color: var(--workstation-text-primary, #1d1d1f);
 }
 
 .batch-table-panel__summary-pill {
@@ -361,7 +362,7 @@ const columns = [
 
 .batch-table-panel__action--primary {
   border: 0 !important;
-  background: var(--workstation-brand-500, #2563eb) !important;
+  background: var(--workstation-brand-500, #0066cc) !important;
   color: #fff !important;
   box-shadow: 0 12px 22px rgba(47, 111, 237, 0.18) !important;
 }
@@ -416,9 +417,9 @@ const columns = [
 
 .batch-table-panel__patient-name {
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--workstation-text-primary, #0f172a);
+  color: var(--workstation-text-primary, #1d1d1f);
 }
 
 .batch-table-panel__patient-cell {
@@ -438,7 +439,7 @@ const columns = [
   object-fit: cover;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.96),
-    0 2px 6px rgba(37, 99, 235, 0.1);
+    0 2px 6px rgba(0, 102, 204, 0.08);
 }
 
 .batch-table-panel__patient-meta {
@@ -451,12 +452,19 @@ const columns = [
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
 }
 
 .batch-table-panel__tag,
 .batch-table-panel__detail-button {
   border-radius: 8px;
+}
+
+.batch-table-panel__visit-label {
+  color: var(--workstation-text-muted, #94a3b8);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .batch-table-panel__visit-id {

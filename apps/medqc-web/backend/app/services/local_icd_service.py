@@ -10,13 +10,17 @@ Behavior:
 from __future__ import annotations
 
 import logging
+import json
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.settings import get_settings
 from .icd_semantic_retrieval_service import get_icd_semantic_retrieval_service
 
 logger = logging.getLogger(__name__)
+
+_LOCAL_ICD_CACHE: Optional[Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]] = None
 
 
 _DIAG_ALIAS_MAP = {
@@ -39,16 +43,78 @@ def _normalize_diagnosis_text(text: str) -> str:
 
 
 def _get_icd_data():
-    """Load ICD caches from router module lazily."""
-    from ..routers import icd_search as _icd_mod
+    """Load only local coding datasets needed by frontpage coding.
 
-    _icd_mod._load_data()
-    return (
-        _icd_mod._icd10_clinical_data,
-        _icd_mod._icd10_data,
-        _icd_mod._icd9cm3_data,
-        _icd_mod._code_mapping,
+    Do not call `icd_search._load_data()` here: that router also loads tree
+    browsing JSON, which makes the first frontpage coding request visibly slow.
+    """
+    global _LOCAL_ICD_CACHE
+    if _LOCAL_ICD_CACHE is not None:
+        return _LOCAL_ICD_CACHE
+
+    data_dir = Path(__file__).resolve().parents[2] / "data"
+
+    def _read_json(name: str, default: Any) -> Any:
+        path = data_dir / name
+        if not path.exists():
+            logger.warning("ICD data file not found: %s", path)
+            return default
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _prepare_items(raw: Any) -> List[Dict[str, Any]]:
+        items = raw if isinstance(raw, list) else []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item["name_lower"] = str(item.get("name") or "").lower()
+            item["code_lower"] = str(item.get("code") or "").lower()
+        return [item for item in items if isinstance(item, dict)]
+
+    insurance_data = _prepare_items(_read_json("icd10_diagnoses.json", []))
+    clinical_data = _prepare_items(_read_json("icd10_clinical_diagnoses.json", []))
+    icd9_data = _prepare_items(_read_json("icd9cm3_procedures.json", []))
+    code_mapping = _read_json("icd10_code_mapping.json", {})
+    if not isinstance(code_mapping, dict):
+        code_mapping = {}
+
+    if clinical_data and code_mapping:
+        c2i = code_mapping.get("clinical_to_insurance", {})
+        i2c = code_mapping.get("insurance_to_clinical", {})
+        existing_codes = {str(item.get("code") or "") for item in clinical_data}
+        if isinstance(c2i, dict) and isinstance(i2c, dict):
+            for clinical_code, ins_info in c2i.items():
+                if clinical_code in existing_codes or not isinstance(ins_info, dict):
+                    continue
+                clinical_name = ""
+                if not ins_info.get("diff", False):
+                    clinical_name = str(ins_info.get("name") or "")
+                else:
+                    ins_code = str(ins_info.get("code") or "")
+                    mapped = i2c.get(ins_code) if ins_code else None
+                    if isinstance(mapped, dict) and mapped.get("code") == clinical_code:
+                        clinical_name = str(mapped.get("name") or "")
+                if clinical_name:
+                    clinical_data.append(
+                        {
+                            "code": clinical_code,
+                            "name": clinical_name,
+                            "name_lower": clinical_name.lower(),
+                            "code_lower": str(clinical_code).lower(),
+                            "_from_mapping": True,
+                        }
+                    )
+                    existing_codes.add(clinical_code)
+
+    _LOCAL_ICD_CACHE = (clinical_data, insurance_data, icd9_data, code_mapping)
+    logger.info(
+        "local ICD datasets loaded: clinical=%d insurance=%d icd9=%d mapping=%s",
+        len(clinical_data),
+        len(insurance_data),
+        len(icd9_data),
+        bool(code_mapping),
     )
+    return _LOCAL_ICD_CACHE
 
 
 def _search_in_dataset(source: List[Dict[str, Any]], name: str) -> Optional[Dict[str, str]]:
@@ -330,6 +396,7 @@ def resolve_diagnosis_codes(diagnoses: Dict[str, Any]) -> Dict[str, Any]:
     if not diagnoses:
         return diagnoses
 
+    diagnoses["_diagnosis_code_source"] = "local_icd_lookup"
     resolved_count = 0
 
     main_text = diagnoses.get("discharge_main_diagnosis_text")

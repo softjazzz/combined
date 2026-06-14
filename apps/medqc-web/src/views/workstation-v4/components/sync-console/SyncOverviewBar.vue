@@ -2,16 +2,10 @@
   <div class="sync-overview">
     <div class="overview-header">
       <div>
-        <h1 class="overview-title">
-          数据对接控制台
-        </h1>
+        <h1 class="overview-title">数据对接控制台</h1>
         <div class="overview-meta">
-          <a-tag color="blue">
-            Workstation V4
-          </a-tag>
-          <a-tag :color="envTagColor">
-            环境：{{ envLabel }}
-          </a-tag>
+          <a-tag color="blue"> Workstation V4 </a-tag>
+          <a-tag :color="envTagColor"> 环境：{{ envLabel }} </a-tag>
           <span class="dot">·</span>
           <span>来源：真实接口</span>
         </div>
@@ -24,20 +18,12 @@
           :disabled="true"
         />
         <a-tooltip :title="isReadonly ? '仅 admin 可执行' : '测试远端 PG + 本地 PG'">
-          <a-button
-            :loading="state.isTestingAll"
-            :disabled="isReadonly"
-            @click="handleTestAll"
-          >
+          <a-button :loading="state.isTestingAll" :disabled="isReadonly" @click="handleTestAll">
             测试全连接
           </a-button>
         </a-tooltip>
         <a-tooltip :title="isReadonly ? '仅 admin 可执行' : '执行前预检，不落库'">
-          <a-button
-            :loading="state.isPreflighting"
-            :disabled="isReadonly"
-            @click="handlePreflight"
-          >
+          <a-button :loading="state.isPreflighting" :disabled="isReadonly" @click="handlePreflight">
             试运行
           </a-button>
         </a-tooltip>
@@ -59,60 +45,31 @@
         <span class="health-title">连接健康度</span>
         <span class="health-value">{{ healthPercent }}%</span>
       </div>
-      <a-progress
-        :percent="healthPercent"
-        :show-info="false"
-        :stroke-color="healthColor"
-      />
-      <div
-        class="health-right"
-        :style="{ color: healthColor }"
-      >
+      <a-progress :percent="healthPercent" :show-info="false" :stroke-color="healthColor" />
+      <div class="health-right" :style="{ color: healthColor }">
         {{ healthLabel }}
       </div>
     </div>
 
     <div class="stats-grid">
-      <a-card
-        size="small"
-        class="stat-card"
-      >
-        <div class="stat-label">
-          连接状态
-        </div>
-        <div class="stat-value">
-          {{ connectedCountDisplay }} / {{ totalSources }}
-        </div>
+      <a-card size="small" class="stat-card">
+        <div class="stat-label">连接状态</div>
+        <div class="stat-value">{{ connectedCountDisplay }} / {{ totalSources }}</div>
       </a-card>
-      <a-card
-        size="small"
-        class="stat-card"
-      >
-        <div class="stat-label">
-          上次同步
-        </div>
+      <a-card size="small" class="stat-card">
+        <div class="stat-label">上次同步</div>
         <div class="stat-value time">
           {{ formattedLastSyncTime }}
         </div>
       </a-card>
-      <a-card
-        size="small"
-        class="stat-card"
-      >
-        <div class="stat-label">
-          待处理
-        </div>
+      <a-card size="small" class="stat-card">
+        <div class="stat-label">待处理</div>
         <div class="stat-value">
           {{ state.stats.pendingRecords.toLocaleString() }}
         </div>
       </a-card>
-      <a-card
-        size="small"
-        class="stat-card danger"
-      >
-        <div class="stat-label">
-          异常
-        </div>
+      <a-card size="small" class="stat-card danger">
+        <div class="stat-label">异常</div>
         <div class="stat-value">
           {{ state.stats.failedRecords }}
         </div>
@@ -160,9 +117,9 @@ const healthPercent = computed(() => {
 })
 
 const healthColor = computed(() => {
-  if (healthPercent.value >= 100) return '#16a34a'
-  if (healthPercent.value >= 67) return '#d97706'
-  return '#dc2626'
+  if (healthPercent.value >= 100) return '#047857'
+  if (healthPercent.value >= 67) return '#b45309'
+  return '#b91c1c'
 })
 
 const healthLabel = computed(() => {
@@ -282,6 +239,10 @@ const handleExecute = async () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 .overview-header {
@@ -294,9 +255,9 @@ const handleExecute = async () => {
 
 .overview-title {
   margin: 0;
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 700;
-  color: #1f2937;
+  color: #1d1d1f;
 }
 
 .overview-meta {
@@ -304,12 +265,12 @@ const handleExecute = async () => {
   align-items: center;
   gap: 8px;
   margin-top: 6px;
-  color: #6b7280;
+  color: rgba(29, 29, 31, 0.6);
   font-size: 12px;
 }
 
 .dot {
-  color: #9ca3af;
+  color: rgba(29, 29, 31, 0.38);
 }
 
 .action-row {
@@ -330,10 +291,12 @@ const handleExecute = async () => {
   grid-template-columns: 180px 1fr 80px;
   align-items: center;
   gap: 12px;
-  background: linear-gradient(90deg, #eff6ff 0%, #ffffff 100%);
-  border: 1px solid #dbeafe;
-  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
   padding: 8px 12px;
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
 }
 
 .health-left {
@@ -344,14 +307,14 @@ const handleExecute = async () => {
 
 .health-title {
   font-size: 12px;
-  color: #4b5563;
+  color: rgba(29, 29, 31, 0.6);
 }
 
 .health-value {
   font-size: 18px;
   line-height: 22px;
   font-weight: 700;
-  color: #111827;
+  color: #1d1d1f;
 }
 
 .health-right {
@@ -364,8 +327,16 @@ const handleExecute = async () => {
   padding: 12px;
 }
 
+.stat-card {
+  border-color: rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
 .stat-label {
-  color: #6b7280;
+  color: rgba(29, 29, 31, 0.56);
   font-size: 12px;
   line-height: 18px;
 }
@@ -375,7 +346,7 @@ const handleExecute = async () => {
   font-size: 24px;
   line-height: 30px;
   font-weight: 700;
-  color: #111827;
+  color: #1d1d1f;
 }
 
 .stat-value.time {
@@ -383,7 +354,31 @@ const handleExecute = async () => {
 }
 
 .danger .stat-value {
-  color: #dc2626;
+  color: #b91c1c;
+}
+
+.sync-overview :deep(.ant-btn) {
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.sync-overview :deep(.ant-btn-primary) {
+  background: #0066cc;
+  border-color: #0066cc;
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.18);
+}
+
+.sync-overview :deep(.ant-select-selector) {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-radius: 8px !important;
+}
+
+.sync-overview :deep(.ant-tag) {
+  border-radius: 999px;
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.6);
+  font-weight: 600;
 }
 
 @media (max-width: 1366px) {

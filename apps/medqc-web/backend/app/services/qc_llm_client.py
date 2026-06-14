@@ -52,13 +52,27 @@ class SichuanQCLLMClient:
             )
         else:
             s = get_settings()
-            self.api_endpoint = str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None
-            self.api_key = s.LLM_API_KEY
+            provider_code = str(s.LLM_DEFAULT_PROVIDER or "").strip().lower()
+            if provider_code == "alibaba":
+                self.api_endpoint = str(s.DASHSCOPE_BASE_URL or s.LLM_API_ENDPOINT or "").strip() or None
+                self.api_key = s.DASHSCOPE_API_KEY or s.LLM_API_KEY
+            elif provider_code == "deepseek":
+                self.api_endpoint = str(s.DEEPSEEK_API_ENDPOINT or s.LLM_API_ENDPOINT or "").strip() or None
+                self.api_key = s.DEEPSEEK_API_KEY or s.LLM_API_KEY
+            elif provider_code == "siliconflow":
+                self.api_endpoint = str(s.SILICONFLOW_API_ENDPOINT or s.LLM_API_ENDPOINT or "").strip() or None
+                self.api_key = s.SILICONFLOW_API_KEY or s.LLM_API_KEY
+            elif provider_code == "ollama":
+                self.api_endpoint = str(s.OLLAMA_API_ENDPOINT or s.LLM_API_ENDPOINT or "").strip() or None
+                self.api_key = s.OLLAMA_API_KEY or s.LLM_API_KEY
+            else:
+                self.api_endpoint = str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None
+                self.api_key = s.LLM_API_KEY
             self.model = s.LLM_MODEL
             self.timeout_seconds = s.LLM_TIMEOUT_SECONDS
             self.allow_mock_when_unconfigured = s.LLM_ALLOW_MOCK_WHEN_UNCONFIGURED
             self.config_source = "env"
-            self.provider_code = str(s.LLM_DEFAULT_PROVIDER or "").strip().lower()
+            self.provider_code = provider_code
             self.model_role = "first_pass"
             self.adjudicator_model_source = ""
 

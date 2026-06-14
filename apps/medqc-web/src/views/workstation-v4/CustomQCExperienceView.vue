@@ -1,13 +1,13 @@
 <template>
-  <div class="min-h-screen bg-[#f5f9fc] p-5 lg:p-6">
-    <div class="mx-auto max-w-7xl space-y-6">
+  <div class="custom-qc-page">
+    <div class="custom-qc-container">
       <a-card
         :bordered="false"
-        class="custom-qc-surface"
+        class="custom-qc-surface custom-qc-hero"
       >
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div class="custom-qc-hero-inner">
           <div>
-            <div class="mb-3 flex flex-wrap gap-2">
+            <div class="custom-qc-chip-row">
               <a-tag color="processing">
                 {{ sceneLabel }}
               </a-tag>
@@ -18,23 +18,23 @@
                 待人工复核后发布
               </a-tag>
             </div>
-            <h1 class="text-[28px] font-black leading-9 tracking-tight text-slate-900">
+            <h1 class="custom-qc-title">
               自定义质控点工作台
             </h1>
-            <p class="mt-2 max-w-3xl text-sm font-medium leading-7 text-slate-500">
+            <p class="custom-qc-subtitle">
               按“规则定义、病历试跑、结果复核”完成自定义质控点验证。试跑过程只读病历，不写正式质控结果表。
             </p>
           </div>
-          <div class="flex flex-wrap gap-2">
+          <div class="custom-qc-actions">
             <a-button
-              class="!rounded-lg"
+              class="custom-qc-secondary-btn"
               @click="goBack"
             >
               返回来源页
             </a-button>
             <a-button
               type="primary"
-              class="!rounded-lg"
+              class="custom-qc-primary-btn"
               @click="jumpToRulesList"
             >
               查看规则库
@@ -953,28 +953,312 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.custom-qc-page {
+  min-height: 100%;
+  padding: 24px;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.custom-qc-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .custom-qc-surface {
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+  overflow: hidden;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.custom-qc-surface:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
+}
+
+.custom-qc-hero {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.custom-qc-hero-inner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.custom-qc-chip-row,
+.custom-qc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.custom-qc-chip-row {
+  margin-bottom: 12px;
+}
+
+.custom-qc-title {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 31px;
+  letter-spacing: 0;
+}
+
+.custom-qc-subtitle {
+  max-width: 760px;
+  margin: 9px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.custom-qc-primary-btn,
+.custom-qc-secondary-btn {
+  height: 36px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.custom-qc-primary-btn {
+  background: #0066cc;
+  border-color: #0066cc;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 5px 14px rgba(0, 102, 204, 0.18);
+}
+
+.custom-qc-secondary-btn {
+  background: rgba(255, 255, 255, 0.94);
+  color: rgba(29, 29, 31, 0.68);
+  border-color: rgba(29, 29, 31, 0.1);
 }
 
 :deep(.custom-qc-surface .ant-card-head) {
-  min-height: 52px;
-  border-bottom-color: #e2e8f0;
+  min-height: 54px;
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.74);
 }
 
 :deep(.custom-qc-surface .ant-card-head-title) {
-  color: #0f172a;
+  color: #1d1d1f;
   font-size: 17px;
-  font-weight: 900;
+  font-weight: 650;
+  line-height: 22px;
+}
+
+:deep(.custom-qc-surface .ant-card-body) {
+  padding: 20px;
+}
+
+:deep(.custom-qc-surface .ant-form-item-label > label) {
+  color: rgba(29, 29, 31, 0.66);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+:deep(.custom-qc-surface .ant-input),
+:deep(.custom-qc-surface .ant-select),
+:deep(.custom-qc-surface .ant-select-item),
+:deep(.custom-qc-surface .ant-picker),
+:deep(.custom-qc-surface .ant-input-number),
+:deep(.custom-qc-surface .ant-btn),
+:deep(.custom-qc-surface .ant-table),
+:deep(.custom-qc-surface .ant-tag),
+:deep(.custom-qc-surface .ant-alert) {
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 :deep(.custom-qc-surface .ant-input),
 :deep(.custom-qc-surface .ant-select-selector),
 :deep(.custom-qc-surface .ant-picker),
 :deep(.custom-qc-surface .ant-input-number) {
-  border-radius: 8px !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  box-shadow: none !important;
+}
+
+:deep(.custom-qc-surface .ant-input:hover),
+:deep(.custom-qc-surface .ant-select-selector:hover),
+:deep(.custom-qc-surface .ant-picker:hover),
+:deep(.custom-qc-surface .ant-input-number:hover) {
+  border-color: rgba(0, 102, 204, 0.28) !important;
+}
+
+:deep(.custom-qc-surface .ant-input:focus),
+:deep(.custom-qc-surface .ant-input-focused),
+:deep(.custom-qc-surface .ant-select-focused .ant-select-selector),
+:deep(.custom-qc-surface .ant-picker-focused),
+:deep(.custom-qc-surface .ant-input-number-focused) {
+  border-color: rgba(0, 102, 204, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+}
+
+:deep(.custom-qc-surface .ant-btn-primary) {
+  background: #0066cc;
+  border-color: #0066cc;
+  border-radius: 10px;
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.16);
+}
+
+:deep(.custom-qc-surface .ant-alert) {
+  border-radius: 14px;
+}
+
+:deep(.custom-qc-surface .ant-table) {
+  color: rgba(29, 29, 31, 0.76);
+}
+
+:deep(.custom-qc-surface .ant-table-thead > tr > th) {
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(29, 29, 31, 0.42);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+:deep(.custom-qc-surface .ant-table-tbody > tr > td) {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+:deep(.custom-qc-surface .ant-table-tbody > tr:hover > td) {
+  background: rgba(0, 0, 0, 0.025) !important;
+}
+
+.custom-qc-page .rounded-2xl.border,
+.custom-qc-page .rounded-xl.bg-white,
+.custom-qc-page .border-dashed.bg-white {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+.custom-qc-page .rounded-2xl.bg-slate-50,
+.custom-qc-page .rounded-xl.bg-white,
+.custom-qc-page .border-dashed.bg-white {
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    0 1px 3px rgba(0, 0, 0, 0.035);
+}
+
+.custom-qc-page .bg-slate-50 {
+  background-color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.custom-qc-page .bg-white {
+  background-color: rgba(255, 255, 255, 0.76) !important;
+}
+
+.custom-qc-page .border-slate-200,
+.custom-qc-page .border-slate-300,
+.custom-qc-page .border-dashed {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+.custom-qc-page .text-slate-900,
+.custom-qc-page .text-slate-800 {
+  color: #1d1d1f !important;
+}
+
+.custom-qc-page .text-slate-700,
+.custom-qc-page .text-slate-600 {
+  color: rgba(29, 29, 31, 0.68) !important;
+}
+
+.custom-qc-page .text-slate-500,
+.custom-qc-page .text-slate-400 {
+  color: rgba(29, 29, 31, 0.46) !important;
+}
+
+.custom-qc-page .font-mono {
+  font-family: 'SF Pro Text', 'Cascadia Code', 'Roboto Mono', ui-monospace, monospace !important;
+}
+
+.custom-qc-page .rounded-2xl,
+.custom-qc-page .rounded-xl {
+  transition:
+    border-color 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 250ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.custom-qc-page .rounded-2xl:hover,
+.custom-qc-page .rounded-xl:hover {
+  border-color: rgba(0, 0, 0, 0.14) !important;
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
+}
+
+.custom-qc-page :deep(.ant-tag) {
+  border-color: rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.custom-qc-page :deep(.ant-tag-green),
+.custom-qc-page :deep(.ant-tag-success) {
+  border-color: rgba(16, 185, 129, 0.18);
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
+
+.custom-qc-page :deep(.ant-tag-orange),
+.custom-qc-page :deep(.ant-tag-warning) {
+  border-color: rgba(245, 158, 11, 0.22);
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+}
+
+.custom-qc-page :deep(.ant-tag-red),
+.custom-qc-page :deep(.ant-tag-error) {
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.09);
+  color: #be123c;
+}
+
+@media (max-width: 900px) {
+  .custom-qc-page {
+    padding: 16px;
+  }
+
+  .custom-qc-hero-inner {
+    flex-direction: column;
+  }
 }
 </style>

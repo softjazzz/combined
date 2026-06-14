@@ -3,6 +3,7 @@ import asyncio
 import uuid
 import json
 import logging
+import re
 import time
 from pathlib import Path
 from pydantic import BaseModel
@@ -21,6 +22,12 @@ from ..services.fast_screen_qc import (
     run_final_fast_screen,
 )
 from ..services.qc_rule_sets import get_sichuan_rule_set, list_sichuan_rule_sets
+from ..services.luxian_0609_rule_catalog import (
+    LUXIAN_0609_RULE_SET_KEY,
+    LUXIAN_0609_RULE_SET_NAME,
+    filter_luxian_0609_rules_by_documents,
+    load_luxian_0609_rules,
+)
 from ..services.sc_rule_launch_tier import (
     load_sc_intrinsic_launch_tier_map,
     resolve_sc_intrinsic_launch_tier,
@@ -969,6 +976,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         )
         hydrated_records = workspace.hydrate_records_with_medical_text(records)
         total_records = len(hydrated_records)
+        if total_records == 0:
+            raise ValueError("批量任务未收集到可执行病历，请确认样本病历已同步到当前病历库")
         total_rules = max(1, len(rule_ids))
 
         all_items: List[Dict[str, Any]] = []
@@ -2690,12 +2699,78 @@ async def rules(
     request: Request,
     document_type: Optional[str] = Query(default=None, description="单个文书类型（中文）"),
     document_types: Optional[str] = Query(default=None, description="逗号分隔的文书类型（中文）"),
-    grouped: Optional[bool] = Query(default=False, description="是否按文书类型分组返回")
+    grouped: Optional[bool] = Query(default=False, description="是否按文书类型分组返回"),
+    rule_set_key: Optional[str] = Query(default=None, description="规则集 key"),
 ):
     """
     返回四川省质控规则。
     优先从 Supabase 的 `qc_rules` 表读取；如果未配置或查询失败，则回退到内置示例规则。
     """
+    wanted_docs: set[str] = set()
+    if document_type:
+        wanted_docs.add(document_type.strip())
+    if document_types:
+        for t in document_types.split(","):
+            t = t.strip()
+            if t:
+                wanted_docs.add(t)
+
+    normalized_rule_set_key = str(rule_set_key or "").strip()
+    if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY:
+        data = filter_luxian_0609_rules_by_documents(
+            load_luxian_0609_rules(),
+            wanted_docs=wanted_docs,
+        )
+
+        if grouped:
+            by_type: dict[str, list[dict[str, Any]]] = {}
+            for rule in data:
+                docs = rule.get("applicable_document_labels") or rule.get("applicable_documents") or []
+                if not docs:
+                    docs = ["通用文书"]
+                for doc_type_item in docs:
+                    by_type.setdefault(str(doc_type_item), []).append(rule)
+            return success_response(
+                data={
+                    "rules_by_document_type": by_type,
+                    "document_types": list(sorted(by_type.keys())),
+                    "total_rules": sum(len(items) for items in by_type.values()),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "status": "success",
+                    "source": "luxian_0609_rules_v1",
+                    "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+                    "rule_set_name": LUXIAN_0609_RULE_SET_NAME,
+                },
+                message="获取规则成功",
+                trace_id=get_trace_id(request),
+            )
+
+        complexity_distribution: dict[str, int] = {}
+        defect_level_distribution: dict[str, int] = {}
+        for rule in data:
+            complexity = str(rule.get("complexity") or "未知")
+            defect_level = str(rule.get("defect_level") or "未知")
+            complexity_distribution[complexity] = complexity_distribution.get(complexity, 0) + 1
+            defect_level_distribution[defect_level] = defect_level_distribution.get(defect_level, 0) + 1
+
+        return success_response(
+            data={
+                "rules": data,
+                "total_rules": len(data),
+                "document_type_filter": list(wanted_docs) if wanted_docs else None,
+                "rule_categories": list(sorted({rule.get("category", "泸县0609质控点") for rule in data})),
+                "complexity_distribution": complexity_distribution,
+                "defect_level_distribution": defect_level_distribution,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "status": "success",
+                "source": "luxian_0609_rules_v1",
+                "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
+                "rule_set_name": LUXIAN_0609_RULE_SET_NAME,
+            },
+            message="获取规则成功",
+            trace_id=get_trace_id(request),
+        )
+
     # 临时：强制使用 JSON 文件中的 146 条规则，待规则稳定后再批量导入 Supabase
     supabase = None  # get_supabase()
     records: list[dict[str, Any]] | None = None
@@ -2843,15 +2918,6 @@ async def rules(
         # 大小写/空白宽松匹配（中文一般直接等值）
         return bool(rd.intersection(wanted))
 
-    wanted_docs: set[str] = set()
-    if document_type:
-        wanted_docs.add(document_type.strip())
-    if document_types:
-        for t in document_types.split(","):
-            t = t.strip()
-            if t:
-                wanted_docs.add(t)
-
     filtered = [d for d in data if _match_doc(d.get("applicable_documents") or [], wanted_docs)]
 
     if grouped:
@@ -2972,6 +3038,265 @@ class TestRuleRequest(BaseModel):
     medical_text: str
 
 
+def _load_single_test_rule(qc_service: SichuanQCService, rule_id: str) -> tuple[Optional[Dict[str, Any]], bool]:
+    normalized_rule_id = str(rule_id or "").strip().upper()
+    if normalized_rule_id.startswith("LX0609-"):
+        from app.services.luxian_0609_rule_catalog import get_luxian_0609_rule
+
+        rule = get_luxian_0609_rule(normalized_rule_id)
+        if rule:
+            # 泸县0609是客户专项包装规则，单条测试应按客户质控点口径执行。
+            # 这里不复用底层 SC/LX/CL 的单文书适用性门控，避免跨文书质控点被提前判为不适用。
+            rule["applicable_documents"] = []
+            rule["rule_code"] = rule.get("rule_code") or rule.get("rule_id")
+            rule["defect_level"] = rule.get("defect_level") or "一般缺陷"
+            rule["complexity"] = rule.get("complexity") or "中复杂度"
+            return rule, True
+    return qc_service.get_rule_by_id(rule_id), False
+
+
+def _parse_luxian_datetime(value: str) -> Optional[datetime]:
+    text = str(value or "").strip()
+    patterns = (
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y年%m月%d日 %H:%M",
+        "%Y年%m月%d日%H:%M",
+    )
+    for pattern in patterns:
+        try:
+            return datetime.strptime(text, pattern)
+        except ValueError:
+            continue
+    return None
+
+
+def _extract_labeled_luxian_time(text: str, labels: tuple[str, ...]) -> Optional[datetime]:
+    for label in labels:
+        pattern = rf"{re.escape(label)}\s*[:：]\s*(\d{{4}}[-年]\d{{1,2}}[-月]\d{{1,2}}(?:日)?\s+\d{{1,2}}:\d{{2}}(?::\d{{2}})?)"
+        match = re.search(pattern, text)
+        if match:
+            parsed = _parse_luxian_datetime(
+                match.group(1).replace("年", "-").replace("月", "-").replace("日", "")
+            )
+            if parsed:
+                return parsed
+    return None
+
+
+def _apply_luxian_time_rule(result: Dict[str, Any], medical_text: str) -> Optional[Dict[str, Any]]:
+    rule_id = str(result.get("rule_id") or "").strip().upper()
+    configs = {
+        "LX0609-001": (("入院时间",), ("记录时间",), 24),
+        "LX0609-002": (("入院时间",), ("记录时间",), 8),
+        "LX0609-003": (("手术结束时间",), ("记录时间",), 24),
+        "LX0609-004": (("抢救结束时间",), ("记录时间",), 6),
+    }
+    config = configs.get(rule_id)
+    if not config:
+        return None
+    start_labels, end_labels, limit_hours = config
+    start_time = _extract_labeled_luxian_time(medical_text, start_labels)
+    end_time = _extract_labeled_luxian_time(medical_text, end_labels)
+    if rule_id == "LX0609-003" and not start_time:
+        surgery_time_match = re.search(
+            r"手术时间\s*[:：]\s*"
+            r"(\d{4}[-年]\d{1,2}[-月]\d{1,2}(?:日)?)\s+\d{1,2}:\d{2}"
+            r"\s*[至-]\s*"
+            r"(?:(\d{4}[-年]\d{1,2}[-月]\d{1,2}(?:日)?)\s+)?(\d{1,2}:\d{2})",
+            medical_text,
+        )
+        if surgery_time_match:
+            end_date = surgery_time_match.group(2) or surgery_time_match.group(1)
+            date_part = end_date.replace("年", "-").replace("月", "-").replace("日", "")
+            start_time = _parse_luxian_datetime(f"{date_part} {surgery_time_match.group(3)}")
+    if not start_time or not end_time:
+        return None
+    elapsed_hours = (end_time - start_time).total_seconds() / 3600
+    normalized = dict(result)
+    normalized["is_compliant"] = elapsed_hours <= limit_hours
+    normalized["status"] = "compliant" if normalized["is_compliant"] else "non_compliant"
+    normalized["not_applicable"] = False
+    normalized["applicability"] = {"is_applicable": True, "reason": "", "method": "luxian_time_rule"}
+    metadata = dict(normalized.get("metadata") or {})
+    metadata["engine"] = "luxian_time_rule"
+    normalized["metadata"] = metadata
+    normalized["confidence"] = max(float(normalized.get("confidence") or 0), 0.98)
+    start_label = start_labels[0]
+    end_label = end_labels[0]
+    if rule_id == "LX0609-003":
+        start_label = "手术结束时间"
+    elapsed_text = f"{elapsed_hours:.1f}".rstrip("0").rstrip(".")
+    evidence = (
+        f"{start_label}: {start_time.strftime('%Y-%m-%d %H:%M')}；"
+        f"{end_label}: {end_time.strftime('%Y-%m-%d %H:%M')}；"
+        f"间隔 {elapsed_text} 小时。"
+    )
+    normalized["evidence"] = normalized.get("evidence") or evidence
+    if normalized["is_compliant"]:
+        normalized["findings"] = normalized.get("findings") or (
+            f"{evidence}未超过 {limit_hours} 小时限制，符合规则要求。"
+        )
+        normalized["suggestion"] = normalized.get("suggestion") or ""
+        normalized["issues"] = []
+    else:
+        normalized["findings"] = normalized.get("findings") or (
+            f"{evidence}超过 {limit_hours} 小时限制，存在超时缺陷。"
+        )
+        normalized["suggestion"] = normalized.get("suggestion") or (
+            f"请按病历书写规范在 {limit_hours} 小时内完成对应记录，并补充逾期原因说明。"
+        )
+        normalized["issues"] = normalized.get("issues") or [
+            {"description": f"记录完成时间超过 {limit_hours} 小时限制", "evidence": evidence}
+        ]
+    return normalized
+
+
+def _extract_luxian_section(text: str, title: str, next_titles: tuple[str, ...] = ()) -> str:
+    start = text.find(title)
+    if start < 0:
+        return ""
+    end_candidates = [text.find(next_title, start + len(title)) for next_title in next_titles]
+    end_candidates = [index for index in end_candidates if index >= 0]
+    end = min(end_candidates) if end_candidates else len(text)
+    return text[start:end]
+
+
+def _apply_luxian_preop_surgeon_rule(result: Dict[str, Any], medical_text: str) -> Optional[Dict[str, Any]]:
+    rule_id = str(result.get("rule_id") or "").strip().upper()
+    if rule_id != "LX0609-039":
+        return None
+
+    preop_section = _extract_luxian_section(
+        medical_text,
+        "文书标题：术前讨论记录",
+        ("文书标题：手术医嘱", "文书标题：手术记录"),
+    )
+    surgery_section = _extract_luxian_section(medical_text, "文书标题：手术记录")
+    if not preop_section or not surgery_section:
+        return None
+
+    surgeon_match = re.search(r"术者[：:]\s*([^。；，,\n]+)", surgery_section)
+    if not surgeon_match:
+        return None
+    surgeon = surgeon_match.group(1).strip()
+    is_emergency_rescue = bool(re.search(r"(?<!非)急诊抢救|抢救生命", medical_text))
+    if is_emergency_rescue:
+        return None
+
+    normalized = dict(result)
+    surgeon_in_preop = surgeon in preop_section
+    normalized["is_compliant"] = surgeon_in_preop
+    normalized["status"] = "compliant" if surgeon_in_preop else "non_compliant"
+    normalized["not_applicable"] = False
+    normalized["applicability"] = {"is_applicable": True, "reason": "", "method": "luxian_preop_surgeon_rule"}
+    metadata = dict(normalized.get("metadata") or {})
+    metadata["engine"] = "luxian_preop_surgeon_rule"
+    normalized["metadata"] = metadata
+    normalized["confidence"] = max(float(normalized.get("confidence") or 0), 0.98)
+    normalized["evidence"] = (
+        f"手术记录术者：{surgeon}；"
+        f"术前讨论记录签名/参加人员片段：{preop_section[-180:]}"
+    )
+    if surgeon_in_preop:
+        normalized["findings"] = f"术前讨论记录中包含拟任术者 {surgeon}，符合规则要求。"
+        normalized["suggestion"] = normalized.get("suggestion") or ""
+        normalized["issues"] = []
+    else:
+        normalized["findings"] = (
+            f"手术记录显示术者为 {surgeon}，但术前讨论记录的参加人员或签名中未见该术者，"
+            "不符合非急诊手术术者应参加术前讨论的要求。"
+        )
+        normalized["suggestion"] = "请补充术者参加术前讨论的记录、讨论意见和签名，或完善术前讨论记录。"
+        normalized["issues"] = [
+            {"description": "术者未参加术前讨论", "evidence": normalized["evidence"]}
+        ]
+    return normalized
+
+
+def _apply_luxian_local_rule(result: Dict[str, Any], medical_text: str) -> Optional[Dict[str, Any]]:
+    return (
+        _apply_luxian_time_rule(result, medical_text)
+        or _apply_luxian_preop_surgeon_rule(result, medical_text)
+    )
+
+
+def _normalize_luxian_single_test_result(result: Dict[str, Any], medical_text: str) -> Dict[str, Any]:
+    """修正泸县0609单条测试中 LLM JSON 字段与文字结论自相矛盾的情况。
+
+    仅用于规则管理页正反例测试，不进入正式批量质控链路。
+    """
+    normalized = dict(result)
+    raw_output = str(normalized.get("llm_raw_output") or "")
+    findings = str(normalized.get("findings") or "")
+    evidence = str(normalized.get("evidence") or "")
+    suggestion = str(normalized.get("suggestion") or "")
+    haystack = f"{findings}\n{evidence}\n{suggestion}\n{raw_output}"
+
+    local_rule_result = _apply_luxian_local_rule(normalized, medical_text)
+    if local_rule_result:
+        return local_rule_result
+
+    raw_declares_non_compliant = bool(
+        re.search(r'"is_compliant"\s*:\s*false', raw_output, flags=re.IGNORECASE)
+    )
+    non_compliant_patterns = (
+        r"属于不合规",
+        r"判定为不合规",
+        r"不符合(?:规则|要求|规定)",
+        r"不合规情形",
+        r"严重缺陷",
+        r"缺陷",
+        r"未[^。；，,]*(?:记录|分析|完成|签名|说明)",
+        r"无[^。；，,]*(?:记录|分析|签名|说明)",
+        r"存在[^。；，,]*违规情形",
+        r"出现[^。；，,]*违规情形",
+        r"已超时",
+        r"超时未",
+        r"超出[^。；，,]*时限",
+        r"已超过[^。；，,]*时限",
+        r"(?<!未)超过了[^。；，,]*时限",
+        r"(?<!未)超过[^。；，,]*限制",
+        r"记录时间[^。；，,]*晚于",
+        r"患者签名[:：][^。；，,]*未签",
+        r"待补签",
+        r"收费中[^。；，,]*不一致",
+        r"与医嘱[^。；，,]*不一致",
+        r"(?<!未)(?:存在|出现|发现|构成|属于)[^。；，,]*(?:完全相同|逐字复制)",
+    )
+    has_non_compliant_text = any(re.search(pattern, haystack) for pattern in non_compliant_patterns)
+    compliant_patterns = (
+        r"符合[^。；，,]*规则",
+        r"符合[^。；，,]*质控",
+        r"符合规定",
+        r"未发现[^。；，,]*(?:违规|不合规|缺陷|问题)",
+        r"不存在[^。；，,]*(?:不一致|缺失|缺少)",
+        r"(?:未出现|并未出现|未发现)[^。；，,]*(?:完全相同|逐字复制)",
+        r"未超过[^。；，,]*(?:时限|限制)",
+        r"记录齐全",
+    )
+    has_compliant_text = any(re.search(pattern, findings) for pattern in compliant_patterns)
+
+    if raw_declares_non_compliant or has_non_compliant_text:
+        normalized["is_compliant"] = False
+        normalized["status"] = "non_compliant"
+        normalized["not_applicable"] = False
+        applicability = dict(normalized.get("applicability") or {})
+        applicability["is_applicable"] = True
+        normalized["applicability"] = applicability
+        if not normalized.get("issues") and findings:
+            normalized["issues"] = [{"description": "命中质控点", "evidence": findings[:120]}]
+    elif has_compliant_text:
+        normalized["is_compliant"] = True
+        normalized["status"] = "compliant"
+        normalized["not_applicable"] = False
+        normalized["issues"] = []
+        applicability = dict(normalized.get("applicability") or {})
+        applicability["is_applicable"] = True
+        normalized["applicability"] = applicability
+    return normalized
+
+
 @router.post("/test-rule")
 async def test_rule(
     request: Request,
@@ -2980,18 +3305,48 @@ async def test_rule(
 ):
     """测试单条质控规则的有效性和正确性"""
     try:
-        target_rule = qc_service.get_rule_by_id(req.rule_id)
+        target_rule, is_luxian_wrapper = _load_single_test_rule(qc_service, req.rule_id)
         if target_rule is None:
             raise HTTPException(
                 status_code=404, detail=f"未找到规则 ID: {req.rule_id}"
             )
+
+        if is_luxian_wrapper:
+            local_rule_result = _apply_luxian_local_rule(
+                {
+                    "rule_id": target_rule.get("rule_id") or req.rule_id,
+                    "rule_name": target_rule.get("name") or target_rule.get("rule_name"),
+                    "is_compliant": True,
+                    "issues": [],
+                    "findings": "",
+                    "evidence": "",
+                    "suggestion": "",
+                    "confidence": 0,
+                    "llm_raw_output": None,
+                    "status": "compliant",
+                    "applicability": {"is_applicable": True, "reason": "", "method": "luxian_time_rule"},
+                    "not_applicable": False,
+                    "not_applicable_reason": None,
+                    "evidence_verified": True,
+                    "evidence_span": None,
+                    "token_usage": {"total_tokens": 0},
+                    "metadata": {"engine": "luxian_time_rule"},
+                },
+                req.medical_text,
+            )
+            if local_rule_result:
+                return success_response(
+                    data=local_rule_result,
+                    message="规则测试完成",
+                    trace_id=get_trace_id(request),
+                )
 
         engine_result = await qc_service.rule_engine.evaluate(
             rule=target_rule,
             medical_record={
                 "id": req.rule_id,
                 "content": req.medical_text,
-                "document_type": target_rule.get("category") or "",
+                "document_type": "" if is_luxian_wrapper else target_rule.get("category") or "",
             }
         )
 
@@ -3016,6 +3371,8 @@ async def test_rule(
             "token_usage": {"total_tokens": metadata.get("tokens_used", 0)},
             "metadata": metadata,
         }
+        if is_luxian_wrapper:
+            response_data = _normalize_luxian_single_test_result(response_data, req.medical_text)
 
         return success_response(
             data=response_data,

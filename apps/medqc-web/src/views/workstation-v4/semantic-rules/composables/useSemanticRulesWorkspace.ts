@@ -14,6 +14,7 @@ import type {
   SemanticRuleStats,
   SemanticRuleTestResult,
   SemanticRuleWorkspaceQueryState,
+  SichuanRuleSetOption,
 } from '../types'
 import {
   buildSemanticKpiCards,
@@ -21,6 +22,7 @@ import {
   executeSemanticRuleTest,
   fetchRulePrompt,
   fetchSemanticRulesFromBackend,
+  fetchSichuanRuleSetsFromBackend,
   filterSemanticRules,
   parseSemanticWorkspaceQuery,
   saveRulePrompt,
@@ -30,11 +32,40 @@ import {
 
 type BuildCaseText = (example: any, options?: Record<string, unknown>) => string
 
+const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
+const DEFAULT_RULE_PAGE_SIZE = 10
+const DEFAULT_RULE_SET_OPTION: SichuanRuleSetOption = {
+  rule_set_key: '',
+  rule_set_name: 'SC 全病历质控规则',
+  rule_set_version: '当前版本',
+  scope: 'all',
+  rule_ids: [],
+  rule_count: 0,
+  description: '默认展示当前 SC 全病历质控规则列表。',
+}
+
 function toErrorMessage(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) return fallback
   const messageText = String(error.message || '').trim()
   if (!messageText) return fallback
   return messageText.length > 120 ? `${messageText.slice(0, 120)}...` : messageText
+}
+
+function renderSemanticRuleExample(example: SemanticRuleItem['positive_example']): string {
+  if (!example) return '暂无示例文本，请手动输入。'
+  if (example.raw_text?.trim()) return example.raw_text.trim()
+  const lines: string[] = []
+  if (example.title) lines.push(example.title)
+  if (example.summary) lines.push(example.summary)
+  ;(example.sections || []).forEach((section) => {
+    if (section.heading) lines.push(`【${section.heading}】`)
+    if (section.content) lines.push(section.content)
+  })
+  if (example.focusPoints?.length) {
+    lines.push('【质控关注点】')
+    example.focusPoints.forEach((item) => lines.push(`- ${item}`))
+  }
+  return lines.join('\n')
 }
 
 export function useSemanticRulesWorkspace() {
@@ -52,14 +83,16 @@ export function useSemanticRulesWorkspace() {
   const lastRefreshedAt = ref<Date | null>(null)
 
   const queryState = reactive<SemanticRuleWorkspaceQueryState>({
+    ruleSetKey: '',
     keyword: '',
     complexity: '',
     defectLevel: '',
     documentType: '',
     page: 1,
-    pageSize: 20,
+    pageSize: DEFAULT_RULE_PAGE_SIZE,
   })
   const keywordInput = ref('')
+  const ruleSetOptions = ref<SichuanRuleSetOption[]>([DEFAULT_RULE_SET_OPTION])
 
   const currentUser = ref<User | null>(null)
   const isAdmin = computed(() => currentUser.value?.roles?.includes(UserRole.ADMIN) || false)
@@ -142,6 +175,7 @@ export function useSemanticRulesWorkspace() {
 
   let keywordTimer: ReturnType<typeof setTimeout> | null = null
   let isApplyingRouteQuery = false
+  let rulesRefreshSeq = 0
 
   const complexityBreakdown = computed(() => {
     const distribution = stats.value.complexity_distribution || {}
@@ -195,7 +229,7 @@ export function useSemanticRulesWorkspace() {
     total: filteredRules.value.length,
     showSizeChanger: true,
     showQuickJumper: true,
-    pageSizeOptions: ['20', '50', '100'],
+    pageSizeOptions: ['10', '20', '50', '100'],
     showTotal: (total) => `共 ${total} 条`,
     size: 'small',
   }))
@@ -236,6 +270,12 @@ export function useSemanticRulesWorkspace() {
     }),
   )
 
+  const selectedRuleSetOption = computed(
+    () =>
+      ruleSetOptions.value.find((item) => item.rule_set_key === queryState.ruleSetKey) ||
+      DEFAULT_RULE_SET_OPTION,
+  )
+
   function normalizeQueryValue(value: unknown): string {
     if (Array.isArray(value)) return value.length > 0 ? String(value[0]) : ''
     if (value === null || value === undefined) return ''
@@ -245,6 +285,7 @@ export function useSemanticRulesWorkspace() {
   function hasSameManagedQuery(nextQuery: Record<string, unknown>): boolean {
     return (
       normalizeQueryValue(route.query.keyword) === normalizeQueryValue(nextQuery.keyword) &&
+      normalizeQueryValue(route.query.ruleSetKey) === normalizeQueryValue(nextQuery.ruleSetKey) &&
       normalizeQueryValue(route.query.complexity) === normalizeQueryValue(nextQuery.complexity) &&
       normalizeQueryValue(route.query.defectLevel) === normalizeQueryValue(nextQuery.defectLevel) &&
       normalizeQueryValue(route.query.documentType) ===
@@ -257,6 +298,7 @@ export function useSemanticRulesWorkspace() {
   function applyRouteQuery() {
     isApplyingRouteQuery = true
     const parsed = parseSemanticWorkspaceQuery(route.query)
+    queryState.ruleSetKey = parsed.ruleSetKey
     queryState.keyword = parsed.keyword
     queryState.complexity = parsed.complexity
     queryState.defectLevel = parsed.defectLevel
@@ -277,13 +319,18 @@ export function useSemanticRulesWorkspace() {
   watch(
     () => route.query,
     () => {
+      const previousRuleSetKey = queryState.ruleSetKey
       applyRouteQuery()
+      if (previousRuleSetKey !== queryState.ruleSetKey && lastRefreshedAt.value) {
+        void refreshRules(false)
+      }
     },
     { immediate: true },
   )
 
   watch(
     () => [
+      queryState.ruleSetKey,
       queryState.complexity,
       queryState.defectLevel,
       queryState.documentType,
@@ -326,19 +373,31 @@ export function useSemanticRulesWorkspace() {
     return `${Math.round((count / stats.value.total_rules) * 100)}%`
   }
 
-  async function refreshRules(showSuccessMessage: boolean = true) {
+  async function refreshRules(
+    showSuccessMessage: boolean = true,
+    requestedRuleSetKey: string = queryState.ruleSetKey,
+  ) {
+    const currentSeq = ++rulesRefreshSeq
     loading.value = true
     try {
-      const payload = await fetchSemanticRulesFromBackend()
+      const payload = await fetchSemanticRulesFromBackend(requestedRuleSetKey)
+      if (currentSeq !== rulesRefreshSeq || requestedRuleSetKey !== queryState.ruleSetKey) {
+        return
+      }
       rules.value = payload.rules
       stats.value = payload.stats
       lastRefreshedAt.value = new Date()
       if (showSuccessMessage) message.success('规则库已刷新')
     } catch (error) {
+      if (currentSeq !== rulesRefreshSeq) {
+        return
+      }
       message.error('规则库加载失败')
       console.error('[SemanticRulesWorkspace] refresh failed', error)
     } finally {
-      loading.value = false
+      if (currentSeq === rulesRefreshSeq) {
+        loading.value = false
+      }
     }
   }
 
@@ -349,7 +408,36 @@ export function useSemanticRulesWorkspace() {
     queryState.defectLevel = ''
     queryState.documentType = ''
     queryState.page = 1
-    queryState.pageSize = 20
+    queryState.pageSize = DEFAULT_RULE_PAGE_SIZE
+  }
+
+  async function loadRuleSetOptions() {
+    try {
+      const items = await fetchSichuanRuleSetsFromBackend()
+      const luxianRuleSet = items.find((item) => item.rule_set_key === LUXIAN_0609_RULE_SET_KEY)
+      ruleSetOptions.value = [
+        DEFAULT_RULE_SET_OPTION,
+        luxianRuleSet || {
+          rule_set_key: LUXIAN_0609_RULE_SET_KEY,
+          rule_set_name: '泸县0609质控点验证 v1',
+          rule_set_version: '2026-06-09',
+          scope: 'running',
+          rule_ids: [],
+          rule_count: 49,
+          description: '客户专项规则包，按 49 条质控点展示。',
+        },
+      ]
+    } catch (error) {
+      ruleSetOptions.value = [DEFAULT_RULE_SET_OPTION]
+      console.error('[SemanticRulesWorkspace] load rule set options failed', error)
+    }
+  }
+
+  function handleRuleSetChange(ruleSetKey: string) {
+    queryState.ruleSetKey = ruleSetKey
+    queryState.page = 1
+    syncStateToRoute()
+    void refreshRules(false, ruleSetKey)
   }
 
   function applyFilterQuery() {
@@ -359,7 +447,7 @@ export function useSemanticRulesWorkspace() {
 
   function handleTableChange(pagination: TablePaginationConfig) {
     queryState.page = Number(pagination.current || 1)
-    queryState.pageSize = Number(pagination.pageSize || 20)
+    queryState.pageSize = Number(pagination.pageSize || DEFAULT_RULE_PAGE_SIZE)
   }
 
   async function openRuleDetail(rule: SemanticRuleItem) {
@@ -367,6 +455,14 @@ export function useSemanticRulesWorkspace() {
     showRuleDetail.value = true
     isEditingPrompt.value = false
     testResult.value = null
+    currentPrompt.value = ''
+    editingPrompt.value = ''
+    if (rule.rule_id.startsWith('LX0609-')) {
+      currentPrompt.value = rule.custom_prompt || '// 暂无检查模板'
+      editingPrompt.value = rule.custom_prompt || ''
+      isDefaultPrompt.value = false
+      return
+    }
     if (!isAdmin.value) return
     await loadPrompt(rule.rule_id)
   }
@@ -422,7 +518,15 @@ export function useSemanticRulesWorkspace() {
   function switchExampleType(type: 'positive' | 'negative') {
     testExampleType.value = type
     if (!testingRule.value) return
-    const ruleCase = qcRuleCaseMapRef.value[testingRule.value.rule_id]
+    const wrapperExample =
+      type === 'positive' ? testingRule.value.positive_example : testingRule.value.negative_example
+    if (wrapperExample) {
+      testMedicalText.value = renderSemanticRuleExample(wrapperExample)
+      return
+    }
+    const ruleCase =
+      qcRuleCaseMapRef.value[testingRule.value.rule_id] ||
+      qcRuleCaseMapRef.value[testingRule.value.primary_execution_rule_id || '']
     const buildCaseText = buildCaseTextRef.value
     if (!ruleCase || !buildCaseText) {
       testMedicalText.value = '暂无示例文本，请手动输入。'
@@ -457,10 +561,10 @@ export function useSemanticRulesWorkspace() {
     testLoading.value = true
     testResult.value = null
     try {
-      testResult.value = await executeSemanticRuleTest(
-        testingRule.value.rule_id,
-        testMedicalText.value,
-      )
+      const ruleId = testingRule.value.rule_id.startsWith('LX0609-')
+        ? testingRule.value.rule_id
+        : testingRule.value.primary_execution_rule_id || testingRule.value.rule_id
+      testResult.value = await executeSemanticRuleTest(ruleId, testMedicalText.value)
     } catch (error) {
       message.error('规则测试失败')
       if (error instanceof SemanticRuleTestError) {
@@ -498,15 +602,18 @@ export function useSemanticRulesWorkspace() {
 
   async function confirmBatchLaunch() {
     if (testingBatch.value) return
-    const ruleIds = filteredRules.value.map((rule) => rule.rule_id).filter(Boolean)
-    if (!ruleIds.length) {
+    const isLuxianRuleSet = queryState.ruleSetKey === LUXIAN_0609_RULE_SET_KEY
+    const ruleIds = isLuxianRuleSet
+      ? []
+      : filteredRules.value.map((rule) => rule.rule_id).filter(Boolean)
+    if (!isLuxianRuleSet && !ruleIds.length) {
       message.info('当前没有可执行的规则')
       return
     }
     testingBatch.value = true
     try {
       const payload = {
-        rule_ids: ruleIds,
+        ...(isLuxianRuleSet ? { rule_set_key: LUXIAN_0609_RULE_SET_KEY } : { rule_ids: ruleIds }),
         scope: batchLaunchFilters.scope,
         department: batchLaunchFilters.department,
         doctor: batchLaunchFilters.doctor,
@@ -587,6 +694,7 @@ export function useSemanticRulesWorkspace() {
     } catch (error) {
       console.error('[SemanticRulesWorkspace] initialize failed', error)
     }
+    await loadRuleSetOptions()
     await refreshRules(false)
     await loadBatchJobs()
   }
@@ -618,6 +726,9 @@ export function useSemanticRulesWorkspace() {
     getDefectRate,
     getCategoryRatio,
     queryState,
+    ruleSetOptions,
+    selectedRuleSetOption,
+    handleRuleSetChange,
     keywordInput,
     filteredRules,
     tableRules,

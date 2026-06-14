@@ -6,10 +6,7 @@
           <section class="wv4-analysis-overview wv4-record-pool-hero">
             <div class="wv4-analysis-overview__header">
               <div>
-                <div
-                  v-if="isFrontpageGenerateStage"
-                  class="wv4-analysis-overview__eyebrow"
-                >
+                <div v-if="isFrontpageGenerateStage" class="wv4-analysis-overview__eyebrow">
                   {{ overviewEyebrow }}
                 </div>
                 <h3 class="wv4-analysis-overview__title">
@@ -20,16 +17,13 @@
                 </p>
                 <div
                   v-if="isFrontpageGenerateStage"
-                  class="wv4-stage-context mt-2 inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700"
+                  class="wv4-stage-context mt-2 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold"
                 >
-                  <span class="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                  <span class="h-1.5 w-1.5 rounded-full" />
                   当前阶段：参考首页生成
                 </div>
               </div>
-              <div
-                v-if="isFrontpageGenerateStage"
-                class="wv4-analysis-overview__actions"
-              >
+              <div v-if="isFrontpageGenerateStage" class="wv4-analysis-overview__actions">
                 <a-button
                   size="small"
                   class="wv4-analysis-overview__action"
@@ -158,14 +152,9 @@
           </section>
         </div>
 
-        <div
-          v-if="isFrontpageGenerateStage"
-          class="workstation-surface-enter mb-4"
-        >
+        <div v-if="isFrontpageGenerateStage" class="workstation-surface-enter mb-4">
           <section class="wv4-stage-notice">
-            <div class="wv4-stage-notice__title">
-              生成指引
-            </div>
+            <div class="wv4-stage-notice__title">生成指引</div>
             <div class="wv4-stage-notice__items">
               <span>优先处理“待生成 / 生成失败”病历，降低阻塞积压。</span>
               <span>批量生成后可在详情页复核草稿内容，不写入正式首页表。</span>

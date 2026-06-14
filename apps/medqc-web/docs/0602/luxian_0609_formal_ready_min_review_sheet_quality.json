@@ -1,0 +1,16 @@
+{
+  "version": "2026-06-10",
+  "sheet_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_formal_ready_min_review_sheet.csv",
+  "summary": {
+    "formal_ready_rule_count": 3,
+    "row_count": 9,
+    "error_count": 0,
+    "case_type_counts": {
+      "positive": 3,
+      "negative": 3,
+      "boundary": 3
+    },
+    "complete_rule_count": 3
+  },
+  "errors": []
+}

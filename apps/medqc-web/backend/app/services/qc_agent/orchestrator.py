@@ -6,6 +6,11 @@ from typing import Any, Dict, List
 
 from fastapi import HTTPException
 
+from app.services.qc_agent.intent_router import (
+    merge_llm_intent,
+    normalize_intent_message,
+    resolve_intent_with_llm,
+)
 from app.services.qc_agent.schemas import QCAgentChatRequest, QCAgentChatResponse
 from app.services.qc_agent.tool_registry import AgentToolRegistry
 from app.services.qc_agent.tools import assert_no_sensitive_output
@@ -14,6 +19,7 @@ from app.services.qc_agent.tools import assert_no_sensitive_output
 _ALLOWED_USER_CONTEXT_KEYS = {"dept", "department", "name", "patient_name", "visit_id", "patient_id", "mr_no"}
 
 _DOCUMENT_PATTERNS = [
+    (("入院记录", "再次入院记录", "多次入院记录"), "admission", None),
     (("查房", "上级医师查房", "主任医师查房", "主治医师查房"), "ward_round", None),
     (("出院记录", "出院小结", "出院"), "discharge", None),
     (("会诊", "MDT", "多学科会诊"), "consultation", None),
@@ -40,10 +46,6 @@ _QC_POINT_PATTERNS = [
 
 _UNSUPPORTED_PATTERNS = re.compile(r"删除|写入|保存|提交|入库|正式表|正式结果|持久化|导出", re.IGNORECASE)
 _RULE_ID_PATTERN = re.compile(r"\b(?:SC|WR|DG|CL|LX|LXE|FQ)-\d+\b", re.IGNORECASE)
-_DIAGNOSIS_CODE_PATTERN = re.compile(r"\b[A-Z]\d{2}(?:\.[A-Z0-9]{1,8})?\b", re.IGNORECASE)
-_PROCEDURE_CODE_PATTERN = re.compile(r"(?<![A-Za-z0-9.])\d{2}\.\d{2,6}(?![A-Za-z0-9.])")
-
-
 def _text(value: Any) -> str:
     if value is None:
         return ""
@@ -108,177 +110,68 @@ def _infer_visit_id(message: str, context: Dict[str, Any]) -> str:
     return bare_record or _text(context.get("visit_id"))
 
 
-def _extract_patient_age(message: str) -> int | None:
-    value = _first_pattern([r"年龄\s*[=:：]?\s*(\d{1,3})", r"(\d{1,3})\s*岁"], message)
-    return int(value) if value else None
-
-
-def _extract_los(message: str) -> int | None:
-    value = _first_pattern([r"住院\s*[=:：]?\s*(\d{1,3})\s*天", r"LOS\s*[=:：]?\s*(\d{1,3})"], message)
-    return int(value) if value else None
-
-
-def _extract_fee(message: str) -> float | None:
-    value = _first_pattern([r"(?:费用|总费用|total_fee|total_cost)\s*[=:：]?\s*(\d+(?:\.\d+)?)"], message)
-    return float(value) if value else None
-
-
-def _extract_gender(message: str) -> str:
-    if "女" in message:
-        return "F"
-    if "男" in message:
-        return "M"
-    return ""
-
-
-def _extract_icd_search_query(message: str) -> str:
-    diagnosis_codes = _DIAGNOSIS_CODE_PATTERN.findall(message)
-    procedure_codes = _PROCEDURE_CODE_PATTERN.findall(message)
-    if diagnosis_codes:
-        return diagnosis_codes[0].upper()
-    if procedure_codes:
-        return procedure_codes[0]
-
-    cleaned = message
-    cleaned = re.sub(r"(?i)\bICD\b", " ", cleaned)
-    cleaned = re.sub(r"(?:查询|查一下|查|编码|代码|的|医保版|国临版|临床版|诊断|疾病|手术|操作|ICD-10|ICD-9|CM-3)", " ", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ：:，,。；;")
-    return cleaned
-
-
-def _infer_code_type(message: str) -> str:
-    if any(keyword in message for keyword in ("手术", "操作", "术式", "ICD-9", "CM-3")):
-        return "procedure"
-    if any(keyword in message for keyword in ("诊断", "疾病", "ICD-10")):
-        return "diagnosis"
-    return "all"
-
-
-def _infer_version(message: str) -> str:
-    if any(keyword in message for keyword in ("国临", "临床版", "临床")):
-        return "clinical"
-    return "insurance"
-
-
-def _is_grouping_request(message: str) -> bool:
-    return bool(re.search(r"\b(?:DRG|DIP)\b", message, flags=re.IGNORECASE) or "入组" in message)
-
-
-def _is_coding_suggestion_request(message: str, visit_id: str) -> bool:
-    if "入组" in message or re.search(r"\b(?:DRG|DIP)\b", message, flags=re.IGNORECASE):
-        return False
-    if "编码建议" in message:
-        return True
-    if re.search(r"推荐.*(?:诊断|手术|操作)?.*编码", message):
-        return True
-    return bool(visit_id and "编码" in message and not any(keyword in message for keyword in ("查询", "查 ")))
-
-
-def _is_icd_search_request(message: str, visit_id: str) -> bool:
-    if _is_grouping_request(message) or _is_coding_suggestion_request(message, visit_id):
-        return False
-    if re.search(r"\bICD\b", message, flags=re.IGNORECASE):
-        return True
-    if "编码" in message and any(keyword in message for keyword in ("查询", "查", "医保版", "国临版", "临床版")):
-        return True
-    return False
-
-
-def _enrich_capability_intent(intent: Dict[str, Any], message: str, warnings: List[str]) -> None:
-    visit_id = _text(intent.get("visit_id"))
-    diagnosis_codes = [item.upper() for item in _DIAGNOSIS_CODE_PATTERN.findall(message)]
-    procedure_codes = _PROCEDURE_CODE_PATTERN.findall(message)
-    if re.search(r"\bDIP\b", message, flags=re.IGNORECASE) or ("DIP" in message.upper() and "入组" in message):
-        intent.update(
-            {
-                "task_type": "grouping",
-                "capability": "predict_dip_group",
-                "result_type": "dip_group",
-                "pdx_code": diagnosis_codes[0] if diagnosis_codes else "",
-                "adx_codes": diagnosis_codes[1:],
-                "proc_codes": procedure_codes,
-                "patient_age": _extract_patient_age(message),
-                "patient_gender": _extract_gender(message),
-                "los": _extract_los(message),
-                "total_fee": _extract_fee(message),
-            }
-        )
-        return
-    if re.search(r"\bDRG\b", message, flags=re.IGNORECASE):
-        intent.update(
-            {
-                "task_type": "grouping",
-                "capability": "predict_drg_group",
-                "result_type": "drg_group",
-                "primary_diagnosis_code": diagnosis_codes[0] if diagnosis_codes else "",
-                "secondary_diagnosis_codes": diagnosis_codes[1:],
-                "procedure_codes": procedure_codes,
-                "patient_age": _extract_patient_age(message),
-                "patient_gender": _extract_gender(message),
-                "los": _extract_los(message),
-                "total_cost": _extract_fee(message),
-            }
-        )
-        return
-    if _is_coding_suggestion_request(message, visit_id):
-        include_procedures = any(keyword in message for keyword in ("手术", "操作", "诊断和手术", "诊断及手术"))
-        intent.update(
-            {
-                "task_type": "coding",
-                "capability": "suggest_record_icd_codes",
-                "result_type": "record_icd_suggestions",
-                "include_procedures": include_procedures,
-            }
-        )
-        return
-    if _is_icd_search_request(message, visit_id):
-        query = _extract_icd_search_query(message)
-        intent.update(
-            {
-                "task_type": "coding",
-                "capability": "search_icd_codes",
-                "result_type": "icd_candidates",
-                "icd_query": query,
-                "code_type": _infer_code_type(message),
-                "version": _infer_version(message),
-            }
-        )
-        if not query:
-            warnings.append("未识别到 ICD 查询关键词或编码")
-        return
-    intent.update({"task_type": "qc", "capability": "run_document_qc", "result_type": "document_qc"})
-
-
 def parse_intent(request: QCAgentChatRequest) -> tuple[Dict[str, Any], List[str]]:
-    message = request.message.strip()
+    raw_message = request.message.strip()
+    message = normalize_intent_message(raw_message)
     context = _safe_user_context(request.user_context)
     warnings: List[str] = []
-    document_alias, document_type = _infer_document(message)
-    qc_point_type = _infer_qc_point(message)
     rule_ids = [item.upper() for item in _RULE_ID_PATTERN.findall(message)]
+    safety_unsupported = bool(_UNSUPPORTED_PATTERNS.search(message))
     intent = {
-        "message": message,
-        "unsupported": bool(_UNSUPPORTED_PATTERNS.search(message)),
-        "visit_id": _infer_visit_id(message, context),
+        "message": raw_message,
+        "normalized_message": message,
+        "unsupported": False,
+        "visit_id": _text(context.get("visit_id")),
         "patient_id": _first_pattern([r"patient_id\s*[=:：]?\s*([A-Za-z0-9_-]+)"], message)
         or _text(context.get("patient_id")),
         "mr_no": _first_pattern([r"(?:住院号|病案号|mr_no)\s*[=:：]?\s*([A-Za-z0-9_-]+)"], message)
         or _text(context.get("mr_no")),
-        "patient_name": _infer_patient_name(message)
-        or _text(context.get("name"))
-        or _text(context.get("patient_name")),
-        "department": _infer_department(message)
-        or _text(context.get("dept"))
-        or _text(context.get("department")),
-        "document_alias": document_alias,
-        "document_type": document_type,
-        "qc_point_type": qc_point_type,
+        "patient_name": _text(context.get("name")) or _text(context.get("patient_name")),
+        "department": _text(context.get("dept")) or _text(context.get("department")),
+        "document_alias": None,
+        "document_type": None,
+        "qc_point_type": None,
         "rule_ids": rule_ids,
     }
-    _enrich_capability_intent(intent, message, warnings)
-    if intent["document_alias"] == "frontpage":
+    llm_intent, llm_warnings = resolve_intent_with_llm(message, context)
+    warnings.extend(llm_warnings)
+    if llm_intent:
+        intent = merge_llm_intent(intent, llm_intent)
+    else:
+        intent.update(
+            {
+                "task_type": "unsupported",
+                "capability": "unsupported",
+                "result_type": "unsupported",
+                "intent_router": "llm_unavailable",
+            }
+        )
+    if safety_unsupported:
+        intent.update(
+            {
+                "unsupported": True,
+                "task_type": "unsupported",
+                "capability": "unsupported",
+                "result_type": "unsupported",
+            }
+        )
+        intent.pop("intent_router", None)
+    if not intent.get("visit_id"):
+        intent["visit_id"] = _infer_visit_id(message, context)
+    if not intent.get("patient_name"):
+        intent["patient_name"] = _infer_patient_name(message)
+    if not intent.get("department"):
+        intent["department"] = _infer_department(message)
+    if rule_ids:
+        merged_rule_ids = list(dict.fromkeys(list(intent.get("rule_ids") or []) + rule_ids))
+        intent["rule_ids"] = merged_rule_ids
+    if intent.get("source") == "all":
+        intent["source"] = None
+    if intent.get("capability") == "list_qc_rules" and "source" not in intent:
+        intent["source"] = "sc146"
+    if intent.get("document_alias") == "frontpage":
         warnings.append("当前自然语言编排仅支持单病历文书质控，病案首页请使用 run_frontpage_qc 工具")
-    if rule_ids and not qc_point_type:
+    if rule_ids and not intent.get("qc_point_type"):
         warnings.append("已识别显式 rule_ids，将优先按 rule_ids 执行或跳过")
     return intent, warnings
 
@@ -298,6 +191,145 @@ def _plan_item(tool_name: str, status: str, arguments: Dict[str, Any], public_da
     return item
 
 
+def _result_type_from_intent(intent: Dict[str, Any], result: Dict[str, Any] | None = None) -> str:
+    capability = _text(intent.get("capability"))
+    raw_type = _text(intent.get("result_type"))
+    if capability == "list_qc_rules" or "rules" in (result or {}):
+        return "qc_rules_catalog"
+    if capability == "run_document_qc" or "qc_summary" in (result or {}):
+        return "document_qc_report"
+    if capability == "search_icd_codes":
+        return "icd_candidates"
+    if capability == "suggest_record_icd_codes":
+        return "record_icd_suggestions"
+    if capability == "predict_dip_group":
+        return "dip_grouping_result"
+    if capability == "predict_drg_group":
+        return "drg_grouping_result"
+    if raw_type == "dip_group":
+        return "dip_grouping_result"
+    if raw_type == "drg_group":
+        return "drg_grouping_result"
+    return raw_type or "clarification"
+
+
+def _result_title(result_type: str, result: Dict[str, Any] | None = None) -> str:
+    if result_type == "qc_rules_catalog":
+        return "规则目录"
+    if result_type == "document_qc_report":
+        return "文书质控报告"
+    if result_type == "icd_candidates":
+        query = _text((result or {}).get("query"))
+        return f"ICD 候选检索：{query}" if query else "ICD 候选检索"
+    if result_type == "record_icd_suggestions":
+        return "当前病历编码建议"
+    if result_type == "dip_grouping_result":
+        return "DIP 模拟入组"
+    if result_type == "drg_grouping_result":
+        return "DRG 模拟入组"
+    if result_type == "system_health":
+        return "智能助手配置异常"
+    if result_type == "unsupported":
+        return "暂不支持的请求"
+    return "需要补充信息"
+
+
+def _summary_from_result(result_type: str, result: Dict[str, Any]) -> Dict[str, Any]:
+    if result_type == "qc_rules_catalog":
+        return {
+            "returned": result.get("returned"),
+            "total": result.get("total"),
+            "document_alias": (result.get("filters") or {}).get("document_alias"),
+            "document_type": (result.get("filters") or {}).get("document_type"),
+            "source": (result.get("filters") or {}).get("source"),
+        }
+    if result_type == "document_qc_report":
+        return dict(result.get("qc_summary") or {})
+    if result_type == "icd_candidates":
+        return {
+            "query": result.get("query"),
+            "code_type": result.get("code_type"),
+            "version": result.get("version"),
+            "returned": result.get("returned"),
+            "total": result.get("total"),
+        }
+    if result_type == "record_icd_suggestions":
+        return {
+            "diagnosis_count": len(result.get("diagnosis_candidates") or []),
+            "procedure_count": len(result.get("procedure_candidates") or []),
+        }
+    if result_type in {"dip_grouping_result", "drg_grouping_result"}:
+        return dict(result.get("input_summary") or {})
+    return {}
+
+
+def _cards_from_result(result_type: str, result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if result_type == "qc_rules_catalog":
+        return [
+            {
+                "card_type": "qc_rules_catalog",
+                "title": "质控规则",
+                "summary": _summary_from_result(result_type, result),
+                "items": list(result.get("rules") or []),
+            }
+        ]
+    if result_type == "document_qc_report":
+        return [
+            {
+                "card_type": "document_qc_report",
+                "title": "质控结果",
+                "summary": dict(result.get("qc_summary") or {}),
+                "items": list(result.get("issues") or result.get("results") or []),
+                "data": {
+                    "executed_rules": result.get("executed_rules") or [],
+                    "skipped_rules": result.get("skipped_rules") or [],
+                    "record_summary": result.get("record_summary") or {},
+                    "document_selection_summary": result.get("document_selection_summary") or {},
+                },
+            }
+        ]
+    if result_type == "icd_candidates":
+        return [
+            {
+                "card_type": "icd_candidates",
+                "title": "候选编码",
+                "summary": _summary_from_result(result_type, result),
+                "items": list(result.get("candidates") or []),
+            }
+        ]
+    if result_type == "record_icd_suggestions":
+        return [
+            {
+                "card_type": "record_icd_suggestions",
+                "title": "编码建议",
+                "summary": _summary_from_result(result_type, result),
+                "data": {
+                    "diagnosis_candidates": result.get("diagnosis_candidates") or [],
+                    "procedure_candidates": result.get("procedure_candidates") or [],
+                },
+            }
+        ]
+    if result_type in {"dip_grouping_result", "drg_grouping_result", "system_health", "clarification", "unsupported"}:
+        return [{"card_type": result_type, "title": _result_title(result_type, result), "summary": _summary_from_result(result_type, result), "data": result}]
+    return []
+
+
+def _envelope_result(intent: Dict[str, Any], result: Dict[str, Any] | None, *, result_type: str | None = None) -> Dict[str, Any] | None:
+    if result is None:
+        return None
+    normalized_type = result_type or _result_type_from_intent(intent, result)
+    envelope = {
+        "result_type": normalized_type,
+        "title": _result_title(normalized_type, result),
+        "summary": _summary_from_result(normalized_type, result),
+        "cards": _cards_from_result(normalized_type, result),
+        "actions": [],
+        "raw_kind": _text(intent.get("capability")) or normalized_type,
+    }
+    envelope.update(result)
+    return envelope
+
+
 def _needs_clarification_response(
     *,
     request: QCAgentChatRequest,
@@ -310,6 +342,7 @@ def _needs_clarification_response(
         status="needs_clarification",
         parsed_intent=intent,
         plan=plan,
+        result=_envelope_result(intent, {"warnings": warnings}, result_type="clarification"),
         warnings=warnings,
         run_id=run_id,
         session_id=request.session_id,
@@ -331,7 +364,8 @@ def _completed_response(
         status="completed",
         parsed_intent=intent,
         plan=plan,
-        result=result,
+        result=_envelope_result(intent, result),
+        legacy_result=result,
         warnings=warnings + list(result.get("warnings") or []),
         run_id=run_id,
         session_id=request.session_id,
@@ -586,17 +620,68 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
     run_id = str(uuid.uuid4())
     plan: List[Dict[str, Any]] = []
     intent, warnings = parse_intent(request)
-    if intent.get("unsupported"):
+    if intent.get("intent_router") == "llm_unavailable":
         response = QCAgentChatResponse(
-            status="unsupported",
+            status="needs_clarification",
             parsed_intent=intent,
             plan=plan,
-            warnings=warnings + ["当前受控 Agent 不支持写入、删除、导出或持久化类操作"],
+            result=_envelope_result(
+                intent,
+                {
+                    "intent_router_enabled": False,
+                    "last_check_status": "unavailable",
+                    "last_error_summary": "LLM 意图识别不可用",
+                    "degraded_reason": "LLM 意图识别不可用，未执行规则兜底，请检查 LLM 配置后重试",
+                    "can_chat_execute": False,
+                },
+                result_type="system_health",
+            ),
+            warnings=warnings + ["LLM 意图识别不可用，未执行规则兜底，请检查 LLM 配置后重试"],
             run_id=run_id,
             session_id=request.session_id,
         )
         assert_no_sensitive_output(response.model_dump())
         return response
+
+    if intent.get("unsupported") or intent.get("capability") == "unsupported":
+        unsupported_warning = (
+            "当前受控 Agent 不支持写入、删除、导出或持久化类操作"
+            if intent.get("unsupported")
+            else "当前问题未匹配到可执行的受控工具"
+        )
+        response = QCAgentChatResponse(
+            status="unsupported",
+            parsed_intent=intent,
+            plan=plan,
+            result=_envelope_result(intent, {"warnings": warnings + [unsupported_warning]}, result_type="unsupported"),
+            warnings=warnings + [unsupported_warning],
+            run_id=run_id,
+            session_id=request.session_id,
+        )
+        assert_no_sensitive_output(response.model_dump())
+        return response
+
+    if intent.get("capability") == "list_qc_rules":
+        result = _execute_tool(
+            registry,
+            "list_qc_rules",
+            {
+                "document_alias": intent.get("document_alias"),
+                "document_type": intent.get("document_type"),
+                "qc_point_type": intent.get("qc_point_type"),
+                "source": intent.get("source"),
+                "limit": 50,
+            },
+            plan,
+        )
+        return _completed_response(
+            request=request,
+            run_id=run_id,
+            intent=intent,
+            plan=plan,
+            result=result,
+            warnings=warnings,
+        )
 
     capability_response = _run_coding_or_grouping_intent(
         request=request,
@@ -614,6 +699,7 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
             status="unsupported",
             parsed_intent=intent,
             plan=plan,
+            result=_envelope_result(intent, {"warnings": warnings}, result_type="unsupported"),
             warnings=warnings,
             run_id=run_id,
             session_id=request.session_id,
@@ -645,6 +731,7 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
                 parsed_intent=intent,
                 plan=plan,
                 candidates=[],
+                result=_envelope_result(intent, {"warnings": warnings + ["未找到匹配病历，请补充 visit_id、住院号、患者姓名或科室"]}, result_type="clarification"),
                 warnings=warnings + ["未找到匹配病历，请补充 visit_id、住院号、患者姓名或科室"],
                 run_id=run_id,
                 session_id=request.session_id,
@@ -657,6 +744,11 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
                 parsed_intent=intent,
                 plan=plan,
                 candidates=candidates,
+                result=_envelope_result(
+                    intent,
+                    {"confirmation_type": "record_selection", "candidates": candidates},
+                    result_type="clarification",
+                ),
                 warnings=warnings + ["命中多份病历，请确认单个 visit_id 后再执行质控"],
                 run_id=run_id,
                 session_id=request.session_id,
@@ -763,7 +855,8 @@ def run_intent(request: QCAgentChatRequest, registry: AgentToolRegistry) -> QCAg
         status="completed",
         parsed_intent={**intent, "visit_id": visit_id, "patient_id": patient_id or ""},
         plan=plan,
-        result=result,
+        result=_envelope_result(intent, result),
+        legacy_result=result,
         warnings=response_warnings,
         run_id=run_id,
         session_id=request.session_id,

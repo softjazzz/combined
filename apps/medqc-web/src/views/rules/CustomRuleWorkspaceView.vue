@@ -3,7 +3,7 @@
     <section class="ops-overview">
       <div class="ops-title-wrap">
         <p class="ops-eyebrow">
-          Custom Rule Workspace
+          规则工作台
         </p>
         <h1 class="ops-title">
           自定义规则工作台
@@ -80,7 +80,7 @@
         <div class="panel-head">
           <div>
             <p class="panel-eyebrow">
-              Step 1
+              步骤一
             </p>
             <h2 class="panel-title">
               规则草稿列表
@@ -216,7 +216,7 @@
       <div class="panel-head">
         <div>
           <p class="panel-eyebrow">
-            Step 2
+            步骤二
           </p>
           <h2 class="panel-title">
             规则创建（抽屉）
@@ -359,7 +359,7 @@
       <div class="panel-head">
         <div>
           <p class="panel-eyebrow">
-            Step 3
+            步骤三
           </p>
           <h2 class="panel-title">
             Prompt 生成与编辑
@@ -638,7 +638,7 @@
       <div class="panel-head">
         <div>
           <p class="panel-eyebrow">
-            Step 4
+            步骤四
           </p>
           <h2 class="panel-title">
             病历筛选与任务执行
@@ -826,7 +826,7 @@
         <div class="batch-shell-head">
           <div>
             <p class="panel-eyebrow">
-              Batch Jobs
+              批量任务
             </p>
             <h3 class="batch-shell-title">
               任务列表
@@ -2182,15 +2182,16 @@ onBeforeUnmount(() => {
 </script>
 <style scoped>
 .custom-rule-workspace {
-  --workstation-font: 'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display',
-    Inter, 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --workstation-font:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
   --panel-bg: rgba(255, 255, 255, 0.86);
   --panel-border: rgba(0, 0, 0, 0.08);
   --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 30px rgba(0, 0, 0, 0.06);
-  --panel-hover-shadow: 0 2px 12px rgba(0, 0, 0, 0.10), 0 6px 22px rgba(0, 0, 0, 0.075);
+  --panel-hover-shadow: 0 2px 12px rgba(0, 0, 0, 0.1), 0 6px 22px rgba(0, 0, 0, 0.075);
   --ink-strong: #1d1d1f;
   --ink-main: rgba(29, 29, 31, 0.78);
-  --ink-muted: rgba(29, 29, 31, 0.60);
+  --ink-muted: rgba(29, 29, 31, 0.6);
   --ink-subtle: rgba(29, 29, 31, 0.38);
   --brand-blue: #0066cc;
   --brand-soft: rgba(0, 102, 204, 0.08);
@@ -2213,7 +2214,8 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(18px);
   box-shadow: var(--panel-shadow);
   padding: 16px 18px;
-  transition: transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+  transition:
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
@@ -2325,7 +2327,8 @@ onBeforeUnmount(() => {
   cursor: pointer;
   color: rgba(29, 29, 31, 0.72);
   text-align: left;
-  transition: background 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+  transition:
+    background 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
@@ -2371,12 +2374,12 @@ onBeforeUnmount(() => {
 
 .step-pill--running {
   border-color: rgba(245, 158, 11, 0.22);
-  background: rgba(245, 158, 11, 0.10);
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .step-pill--done {
   border-color: rgba(16, 185, 129, 0.22);
-  background: rgba(16, 185, 129, 0.10);
+  background: rgba(16, 185, 129, 0.1);
 }
 
 .workspace-grid {
@@ -2397,7 +2400,8 @@ onBeforeUnmount(() => {
   box-shadow: var(--panel-shadow);
   padding: 14px;
   margin-top: 12px;
-  transition: transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+  transition:
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
@@ -2677,7 +2681,7 @@ onBeforeUnmount(() => {
   margin-top: 12px;
   border: 1px solid var(--panel-border);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.70);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .batch-shell-head {
@@ -2744,7 +2748,7 @@ onBeforeUnmount(() => {
 }
 
 .job-status--completed {
-  background: rgba(16, 185, 129, 0.10);
+  background: rgba(16, 185, 129, 0.1);
   color: #047857;
 }
 
@@ -2831,7 +2835,7 @@ onBeforeUnmount(() => {
 
 :deep(.ant-table-thead > tr > th) {
   background: rgba(255, 255, 255, 0.88) !important;
-  color: rgba(29, 29, 31, 0.60) !important;
+  color: rgba(29, 29, 31, 0.6) !important;
   font-size: 12px;
   font-weight: 600 !important;
   border-bottom: 1px solid var(--panel-border) !important;
@@ -2849,7 +2853,8 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   font-family: var(--workstation-font);
   font-weight: 600;
-  transition: transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
+  transition:
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     box-shadow 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     border-color 260ms cubic-bezier(0.25, 0.1, 0.25, 1),
     background 260ms cubic-bezier(0.25, 0.1, 0.25, 1);

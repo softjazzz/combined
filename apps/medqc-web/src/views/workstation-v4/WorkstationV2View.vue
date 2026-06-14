@@ -1,23 +1,13 @@
 <template>
   <div :class="['ws-v2', { 'ws-v2-embedded': embedded }]">
     <!-- 侧边栏（仅独立模式） -->
-    <aside
-      v-if="!embedded"
-      :class="['ws-v2-sidebar', { collapsed: sidebarCollapsed }]"
-    >
+    <aside v-if="!embedded" :class="['ws-v2-sidebar', { collapsed: sidebarCollapsed }]">
       <div class="sidebar-header">
-        <div
-          v-if="!sidebarCollapsed"
-          class="sidebar-title"
-        >
-          <ThunderboltOutlined style="color: #1677ff" />
+        <div v-if="!sidebarCollapsed" class="sidebar-title">
+          <ThunderboltOutlined style="color: #0066cc" />
           <span>AI 质控工作站</span>
         </div>
-        <a-button
-          type="text"
-          size="small"
-          @click="sidebarCollapsed = !sidebarCollapsed"
-        >
+        <a-button type="text" size="small" @click="sidebarCollapsed = !sidebarCollapsed">
           <MenuFoldOutlined v-if="!sidebarCollapsed" />
           <MenuUnfoldOutlined v-else />
         </a-button>
@@ -42,9 +32,7 @@
           <template #icon>
             <ClusterOutlined />
           </template>
-          <template #title>
-            DRG/DIP
-          </template>
+          <template #title> DRG/DIP </template>
           <a-menu-item key="pre-analysis">
             <template #icon>
               <FileSearchOutlined />
@@ -98,20 +86,48 @@
     <!-- 主内容区 -->
     <main class="ws-v2-main">
       <!-- 工作台视图 -->
-      <div
-        v-if="currentView === 'workbench'"
-        class="workbench-layout"
-      >
+      <div v-if="currentView === 'workbench'" class="workbench-layout">
+        <header class="workbench-hero">
+          <div>
+            <span class="workbench-eyebrow">工作台</span>
+            <h2>病案质控工作台</h2>
+            <p>集中查看病案原文、首页抽取、质控结果和 DRG/DIP 预分组。</p>
+          </div>
+          <div class="workbench-hero-actions">
+            <a-tag color="blue"> {{ testCases.length }} 份病历 </a-tag>
+            <a-button
+              v-if="demoCase"
+              type="primary"
+              :loading="extracting"
+              @click="extractStructuredData"
+            >
+              <ThunderboltOutlined /> AI 提取
+            </a-button>
+          </div>
+        </header>
+
+        <section class="workbench-metric-strip">
+          <article class="workbench-metric-card">
+            <span>当前病历</span>
+            <strong>{{ currentCaseIndex >= 0 ? currentCaseIndex + 1 : '-' }}</strong>
+            <small>当前工作序号</small>
+          </article>
+          <article class="workbench-metric-card">
+            <span>结构化首页</span>
+            <strong>{{ frontpage ? '已生成' : '待提取' }}</strong>
+            <small>病案首页字段抽取</small>
+          </article>
+          <article class="workbench-metric-card">
+            <span>DRG/DIP</span>
+            <strong>{{ drgResult ? '已模拟' : '待分组' }}</strong>
+            <small>预入组结果验证</small>
+          </article>
+        </section>
+
         <!-- 上方双栏区 -->
-        <div
-          ref="panelsRef"
-          class="workbench-panels"
-        >
+        <div ref="panelsRef" class="workbench-panels">
           <!-- 左栏：病历原文 -->
-          <div
-            class="panel-left"
-            :style="{ width: leftPanelWidth + '%' }"
-          >
+          <div class="panel-left" :style="{ width: leftPanelWidth + '%' }">
             <div class="panel-header">
               <span class="panel-title"> <FileTextOutlined /> 病历原文 </span>
               <a-space>
@@ -137,22 +153,12 @@
           </div>
 
           <!-- 可拖拽分隔线 -->
-          <div
-            class="resize-handle"
-            @mousedown="startResize"
-          />
+          <div class="resize-handle" @mousedown="startResize" />
 
           <!-- 右栏：分析面板 -->
-          <div
-            class="panel-right"
-            :style="{ width: 100 - leftPanelWidth + '%' }"
-          >
+          <div class="panel-right" :style="{ width: 100 - leftPanelWidth + '%' }">
             <div class="panel-header">
-              <a-segmented
-                v-model:value="activeTab"
-                :options="analysisTabs"
-                size="small"
-              />
+              <a-segmented v-model:value="activeTab" :options="analysisTabs" size="small" />
             </div>
             <div class="panel-body custom-scrollbar">
               <!-- Tab1: 首页结果 (M1) -->
@@ -167,16 +173,11 @@
               />
 
               <!-- Tab2: 质控结果 (M2 + M3-A) -->
-              <div
-                v-else-if="activeTab === 'qc'"
-                class="tab-placeholder"
-              >
-                <SafetyCertificateOutlined style="font-size: 48px; color: #1677ff" />
+              <div v-else-if="activeTab === 'qc'" class="tab-placeholder">
+                <SafetyCertificateOutlined style="font-size: 48px; color: #0066cc" />
                 <h3>首页质控</h3>
                 <p>形式质控（M2）+ 内涵质控（M3-A）</p>
-                <p class="hint">
-                  Phase 2 开发：≥160 条质控规则引擎
-                </p>
+                <p class="hint">规则引擎接入后展示结构化问题与复核入口</p>
               </div>
 
               <!-- Tab3: DRG 分组 (M6) -->
@@ -187,13 +188,13 @@
                 :has-frontpage="!!frontpage"
                 :main-diagnosis-code="
                   frontpage?.primary_diagnosis_code ||
-                    frontpage?.diagnoses?.discharge_main_icd ||
-                    ''
+                  frontpage?.diagnoses?.discharge_main_icd ||
+                  ''
                 "
                 :main-diagnosis-text="
                   frontpage?.primary_diagnosis_name ||
-                    frontpage?.diagnoses?.discharge_main_diagnosis_text ||
-                    ''
+                  frontpage?.diagnoses?.discharge_main_diagnosis_text ||
+                  ''
                 "
                 :main-procedure-code="
                   frontpage?.main_procedure_code || frontpage?.procedures?.main?.code || ''
@@ -206,10 +207,7 @@
               />
 
               <!-- Tab4: AI 画像 (M3-B) -->
-              <AIProfileDashboard
-                v-else-if="activeTab === 'profile'"
-                :frontpage="frontpage"
-              />
+              <AIProfileDashboard v-else-if="activeTab === 'profile'" :frontpage="frontpage" />
 
               <!-- Tab5: ICD 查询 (M4) -->
               <ICDSearchPanel v-else-if="activeTab === 'icd'" />
@@ -217,14 +215,12 @@
           </div>
         </div>
 
-        <!-- 底部：测试用例列表 -->
+        <!-- 底部：病历选择栏 -->
         <div class="workbench-footer">
           <div class="footer-header">
-            <span class="panel-title"> <ProfileOutlined /> 测试用例 </span>
+            <span class="panel-title"> <ProfileOutlined /> 病历队列 </span>
             <a-space>
-              <a-tag color="blue">
-                {{ testCases.length }} 份
-              </a-tag>
+              <a-tag color="blue"> {{ testCases.length }} 份 </a-tag>
             </a-space>
           </div>
           <div class="test-case-bar">
@@ -266,27 +262,141 @@
       />
 
       <!-- 质控消息 -->
-      <div
-        v-else-if="currentView === 'messages'"
-        class="tab-placeholder"
-        style="
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-direction: column;
-        "
-      >
-        <BellOutlined style="font-size: 48px; color: #1677ff" />
-        <h3>质控消息概览</h3>
-        <p>M5：每日问题汇总 + 科室分布</p>
+      <div v-else-if="currentView === 'messages'" class="qc-message-page">
+        <header class="qc-message-header">
+          <div>
+            <span class="qc-message-eyebrow">质控消息</span>
+            <h2>病案问题概览</h2>
+            <p>集中推送当天高频病案问题，辅助质控人员快速定位科室和病历。</p>
+          </div>
+          <button type="button" class="qc-message-primary">
+            <RefreshCw class="qc-message-button-icon" />
+            刷新消息
+          </button>
+        </header>
+
+        <section class="qc-message-metrics">
+          <article class="qc-message-metric-card">
+            <ClipboardList class="qc-message-metric-icon" />
+            <div>
+              <span>今日问题</span>
+              <strong>128</strong>
+              <small>较昨日 +12</small>
+            </div>
+          </article>
+          <article class="qc-message-metric-card">
+            <AlertTriangle class="qc-message-metric-icon qc-message-metric-icon--risk" />
+            <div>
+              <span>高风险</span>
+              <strong>36</strong>
+              <small>优先复核</small>
+            </div>
+          </article>
+          <article class="qc-message-metric-card">
+            <Building2 class="qc-message-metric-icon" />
+            <div>
+              <span>涉及科室</span>
+              <strong>12</strong>
+              <small>前 5 科室集中</small>
+            </div>
+          </article>
+          <article class="qc-message-metric-card qc-message-metric-card--safe">
+            <ShieldCheck class="qc-message-metric-icon" />
+            <div>
+              <span>处理完成</span>
+              <strong>74</strong>
+              <small>闭环率 57.8%</small>
+            </div>
+          </article>
+        </section>
+
+        <section class="qc-message-grid">
+          <div class="qc-message-panel qc-message-panel--list">
+            <div class="qc-message-panel-head">
+              <div>
+                <h3>消息列表</h3>
+                <p>按风险和集中度排序，默认显示需要优先处理的问题。</p>
+              </div>
+              <span class="qc-message-chip">实时</span>
+            </div>
+            <div class="qc-message-list">
+              <article class="qc-message-item qc-message-item--risk">
+                <span class="qc-message-item-dot" />
+                <div>
+                  <h4>出院诊断与首页主诊断不一致</h4>
+                  <p>普通外科 12 份病历集中出现，建议优先核对首页诊断和出院记录诊断。</p>
+                  <small>最近更新 09:42 · 12 份病历</small>
+                </div>
+                <button type="button">查看</button>
+              </article>
+              <article class="qc-message-item">
+                <span class="qc-message-item-dot" />
+                <div>
+                  <h4>术后 24 小时内未完成手术记录</h4>
+                  <p>骨科、普外科存在时限风险，需核对手术时间和文书记录时间。</p>
+                  <small>最近更新 09:18 · 8 份病历</small>
+                </div>
+                <button type="button">查看</button>
+              </article>
+              <article class="qc-message-item">
+                <span class="qc-message-item-dot" />
+                <div>
+                  <h4>CT/MRI 阳性结果未在病程中分析</h4>
+                  <p>影像报告已出具，但病程记录未见对应分析，建议补充诊疗依据。</p>
+                  <small>最近更新 08:56 · 6 份病历</small>
+                </div>
+                <button type="button">查看</button>
+              </article>
+            </div>
+          </div>
+
+          <aside class="qc-message-panel qc-message-panel--insight">
+            <div class="qc-message-panel-head">
+              <div>
+                <h3>科室集中度</h3>
+                <p>按今日问题数排序</p>
+              </div>
+            </div>
+            <div class="qc-message-rank-list">
+              <div class="qc-message-rank-item">
+                <span>1</span>
+                <strong>普通外科</strong>
+                <em>24</em>
+              </div>
+              <div class="qc-message-rank-bar">
+                <i style="width: 92%" />
+              </div>
+              <div class="qc-message-rank-item">
+                <span>2</span>
+                <strong>骨科</strong>
+                <em>18</em>
+              </div>
+              <div class="qc-message-rank-bar">
+                <i style="width: 72%" />
+              </div>
+              <div class="qc-message-rank-item">
+                <span>3</span>
+                <strong>消化内科</strong>
+                <em>15</em>
+              </div>
+              <div class="qc-message-rank-bar">
+                <i style="width: 60%" />
+              </div>
+              <div class="qc-message-rank-item">
+                <span>4</span>
+                <strong>神经内科</strong>
+                <em>11</em>
+              </div>
+              <div class="qc-message-rank-bar">
+                <i style="width: 44%" />
+              </div>
+            </div>
+          </aside>
+        </section>
       </div>
 
       <!-- ICD 编码查询（独立全屏视图） -->
-      <div
-        v-else-if="currentView === 'icd-search'"
-        class="icd-fullpage"
-      >
+      <div v-else-if="currentView === 'icd-search'" class="icd-fullpage">
         <ICDSearchPanel />
       </div>
     </main>
@@ -302,11 +412,7 @@
     />
 
     <!-- 质控提醒浮动窗口 -->
-    <QCAlertPanel
-      :frontpage="frontpage"
-      :analyzing="extracting"
-      @refresh="extractStructuredData"
-    />
+    <QCAlertPanel :frontpage="frontpage" :analyzing="extracting" @refresh="extractStructuredData" />
   </div>
 </template>
 
@@ -331,6 +437,7 @@ import {
   SearchOutlined,
   ProfileOutlined,
 } from '@ant-design/icons-vue'
+import { AlertTriangle, Building2, ClipboardList, RefreshCw, ShieldCheck } from 'lucide-vue-next'
 // 复用 demo 组件（保持 Tailwind 内部样式）
 import {
   AIProfileDashboard,
@@ -542,15 +649,21 @@ onUnmounted(() => {
 .ws-v2 {
   display: flex;
   height: 100vh;
-  background: #f5f9fc;
+  background: #f5f5f7;
   overflow: hidden;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 /* ==================== 侧边栏 ==================== */
 .ws-v2-sidebar {
   width: 220px;
-  background: #fff;
-  border-right: 1px solid #e8e8e8;
+  background: rgba(255, 255, 255, 0.86);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
   display: flex;
   flex-direction: column;
   transition: width 0.2s ease;
@@ -565,7 +678,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0 12px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 .sidebar-title {
   display: flex;
@@ -573,14 +686,134 @@ onUnmounted(() => {
   gap: 8px;
   font-weight: 600;
   font-size: 15px;
-  color: #1a1a1a;
+  color: #1d1d1f;
   white-space: nowrap;
+}
+
+.ws-v2-sidebar :deep(.ant-menu) {
+  flex: 1;
+  border-inline-end: 0;
+  background: transparent;
+  color: rgba(29, 29, 31, 0.68);
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.ws-v2-sidebar :deep(.ant-menu-item),
+.ws-v2-sidebar :deep(.ant-menu-submenu-title) {
+  width: calc(100% - 16px);
+  height: 38px;
+  margin: 4px 8px;
+  border-radius: 10px;
+  color: rgba(29, 29, 31, 0.68);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 38px;
+  transition:
+    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.ws-v2-sidebar :deep(.ant-menu-item:hover),
+.ws-v2-sidebar :deep(.ant-menu-submenu-title:hover) {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1d1d1f;
+  transform: translateX(1px);
+}
+
+.ws-v2-sidebar :deep(.ant-menu-item-selected) {
+  background: rgba(0, 102, 204, 0.1);
+  color: #0066cc;
+}
+
+.ws-v2-sidebar :deep(.ant-menu-item-selected::after) {
+  display: none;
+}
+
+.ws-v2-sidebar :deep(.ant-menu-item-selected::before) {
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: #0066cc;
+  content: '';
+}
+
+.ws-v2-sidebar :deep(.ant-menu-submenu-selected > .ant-menu-submenu-title),
+.ws-v2-sidebar :deep(.ant-menu-submenu-open > .ant-menu-submenu-title) {
+  color: #0066cc;
+}
+
+.ws-v2-sidebar :deep(.ant-menu-sub) {
+  margin: 2px 8px 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.ws-v2-sidebar :deep(.ant-menu-item-divider) {
+  margin: 10px 16px;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.ws-v2 :deep(.ant-btn),
+.workbench-layout :deep(.ant-segmented),
+.workbench-layout :deep(.ant-tag) {
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+.ws-v2 :deep(.ant-btn) {
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ws-v2 :deep(.ant-btn-primary) {
+  border-color: #0066cc;
+  background: #0066cc;
+  box-shadow: 0 5px 14px rgba(0, 102, 204, 0.16);
+}
+
+.ws-v2 :deep(.ant-btn-primary:not(:disabled):hover) {
+  border-color: #0057b8;
+  background: #0057b8;
+}
+
+.workbench-layout :deep(.ant-tag-blue) {
+  border-color: rgba(0, 102, 204, 0.14);
+  background: rgba(0, 102, 204, 0.06);
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.workbench-layout :deep(.ant-segmented) {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 3px;
+}
+
+.workbench-layout :deep(.ant-segmented-item) {
+  border-radius: 7px;
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.workbench-layout :deep(.ant-segmented-item-selected) {
+  color: #0066cc;
 }
 
 /* ==================== 嵌入模式 ====================  */
 .ws-v2-embedded {
   height: calc(100vh - 64px);
-  background: #f5f9fc;
+  background: #f5f5f7;
 }
 
 /* ==================== 主内容区 ==================== */
@@ -589,7 +822,7 @@ onUnmounted(() => {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: #f5f9fc;
+  background: #f5f5f7;
 }
 
 /* ==================== 工作台布局 ==================== */
@@ -597,12 +830,118 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  gap: 16px;
+  padding: 24px;
+  overflow: hidden;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+.workbench-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.workbench-eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: #0066cc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.workbench-hero h2 {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 31px;
+}
+.workbench-hero p {
+  margin: 8px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+.workbench-hero-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.workbench-metric-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  flex-shrink: 0;
+}
+.workbench-metric-card {
+  min-height: 94px;
+  padding: 18px 20px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.workbench-metric-card:hover,
+.workbench-panels:hover,
+.workbench-footer:hover,
+.qc-message-metric-card:hover,
+.qc-message-panel:hover {
+  border-color: rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.1),
+    0 6px 22px rgba(0, 0, 0, 0.075);
+  transform: translateY(-2px);
+}
+.workbench-metric-card span,
+.workbench-metric-card small {
+  display: block;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.workbench-metric-card strong {
+  display: block;
+  margin: 4px 0 2px;
+  color: #1d1d1f;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 32px;
 }
 .workbench-panels {
   flex: 1;
   display: flex;
-  overflow: hidden;
+  gap: 0;
   min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 /* 面板通用 */
@@ -614,19 +953,19 @@ onUnmounted(() => {
   min-width: 0;
 }
 .panel-header {
-  height: 48px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  background: #fff;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
 }
 .panel-title {
-  font-weight: 600;
+  font-weight: 650;
   font-size: 14px;
-  color: #333;
+  color: #1d1d1f;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -634,40 +973,51 @@ onUnmounted(() => {
 .panel-body {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
-  background: #f5f9fc;
+  padding: 18px;
+  background: rgba(250, 250, 252, 0.72);
 }
 
 /* 分隔线 */
 .resize-handle {
-  width: 6px;
+  width: 5px;
   cursor: col-resize;
-  background: #e2e8f0;
+  background: rgba(0, 0, 0, 0.06);
   transition: background 0.15s;
   flex-shrink: 0;
 }
 .resize-handle:hover {
-  background: #2563eb;
+  background: rgba(0, 102, 204, 0.42);
 }
 
 /* ==================== 底部测试用例栏 ==================== */
 .workbench-footer {
-  border-top: 1px solid #e8e8e8;
-  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
   flex-shrink: 0;
+  overflow: hidden;
+  transition:
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 .footer-header {
-  height: 36px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 .test-case-bar {
   display: flex;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 10px 18px 12px;
   overflow-x: auto;
 }
 
@@ -702,7 +1052,342 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #f5f9fc;
+  background: #f5f5f7;
+}
+
+/* ==================== 质控消息页 ==================== */
+.qc-message-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  height: 100%;
+  overflow: auto;
+  padding: 24px;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-feature-settings:
+    'rlig' 1,
+    'calt' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.qc-message-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.qc-message-eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: #0066cc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.qc-message-header h2 {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 31px;
+}
+
+.qc-message-header p {
+  margin: 8px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.qc-message-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #0066cc;
+  border-radius: 10px;
+  background: #0066cc;
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 5px 14px rgba(0, 102, 204, 0.18);
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.qc-message-primary:hover {
+  background: #0057b8;
+  border-color: #0057b8;
+}
+
+.qc-message-button-icon {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.1;
+}
+
+.qc-message-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.qc-message-metric-card,
+.qc-message-panel {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.86);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 2px 8px rgba(0, 0, 0, 0.035);
+}
+
+.qc-message-metric-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 118px;
+  padding: 20px;
+}
+
+.qc-message-metric-icon {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  padding: 11px;
+  border: 1px solid rgba(0, 102, 204, 0.16);
+  border-radius: 15px;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+  stroke-width: 1.9;
+}
+
+.qc-message-metric-icon--risk {
+  border-color: rgba(239, 68, 68, 0.18);
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+}
+
+.qc-message-metric-card--safe .qc-message-metric-icon {
+  border-color: rgba(16, 185, 129, 0.18);
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+}
+
+.qc-message-metric-card span,
+.qc-message-metric-card small {
+  display: block;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.qc-message-metric-card strong {
+  display: block;
+  margin: 4px 0 2px;
+  color: #1d1d1f;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 34px;
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-message-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  min-height: 0;
+}
+
+.qc-message-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.qc-message-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.qc-message-panel-head h3 {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 22px;
+}
+
+.qc-message-panel-head p {
+  margin: 5px 0 0;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.qc-message-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid rgba(0, 102, 204, 0.14);
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.06);
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.qc-message-list {
+  padding: 8px 10px 12px;
+}
+
+.qc-message-item {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px;
+  border-radius: 14px;
+  transition:
+    background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.qc-message-item:hover {
+  background: rgba(0, 0, 0, 0.025);
+  transform: translateY(-1px);
+}
+
+.qc-message-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #0066cc;
+}
+
+.qc-message-item--risk .qc-message-item-dot {
+  background: #ef4444;
+}
+
+.qc-message-item h4 {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.qc-message-item p {
+  margin: 4px 0 0;
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.qc-message-item small {
+  display: block;
+  margin-top: 6px;
+  color: rgba(29, 29, 31, 0.38);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.qc-message-item button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 102, 204, 0.16);
+  border-radius: 9px;
+  background: rgba(0, 102, 204, 0.06);
+  color: #0066cc;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.qc-message-rank-list {
+  padding: 16px 18px 20px;
+}
+
+.qc-message-rank-item {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.qc-message-rank-item:first-child {
+  margin-top: 0;
+}
+
+.qc-message-rank-item span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qc-message-rank-item strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-message-rank-item em {
+  color: #1d1d1f;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-message-rank-bar {
+  height: 6px;
+  margin: 8px 0 12px 34px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.qc-message-rank-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #0066cc;
 }
 
 /* ==================== 滚动条 ==================== */
@@ -714,10 +1399,10 @@ onUnmounted(() => {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #d9d9d9;
+  background: rgba(29, 29, 31, 0.16);
   border-radius: 3px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #bfbfbf;
+  background: rgba(29, 29, 31, 0.26);
 }
 </style>

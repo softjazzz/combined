@@ -296,8 +296,23 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
                 procedures["main_procedure_text"] = parsed_proc
                 logger.info("extract: fallback text parse filled main_procedure_text=%s", parsed_proc)
 
+        # 本地 ICD 码表优先，LLM 编码建议只作为本地未命中的兜底。
+        try:
+            from ..services.local_icd_service import resolve_diagnosis_codes, resolve_procedure_codes
+            if isinstance(diagnoses, dict) and diagnoses:
+                diagnoses = resolve_diagnosis_codes(diagnoses)
+                logger.info("extract: 本地 ICD 诊断编码优先匹配完成")
+            if isinstance(procedures, dict) and procedures:
+                procedures = resolve_procedure_codes(procedures)
+                logger.info("extract: 本地 ICD 手术编码优先匹配完成")
+        except Exception:
+            logger.exception("extract: 本地 ICD 编码优先匹配失败")
+
+        diagnosis_llm_suggested = False
+        procedure_llm_suggested = False
         if isinstance(diagnoses, dict) and diagnoses and not diagnoses.get("discharge_main_icd"):
             try:
+                diagnosis_llm_suggested = True
                 diagnoses = await service._suggest_diagnosis_codes(diagnoses)
                 logger.info("extract: LLM 诊断编码建议完成")
             except Exception:
@@ -305,23 +320,24 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
 
         if isinstance(procedures, dict) and procedures and not procedures.get("main_procedure_code"):
             try:
+                procedure_llm_suggested = True
                 procedures = await service._suggest_procedure_codes(procedures)
                 logger.info("extract: LLM 手术编码建议完成")
             except Exception:
                 logger.exception("extract: LLM 手术编码建议失败")
 
-        # 3) 本地 ICD 编码库精确匹配（替换/校正 LLM 输出的编码）
-        try:
-            from ..services.local_icd_service import resolve_diagnosis_codes, resolve_procedure_codes
-            if isinstance(diagnoses, dict) and diagnoses:
-                diagnoses = resolve_diagnosis_codes(diagnoses)
-                logger.info("extract: 本地 ICD 诊断编码匹配完成")
-            if isinstance(procedures, dict) and procedures:
-                procedures = resolve_procedure_codes(procedures)
-                logger.info("extract: 本地 ICD 手术编码匹配完成")
-        except Exception:
-            logger.exception("extract: 本地 ICD 编码匹配失败")
-
+        # 3) 如果走过 LLM 兜底，再用本地 ICD 编码库替换/校正 LLM 输出的编码。
+        if diagnosis_llm_suggested or procedure_llm_suggested:
+            try:
+                from ..services.local_icd_service import resolve_diagnosis_codes, resolve_procedure_codes
+                if diagnosis_llm_suggested and isinstance(diagnoses, dict) and diagnoses:
+                    diagnoses = resolve_diagnosis_codes(diagnoses)
+                    logger.info("extract: LLM 后本地 ICD 诊断编码校正完成")
+                if procedure_llm_suggested and isinstance(procedures, dict) and procedures:
+                    procedures = resolve_procedure_codes(procedures)
+                    logger.info("extract: LLM 后本地 ICD 手术编码校正完成")
+            except Exception:
+                logger.exception("extract: LLM 后本地 ICD 编码校正失败")
         evidence = _to_plain_dict(result.get("evidence"))
         if not isinstance(evidence, dict):
             evidence = {}

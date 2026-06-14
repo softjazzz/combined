@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import threading
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 from typing import Any, Dict, Iterable, List
 
 from fastapi import HTTPException, status
@@ -12,7 +13,7 @@ from sqlalchemy import text as sqlalchemy_text
 from app.services.custom_qc_workspace_service import CustomQCWorkspaceService
 from app.services.frontpage_formal_qc import Category, FrontpageFormalQC, QCResult, Severity
 
-from .schemas import (
+from ..schemas import (
     AgentToolObservation,
     DocumentScope,
     GetRecordContextInput,
@@ -29,8 +30,8 @@ from .schemas import (
     SearchRecordsInput,
     SearchRecordsPublicData,
 )
-from .tool_registry import AgentToolRegistry
-from .rule_catalog import RuleSummary, filter_rule_catalog, get_rule_catalog, get_rules_by_ids
+from ..tool_registry import AgentToolRegistry
+from ..rule_catalog import RuleSummary, filter_rule_catalog, get_rule_catalog, get_rules_by_ids
 
 
 _CDM_DOCUMENT_TABLES = (
@@ -2093,6 +2094,9 @@ def _icd_public_type(dataset_type: str) -> str:
 
 
 def _icd_match_type(query: str, item: Dict[str, Any]) -> str:
+    explicit_match_type = _text(item.get("_match_type"))
+    if explicit_match_type:
+        return explicit_match_type
     query_lower = query.lower()
     code = _text(item.get("code")).lower()
     name = _text(item.get("name")).lower()
@@ -2107,6 +2111,133 @@ def _icd_match_type(query: str, item: Dict[str, Any]) -> str:
     if query_lower in code:
         return "code_contains"
     return "local_fuzzy"
+
+
+def _is_icd_code_query(query: str) -> bool:
+    text = _text(query)
+    return bool(
+        re.fullmatch(r"[A-Za-z]\d{2}(?:\.[A-Za-z0-9]{1,8})?", text)
+        or re.fullmatch(r"\d{2}\.\d{2,6}", text)
+    )
+
+
+def _normalize_icd_similarity_text(value: str) -> str:
+    return re.sub(r"[\s()（）,，;；:：。.\-_/]+", "", _text(value).lower())
+
+
+def _severity_rank_hints(query: str) -> set[str]:
+    text = _normalize_icd_similarity_text(query)
+    hints: set[str] = set()
+    if any(token in text for token in ("重度", "严重", "重型", "3级", "三级", "ⅲ级", "iii级")):
+        hints.update({"3级", "恶性", "危象", "急症", "极高危"})
+    if any(token in text for token in ("中度", "2级", "二级", "ⅱ级", "ii级")):
+        hints.update({"2级", "中危", "高危"})
+    if any(token in text for token in ("轻度", "1级", "一级", "ⅰ级", "i级")):
+        hints.update({"1级", "低危"})
+    return hints
+
+
+def _char_set_score(query: str, name: str) -> float:
+    query_chars = set(_normalize_icd_similarity_text(query))
+    name_chars = set(_normalize_icd_similarity_text(name))
+    if not query_chars or not name_chars:
+        return 0.0
+    return len(query_chars & name_chars) / max(1, len(query_chars | name_chars))
+
+
+def _fallback_icd10_similarity_results(query: str, *, version: str, limit: int) -> List[Dict[str, Any]]:
+    try:
+        from app.routers import icd_search as icd_mod
+
+        source = (
+            icd_mod._icd10_clinical_data
+            if version == "clinical" and icd_mod._icd10_clinical_data
+            else icd_mod._icd10_data
+        )
+    except Exception:
+        return []
+    query_norm = _normalize_icd_similarity_text(query)
+    if not query_norm:
+        return []
+    severity_hints = _severity_rank_hints(query)
+    scored: List[Dict[str, Any]] = []
+    for item in source:
+        name = _text(item.get("name"))
+        code = _text(item.get("code"))
+        if not name or not code:
+            continue
+        name_norm = _normalize_icd_similarity_text(name)
+        ratio = SequenceMatcher(None, query_norm, name_norm).ratio()
+        char_score = _char_set_score(query_norm, name_norm)
+        contains_score = 0.25 if query_norm in name_norm or name_norm in query_norm else 0.0
+        severity_score = 0.0
+        if severity_hints and any(hint in name for hint in severity_hints):
+            severity_score = 0.3
+        score = min(1.0, ratio * 0.5 + char_score * 0.35 + contains_score + severity_score)
+        if score <= 0:
+            continue
+        scored.append(
+            {
+                "code": code,
+                "name": name,
+                "type": "icd10",
+                "_score": max(1, min(100, round(score * 100, 2))),
+                "_match_type": "local_similarity",
+            }
+        )
+    scored.sort(key=lambda item: -float(item.get("_score") or 0))
+    return scored[: max(1, limit)]
+
+
+def _semantic_icd10_results(query: str, *, version: str, limit: int) -> tuple[List[Dict[str, Any]], List[str]]:
+    try:
+        from app.routers import icd_search as icd_mod
+        from app.services.icd_semantic_retrieval_service import get_icd_semantic_retrieval_service
+
+        service = get_icd_semantic_retrieval_service()
+        semantic_results = service.search_diagnosis(
+            query,
+            prefer_insurance=(version != "clinical"),
+            top_k=max(1, limit),
+            min_score=0.0,
+        )
+    except Exception as exc:
+        fallback = _fallback_icd10_similarity_results(query, version=version, limit=limit)
+        return fallback, [f"语义索引检索不可用，已使用本地相似度兜底: {type(exc).__name__}"]
+
+    output: List[Dict[str, Any]] = []
+    for item in semantic_results:
+        code = _text(item.get("code"))
+        name = _text(item.get("name"))
+        if not code or not name:
+            continue
+        semantic_version = _text(item.get("version"))
+        if version != "clinical" and semantic_version == "clinical":
+            mapped = ((icd_mod._code_mapping or {}).get("clinical_to_insurance") or {}).get(code)
+            if isinstance(mapped, dict) and mapped.get("code"):
+                code = _text(mapped.get("code"))
+                name = _text(mapped.get("name")) or name
+        elif version == "clinical" and semantic_version == "insurance":
+            mapped = ((icd_mod._code_mapping or {}).get("insurance_to_clinical") or {}).get(code)
+            if isinstance(mapped, dict) and mapped.get("code"):
+                code = _text(mapped.get("code"))
+                name = _text(mapped.get("name")) or name
+        score = float(item.get("score") or 0)
+        output.append(
+            {
+                "code": code,
+                "name": name,
+                "type": "icd10",
+                "_score": max(1, min(100, round(score * 100, 2))),
+                "_match_type": "semantic",
+            }
+        )
+    if output:
+        return output, []
+    fallback = _fallback_icd10_similarity_results(query, version=version, limit=limit)
+    if fallback:
+        return fallback, ["语义索引未返回候选，已使用本地相似度兜底"]
+    return [], []
 
 
 def _apply_icd_mapping(item: Dict[str, Any], version: str) -> None:
@@ -2154,16 +2285,27 @@ def _search_icd_candidates(
 
         icd_mod._load_data()
         dataset_type = _icd_type_to_dataset_type(code_type)
-        raw_results: List[Dict[str, Any]] = []
+        literal_results: List[Dict[str, Any]] = []
         if dataset_type in {"icd10", "all"}:
             icd10_source = (
                 icd_mod._icd10_clinical_data
                 if version == "clinical" and icd_mod._icd10_clinical_data
                 else icd_mod._icd10_data
             )
-            raw_results.extend(icd_mod._search_dataset(icd10_source, query, "icd10"))
+            literal_results.extend(icd_mod._search_dataset(icd10_source, query, "icd10"))
         if dataset_type in {"icd9cm3", "all"}:
-            raw_results.extend(icd_mod._search_dataset(icd_mod._icd9cm3_data, query, "icd9cm3"))
+            literal_results.extend(icd_mod._search_dataset(icd_mod._icd9cm3_data, query, "icd9cm3"))
+
+        semantic_results: List[Dict[str, Any]] = []
+        if dataset_type in {"icd10", "all"} and not _is_icd_code_query(query):
+            semantic_results, semantic_warnings = _semantic_icd10_results(query, version=version, limit=limit)
+            warnings.extend(semantic_warnings)
+
+        raw_results = (
+            literal_results + semantic_results
+            if _is_icd_code_query(query)
+            else semantic_results + literal_results
+        )
     except Exception as exc:
         return [], [f"本地 ICD 编码库检索失败: {type(exc).__name__}"]
 

@@ -313,6 +313,41 @@ class TestFrontPageExtractionService:
         assert isinstance(other_icds, list)
         assert len(other_icds) == len(others)
 
+    def test_normalize_diagnoses_uses_only_discharge_record_diagnosis_block(self):
+        """粘贴病历生成首页时，诊断只来自出院记录里的出院诊断段落。"""
+        service = FrontPageExtractionService()
+        medical_text = """
+【入院记录】
+入院诊断：急性胃炎；高血压。
+
+【病程记录】
+患者治疗过程中曾出现低钾血症，后复查恢复。
+
+【出院记录】
+诊疗经过：患者恢复可，办理出院。
+出院记录诊断
+诊断类型: 出院诊断
+主诊断: 胆囊结石伴慢性胆囊炎急性发作
+其他诊断: 十二指肠憩室；胆总管结石
+出院医嘱：清淡饮食。
+"""
+        llm_diagnoses = {
+            "discharge_main_diagnosis_text": "急性胃炎",
+            "discharge_main_icd": "K29.100",
+            "discharge_other_diagnoses_texts": ["高血压", "低钾血症", "胆总管结石"],
+            "discharge_other_icds": ["I10.x00x002", "E87.600", "K80.500"],
+        }
+
+        normalized = service._normalize_diagnoses_structure(medical_text, llm_diagnoses)
+
+        assert normalized["discharge_main_diagnosis_text"] == "胆囊结石伴慢性胆囊炎急性发作"
+        assert normalized["discharge_other_diagnoses_texts"] == ["十二指肠憩室", "胆总管结石"]
+        assert normalized["discharge_main_icd"] is None
+        assert normalized["discharge_other_icds"] == [None, None]
+        assert "急性胃炎" not in normalized["discharge_other_diagnoses_texts"]
+        assert "高血压" not in normalized["discharge_other_diagnoses_texts"]
+        assert "低钾血症" not in normalized["discharge_other_diagnoses_texts"]
+
     def test_extract_discharge_diagnoses_prefers_last_inline_section(self):
         """出院记录内句中出院诊断应优先于入院记录引用的外院诊断。"""
         service = FrontPageExtractionService()
@@ -535,8 +570,11 @@ class TestFrontPageExtractionService:
         """单次 LLM 审核应同时返回 main_diagnosis_llm 与 coding_audit_llm。"""
         service = FrontPageExtractionService()
         service._use_llm = True
+        seen_max_tokens = None
 
         async def _fake_extract_json(prompt: str, max_tokens: int = None):
+            nonlocal seen_max_tokens
+            seen_max_tokens = max_tokens
             if "一次完成“主诊断推荐解释 + 编码审核风险识别”" in prompt:
                 return {
                     "main_diagnosis_llm": {
@@ -598,6 +636,7 @@ class TestFrontPageExtractionService:
         assert isinstance(merged, dict)
         assert isinstance(merged.get("main_diagnosis_llm"), dict)
         assert isinstance(merged.get("coding_audit_llm"), dict)
+        assert seen_max_tokens == 4000
         assert merged["main_diagnosis_llm"]["llm_recommended_main_diagnosis"] == "冠状动脉粥样硬化性心脏病"
         assert merged["coding_audit_llm"]["counts"]["diagnosis_missing"] == 1
 
@@ -977,6 +1016,103 @@ class TestFrontPageExtractionIntegration:
         async for _event_name, _payload in service.extract_from_text_stream(medical_text):
             pass
         assert service._build_main_and_audit_llm_evidence.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_stream_locked_diagnosis_still_builds_llm_evidence(
+        self,
+        monkeypatch,
+    ):
+        """正式生成直读 diagnosis 表时，诊断名称锁定但仍应生成 LLM 证据链。"""
+
+        async def _fake_prefill_from_cdm(visit_id: str):
+            return {
+                "basic_info": {"patient_name": "测试患者"},
+                "hospitalization": {
+                    "hospital_name": "泸县人民医院",
+                    "admission_datetime": "2026-04-01 08:00:00",
+                },
+                "diagnoses": {
+                    "_diagnosis_source": "diagnosis_table",
+                    "discharge_main_diagnosis_text": "胆囊结石伴慢性胆囊炎急性发作",
+                    "discharge_other_diagnoses_texts": ["低钾血症"],
+                    "discharge_main_icd": None,
+                    "discharge_other_icds": [None],
+                },
+                "procedures": {},
+                "other_medical_info": {},
+                "staff": {},
+                "costs": {"total_cost": None, "self_paid": None, "categories": {}},
+                "evidence": {},
+                "confidence": {},
+            }
+
+        async def _fake_get_llm_context_text(visit_id: str):
+            return """
+出院记录诊断
+诊断类型: 出院诊断
+主诊断: 胆囊结石伴慢性胆囊炎急性发作
+其他诊断: 低钾血症
+诊疗经过: 完善术前准备后行腹腔镜下胆囊切除术。
+"""
+
+        async def _fake_extract_json(prompt: str, max_tokens: int = None):
+            if "main_procedure_text" in prompt:
+                return {"main_procedure_text": "腹腔镜下胆囊切除术"}
+            return {}
+
+        monkeypatch.setattr(
+            "app.services.local_icd_service.resolve_diagnosis_codes",
+            lambda diagnoses: diagnoses,
+        )
+        monkeypatch.setattr(
+            "app.services.local_icd_service.resolve_procedure_codes",
+            lambda procedures: procedures,
+        )
+
+        service = FrontPageExtractionService()
+        service._use_llm = True
+        service._prefill_from_cdm = _fake_prefill_from_cdm
+        service._get_llm_context_text = _fake_get_llm_context_text
+        service._extract_json = _fake_extract_json
+        service._infer_admission_conditions = AsyncMock(side_effect=lambda _text, diagnoses: diagnoses)
+        service._build_main_and_audit_llm_evidence = AsyncMock(
+            return_value={
+                "main_diagnosis_llm": {
+                    "clinician_main_diagnosis": "胆囊结石伴慢性胆囊炎急性发作",
+                    "llm_recommended_main_diagnosis": "胆囊结石伴慢性胆囊炎急性发作",
+                    "is_consistent_with_clinician": True,
+                    "confidence": 0.9,
+                    "conclusion": "主诊断与病历证据一致。",
+                    "key_evidence": [],
+                    "reasoning_summary": "依据出院诊断和手术经过。",
+                },
+                "coding_audit_llm": {
+                    "version": "v1",
+                    "summary": "未识别到高风险审核项。",
+                    "confidence": 0.86,
+                    "counts": {
+                        "diagnosis_missing": 0,
+                        "procedure_missing": 0,
+                        "diagnosis_inappropriate": 0,
+                        "diagnosis_insufficient_evidence": 0,
+                    },
+                    "findings": [],
+                },
+            }
+        )
+
+        done_payload = None
+        async for event_name, payload in service.extract_from_text_stream(visit_id="2327440", medical_text=""):
+            if event_name == "done":
+                done_payload = payload
+
+        assert service._build_main_and_audit_llm_evidence.await_count == 1
+        evidence = (done_payload or {}).get("frontpage", {}).get("evidence", {})
+        assert isinstance(evidence.get("main_diagnosis_llm"), dict)
+        assert (
+            evidence["main_diagnosis_llm"].get("llm_recommended_main_diagnosis")
+            == "胆囊结石伴慢性胆囊炎急性发作"
+        )
 
 
 # ============================================================================
