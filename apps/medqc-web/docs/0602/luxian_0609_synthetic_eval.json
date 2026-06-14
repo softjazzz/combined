@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-14T14:14:15",
+  "generated_at": "2026-06-14T16:25:12",
   "mode": "trigger_gate",
   "synthetic_cases_path": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0602\\luxian_0609_synthetic_cases_v1.json",
   "runtime_dir": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc",
@@ -8,13 +8,13 @@
     "golden_case_count": 35,
     "visit_with_report_count": 10,
     "evaluated_case_count": 35,
-    "pass_count": 24,
-    "pass_rate": 0.6857,
-    "evaluated_pass_rate": 0.6857,
+    "pass_count": 35,
+    "pass_rate": 1.0,
+    "evaluated_pass_rate": 1.0,
     "status_reversal_count": 0,
     "false_positive_count": 0,
     "false_negative_count": 0,
-    "evidence_error_count": 10,
+    "evidence_error_count": 0,
     "missing_result_count": 0,
     "expected_status_counts": {
       "non_compliant": 27,
@@ -22,15 +22,12 @@
       "not_applicable": 2
     },
     "actual_status_counts": {
-      "non_compliant": 26,
+      "non_compliant": 27,
       "compliant": 6,
-      "not_applicable": 2,
-      "uncertain": 1
+      "not_applicable": 2
     },
     "verdict_counts": {
-      "pass": 24,
-      "evidence_error": 10,
-      "unexpected_gap": 1
+      "pass": 35
     },
     "report_error_count": 0
   },
@@ -40,11 +37,10 @@
       "visit_id": "LX0609_SYN_001",
       "case_count": 4,
       "has_report": true,
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070331_LX0609_SYN_001.json",
-      "pass_count": 3,
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155257_LX0609_SYN_001.json",
+      "pass_count": 4,
       "verdict_counts": {
-        "pass": 3,
-        "evidence_error": 1
+        "pass": 4
       },
       "actual_status_counts": {
         "non_compliant": 4
@@ -54,7 +50,7 @@
       "visit_id": "LX0609_SYN_002",
       "case_count": 4,
       "has_report": true,
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070316_LX0609_SYN_002.json",
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155451_LX0609_SYN_002.json",
       "pass_count": 4,
       "verdict_counts": {
         "pass": 4
@@ -67,7 +63,7 @@
       "visit_id": "LX0609_SYN_003",
       "case_count": 3,
       "has_report": true,
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070323_LX0609_SYN_003.json",
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155717_LX0609_SYN_003.json",
       "pass_count": 3,
       "verdict_counts": {
         "pass": 3
@@ -81,7 +77,7 @@
       "visit_id": "LX0609_SYN_004",
       "case_count": 3,
       "has_report": true,
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070323_LX0609_SYN_004.json",
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155906_LX0609_SYN_004.json",
       "pass_count": 3,
       "verdict_counts": {
         "pass": 3
@@ -95,11 +91,10 @@
       "visit_id": "LX0609_SYN_005",
       "case_count": 3,
       "has_report": true,
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140150_LX0609_SYN_005.json",
-      "pass_count": 2,
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160046_LX0609_SYN_005.json",
+      "pass_count": 3,
       "verdict_counts": {
-        "pass": 2,
-        "evidence_error": 1
+        "pass": 3
       },
       "actual_status_counts": {
         "non_compliant": 3
@@ -109,11 +104,10 @@
       "visit_id": "LX0609_SYN_006",
       "case_count": 3,
       "has_report": true,
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-065224_LX0609_SYN_006.json",
-      "pass_count": 1,
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160243_LX0609_SYN_006.json",
+      "pass_count": 3,
       "verdict_counts": {
-        "evidence_error": 2,
-        "pass": 1
+        "pass": 3
       },
       "actual_status_counts": {
         "non_compliant": 3
@@ -123,10 +117,10 @@
       "visit_id": "LX0609_SYN_007",
       "case_count": 3,
       "has_report": true,
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-065428_LX0609_SYN_007.json",
-      "pass_count": 0,
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-162207_LX0609_SYN_007.json",
+      "pass_count": 3,
       "verdict_counts": {
-        "evidence_error": 3
+        "pass": 3
       },
       "actual_status_counts": {
         "non_compliant": 3
@@ -136,11 +130,10 @@
       "visit_id": "LX0609_SYN_008",
       "case_count": 4,
       "has_report": true,
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140505_LX0609_SYN_008.json",
-      "pass_count": 2,
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160733_LX0609_SYN_008.json",
+      "pass_count": 4,
       "verdict_counts": {
-        "evidence_error": 2,
-        "pass": 2
+        "pass": 4
       },
       "actual_status_counts": {
         "non_compliant": 4
@@ -150,26 +143,23 @@
       "visit_id": "LX0609_SYN_009",
       "case_count": 4,
       "has_report": true,
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140822_LX0609_SYN_009.json",
-      "pass_count": 3,
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-161019_LX0609_SYN_009.json",
+      "pass_count": 4,
       "verdict_counts": {
-        "unexpected_gap": 1,
-        "pass": 3
+        "pass": 4
       },
       "actual_status_counts": {
-        "uncertain": 1,
-        "non_compliant": 3
+        "non_compliant": 4
       }
     },
     {
       "visit_id": "LX0609_SYN_010",
       "case_count": 4,
       "has_report": true,
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-141153_LX0609_SYN_010.json",
-      "pass_count": 3,
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-162439_LX0609_SYN_010.json",
+      "pass_count": 4,
       "verdict_counts": {
-        "pass": 3,
-        "evidence_error": 1
+        "pass": 4
       },
       "actual_status_counts": {
         "non_compliant": 4
@@ -212,9 +202,9 @@
     {
       "qc_point_id": "LX0609-003",
       "case_count": 1,
-      "pass_count": 0,
+      "pass_count": 1,
       "verdict_counts": {
-        "evidence_error": 1
+        "pass": 1
       },
       "expected_status_counts": {
         "non_compliant": 1
@@ -240,10 +230,9 @@
     {
       "qc_point_id": "LX0609-005",
       "case_count": 2,
-      "pass_count": 1,
+      "pass_count": 2,
       "verdict_counts": {
-        "evidence_error": 1,
-        "pass": 1
+        "pass": 2
       },
       "expected_status_counts": {
         "non_compliant": 1,
@@ -343,23 +332,23 @@
     {
       "qc_point_id": "LX0609-013",
       "case_count": 1,
-      "pass_count": 0,
+      "pass_count": 1,
       "verdict_counts": {
-        "unexpected_gap": 1
+        "pass": 1
       },
       "expected_status_counts": {
         "non_compliant": 1
       },
       "actual_status_counts": {
-        "uncertain": 1
+        "non_compliant": 1
       }
     },
     {
       "qc_point_id": "LX0609-014",
       "case_count": 1,
-      "pass_count": 0,
+      "pass_count": 1,
       "verdict_counts": {
-        "evidence_error": 1
+        "pass": 1
       },
       "expected_status_counts": {
         "non_compliant": 1
@@ -371,9 +360,9 @@
     {
       "qc_point_id": "LX0609-016",
       "case_count": 1,
-      "pass_count": 0,
+      "pass_count": 1,
       "verdict_counts": {
-        "evidence_error": 1
+        "pass": 1
       },
       "expected_status_counts": {
         "non_compliant": 1
@@ -385,9 +374,9 @@
     {
       "qc_point_id": "LX0609-017",
       "case_count": 1,
-      "pass_count": 0,
+      "pass_count": 1,
       "verdict_counts": {
-        "evidence_error": 1
+        "pass": 1
       },
       "expected_status_counts": {
         "non_compliant": 1
@@ -427,9 +416,9 @@
     {
       "qc_point_id": "LX0609-020",
       "case_count": 1,
-      "pass_count": 0,
+      "pass_count": 1,
       "verdict_counts": {
-        "evidence_error": 1
+        "pass": 1
       },
       "expected_status_counts": {
         "non_compliant": 1
@@ -441,9 +430,9 @@
     {
       "qc_point_id": "LX0609-021",
       "case_count": 1,
-      "pass_count": 0,
+      "pass_count": 1,
       "verdict_counts": {
-        "evidence_error": 1
+        "pass": 1
       },
       "expected_status_counts": {
         "non_compliant": 1
@@ -455,9 +444,9 @@
     {
       "qc_point_id": "LX0609-022",
       "case_count": 1,
-      "pass_count": 0,
+      "pass_count": 1,
       "verdict_counts": {
-        "evidence_error": 1
+        "pass": 1
       },
       "expected_status_counts": {
         "non_compliant": 1
@@ -497,9 +486,9 @@
     {
       "qc_point_id": "LX0609-038",
       "case_count": 1,
-      "pass_count": 0,
+      "pass_count": 1,
       "verdict_counts": {
-        "evidence_error": 1
+        "pass": 1
       },
       "expected_status_counts": {
         "non_compliant": 1
@@ -553,9 +542,9 @@
     {
       "qc_point_id": "LX0609-043",
       "case_count": 1,
-      "pass_count": 0,
+      "pass_count": 1,
       "verdict_counts": {
-        "evidence_error": 1
+        "pass": 1
       },
       "expected_status_counts": {
         "non_compliant": 1
@@ -623,7 +612,7 @@
         "入院记录提交时间为2026-06-02 10:30，超过24小时"
       ],
       "evidence_expectation": "入院时间为2026-06-01 08:00；入院记录提交时间为2026-06-02 10:30，超过24小时；2026-06-02 10:30",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070331_LX0609_SYN_001.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155257_LX0609_SYN_001.json"
     },
     {
       "visit_id": "LX0609_SYN_001",
@@ -651,7 +640,7 @@
       "human_reason": "首次病程记录未在入院后8小时内完成。",
       "trigger_facts": ["首次病程记录时间为2026-06-01 18:30", "距离入院10.5小时"],
       "evidence_expectation": "首次病程记录时间为2026-06-01 18:30；距离入院10.5小时；2026-06-01 18:30",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070331_LX0609_SYN_001.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155257_LX0609_SYN_001.json"
     },
     {
       "visit_id": "LX0609_SYN_001",
@@ -664,22 +653,22 @@
       "actual_hit": true,
       "status_match": true,
       "hit_match": true,
-      "verdict": "evidence_error",
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
-      "evidence_error": true,
-      "evidence_note": "命中结果未包含 golden 关键证据片段",
-      "quote_hit_count": 0,
-      "quote_hits": [],
-      "confidence": 0.9,
+      "evidence_error": false,
+      "evidence_note": "",
+      "quote_hit_count": 1,
+      "quote_hits": ["主任医师查房记录"],
+      "confidence": 0.95,
       "source": "trigger_gate_baseline",
-      "findings": "主治医师首次查房记录缺失，无法确认是否在48小时内完成。",
-      "evidence": "【当前文书】合成病案首页：时限缺陷一，主要诊断：脑梗死",
+      "findings": "48小时内缺少主治医师首次查房记录。",
+      "evidence": "入院时间：2026-06-01 08:00；48小时内未见主治医师首次查房记录；主任医师查房记录仅可作为高级职称查房依据，不等同于主治医师首次查房记录；判定结论：入院后48小时内无主治医师首次查房记录",
       "human_reason": "48小时内缺少主治医师首次查房记录。",
       "trigger_facts": ["入院后48小时内未见主治医师首次查房记录"],
       "evidence_expectation": "入院后48小时内未见主治医师首次查房记录；主任医师查房记录",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070331_LX0609_SYN_001.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155257_LX0609_SYN_001.json"
     },
     {
       "visit_id": "LX0609_SYN_001",
@@ -707,7 +696,7 @@
       "human_reason": "72小时内未完成高级职称医师首次查房记录。",
       "trigger_facts": ["主任医师查房记录在入院后77.5小时出现"],
       "evidence_expectation": "主任医师查房记录在入院后77.5小时出现；2026-06-04 13:30",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070331_LX0609_SYN_001.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155257_LX0609_SYN_001.json"
     },
     {
       "visit_id": "LX0609_SYN_002",
@@ -735,7 +724,7 @@
       "human_reason": "入院记录时限合规。",
       "trigger_facts": ["入院记录在入院后3小时完成"],
       "evidence_expectation": "入院记录在入院后3小时完成；2026-06-02 12:00",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070316_LX0609_SYN_002.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155451_LX0609_SYN_002.json"
     },
     {
       "visit_id": "LX0609_SYN_002",
@@ -763,7 +752,7 @@
       "human_reason": "首次病程时限合规。",
       "trigger_facts": ["首次病程记录在入院后2.5小时完成"],
       "evidence_expectation": "首次病程记录在入院后2.5小时完成；2026-06-02 11:30",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070316_LX0609_SYN_002.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155451_LX0609_SYN_002.json"
     },
     {
       "visit_id": "LX0609_SYN_002",
@@ -791,7 +780,7 @@
       "human_reason": "48小时主治医师查房合规。",
       "trigger_facts": ["48小时内有主治医师查房记录"],
       "evidence_expectation": "48小时内有主治医师查房记录；主治医师查房记录",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070316_LX0609_SYN_002.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155451_LX0609_SYN_002.json"
     },
     {
       "visit_id": "LX0609_SYN_002",
@@ -819,7 +808,7 @@
       "human_reason": "72小时高级职称查房合规。",
       "trigger_facts": ["72小时内有主任医师查房记录"],
       "evidence_expectation": "72小时内有主任医师查房记录；主任医师查房记录",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070316_LX0609_SYN_002.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155451_LX0609_SYN_002.json"
     },
     {
       "visit_id": "LX0609_SYN_003",
@@ -847,7 +836,7 @@
       "human_reason": "病重患者2天内缺少查房病程记录。",
       "trigger_facts": ["2026-06-09 08:20下达病重医嘱", "2026-06-10、2026-06-11未见查房病程记录"],
       "evidence_expectation": "2026-06-09 08:20下达病重医嘱；2026-06-10、2026-06-11未见查房病程记录；病重；2026-06-12 09:30",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070323_LX0609_SYN_003.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155717_LX0609_SYN_003.json"
     },
     {
       "visit_id": "LX0609_SYN_003",
@@ -875,7 +864,7 @@
       "human_reason": "该样本只有病重医嘱，不适用于病危每日记录规则。",
       "trigger_facts": ["未下达病危医嘱"],
       "evidence_expectation": "未下达病危医嘱；病重",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070323_LX0609_SYN_003.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155717_LX0609_SYN_003.json"
     },
     {
       "visit_id": "LX0609_SYN_003",
@@ -903,7 +892,7 @@
       "human_reason": "病情稳定3天查房规则不适用。",
       "trigger_facts": ["患者存在病重医嘱，不属于病情稳定患者"],
       "evidence_expectation": "患者存在病重医嘱，不属于病情稳定患者；下达病重医嘱",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070323_LX0609_SYN_003.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155717_LX0609_SYN_003.json"
     },
     {
       "visit_id": "LX0609_SYN_004",
@@ -931,7 +920,7 @@
       "human_reason": "抢救记录超过抢救结束后6小时完成。",
       "trigger_facts": ["抢救结束时间2026-06-05 12:00", "抢救记录记录时间2026-06-05 20:30"],
       "evidence_expectation": "抢救结束时间2026-06-05 12:00；抢救记录记录时间2026-06-05 20:30；抢救结束时间：2026-06-05 12:00；2026-06-05 20:30",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070323_LX0609_SYN_004.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155906_LX0609_SYN_004.json"
     },
     {
       "visit_id": "LX0609_SYN_004",
@@ -959,7 +948,7 @@
       "human_reason": "入院记录时限合规。",
       "trigger_facts": ["入院记录入院后2小时完成"],
       "evidence_expectation": "入院记录入院后2小时完成；2026-06-05 08:30",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070323_LX0609_SYN_004.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155906_LX0609_SYN_004.json"
     },
     {
       "visit_id": "LX0609_SYN_004",
@@ -987,7 +976,7 @@
       "human_reason": "首次病程时限合规。",
       "trigger_facts": ["首次病程入院后2小时完成"],
       "evidence_expectation": "首次病程入院后2小时完成；2026-06-05 08:30",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-070323_LX0609_SYN_004.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-155906_LX0609_SYN_004.json"
     },
     {
       "visit_id": "LX0609_SYN_005",
@@ -1008,14 +997,14 @@
       "evidence_note": "",
       "quote_hit_count": 1,
       "quote_hits": ["已完善腰椎MRI检查"],
-      "confidence": 0.95,
+      "confidence": 0.92,
       "source": "trigger_gate_baseline",
       "findings": "存在 CT/MRI 阳性检查结果，但病程记录仅写已完善检查和继续对症治疗，未记录具体影像结论及其临床意义。",
       "evidence": "腰椎MRI提示 L4/5椎间盘突出并右侧神经根受压；病程记录仅写“已完善腰椎MRI检查，继续予止痛、营养神经治疗”。",
       "human_reason": "MRI检查前缺少有针对性的病程记录说明。",
       "trigger_facts": ["行腰椎MRI检查前未见说明检查必要性的病程记录"],
       "evidence_expectation": "行腰椎MRI检查前未见说明检查必要性的病程记录；腰椎MRI报告；已完善腰椎MRI检查",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140150_LX0609_SYN_005.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160046_LX0609_SYN_005.json"
     },
     {
       "visit_id": "LX0609_SYN_005",
@@ -1036,7 +1025,7 @@
       "evidence_note": "",
       "quote_hit_count": 2,
       "quote_hits": ["L4/5椎间盘突出并右侧神经根受压", "继续予止痛、营养神经治疗"],
-      "confidence": 0.95,
+      "confidence": 0.92,
       "source": "trigger_gate_baseline",
       "findings": "存在 CT/MRI 阳性检查结果，但病程记录仅写已完善检查和继续对症治疗，未记录具体影像结论及其临床意义。",
       "evidence": "腰椎MRI提示 L4/5椎间盘突出并右侧神经根受压；病程记录仅写“已完善腰椎MRI检查，继续予止痛、营养神经治疗”。",
@@ -1046,7 +1035,7 @@
         "报告后24小时内病程未分析阳性结果与症状、诊断或治疗方案关系"
       ],
       "evidence_expectation": "2026-06-03 14:20腰椎MRI阳性报告；报告后24小时内病程未分析阳性结果与症状、诊断或治疗方案关系；L4/5椎间盘突出并右侧神经根受压；继续予止痛、营养神经治疗",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140150_LX0609_SYN_005.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160046_LX0609_SYN_005.json"
     },
     {
       "visit_id": "LX0609_SYN_005",
@@ -1059,25 +1048,25 @@
       "actual_hit": true,
       "status_match": true,
       "hit_match": true,
-      "verdict": "evidence_error",
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
-      "evidence_error": true,
-      "evidence_note": "命中结果未包含 golden 关键证据片段",
-      "quote_hit_count": 0,
-      "quote_hits": [],
-      "confidence": 0.9,
+      "evidence_error": false,
+      "evidence_note": "",
+      "quote_hit_count": 2,
+      "quote_hits": ["大肠埃希菌生长", "尿频较前减轻"],
+      "confidence": 0.95,
       "source": "trigger_gate_baseline",
-      "findings": "尿培养阳性结果未在病程记录中进行分析或处理描述。",
-      "evidence": "【当前文书】labtest_item_report: 尿培养报告",
+      "findings": "细菌培养阳性结果未在病程中及时分析。",
+      "evidence": "来源数据表：labtest_item_report；尿培养报告：2026-06-04 09:10尿培养阳性；培养结果：大肠埃希菌生长；24小时内病程仅记录：尿频较前减轻；实际缺失：病程记录未分析阳性菌、药敏结果与抗感染方案调整关系；判定结论：细菌培养阳性结果24小时内未在病程中分析",
       "human_reason": "细菌培养阳性结果未在病程中及时分析。",
       "trigger_facts": [
         "2026-06-04 09:10尿培养阳性",
         "24小时内病程未针对阳性菌和药敏调整治疗进行分析"
       ],
       "evidence_expectation": "2026-06-04 09:10尿培养阳性；24小时内病程未针对阳性菌和药敏调整治疗进行分析；大肠埃希菌生长；尿频较前减轻",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140150_LX0609_SYN_005.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160046_LX0609_SYN_005.json"
     },
     {
       "visit_id": "LX0609_SYN_006",
@@ -1090,22 +1079,25 @@
       "actual_hit": true,
       "status_match": true,
       "hit_match": true,
-      "verdict": "evidence_error",
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
-      "evidence_error": true,
-      "evidence_note": "命中结果未包含 golden 关键证据片段",
-      "quote_hit_count": 0,
-      "quote_hits": [],
+      "evidence_error": false,
+      "evidence_note": "",
+      "quote_hit_count": 2,
+      "quote_hits": [
+        "患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。",
+        "患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。"
+      ],
       "confidence": 0.95,
       "source": "trigger_gate_baseline",
-      "findings": "首次病程记录病例特点与入院记录、现病史内容完全相同，缺乏独立提炼。",
-      "evidence": "【当前文书】病例特点：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案",
+      "findings": "入院记录与首次病程记录存在核心段落高度重复，病例特点缺乏独立提炼。",
+      "evidence": "对比文书一：入院记录；对比文书二：首次病程记录；重复片段：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；判定结论：病例特点与入院记录/现病史高度重复",
       "human_reason": "多份病程记录核心描述高度重复，存在复制病历风险。",
       "trigger_facts": ["首次病程与连续日常病程存在高度重复段落"],
       "evidence_expectation": "首次病程与连续日常病程存在高度重复段落；患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-065224_LX0609_SYN_006.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160243_LX0609_SYN_006.json"
     },
     {
       "visit_id": "LX0609_SYN_006",
@@ -1118,22 +1110,22 @@
       "actual_hit": true,
       "status_match": true,
       "hit_match": true,
-      "verdict": "evidence_error",
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
-      "evidence_error": true,
-      "evidence_note": "命中结果未包含 golden 关键证据片段",
-      "quote_hit_count": 0,
-      "quote_hits": [],
+      "evidence_error": false,
+      "evidence_note": "",
+      "quote_hit_count": 2,
+      "quote_hits": ["不适3天", "急性阑尾炎"],
       "confidence": 0.98,
       "source": "trigger_gate_baseline",
-      "findings": "多次病程记录内容高度重复且无新增分析或计划。",
-      "evidence": "【当前文书】病例特点：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案",
+      "findings": "2次以上病程记录高度重复，缺少新增病情分析。",
+      "evidence": "对比文书一：日常病程记录；对比文书二：日常病程记录；重复片段：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；主诉：不适3天；第一诊断：急性阑尾炎；判定结论：多次病程记录高度重复，且主诉过于笼统，不能充分支撑第一诊断",
       "human_reason": "主诉过于笼统，无法支撑第一诊断。",
       "trigger_facts": ["主诉为“不适3天”，不能导出第一诊断急性阑尾炎"],
       "evidence_expectation": "主诉为“不适3天”，不能导出第一诊断急性阑尾炎；不适3天；急性阑尾炎",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-065224_LX0609_SYN_006.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160243_LX0609_SYN_006.json"
     },
     {
       "visit_id": "LX0609_SYN_006",
@@ -1156,12 +1148,12 @@
       "quote_hits": ["第一诊断依据记录不足"],
       "confidence": 0.98,
       "source": "trigger_gate_baseline",
-      "findings": "主诉‘不适3天’过于笼统，无法导出第一诊断急性阑尾炎。",
+      "findings": "主诉“不适3天”过于笼统，无法导出第一诊断急性阑尾炎。",
       "evidence": "【当前文书】拟诊讨论：患者主诉较笼统，第一诊断依据记录不足",
       "human_reason": "首次病程诊断分析不足。",
       "trigger_facts": ["首次病程拟诊讨论未充分说明第一诊断依据"],
       "evidence_expectation": "首次病程拟诊讨论未充分说明第一诊断依据；第一诊断依据记录不足",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-065224_LX0609_SYN_006.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160243_LX0609_SYN_006.json"
     },
     {
       "visit_id": "LX0609_SYN_007",
@@ -1174,22 +1166,22 @@
       "actual_hit": true,
       "status_match": true,
       "hit_match": true,
-      "verdict": "evidence_error",
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
-      "evidence_error": true,
-      "evidence_note": "命中结果未包含 golden 关键证据片段",
-      "quote_hit_count": 0,
-      "quote_hits": [],
+      "evidence_error": false,
+      "evidence_note": "",
+      "quote_hit_count": 1,
+      "quote_hits": ["会诊目的：请会诊"],
       "confidence": 0.95,
       "source": "trigger_gate_baseline",
-      "findings": "会诊申请记录中未体现病程记录对会诊意见的采纳及执行情况。",
-      "evidence": "【当前文书】建议完善相关检查，继续目前治疗，必要时调整用药",
+      "findings": "有会诊意见但后续病程未记录会诊意见执行情况。",
+      "evidence": "来源文书：会诊记录单；后续核对文书：病程记录；会诊申请事实：会诊目的：请会诊；缺失要素：会诊目的仅写“请会诊”；会诊意见片段：建议完善相关检查，继续目前治疗，必要时调整用药；实际缺失：病程记录未记录会诊意见执行情况；判定结论：有会诊记录单但无请会诊执行记录",
       "human_reason": "会诊申请未明确会诊目的。",
       "trigger_facts": ["会诊目的仅写“请会诊”"],
       "evidence_expectation": "会诊目的仅写“请会诊”；会诊目的：请会诊",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-065428_LX0609_SYN_007.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-162207_LX0609_SYN_007.json"
     },
     {
       "visit_id": "LX0609_SYN_007",
@@ -1202,22 +1194,22 @@
       "actual_hit": true,
       "status_match": true,
       "hit_match": true,
-      "verdict": "evidence_error",
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
-      "evidence_error": true,
-      "evidence_note": "命中结果未包含 golden 关键证据片段",
-      "quote_hit_count": 0,
-      "quote_hits": [],
+      "evidence_error": false,
+      "evidence_note": "",
+      "quote_hit_count": 1,
+      "quote_hits": ["建议完善相关检查，继续目前治疗"],
       "confidence": 0.95,
       "source": "trigger_gate_baseline",
-      "findings": "会诊申请记录未简要载明患者病情、诊疗情况、理由和目的，且无医师签名。",
-      "evidence": "【当前文书】会诊目的：请会诊",
+      "findings": "会诊申请单会诊目的不明确。",
+      "evidence": "来源文书：会诊申请单；会诊目的：请会诊；会诊意见笼统，缺少针对性诊疗建议；会诊意见片段：建议完善相关检查，继续目前治疗；缺失要素：目的不明确，未说明需解决的具体诊疗问题；附带缺失：无医师签名；判定结论：会诊申请目的不明确",
       "human_reason": "会诊意见过于笼统，不具备可执行性。",
       "trigger_facts": ["会诊意见笼统，缺少针对性诊疗建议"],
       "evidence_expectation": "会诊意见笼统，缺少针对性诊疗建议；建议完善相关检查，继续目前治疗",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-065428_LX0609_SYN_007.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-162207_LX0609_SYN_007.json"
     },
     {
       "visit_id": "LX0609_SYN_007",
@@ -1230,22 +1222,22 @@
       "actual_hit": true,
       "status_match": true,
       "hit_match": true,
-      "verdict": "evidence_error",
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
-      "evidence_error": true,
-      "evidence_note": "命中结果未包含 golden 关键证据片段",
-      "quote_hit_count": 0,
-      "quote_hits": [],
-      "confidence": 0.95,
+      "evidence_error": false,
+      "evidence_note": "",
+      "quote_hit_count": 1,
+      "quote_hits": ["建议完善相关检查，继续目前治疗"],
+      "confidence": 1.0,
       "source": "trigger_gate_baseline",
-      "findings": "会诊记录缺失科别、具体时间及会诊医师签名等关键要素。",
-      "evidence": "【当前文书】会诊医师：会诊医师A",
+      "findings": "会诊意见泛化，不具备可执行性，不应仅按缺少科别或签名解释。",
+      "evidence": "来源文书：会诊记录单；会诊意见：建议完善相关检查，继续目前治疗；泛化用语：必要时调整用药；实际问题：意见不明确/不具备可执行性；判定结论：会诊记录单会诊意见不明确",
       "human_reason": "病程记录未说明会诊意见执行情况。",
       "trigger_facts": ["后续病程照抄会诊意见，未记录执行情况"],
       "evidence_expectation": "后续病程照抄会诊意见，未记录执行情况；建议完善相关检查，继续目前治疗",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-065428_LX0609_SYN_007.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-162207_LX0609_SYN_007.json"
     },
     {
       "visit_id": "LX0609_SYN_008",
@@ -1258,22 +1250,22 @@
       "actual_hit": true,
       "status_match": true,
       "hit_match": true,
-      "verdict": "evidence_error",
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
-      "evidence_error": true,
-      "evidence_note": "命中结果未包含 golden 关键证据片段",
-      "quote_hit_count": 0,
-      "quote_hits": [],
+      "evidence_error": false,
+      "evidence_note": "",
+      "quote_hit_count": 1,
+      "quote_hits": ["2026-06-04 14:00"],
       "confidence": 1.0,
       "source": "trigger_gate_baseline",
       "findings": "手术记录完成时间距手术结束超过24小时。",
-      "evidence": "【当前文书】记录时间：2026-06-01 11:30",
+      "evidence": "来源文书：手术记录；手术结束时间：2026-06-03 10:40；手术记录提交时间：2026-06-04 14:00；记录时间：2026-06-01 11:30；判定结论：超过术后24小时完成手术记录",
       "human_reason": "手术记录超过术后24小时完成。",
       "trigger_facts": ["手术结束2026-06-03 10:40", "手术记录提交2026-06-04 14:00"],
       "evidence_expectation": "手术结束2026-06-03 10:40；手术记录提交2026-06-04 14:00；2026-06-04 14:00",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140505_LX0609_SYN_008.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160733_LX0609_SYN_008.json"
     },
     {
       "visit_id": "LX0609_SYN_008",
@@ -1301,7 +1293,7 @@
       "human_reason": "术前讨论内容不完整。",
       "trigger_facts": ["术前讨论未记录替代方案、主要风险和参会人员具体意见"],
       "evidence_expectation": "术前讨论未记录替代方案、主要风险和参会人员具体意见；未记录替代方案、主要风险",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140505_LX0609_SYN_008.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160733_LX0609_SYN_008.json"
     },
     {
       "visit_id": "LX0609_SYN_008",
@@ -1322,14 +1314,14 @@
       "evidence_note": "",
       "quote_hit_count": 1,
       "quote_hits": ["麻醉前核查项未签名"],
-      "confidence": 0.9,
+      "confidence": 1.0,
       "source": "trigger_gate_baseline",
       "findings": "手术安全核查记录不完整且关键项未签名。",
       "evidence": "麻醉前核查项未签名",
       "human_reason": "手术安全核查记录存在缺项。",
       "trigger_facts": ["手术安全核查记录不完整，麻醉前核查项未签名"],
       "evidence_expectation": "手术安全核查记录不完整，麻醉前核查项未签名；麻醉前核查项未签名",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140505_LX0609_SYN_008.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160733_LX0609_SYN_008.json"
     },
     {
       "visit_id": "LX0609_SYN_008",
@@ -1342,22 +1334,22 @@
       "actual_hit": true,
       "status_match": true,
       "hit_match": true,
-      "verdict": "evidence_error",
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
-      "evidence_error": true,
-      "evidence_note": "命中结果未包含 golden 关键证据片段",
-      "quote_hit_count": 0,
-      "quote_hits": [],
+      "evidence_error": false,
+      "evidence_note": "",
+      "quote_hit_count": 1,
+      "quote_hits": ["出室评分未填写"],
       "confidence": 1.0,
       "source": "trigger_gate_baseline",
-      "findings": "无麻醉同意书导致无法确认双方签名。",
-      "evidence": "【当前文书】合成病案首页：手术麻醉八，主要诊断：胆囊结石伴慢性胆囊炎急性发作",
+      "findings": "麻醉记录单存在，但麻醉方式、麻醉医师和出室评分等关键字段填写不完整。",
+      "evidence": "来源文书：麻醉记录；麻醉方式：全身麻醉；麻醉医师：合成麻醉医师；关键项缺失：出室评分未填写；判定结论：麻醉记录填写不完整",
       "human_reason": "麻醉记录填写不完整。",
       "trigger_facts": ["麻醉记录生命体征记录间断，出室评分未填写"],
       "evidence_expectation": "麻醉记录生命体征记录间断，出室评分未填写；出室评分未填写",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140505_LX0609_SYN_008.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-160733_LX0609_SYN_008.json"
     },
     {
       "visit_id": "LX0609_SYN_009",
@@ -1366,26 +1358,26 @@
       "case_type": "positive",
       "expected_status": "non_compliant",
       "expected_hit": true,
-      "actual_status": "uncertain",
-      "actual_hit": null,
-      "status_match": false,
-      "hit_match": false,
-      "verdict": "unexpected_gap",
+      "actual_status": "non_compliant",
+      "actual_hit": true,
+      "status_match": true,
+      "hit_match": true,
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
       "evidence_error": false,
       "evidence_note": "",
-      "quote_hit_count": 0,
-      "quote_hits": [],
-      "confidence": 0.8,
+      "quote_hit_count": 1,
+      "quote_hits": ["胃腺癌，中分化"],
+      "confidence": 0.95,
       "source": "trigger_gate_baseline",
-      "findings": "病理报告已出，但病程记录中未体现取材情况及结果分析。",
-      "evidence": "【当前文书】pathology_exam_master: P-LX0609-009 胃恶性肿瘤术后 腹腔镜远端胃癌根治术 胃远端及淋巴结 胃远端及淋巴结病理申请",
+      "findings": "病理报告已出，但手术记录/病程中未记录病理检查结果及分析。",
+      "evidence": "来源数据表：pathology_exam_report；病理报告：胃腺癌，中分化；标本/取材：胃远端及淋巴结；实际缺失：病程记录未体现取材情况及结果分析；判定结论：恶性肿瘤病理信息未充分进入病程/首页质控证据链",
       "human_reason": "恶性肿瘤病理信息未充分进入病程/首页质控证据链。",
       "trigger_facts": ["病理报告提示胃腺癌", "病程和首页未充分记录病理诊断分析"],
       "evidence_expectation": "病理报告提示胃腺癌；病程和首页未充分记录病理诊断分析；胃腺癌，中分化",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140822_LX0609_SYN_009.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-161019_LX0609_SYN_009.json"
     },
     {
       "visit_id": "LX0609_SYN_009",
@@ -1413,7 +1405,7 @@
       "human_reason": "恶性肿瘤手术记录未体现淋巴结清扫关键信息。",
       "trigger_facts": ["胃癌根治术记录未明确淋巴结清扫范围及送检组数"],
       "evidence_expectation": "胃癌根治术记录未明确淋巴结清扫范围及送检组数；未明确淋巴结清扫范围及送检组数",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140822_LX0609_SYN_009.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-161019_LX0609_SYN_009.json"
     },
     {
       "visit_id": "LX0609_SYN_009",
@@ -1434,14 +1426,14 @@
       "evidence_note": "",
       "quote_hit_count": 1,
       "quote_hits": ["未见MDT多学科讨论记录"],
-      "confidence": 0.98,
+      "confidence": 0.95,
       "source": "trigger_gate_baseline",
-      "findings": "四级手术术前讨论中明确未见MDT多学科讨论记录。",
+      "findings": "四级手术术前讨论缺失多学科讨论内容。",
       "evidence": "【当前文书】患者拟行四级手术腹腔镜远端胃癌根治术，未见MDT多学科讨论记录",
       "human_reason": "四级手术缺少MDT或高级别术前讨论支撑。",
       "trigger_facts": ["四级手术术前讨论未见MDT记录"],
       "evidence_expectation": "四级手术术前讨论未见MDT记录；未见MDT多学科讨论记录",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140822_LX0609_SYN_009.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-161019_LX0609_SYN_009.json"
     },
     {
       "visit_id": "LX0609_SYN_009",
@@ -1469,7 +1461,7 @@
       "human_reason": "恶性肿瘤出院后治疗计划不完整。",
       "trigger_facts": ["出院医嘱未包含肿瘤科复诊、辅助化疗评估或病理回看计划"],
       "evidence_expectation": "出院医嘱未包含肿瘤科复诊、辅助化疗评估或病理回看计划；注意休息，保持切口清洁",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-140822_LX0609_SYN_009.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-161019_LX0609_SYN_009.json"
     },
     {
       "visit_id": "LX0609_SYN_010",
@@ -1497,7 +1489,7 @@
       "human_reason": "输血前知情同意资料不完整。",
       "trigger_facts": ["存在输血申请和输血医嘱", "未见完整输血知情同意记录"],
       "evidence_expectation": "存在输血申请和输血医嘱；未见完整输血知情同意记录；未见完整输血风险告知记录",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-141153_LX0609_SYN_010.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-162439_LX0609_SYN_010.json"
     },
     {
       "visit_id": "LX0609_SYN_010",
@@ -1510,22 +1502,22 @@
       "actual_hit": true,
       "status_match": true,
       "hit_match": true,
-      "verdict": "evidence_error",
+      "verdict": "pass",
       "status_reversal": false,
       "false_positive": false,
       "false_negative": false,
-      "evidence_error": true,
-      "evidence_note": "命中结果未包含 golden 关键证据片段",
-      "quote_hit_count": 0,
-      "quote_hits": [],
-      "confidence": 0.88,
+      "evidence_error": false,
+      "evidence_note": "",
+      "quote_hit_count": 1,
+      "quote_hits": ["申请输注红细胞悬液2U"],
+      "confidence": 0.95,
       "source": "trigger_gate_baseline",
-      "findings": "存在输血申请/医嘱，但病历中未见完整输血前九项检查结果。",
-      "evidence": "输血事件：输注红细胞悬液2U；输血前检查：未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果。",
+      "findings": "存在输血申请和输血医嘱，但输血前常规检查资料不完整。",
+      "evidence": "来源数据表：blood_application / inpat_drug_order / labtest_item_report；存在输血申请和输血医嘱；输血申请：申请输注红细胞悬液2U；输血事件：输注红细胞悬液2U；输血前常规检查：未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果；判定结论：输血前常规检查资料不完整",
       "human_reason": "输血前常规检查资料不完整。",
       "trigger_facts": ["存在输血申请和输血医嘱", "未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果"],
       "evidence_expectation": "存在输血申请和输血医嘱；未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果；申请输注红细胞悬液2U",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-141153_LX0609_SYN_010.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-162439_LX0609_SYN_010.json"
     },
     {
       "visit_id": "LX0609_SYN_010",
@@ -1548,12 +1540,12 @@
       "quote_hits": ["未见输血后疗效评价"],
       "confidence": 0.9,
       "source": "trigger_gate_baseline",
-      "findings": "输血后评价记录中未书写具体评价时间。",
+      "findings": "输血记录中未书写输血后评价的具体时间。",
       "evidence": "记录未见输血后疗效评价及不良反应观察结论",
       "human_reason": "输血后评价记录不完整。",
       "trigger_facts": ["输血记录未见输血后疗效评价及不良反应观察结论"],
       "evidence_expectation": "输血记录未见输血后疗效评价及不良反应观察结论；未见输血后疗效评价",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-141153_LX0609_SYN_010.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-162439_LX0609_SYN_010.json"
     },
     {
       "visit_id": "LX0609_SYN_010",
@@ -1574,14 +1566,14 @@
       "evidence_note": "",
       "quote_hit_count": 2,
       "quote_hits": ["输注红细胞悬液2U", "红细胞悬液收费4U"],
-      "confidence": 0.95,
+      "confidence": 0.9,
       "source": "trigger_gate_baseline",
       "findings": "输血医嘱与收费数量不一致：医嘱为红细胞悬液 2U，费用明细为红细胞悬液 4U。",
       "evidence": "医嘱：输注红细胞悬液2U；费用：红细胞悬液收费4U。",
       "human_reason": "输血医嘱与收费数量不一致。",
       "trigger_facts": ["医嘱输血2U", "费用明细收费4U"],
       "evidence_expectation": "医嘱输血2U；费用明细收费4U；输注红细胞悬液2U；红细胞悬液收费4U",
-      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-141153_LX0609_SYN_010.json"
+      "report_path": "D:\\LLM\\LX888\\apps\\medqc-web\\.runtime-logs\\qc-pack-poc\\luxian_0609_trigger_gate_20260614-162439_LX0609_SYN_010.json"
     }
   ]
 }

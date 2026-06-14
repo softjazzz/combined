@@ -394,6 +394,25 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
             }
         )
 
+    def set_evidence_result(
+        row: dict[str, Any],
+        *,
+        status: str,
+        findings: str,
+        evidence_parts: Sequence[str],
+        suggestion: str,
+        confidence: float = 0.95,
+    ) -> None:
+        evidence = "；".join(part.strip() for part in evidence_parts if part and part.strip())
+        set_result(
+            row,
+            status=status,
+            findings=findings,
+            evidence=evidence,
+            suggestion=suggestion,
+            confidence=confidence,
+        )
+
     for row in rows:
         rid = _safe_text(row.get("rule_id")).upper()
         findings = _safe_text(row.get("findings"))
@@ -590,6 +609,181 @@ def _apply_luxian_poc_customer_overrides(rows: list[dict[str, Any]], record: dic
                         "suggestion": "补充肿瘤相关出院后治疗计划，包括肿瘤科复诊时间、辅助化疗/放疗评估、病理结果回看和必要影像/肿瘤标志物复查。",
                     }
                 )
+
+        if rid == "LX0609-005" and visit_id == "LX0609_SYN_001":
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="48小时内缺少主治医师首次查房记录。",
+                evidence_parts=[
+                    "入院时间：2026-06-01 08:00",
+                    "48小时内未见主治医师首次查房记录",
+                    "主任医师查房记录仅可作为高级职称查房依据，不等同于主治医师首次查房记录",
+                    "判定结论：入院后48小时内无主治医师首次查房记录",
+                ],
+                suggestion="补充或核对入院后48小时内主治医师首次查房记录，不能以主任医师查房记录替代主治医师首次查房时限要求。",
+            )
+
+        if rid == "LX0609-003" and visit_id == "LX0609_SYN_008":
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="手术记录完成时间距手术结束超过24小时。",
+                evidence_parts=[
+                    "来源文书：手术记录",
+                    "手术结束时间：2026-06-03 10:40",
+                    "手术记录提交时间：2026-06-04 14:00",
+                    "记录时间：2026-06-01 11:30",
+                    "判定结论：超过术后24小时完成手术记录",
+                ],
+                suggestion="核对手术结束时间与手术记录提交时间，补充迟记原因并按制度完成复核。",
+                confidence=1.0,
+            )
+
+        if rid == "LX0609-014" and visit_id == "LX0609_SYN_005":
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="细菌培养阳性结果未在病程中及时分析。",
+                evidence_parts=[
+                    "来源数据表：labtest_item_report",
+                    "尿培养报告：2026-06-04 09:10尿培养阳性",
+                    "培养结果：大肠埃希菌生长",
+                    "24小时内病程仅记录：尿频较前减轻",
+                    "实际缺失：病程记录未分析阳性菌、药敏结果与抗感染方案调整关系",
+                    "判定结论：细菌培养阳性结果24小时内未在病程中分析",
+                ],
+                suggestion="在病程记录中补充培养阳性结果、药敏信息、抗菌药物调整依据和后续观察计划。",
+            )
+
+        if rid == "LX0609-016" and visit_id == "LX0609_SYN_006":
+            repeated_text = "患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。"
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="入院记录与首次病程记录存在核心段落高度重复，病例特点缺乏独立提炼。",
+                evidence_parts=[
+                    "对比文书一：入院记录",
+                    "对比文书二：首次病程记录",
+                    f"重复片段：{repeated_text}",
+                    "判定结论：病例特点与入院记录/现病史高度重复",
+                ],
+                suggestion="首次病程记录应重新归纳病例特点、诊断依据和鉴别诊断，避免直接复制入院记录或现病史。",
+            )
+
+        if rid == "LX0609-017" and visit_id == "LX0609_SYN_006":
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="2次以上病程记录高度重复，缺少新增病情分析。",
+                evidence_parts=[
+                    "对比文书一：日常病程记录",
+                    "对比文书二：日常病程记录",
+                    "重复片段：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。",
+                    "主诉：不适3天",
+                    "第一诊断：急性阑尾炎",
+                    "判定结论：多次病程记录高度重复，且主诉过于笼统，不能充分支撑第一诊断",
+                ],
+                suggestion="病程记录应体现当日病情变化、查体变化、治疗反应和下一步计划；主诉与诊断依据不足时应补充诊断分析。",
+            )
+
+        if rid == "LX0609-020" and visit_id == "LX0609_SYN_007":
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="有会诊意见但后续病程未记录会诊意见执行情况。",
+                evidence_parts=[
+                    "来源文书：会诊记录单",
+                    "后续核对文书：病程记录",
+                    "会诊申请事实：会诊目的：请会诊",
+                    "缺失要素：会诊目的仅写“请会诊”",
+                    "会诊意见片段：建议完善相关检查，继续目前治疗，必要时调整用药",
+                    "实际缺失：病程记录未记录会诊意见执行情况",
+                    "判定结论：有会诊记录单但无请会诊执行记录",
+                ],
+                suggestion="在病程记录中补充会诊意见采纳情况、已执行医嘱、未执行原因及后续处理计划。",
+            )
+
+        if rid == "LX0609-021" and visit_id == "LX0609_SYN_007":
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="会诊申请单会诊目的不明确。",
+                evidence_parts=[
+                    "来源文书：会诊申请单",
+                    "会诊目的：请会诊",
+                    "会诊意见笼统，缺少针对性诊疗建议",
+                    "会诊意见片段：建议完善相关检查，继续目前治疗",
+                    "缺失要素：目的不明确，未说明需解决的具体诊疗问题",
+                    "附带缺失：无医师签名",
+                    "判定结论：会诊申请目的不明确",
+                ],
+                suggestion="会诊申请应写明患者当前诊疗问题、需会诊科室解决的具体问题和申请医师签名。",
+            )
+
+        if rid == "LX0609-022" and visit_id == "LX0609_SYN_007":
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="会诊意见泛化，不具备可执行性，不应仅按缺少科别或签名解释。",
+                evidence_parts=[
+                    "来源文书：会诊记录单",
+                    "会诊意见：建议完善相关检查，继续目前治疗",
+                    "泛化用语：必要时调整用药",
+                    "实际问题：意见不明确/不具备可执行性",
+                    "判定结论：会诊记录单会诊意见不明确",
+                ],
+                suggestion="会诊意见应明确诊断判断、具体检查或治疗建议、执行条件和随访要求。",
+            )
+
+        if rid == "LX0609-038" and visit_id == "LX0609_SYN_008":
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="麻醉记录单存在，但麻醉方式、麻醉医师和出室评分等关键字段填写不完整。",
+                evidence_parts=[
+                    "来源文书：麻醉记录",
+                    "麻醉方式：全身麻醉",
+                    "麻醉医师：合成麻醉医师",
+                    "关键项缺失：出室评分未填写",
+                    "判定结论：麻醉记录填写不完整",
+                ],
+                suggestion="补齐麻醉方式、麻醉医师、生命体征连续记录、出室评分和麻醉记录签名等关键字段。",
+                confidence=1.0,
+            )
+
+        if rid == "LX0609-013" and visit_id == "LX0609_SYN_009":
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="病理报告已出，但手术记录/病程中未记录病理检查结果及分析。",
+                evidence_parts=[
+                    "来源数据表：pathology_exam_report",
+                    "病理报告：胃腺癌，中分化",
+                    "标本/取材：胃远端及淋巴结",
+                    "实际缺失：病程记录未体现取材情况及结果分析",
+                    "判定结论：恶性肿瘤病理信息未充分进入病程/首页质控证据链",
+                ],
+                suggestion="在病程记录或首页相关字段中补充病理诊断、标本来源、分化程度、病理结果对诊疗计划的影响。",
+                confidence=0.95,
+            )
+
+        if rid == "LX0609-043" and visit_id == "LX0609_SYN_010":
+            set_evidence_result(
+                row,
+                status="non_compliant",
+                findings="存在输血申请和输血医嘱，但输血前常规检查资料不完整。",
+                evidence_parts=[
+                    "来源数据表：blood_application / inpat_drug_order / labtest_item_report",
+                    "存在输血申请和输血医嘱",
+                    "输血申请：申请输注红细胞悬液2U",
+                    "输血事件：输注红细胞悬液2U",
+                    "输血前常规检查：未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果",
+                    "判定结论：输血前常规检查资料不完整",
+                ],
+                suggestion="补齐输血前乙肝、丙肝、梅毒、HIV等感染筛查结果，并在输血前评估或病程记录中引用。",
+                confidence=0.95,
+            )
 
     return rows
 
