@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 import uuid
@@ -803,8 +804,57 @@ def build_visit_010() -> SyntheticVisit:
     return visit
 
 
+def clone_visit_as(base: SyntheticVisit, new_index: int) -> SyntheticVisit:
+    """Clone a synthetic case into a new visit while preserving scenario facts."""
+    new_visit_id = f"{SYNTHETIC_PREFIX}{new_index:03d}"
+    old_visit_id = base.visit_id
+    old_patient_id = base.patient_id
+    new_patient_name = f"{base.patient_name}-扩展{new_index:02d}"
+    new_visit = SyntheticVisit(
+        visit_id=new_visit_id,
+        patient_name=new_patient_name,
+        sex=base.sex,
+        age=base.age,
+        dept_name=base.dept_name,
+        admission_time=base.admission_time,
+        discharge_time=base.discharge_time,
+        main_diagnosis=base.main_diagnosis,
+        other_diagnoses=list(base.other_diagnoses),
+        description=f"{base.description}（扩展变体 {new_index:02d}）",
+    )
+    rows = copy.deepcopy(base.rows)
+    for table_rows in rows.values():
+        for row in table_rows:
+            for key, value in list(row.items()):
+                if value == old_visit_id:
+                    row[key] = new_visit_id
+                elif value == old_patient_id:
+                    row[key] = new_visit.patient_id
+                elif value == base.patient_name:
+                    row[key] = new_patient_name
+                elif isinstance(value, str):
+                    row[key] = (
+                        value.replace(old_visit_id, new_visit_id)
+                        .replace(old_patient_id, new_visit.patient_id)
+                        .replace(base.patient_name, new_patient_name)
+                    )
+            if row.get("patient_id") == old_patient_id:
+                row["patient_id"] = new_visit.patient_id
+            if row.get("visit_id") == old_visit_id:
+                row["visit_id"] = new_visit_id
+            if row.get("inpat_no") == old_visit_id:
+                row["inpat_no"] = new_visit_id
+            if row.get("mr_no") == old_visit_id:
+                row["mr_no"] = new_visit_id
+            if row.get("name") == base.patient_name:
+                row["name"] = new_patient_name
+    new_visit.rows = rows
+    new_visit.golden_answers = list(base.golden_answers)
+    return new_visit
+
+
 def build_visits() -> list[SyntheticVisit]:
-    visits = [
+    base_visits = [
         build_visit_001(),
         build_visit_002(),
         build_visit_003(),
@@ -816,6 +866,9 @@ def build_visits() -> list[SyntheticVisit]:
         build_visit_009(),
         build_visit_010(),
     ]
+    visits = [*base_visits]
+    for index in range(11, 31):
+        visits.append(clone_visit_as(base_visits[(index - 1) % len(base_visits)], index))
     for visit in visits:
         add_sample_pool_rows(visit)
     return visits
@@ -1194,8 +1247,8 @@ def validate(visits: list[SyntheticVisit], rows: dict[str, list[dict[str, Any]]]
     errors: list[str] = []
     catalog_ids = {str(item.get("qc_point_id")) for item in json.loads(CATALOG_PATH.read_text(encoding="utf-8"))}
     visit_ids = [visit.visit_id for visit in visits]
-    if len(visits) != 10:
-        errors.append(f"样本数应为10，实际为{len(visits)}。")
+    if len(visits) != 30:
+        errors.append(f"样本数应为30，实际为{len(visits)}。")
     duplicate_ids = [item for item, count in Counter(visit_ids).items() if count > 1]
     if duplicate_ids:
         errors.append(f"visit_id 重复: {', '.join(duplicate_ids)}")
