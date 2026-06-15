@@ -200,12 +200,12 @@
           <div class="synthetic-case-section-head">
             <div>
               <h2>病历文书</h2>
-              <p>逐份文书设置记录时间、提交时间和正文，长文本在这里完整编辑。</p>
             </div>
             <div class="synthetic-case-inline-actions">
               <a-select
                 v-model:value="newDocumentType"
                 class="synthetic-case-doc-select"
+                popup-class-name="synthetic-case-doc-type-dropdown"
                 :options="testRecordDocumentTypeOptions"
               />
               <a-button @click="addDocument">
@@ -252,6 +252,7 @@
                   <span>文书类型</span>
                   <a-select
                     v-model:value="document.document_type"
+                    popup-class-name="synthetic-case-doc-type-dropdown"
                     :options="testRecordDocumentTypeOptions"
                     @change="syncDocumentTitle(document)"
                   />
@@ -1023,8 +1024,21 @@ async function handleSave(runAfterSave: boolean) {
 }
 
 .synthetic-case-doc-select {
-  width: 100%;
-  min-width: 0;
+  width: 184px;
+  min-width: 184px;
+}
+
+:global(.synthetic-case-doc-type-dropdown) {
+  min-width: 184px !important;
+  font-family:
+    'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+}
+
+:global(.synthetic-case-doc-type-dropdown .ant-select-item-option-content) {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .synthetic-case-doc-status {
