@@ -995,6 +995,9 @@ const selectedRuleSet = computed(() => {
 const selectedRuleSetPayloadKey = computed(() =>
   selectedValidationMode.value === 'sc' ? '' : selectedRuleSet.value?.rule_set_key || '',
 )
+const isLuxian0609Mode = computed(
+  () => selectedRuleSet.value?.rule_set_key === LUXIAN_0609_RULE_SET_KEY,
+)
 const mainRuleSets = computed(() =>
   ruleSets.value.filter((item) => !item.advanced && (item.display_group || 'main') === 'main'),
 )
@@ -1243,16 +1246,12 @@ const selectedRecordStats = computed(() => {
   }
 })
 
-const hasFormalSelectedRecords = computed(
-  () => !isFormalFastScreenMode.value || selectedRecordStats.value.selectedCount > 0,
+const requiresSelectedRecords = computed(
+  () => isFormalFastScreenMode.value || isLuxian0609Mode.value,
 )
 
 const runButtonDisabled = computed(
-  () =>
-    runLoading.value ||
-    !selectedPoolId.value ||
-    !selectedPool.value?.total_items ||
-    !hasFormalSelectedRecords.value,
+  () => runLoading.value || !selectedPoolId.value || !selectedPool.value?.total_items,
 )
 
 const runButtonText = computed(() =>
@@ -1260,10 +1259,10 @@ const runButtonText = computed(() =>
     ? selectedRecordStats.value.selectedCount > 0
       ? `发起SC全量验证（${selectedRecordStats.value.selectedCount}）`
       : '请选择病历后发起SC全量验证'
-    : selectedRuleSet.value?.rule_set_key === LUXIAN_0609_RULE_SET_KEY
+    : isLuxian0609Mode.value
       ? selectedRecordStats.value.selectedCount > 0
         ? `发起泸县0609验证（${selectedRecordStats.value.selectedCount}）`
-        : '发起泸县0609验证'
+        : '请选择病历后发起泸县0609验证'
       : selectedRecordStats.value.selectedCount > 0
         ? `发起样本验证（${selectedRecordStats.value.selectedCount}）`
         : '发起样本验证',
@@ -2185,7 +2184,7 @@ async function handleRunPool() {
   if (!selectedPoolId.value) return
   const { selectedCount, runnableCount, skippedCount, runnableRecordIds } =
     selectedRecordStats.value
-  if (isFormalFastScreenMode.value && selectedCount === 0) {
+  if (requiresSelectedRecords.value && selectedCount === 0) {
     message.warning('请先选择要质控的病历')
     return
   }
@@ -2222,12 +2221,11 @@ async function handleRunPool() {
     key: runKey,
     startedAt: now,
   }
-  const creatingMessage =
-    selectedRuleSet.value?.rule_set_key === LUXIAN_0609_RULE_SET_KEY
-      ? '正在创建泸县0609验证任务...'
-      : isFormalFastScreenMode.value
-        ? '正式84条质控任务已提交，正在准备执行'
-        : '正在创建样本验证任务...'
+  const creatingMessage = isLuxian0609Mode.value
+    ? '正在创建泸县0609验证任务...'
+    : isFormalFastScreenMode.value
+      ? '正式84条质控任务已提交，正在准备执行'
+      : '正在创建样本验证任务...'
   message.loading({
     content: creatingMessage,
     key: runKey,
