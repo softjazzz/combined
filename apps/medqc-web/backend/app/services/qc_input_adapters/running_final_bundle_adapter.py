@@ -187,6 +187,8 @@ def adapt_bundle_to_sichuan_eval_args(
 
 
 def adapt_bundle_to_evidence_payload(bundle: dict[str, Any]) -> dict[str, Any]:
+    from ..sample_programmatic_evidence import build_programmatic_evidence_payload
+
     scene = _resolve_scene(bundle)
     documents = _extract_documents(bundle, scene)
     primary_document_text = _safe_text(bundle.get("medical_text"))
@@ -205,10 +207,15 @@ def adapt_bundle_to_evidence_payload(bundle: dict[str, Any]) -> dict[str, Any]:
         )
     structured = _safe_dict(bundle.get("structured_context"))
     timeline_facts = _safe_list(bundle.get("timeline_facts")) or _safe_list(structured.get("timeline_facts"))
+    programmatic_payload = build_programmatic_evidence_payload(
+        bundle=bundle,
+        medical_text=primary_document_text,
+    )
     return {
         "primary_document_text": primary_document_text,
         "supporting_documents": supporting_documents,
         "timeline_facts": timeline_facts,
         "document_hits": _safe_dict(bundle.get("document_hits")),
         "data_quality_flags": _safe_list(bundle.get("data_quality_flags")),
+        "programmatic_timeline": _safe_dict(programmatic_payload.get("programmatic_timeline")),
     }

@@ -1,106 +1,820 @@
 visit_id,qc_point_id,case_id,case_type,expected_status,expected_hit,actual_status,actual_hit,verdict,confidence,source,status_reversal,false_positive,false_negative,evidence_error,evidence_note,quote_hit_count,findings,evidence,human_reason,report_path
-LX0609_SYN_001,LX0609-001,LX0609_SYN_001-LX0609-001-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,入院记录完成时间超过患者入院后 24 小时。,入院时间：2026-06-01 08:00；入院记录提交时间：2026-06-02 10:30，超过24小时。,入院记录超过入院后24小时完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155257_LX0609_SYN_001.json
-LX0609_SYN_001,LX0609-002,LX0609_SYN_001-LX0609-002-02,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,首次病程记录未在入院后 8 小时内完成。,入院时间：2026-06-01 08:00；首次病程记录时间：2026-06-01 18:30，距离入院10.5小时。,首次病程记录未在入院后8小时内完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155257_LX0609_SYN_001.json
-LX0609_SYN_001,LX0609-005,LX0609_SYN_001-LX0609-005-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,48小时内缺少主治医师首次查房记录。,入院时间：2026-06-01 08:00；48小时内未见主治医师首次查房记录；主任医师查房记录仅可作为高级职称查房依据，不等同于主治医师首次查房记录；判定结论：入院后48小时内无主治医师首次查房记录,48小时内缺少主治医师首次查房记录。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155257_LX0609_SYN_001.json
-LX0609_SYN_001,LX0609-006,LX0609_SYN_001-LX0609-006-04,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,高级职称医师首次查房记录未在入院后 72 小时内完成。,主任医师查房记录时间：2026-06-04 13:30，距入院时间2026-06-01 08:00约77.5小时。,72小时内未完成高级职称医师首次查房记录。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155257_LX0609_SYN_001.json
-LX0609_SYN_002,LX0609-001,LX0609_SYN_002-LX0609-001-01,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,入院记录在入院后 24 小时内完成。,入院记录提交时间位于入院后24小时内。,入院记录时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155451_LX0609_SYN_002.json
-LX0609_SYN_002,LX0609-002,LX0609_SYN_002-LX0609-002-02,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,首次病程记录在入院后 8 小时内完成。,首次病程记录完成时间位于入院后8小时内。,首次病程时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155451_LX0609_SYN_002.json
-LX0609_SYN_002,LX0609-005,LX0609_SYN_002-LX0609-005-03,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,主治医师查房记录在入院次日完成，符合48小时时限。,【当前文书】记录时间：2026-06-02 11:30,48小时主治医师查房合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155451_LX0609_SYN_002.json
-LX0609_SYN_002,LX0609-006,LX0609_SYN_002-LX0609-006-04,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,入院后 72 小时内已有高级职称医师查房记录。,主任医师查房记录位于入院后72小时内。,72小时高级职称查房合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155451_LX0609_SYN_002.json
-LX0609_SYN_003,LX0609-008,LX0609_SYN_003-LX0609-008-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,患者下达病重医嘱后，2天内缺少规定查房或病程记录。,2026-06-09 08:20 下达病重医嘱；2026-06-10、2026-06-11 未见查房病程记录；2026-06-12 09:30 才补记。,病重患者2天内缺少查房病程记录。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155717_LX0609_SYN_003.json
-LX0609_SYN_003,LX0609-009,LX0609_SYN_003-LX0609-009-02,boundary,not_applicable,False,not_applicable,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,该样本存在病重医嘱，但不满足“病危每日记录规则”的触发条件。,2026-06-09 08:20 下达病重医嘱；未下达病危医嘱。,该样本只有病重医嘱，不适用于病危每日记录规则。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155717_LX0609_SYN_003.json
-LX0609_SYN_003,LX0609-007,LX0609_SYN_003-LX0609-007-03,boundary,not_applicable,False,not_applicable,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,该样本存在病重医嘱，但不满足“病情稳定三天查房规则”的触发条件。,2026-06-09 08:20 下达病重医嘱；未下达病危医嘱。,病情稳定3天查房规则不适用。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155717_LX0609_SYN_003.json
-LX0609_SYN_004,LX0609-004,LX0609_SYN_004-LX0609-004-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,抢救记录超过抢救结束后 6 小时完成。,抢救结束时间：2026-06-05 12:00；抢救记录记录时间：2026-06-05 20:30。,抢救记录超过抢救结束后6小时完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155906_LX0609_SYN_004.json
-LX0609_SYN_004,LX0609-001,LX0609_SYN_004-LX0609-001-02,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,入院记录在入院后 24 小时内完成。,入院记录提交时间位于入院后24小时内。,入院记录时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155906_LX0609_SYN_004.json
-LX0609_SYN_004,LX0609-002,LX0609_SYN_004-LX0609-002-03,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,首次病程记录在入院后 8 小时内完成。,首次病程记录完成时间位于入院后8小时内。,首次病程时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-155906_LX0609_SYN_004.json
-LX0609_SYN_005,LX0609-010,LX0609_SYN_005-LX0609-010-01,positive,non_compliant,True,non_compliant,True,pass,0.92,trigger_gate_baseline,False,False,False,False,,1,存在 CT/MRI 阳性检查结果，但病程记录仅写已完善检查和继续对症治疗，未记录具体影像结论及其临床意义。,腰椎MRI提示 L4/5椎间盘突出并右侧神经根受压；病程记录仅写“已完善腰椎MRI检查，继续予止痛、营养神经治疗”。,MRI检查前缺少有针对性的病程记录说明。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-160046_LX0609_SYN_005.json
-LX0609_SYN_005,LX0609-012,LX0609_SYN_005-LX0609-012-02,positive,non_compliant,True,non_compliant,True,pass,0.92,trigger_gate_baseline,False,False,False,False,,2,存在 CT/MRI 阳性检查结果，但病程记录仅写已完善检查和继续对症治疗，未记录具体影像结论及其临床意义。,腰椎MRI提示 L4/5椎间盘突出并右侧神经根受压；病程记录仅写“已完善腰椎MRI检查，继续予止痛、营养神经治疗”。,MRI阳性结果未在24小时内进行临床分析。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-160046_LX0609_SYN_005.json
-LX0609_SYN_005,LX0609-014,LX0609_SYN_005-LX0609-014-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,细菌培养阳性结果未在病程中及时分析。,来源数据表：labtest_item_report；尿培养报告：2026-06-04 09:10尿培养阳性；培养结果：大肠埃希菌生长；24小时内病程仅记录：尿频较前减轻；实际缺失：病程记录未分析阳性菌、药敏结果与抗感染方案调整关系；判定结论：细菌培养阳性结果24小时内未在病程中分析,细菌培养阳性结果未在病程中及时分析。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-160046_LX0609_SYN_005.json
-LX0609_SYN_006,LX0609-016,LX0609_SYN_006-LX0609-016-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,入院记录与首次病程记录存在核心段落高度重复，病例特点缺乏独立提炼。,对比文书一：入院记录；对比文书二：首次病程记录；重复片段：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；判定结论：病例特点与入院记录/现病史高度重复,多份病程记录核心描述高度重复，存在复制病历风险。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-160243_LX0609_SYN_006.json
-LX0609_SYN_006,LX0609-017,LX0609_SYN_006-LX0609-017-02,positive,non_compliant,True,non_compliant,True,pass,0.98,trigger_gate_baseline,False,False,False,False,,2,2次以上病程记录高度重复，缺少新增病情分析。,对比文书一：日常病程记录；对比文书二：日常病程记录；重复片段：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；主诉：不适3天；第一诊断：急性阑尾炎；判定结论：多次病程记录高度重复，且主诉过于笼统，不能充分支撑第一诊断,主诉过于笼统，无法支撑第一诊断。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-160243_LX0609_SYN_006.json
-LX0609_SYN_006,LX0609-018,LX0609_SYN_006-LX0609-018-03,positive,non_compliant,True,non_compliant,True,pass,0.98,trigger_gate_baseline,False,False,False,False,,1,主诉“不适3天”过于笼统，无法导出第一诊断急性阑尾炎。,【当前文书】拟诊讨论：患者主诉较笼统，第一诊断依据记录不足,首次病程诊断分析不足。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-160243_LX0609_SYN_006.json
-LX0609_SYN_007,LX0609-020,LX0609_SYN_007-LX0609-020-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,有会诊意见但后续病程未记录会诊意见执行情况。,来源文书：会诊记录单；后续核对文书：病程记录；会诊申请事实：会诊目的：请会诊；缺失要素：会诊目的仅写“请会诊”；会诊意见片段：建议完善相关检查，继续目前治疗，必要时调整用药；实际缺失：病程记录未记录会诊意见执行情况；判定结论：有会诊记录单但无请会诊执行记录,会诊申请未明确会诊目的。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-162207_LX0609_SYN_007.json
-LX0609_SYN_007,LX0609-021,LX0609_SYN_007-LX0609-021-02,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,会诊申请单会诊目的不明确。,来源文书：会诊申请单；会诊目的：请会诊；会诊意见笼统，缺少针对性诊疗建议；会诊意见片段：建议完善相关检查，继续目前治疗；缺失要素：目的不明确，未说明需解决的具体诊疗问题；附带缺失：无医师签名；判定结论：会诊申请目的不明确,会诊意见过于笼统，不具备可执行性。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-162207_LX0609_SYN_007.json
-LX0609_SYN_007,LX0609-022,LX0609_SYN_007-LX0609-022-03,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,会诊意见泛化，不具备可执行性，不应仅按缺少科别或签名解释。,来源文书：会诊记录单；会诊意见：建议完善相关检查，继续目前治疗；泛化用语：必要时调整用药；实际问题：意见不明确/不具备可执行性；判定结论：会诊记录单会诊意见不明确,病程记录未说明会诊意见执行情况。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-162207_LX0609_SYN_007.json
-LX0609_SYN_008,LX0609-003,LX0609_SYN_008-LX0609-003-01,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,手术记录完成时间距手术结束超过24小时。,来源文书：手术记录；手术结束时间：2026-06-03 10:40；手术记录提交时间：2026-06-04 14:00；记录时间：2026-06-01 11:30；判定结论：超过术后24小时完成手术记录,手术记录超过术后24小时完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-160733_LX0609_SYN_008.json
-LX0609_SYN_008,LX0609-039,LX0609_SYN_008-LX0609-039-02,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,术前讨论记录存在，但未记录替代方案、主要风险和参会人员具体意见，不能仅按“有术前讨论记录”判为合规。,术前讨论记录：未记录替代方案、主要风险和参会人员具体意见。,术前讨论内容不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-160733_LX0609_SYN_008.json
-LX0609_SYN_008,LX0609-032,LX0609_SYN_008-LX0609-032-03,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,手术安全核查记录不完整且关键项未签名。,麻醉前核查项未签名,手术安全核查记录存在缺项。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-160733_LX0609_SYN_008.json
-LX0609_SYN_008,LX0609-038,LX0609_SYN_008-LX0609-038-04,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,麻醉记录单存在，但麻醉方式、麻醉医师和出室评分等关键字段填写不完整。,来源文书：麻醉记录；麻醉方式：全身麻醉；麻醉医师：合成麻醉医师；关键项缺失：出室评分未填写；判定结论：麻醉记录填写不完整,麻醉记录填写不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-160733_LX0609_SYN_008.json
-LX0609_SYN_009,LX0609-013,LX0609_SYN_009-LX0609-013-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,病理报告已出，但手术记录/病程中未记录病理检查结果及分析。,来源数据表：pathology_exam_report；病理报告：胃腺癌，中分化；标本/取材：胃远端及淋巴结；实际缺失：病程记录未体现取材情况及结果分析；判定结论：恶性肿瘤病理信息未充分进入病程/首页质控证据链,恶性肿瘤病理信息未充分进入病程/首页质控证据链。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-161019_LX0609_SYN_009.json
-LX0609_SYN_009,LX0609-019,LX0609_SYN_009-LX0609-019-02,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,恶性肿瘤手术记录未明确淋巴结清扫范围及送检组数，取材情况记录不充分。,胃癌根治术记录未明确淋巴结清扫范围及送检组数。,恶性肿瘤手术记录未体现淋巴结清扫关键信息。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-161019_LX0609_SYN_009.json
-LX0609_SYN_009,LX0609-040,LX0609_SYN_009-LX0609-040-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,四级手术术前讨论缺失多学科讨论内容。,【当前文书】患者拟行四级手术腹腔镜远端胃癌根治术，未见MDT多学科讨论记录,四级手术缺少MDT或高级别术前讨论支撑。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-161019_LX0609_SYN_009.json
-LX0609_SYN_009,LX0609-027,LX0609_SYN_009-LX0609-027-04,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,恶性肿瘤患者出院医嘱仅为一般休息和切口护理，缺少肿瘤科复诊、辅助化疗评估、病理回看或影像复查计划。,出院医嘱：注意休息，保持切口清洁；未包含肿瘤科复诊、辅助化疗评估或病理回看计划。,恶性肿瘤出院后治疗计划不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-161019_LX0609_SYN_009.json
-LX0609_SYN_010,LX0609-041,LX0609_SYN_010-LX0609-041-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,输血医嘱存在但未见知情同意书及患者签名。,【当前文书】blood_application: 红细胞悬液 2 申请输注红细胞悬液2U，未见完整输血风险告知记录,输血前知情同意资料不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-162439_LX0609_SYN_010.json
-LX0609_SYN_010,LX0609-043,LX0609_SYN_010-LX0609-043-02,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,存在输血申请和输血医嘱，但输血前常规检查资料不完整。,来源数据表：blood_application / inpat_drug_order / labtest_item_report；存在输血申请和输血医嘱；输血申请：申请输注红细胞悬液2U；输血事件：输注红细胞悬液2U；输血前常规检查：未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果；判定结论：输血前常规检查资料不完整,输血前常规检查资料不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-162439_LX0609_SYN_010.json
-LX0609_SYN_010,LX0609-047,LX0609_SYN_010-LX0609-047-03,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,输血记录中未书写输血后评价的具体时间。,记录未见输血后疗效评价及不良反应观察结论,输血后评价记录不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-162439_LX0609_SYN_010.json
-LX0609_SYN_010,LX0609-049,LX0609_SYN_010-LX0609-049-04,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,2,输血医嘱与收费数量不一致：医嘱为红细胞悬液 2U，费用明细为红细胞悬液 4U。,医嘱：输注红细胞悬液2U；费用：红细胞悬液收费4U。,输血医嘱与收费数量不一致。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-162439_LX0609_SYN_010.json
-LX0609_SYN_011,LX0609-001,LX0609_SYN_011-LX0609-001-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,入院记录完成时间超过患者入院后 24 小时。,入院时间：2026-06-01 08:00；入院记录提交时间：2026-06-02 10:30，超过24小时。,入院记录超过入院后24小时完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174428_LX0609_SYN_011.json
-LX0609_SYN_011,LX0609-002,LX0609_SYN_011-LX0609-002-02,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,首次病程记录未在入院后 8 小时内完成。,入院时间：2026-06-01 08:00；首次病程记录时间：2026-06-01 18:30，距离入院10.5小时。,首次病程记录未在入院后8小时内完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174428_LX0609_SYN_011.json
-LX0609_SYN_011,LX0609-005,LX0609_SYN_011-LX0609-005-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,48小时内缺少主治医师首次查房记录。,入院时间：2026-06-01 08:00；48小时内未见主治医师首次查房记录；主任医师查房记录仅可作为高级职称查房依据，不等同于主治医师首次查房记录；判定结论：入院后48小时内无主治医师首次查房记录,48小时内缺少主治医师首次查房记录。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174428_LX0609_SYN_011.json
-LX0609_SYN_011,LX0609-006,LX0609_SYN_011-LX0609-006-04,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,高级职称医师首次查房记录未在入院后 72 小时内完成。,主任医师查房记录时间：2026-06-04 13:30，距入院时间2026-06-01 08:00约77.5小时。,72小时内未完成高级职称医师首次查房记录。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174428_LX0609_SYN_011.json
-LX0609_SYN_012,LX0609-001,LX0609_SYN_012-LX0609-001-01,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,入院记录在入院后 24 小时内完成。,入院记录提交时间位于入院后24小时内。,入院记录时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174608_LX0609_SYN_012.json
-LX0609_SYN_012,LX0609-002,LX0609_SYN_012-LX0609-002-02,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,首次病程记录在入院后 8 小时内完成。,首次病程记录完成时间位于入院后8小时内。,首次病程时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174608_LX0609_SYN_012.json
-LX0609_SYN_012,LX0609-005,LX0609_SYN_012-LX0609-005-03,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,入院48小时内有主治医师首次查房记录。,【当前文书】记录时间：2026-06-02 11:30,48小时主治医师查房合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174608_LX0609_SYN_012.json
-LX0609_SYN_012,LX0609-006,LX0609_SYN_012-LX0609-006-04,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,入院后 72 小时内已有高级职称医师查房记录。,主任医师查房记录位于入院后72小时内。,72小时高级职称查房合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174608_LX0609_SYN_012.json
-LX0609_SYN_013,LX0609-008,LX0609_SYN_013-LX0609-008-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,患者下达病重医嘱后，2天内缺少规定查房或病程记录。,2026-06-09 08:20 下达病重医嘱；2026-06-10、2026-06-11 未见查房病程记录；2026-06-12 09:30 才补记。,病重患者2天内缺少查房病程记录。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174802_LX0609_SYN_013.json
-LX0609_SYN_013,LX0609-009,LX0609_SYN_013-LX0609-009-02,boundary,not_applicable,False,not_applicable,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,该样本存在病重医嘱，但不满足“病危每日记录规则”的触发条件。,2026-06-09 08:20 下达病重医嘱；未下达病危医嘱。,该样本只有病重医嘱，不适用于病危每日记录规则。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174802_LX0609_SYN_013.json
-LX0609_SYN_013,LX0609-007,LX0609_SYN_013-LX0609-007-03,boundary,not_applicable,False,not_applicable,False,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,该样本存在病重医嘱，但不满足“病情稳定三天查房规则”的触发条件。,2026-06-09 08:20 下达病重医嘱；未下达病危医嘱。,病情稳定3天查房规则不适用。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174802_LX0609_SYN_013.json
-LX0609_SYN_014,LX0609-004,LX0609_SYN_014-LX0609-004-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,抢救记录超过抢救结束后 6 小时完成。,抢救结束时间：2026-06-05 12:00；抢救记录记录时间：2026-06-05 20:30。,抢救记录超过抢救结束后6小时完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174949_LX0609_SYN_014.json
-LX0609_SYN_014,LX0609-001,LX0609_SYN_014-LX0609-001-02,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,入院记录在入院后 24 小时内完成。,入院记录提交时间位于入院后24小时内。,入院记录时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174949_LX0609_SYN_014.json
-LX0609_SYN_014,LX0609-002,LX0609_SYN_014-LX0609-002-03,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,首次病程记录在入院后 8 小时内完成。,首次病程记录完成时间位于入院后8小时内。,首次病程时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-174949_LX0609_SYN_014.json
-LX0609_SYN_015,LX0609-010,LX0609_SYN_015-LX0609-010-01,positive,non_compliant,True,non_compliant,True,pass,0.92,trigger_gate_baseline,False,False,False,False,,1,存在 CT/MRI 阳性检查结果，但病程记录仅写已完善检查和继续对症治疗，未记录具体影像结论及其临床意义。,腰椎MRI提示 L4/5椎间盘突出并右侧神经根受压；病程记录仅写“已完善腰椎MRI检查，继续予止痛、营养神经治疗”。,MRI检查前缺少有针对性的病程记录说明。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175137_LX0609_SYN_015.json
-LX0609_SYN_015,LX0609-012,LX0609_SYN_015-LX0609-012-02,positive,non_compliant,True,non_compliant,True,pass,0.92,trigger_gate_baseline,False,False,False,False,,2,存在 CT/MRI 阳性检查结果，但病程记录仅写已完善检查和继续对症治疗，未记录具体影像结论及其临床意义。,腰椎MRI提示 L4/5椎间盘突出并右侧神经根受压；病程记录仅写“已完善腰椎MRI检查，继续予止痛、营养神经治疗”。,MRI阳性结果未在24小时内进行临床分析。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175137_LX0609_SYN_015.json
-LX0609_SYN_015,LX0609-014,LX0609_SYN_015-LX0609-014-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,细菌培养阳性结果未在病程中及时分析。,来源数据表：labtest_item_report；尿培养报告：2026-06-04 09:10尿培养阳性；培养结果：大肠埃希菌生长；24小时内病程仅记录：尿频较前减轻；实际缺失：病程记录未分析阳性菌、药敏结果与抗感染方案调整关系；判定结论：细菌培养阳性结果24小时内未在病程中分析,细菌培养阳性结果未在病程中及时分析。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175137_LX0609_SYN_015.json
-LX0609_SYN_016,LX0609-016,LX0609_SYN_016-LX0609-016-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,入院记录与首次病程记录存在核心段落高度重复，病例特点缺乏独立提炼。,对比文书一：入院记录；对比文书二：首次病程记录；重复片段：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；判定结论：病例特点与入院记录/现病史高度重复,多份病程记录核心描述高度重复，存在复制病历风险。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175330_LX0609_SYN_016.json
-LX0609_SYN_016,LX0609-017,LX0609_SYN_016-LX0609-017-02,positive,non_compliant,True,non_compliant,True,pass,0.98,trigger_gate_baseline,False,False,False,False,,2,2次以上病程记录高度重复，缺少新增病情分析。,对比文书一：日常病程记录；对比文书二：日常病程记录；重复片段：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；主诉：不适3天；第一诊断：急性阑尾炎；判定结论：多次病程记录高度重复，且主诉过于笼统，不能充分支撑第一诊断,主诉过于笼统，无法支撑第一诊断。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175330_LX0609_SYN_016.json
-LX0609_SYN_016,LX0609-018,LX0609_SYN_016-LX0609-018-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,主诉描述过于笼统（仅“不适”），无法导出具体第一诊断。,【当前文书】拟诊讨论：患者主诉较笼统，第一诊断依据记录不足,首次病程诊断分析不足。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175330_LX0609_SYN_016.json
-LX0609_SYN_017,LX0609-020,LX0609_SYN_017-LX0609-020-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,有会诊意见但后续病程未记录会诊意见执行情况。,来源文书：会诊记录单；后续核对文书：病程记录；会诊申请事实：会诊目的：请会诊；缺失要素：会诊目的仅写“请会诊”；会诊意见片段：建议完善相关检查，继续目前治疗，必要时调整用药；实际缺失：病程记录未记录会诊意见执行情况；判定结论：有会诊记录单但无请会诊执行记录,会诊申请未明确会诊目的。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175525_LX0609_SYN_017.json
-LX0609_SYN_017,LX0609-021,LX0609_SYN_017-LX0609-021-02,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,会诊申请单会诊目的不明确。,来源文书：会诊申请单；会诊目的：请会诊；会诊意见笼统，缺少针对性诊疗建议；会诊意见片段：建议完善相关检查，继续目前治疗；缺失要素：目的不明确，未说明需解决的具体诊疗问题；附带缺失：无医师签名；判定结论：会诊申请目的不明确,会诊意见过于笼统，不具备可执行性。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175525_LX0609_SYN_017.json
-LX0609_SYN_017,LX0609-022,LX0609_SYN_017-LX0609-022-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,会诊意见泛化，不具备可执行性，不应仅按缺少科别或签名解释。,来源文书：会诊记录单；会诊意见：建议完善相关检查，继续目前治疗；泛化用语：必要时调整用药；实际问题：意见不明确/不具备可执行性；判定结论：会诊记录单会诊意见不明确,病程记录未说明会诊意见执行情况。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175525_LX0609_SYN_017.json
-LX0609_SYN_018,LX0609-003,LX0609_SYN_018-LX0609-003-01,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,手术记录完成时间距手术结束超过24小时。,来源文书：手术记录；手术结束时间：2026-06-03 10:40；手术记录提交时间：2026-06-04 14:00；记录时间：2026-06-01 11:30；判定结论：超过术后24小时完成手术记录,手术记录超过术后24小时完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175817_LX0609_SYN_018.json
-LX0609_SYN_018,LX0609-039,LX0609_SYN_018-LX0609-039-02,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,术前讨论记录存在，但未记录替代方案、主要风险和参会人员具体意见，不能仅按“有术前讨论记录”判为合规。,术前讨论记录：未记录替代方案、主要风险和参会人员具体意见。,术前讨论内容不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175817_LX0609_SYN_018.json
-LX0609_SYN_018,LX0609-032,LX0609_SYN_018-LX0609-032-03,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,手术安全核查记录存在项目不完整及缺签名问题。,【当前文书】患者身份、手术部位、术式核查记录不完整，麻醉前核查项未签名,手术安全核查记录存在缺项。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175817_LX0609_SYN_018.json
-LX0609_SYN_018,LX0609-038,LX0609_SYN_018-LX0609-038-04,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,麻醉记录单存在，但麻醉方式、麻醉医师和出室评分等关键字段填写不完整。,来源文书：麻醉记录；麻醉方式：全身麻醉；麻醉医师：合成麻醉医师；关键项缺失：出室评分未填写；判定结论：麻醉记录填写不完整,麻醉记录填写不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-175817_LX0609_SYN_018.json
-LX0609_SYN_019,LX0609-013,LX0609_SYN_019-LX0609-013-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,病理报告已出，但手术记录/病程中未记录病理检查结果及分析。,来源数据表：pathology_exam_report；病理报告：胃腺癌，中分化；标本/取材：胃远端及淋巴结；实际缺失：病程记录未体现取材情况及结果分析；判定结论：恶性肿瘤病理信息未充分进入病程/首页质控证据链,恶性肿瘤病理信息未充分进入病程/首页质控证据链。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180119_LX0609_SYN_019.json
-LX0609_SYN_019,LX0609-019,LX0609_SYN_019-LX0609-019-02,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,恶性肿瘤手术记录未明确淋巴结清扫范围及送检组数，取材情况记录不充分。,胃癌根治术记录未明确淋巴结清扫范围及送检组数。,恶性肿瘤手术记录未体现淋巴结清扫关键信息。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180119_LX0609_SYN_019.json
-LX0609_SYN_019,LX0609-040,LX0609_SYN_019-LX0609-040-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,四级手术术前讨论记录中明确未见MDT多学科讨论记录。,【当前文书】患者拟行四级手术腹腔镜远端胃癌根治术，未见MDT多学科讨论记录,四级手术缺少MDT或高级别术前讨论支撑。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180119_LX0609_SYN_019.json
-LX0609_SYN_019,LX0609-027,LX0609_SYN_019-LX0609-027-04,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,恶性肿瘤患者出院医嘱仅为一般休息和切口护理，缺少肿瘤科复诊、辅助化疗评估、病理回看或影像复查计划。,出院医嘱：注意休息，保持切口清洁；未包含肿瘤科复诊、辅助化疗评估或病理回看计划。,恶性肿瘤出院后治疗计划不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180119_LX0609_SYN_019.json
-LX0609_SYN_020,LX0609-041,LX0609_SYN_020-LX0609-041-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,输血医嘱存在但未见知情同意书及患者签名。,blood_application: 红细胞悬液 2 申请输注红细胞悬液2U，未见完整输血风险告知记录。,输血前知情同意资料不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180359_LX0609_SYN_020.json
-LX0609_SYN_020,LX0609-043,LX0609_SYN_020-LX0609-043-02,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,存在输血申请和输血医嘱，但输血前常规检查资料不完整。,来源数据表：blood_application / inpat_drug_order / labtest_item_report；存在输血申请和输血医嘱；输血申请：申请输注红细胞悬液2U；输血事件：输注红细胞悬液2U；输血前常规检查：未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果；判定结论：输血前常规检查资料不完整,输血前常规检查资料不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180359_LX0609_SYN_020.json
-LX0609_SYN_020,LX0609-047,LX0609_SYN_020-LX0609-047-03,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,输血记录中未书写输血后评价的具体时间。,记录未见输血后疗效评价及不良反应观察结论,输血后评价记录不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180359_LX0609_SYN_020.json
-LX0609_SYN_020,LX0609-049,LX0609_SYN_020-LX0609-049-04,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,2,输血医嘱与收费数量不一致：医嘱为红细胞悬液 2U，费用明细为红细胞悬液 4U。,医嘱：输注红细胞悬液2U；费用：红细胞悬液收费4U。,输血医嘱与收费数量不一致。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180359_LX0609_SYN_020.json
-LX0609_SYN_021,LX0609-001,LX0609_SYN_021-LX0609-001-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,入院记录完成时间超过患者入院后 24 小时。,入院时间：2026-06-01 08:00；入院记录提交时间：2026-06-02 10:30，超过24小时。,入院记录超过入院后24小时完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180555_LX0609_SYN_021.json
-LX0609_SYN_021,LX0609-002,LX0609_SYN_021-LX0609-002-02,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,首次病程记录未在入院后 8 小时内完成。,入院时间：2026-06-01 08:00；首次病程记录时间：2026-06-01 18:30，距离入院10.5小时。,首次病程记录未在入院后8小时内完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180555_LX0609_SYN_021.json
-LX0609_SYN_021,LX0609-005,LX0609_SYN_021-LX0609-005-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,48小时内缺少主治医师首次查房记录。,入院时间：2026-06-01 08:00；48小时内未见主治医师首次查房记录；主任医师查房记录仅可作为高级职称查房依据，不等同于主治医师首次查房记录；判定结论：入院后48小时内无主治医师首次查房记录,48小时内缺少主治医师首次查房记录。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180555_LX0609_SYN_021.json
-LX0609_SYN_021,LX0609-006,LX0609_SYN_021-LX0609-006-04,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,高级职称医师首次查房记录未在入院后 72 小时内完成。,主任医师查房记录时间：2026-06-04 13:30，距入院时间2026-06-01 08:00约77.5小时。,72小时内未完成高级职称医师首次查房记录。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180555_LX0609_SYN_021.json
-LX0609_SYN_022,LX0609-001,LX0609_SYN_022-LX0609-001-01,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,入院记录在入院后 24 小时内完成。,入院记录提交时间位于入院后24小时内。,入院记录时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182740_LX0609_SYN_022.json
-LX0609_SYN_022,LX0609-002,LX0609_SYN_022-LX0609-002-02,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,首次病程记录在入院后 8 小时内完成。,首次病程记录完成时间位于入院后8小时内。,首次病程时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182740_LX0609_SYN_022.json
-LX0609_SYN_022,LX0609-005,LX0609_SYN_022-LX0609-005-03,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,入院后48小时内已有主治医师查房记录。,来源文书：主治医师查房记录；查房记录时间：2026-06-03 08:30；触发事实：48小时内有主治医师查房记录；判定结论：48小时主治医师查房时限合规,48小时主治医师查房合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182740_LX0609_SYN_022.json
-LX0609_SYN_022,LX0609-006,LX0609_SYN_022-LX0609-006-04,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,入院后 72 小时内已有高级职称医师查房记录。,主任医师查房记录位于入院后72小时内。,72小时高级职称查房合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182740_LX0609_SYN_022.json
-LX0609_SYN_023,LX0609-008,LX0609_SYN_023-LX0609-008-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,患者下达病重医嘱后，2天内缺少规定查房或病程记录。,2026-06-09 08:20 下达病重医嘱；2026-06-10、2026-06-11 未见查房病程记录；2026-06-12 09:30 才补记。,病重患者2天内缺少查房病程记录。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180940_LX0609_SYN_023.json
-LX0609_SYN_023,LX0609-009,LX0609_SYN_023-LX0609-009-02,boundary,not_applicable,False,not_applicable,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,该样本存在病重医嘱，但不满足“病危每日记录规则”的触发条件。,2026-06-09 08:20 下达病重医嘱；未下达病危医嘱。,该样本只有病重医嘱，不适用于病危每日记录规则。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180940_LX0609_SYN_023.json
-LX0609_SYN_023,LX0609-007,LX0609_SYN_023-LX0609-007-03,boundary,not_applicable,False,not_applicable,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,该样本存在病重医嘱，但不满足“病情稳定三天查房规则”的触发条件。,2026-06-09 08:20 下达病重医嘱；未下达病危医嘱。,病情稳定3天查房规则不适用。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-180940_LX0609_SYN_023.json
-LX0609_SYN_024,LX0609-004,LX0609_SYN_024-LX0609-004-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,抢救记录超过抢救结束后 6 小时完成。,抢救结束时间：2026-06-05 12:00；抢救记录记录时间：2026-06-05 20:30。,抢救记录超过抢救结束后6小时完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181140_LX0609_SYN_024.json
-LX0609_SYN_024,LX0609-001,LX0609_SYN_024-LX0609-001-02,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,入院记录在入院后 24 小时内完成。,入院记录提交时间位于入院后24小时内。,入院记录时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181140_LX0609_SYN_024.json
-LX0609_SYN_024,LX0609-002,LX0609_SYN_024-LX0609-002-03,negative,compliant,False,compliant,False,pass,0.95,trigger_gate_baseline,False,False,False,False,,0,首次病程记录在入院后 8 小时内完成。,首次病程记录完成时间位于入院后8小时内。,首次病程时限合规。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181140_LX0609_SYN_024.json
-LX0609_SYN_025,LX0609-010,LX0609_SYN_025-LX0609-010-01,positive,non_compliant,True,non_compliant,True,pass,0.92,trigger_gate_baseline,False,False,False,False,,1,存在 CT/MRI 阳性检查结果，但病程记录仅写已完善检查和继续对症治疗，未记录具体影像结论及其临床意义。,腰椎MRI提示 L4/5椎间盘突出并右侧神经根受压；病程记录仅写“已完善腰椎MRI检查，继续予止痛、营养神经治疗”。,MRI检查前缺少有针对性的病程记录说明。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181324_LX0609_SYN_025.json
-LX0609_SYN_025,LX0609-012,LX0609_SYN_025-LX0609-012-02,positive,non_compliant,True,non_compliant,True,pass,0.92,trigger_gate_baseline,False,False,False,False,,2,存在 CT/MRI 阳性检查结果，但病程记录仅写已完善检查和继续对症治疗，未记录具体影像结论及其临床意义。,腰椎MRI提示 L4/5椎间盘突出并右侧神经根受压；病程记录仅写“已完善腰椎MRI检查，继续予止痛、营养神经治疗”。,MRI阳性结果未在24小时内进行临床分析。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181324_LX0609_SYN_025.json
-LX0609_SYN_025,LX0609-014,LX0609_SYN_025-LX0609-014-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,细菌培养阳性结果未在病程中及时分析。,来源数据表：labtest_item_report；尿培养报告：2026-06-04 09:10尿培养阳性；培养结果：大肠埃希菌生长；24小时内病程仅记录：尿频较前减轻；实际缺失：病程记录未分析阳性菌、药敏结果与抗感染方案调整关系；判定结论：细菌培养阳性结果24小时内未在病程中分析,细菌培养阳性结果未在病程中及时分析。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181324_LX0609_SYN_025.json
-LX0609_SYN_026,LX0609-016,LX0609_SYN_026-LX0609-016-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,2,入院记录与首次病程记录存在核心段落高度重复，病例特点缺乏独立提炼。,对比文书一：入院记录；对比文书二：首次病程记录；重复片段：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；判定结论：病例特点与入院记录/现病史高度重复,多份病程记录核心描述高度重复，存在复制病历风险。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181539_LX0609_SYN_026.json
-LX0609_SYN_026,LX0609-017,LX0609_SYN_026-LX0609-017-02,positive,non_compliant,True,non_compliant,True,pass,0.98,trigger_gate_baseline,False,False,False,False,,2,2次以上病程记录高度重复，缺少新增病情分析。,对比文书一：日常病程记录；对比文书二：日常病程记录；重复片段：患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；主诉：不适3天；第一诊断：急性阑尾炎；判定结论：多次病程记录高度重复，且主诉过于笼统，不能充分支撑第一诊断,主诉过于笼统，无法支撑第一诊断。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181539_LX0609_SYN_026.json
-LX0609_SYN_026,LX0609-018,LX0609_SYN_026-LX0609-018-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,主诉“不适3天”过于笼统，无法导出第一诊断急性阑尾炎。,【当前文书】拟诊讨论：患者主诉较笼统，第一诊断依据记录不足,首次病程诊断分析不足。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181539_LX0609_SYN_026.json
-LX0609_SYN_027,LX0609-020,LX0609_SYN_027-LX0609-020-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,有会诊意见但后续病程未记录会诊意见执行情况。,来源文书：会诊记录单；后续核对文书：病程记录；会诊申请事实：会诊目的：请会诊；缺失要素：会诊目的仅写“请会诊”；会诊意见片段：建议完善相关检查，继续目前治疗，必要时调整用药；实际缺失：病程记录未记录会诊意见执行情况；判定结论：有会诊记录单但无请会诊执行记录,会诊申请未明确会诊目的。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181748_LX0609_SYN_027.json
-LX0609_SYN_027,LX0609-021,LX0609_SYN_027-LX0609-021-02,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,会诊申请单会诊目的不明确。,来源文书：会诊申请单；会诊目的：请会诊；会诊意见笼统，缺少针对性诊疗建议；会诊意见片段：建议完善相关检查，继续目前治疗；缺失要素：目的不明确，未说明需解决的具体诊疗问题；附带缺失：无医师签名；判定结论：会诊申请目的不明确,会诊意见过于笼统，不具备可执行性。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181748_LX0609_SYN_027.json
-LX0609_SYN_027,LX0609-022,LX0609_SYN_027-LX0609-022-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,会诊意见泛化，不具备可执行性，不应仅按缺少科别或签名解释。,来源文书：会诊记录单；会诊意见：建议完善相关检查，继续目前治疗；泛化用语：必要时调整用药；实际问题：意见不明确/不具备可执行性；判定结论：会诊记录单会诊意见不明确,病程记录未说明会诊意见执行情况。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-181748_LX0609_SYN_027.json
-LX0609_SYN_028,LX0609-003,LX0609_SYN_028-LX0609-003-01,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,手术记录完成时间距手术结束超过24小时。,来源文书：手术记录；手术结束时间：2026-06-03 10:40；手术记录提交时间：2026-06-04 14:00；记录时间：2026-06-01 11:30；判定结论：超过术后24小时完成手术记录,手术记录超过术后24小时完成。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182047_LX0609_SYN_028.json
-LX0609_SYN_028,LX0609-039,LX0609_SYN_028-LX0609-039-02,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,术前讨论记录存在，但未记录替代方案、主要风险和参会人员具体意见，不能仅按“有术前讨论记录”判为合规。,术前讨论记录：未记录替代方案、主要风险和参会人员具体意见。,术前讨论内容不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182047_LX0609_SYN_028.json
-LX0609_SYN_028,LX0609-032,LX0609_SYN_028-LX0609-032-03,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,手术安全核查记录存在项目不完整及未签名。,核查记录不完整，麻醉前核查项未签名,手术安全核查记录存在缺项。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182047_LX0609_SYN_028.json
-LX0609_SYN_028,LX0609-038,LX0609_SYN_028-LX0609-038-04,positive,non_compliant,True,non_compliant,True,pass,1.0,trigger_gate_baseline,False,False,False,False,,1,麻醉记录单存在，但麻醉方式、麻醉医师和出室评分等关键字段填写不完整。,来源文书：麻醉记录；麻醉方式：全身麻醉；麻醉医师：合成麻醉医师；关键项缺失：出室评分未填写；判定结论：麻醉记录填写不完整,麻醉记录填写不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182047_LX0609_SYN_028.json
-LX0609_SYN_029,LX0609-013,LX0609_SYN_029-LX0609-013-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,病理报告已出，但手术记录/病程中未记录病理检查结果及分析。,来源数据表：pathology_exam_report；病理报告：胃腺癌，中分化；标本/取材：胃远端及淋巴结；实际缺失：病程记录未体现取材情况及结果分析；判定结论：恶性肿瘤病理信息未充分进入病程/首页质控证据链,恶性肿瘤病理信息未充分进入病程/首页质控证据链。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182334_LX0609_SYN_029.json
-LX0609_SYN_029,LX0609-019,LX0609_SYN_029-LX0609-019-02,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,恶性肿瘤手术记录未明确淋巴结清扫范围及送检组数，取材情况记录不充分。,胃癌根治术记录未明确淋巴结清扫范围及送检组数。,恶性肿瘤手术记录未体现淋巴结清扫关键信息。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182334_LX0609_SYN_029.json
-LX0609_SYN_029,LX0609-040,LX0609_SYN_029-LX0609-040-03,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,四级手术术前讨论未见多学科讨论记录。,【当前文书】患者拟行四级手术腹腔镜远端胃癌根治术，未见MDT多学科讨论记录,四级手术缺少MDT或高级别术前讨论支撑。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182334_LX0609_SYN_029.json
-LX0609_SYN_029,LX0609-027,LX0609_SYN_029-LX0609-027-04,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,恶性肿瘤患者出院医嘱仅为一般休息和切口护理，缺少肿瘤科复诊、辅助化疗评估、病理回看或影像复查计划。,出院医嘱：注意休息，保持切口清洁；未包含肿瘤科复诊、辅助化疗评估或病理回看计划。,恶性肿瘤出院后治疗计划不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182334_LX0609_SYN_029.json
-LX0609_SYN_030,LX0609-041,LX0609_SYN_030-LX0609-041-01,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,输血医嘱存在但未见输血治疗知情同意书及患者签名。,【当前文书】blood_application: 红细胞悬液 2 申请输注红细胞悬液2U，未见完整输血风险告知记录,输血前知情同意资料不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182600_LX0609_SYN_030.json
-LX0609_SYN_030,LX0609-043,LX0609_SYN_030-LX0609-043-02,positive,non_compliant,True,non_compliant,True,pass,0.95,trigger_gate_baseline,False,False,False,False,,1,存在输血申请和输血医嘱，但输血前常规检查资料不完整。,来源数据表：blood_application / inpat_drug_order / labtest_item_report；存在输血申请和输血医嘱；输血申请：申请输注红细胞悬液2U；输血事件：输注红细胞悬液2U；输血前常规检查：未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果；判定结论：输血前常规检查资料不完整,输血前常规检查资料不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182600_LX0609_SYN_030.json
-LX0609_SYN_030,LX0609-047,LX0609_SYN_030-LX0609-047-03,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,1,输血记录中未书写输血后评价的具体时间。,记录未见输血后疗效评价及不良反应观察结论,输血后评价记录不完整。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182600_LX0609_SYN_030.json
-LX0609_SYN_030,LX0609-049,LX0609_SYN_030-LX0609-049-04,positive,non_compliant,True,non_compliant,True,pass,0.9,trigger_gate_baseline,False,False,False,False,,2,输血医嘱与收费数量不一致：医嘱为红细胞悬液 2U，费用明细为红细胞悬液 4U。,医嘱：输注红细胞悬液2U；费用：红细胞悬液收费4U。,输血医嘱与收费数量不一致。,D:\LLM\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_20260614-182600_LX0609_SYN_030.json
+LX0609_SYN_001,LX0609-001,LX0609_SYN_001-LX0609-001-01,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,入院记录未在入院后24小时内完成。,"证据模板：时限类
+质控点：LX0609-001 入院记录：入院后24小时内是否完成
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-002
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；入院记录记录时间：2026-06-02 10:30:00；间隔：26.5小时",入院记录超过入院后24小时完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-102947_LX0609_SYN_001.json
+LX0609_SYN_001,LX0609-002,LX0609_SYN_001-LX0609-002-02,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,首次病程记录未在入院后8小时内完成。,"证据模板：时限类
+质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-081、SC-021
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；首次病程记录记录时间：2026-06-01 18:30:00；间隔：10.5小时",首次病程记录未在入院后8小时内完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-102947_LX0609_SYN_001.json
+LX0609_SYN_001,LX0609-005,LX0609_SYN_001-LX0609-005-03,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,入院后48小时内未找到主治医师首次查房记录。,"证据模板：时限类
+质控点：LX0609-005 上级医生查房记录：入院后 48 小时内无主治医师首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-048
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；入院后48小时内未见主治医师首次查房记录；主治医师首次查房：缺失；主任医师查房记录：主任医师查房记录@2026-06-04 13:30:00，不能替代主治医师首次查房记录",48小时内缺少主治医师首次查房记录。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-102947_LX0609_SYN_001.json
+LX0609_SYN_001,LX0609-006,LX0609_SYN_001-LX0609-006-04,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,副主任/主任医师首次查房超过入院后72小时完成。,"证据模板：时限类
+质控点：LX0609-006 上级医生查房记录：入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-049、CL-080
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；主任医师查房记录记录时间：2026-06-04 13:30:00；间隔：77.5小时",72小时内未完成高级职称医师首次查房记录。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-102947_LX0609_SYN_001.json
+LX0609_SYN_002,LX0609-001,LX0609_SYN_002-LX0609-001-01,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,入院记录在入院后24小时内完成。,"证据模板：时限类
+质控点：LX0609-001 入院记录：入院后24小时内是否完成
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-002
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；入院记录记录时间：2026-06-02 12:00:00；间隔：3.0小时",入院记录时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103057_LX0609_SYN_002.json
+LX0609_SYN_002,LX0609-002,LX0609_SYN_002-LX0609-002-02,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,首次病程记录在入院后8小时内完成。,"证据模板：时限类
+质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-081、SC-021
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；首次病程记录记录时间：2026-06-02 11:30:00；间隔：2.5小时",首次病程时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103057_LX0609_SYN_002.json
+LX0609_SYN_002,LX0609-005,LX0609_SYN_002-LX0609-005-03,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,主治医师首次查房在入院后48小时内完成。,"证据模板：时限类
+质控点：LX0609-005 上级医生查房记录：入院后 48 小时内无主治医师首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-048
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；主治医师查房记录记录时间：2026-06-03 08:30:00；间隔：23.5小时",48小时主治医师查房合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103057_LX0609_SYN_002.json
+LX0609_SYN_002,LX0609-006,LX0609_SYN_002-LX0609-006-04,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,副主任/主任医师首次查房在入院后72小时内完成。,"证据模板：时限类
+质控点：LX0609-006 上级医生查房记录：入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-049、CL-080
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；主任医师查房记录记录时间：2026-06-04 08:00:00；间隔：47.0小时",72小时高级职称查房合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103057_LX0609_SYN_002.json
+LX0609_SYN_003,LX0609-008,LX0609_SYN_003-LX0609-008-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,病重患者2天内缺少规定查房或病程记录。,"证据模板：通用质控
+质控点：LX0609-008 查房记录：病重（下了病重医嘱）患者2天内无查房病程记录；
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：病重、病重医嘱
+数据缺口：病重医嘱起止时间
+映射执行规则：SC-051、CL-231
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：2026-06-09 08:20下达病重医嘱；2026-06-10、2026-06-11未见查房病程记录；病重；2026-06-12 09:30",病重患者2天内缺少查房病程记录。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-144823_LX0609_SYN_003.json
+LX0609_SYN_003,LX0609-009,LX0609_SYN_003-LX0609-009-02,boundary,not_applicable,False,not_applicable,False,pass,0.95,,False,False,False,False,,1,未下达病危医嘱，本规则不适用。,"证据模板：通用质控
+质控点：LX0609-009 查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：病重、病重医嘱
+数据缺口：病危医嘱起止时间
+映射执行规则：SC-051、CL-231
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：未下达病危医嘱；病重",该样本只有病重医嘱，不适用于病危每日记录规则。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-144823_LX0609_SYN_003.json
+LX0609_SYN_003,LX0609-007,LX0609_SYN_003-LX0609-007-03,boundary,not_applicable,False,not_applicable,False,pass,0.95,,False,False,False,False,,1,患者存在病重医嘱，不属于病情稳定患者，本规则不适用。,"证据模板：通用质控
+质控点：LX0609-007 查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：病重、病重医嘱
+映射执行规则：LXE-18
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：患者存在病重医嘱，不属于病情稳定患者；下达病重医嘱",病情稳定3天查房规则不适用。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-144823_LX0609_SYN_003.json
+LX0609_SYN_004,LX0609-004,LX0609_SYN_004-LX0609-004-01,positive,non_compliant,True,non_compliant,True,pass,1.0,,False,False,False,False,,1,抢救结束至记录完成超时，超过6小时规定时限。,"证据模板：时限类
+质控点：LX0609-004 抢救记录：抢救结束后6小时内是否完成
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：抢救、抢救记录、抢救结束
+映射执行规则：SC-054
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：【抢救记录】抢救结束时间：2026-06-05 12:00",抢救记录超过抢救结束后6小时完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103240_LX0609_SYN_004.json
+LX0609_SYN_004,LX0609-001,LX0609_SYN_004-LX0609-001-02,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,入院记录在入院后24小时内完成。,"证据模板：时限类
+质控点：LX0609-001 入院记录：入院后24小时内是否完成
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-002
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-05 06:30:00；入院记录记录时间：2026-06-05 08:30:00；间隔：2.0小时",入院记录时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103240_LX0609_SYN_004.json
+LX0609_SYN_004,LX0609-002,LX0609_SYN_004-LX0609-002-03,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,首次病程记录在入院后8小时内完成。,"证据模板：时限类
+质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-081、SC-021
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-05 06:30:00；首次病程记录记录时间：2026-06-05 08:30:00；间隔：2.0小时",首次病程时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103240_LX0609_SYN_004.json
+LX0609_SYN_005,LX0609-010,LX0609_SYN_005-LX0609-010-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,CT/MRI检查前未见说明检查必要性的病程记录。,"证据模板：检查检验类
+质控点：LX0609-010 CT/MRI 检查记录：CT/MRI检查前有无病程记录（无行CT/MRI检查原因）
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：MRI、检查报告、报告时间
+数据缺口：CT/MRI医嘱、检查时间
+映射执行规则：LXE-23
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：行腰椎MRI检查前未见说明检查必要性的病程记录；腰椎MRI报告；已完善腰椎MRI检查",MRI检查前缺少有针对性的病程记录说明。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-144919_LX0609_SYN_005.json
+LX0609_SYN_005,LX0609-012,LX0609_SYN_005-LX0609-012-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,CT/MRI阳性报告后24小时内未分析阳性结果与诊疗方案关系。,"证据模板：时限类
+质控点：LX0609-012 CT/MRI 检查记录：CT/MRI影像报告结果出具后24小时内阳性结果未进行分析
+触发状态：absent
+触发说明：病历文本和证据中未发现surgery相关触发事实
+映射执行规则：LXE-23
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：2026-06-03 14:20腰椎MRI阳性报告；报告后24小时内病程未分析阳性结果与症状、诊断或治疗方案关系；L4/5椎间盘突出并右侧神经根受压；继续予止痛、营养神经治疗",MRI阳性结果未在24小时内进行临床分析。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-144919_LX0609_SYN_005.json
+LX0609_SYN_005,LX0609-014,LX0609_SYN_005-LX0609-014-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,细菌培养阳性结果未在病程中及时分析。,"证据模板：时限类
+质控点：LX0609-014 细菌培养记录：细菌培养结果在病程中未记录（报告出具后24小时内）
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：MRI、检查报告、报告时间
+数据缺口：细菌培养报告时间
+映射执行规则：LXE-24
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：2026-06-04 09:10尿培养阳性；24小时内病程未针对阳性菌和药敏调整治疗进行分析；大肠埃希菌生长；尿频较前减轻",细菌培养阳性结果未在病程中及时分析。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-144919_LX0609_SYN_005.json
+LX0609_SYN_006,LX0609-016,LX0609_SYN_006-LX0609-016-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,首次病程与连续日常病程存在高度重复段落。,"证据模板：复制类
+质控点：LX0609-016 不合理复制病历：不合理复制病历内容是指首次病程记录病例特点与入院记录、现病史完全相同
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-273
+应包含证据要素：重复文书、重复片段、相似原因、记录时间
+执行证据：首次病程与连续日常病程存在高度重复段落；患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。",多份病程记录核心描述高度重复，存在复制病历风险。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103433_LX0609_SYN_006.json
+LX0609_SYN_006,LX0609-017,LX0609_SYN_006-LX0609-017-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,主诉不能导出第一诊断。,"证据模板：复制类
+质控点：LX0609-017 不合理复制病历：2次以上病程记录完全相同（相识度大于70%）
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-275、LXE-21
+应包含证据要素：重复文书、重复片段、相似原因、记录时间
+执行证据：主诉为“不适3天”，不能导出第一诊断急性阑尾炎；不适3天；急性阑尾炎",主诉过于笼统，无法支撑第一诊断。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103433_LX0609_SYN_006.json
+LX0609_SYN_006,LX0609-018,LX0609_SYN_006-LX0609-018-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,首次病程拟诊讨论未充分说明第一诊断依据。,"证据模板：通用质控
+质控点：LX0609-018 主诉能导出第一诊断：主诉书写不规范（1.只写症状不写诊断，2.≤20字)或不能导出第一诊断。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-008、LX-001、CL-068
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：首次病程拟诊讨论未充分说明第一诊断依据；第一诊断依据记录不足",首次病程诊断分析不足。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103433_LX0609_SYN_006.json
+LX0609_SYN_007,LX0609-020,LX0609_SYN_007-LX0609-020-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,会诊目的仅写“请会诊”。,"证据模板：会诊类
+质控点：LX0609-020 会诊记录：有会诊记录单无请会诊执行记录
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：会诊记录、会诊申请、会诊意见、会诊目的
+映射执行规则：LX-017、CL-250
+应包含证据要素：会诊申请单、会诊目的、会诊意见、执行记录
+执行证据：会诊目的仅写“请会诊”；会诊目的：请会诊",会诊申请未明确会诊目的。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-151132_LX0609_SYN_007.json
+LX0609_SYN_007,LX0609-021,LX0609_SYN_007-LX0609-021-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,会诊意见笼统，缺少针对性诊疗建议。,"证据模板：会诊类
+质控点：LX0609-021 会诊记录：会诊申请单会诊目的不明确
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：会诊记录、会诊申请、会诊意见、会诊目的
+映射执行规则：SC-068、LX-015
+应包含证据要素：会诊申请单、会诊目的、会诊意见、执行记录
+执行证据：会诊意见笼统，缺少针对性诊疗建议；建议完善相关检查，继续目前治疗",会诊意见过于笼统，不具备可执行性。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-151132_LX0609_SYN_007.json
+LX0609_SYN_007,LX0609-022,LX0609_SYN_007-LX0609-022-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,会诊意见笼统，缺少针对性诊疗建议；后续病程照抄会诊意见，未记录执行情况。,"证据模板：会诊类
+质控点：LX0609-022 会诊记录：会诊记录单会诊意见不明确（如出现必要时行**检查或**药物治疗）
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：会诊记录、会诊申请、会诊意见、会诊目的
+映射执行规则：SC-069
+应包含证据要素：会诊申请单、会诊目的、会诊意见、执行记录
+执行证据：会诊意见笼统，缺少针对性诊疗建议；后续病程照抄会诊意见，未记录执行情况；建议完善相关检查，继续目前治疗",病程记录未说明会诊意见执行情况。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-151132_LX0609_SYN_007.json
+LX0609_SYN_008,LX0609-003,LX0609_SYN_008-LX0609-003-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,手术记录完成时间距手术结束超过24小时。,"证据模板：时限类
+质控点：LX0609-003 手术记录：手术后24小时内是否完成
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：LX-026、SC-096
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：手术结束2026-06-03 10:40；手术记录提交2026-06-04 14:00；2026-06-04 14:00",手术记录超过术后24小时完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-144959_LX0609_SYN_008.json
+LX0609_SYN_008,LX0609-039,LX0609_SYN_008-LX0609-039-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,术前讨论未记录替代方案、主要风险和参会人员具体意见。,"证据模板：手术麻醉类
+质控点：LX0609-039 术前讨论记录：除以紧急抢救生命为目的的急诊手术外，其他住院患者手术无术前讨论或术者未参加。
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：LX-019、SC-082
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：术前讨论未记录替代方案、主要风险和参会人员具体意见；未记录替代方案、主要风险",术前讨论内容不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-144959_LX0609_SYN_008.json
+LX0609_SYN_008,LX0609-032,LX0609_SYN_008-LX0609-032-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,手术安全核查记录不完整，麻醉前核查项未签名。,"证据模板：手术麻醉类
+质控点：LX0609-032 手术安全核查表：无手术安全核查表（有手术记录）
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：SC-102、LXE-33
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：手术安全核查记录不完整，麻醉前核查项未签名；麻醉前核查项未签名",手术安全核查记录存在缺项。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-144959_LX0609_SYN_008.json
+LX0609_SYN_008,LX0609-038,LX0609_SYN_008-LX0609-038-04,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,麻醉记录生命体征记录间断，出室评分未填写。,"证据模板：手术麻醉类
+质控点：LX0609-038 麻醉记录单：无麻醉记录单（局麻除外）；
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：SC-090
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：麻醉记录生命体征记录间断，出室评分未填写；出室评分未填写",麻醉记录填写不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-144959_LX0609_SYN_008.json
+LX0609_SYN_009,LX0609-013,LX0609_SYN_009-LX0609-013-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,病理报告提示胃腺癌，但病程和首页未充分记录病理诊断分析。,"证据模板：检查检验类
+质控点：LX0609-013 病理检查：病理检查结果在手术记录、病程中未记录
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：手术记录、手术名称、术前讨论、切口、术后
+数据缺口：病理报告时间
+映射执行规则：SC-037、SC-099、SC-114
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：病理报告提示胃腺癌；病程和首页未充分记录病理诊断分析；胃腺癌，中分化",恶性肿瘤病理信息未充分进入病程/首页质控证据链。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145054_LX0609_SYN_009.json
+LX0609_SYN_009,LX0609-019,LX0609_SYN_009-LX0609-019-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,胃癌根治术记录未明确淋巴结清扫范围及送检组数。,"证据模板：检查检验类
+质控点：LX0609-019 病理检查：取材情况未在病程记录/手术记录中进行记录。
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、切口、术后
+映射执行规则：SC-037、SC-099
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：胃癌根治术记录未明确淋巴结清扫范围及送检组数；未明确淋巴结清扫范围及送检组数",恶性肿瘤手术记录未体现淋巴结清扫关键信息。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145054_LX0609_SYN_009.json
+LX0609_SYN_009,LX0609-040,LX0609_SYN_009-LX0609-040-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,四级手术术前讨论未见MDT记录。,"证据模板：手术麻醉类
+质控点：LX0609-040 术前多学科讨论记录：四级手术术前讨论未多学科讨论。
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、切口、术后
+映射执行规则：SC-083、CL-108
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：四级手术术前讨论未见MDT记录；未见MDT多学科讨论记录",四级手术缺少MDT或高级别术前讨论支撑。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145054_LX0609_SYN_009.json
+LX0609_SYN_009,LX0609-027,LX0609_SYN_009-LX0609-027-04,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,恶性肿瘤患者出院医嘱缺少肿瘤相关后续治疗计划。,"证据模板：通用质控
+质控点：LX0609-027 出院记录：出院记录（恶性肿瘤患者）中是否有出院后肿瘤相关治疗的出院治疗计划
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：病理、肿瘤、癌、淋巴结
+映射执行规则：SC-116、SC-124
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：出院医嘱未包含肿瘤科复诊、辅助化疗评估或病理回看计划；注意休息，保持切口清洁",恶性肿瘤出院后治疗计划不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145054_LX0609_SYN_009.json
+LX0609_SYN_010,LX0609-041,LX0609_SYN_010-LX0609-041-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,存在输血申请和输血医嘱，但未见完整输血知情同意记录。,"证据模板：输血类
+质控点：LX0609-041 输血知情同意书：无输血知情同意书；
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：输血、红细胞、输血记录、输血申请
+数据缺口：输血医嘱或输血记录
+映射执行规则：SC-133、LXE-52
+应包含证据要素：输血申请、输血医嘱、输血记录、费用、输血前检查项
+执行证据：存在输血申请和输血医嘱；未见完整输血知情同意记录；未见完整输血风险告知记录",输血前知情同意资料不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-152932_LX0609_SYN_010.json
+LX0609_SYN_010,LX0609-043,LX0609_SYN_010-LX0609-043-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,输血前常规检查资料不完整。,"证据模板：检查检验类
+质控点：LX0609-043 输血前辅助检查：输血前常规检查不完整；
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：输血、红细胞、输血记录、输血申请
+映射执行规则：SC-073、SC-138
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：存在输血申请和输血医嘱；未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果；申请输注红细胞悬液2U",输血前常规检查资料不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-152932_LX0609_SYN_010.json
+LX0609_SYN_010,LX0609-047,LX0609_SYN_010-LX0609-047-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,输血记录未见输血后疗效评价及不良反应观察结论。,"证据模板：输血类
+质控点：LX0609-047 输血后评价：无输血后评价
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：输血、红细胞、输血记录、输血申请
+映射执行规则：CL-255、SC-074
+应包含证据要素：输血申请、输血医嘱、输血记录、费用、输血前检查项
+执行证据：输血记录未见输血后疗效评价及不良反应观察结论；未见输血后疗效评价",输血后评价记录不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-152932_LX0609_SYN_010.json
+LX0609_SYN_010,LX0609-049,LX0609_SYN_010-LX0609-049-04,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,输血医嘱与费用数量不一致。,"证据模板：检查检验类
+质控点：LX0609-049 输血医嘱：输血医嘱与收费不一致。
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：输血、红细胞、输血记录、输血申请
+数据缺口：输血医嘱、费用明细
+映射执行规则：SC-146
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：医嘱输血2U；费用明细收费4U；输注红细胞悬液2U；红细胞悬液收费4U",输血医嘱与收费数量不一致。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-152932_LX0609_SYN_010.json
+LX0609_SYN_011,LX0609-001,LX0609_SYN_011-LX0609-001-01,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,入院记录未在入院后24小时内完成。,"证据模板：时限类
+质控点：LX0609-001 入院记录：入院后24小时内是否完成
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-002
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；入院记录记录时间：2026-06-02 10:30:00；间隔：26.5小时",入院记录超过入院后24小时完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103945_LX0609_SYN_011.json
+LX0609_SYN_011,LX0609-002,LX0609_SYN_011-LX0609-002-02,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,首次病程记录未在入院后8小时内完成。,"证据模板：时限类
+质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-081、SC-021
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；首次病程记录记录时间：2026-06-01 18:30:00；间隔：10.5小时",首次病程记录未在入院后8小时内完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103945_LX0609_SYN_011.json
+LX0609_SYN_011,LX0609-005,LX0609_SYN_011-LX0609-005-03,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,入院后48小时内未找到主治医师首次查房记录。,"证据模板：时限类
+质控点：LX0609-005 上级医生查房记录：入院后 48 小时内无主治医师首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-048
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；入院后48小时内未见主治医师首次查房记录；主治医师首次查房：缺失；主任医师查房记录：主任医师查房记录@2026-06-04 13:30:00，不能替代主治医师首次查房记录",48小时内缺少主治医师首次查房记录。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103945_LX0609_SYN_011.json
+LX0609_SYN_011,LX0609-006,LX0609_SYN_011-LX0609-006-04,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,副主任/主任医师首次查房超过入院后72小时完成。,"证据模板：时限类
+质控点：LX0609-006 上级医生查房记录：入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-049、CL-080
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；主任医师查房记录记录时间：2026-06-04 13:30:00；间隔：77.5小时",72小时内未完成高级职称医师首次查房记录。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-103945_LX0609_SYN_011.json
+LX0609_SYN_012,LX0609-001,LX0609_SYN_012-LX0609-001-01,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,入院记录在入院后24小时内完成。,"证据模板：时限类
+质控点：LX0609-001 入院记录：入院后24小时内是否完成
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-002
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；入院记录记录时间：2026-06-02 12:00:00；间隔：3.0小时",入院记录时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104048_LX0609_SYN_012.json
+LX0609_SYN_012,LX0609-002,LX0609_SYN_012-LX0609-002-02,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,首次病程记录在入院后8小时内完成。,"证据模板：时限类
+质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-081、SC-021
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；首次病程记录记录时间：2026-06-02 11:30:00；间隔：2.5小时",首次病程时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104048_LX0609_SYN_012.json
+LX0609_SYN_012,LX0609-005,LX0609_SYN_012-LX0609-005-03,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,主治医师首次查房在入院后48小时内完成。,"证据模板：时限类
+质控点：LX0609-005 上级医生查房记录：入院后 48 小时内无主治医师首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-048
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；主治医师查房记录记录时间：2026-06-03 08:30:00；间隔：23.5小时",48小时主治医师查房合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104048_LX0609_SYN_012.json
+LX0609_SYN_012,LX0609-006,LX0609_SYN_012-LX0609-006-04,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,副主任/主任医师首次查房在入院后72小时内完成。,"证据模板：时限类
+质控点：LX0609-006 上级医生查房记录：入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-049、CL-080
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；主任医师查房记录记录时间：2026-06-04 08:00:00；间隔：47.0小时",72小时高级职称查房合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104048_LX0609_SYN_012.json
+LX0609_SYN_013,LX0609-008,LX0609_SYN_013-LX0609-008-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,病重患者2天内缺少规定查房或病程记录。,"证据模板：通用质控
+质控点：LX0609-008 查房记录：病重（下了病重医嘱）患者2天内无查房病程记录；
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：病重、病重医嘱
+数据缺口：病重医嘱起止时间
+映射执行规则：SC-051、CL-231
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：2026-06-09 08:20下达病重医嘱；2026-06-10、2026-06-11未见查房病程记录；病重；2026-06-12 09:30",病重患者2天内缺少查房病程记录。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145556_LX0609_SYN_013.json
+LX0609_SYN_013,LX0609-009,LX0609_SYN_013-LX0609-009-02,boundary,not_applicable,False,not_applicable,False,pass,0.95,,False,False,False,False,,1,未下达病危医嘱，本规则不适用。,"证据模板：通用质控
+质控点：LX0609-009 查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：病重、病重医嘱
+数据缺口：病危医嘱起止时间
+映射执行规则：SC-051、CL-231
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：未下达病危医嘱；病重",该样本只有病重医嘱，不适用于病危每日记录规则。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145556_LX0609_SYN_013.json
+LX0609_SYN_013,LX0609-007,LX0609_SYN_013-LX0609-007-03,boundary,not_applicable,False,not_applicable,False,pass,0.95,,False,False,False,False,,1,患者存在病重医嘱，不属于病情稳定患者，本规则不适用。,"证据模板：通用质控
+质控点：LX0609-007 查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：病重、病重医嘱
+映射执行规则：LXE-18
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：患者存在病重医嘱，不属于病情稳定患者；下达病重医嘱",病情稳定3天查房规则不适用。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145556_LX0609_SYN_013.json
+LX0609_SYN_014,LX0609-004,LX0609_SYN_014-LX0609-004-01,positive,non_compliant,True,non_compliant,True,pass,1.0,,False,False,False,False,,1,抢救结束至记录完成超过6小时，不符合时限要求。,"证据模板：时限类
+质控点：LX0609-004 抢救记录：抢救结束后6小时内是否完成
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：抢救、抢救记录、抢救结束
+映射执行规则：SC-054
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：【抢救记录】抢救结束时间：2026-06-05 12:00",抢救记录超过抢救结束后6小时完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104231_LX0609_SYN_014.json
+LX0609_SYN_014,LX0609-001,LX0609_SYN_014-LX0609-001-02,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,入院记录在入院后24小时内完成。,"证据模板：时限类
+质控点：LX0609-001 入院记录：入院后24小时内是否完成
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-002
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-05 06:30:00；入院记录记录时间：2026-06-05 08:30:00；间隔：2.0小时",入院记录时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104231_LX0609_SYN_014.json
+LX0609_SYN_014,LX0609-002,LX0609_SYN_014-LX0609-002-03,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,首次病程记录在入院后8小时内完成。,"证据模板：时限类
+质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-081、SC-021
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-05 06:30:00；首次病程记录记录时间：2026-06-05 08:30:00；间隔：2.0小时",首次病程时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104231_LX0609_SYN_014.json
+LX0609_SYN_015,LX0609-010,LX0609_SYN_015-LX0609-010-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,CT/MRI检查前未见说明检查必要性的病程记录。,"证据模板：检查检验类
+质控点：LX0609-010 CT/MRI 检查记录：CT/MRI检查前有无病程记录（无行CT/MRI检查原因）
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：MRI、检查报告、报告时间
+数据缺口：CT/MRI医嘱、检查时间
+映射执行规则：LXE-23
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：行腰椎MRI检查前未见说明检查必要性的病程记录；腰椎MRI报告；已完善腰椎MRI检查",MRI检查前缺少有针对性的病程记录说明。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145647_LX0609_SYN_015.json
+LX0609_SYN_015,LX0609-012,LX0609_SYN_015-LX0609-012-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,CT/MRI阳性报告后24小时内未分析阳性结果与诊疗方案关系。,"证据模板：时限类
+质控点：LX0609-012 CT/MRI 检查记录：CT/MRI影像报告结果出具后24小时内阳性结果未进行分析
+触发状态：absent
+触发说明：病历文本和证据中未发现surgery相关触发事实
+映射执行规则：LXE-23
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：2026-06-03 14:20腰椎MRI阳性报告；报告后24小时内病程未分析阳性结果与症状、诊断或治疗方案关系；L4/5椎间盘突出并右侧神经根受压；继续予止痛、营养神经治疗",MRI阳性结果未在24小时内进行临床分析。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145647_LX0609_SYN_015.json
+LX0609_SYN_015,LX0609-014,LX0609_SYN_015-LX0609-014-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,细菌培养阳性结果未在病程中及时分析。,"证据模板：时限类
+质控点：LX0609-014 细菌培养记录：细菌培养结果在病程中未记录（报告出具后24小时内）
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：MRI、检查报告、报告时间
+数据缺口：细菌培养报告时间
+映射执行规则：LXE-24
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：2026-06-04 09:10尿培养阳性；24小时内病程未针对阳性菌和药敏调整治疗进行分析；大肠埃希菌生长；尿频较前减轻",细菌培养阳性结果未在病程中及时分析。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145647_LX0609_SYN_015.json
+LX0609_SYN_016,LX0609-016,LX0609_SYN_016-LX0609-016-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,首次病程与连续日常病程存在高度重复段落。,"证据模板：复制类
+质控点：LX0609-016 不合理复制病历：不合理复制病历内容是指首次病程记录病例特点与入院记录、现病史完全相同
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-273
+应包含证据要素：重复文书、重复片段、相似原因、记录时间
+执行证据：首次病程与连续日常病程存在高度重复段落；患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。",多份病程记录核心描述高度重复，存在复制病历风险。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104441_LX0609_SYN_016.json
+LX0609_SYN_016,LX0609-017,LX0609_SYN_016-LX0609-017-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,主诉不能导出第一诊断。,"证据模板：复制类
+质控点：LX0609-017 不合理复制病历：2次以上病程记录完全相同（相识度大于70%）
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-275、LXE-21
+应包含证据要素：重复文书、重复片段、相似原因、记录时间
+执行证据：主诉为“不适3天”，不能导出第一诊断急性阑尾炎；不适3天；急性阑尾炎",主诉过于笼统，无法支撑第一诊断。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104441_LX0609_SYN_016.json
+LX0609_SYN_016,LX0609-018,LX0609_SYN_016-LX0609-018-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,首次病程拟诊讨论未充分说明第一诊断依据。,"证据模板：通用质控
+质控点：LX0609-018 主诉能导出第一诊断：主诉书写不规范（1.只写症状不写诊断，2.≤20字)或不能导出第一诊断。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-008、LX-001、CL-068
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：首次病程拟诊讨论未充分说明第一诊断依据；第一诊断依据记录不足",首次病程诊断分析不足。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104441_LX0609_SYN_016.json
+LX0609_SYN_017,LX0609-020,LX0609_SYN_017-LX0609-020-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,会诊目的仅写“请会诊”。,"证据模板：会诊类
+质控点：LX0609-020 会诊记录：有会诊记录单无请会诊执行记录
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：会诊记录、会诊申请、会诊意见、会诊目的
+映射执行规则：LX-017、CL-250
+应包含证据要素：会诊申请单、会诊目的、会诊意见、执行记录
+执行证据：会诊目的仅写“请会诊”；会诊目的：请会诊",会诊申请未明确会诊目的。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104602_LX0609_SYN_017.json
+LX0609_SYN_017,LX0609-021,LX0609_SYN_017-LX0609-021-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,会诊意见笼统，缺少针对性诊疗建议。,"证据模板：会诊类
+质控点：LX0609-021 会诊记录：会诊申请单会诊目的不明确
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：会诊记录、会诊申请、会诊意见、会诊目的
+映射执行规则：SC-068、LX-015
+应包含证据要素：会诊申请单、会诊目的、会诊意见、执行记录
+执行证据：会诊意见笼统，缺少针对性诊疗建议；建议完善相关检查，继续目前治疗",会诊意见过于笼统，不具备可执行性。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104602_LX0609_SYN_017.json
+LX0609_SYN_017,LX0609-022,LX0609_SYN_017-LX0609-022-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,会诊记录缺失会诊时间、科别及会诊医师签名等关键要素。,"证据模板：会诊类
+质控点：LX0609-022 会诊记录：会诊记录单会诊意见不明确（如出现必要时行**检查或**药物治疗）
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：会诊记录、会诊申请、会诊意见、会诊目的
+映射执行规则：SC-069
+应包含证据要素：会诊申请单、会诊目的、会诊意见、执行记录
+执行证据：【会诊记录】会诊意见：建议完善相关检查，继续目前治疗，必要时调整用药",病程记录未说明会诊意见执行情况。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104602_LX0609_SYN_017.json
+LX0609_SYN_018,LX0609-003,LX0609_SYN_018-LX0609-003-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,手术记录完成时间距手术结束超过24小时。,"证据模板：时限类
+质控点：LX0609-003 手术记录：手术后24小时内是否完成
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：LX-026、SC-096
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：手术结束2026-06-03 10:40；手术记录提交2026-06-04 14:00；2026-06-04 14:00",手术记录超过术后24小时完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145731_LX0609_SYN_018.json
+LX0609_SYN_018,LX0609-039,LX0609_SYN_018-LX0609-039-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,术前讨论未记录替代方案、主要风险和参会人员具体意见。,"证据模板：手术麻醉类
+质控点：LX0609-039 术前讨论记录：除以紧急抢救生命为目的的急诊手术外，其他住院患者手术无术前讨论或术者未参加。
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：LX-019、SC-082
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：术前讨论未记录替代方案、主要风险和参会人员具体意见；未记录替代方案、主要风险",术前讨论内容不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145731_LX0609_SYN_018.json
+LX0609_SYN_018,LX0609-032,LX0609_SYN_018-LX0609-032-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,手术安全核查记录不完整，麻醉前核查项未签名。,"证据模板：手术麻醉类
+质控点：LX0609-032 手术安全核查表：无手术安全核查表（有手术记录）
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：SC-102、LXE-33
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：手术安全核查记录不完整，麻醉前核查项未签名；麻醉前核查项未签名",手术安全核查记录存在缺项。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145731_LX0609_SYN_018.json
+LX0609_SYN_018,LX0609-038,LX0609_SYN_018-LX0609-038-04,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,麻醉记录生命体征记录间断，出室评分未填写。,"证据模板：手术麻醉类
+质控点：LX0609-038 麻醉记录单：无麻醉记录单（局麻除外）；
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：SC-090
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：麻醉记录生命体征记录间断，出室评分未填写；出室评分未填写",麻醉记录填写不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145731_LX0609_SYN_018.json
+LX0609_SYN_019,LX0609-013,LX0609_SYN_019-LX0609-013-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,病理报告提示胃腺癌，但病程和首页未充分记录病理诊断分析。,"证据模板：检查检验类
+质控点：LX0609-013 病理检查：病理检查结果在手术记录、病程中未记录
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：手术记录、手术名称、术前讨论、切口、术后
+数据缺口：病理报告时间
+映射执行规则：SC-037、SC-099、SC-114
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：病理报告提示胃腺癌；病程和首页未充分记录病理诊断分析；胃腺癌，中分化",恶性肿瘤病理信息未充分进入病程/首页质控证据链。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145836_LX0609_SYN_019.json
+LX0609_SYN_019,LX0609-019,LX0609_SYN_019-LX0609-019-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,胃癌根治术记录未明确淋巴结清扫范围及送检组数。,"证据模板：检查检验类
+质控点：LX0609-019 病理检查：取材情况未在病程记录/手术记录中进行记录。
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、切口、术后
+映射执行规则：SC-037、SC-099
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：胃癌根治术记录未明确淋巴结清扫范围及送检组数；未明确淋巴结清扫范围及送检组数",恶性肿瘤手术记录未体现淋巴结清扫关键信息。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145836_LX0609_SYN_019.json
+LX0609_SYN_019,LX0609-040,LX0609_SYN_019-LX0609-040-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,四级手术术前讨论未见MDT记录。,"证据模板：手术麻醉类
+质控点：LX0609-040 术前多学科讨论记录：四级手术术前讨论未多学科讨论。
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、切口、术后
+映射执行规则：SC-083、CL-108
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：四级手术术前讨论未见MDT记录；未见MDT多学科讨论记录",四级手术缺少MDT或高级别术前讨论支撑。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145836_LX0609_SYN_019.json
+LX0609_SYN_019,LX0609-027,LX0609_SYN_019-LX0609-027-04,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,恶性肿瘤患者出院医嘱缺少肿瘤相关后续治疗计划。,"证据模板：通用质控
+质控点：LX0609-027 出院记录：出院记录（恶性肿瘤患者）中是否有出院后肿瘤相关治疗的出院治疗计划
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：病理、肿瘤、癌、淋巴结
+映射执行规则：SC-116、SC-124
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：出院医嘱未包含肿瘤科复诊、辅助化疗评估或病理回看计划；注意休息，保持切口清洁",恶性肿瘤出院后治疗计划不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-145836_LX0609_SYN_019.json
+LX0609_SYN_020,LX0609-041,LX0609_SYN_020-LX0609-041-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,存在输血申请和输血医嘱，但未见完整输血知情同意记录。,"证据模板：输血类
+质控点：LX0609-041 输血知情同意书：无输血知情同意书；
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：输血、红细胞、输血记录、输血申请
+数据缺口：输血医嘱或输血记录
+映射执行规则：SC-133、LXE-52
+应包含证据要素：输血申请、输血医嘱、输血记录、费用、输血前检查项
+执行证据：存在输血申请和输血医嘱；未见完整输血知情同意记录；未见完整输血风险告知记录",输血前知情同意资料不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-153041_LX0609_SYN_020.json
+LX0609_SYN_020,LX0609-043,LX0609_SYN_020-LX0609-043-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,输血前常规检查资料不完整。,"证据模板：检查检验类
+质控点：LX0609-043 输血前辅助检查：输血前常规检查不完整；
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：输血、红细胞、输血记录、输血申请
+映射执行规则：SC-073、SC-138
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：存在输血申请和输血医嘱；未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果；申请输注红细胞悬液2U",输血前常规检查资料不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-153041_LX0609_SYN_020.json
+LX0609_SYN_020,LX0609-047,LX0609_SYN_020-LX0609-047-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,输血记录未见输血后疗效评价及不良反应观察结论。,"证据模板：输血类
+质控点：LX0609-047 输血后评价：无输血后评价
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：输血、红细胞、输血记录、输血申请
+映射执行规则：CL-255、SC-074
+应包含证据要素：输血申请、输血医嘱、输血记录、费用、输血前检查项
+执行证据：输血记录未见输血后疗效评价及不良反应观察结论；未见输血后疗效评价",输血后评价记录不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-153041_LX0609_SYN_020.json
+LX0609_SYN_020,LX0609-049,LX0609_SYN_020-LX0609-049-04,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,输血医嘱与费用数量不一致。,"证据模板：检查检验类
+质控点：LX0609-049 输血医嘱：输血医嘱与收费不一致。
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：输血、红细胞、输血记录、输血申请
+数据缺口：输血医嘱、费用明细
+映射执行规则：SC-146
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：医嘱输血2U；费用明细收费4U；输注红细胞悬液2U；红细胞悬液收费4U",输血医嘱与收费数量不一致。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-153041_LX0609_SYN_020.json
+LX0609_SYN_021,LX0609-001,LX0609_SYN_021-LX0609-001-01,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,入院记录未在入院后24小时内完成。,"证据模板：时限类
+质控点：LX0609-001 入院记录：入院后24小时内是否完成
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-002
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；入院记录记录时间：2026-06-02 10:30:00；间隔：26.5小时",入院记录超过入院后24小时完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104945_LX0609_SYN_021.json
+LX0609_SYN_021,LX0609-002,LX0609_SYN_021-LX0609-002-02,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,首次病程记录未在入院后8小时内完成。,"证据模板：时限类
+质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-081、SC-021
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；首次病程记录记录时间：2026-06-01 18:30:00；间隔：10.5小时",首次病程记录未在入院后8小时内完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104945_LX0609_SYN_021.json
+LX0609_SYN_021,LX0609-005,LX0609_SYN_021-LX0609-005-03,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,入院后48小时内未找到主治医师首次查房记录。,"证据模板：时限类
+质控点：LX0609-005 上级医生查房记录：入院后 48 小时内无主治医师首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-048
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；入院后48小时内未见主治医师首次查房记录；主治医师首次查房：缺失；主任医师查房记录：主任医师查房记录@2026-06-04 13:30:00，不能替代主治医师首次查房记录",48小时内缺少主治医师首次查房记录。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104945_LX0609_SYN_021.json
+LX0609_SYN_021,LX0609-006,LX0609_SYN_021-LX0609-006-04,positive,non_compliant,True,non_compliant,True,pass,0.94,,False,False,False,False,,1,副主任/主任医师首次查房超过入院后72小时完成。,"证据模板：时限类
+质控点：LX0609-006 上级医生查房记录：入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-049、CL-080
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-01 08:00:00；主任医师查房记录记录时间：2026-06-04 13:30:00；间隔：77.5小时",72小时内未完成高级职称医师首次查房记录。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-104945_LX0609_SYN_021.json
+LX0609_SYN_022,LX0609-001,LX0609_SYN_022-LX0609-001-01,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,入院记录在入院后24小时内完成。,"证据模板：时限类
+质控点：LX0609-001 入院记录：入院后24小时内是否完成
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-002
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；入院记录记录时间：2026-06-02 12:00:00；间隔：3.0小时",入院记录时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-105102_LX0609_SYN_022.json
+LX0609_SYN_022,LX0609-002,LX0609_SYN_022-LX0609-002-02,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,首次病程记录在入院后8小时内完成。,"证据模板：时限类
+质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-081、SC-021
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；首次病程记录记录时间：2026-06-02 11:30:00；间隔：2.5小时",首次病程时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-105102_LX0609_SYN_022.json
+LX0609_SYN_022,LX0609-005,LX0609_SYN_022-LX0609-005-03,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,主治医师首次查房在入院后48小时内完成。,"证据模板：时限类
+质控点：LX0609-005 上级医生查房记录：入院后 48 小时内无主治医师首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-048
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；主治医师查房记录记录时间：2026-06-03 08:30:00；间隔：23.5小时",48小时主治医师查房合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-105102_LX0609_SYN_022.json
+LX0609_SYN_022,LX0609-006,LX0609_SYN_022-LX0609-006-04,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,副主任/主任医师首次查房在入院后72小时内完成。,"证据模板：时限类
+质控点：LX0609-006 上级医生查房记录：入院后 72小时内无最高级别（副主任医师或主任医师）首次查房记录。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-049、CL-080
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-02 09:00:00；主任医师查房记录记录时间：2026-06-04 08:00:00；间隔：47.0小时",72小时高级职称查房合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-105102_LX0609_SYN_022.json
+LX0609_SYN_023,LX0609-008,LX0609_SYN_023-LX0609-008-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,病重患者2天内缺少规定查房或病程记录。,"证据模板：通用质控
+质控点：LX0609-008 查房记录：病重（下了病重医嘱）患者2天内无查房病程记录；
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：病重、病重医嘱
+数据缺口：病重医嘱起止时间
+映射执行规则：SC-051、CL-231
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：2026-06-09 08:20下达病重医嘱；2026-06-10、2026-06-11未见查房病程记录；病重；2026-06-12 09:30",病重患者2天内缺少查房病程记录。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150100_LX0609_SYN_023.json
+LX0609_SYN_023,LX0609-009,LX0609_SYN_023-LX0609-009-02,boundary,not_applicable,False,not_applicable,False,pass,0.95,,False,False,False,False,,1,未下达病危医嘱，本规则不适用。,"证据模板：通用质控
+质控点：LX0609-009 查房记录：病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：病重、病重医嘱
+数据缺口：病危医嘱起止时间
+映射执行规则：SC-051、CL-231
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：未下达病危医嘱；病重",该样本只有病重医嘱，不适用于病危每日记录规则。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150100_LX0609_SYN_023.json
+LX0609_SYN_023,LX0609-007,LX0609_SYN_023-LX0609-007-03,boundary,not_applicable,False,not_applicable,False,pass,0.95,,False,False,False,False,,1,患者存在病重医嘱，不属于病情稳定患者，本规则不适用。,"证据模板：通用质控
+质控点：LX0609-007 查房记录：病情稳定（未下病危、病重医嘱）患者3天内无查房病程记录
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：病重、病重医嘱
+映射执行规则：LXE-18
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：患者存在病重医嘱，不属于病情稳定患者；下达病重医嘱",病情稳定3天查房规则不适用。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150100_LX0609_SYN_023.json
+LX0609_SYN_024,LX0609-004,LX0609_SYN_024-LX0609-004-01,positive,non_compliant,True,non_compliant,True,pass,1.0,,False,False,False,False,,1,抢救结束至记录完成超过6小时，不符合时限要求。,"证据模板：时限类
+质控点：LX0609-004 抢救记录：抢救结束后6小时内是否完成
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：抢救、抢救记录、抢救结束
+映射执行规则：SC-054
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：【抢救记录】抢救结束时间：2026-06-05 12:00",抢救记录超过抢救结束后6小时完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-105243_LX0609_SYN_024.json
+LX0609_SYN_024,LX0609-001,LX0609_SYN_024-LX0609-001-02,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,入院记录在入院后24小时内完成。,"证据模板：时限类
+质控点：LX0609-001 入院记录：入院后24小时内是否完成
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-002
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-05 06:30:00；入院记录记录时间：2026-06-05 08:30:00；间隔：2.0小时",入院记录时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-105243_LX0609_SYN_024.json
+LX0609_SYN_024,LX0609-002,LX0609_SYN_024-LX0609-002-03,negative,compliant,False,compliant,False,pass,0.94,,False,False,False,False,,1,首次病程记录在入院后8小时内完成。,"证据模板：时限类
+质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-081、SC-021
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：入院时间：2026-06-05 06:30:00；首次病程记录记录时间：2026-06-05 08:30:00；间隔：2.0小时",首次病程时限合规。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-105243_LX0609_SYN_024.json
+LX0609_SYN_025,LX0609-010,LX0609_SYN_025-LX0609-010-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,CT/MRI检查前未见说明检查必要性的病程记录。,"证据模板：检查检验类
+质控点：LX0609-010 CT/MRI 检查记录：CT/MRI检查前有无病程记录（无行CT/MRI检查原因）
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：MRI、检查报告、报告时间
+数据缺口：CT/MRI医嘱、检查时间
+映射执行规则：LXE-23
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：行腰椎MRI检查前未见说明检查必要性的病程记录；腰椎MRI报告；已完善腰椎MRI检查",MRI检查前缺少有针对性的病程记录说明。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150204_LX0609_SYN_025.json
+LX0609_SYN_025,LX0609-012,LX0609_SYN_025-LX0609-012-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,CT/MRI阳性报告后24小时内未分析阳性结果与诊疗方案关系。,"证据模板：时限类
+质控点：LX0609-012 CT/MRI 检查记录：CT/MRI影像报告结果出具后24小时内阳性结果未进行分析
+触发状态：absent
+触发说明：病历文本和证据中未发现surgery相关触发事实
+映射执行规则：LXE-23
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：2026-06-03 14:20腰椎MRI阳性报告；报告后24小时内病程未分析阳性结果与症状、诊断或治疗方案关系；L4/5椎间盘突出并右侧神经根受压；继续予止痛、营养神经治疗",MRI阳性结果未在24小时内进行临床分析。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150204_LX0609_SYN_025.json
+LX0609_SYN_025,LX0609-014,LX0609_SYN_025-LX0609-014-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,细菌培养阳性结果未在病程中及时分析。,"证据模板：时限类
+质控点：LX0609-014 细菌培养记录：细菌培养结果在病程中未记录（报告出具后24小时内）
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：MRI、检查报告、报告时间
+数据缺口：细菌培养报告时间
+映射执行规则：LXE-24
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：2026-06-04 09:10尿培养阳性；24小时内病程未针对阳性菌和药敏调整治疗进行分析；大肠埃希菌生长；尿频较前减轻",细菌培养阳性结果未在病程中及时分析。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150204_LX0609_SYN_025.json
+LX0609_SYN_026,LX0609-016,LX0609_SYN_026-LX0609-016-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,首次病程与连续日常病程存在高度重复段落。,"证据模板：复制类
+质控点：LX0609-016 不合理复制病历：不合理复制病历内容是指首次病程记录病例特点与入院记录、现病史完全相同
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-273
+应包含证据要素：重复文书、重复片段、相似原因、记录时间
+执行证据：首次病程与连续日常病程存在高度重复段落；患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。；患者一般情况尚可，生命体征平稳，腹部查体较前无明显变化，继续目前治疗方案。",多份病程记录核心描述高度重复，存在复制病历风险。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-105506_LX0609_SYN_026.json
+LX0609_SYN_026,LX0609-017,LX0609_SYN_026-LX0609-017-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,主诉不能导出第一诊断。,"证据模板：复制类
+质控点：LX0609-017 不合理复制病历：2次以上病程记录完全相同（相识度大于70%）
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：CL-275、LXE-21
+应包含证据要素：重复文书、重复片段、相似原因、记录时间
+执行证据：主诉为“不适3天”，不能导出第一诊断急性阑尾炎；不适3天；急性阑尾炎",主诉过于笼统，无法支撑第一诊断。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-105506_LX0609_SYN_026.json
+LX0609_SYN_026,LX0609-018,LX0609_SYN_026-LX0609-018-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,首次病程拟诊讨论未充分说明第一诊断依据。,"证据模板：通用质控
+质控点：LX0609-018 主诉能导出第一诊断：主诉书写不规范（1.只写症状不写诊断，2.≤20字)或不能导出第一诊断。
+触发状态：unknown
+触发说明：未识别到可安全门控的触发族，进入常规执行
+映射执行规则：SC-008、LX-001、CL-068
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：首次病程拟诊讨论未充分说明第一诊断依据；第一诊断依据记录不足",首次病程诊断分析不足。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-105506_LX0609_SYN_026.json
+LX0609_SYN_027,LX0609-020,LX0609_SYN_027-LX0609-020-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,会诊目的仅写“请会诊”。,"证据模板：会诊类
+质控点：LX0609-020 会诊记录：有会诊记录单无请会诊执行记录
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：会诊记录、会诊申请、会诊意见、会诊目的
+映射执行规则：LX-017、CL-250
+应包含证据要素：会诊申请单、会诊目的、会诊意见、执行记录
+执行证据：会诊目的仅写“请会诊”；会诊目的：请会诊",会诊申请未明确会诊目的。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-151440_LX0609_SYN_027.json
+LX0609_SYN_027,LX0609-021,LX0609_SYN_027-LX0609-021-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,会诊意见笼统，缺少针对性诊疗建议。,"证据模板：会诊类
+质控点：LX0609-021 会诊记录：会诊申请单会诊目的不明确
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：会诊记录、会诊申请、会诊意见、会诊目的
+映射执行规则：SC-068、LX-015
+应包含证据要素：会诊申请单、会诊目的、会诊意见、执行记录
+执行证据：会诊意见笼统，缺少针对性诊疗建议；建议完善相关检查，继续目前治疗",会诊意见过于笼统，不具备可执行性。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-151440_LX0609_SYN_027.json
+LX0609_SYN_027,LX0609-022,LX0609_SYN_027-LX0609-022-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,会诊意见笼统，缺少针对性诊疗建议；后续病程照抄会诊意见，未记录执行情况。,"证据模板：会诊类
+质控点：LX0609-022 会诊记录：会诊记录单会诊意见不明确（如出现必要时行**检查或**药物治疗）
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：会诊记录、会诊申请、会诊意见、会诊目的
+映射执行规则：SC-069
+应包含证据要素：会诊申请单、会诊目的、会诊意见、执行记录
+执行证据：会诊意见笼统，缺少针对性诊疗建议；后续病程照抄会诊意见，未记录执行情况；建议完善相关检查，继续目前治疗",病程记录未说明会诊意见执行情况。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-151440_LX0609_SYN_027.json
+LX0609_SYN_028,LX0609-003,LX0609_SYN_028-LX0609-003-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,手术记录完成时间距手术结束超过24小时。,"证据模板：时限类
+质控点：LX0609-003 手术记录：手术后24小时内是否完成
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：LX-026、SC-096
+应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段
+执行证据：手术结束2026-06-03 10:40；手术记录提交2026-06-04 14:00；2026-06-04 14:00",手术记录超过术后24小时完成。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150356_LX0609_SYN_028.json
+LX0609_SYN_028,LX0609-039,LX0609_SYN_028-LX0609-039-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,术前讨论未记录替代方案、主要风险和参会人员具体意见。,"证据模板：手术麻醉类
+质控点：LX0609-039 术前讨论记录：除以紧急抢救生命为目的的急诊手术外，其他住院患者手术无术前讨论或术者未参加。
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：LX-019、SC-082
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：术前讨论未记录替代方案、主要风险和参会人员具体意见；未记录替代方案、主要风险",术前讨论内容不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150356_LX0609_SYN_028.json
+LX0609_SYN_028,LX0609-032,LX0609_SYN_028-LX0609-032-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,手术安全核查记录不完整，麻醉前核查项未签名。,"证据模板：手术麻醉类
+质控点：LX0609-032 手术安全核查表：无手术安全核查表（有手术记录）
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：SC-102、LXE-33
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：手术安全核查记录不完整，麻醉前核查项未签名；麻醉前核查项未签名",手术安全核查记录存在缺项。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150356_LX0609_SYN_028.json
+LX0609_SYN_028,LX0609-038,LX0609_SYN_028-LX0609-038-04,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,麻醉记录生命体征记录间断，出室评分未填写。,"证据模板：手术麻醉类
+质控点：LX0609-038 麻醉记录单：无麻醉记录单（局麻除外）；
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、术前小结、麻醉记录、安全核查、切口、术后
+映射执行规则：SC-090
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：麻醉记录生命体征记录间断，出室评分未填写；出室评分未填写",麻醉记录填写不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150356_LX0609_SYN_028.json
+LX0609_SYN_029,LX0609-013,LX0609_SYN_029-LX0609-013-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,病理报告提示胃腺癌，但病程和首页未充分记录病理诊断分析。,"证据模板：检查检验类
+质控点：LX0609-013 病理检查：病理检查结果在手术记录、病程中未记录
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：手术记录、手术名称、术前讨论、切口、术后
+数据缺口：病理报告时间
+映射执行规则：SC-037、SC-099、SC-114
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：病理报告提示胃腺癌；病程和首页未充分记录病理诊断分析；胃腺癌，中分化",恶性肿瘤病理信息未充分进入病程/首页质控证据链。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150502_LX0609_SYN_029.json
+LX0609_SYN_029,LX0609-019,LX0609_SYN_029-LX0609-019-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,胃癌根治术记录未明确淋巴结清扫范围及送检组数。,"证据模板：检查检验类
+质控点：LX0609-019 病理检查：取材情况未在病程记录/手术记录中进行记录。
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、切口、术后
+映射执行规则：SC-037、SC-099
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：胃癌根治术记录未明确淋巴结清扫范围及送检组数；未明确淋巴结清扫范围及送检组数",恶性肿瘤手术记录未体现淋巴结清扫关键信息。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150502_LX0609_SYN_029.json
+LX0609_SYN_029,LX0609-040,LX0609_SYN_029-LX0609-040-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,四级手术术前讨论未见MDT记录。,"证据模板：手术麻醉类
+质控点：LX0609-040 术前多学科讨论记录：四级手术术前讨论未多学科讨论。
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：手术记录、手术名称、术前讨论、切口、术后
+映射执行规则：SC-083、CL-108
+应包含证据要素：手术时间、麻醉记录、安全核查单、关键缺失项
+执行证据：四级手术术前讨论未见MDT记录；未见MDT多学科讨论记录",四级手术缺少MDT或高级别术前讨论支撑。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150502_LX0609_SYN_029.json
+LX0609_SYN_029,LX0609-027,LX0609_SYN_029-LX0609-027-04,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,恶性肿瘤患者出院医嘱缺少肿瘤相关后续治疗计划。,"证据模板：通用质控
+质控点：LX0609-027 出院记录：出院记录（恶性肿瘤患者）中是否有出院后肿瘤相关治疗的出院治疗计划
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：病理、肿瘤、癌、淋巴结
+映射执行规则：SC-116、SC-124
+应包含证据要素：触发事实、来源文书、判定依据、处理建议
+执行证据：出院医嘱未包含肿瘤科复诊、辅助化疗评估或病理回看计划；注意休息，保持切口清洁",恶性肿瘤出院后治疗计划不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-150502_LX0609_SYN_029.json
+LX0609_SYN_030,LX0609-041,LX0609_SYN_030-LX0609-041-01,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,存在输血申请和输血医嘱，但未见完整输血知情同意记录。,"证据模板：输血类
+质控点：LX0609-041 输血知情同意书：无输血知情同意书；
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：输血、红细胞、输血记录、输血申请
+数据缺口：输血医嘱或输血记录
+映射执行规则：SC-133、LXE-52
+应包含证据要素：输血申请、输血医嘱、输血记录、费用、输血前检查项
+执行证据：存在输血申请和输血医嘱；未见完整输血知情同意记录；未见完整输血风险告知记录",输血前知情同意资料不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-153201_LX0609_SYN_030.json
+LX0609_SYN_030,LX0609-043,LX0609_SYN_030-LX0609-043-02,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,输血前常规检查资料不完整。,"证据模板：检查检验类
+质控点：LX0609-043 输血前辅助检查：输血前常规检查不完整；
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：输血、红细胞、输血记录、输血申请
+映射执行规则：SC-073、SC-138
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：存在输血申请和输血医嘱；未见乙肝、丙肝、梅毒、HIV等输血前常规检查结果；申请输注红细胞悬液2U",输血前常规检查资料不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-153201_LX0609_SYN_030.json
+LX0609_SYN_030,LX0609-047,LX0609_SYN_030-LX0609-047-03,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,1,输血记录未见输血后疗效评价及不良反应观察结论。,"证据模板：输血类
+质控点：LX0609-047 输血后评价：无输血后评价
+触发状态：present
+触发说明：已发现相关触发事实，进入常规执行
+触发关键词：输血、红细胞、输血记录、输血申请
+映射执行规则：CL-255、SC-074
+应包含证据要素：输血申请、输血医嘱、输血记录、费用、输血前检查项
+执行证据：输血记录未见输血后疗效评价及不良反应观察结论；未见输血后疗效评价",输血后评价记录不完整。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-153201_LX0609_SYN_030.json
+LX0609_SYN_030,LX0609-049,LX0609_SYN_030-LX0609-049-04,positive,non_compliant,True,non_compliant,True,pass,0.95,,False,False,False,False,,2,输血医嘱与费用数量不一致。,"证据模板：检查检验类
+质控点：LX0609-049 输血医嘱：输血医嘱与收费不一致。
+触发状态：data_gap
+触发说明：已发现触发事实，但缺少完成判定所需的结构化字段
+触发关键词：输血、红细胞、输血记录、输血申请
+数据缺口：输血医嘱、费用明细
+映射执行规则：SC-146
+应包含证据要素：报告时间、阳性结果、24小时内病程分析、来源报告、对应病程记录
+执行证据：医嘱输血2U；费用明细收费4U；输注红细胞悬液2U；红细胞悬液收费4U",输血医嘱与收费数量不一致。,C:\Users\Coldplay\.codex\worktrees\9849\LX888\apps\medqc-web\.runtime-logs\qc-pack-poc\luxian_0609_trigger_gate_mainline_20260615-153201_LX0609_SYN_030.json

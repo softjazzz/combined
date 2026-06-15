@@ -118,6 +118,12 @@ class Settings(BaseSettings):
     QC_AGENT_LLM_INTENT_TIMEOUT_SECONDS: int = 8
     QC_AGENT_LLM_INTENT_MIN_CONFIDENCE: float = 0.55
 
+    # 泸县0609客户专项质控集主干化开关
+    # 仅在 rule_set_key=luxian_0609_qc_v1 时生效，关闭后回到原底层 SC/LX/CL 执行链路。
+    LUXIAN_0609_TRIGGER_GATE_ENABLED: bool = True
+    LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED: bool = True
+    LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED: bool = True
+
     # LLM API Configuration (unified naming; compatible with legacy SICHUAN_* env vars)
     LLM_API_ENDPOINT: Optional[AnyHttpUrl] = Field(
         default="https://dashscope.aliyuncs.com/compatible-mode/v1",

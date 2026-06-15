@@ -82,6 +82,7 @@ async def evaluate_running_final_bundle(
     refine_confidence_threshold: float = 0.75,
     max_refine_candidates: int = 3,
     use_execution_cache: bool = True,
+    rule_set_key: str = "",
     cancellation_check: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     if isinstance(bundle_input, dict) and bundle_input:
@@ -108,6 +109,7 @@ async def evaluate_running_final_bundle(
         refine_confidence_threshold=refine_confidence_threshold,
         max_refine_candidates=max_refine_candidates,
         use_execution_cache=use_execution_cache,
+        rule_set_key=rule_set_key,
         cancellation_check=cancellation_check,
     )
     eval_args = adapt_bundle_to_sichuan_eval_args(bundle, rule_ids=rule_ids or [])

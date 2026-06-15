@@ -58,6 +58,10 @@ from .effect_priority_qc import (
 from .qc_rule_sets import should_refine_rule_by_default
 from .qc_cancellation import raise_if_cancelled
 from .customer_rule_sets import load_customer_luxian_rules, invalidate_customer_rule_set_cache
+from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY, load_luxian_0609_rules
+from .luxian_0609_result_aggregator import aggregate_luxian_0609_results, summarize_luxian_0609_results
+from .luxian_0609_programmatic_rules import evaluate_luxian_0609_programmatic_rules
+from .luxian_0609_trigger_gate import evaluate_luxian_0609_trigger_gates, filter_executable_rules_by_gate
 from .sc_rule_family import (
     DEFAULT_RULE_FAMILY,
     load_sc_rule_family_map,
@@ -1029,10 +1033,25 @@ class SichuanQCService:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
+        rule_set_key: str = "",
         cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         raise_if_cancelled(cancellation_check)
         prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
+        settings = get_settings()
+        normalized_rule_set_key = str(rule_set_key or "").strip()
+        is_luxian_0609 = normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY
+        luxian_aggregation_enabled = bool(
+            is_luxian_0609 and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
+        )
+        luxian_trigger_gate_enabled = bool(
+            luxian_aggregation_enabled and settings.LUXIAN_0609_TRIGGER_GATE_ENABLED
+        )
+        luxian_evidence_formatter_enabled = bool(
+            is_luxian_0609 and settings.LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED
+        )
+        luxian_wrapper_rules: List[Dict[str, Any]] = []
+        luxian_gate_decisions = {}
         quality_profile_normalized = normalize_quality_profile(quality_profile)
         batch_output_mode_normalized = normalize_batch_output_mode(
             batch_output_mode,
@@ -1053,8 +1072,24 @@ class SichuanQCService:
         if isinstance(evidence_payload, dict) and evidence_payload:
             medical_record["evidence_payload"] = dict(evidence_payload)
 
+        executable_rules = prepared_rules
+        if luxian_aggregation_enabled:
+            luxian_wrapper_rules = load_luxian_0609_rules()
+            if luxian_trigger_gate_enabled:
+                luxian_gate_decisions = evaluate_luxian_0609_trigger_gates(
+                    rules=luxian_wrapper_rules,
+                    visit_id=str(document_id or ""),
+                    medical_text=content,
+                    evidence_payload=evidence_payload,
+                )
+                executable_rules = filter_executable_rules_by_gate(
+                    executable_rules=prepared_rules,
+                    wrapper_rules=luxian_wrapper_rules,
+                    decisions=luxian_gate_decisions,
+                )
+
         orchestrated = await self.rule_orchestrator.evaluate_rules(
-            rules=prepared_rules,
+            rules=executable_rules,
             medical_record=medical_record,
             llm_evaluate=_llm_evaluate,
             llm_batch_evaluate=self._llm_evaluate_batch_compact,
@@ -1074,16 +1109,65 @@ class SichuanQCService:
         )
         orchestrated["quality_profile"] = quality_profile_normalized
         orchestrated["batch_output_mode"] = batch_output_mode_normalized
+        if is_luxian_0609:
+            orchestrated["rule_set_key"] = normalized_rule_set_key
+            orchestrated["luxian_0609_execution_rule_count"] = len(prepared_rules)
+            orchestrated["luxian_0609_executed_rule_count"] = len(executable_rules)
+            if luxian_trigger_gate_enabled:
+                orchestrated["luxian_0609_trigger_gate"] = {
+                    rule_id: decision.to_metadata()
+                    for rule_id, decision in luxian_gate_decisions.items()
+                }
 
         if enable_selective_refine:
             refined = await self._apply_selective_refine(
                 orchestrated=orchestrated,
-                rules=prepared_rules,
+                rules=executable_rules,
                 medical_record=medical_record,
                 refine_confidence_threshold=refine_confidence_threshold,
                 max_refine_candidates=max_refine_candidates_normalized,
             )
-            return refined
+            orchestrated = refined
+            orchestrated.setdefault("quality_profile", quality_profile_normalized)
+            orchestrated.setdefault("batch_output_mode", batch_output_mode_normalized)
+            if not luxian_aggregation_enabled:
+                return orchestrated
+        if luxian_aggregation_enabled:
+            orchestrated.setdefault("results", [])
+            orchestrated["results"].extend(
+                evaluate_luxian_0609_programmatic_rules(
+                    wrapper_rules=luxian_wrapper_rules,
+                    evidence_payload=evidence_payload,
+                )
+            )
+            customer_results = aggregate_luxian_0609_results(
+                wrapper_rules=luxian_wrapper_rules,
+                execution_results=list(orchestrated.get("results") or []),
+                gate_decisions=luxian_gate_decisions,
+                format_evidence=luxian_evidence_formatter_enabled,
+            )
+            orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])
+            orchestrated["results"] = customer_results
+            orchestrated["display_rule_ids"] = [
+                str(rule.get("rule_id") or rule.get("rule_code") or "")
+                for rule in luxian_wrapper_rules
+            ]
+            orchestrated["display_rule_count"] = len(customer_results)
+            orchestrated["luxian_0609_summary"] = summarize_luxian_0609_results(customer_results)
+            orchestrated.setdefault(
+                "refine_summary",
+                {
+                    "enabled": bool(enable_selective_refine),
+                    "candidate_count": 0,
+                    "eligible_candidate_count": 0,
+                    "refined_rule_count": 0,
+                    "refine_failed_count": 0,
+                    "budget_applied": max_refine_candidates_normalized if enable_selective_refine else 0,
+                    "budget_skipped_count": 0,
+                    "refine_reasons": {},
+                },
+            )
+            return orchestrated
         orchestrated.setdefault(
             "refine_summary",
             {
@@ -1330,7 +1414,8 @@ class SichuanQCService:
         first_result_source = str(orchestrated.get("first_result_source") or "")
         cot_summary = dict(orchestrated.get("cot_summary") or {})
 
-        total_rules = len(rules)
+        display_rule_ids = list(orchestrated.get("display_rule_ids") or [])
+        total_rules = int(orchestrated.get("display_rule_count") or len(rules))
         compliant_rules = sum(
             1 for r in rule_results
             if r.get("status") in ("compliant", "not_applicable")
@@ -1363,7 +1448,7 @@ class SichuanQCService:
             "document_id": document_id,
             "document_type": document_type,
             "total_rules": total_rules,
-            "applicable_rules": [r.get("rule_code", r.get("id", "")) for r in rules],
+            "applicable_rules": display_rule_ids or [r.get("rule_code", r.get("id", "")) for r in rules],
             "evaluation_summary": {
                 "compliance_rate": round(compliance_rate, 2),
                 "issues_found": issues_found,
@@ -1383,6 +1468,7 @@ class SichuanQCService:
                 "first_result_latency": first_result_latency,
                 "first_result_source": first_result_source,
                 "cot_summary": cot_summary,
+                "luxian_0609_summary": orchestrated.get("luxian_0609_summary") or {},
             },
             "parsed_evaluation_results": rule_results,
             "evaluation_results": evaluation_results,
@@ -1405,6 +1491,7 @@ class SichuanQCService:
             "refine_details": orchestrated.get("refine_details") or [],
             "cot_summary": cot_summary,
             "trace": orchestrated.get("trace") or [],
+            "luxian_0609_summary": orchestrated.get("luxian_0609_summary") or {},
         }
 
     async def _evaluate_rules_with_engine(
@@ -1805,6 +1892,12 @@ class SichuanQCService:
             source_documents=all_documents,
             rule_ids=[str(item.get("rule_id") or item.get("rule_code") or "") for item in list(rules or [])],
         )
+        from .sample_programmatic_evidence import build_programmatic_evidence_payload
+
+        programmatic_payload = build_programmatic_evidence_payload(
+            bundle=bundle,
+            medical_text=str(bundle.get("medical_text") or ""),
+        )
         return {
             "primary_document_text": str(primary_document.get("content") or "").strip(),
             "supporting_documents": supporting_documents,
@@ -1812,6 +1905,7 @@ class SichuanQCService:
             "document_hits": dict(bundle.get("document_hits") or {}),
             "data_quality_flags": list(bundle.get("data_quality_flags") or []),
             "derived_signals": derived_signals,
+            "programmatic_timeline": dict(programmatic_payload.get("programmatic_timeline") or {}),
         }
 
     def _build_bundle_missing_doc_result_item(
@@ -3846,6 +3940,7 @@ class SichuanQCService:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
+        rule_set_key: str = "",
         cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
@@ -3887,6 +3982,7 @@ class SichuanQCService:
             refine_confidence_threshold=refine_confidence_threshold,
             max_refine_candidates=max_refine_candidates,
             use_execution_cache=use_execution_cache,
+            rule_set_key=rule_set_key,
             cancellation_check=cancellation_check,
         )
 
@@ -3906,6 +4002,7 @@ class SichuanQCService:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
+        rule_set_key: str = "",
         cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         prepared_rules = [self._ensure_rule_execution_meta(rule) for rule in rules]
@@ -3924,6 +4021,7 @@ class SichuanQCService:
             refine_confidence_threshold=refine_confidence_threshold,
             max_refine_candidates=max_refine_candidates,
             use_execution_cache=use_execution_cache,
+            rule_set_key=rule_set_key,
             cancellation_check=cancellation_check,
         )
         return self._build_document_evaluation_result(
@@ -3945,6 +4043,7 @@ class SichuanQCService:
         refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
         max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
         use_execution_cache: bool = True,
+        rule_set_key: str = "",
         cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> Dict[str, Any]:
         """
@@ -4003,6 +4102,7 @@ class SichuanQCService:
                 refine_confidence_threshold=refine_confidence_threshold,
                 max_refine_candidates=max_refine_candidates,
                 use_execution_cache=use_execution_cache,
+                rule_set_key=rule_set_key,
                 cancellation_check=cancellation_check,
             )
         else:
@@ -4112,6 +4212,43 @@ class SichuanQCService:
                 "refined_rule_count": sum(1 for item in result_items if bool((item.get("metadata") or {}).get("refined"))),
                 "refine_reasons": refine_reasons_agg,
             }
+            settings = get_settings()
+            if (
+                str(rule_set_key or "").strip() == LUXIAN_0609_RULE_SET_KEY
+                and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
+            ):
+                wrapper_rules = load_luxian_0609_rules()
+                gate_decisions = {}
+                if settings.LUXIAN_0609_TRIGGER_GATE_ENABLED:
+                    gate_decisions = evaluate_luxian_0609_trigger_gates(
+                        rules=wrapper_rules,
+                        visit_id=str((bundle or {}).get("visit_id") or document_id or ""),
+                        medical_text=content,
+                        evidence_payload=evidence_payload,
+                    )
+                orchestrated.setdefault("results", [])
+                orchestrated["results"].extend(
+                    evaluate_luxian_0609_programmatic_rules(
+                        wrapper_rules=wrapper_rules,
+                        evidence_payload=evidence_payload,
+                    )
+                )
+                customer_results = aggregate_luxian_0609_results(
+                    wrapper_rules=wrapper_rules,
+                    execution_results=list(orchestrated.get("results") or []),
+                    gate_decisions=gate_decisions,
+                    format_evidence=bool(settings.LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED),
+                )
+                orchestrated["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
+                orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])
+                orchestrated["results"] = customer_results
+                orchestrated["display_rule_ids"] = [
+                    str(rule.get("rule_id") or rule.get("rule_code") or "")
+                    for rule in wrapper_rules
+                ]
+                orchestrated["display_rule_count"] = len(customer_results)
+                orchestrated["luxian_0609_execution_rule_count"] = len(selected_rules)
+                orchestrated["luxian_0609_summary"] = summarize_luxian_0609_results(customer_results)
         result = self._build_document_evaluation_result(
             document_id=document_id,
             document_type="终末病历" if scene == "final" else "运行病历",

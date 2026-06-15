@@ -1061,6 +1061,35 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             for rule_id in valid_rule_ids
             if isinstance(rule_states[rule_id].get("rule"), dict)
         ]
+        settings = get_settings()
+        use_luxian_customer_results = bool(
+            rule_set_key == LUXIAN_0609_RULE_SET_KEY
+            and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
+        )
+        output_rule_states: Dict[str, Dict[str, Any]] = rule_states
+        output_rule_ids: List[str] = list(valid_rule_ids)
+        if use_luxian_customer_results:
+            output_rule_states = {}
+            output_rule_ids = []
+            for wrapper in load_luxian_0609_rules():
+                customer_rule_id = str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
+                if not customer_rule_id:
+                    continue
+                output_rule_ids.append(customer_rule_id)
+                output_rule_states[customer_rule_id] = {
+                    "rule_id": customer_rule_id,
+                    "rule": wrapper,
+                    "rule_name": str(wrapper.get("name") or wrapper.get("rule_name") or customer_rule_id),
+                    "rule_code": customer_rule_id,
+                    "rule_job_id": str(uuid.uuid4()),
+                    "items": [],
+                    "failed_records": [],
+                    "total_tokens": 0,
+                    "total_processing_time": 0.0,
+                    "executor_program": 0,
+                    "executor_llm": 0,
+                }
+            total_rules = max(1, len(output_rule_ids))
         record_rule_map_raw = dict(filters.get("record_rule_map") or {})
         record_rule_map: Dict[str, List[str]] = {}
         for raw_record_id, raw_rule_ids in record_rule_map_raw.items():
@@ -1155,8 +1184,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 for rule_id in active_rule_ids
                 if isinstance(rule_states[rule_id].get("rule"), dict)
             ]
-            items_by_rule: Dict[str, List[Dict[str, Any]]] = {rule_id: [] for rule_id in valid_rule_ids}
-            failed_by_rule: Dict[str, List[Dict[str, Any]]] = {rule_id: [] for rule_id in valid_rule_ids}
+            result_rule_ids = output_rule_ids if use_luxian_customer_results else active_rule_ids
+            result_rule_states = output_rule_states if use_luxian_customer_results else rule_states
+            items_by_rule: Dict[str, List[Dict[str, Any]]] = {rule_id: [] for rule_id in result_rule_ids}
+            failed_by_rule: Dict[str, List[Dict[str, Any]]] = {rule_id: [] for rule_id in result_rule_ids}
             rule_stats: Dict[str, Dict[str, Any]] = {
                 rule_id: {
                     "total_tokens": 0,
@@ -1164,7 +1195,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "executor_program": 0,
                     "executor_llm": 0,
                 }
-                for rule_id in valid_rule_ids
+                for rule_id in result_rule_ids
             }
             try:
                 used_bundle_path = False
@@ -1295,6 +1326,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         enable_selective_refine=enable_selective_refine,
                         refine_confidence_threshold=refine_confidence_threshold,
                         max_refine_candidates=max_refine_candidates,
+                        rule_set_key=rule_set_key,
                         cancellation_check=_is_cancelled,
                     )
                     token_usage = dict(result.get("token_usage") or {})
@@ -1366,6 +1398,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                                 enable_selective_refine=enable_selective_refine,
                                 refine_confidence_threshold=refine_confidence_threshold,
                                 max_refine_candidates=max_refine_candidates,
+                                rule_set_key=rule_set_key,
                                 cancellation_check=_is_cancelled,
                             )
                         eval_items = list(
@@ -1426,6 +1459,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         enable_selective_refine=enable_selective_refine,
                         refine_confidence_threshold=refine_confidence_threshold,
                         max_refine_candidates=max_refine_candidates,
+                        rule_set_key=rule_set_key,
                         cancellation_check=_is_cancelled,
                     )
                     token_usage = dict(result.get("token_usage") or {})
@@ -1456,16 +1490,16 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 has_uncertain = False
                 record_issue_items: List[Dict[str, Any]] = []
 
-                fallback_tokens_per_rule = int(record_total_tokens / max(1, len(active_rule_ids)))
-                fallback_prompt_tokens_per_rule = int(record_total_prompt_tokens / max(1, len(active_rule_ids)))
+                fallback_tokens_per_rule = int(record_total_tokens / max(1, len(result_rule_ids)))
+                fallback_prompt_tokens_per_rule = int(record_total_prompt_tokens / max(1, len(result_rule_ids)))
                 fallback_completion_tokens_per_rule = int(
-                    record_total_completion_tokens / max(1, len(active_rule_ids))
+                    record_total_completion_tokens / max(1, len(result_rule_ids))
                 )
-                fallback_api_per_rule = float(record_total_api_time / max(1, len(active_rule_ids)))
+                fallback_api_per_rule = float(record_total_api_time / max(1, len(result_rule_ids)))
 
-                for rule_id in active_rule_ids:
+                for rule_id in result_rule_ids:
                     normalized_rule_id = str(rule_id).strip().upper()
-                    state = rule_states[rule_id]
+                    state = result_rule_states[rule_id]
                     rule = state["rule"]
                     rule_name = str(state["rule_name"])
                     rule_code = str(state["rule_code"])
@@ -1489,7 +1523,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         continue
 
                     status = str(eval_item.get("status") or "").strip().lower()
-                    if status not in {"compliant", "non_compliant", "not_applicable", "uncertain"}:
+                    if status not in {"compliant", "non_compliant", "not_applicable", "data_gap", "uncertain"}:
                         status = "compliant" if eval_item.get("is_compliant") else "non_compliant"
                     metadata = dict(eval_item.get("metadata") or {})
                     metadata.setdefault("tokens_used", fallback_tokens_per_rule)
@@ -1621,7 +1655,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                         has_issue = True
                     elif not should_postprocess_formal_results and issue_item["status"] == "uncertain":
                         has_uncertain = True
-                    if issue_item["status"] in {"non_compliant", "uncertain"}:
+                    if issue_item["status"] in {"non_compliant", "data_gap", "uncertain"}:
                         record_issue_items.append(issue_item)
 
                 if should_postprocess_formal_results and record_issue_items:
@@ -1678,8 +1712,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             except QCJobCancelled:
                 raise
             except Exception as exc:
-                for rule_id in valid_rule_ids:
-                    state = rule_states[rule_id]
+                for rule_id in result_rule_ids:
+                    state = result_rule_states[rule_id]
                     failed_by_rule[rule_id].append(
                         {
                             "rule_job_id": str(state["rule_job_id"]),
@@ -1795,8 +1829,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             items_by_rule = dict(record_result.get("items_by_rule") or {})
             failed_by_rule = dict(record_result.get("failed_by_rule") or {})
             rule_stats = dict(record_result.get("rule_stats") or {})
-            for rule_id in valid_rule_ids:
-                state = rule_states[rule_id]
+            for rule_id in output_rule_ids:
+                state = output_rule_states[rule_id]
                 stats = dict(rule_stats.get(rule_id) or {})
                 state["total_tokens"] = int(state.get("total_tokens") or 0) + int(
                     stats.get("total_tokens") or 0
@@ -1820,7 +1854,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             workspace.update_batch_job_progress(
                 job_id=job_id,
                 step_key="run",
-                rule_index=len(valid_rule_ids) if valid_rule_ids else 0,
+                rule_index=len(output_rule_ids) if output_rule_ids else 0,
                 rule_count=total_rules,
                 processed_records=processed_records_count,
                 total_records=total_records,
@@ -1888,14 +1922,16 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             return str(item.get("status") or "") == "uncertain"
 
         def _item_data_quality_gap(item: Dict[str, Any]) -> bool:
+            if str(item.get("status") or "") == "data_gap":
+                return True
             return should_postprocess_job and str(item.get("display_status") or "") == "data_quality_gap"
 
         def _item_rejected_by_system(item: Dict[str, Any]) -> bool:
             return should_postprocess_job and str(item.get("display_status") or "") == "rejected_by_system"
 
         rule_results: List[Dict[str, Any]] = []
-        for rule_index, rule_id in enumerate(rule_ids):
-            state = rule_states[rule_id]
+        for rule_index, rule_id in enumerate(output_rule_ids):
+            state = output_rule_states[rule_id]
             rule_items = list(state.get("items") or [])
             rule_failed = list(state.get("failed_records") or [])
             rule_summary = {
@@ -1950,7 +1986,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                     "progress": {
                         "rule_index": rule_index + 1,
-                        "rule_count": len(rule_ids),
+                        "rule_count": len(output_rule_ids),
                         "processed_records": total_records,
                     },
                     "debug": {
@@ -1968,7 +2004,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         data_quality_gap_record_ids = {
             str(item.get("record_id") or "")
             for item in all_items
-            if str(item.get("display_status") or "") == "data_quality_gap" and str(item.get("record_id") or "")
+            if (
+                str(item.get("status") or "") == "data_gap"
+                or str(item.get("display_status") or "") == "data_quality_gap"
+            )
+            and str(item.get("record_id") or "")
         }
         technical_error_record_ids = {
             str(item.get("record_id") or "")
@@ -2001,7 +2041,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "uncertain_records": len(uncertain_record_ids),
             "compliant_records": max(
                 0,
-                total_records - len(issue_record_ids) - len(uncertain_record_ids) - len(failed_record_ids),
+                total_records
+                - len(issue_record_ids)
+                - len(uncertain_record_ids)
+                - len(data_quality_gap_record_ids)
+                - len(failed_record_ids),
             ),
             "postprocess_summary": postprocess_summary,
             "confirmed_defect_count": int(postprocess_summary.get("confirmed_defect_count") or len(issue_record_ids)),
@@ -2019,8 +2063,16 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "status_breakdown": {
                 "non_compliant": len(issue_record_ids),
                 "uncertain": len(uncertain_record_ids),
+                "data_gap": len(data_quality_gap_record_ids),
                 "failed": len(failed_record_ids),
-                "compliant": max(0, total_records - len(issue_record_ids) - len(uncertain_record_ids) - len(failed_record_ids)),
+                "compliant": max(
+                    0,
+                    total_records
+                    - len(issue_record_ids)
+                    - len(uncertain_record_ids)
+                    - len(data_quality_gap_record_ids)
+                    - len(failed_record_ids),
+                ),
             },
             "total_tokens": int(total_tokens),
             "total_prompt_tokens": int(total_prompt_tokens),
@@ -2029,7 +2081,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "wall_clock_time": max(0.0, time.perf_counter() - job_wall_started),
             "first_result_latency": round(float(first_result_latency or 0.0), 4),
             "first_result_source": first_result_source,
-            "rule_count": len(rule_ids),
+            "rule_count": len(output_rule_ids),
+            "execution_rule_count": len(rule_ids),
             "processed_rule_count": len(rule_results),
             "executor_breakdown": {
                 "program": executor_program,
@@ -2060,7 +2113,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
         workspace.update_batch_job_progress(
             job_id=job_id,
             step_key="aggregate",
-            rule_index=len(rule_ids),
+            rule_index=len(output_rule_ids),
             rule_count=total_rules,
             processed_records=total_records,
             total_records=total_records,

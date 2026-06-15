@@ -804,53 +804,73 @@ def build_visit_010() -> SyntheticVisit:
     return visit
 
 
-def clone_visit_as(base: SyntheticVisit, new_index: int) -> SyntheticVisit:
-    """Clone a synthetic case into a new visit while preserving scenario facts."""
-    new_visit_id = f"{SYNTHETIC_PREFIX}{new_index:03d}"
+def _replace_text(value: Any, replacements: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        rendered = value
+        for old, new in replacements.items():
+            rendered = rendered.replace(old, new)
+        return rendered
+    if isinstance(value, list):
+        return [_replace_text(item, replacements) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_replace_text(item, replacements) for item in value)
+    if isinstance(value, dict):
+        return {
+            _replace_text(key, replacements): _replace_text(item, replacements)
+            for key, item in value.items()
+        }
+    return value
+
+
+def clone_visit_variant(base: SyntheticVisit, *, new_index: int, variant_label: str) -> SyntheticVisit:
+    """Create a PG-safe de-identified variant for regression volume testing.
+
+    The variant keeps the same clinical facts and golden answers, but rewrites
+    identifiers and patient identity fields so it can coexist in PG without
+    colliding with the source visit.
+    """
+
+    cloned = copy.deepcopy(base)
     old_visit_id = base.visit_id
     old_patient_id = base.patient_id
-    new_patient_name = f"{base.patient_name}-扩展{new_index:02d}"
-    new_visit = SyntheticVisit(
-        visit_id=new_visit_id,
-        patient_name=new_patient_name,
-        sex=base.sex,
-        age=base.age,
-        dept_name=base.dept_name,
-        admission_time=base.admission_time,
-        discharge_time=base.discharge_time,
-        main_diagnosis=base.main_diagnosis,
-        other_diagnoses=list(base.other_diagnoses),
-        description=f"{base.description}（扩展变体 {new_index:02d}）",
-    )
-    rows = copy.deepcopy(base.rows)
-    for table_rows in rows.values():
+    old_name = base.patient_name
+    new_visit_id = f"{SYNTHETIC_PREFIX}{new_index:03d}"
+    new_name = f"合成患者{new_index:03d}"
+    replacements = {
+        old_visit_id: new_visit_id,
+        old_patient_id: f"P-{new_visit_id}",
+        old_name: new_name,
+    }
+
+    cloned.visit_id = new_visit_id
+    cloned.patient_name = new_name
+    cloned.description = f"{base.description}（{variant_label}）"
+    cloned.rows = defaultdict(list)
+    for table, table_rows in base.rows.items():
         for row in table_rows:
-            for key, value in list(row.items()):
-                if value == old_visit_id:
-                    row[key] = new_visit_id
-                elif value == old_patient_id:
-                    row[key] = new_visit.patient_id
-                elif value == base.patient_name:
-                    row[key] = new_patient_name
-                elif isinstance(value, str):
-                    row[key] = (
-                        value.replace(old_visit_id, new_visit_id)
-                        .replace(old_patient_id, new_visit.patient_id)
-                        .replace(base.patient_name, new_patient_name)
-                    )
-            if row.get("patient_id") == old_patient_id:
-                row["patient_id"] = new_visit.patient_id
-            if row.get("visit_id") == old_visit_id:
-                row["visit_id"] = new_visit_id
-            if row.get("inpat_no") == old_visit_id:
-                row["inpat_no"] = new_visit_id
-            if row.get("mr_no") == old_visit_id:
-                row["mr_no"] = new_visit_id
-            if row.get("name") == base.patient_name:
-                row["name"] = new_patient_name
-    new_visit.rows = rows
-    new_visit.golden_answers = list(base.golden_answers)
-    return new_visit
+            rendered = _replace_text(copy.deepcopy(row), replacements)
+            rendered["visit_id"] = new_visit_id
+            rendered["inpat_no"] = new_visit_id
+            rendered["mr_no"] = new_visit_id
+            rendered["patient_id"] = cloned.patient_id
+            rendered["name"] = new_name
+            if "document_id" in rendered and isinstance(rendered["document_id"], str):
+                rendered["document_id"] = rendered["document_id"].replace(old_visit_id, new_visit_id)
+            for id_field in (
+                "diagnosis_id",
+                "surgery_id",
+                "application_id",
+                "order_id",
+                "bill_item_id",
+                "exam_id",
+                "exam_no",
+                "test_id",
+                "operation_id",
+            ):
+                if id_field in rendered and isinstance(rendered[id_field], str):
+                    rendered[id_field] = rendered[id_field].replace(old_visit_id, new_visit_id)
+            cloned.rows[table].append(rendered)
+    return cloned
 
 
 def build_visits() -> list[SyntheticVisit]:
@@ -866,9 +886,10 @@ def build_visits() -> list[SyntheticVisit]:
         build_visit_009(),
         build_visit_010(),
     ]
-    visits = [*base_visits]
-    for index in range(11, 31):
-        visits.append(clone_visit_as(base_visits[(index - 1) % len(base_visits)], index))
+    visits = list(base_visits)
+    for offset, label in ((10, "复测变体A"), (20, "复测变体B")):
+        for index, base in enumerate(base_visits, start=1):
+            visits.append(clone_visit_variant(base, new_index=offset + index, variant_label=label))
     for visit in visits:
         add_sample_pool_rows(visit)
     return visits

@@ -22,11 +22,26 @@ _SOURCE_TABLES = (
     "daily_course_record",
     "senior_course_record",
     "consultation_record",
+    "rescue_record",
     "presurg_discussion",
     "presurg_summary",
     "surgery_record",
     "surgery_safecheck_record",
     "anesthesia_record",
+    "postsurg_firstcourse_record",
+    "surgery_application",
+    "surgery_inform_consent",
+    "exam_master",
+    "exam_item_report",
+    "labtest_master",
+    "labtest_item_report",
+    "pathology_exam_master",
+    "pathology_exam_report",
+    "inpat_drug_order",
+    "inpat_nondrug_order",
+    "inpat_bill_item",
+    "blood_application",
+    "bloodtrans_record",
     "discharge_record",
 )
 
@@ -36,11 +51,26 @@ _FALLBACK_DOC_FETCH_LIMITS = {
     "daily_course_record": 50,
     "senior_course_record": 50,
     "consultation_record": 20,
+    "rescue_record": 10,
     "presurg_discussion": 10,
     "presurg_summary": 10,
     "surgery_record": 10,
     "surgery_safecheck_record": 10,
     "anesthesia_record": 10,
+    "postsurg_firstcourse_record": 10,
+    "surgery_application": 10,
+    "surgery_inform_consent": 10,
+    "exam_master": 20,
+    "exam_item_report": 20,
+    "labtest_master": 20,
+    "labtest_item_report": 20,
+    "pathology_exam_master": 10,
+    "pathology_exam_report": 10,
+    "inpat_drug_order": 30,
+    "inpat_nondrug_order": 30,
+    "inpat_bill_item": 30,
+    "blood_application": 10,
+    "bloodtrans_record": 10,
     "discharge_record": 5,
 }
 
@@ -85,6 +115,61 @@ def _safe_dict(value: Any) -> dict[str, Any]:
 
 def _safe_list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
+
+
+def _item_text(item: dict[str, Any]) -> str:
+    """提取结构化行中可用于证据判断的主要文本。"""
+    values: list[str] = []
+    preferred_keys = (
+        "content",
+        "record_content",
+        "text_preview",
+        "document_title",
+        "document_id",
+        "order_name",
+        "item_name",
+        "charge_item_name",
+        "exam_report",
+        "report_content",
+        "result",
+        "diagnosis",
+        "operation_name",
+    )
+    for key in preferred_keys:
+        text_value = _safe_text(item.get(key))
+        if text_value:
+            values.append(text_value)
+    if not values:
+        for value in item.values():
+            text_value = _safe_text(value)
+            if text_value:
+                values.append(text_value)
+    return " ".join(values)
+
+
+def _merge_fallback_items(items: list[dict[str, Any]], fallback_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not fallback_items:
+        return items
+    merged = list(items)
+    table_content_lengths: dict[str, int] = {}
+    for item in merged:
+        source_table = _safe_text(item.get("source_table") or item.get("document_type")).lower()
+        if not source_table:
+            continue
+        content_len = len(_item_text(item))
+        table_content_lengths[source_table] = max(table_content_lengths.get(source_table, 0), content_len)
+    for item in fallback_items:
+        source_table = _safe_text(item.get("source_table") or item.get("document_type")).lower()
+        if not source_table:
+            continue
+        fallback_len = len(_item_text(item))
+        if source_table not in table_content_lengths or (
+            fallback_len > table_content_lengths[source_table]
+            and table_content_lengths[source_table] < 80
+        ):
+            merged.append(item)
+            table_content_lengths[source_table] = max(table_content_lengths.get(source_table, 0), fallback_len)
+    return merged
 
 
 def _normalize_datetime_text(value: Any) -> str:
@@ -257,7 +342,11 @@ def _extract_timeline_fact_datetime(
 def _flatten_inventory_items(structured: dict[str, Any], bundle_payload: dict[str, Any]) -> list[dict[str, Any]]:
     inventory_items = _safe_list(bundle_payload.get("source_documents")) or _safe_list(structured.get("document_inventory"))
     if inventory_items:
-        return [_safe_dict(item) for item in inventory_items if _safe_dict(item)]
+        items = [_safe_dict(item) for item in inventory_items if _safe_dict(item)]
+        fallback_items, fallback_meta = _fetch_source_table_fallback_items(bundle_payload)
+        if fallback_meta:
+            bundle_payload["_source_table_fallback_meta"] = fallback_meta
+        return _merge_fallback_items(items, fallback_items)
 
     flattened: list[dict[str, Any]] = []
     documents = _safe_dict(structured.get("documents"))
@@ -270,7 +359,10 @@ def _flatten_inventory_items(structured: dict[str, Any], bundle_payload: dict[st
             item.setdefault("document_type", source_table)
             flattened.append(item)
     if flattened:
-        return flattened
+        fallback_items, fallback_meta = _fetch_source_table_fallback_items(bundle_payload)
+        if fallback_meta:
+            bundle_payload["_source_table_fallback_meta"] = fallback_meta
+        return _merge_fallback_items(flattened, fallback_items)
     fallback_items, fallback_meta = _fetch_source_table_fallback_items(bundle_payload)
     if fallback_meta:
         bundle_payload["_source_table_fallback_meta"] = fallback_meta
@@ -286,7 +378,8 @@ def _flatten_inventory_items(structured: dict[str, Any], bundle_payload: dict[st
 def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, str]]:
     institute_id = _safe_text(bundle_payload.get("institute_id"))
     visit_id = _safe_text(bundle_payload.get("visit_id"))
-    if not institute_id or not visit_id or engine is None:
+    patient_id = _safe_text(bundle_payload.get("patient_id"))
+    if not visit_id or engine is None:
         return [], {}
 
     fallback_items: list[dict[str, Any]] = []
@@ -295,28 +388,63 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
         for table_name in _SOURCE_TABLES:
             limit = int(_FALLBACK_DOC_FETCH_LIMITS.get(table_name, 20))
             try:
-                rows = conn.execute(
-                    text(
-                        f"""
-                        SELECT *
-                        FROM cdm.{table_name}
-                        WHERE institute_id = :institute_id
-                          AND visit_id = :visit_id
-                        ORDER BY COALESCE(record_time, submit_datetime, update_time) ASC NULLS LAST, document_id ASC
-                        LIMIT :limit
-                        """
-                    ),
-                    {
-                        "institute_id": institute_id,
-                        "visit_id": visit_id,
-                        "limit": limit,
-                    },
-                ).mappings().all()
+                if institute_id:
+                    rows = conn.execute(
+                        text(
+                            f"""
+                            SELECT *
+                            FROM cdm.{table_name}
+                            WHERE institute_id = :institute_id
+                              AND visit_id = :visit_id
+                            LIMIT :limit
+                            """
+                        ),
+                        {
+                            "institute_id": institute_id,
+                            "visit_id": visit_id,
+                            "limit": limit,
+                        },
+                    ).mappings().all()
+                else:
+                    rows = []
+                if not rows and patient_id:
+                    rows = conn.execute(
+                        text(
+                            f"""
+                            SELECT *
+                            FROM cdm.{table_name}
+                            WHERE visit_id = :visit_id
+                              AND patient_id = :patient_id
+                            LIMIT :limit
+                            """
+                        ),
+                        {
+                            "visit_id": visit_id,
+                            "patient_id": patient_id,
+                            "limit": limit,
+                        },
+                    ).mappings().all()
+                if not rows:
+                    rows = conn.execute(
+                        text(
+                            f"""
+                            SELECT *
+                            FROM cdm.{table_name}
+                            WHERE visit_id = :visit_id
+                            LIMIT :limit
+                            """
+                        ),
+                        {
+                            "visit_id": visit_id,
+                            "limit": limit,
+                        },
+                    ).mappings().all()
             except Exception:
                 continue
             for row in rows:
                 item = dict(row)
                 display_time = _safe_text(item.get("record_time") or item.get("submit_datetime") or item.get("update_time"))
+                row_text = _safe_text(item.get("record_content")) or _item_text(item)
                 fallback_items.append(
                     {
                         "source_table": table_name,
@@ -326,26 +454,57 @@ def _fetch_source_table_fallback_items(bundle_payload: dict[str, Any]) -> tuple[
                         "record_time": _safe_text(item.get("record_time")),
                         "display_time": display_time,
                         "submit_datetime": _safe_text(item.get("submit_datetime")),
-                        "content": _safe_text(item.get("record_content")),
-                        "text_preview": _safe_text(item.get("record_content"))[:400],
+                        "content": row_text,
+                        "text_preview": row_text[:400],
                     }
                 )
         try:
-            registration = conn.execute(
-                text(
-                    """
-                    SELECT admission_datetime, discharge_datetime
-                    FROM cdm.inpat_registration
-                    WHERE institute_id = :institute_id
-                      AND visit_id = :visit_id
-                    LIMIT 1
-                    """
-                ),
-                {
-                    "institute_id": institute_id,
-                    "visit_id": visit_id,
-                },
-            ).mappings().first()
+            if institute_id:
+                registration = conn.execute(
+                    text(
+                        """
+                        SELECT admission_datetime, discharge_datetime
+                        FROM cdm.inpat_registration
+                        WHERE institute_id = :institute_id
+                          AND visit_id = :visit_id
+                        LIMIT 1
+                        """
+                    ),
+                    {
+                        "institute_id": institute_id,
+                        "visit_id": visit_id,
+                    },
+                ).mappings().first()
+            else:
+                registration = None
+            if not registration and patient_id:
+                registration = conn.execute(
+                    text(
+                        """
+                        SELECT admission_datetime, discharge_datetime
+                        FROM cdm.inpat_registration
+                        WHERE visit_id = :visit_id
+                          AND patient_id = :patient_id
+                        LIMIT 1
+                        """
+                    ),
+                    {
+                        "visit_id": visit_id,
+                        "patient_id": patient_id,
+                    },
+                ).mappings().first()
+            if not registration:
+                registration = conn.execute(
+                    text(
+                        """
+                        SELECT admission_datetime, discharge_datetime
+                        FROM cdm.inpat_registration
+                        WHERE visit_id = :visit_id
+                        LIMIT 1
+                        """
+                    ),
+                    {"visit_id": visit_id},
+                ).mappings().first()
         except Exception:
             registration = None
         if registration:
@@ -479,6 +638,7 @@ def build_programmatic_evidence_payload(*, bundle: dict[str, Any] | None, medica
         "document_hits": dict(bundle_payload.get("document_hits") or {}),
         "data_quality_flags": list(bundle_payload.get("data_quality_flags") or []),
         "programmatic_timeline": {
+            "visit_id": _safe_text(bundle_payload.get("visit_id")),
             "admission_time": admission_time,
             "discharge_time": discharge_time,
             "documents": documents,
