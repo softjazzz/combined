@@ -772,7 +772,7 @@ const FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = 'sc_content_full_v1'
 const SC_SAMPLE_RULE_SET_KEY = 'sc_sample_running_v1'
 const PROGRAMMATIC_RULE_SET_KEY = 'sample_programmatic_gate_v1'
 const LEGACY_CUSTOMER_RULE_SET_KEY = 'customer_luxian_full_v1'
-const FORMAL_FAST_SCREEN_RUN_TIMEOUT_MS = 90000
+const SAMPLE_RULE_SET_RUN_TIMEOUT_MS = 90000
 const RUN_DUPLICATE_GUARD_MS = 120000
 
 const fallbackRuleSets: ManualSampleValidationRuleSet[] = [
@@ -2245,15 +2245,15 @@ async function handleRunPool() {
   const result = await runManualSamplePool(
     selectedPoolId.value,
     runPayload,
-    isFormalFastScreenMode.value ? { timeout: FORMAL_FAST_SCREEN_RUN_TIMEOUT_MS } : undefined,
+    requiresSelectedRecords.value ? { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS } : undefined,
   )
   if (!result.success || !result.data) {
     if (
-      isFormalFastScreenMode.value &&
+      requiresSelectedRecords.value &&
       (result.errorType === 'timeout' || result.errorType === 'network')
     ) {
       message.info('请求等待较久，正在确认后台任务状态')
-      const recovered = await recoverFormalRunAfterSlowRequest({
+      const recovered = await recoverRunAfterSlowRequest({
         poolId: selectedPoolId.value,
         recordIds: runnableRecordIds,
         startedAt: now,
@@ -2330,7 +2330,7 @@ function isSameRecordScope(job: SichuanBatchJob, recordIds: string[]): boolean {
   return expected === actual
 }
 
-function isRecoverableFormalJob(
+function isRecoverableRunJob(
   job: SichuanBatchJob,
   recordIds: string[],
   startedAt: number,
@@ -2343,7 +2343,7 @@ function isRecoverableFormalJob(
   )
 }
 
-async function recoverFormalRunAfterSlowRequest(options: {
+async function recoverRunAfterSlowRequest(options: {
   poolId: string
   recordIds: string[]
   startedAt: number
@@ -2362,12 +2362,7 @@ async function recoverFormalRunAfterSlowRequest(options: {
     return false
   }
   if (
-    !isRecoverableFormalJob(
-      jobResult.data,
-      options.recordIds,
-      options.startedAt,
-      options.ruleSetKey,
-    )
+    !isRecoverableRunJob(jobResult.data, options.recordIds, options.startedAt, options.ruleSetKey)
   ) {
     return false
   }
