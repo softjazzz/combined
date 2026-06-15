@@ -13,9 +13,10 @@
 
             <div class="customer-sample-toolbar-actions">
               <a-button
-                class="!rounded-lg"
+                class="customer-sample-create-action !rounded-lg"
                 @click="openTestRecordDrawer"
               >
+                <FilePlus2 :size="15" />
                 创建测试病历
               </a-button>
               <a-button
@@ -723,6 +724,7 @@ import { message } from 'ant-design-vue'
 import type { UploadFile, UploadProps } from 'ant-design-vue'
 import { InboxOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType } from 'ant-design-vue'
+import { FilePlus2 } from 'lucide-vue-next'
 import type {
   ManualSamplePool,
   ManualSamplePoolRecord,
@@ -2768,6 +2770,34 @@ onUnmounted(() => {
   border-color: rgba(29, 29, 31, 0.15);
   background: rgba(255, 255, 255, 0.98);
   color: #1d1d1f;
+}
+
+.customer-sample-toolbar-actions :deep(.customer-sample-create-action.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-color: #0066cc;
+  background: #0066cc;
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 4px 10px rgba(0, 102, 204, 0.16);
+}
+
+.customer-sample-toolbar-actions :deep(.customer-sample-create-action.ant-btn:hover),
+.customer-sample-toolbar-actions :deep(.customer-sample-create-action.ant-btn:focus) {
+  border-color: #0057b8;
+  background: #0057b8;
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 5px 12px rgba(0, 102, 204, 0.18);
+  transform: translateY(-1px);
+}
+
+.customer-sample-toolbar-actions :deep(.customer-sample-create-action svg) {
+  flex: 0 0 auto;
+  stroke-width: 2.2;
 }
 
 .customer-sample-command-bar {
