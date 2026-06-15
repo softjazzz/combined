@@ -6,6 +6,8 @@ import type {
   ManualSamplePoolRecordsResult,
   ManualSamplePoolRunResult,
   ManualSamplePoolSyncJob,
+  ManualTestRecordCreateRequest,
+  ManualTestRecordCreateResult,
   ManualSampleValidationRuleSetListResult,
   Sheet2ExactReviewAcceptancePackage,
 } from '@/views/workstation-v4/customer-sample-validation/types'
@@ -105,6 +107,17 @@ export async function importManualSamplePoolByUpload(payload: {
       },
     },
     '导入客户样本模板失败',
+  )
+}
+
+export async function createManualTestMedicalRecord(payload: ManualTestRecordCreateRequest) {
+  return requestEnvelope<ManualTestRecordCreateResult>(
+    {
+      method: 'POST',
+      url: '/api/v1/qc/sample-pools/test-records',
+      data: payload,
+    },
+    '创建测试病历失败',
   )
 }
 

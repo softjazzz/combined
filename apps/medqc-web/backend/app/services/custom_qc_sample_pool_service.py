@@ -14,6 +14,7 @@ import psycopg2
 import psycopg2.extras
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy import MetaData, Table, and_, desc, func, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -29,6 +30,11 @@ from .etl_sync import (
     upsert_to_local,
 )
 from .visit_index_service import ingest_sync_rows
+
+CUSTOMER_TEST_POOL_ID = "customer-created-test-records-v1"
+CUSTOMER_TEST_POOL_NAME = "客户自建测试病历"
+CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
+CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
 
 
 def _now_utc() -> datetime:
@@ -2606,6 +2612,15 @@ class CustomQCSamplePoolService:
         finally:
             session.close()
 
+    def get_item(self, *, item_id: str) -> Optional[Dict[str, Any]]:
+        session = _session()
+        try:
+            stmt = select(self._item_table).where(self._item_table.c.id == item_id)
+            row = session.execute(stmt).mappings().first()
+            return self._row_to_item(dict(row)) if row else None
+        finally:
+            session.close()
+
     def create_sync_job(
         self,
         *,
@@ -2910,6 +2925,454 @@ class CustomQCSamplePoolService:
             return self.get_pool(pool_id=pool_id) or {"id": pool_id}
         finally:
             session.close()
+
+    @staticmethod
+    def _parse_test_record_datetime(value: Any) -> Optional[datetime]:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, date):
+            return datetime.combine(value, datetime.min.time())
+        text = _safe_text(value)
+        if not text:
+            return None
+        normalized = text.replace("/", "-").replace(".", "-").replace("T", " ")
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(normalized[:19], fmt)
+            except Exception:
+                continue
+        try:
+            return datetime.fromisoformat(normalized)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _reflect_cdm_table(table_name: str, metadata: MetaData) -> Optional[Table]:
+        if engine is None:
+            raise RuntimeError("DATABASE_URL is not configured; sample pool unavailable")
+        try:
+            return Table(table_name, metadata, autoload_with=engine)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _upsert_reflected_rows(session: Session, table: Table, rows: Sequence[Dict[str, Any]]) -> int:
+        cleaned_rows: List[Dict[str, Any]] = []
+        allowed_columns = set(table.c.keys())
+        for row in rows:
+            cleaned = {key: value for key, value in row.items() if key in allowed_columns and value is not None}
+            if cleaned:
+                cleaned_rows.append(cleaned)
+        if not cleaned_rows:
+            return 0
+        insert_columns = sorted({key for row in cleaned_rows for key in row.keys()})
+        normalized_rows = [{column: row.get(column) for column in insert_columns} for row in cleaned_rows]
+        pk_columns = [column.name for column in table.primary_key.columns]
+        statement = pg_insert(table).values(normalized_rows)
+        update_columns = [column for column in insert_columns if column not in pk_columns]
+        if pk_columns and update_columns:
+            statement = statement.on_conflict_do_update(
+                index_elements=pk_columns,
+                set_={column: getattr(statement.excluded, column) for column in update_columns},
+            )
+        elif pk_columns:
+            statement = statement.on_conflict_do_nothing(index_elements=pk_columns)
+        session.execute(statement)
+        return len(normalized_rows)
+
+    @staticmethod
+    def _test_record_common_identity(
+        *,
+        visit_id: str,
+        patient_id: str,
+        mr_no: str,
+        patient_name: str,
+        sex: str,
+        age: int,
+        department: str,
+        now_value: datetime,
+    ) -> Dict[str, Any]:
+        return {
+            "institute_id": CUSTOMER_TEST_INSTITUTE_ID,
+            "patient_id": patient_id,
+            "visit_id": visit_id,
+            "visit_type": "住院",
+            "inpat_no": mr_no,
+            "mr_no": mr_no,
+            "name": patient_name,
+            "sex": sex,
+            "age_year": str(age),
+            "age": f"{age}岁",
+            "dept_name": department,
+            "admission_dept_name": department,
+            "discharge_dept_name": department,
+            "update_time": now_value,
+            "last_modified_datetime": now_value,
+        }
+
+    @staticmethod
+    def _test_record_document_table(document_type: str) -> str:
+        mapping = {
+            "admission_record": "admission_record",
+            "first_course_record": "first_course_record",
+            "daily_course_record": "daily_course_record",
+            "senior_course_record": "senior_course_record",
+            "rescue_record": "rescue_record",
+            "consultation_record": "consultation_record",
+            "discharge_record": "discharge_record",
+            "surgery_record": "surgery_record",
+            "presurg_summary": "presurg_summary",
+            "presurg_discussion": "presurg_discussion",
+            "surgery_safecheck_record": "surgery_safecheck_record",
+            "surgery_inform_consent": "surgery_inform_consent",
+            "anesthesia_record": "anesthesia_record",
+            "exam_report": "exam_item_report",
+            "lab_report": "labtest_item_report",
+            "medical_order": "inpat_nondrug_order",
+            "blood_application": "blood_application",
+            "bloodtrans_record": "bloodtrans_record",
+            "other": "daily_course_record",
+        }
+        return mapping.get(_safe_text(document_type), "daily_course_record")
+
+    def create_customer_test_record(
+        self,
+        *,
+        payload: Dict[str, Any],
+        created_by: str,
+    ) -> Dict[str, Any]:
+        if engine is None:
+            raise RuntimeError("DATABASE_URL is not configured; sample pool unavailable")
+
+        basic = payload.get("basic_info") if isinstance(payload.get("basic_info"), dict) else {}
+        documents = payload.get("documents") if isinstance(payload.get("documents"), list) else []
+        enabled_documents = [
+            item for item in documents if isinstance(item, dict) and bool(item.get("enabled", True)) and _safe_text(item.get("content"))
+        ]
+        if not enabled_documents:
+            raise ValueError("至少需要填写一份病历文书")
+
+        now_value = _now_utc()
+        patient_name = _safe_text(basic.get("patient_name"), "测试患者")
+        sex = _safe_text(basic.get("sex"), "男")
+        try:
+            age = int(basic.get("age") or 45)
+        except Exception:
+            age = 45
+        age = min(max(age, 0), 120)
+        department = _safe_text(basic.get("department"), "测试科室")
+        admission_time = self._parse_test_record_datetime(basic.get("admission_time")) or now_value
+        discharge_time = self._parse_test_record_datetime(basic.get("discharge_time"))
+        case_title = _safe_text(payload.get("case_title"), f"{patient_name}测试病历")
+        sequence = now_value.strftime("%Y%m%d%H%M%S") + uuid.uuid4().hex[:6].upper()
+        visit_id = f"{CUSTOMER_TEST_VISIT_PREFIX}{sequence}"
+        patient_id = f"CUSTOMER_PATIENT_{sequence}"
+        mr_no = _safe_text(basic.get("mr_no")) or visit_id
+        birth_year = max(admission_time.year - age, 1900)
+        common = self._test_record_common_identity(
+            visit_id=visit_id,
+            patient_id=patient_id,
+            mr_no=mr_no,
+            patient_name=patient_name,
+            sex=sex,
+            age=age,
+            department=department,
+            now_value=now_value,
+        )
+
+        main_diagnosis = _safe_text(basic.get("main_diagnosis"))
+        other_diagnoses = [
+            _safe_text(item)
+            for item in (basic.get("other_diagnoses") or [])
+            if _safe_text(item)
+        ]
+        base_record_content = (
+            f"客户自建测试病历：{case_title}\n"
+            f"姓名：{patient_name}；性别：{sex}；年龄：{age}岁；住院号：{mr_no}；科室：{department}。\n"
+            f"入院时间：{admission_time:%Y-%m-%d %H:%M}"
+            + (f"；出院时间：{discharge_time:%Y-%m-%d %H:%M}" if discharge_time else "")
+            + (f"\n主要诊断：{main_diagnosis}" if main_diagnosis else "")
+        )
+
+        rows_by_table: Dict[str, List[Dict[str, Any]]] = {
+            "patient_information": [
+                {
+                    "institute_id": CUSTOMER_TEST_INSTITUTE_ID,
+                    "patient_id": patient_id,
+                    "name": patient_name,
+                    "sex": sex,
+                    "birthday": date(birth_year, 1, 1),
+                    "id_card_type": "居民身份证",
+                    "id_card_no": f"510521{birth_year}0101{sequence[-4:]}",
+                    "ethnicity": "汉族",
+                    "nationality": "中国",
+                    "marital_status": "已婚",
+                    "contact_number": _safe_text(basic.get("contact_number"), "13900000000"),
+                    "currentaddress": _safe_text(basic.get("address"), "四川省泸州市泸县客户测试地址"),
+                    "contact_name": f"{patient_name}家属",
+                    "contact_relationship": "家属",
+                    "contact_telephone": _safe_text(basic.get("contact_number"), "13900000000"),
+                    "record_content": base_record_content,
+                    "update_time": now_value,
+                }
+            ],
+            "inpat_registration": [
+                {
+                    **common,
+                    "visit_cnt": "1",
+                    "birthday": date(birth_year, 1, 1),
+                    "charge_type": "城镇职工基本医疗保险",
+                    "insurance_type": "医保",
+                    "admission_datetime": admission_time,
+                    "discharge_datetime": discharge_time,
+                    "record_content": base_record_content,
+                }
+            ],
+            "mr": [
+                {
+                    **common,
+                    "document_id": f"{visit_id}-MR",
+                    "institute_code": "H51052100267",
+                    "institute_county_desc": "泸县人民医院",
+                    "visit_cnt": "1",
+                    "id_card_type": "居民身份证",
+                    "id_card_no": f"510521{birth_year}0101{sequence[-4:]}",
+                    "birthday": date(birth_year, 1, 1),
+                    "nationality": "中国",
+                    "ethnicity": "汉族",
+                    "marital_status": "已婚",
+                    "currentaddress": _safe_text(basic.get("address"), "四川省泸州市泸县客户测试地址"),
+                    "contact_number": _safe_text(basic.get("contact_number"), "13900000000"),
+                    "contact_name": f"{patient_name}家属",
+                    "contact_relationship": "家属",
+                    "contact_telephone": _safe_text(basic.get("contact_number"), "13900000000"),
+                    "admission_route": "急诊",
+                    "admission_datetime": admission_time,
+                    "admission_condition": "一般",
+                    "admission_ward_name": "测试病区",
+                    "discharge_datetime": discharge_time,
+                    "discharge_ward_name": "测试病区",
+                    "hospital_duration": str(max(((discharge_time or admission_time).date() - admission_time.date()).days, 1)),
+                    "mr_datetime": discharge_time or now_value,
+                    "record_content": base_record_content,
+                }
+            ],
+        }
+
+        if main_diagnosis:
+            rows_by_table["diagnosis"] = [
+                {
+                    **common,
+                    "diagnosis_id": f"{visit_id}-DIAG-001",
+                    "diagnosis_type": "主要诊断",
+                    "diagnosis_name": main_diagnosis,
+                    "diagnosis_code": "",
+                    "record_content": f"主要诊断：{main_diagnosis}",
+                }
+            ]
+            for index, diagnosis in enumerate(other_diagnoses, start=2):
+                rows_by_table["diagnosis"].append(
+                    {
+                        **common,
+                        "diagnosis_id": f"{visit_id}-DIAG-{index:03d}",
+                        "diagnosis_type": "其他诊断",
+                        "diagnosis_name": diagnosis,
+                        "diagnosis_code": "",
+                        "record_content": f"其他诊断：{diagnosis}",
+                    }
+                )
+
+        for index, document in enumerate(enabled_documents, start=1):
+            document_type = _safe_text(document.get("document_type"), "other")
+            table_name = self._test_record_document_table(document_type)
+            record_time = self._parse_test_record_datetime(document.get("record_time"))
+            submit_time = self._parse_test_record_datetime(document.get("submit_time")) or record_time or admission_time
+            title = _safe_text(document.get("title"), "病历文书")
+            content = _safe_text(document.get("content"))
+            row = {
+                **common,
+                "document_id": f"{visit_id}-DOC-{index:03d}",
+                "document_title": title,
+                "document_status": "已提交",
+                "submitter": _safe_text(document.get("doctor_name"), "测试医师"),
+                "submitter_id": _safe_text(document.get("doctor_code"), "CUSTOMER-DOCTOR"),
+                "submit_datetime": submit_time,
+                "record_datetime": record_time or submit_time,
+                "report_datetime": record_time or submit_time,
+                "order_datetime": record_time or submit_time,
+                "record_content": content,
+            }
+            rows_by_table.setdefault(table_name, []).append(row)
+
+        inserted_summary: Dict[str, int] = {}
+        metadata = MetaData()
+        session = _session()
+        try:
+            existing_pool = session.execute(
+                select(self._pool_table.c.id).where(self._pool_table.c.id == CUSTOMER_TEST_POOL_ID)
+            ).first()
+            if existing_pool:
+                session.execute(
+                    update(self._pool_table)
+                    .where(self._pool_table.c.id == CUSTOMER_TEST_POOL_ID)
+                    .values(updated_at=now_value)
+                )
+            else:
+                session.execute(
+                    self._pool_table.insert().values(
+                        id=CUSTOMER_TEST_POOL_ID,
+                        name=CUSTOMER_TEST_POOL_NAME,
+                        source_file="online-builder",
+                        source_sheet="手工创建",
+                        scene="running",
+                        description="客户通过页面复制粘贴创建的质控测试病历。",
+                        created_by=_safe_text(created_by, "system"),
+                        created_at=now_value,
+                        updated_at=now_value,
+                        total_items=0,
+                        llm_intrinsic_items=0,
+                        programmatic_items=0,
+                        unsupported_items=0,
+                        matched_items=0,
+                        ambiguous_items=0,
+                        unmatched_items=0,
+                        ready_items=0,
+                    )
+                )
+
+            for table_name, rows in rows_by_table.items():
+                table = self._reflect_cdm_table(table_name, metadata)
+                if table is None:
+                    continue
+                inserted_summary[table_name] = self._upsert_reflected_rows(session, table, rows)
+
+            item_id = f"customer-test-{visit_id.lower()}"
+            item_payload = {
+                "builder_version": "v1",
+                "case_title": case_title,
+                "visit_id": visit_id,
+                "mr_no": mr_no,
+                "patient_name": patient_name,
+                "department": department,
+                "document_count": len(enabled_documents),
+                "selected_rule_ids": payload.get("selected_rule_ids") or [],
+            }
+            candidate_rule_ids = [
+                _safe_text(rule_id).upper()
+                for rule_id in (payload.get("selected_rule_ids") or [])
+                if _safe_text(rule_id)
+            ]
+            manual_issue_text = _safe_text(
+                payload.get("manual_issue_text"),
+                f"客户自建测试病历：{case_title}；共 {len(enabled_documents)} 份文书，可用于验证质控规则。",
+            )
+            item_values = {
+                "id": item_id,
+                "pool_id": CUSTOMER_TEST_POOL_ID,
+                "row_no": int(now_value.timestamp()),
+                "department": department,
+                "patient_name": patient_name,
+                "mr_no": mr_no,
+                "manual_issue_text": manual_issue_text,
+                "normalized_issue_text": _normalize_issue_text(manual_issue_text),
+                "doctor_name": _safe_text(basic.get("doctor_name"), "测试医师"),
+                "qc_date": now_value.date(),
+                "qc_user": _safe_text(created_by, "system"),
+                "coverage_type": "llm_intrinsic",
+                "issue_category": "客户自建测试病历",
+                "expected_scene": "running",
+                "candidate_rule_ids_json": _safe_json_dumps(candidate_rule_ids),
+                "include_in_batch_1": True,
+                "exclude_reason": "",
+                "matched_institute_id": CUSTOMER_TEST_INSTITUTE_ID,
+                "matched_patient_id": patient_id,
+                "matched_visit_id": visit_id,
+                "match_status": "matched",
+                "sync_status": "synced",
+                "bundle_status": "pending",
+                "latest_job_id": "",
+                "latest_match_status": "matched",
+                "raw_payload_json": _safe_json_dumps(item_payload),
+                "created_at": now_value,
+                "updated_at": now_value,
+            }
+            statement = pg_insert(self._item_table).values(item_values)
+            update_columns = [key for key in item_values if key != "id"]
+            statement = statement.on_conflict_do_update(
+                index_elements=["id"],
+                set_={column: getattr(statement.excluded, column) for column in update_columns},
+            )
+            session.execute(statement)
+            self._update_pool_counters(session, CUSTOMER_TEST_POOL_ID)
+            session.commit()
+        finally:
+            session.close()
+
+        bundle_rows = [
+            {
+                "institute_id": CUSTOMER_TEST_INSTITUTE_ID,
+                "patient_id": patient_id,
+                "visit_id": visit_id,
+            }
+        ]
+        bundle_error = ""
+        try:
+            ingest_sync_rows(
+                table_name="mr",
+                rows=rows_by_table.get("mr") or bundle_rows,
+                policy_version="customer_test_record_builder",
+                sync_scene="running",
+                allow_frontpage_only=False,
+                latest_mirror_success_time=datetime.now(),
+                mirror_delay_base_minutes=30,
+                sync_interval_minutes=30,
+            )
+            refresh_scene_bundles_for_rows(
+                scene="running",
+                rows=bundle_rows,
+                policy_version="customer_test_record_builder",
+            )
+            refresh_scene_bundles_for_rows(
+                scene="final",
+                rows=bundle_rows,
+                policy_version="customer_test_record_builder",
+            )
+            refresh_domain_bundles_for_rows(
+                rows=bundle_rows,
+                policy_version="customer_test_record_builder",
+            )
+        except Exception as exc:
+            bundle_error = _safe_text(str(exc))
+
+        session = _session()
+        try:
+            bundle_status = "ready" if not bundle_error and self._check_running_bundle_status(
+                institute_id=CUSTOMER_TEST_INSTITUTE_ID,
+                patient_id=patient_id,
+                visit_id=visit_id,
+            ) == "ready" else "pending"
+            session.execute(
+                update(self._item_table)
+                .where(self._item_table.c.id == f"customer-test-{visit_id.lower()}")
+                .values(bundle_status=bundle_status, updated_at=_now_utc())
+            )
+            self._update_pool_counters(session, CUSTOMER_TEST_POOL_ID)
+            session.commit()
+        finally:
+            session.close()
+
+        return {
+            "pool": self.get_pool(pool_id=CUSTOMER_TEST_POOL_ID),
+            "item": self.get_item(item_id=f"customer-test-{visit_id.lower()}"),
+            "visit_id": visit_id,
+            "mr_no": mr_no,
+            "patient_id": patient_id,
+            "inserted_tables": inserted_summary,
+            "bundle_status": bundle_status,
+            "bundle_error": bundle_error,
+        }
 
     def refresh_pool_item_classifications(
         self,

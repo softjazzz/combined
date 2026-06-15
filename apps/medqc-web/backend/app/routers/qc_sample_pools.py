@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -115,6 +116,40 @@ class SamplePoolSyncRequest(BaseModel):
     )
 
 
+class TestRecordBasicInfo(BaseModel):
+    patient_name: str = Field(..., description="患者姓名")
+    sex: str = Field(default="男", description="性别")
+    age: int = Field(default=45, ge=0, le=120, description="年龄")
+    mr_no: Optional[str] = Field(default=None, description="住院号")
+    department: str = Field(..., description="科室")
+    admission_time: datetime = Field(..., description="入院时间")
+    discharge_time: Optional[datetime] = Field(default=None, description="出院时间")
+    main_diagnosis: Optional[str] = Field(default=None, description="主要诊断")
+    other_diagnoses: list[str] = Field(default_factory=list, description="其他诊断")
+    doctor_name: Optional[str] = Field(default=None, description="默认记录医师")
+    contact_number: Optional[str] = Field(default=None, description="联系电话")
+    address: Optional[str] = Field(default=None, description="住址")
+
+
+class TestRecordDocument(BaseModel):
+    document_type: str = Field(..., description="文书类型")
+    title: str = Field(..., description="文书标题")
+    record_time: Optional[datetime] = Field(default=None, description="记录/报告/医嘱时间")
+    submit_time: Optional[datetime] = Field(default=None, description="提交时间")
+    content: str = Field(..., description="文书内容")
+    doctor_name: Optional[str] = Field(default=None, description="记录医师")
+    doctor_code: Optional[str] = Field(default=None, description="医师代码")
+    enabled: bool = Field(default=True, description="是否写入")
+
+
+class TestRecordCreateRequest(BaseModel):
+    case_title: str = Field(..., description="测试病历名称")
+    basic_info: TestRecordBasicInfo
+    documents: list[TestRecordDocument] = Field(..., min_length=1, description="文书列表")
+    selected_rule_ids: list[str] = Field(default_factory=list, description="重点验证规则")
+    manual_issue_text: Optional[str] = Field(default=None, description="样本说明")
+
+
 def _run_sample_pool_sync_job(job_id: str) -> None:
     service = _service()
     job = service.get_sync_job(job_id=job_id)
@@ -161,6 +196,26 @@ async def list_sample_pools(
             "page_size": result.page_size,
         },
         message="获取客户样本池成功",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/test-records")
+async def create_test_record(
+    request: Request,
+    payload: TestRecordCreateRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        result = _service().create_customer_test_record(
+            payload=payload.model_dump(mode="json"),
+            created_by=_current_user_id(current_user),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return success_response(
+        data=result,
+        message="客户自建测试病历已创建",
         trace_id=get_trace_id(request),
     )
 

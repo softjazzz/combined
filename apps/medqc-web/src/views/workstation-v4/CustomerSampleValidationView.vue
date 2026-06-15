@@ -13,6 +13,12 @@
 
             <div class="customer-sample-toolbar-actions">
               <a-button
+                class="!rounded-lg"
+                @click="openTestRecordDrawer"
+              >
+                创建测试病历
+              </a-button>
+              <a-button
                 type="primary"
                 class="!rounded-lg"
                 :disabled="runButtonDisabled"
@@ -22,11 +28,20 @@
                 {{ runButtonText }}
               </a-button>
               <a-dropdown :trigger="['click']">
-                <a-button class="!rounded-lg"> 更多操作 </a-button>
+                <a-button class="!rounded-lg">
+                  更多操作
+                </a-button>
                 <template #overlay>
                   <a-menu>
-                    <a-menu-item @click="handleMoreActionKey('import')"> 导入模板 </a-menu-item>
-                    <a-menu-item @click="handleMoreActionKey('refresh')"> 刷新样本池 </a-menu-item>
+                    <a-menu-item @click="handleMoreActionKey('import')">
+                      导入模板
+                    </a-menu-item>
+                    <a-menu-item @click="handleMoreActionKey('create-test-record')">
+                      创建测试病历
+                    </a-menu-item>
+                    <a-menu-item @click="handleMoreActionKey('refresh')">
+                      刷新样本池
+                    </a-menu-item>
                     <a-menu-item
                       :disabled="!selectedPoolId || syncLoading"
                       @click="handleMoreActionKey('sync')"
@@ -46,7 +61,10 @@
                       查看最近任务
                     </a-menu-item>
                     <a-menu-divider />
-                    <a-sub-menu key="luxian-report" title="导出泸县0609报告">
+                    <a-sub-menu
+                      key="luxian-report"
+                      title="导出泸县0609报告"
+                    >
                       <a-menu-item @click="handleMoreActionKey('export-luxian-md')">
                         Markdown 评估报告
                       </a-menu-item>
@@ -58,7 +76,10 @@
                       </a-menu-item>
                     </a-sub-menu>
                     <a-menu-divider />
-                    <a-sub-menu key="advanced" title="高级模式">
+                    <a-sub-menu
+                      key="advanced"
+                      title="高级模式"
+                    >
                       <a-menu-item @click="handleMoreActionKey('mode-sc')">
                         SC 样本规则模式
                       </a-menu-item>
@@ -77,7 +98,9 @@
 
           <div class="customer-sample-command-bar">
             <div class="customer-sample-field">
-              <div class="customer-sample-field-label">当前样本池</div>
+              <div class="customer-sample-field-label">
+                当前样本池
+              </div>
               <div class="flex items-center gap-2">
                 <a-select
                   v-model:value="selectedPoolId"
@@ -100,7 +123,9 @@
             </div>
 
             <div class="customer-sample-field">
-              <div class="customer-sample-field-label">验证规则集</div>
+              <div class="customer-sample-field-label">
+                验证规则集
+              </div>
               <div class="customer-sample-rule-switcher">
                 <button
                   v-for="ruleSet in mainRuleSets"
@@ -135,9 +160,7 @@
                 <span class="text-[14px] font-semibold text-slate-900">
                   {{ selectedRuleSet?.rule_set_name || '泸县0609质控点验证 v1' }}
                 </span>
-                <span class="customer-sample-meta-chip"
-                  >场景 {{ ruleSetScopeLabel(selectedRuleSet?.scope) }}</span
-                >
+                <span class="customer-sample-meta-chip">场景 {{ ruleSetScopeLabel(selectedRuleSet?.scope) }}</span>
               </div>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -159,7 +182,10 @@
             ghost
             class="customer-sample-internal-collapse"
           >
-            <a-collapse-panel key="sheet2" header="内部验收诊断">
+            <a-collapse-panel
+              key="sheet2"
+              header="内部验收诊断"
+            >
               <div class="border-b border-slate-200/80 px-5 pb-4">
                 <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                   <div class="min-w-0">
@@ -177,7 +203,10 @@
               </div>
 
               <a-spin :spinning="exactReviewLoading">
-                <div v-if="exactReviewAcceptance" class="space-y-4 px-5 py-4">
+                <div
+                  v-if="exactReviewAcceptance"
+                  class="space-y-4 px-5 py-4"
+                >
                   <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <div
                       v-for="item in exactReviewStatusCards"
@@ -200,7 +229,9 @@
                   <div
                     class="rounded-[20px] border border-amber-200 bg-amber-50 px-4 py-4 text-[13px] leading-6 text-amber-900"
                   >
-                    <div class="font-semibold text-amber-950">blocked_with_reason 口径</div>
+                    <div class="font-semibold text-amber-950">
+                      blocked_with_reason 口径
+                    </div>
                     <div class="mt-1">
                       {{ exactReviewAcceptance.explanations.blocked_with_reason }}
                     </div>
@@ -273,7 +304,10 @@
                   </div>
                 </div>
 
-                <div v-else class="px-5 py-6 text-[13px] leading-6 text-rose-600">
+                <div
+                  v-else
+                  class="px-5 py-6 text-[13px] leading-6 text-rose-600"
+                >
                   {{ exactReviewError || '暂未读取到 Sheet2 精确复核验收包。' }}
                 </div>
               </a-spin>
@@ -288,7 +322,9 @@
           <div class="border-b border-slate-200/80 px-5 py-4">
             <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
               <div class="min-w-0">
-                <div class="text-[17px] font-semibold text-slate-900">样本病历同步进度</div>
+                <div class="text-[17px] font-semibold text-slate-900">
+                  样本病历同步进度
+                </div>
                 <div class="mt-1 text-[13px] leading-6 text-slate-500">
                   按样本池定向从源库拉取真实病历到本地 PG，并刷新 running bundle。
                 </div>
@@ -300,31 +336,41 @@
           </div>
           <div class="grid gap-4 px-5 py-4 md:grid-cols-2 xl:grid-cols-5">
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">样本病历</div>
+              <div class="text-[12px] text-slate-400">
+                样本病历
+              </div>
               <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
                 {{ syncProgress.total_candidates ?? 0 }}
               </div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">可同步病历</div>
+              <div class="text-[12px] text-slate-400">
+                可同步病历
+              </div>
               <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
                 {{ syncProgress.eligible_visits ?? 0 }}
               </div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">已完成表数</div>
+              <div class="text-[12px] text-slate-400">
+                已完成表数
+              </div>
               <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
                 {{ syncProgress.processed_tables ?? 0 }}/{{ syncProgress.total_tables ?? 0 }}
               </div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">已拉取行数</div>
+              <div class="text-[12px] text-slate-400">
+                已拉取行数
+              </div>
               <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
                 {{ syncProgress.total_rows_pulled ?? 0 }}
               </div>
             </div>
             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div class="text-[12px] text-slate-400">已写入行数</div>
+              <div class="text-[12px] text-slate-400">
+                已写入行数
+              </div>
               <div class="mt-2 text-[28px] font-semibold leading-none text-slate-900">
                 {{ syncProgress.total_rows_upserted ?? 0 }}
               </div>
@@ -342,7 +388,10 @@
                   syncProgress.remaining_tables ?? 0
                 }}
               </div>
-              <div v-if="syncJobDetail.error_message" class="mt-2 text-rose-600">
+              <div
+                v-if="syncJobDetail.error_message"
+                class="mt-2 text-rose-600"
+              >
                 {{ syncJobDetail.error_message }}
               </div>
             </div>
@@ -354,9 +403,14 @@
             <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-3">
-                  <div class="text-[18px] font-semibold text-slate-900">病历池</div>
+                  <div class="text-[18px] font-semibold text-slate-900">
+                    病历池
+                  </div>
                   <div class="customer-sample-inline-metrics">
-                    <span v-for="item in summaryCards" :key="item.label">
+                    <span
+                      v-for="item in summaryCards"
+                      :key="item.label"
+                    >
                       {{ item.label }} <strong>{{ item.value }}</strong>
                     </span>
                   </div>
@@ -422,10 +476,19 @@
                     :options="parallelOptions"
                   />
                 </div>
-                <a-button type="primary" class="!rounded-full" @click="loadRecords()">
+                <a-button
+                  type="primary"
+                  class="!rounded-full"
+                  @click="loadRecords()"
+                >
                   查询
                 </a-button>
-                <a-button class="!rounded-full" @click="resetFilters"> 重置 </a-button>
+                <a-button
+                  class="!rounded-full"
+                  @click="resetFilters"
+                >
+                  重置
+                </a-button>
               </div>
             </div>
 
@@ -457,7 +520,9 @@
     >
       <div class="space-y-4 pt-2">
         <div>
-          <div class="mb-2 text-[13px] font-medium text-slate-700">样本池名称</div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">
+            样本池名称
+          </div>
           <a-input
             v-model:value="importForm.poolName"
             placeholder="例如：手工问题样本池-第二轮"
@@ -465,7 +530,9 @@
           />
         </div>
         <div>
-          <div class="mb-2 text-[13px] font-medium text-slate-700">备注</div>
+          <div class="mb-2 text-[13px] font-medium text-slate-700">
+            备注
+          </div>
           <a-textarea
             v-model:value="importForm.description"
             :rows="3"
@@ -478,7 +545,11 @@
             class="mb-2 flex items-center justify-between gap-3 text-[13px] font-medium text-slate-700"
           >
             <span>Excel 模板</span>
-            <a-button type="link" class="!px-0" @click="handleDownloadTemplate">
+            <a-button
+              type="link"
+              class="!px-0"
+              @click="handleDownloadTemplate"
+            >
               下载模板
             </a-button>
           </div>
@@ -492,40 +563,277 @@
             <p class="ant-upload-drag-icon">
               <InboxOutlined />
             </p>
-            <p class="ant-upload-text">点击或拖拽上传 Excel 模板</p>
-            <p class="ant-upload-hint">支持 .xls / .xlsx，默认读取第一个工作表。</p>
-            <p class="mt-2 text-[12px] text-slate-400">模板只需填写住院号，一行一个。</p>
+            <p class="ant-upload-text">
+              点击或拖拽上传 Excel 模板
+            </p>
+            <p class="ant-upload-hint">
+              支持 .xls / .xlsx，默认读取第一个工作表。
+            </p>
+            <p class="mt-2 text-[12px] text-slate-400">
+              模板只需填写住院号，一行一个。
+            </p>
           </a-upload-dragger>
         </div>
       </div>
     </a-modal>
 
-    <a-drawer :open="detailOpen" width="720" title="病历关联问题" @close="detailOpen = false">
-      <div v-if="activeRecord" class="space-y-5">
-        <a-card size="small" class="rounded-2xl">
-          <template #title> 病历概况 </template>
+    <a-drawer
+      v-model:open="testRecordDrawerOpen"
+      width="880"
+      title="创建测试病历"
+      class="customer-test-record-drawer"
+      :destroy-on-close="false"
+      @close="resetTestRecordForm"
+    >
+      <div class="space-y-5">
+        <a-alert
+          type="info"
+          show-icon
+          message="保存后进入独立样本池"
+          description="适合客户复制粘贴病历片段，自行修改记录时间、提交时间、报告时间等要素，用来验证泸县0609质控点效果。系统会生成独立测试 visit，不混入真实生产病历。"
+        />
+
+        <section class="customer-test-record-section">
+          <div class="customer-test-record-section-title">
+            基本信息
+          </div>
+          <div class="customer-test-record-grid">
+            <label>
+              <span>测试病历名称</span>
+              <a-input
+                v-model:value="testRecordForm.caseTitle"
+                placeholder="例如：术后记录超时测试"
+              />
+            </label>
+            <label>
+              <span>患者姓名</span>
+              <a-input
+                v-model:value="testRecordForm.patientName"
+                placeholder="脱敏姓名"
+              />
+            </label>
+            <label>
+              <span>性别</span>
+              <a-select
+                v-model:value="testRecordForm.sex"
+                :options="sexOptions"
+              />
+            </label>
+            <label>
+              <span>年龄</span>
+              <a-input-number
+                v-model:value="testRecordForm.age"
+                class="w-full"
+                :min="0"
+                :max="120"
+              />
+            </label>
+            <label>
+              <span>住院号</span>
+              <a-input
+                v-model:value="testRecordForm.mrNo"
+                placeholder="可填客户自定义住院号"
+              />
+            </label>
+            <label>
+              <span>科室</span>
+              <a-input
+                v-model:value="testRecordForm.department"
+                placeholder="例如：普通外科"
+              />
+            </label>
+            <label>
+              <span>入院时间</span>
+              <a-input
+                v-model:value="testRecordForm.admissionTime"
+                type="datetime-local"
+              />
+            </label>
+            <label>
+              <span>出院时间</span>
+              <a-input
+                v-model:value="testRecordForm.dischargeTime"
+                type="datetime-local"
+              />
+            </label>
+            <label class="customer-test-record-grid-wide">
+              <span>主要诊断</span>
+              <a-input
+                v-model:value="testRecordForm.mainDiagnosis"
+                placeholder="可选，用于病案上下文"
+              />
+            </label>
+            <label class="customer-test-record-grid-wide">
+              <span>其他诊断</span>
+              <a-textarea
+                v-model:value="testRecordForm.otherDiagnosesText"
+                :rows="2"
+                placeholder="可选，每行一个诊断"
+              />
+            </label>
+          </div>
+        </section>
+
+        <section class="customer-test-record-section">
+          <div class="customer-test-record-section-header">
+            <div>
+              <div class="customer-test-record-section-title">
+                多文书粘贴
+              </div>
+              <p>
+                每份文书都可以单独设置记录时间和提交时间，便于构造时限、查房、检查检验、手术麻醉、输血等质控场景。
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <a-select
+                v-model:value="newDocumentType"
+                class="w-[180px]"
+                :options="testRecordDocumentTypeOptions"
+              />
+              <a-button @click="addTestRecordDocument()">
+                添加文书
+              </a-button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div
+              v-for="(document, index) in testRecordForm.documents"
+              :key="document.key"
+              class="customer-test-record-doc"
+            >
+              <div class="customer-test-record-doc-header">
+                <div>
+                  <strong>{{ index + 1 }}. {{ document.title || '未命名文书' }}</strong>
+                  <span>{{ documentTypeLabel(document.document_type) }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <a-switch
+                    v-model:checked="document.enabled"
+                    size="small"
+                  />
+                  <a-button
+                    size="small"
+                    danger
+                    :disabled="testRecordForm.documents.length <= 1"
+                    @click="removeTestRecordDocument(index)"
+                  >
+                    删除
+                  </a-button>
+                </div>
+              </div>
+              <div class="customer-test-record-doc-grid">
+                <label>
+                  <span>文书类型</span>
+                  <a-select
+                    v-model:value="document.document_type"
+                    :options="testRecordDocumentTypeOptions"
+                    @change="handleDocumentTypeChange(document)"
+                  />
+                </label>
+                <label>
+                  <span>文书标题</span>
+                  <a-input v-model:value="document.title" />
+                </label>
+                <label>
+                  <span>记录/报告时间</span>
+                  <a-input
+                    v-model:value="document.record_time"
+                    type="datetime-local"
+                  />
+                </label>
+                <label>
+                  <span>提交时间</span>
+                  <a-input
+                    v-model:value="document.submit_time"
+                    type="datetime-local"
+                  />
+                </label>
+                <label>
+                  <span>记录医师</span>
+                  <a-input
+                    v-model:value="document.doctor_name"
+                    placeholder="可选"
+                  />
+                </label>
+              </div>
+              <a-textarea
+                v-model:value="document.content"
+                :rows="6"
+                placeholder="粘贴或编辑这份文书的完整文本。不要写“备注：这里缺失”，应通过真实文书内容自然体现缺陷。"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section class="customer-test-record-section">
+          <div class="customer-test-record-section-title">
+            验证说明
+          </div>
+          <a-textarea
+            v-model:value="testRecordForm.manualIssueText"
+            :rows="3"
+            placeholder="可选：说明这份测试病历想验证哪些质控点，例如：验证术后24小时记录、会诊执行记录、输血前检查。"
+          />
+        </section>
+      </div>
+
+      <template #footer>
+        <div class="flex items-center justify-end gap-2">
+          <a-button @click="resetTestRecordForm">
+            取消
+          </a-button>
+          <a-button
+            type="primary"
+            :loading="savingTestRecord"
+            @click="handleCreateTestRecord"
+          >
+            保存到测试样本池
+          </a-button>
+        </div>
+      </template>
+    </a-drawer>
+
+    <a-drawer
+      :open="detailOpen"
+      width="720"
+      title="病历关联问题"
+      @close="detailOpen = false"
+    >
+      <div
+        v-if="activeRecord"
+        class="space-y-5"
+      >
+        <a-card
+          size="small"
+          class="rounded-2xl"
+        >
+          <template #title>
+            病历概况
+          </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">科室：</span
-              >{{ activeRecord.department || '-' }}
+              <span class="font-medium text-slate-500">科室：</span>{{ activeRecord.department || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">患者：</span
-              >{{ activeRecord.patient_name || '-' }}
+              <span class="font-medium text-slate-500">患者：</span>{{ activeRecord.patient_name || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">住院号：</span
-              >{{ activeRecord.mr_no || '-' }}
+              <span class="font-medium text-slate-500">住院号：</span>{{ activeRecord.mr_no || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">visit_id：</span
-              >{{ activeRecord.matched_visit_id || '-' }}
+              <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
             </div>
           </div>
         </a-card>
 
-        <a-card size="small" class="rounded-2xl">
-          <template #title> 识别范围 </template>
+        <a-card
+          size="small"
+          class="rounded-2xl"
+        >
+          <template #title>
+            识别范围
+          </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
               <span class="font-medium text-slate-500">文书范围：</span>
@@ -542,38 +850,42 @@
           </div>
         </a-card>
 
-        <a-card size="small" class="rounded-2xl">
-          <template #title> 病历关联 </template>
+        <a-card
+          size="small"
+          class="rounded-2xl"
+        >
+          <template #title>
+            病历关联
+          </template>
           <div class="space-y-2 text-sm leading-7 text-slate-700">
             <div>
-              <span class="font-medium text-slate-500">关联结果：</span
-              >{{ matchStatusLabel(activeRecord.match_status) }}
+              <span class="font-medium text-slate-500">关联结果：</span>{{ matchStatusLabel(activeRecord.match_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">下一步：</span
-              >{{ matchStatusHint(activeRecord.match_status) }}
+              <span class="font-medium text-slate-500">下一步：</span>{{ matchStatusHint(activeRecord.match_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">visit_id：</span
-              >{{ activeRecord.matched_visit_id || '-' }}
+              <span class="font-medium text-slate-500">visit_id：</span>{{ activeRecord.matched_visit_id || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">同步状态：</span
-              >{{ activeRecord.sync_status || '-' }}
+              <span class="font-medium text-slate-500">同步状态：</span>{{ activeRecord.sync_status || '-' }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">文书就绪：</span
-              >{{ bundleStatusLabel(activeRecord.bundle_status) }}
+              <span class="font-medium text-slate-500">文书就绪：</span>{{ bundleStatusLabel(activeRecord.bundle_status) }}
             </div>
             <div>
-              <span class="font-medium text-slate-500">处理建议：</span
-              >{{ bundleStatusHint(activeRecord.bundle_status) }}
+              <span class="font-medium text-slate-500">处理建议：</span>{{ bundleStatusHint(activeRecord.bundle_status) }}
             </div>
           </div>
         </a-card>
 
-        <a-card size="small" class="rounded-2xl">
-          <template #title> 关联人工问题 </template>
+        <a-card
+          size="small"
+          class="rounded-2xl"
+        >
+          <template #title>
+            关联人工问题
+          </template>
           <div class="space-y-3">
             <div
               v-for="sample in activeRecord.sample_items"
@@ -633,9 +945,11 @@ import type {
   ManualSampleValidationMode,
   ManualSampleValidationRuleSet,
   ManualSamplePoolSyncJob,
+  ManualTestRecordDocument,
   Sheet2ExactReviewAcceptancePackage,
 } from './customer-sample-validation/types'
 import {
+  createManualTestMedicalRecord,
   exportLuxian0609EvaluationReport,
   getSheet2ExactReviewAcceptancePackage,
   getLatestManualSamplePoolSyncJob,
@@ -667,6 +981,28 @@ const importingPool = ref(false)
 const selectedRowKeys = ref<string[]>([])
 const importModalOpen = ref(false)
 const importFileList = ref<UploadFile[]>([])
+const testRecordDrawerOpen = ref(false)
+const savingTestRecord = ref(false)
+
+type TestRecordDocumentForm = ManualTestRecordDocument & {
+  key: string
+  enabled: boolean
+}
+
+type TestRecordForm = {
+  caseTitle: string
+  patientName: string
+  sex: string
+  age: number
+  mrNo: string
+  department: string
+  admissionTime: string
+  dischargeTime: string
+  mainDiagnosis: string
+  otherDiagnosesText: string
+  manualIssueText: string
+  documents: TestRecordDocumentForm[]
+}
 
 const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
 const FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = 'sc_content_full_v1'
@@ -675,6 +1011,106 @@ const PROGRAMMATIC_RULE_SET_KEY = 'sample_programmatic_gate_v1'
 const LEGACY_CUSTOMER_RULE_SET_KEY = 'customer_luxian_full_v1'
 const FORMAL_FAST_SCREEN_RUN_TIMEOUT_MS = 90000
 const RUN_DUPLICATE_GUARD_MS = 120000
+
+function toDateTimeLocal(value: Date): string {
+  const pad = (input: number) => String(input).padStart(2, '0')
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`
+}
+
+function buildDocumentKey(): string {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+const sexOptions = [
+  { label: '男', value: '男' },
+  { label: '女', value: '女' },
+]
+
+const testRecordDocumentTypeOptions = [
+  { label: '入院记录', value: 'admission_record' },
+  { label: '首次病程记录', value: 'first_course_record' },
+  { label: '日常病程记录', value: 'daily_course_record' },
+  { label: '上级医师查房记录', value: 'senior_course_record' },
+  { label: '抢救记录', value: 'rescue_record' },
+  { label: '会诊记录', value: 'consultation_record' },
+  { label: '出院记录', value: 'discharge_record' },
+  { label: '术前小结', value: 'presurg_summary' },
+  { label: '术前讨论', value: 'presurg_discussion' },
+  { label: '手术记录', value: 'surgery_record' },
+  { label: '手术安全核查', value: 'surgery_safecheck_record' },
+  { label: '手术知情同意', value: 'surgery_inform_consent' },
+  { label: '麻醉记录', value: 'anesthesia_record' },
+  { label: '检查报告', value: 'exam_report' },
+  { label: '检验报告', value: 'lab_report' },
+  { label: '医嘱记录', value: 'medical_order' },
+  { label: '输血申请', value: 'blood_application' },
+  { label: '输血记录', value: 'bloodtrans_record' },
+  { label: '其他文书', value: 'other' },
+]
+
+function documentTypeLabel(value: string): string {
+  return testRecordDocumentTypeOptions.find((item) => item.value === value)?.label || '其他文书'
+}
+
+function createDocument(
+  type: string,
+  overrides: Partial<TestRecordDocumentForm> = {},
+): TestRecordDocumentForm {
+  const label = documentTypeLabel(type)
+  const nowText = toDateTimeLocal(new Date())
+  return {
+    key: buildDocumentKey(),
+    document_type: type,
+    title: label,
+    record_time: nowText,
+    submit_time: nowText,
+    content: '',
+    doctor_name: '测试医师',
+    doctor_code: '',
+    enabled: true,
+    ...overrides,
+  }
+}
+
+function createDefaultTestRecordForm(): TestRecordForm {
+  const now = new Date()
+  const admission = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+  const firstCourse = new Date(admission.getTime() + 4 * 60 * 60 * 1000)
+  return {
+    caseTitle: '客户自建质控测试病历',
+    patientName: '测试患者',
+    sex: '男',
+    age: 56,
+    mrNo: '',
+    department: '普通外科',
+    admissionTime: toDateTimeLocal(admission),
+    dischargeTime: toDateTimeLocal(now),
+    mainDiagnosis: '',
+    otherDiagnosesText: '',
+    manualIssueText: '',
+    documents: [
+      createDocument('admission_record', {
+        record_time: toDateTimeLocal(admission),
+        submit_time: toDateTimeLocal(admission),
+        content:
+          '入院记录\n主诉：腹痛3小时。\n现病史：患者入院前无明显诱因出现腹痛，伴恶心，无呕血黑便。\n初步诊断：腹痛待查。',
+      }),
+      createDocument('first_course_record', {
+        record_time: toDateTimeLocal(firstCourse),
+        submit_time: toDateTimeLocal(firstCourse),
+        content:
+          '首次病程记录\n病例特点：患者因腹痛入院，查体腹软，上腹压痛。\n诊疗计划：完善血常规、腹部影像检查，予对症处理。',
+      }),
+      createDocument('daily_course_record', {
+        content: '日常病程记录\n患者腹痛较前缓解，生命体征平稳，继续当前治疗方案。',
+      }),
+      createDocument('discharge_record', {
+        content:
+          '出院记录\n诊疗经过：患者入院后完善检查并对症治疗，症状好转。\n出院医嘱：门诊随访，不适随诊。',
+      }),
+    ],
+  }
+}
 
 const fallbackRuleSets: ManualSampleValidationRuleSet[] = [
   {
@@ -847,6 +1283,8 @@ const importForm = ref({
   poolName: '',
   description: '',
 })
+const testRecordForm = ref<TestRecordForm>(createDefaultTestRecordForm())
+const newDocumentType = ref('daily_course_record')
 const runOptions = ref({
   maxParallelRecords: 4,
 })
@@ -1715,6 +2153,118 @@ function buildRuleSetDirectory(
   })
 }
 
+function openTestRecordDrawer() {
+  if (!testRecordDrawerOpen.value) {
+    testRecordForm.value = createDefaultTestRecordForm()
+  }
+  testRecordDrawerOpen.value = true
+}
+
+function resetTestRecordForm() {
+  if (savingTestRecord.value) return
+  testRecordDrawerOpen.value = false
+  testRecordForm.value = createDefaultTestRecordForm()
+  newDocumentType.value = 'daily_course_record'
+}
+
+function handleDocumentTypeChange(document: TestRecordDocumentForm) {
+  if (!String(document.title || '').trim()) {
+    document.title = documentTypeLabel(document.document_type)
+  }
+}
+
+function addTestRecordDocument(type?: string) {
+  const nextType = type || newDocumentType.value || 'daily_course_record'
+  testRecordForm.value.documents.push(createDocument(nextType))
+}
+
+function removeTestRecordDocument(index: number) {
+  if (testRecordForm.value.documents.length <= 1) return
+  testRecordForm.value.documents.splice(index, 1)
+}
+
+function normalizeDateTimeLocal(value: string): string | undefined {
+  const text = String(value || '').trim()
+  if (!text) return undefined
+  return text.length === 16 ? `${text}:00` : text
+}
+
+async function handleCreateTestRecord() {
+  const form = testRecordForm.value
+  const patientName = form.patientName.trim()
+  const department = form.department.trim()
+  const caseTitle = form.caseTitle.trim()
+  const documents = form.documents
+    .filter((document) => document.enabled && String(document.content || '').trim())
+    .map((document) => ({
+      document_type: document.document_type,
+      title: String(document.title || documentTypeLabel(document.document_type)).trim(),
+      record_time: normalizeDateTimeLocal(document.record_time || ''),
+      submit_time: normalizeDateTimeLocal(document.submit_time || ''),
+      content: String(document.content || '').trim(),
+      doctor_name: String(document.doctor_name || '').trim() || undefined,
+      doctor_code: String(document.doctor_code || '').trim() || undefined,
+      enabled: true,
+    }))
+  if (!caseTitle) {
+    message.warning('请填写测试病历名称')
+    return
+  }
+  if (!patientName) {
+    message.warning('请填写患者姓名')
+    return
+  }
+  if (!department) {
+    message.warning('请填写科室')
+    return
+  }
+  if (!form.admissionTime) {
+    message.warning('请填写入院时间')
+    return
+  }
+  if (documents.length === 0) {
+    message.warning('至少需要填写一份病历文书')
+    return
+  }
+
+  savingTestRecord.value = true
+  const result = await createManualTestMedicalRecord({
+    case_title: caseTitle,
+    basic_info: {
+      patient_name: patientName,
+      sex: form.sex,
+      age: Number(form.age || 0),
+      mr_no: form.mrNo.trim() || undefined,
+      department,
+      admission_time: normalizeDateTimeLocal(form.admissionTime) || form.admissionTime,
+      discharge_time: normalizeDateTimeLocal(form.dischargeTime),
+      main_diagnosis: form.mainDiagnosis.trim() || undefined,
+      other_diagnoses: form.otherDiagnosesText
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    },
+    documents,
+    manual_issue_text: form.manualIssueText.trim() || undefined,
+  })
+  savingTestRecord.value = false
+  if (!result.success || !result.data) {
+    message.error(result.message || '创建测试病历失败')
+    return
+  }
+  if (result.data.bundle_status !== 'ready') {
+    message.warning('测试病历已创建，但文书索引仍在准备中，请稍后刷新后再运行质控')
+  } else {
+    message.success(`测试病历已创建：${result.data.mr_no || result.data.visit_id}`)
+  }
+  testRecordDrawerOpen.value = false
+  testRecordForm.value = createDefaultTestRecordForm()
+  selectedPoolId.value = result.data.pool?.id
+  pagination.value.page = 1
+  selectedRowKeys.value = []
+  await loadPools()
+}
+
 async function loadRuleSets() {
   const result = await listManualSampleValidationRuleSets()
   if (!result.success || !result.data) {
@@ -1862,6 +2412,10 @@ async function handleValidationModeChange(mode: ManualSampleValidationMode | str
 async function handleMoreActionKey(key: string) {
   if (key === 'import') {
     importModalOpen.value = true
+    return
+  }
+  if (key === 'create-test-record') {
+    openTestRecordDrawer()
     return
   }
   if (key === 'refresh') {
@@ -3379,5 +3933,111 @@ onUnmounted(() => {
   font-family:
     'Source Han Sans SC', 'San Francisco', 'SF Pro Text', 'SF Pro Display', Inter, 'PingFang SC',
     'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif !important;
+}
+
+.customer-test-record-drawer :deep(.ant-drawer-body) {
+  background: var(--customer-sample-canvas);
+}
+
+.customer-test-record-section {
+  border: 1px solid var(--customer-sample-border);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 18px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+
+.customer-test-record-section-title {
+  color: var(--customer-sample-text);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 22px;
+}
+
+.customer-test-record-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.customer-test-record-section-header p {
+  margin: 4px 0 0;
+  color: var(--customer-sample-muted);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.customer-test-record-grid,
+.customer-test-record-doc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.customer-test-record-grid-wide {
+  grid-column: span 2;
+}
+
+.customer-test-record-grid label,
+.customer-test-record-doc-grid label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--customer-sample-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.customer-test-record-doc {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 14px;
+}
+
+.customer-test-record-doc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.customer-test-record-doc-header strong {
+  display: block;
+  color: var(--customer-sample-text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.customer-test-record-doc-header span {
+  display: inline-flex;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.08);
+  padding: 2px 8px;
+  color: var(--customer-sample-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.customer-test-record-doc :deep(.ant-input),
+.customer-test-record-doc :deep(.ant-input-number),
+.customer-test-record-section :deep(.ant-input),
+.customer-test-record-section :deep(.ant-input-number),
+.customer-test-record-section :deep(.ant-select-selector),
+.customer-test-record-section :deep(.ant-input-number-input) {
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .customer-test-record-grid,
+  .customer-test-record-doc-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

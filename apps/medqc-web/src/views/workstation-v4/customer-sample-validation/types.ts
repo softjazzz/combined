@@ -208,6 +208,49 @@ export type ManualSamplePoolRunResult = {
   rule_set_version?: string
 }
 
+export type ManualTestRecordDocument = {
+  document_type: string
+  title: string
+  record_time?: string
+  submit_time?: string
+  content: string
+  doctor_name?: string
+  doctor_code?: string
+  enabled?: boolean
+}
+
+export type ManualTestRecordCreateRequest = {
+  case_title: string
+  basic_info: {
+    patient_name: string
+    sex: string
+    age: number
+    mr_no?: string
+    department: string
+    admission_time: string
+    discharge_time?: string
+    main_diagnosis?: string
+    other_diagnoses?: string[]
+    doctor_name?: string
+    contact_number?: string
+    address?: string
+  }
+  documents: ManualTestRecordDocument[]
+  selected_rule_ids?: string[]
+  manual_issue_text?: string
+}
+
+export type ManualTestRecordCreateResult = {
+  pool?: ManualSamplePool
+  item?: ManualSamplePoolItem
+  visit_id: string
+  mr_no: string
+  patient_id: string
+  inserted_tables: Record<string, number>
+  bundle_status: string
+  bundle_error?: string
+}
+
 export type Sheet2ExactReviewBlockedRow = {
   sheet2_row_id: string
   visit_id: string
