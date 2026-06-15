@@ -724,22 +724,40 @@ async function handleSave(runAfterSave: boolean) {
 
 .synthetic-case-ghost-button,
 .synthetic-case-primary-button {
+  display: inline-flex !important;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   height: 34px;
+  padding: 0 14px !important;
   border-radius: 9px !important;
   font-size: 13px;
   font-weight: 600;
+  line-height: 34px;
+  white-space: nowrap;
 }
 
 .synthetic-case-ghost-button {
+  min-width: 112px;
   border-color: rgba(0, 0, 0, 0.1);
   background: rgba(255, 255, 255, 0.72);
   color: rgba(29, 29, 31, 0.78);
 }
 
 .synthetic-case-primary-button {
+  min-width: 128px;
   background: #0066cc;
   border-color: #0066cc;
   box-shadow: 0 7px 18px rgba(0, 102, 204, 0.18);
+}
+
+.synthetic-case-ghost-button :deep(.ant-btn-icon),
+.synthetic-case-primary-button :deep(.ant-btn-icon) {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-inline-end: 0 !important;
 }
 
 .synthetic-case-primary-button.is-strong {
@@ -1000,12 +1018,13 @@ async function handleSave(runAfterSave: boolean) {
 }
 
 .synthetic-case-doc-grid {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   margin-bottom: 12px;
 }
 
 .synthetic-case-doc-select {
-  width: 168px;
+  width: 100%;
+  min-width: 0;
 }
 
 .synthetic-case-doc-status {

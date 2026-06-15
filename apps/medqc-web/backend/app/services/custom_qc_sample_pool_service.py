@@ -3248,7 +3248,9 @@ class CustomQCSamplePoolService:
                     continue
                 inserted_summary[table_name] = self._upsert_reflected_rows(session, table, rows)
 
-            item_id = f"customer-test-{visit_id.lower()}"
+            # manual_problem_sample_pool_items.id is varchar(36); keep the
+            # generated sample item id short while preserving uniqueness.
+            item_id = f"ct-{sequence.lower()}"
             golden_answers = [
                 item
                 for item in (payload.get("golden_answers") or [])
@@ -3363,7 +3365,7 @@ class CustomQCSamplePoolService:
             ) == "ready" else "pending"
             session.execute(
                 update(self._item_table)
-                .where(self._item_table.c.id == f"customer-test-{visit_id.lower()}")
+                .where(self._item_table.c.id == item_id)
                 .values(bundle_status=bundle_status, updated_at=_now_utc())
             )
             self._update_pool_counters(session, CUSTOMER_TEST_POOL_ID)
@@ -3373,7 +3375,7 @@ class CustomQCSamplePoolService:
 
         return {
             "pool": self.get_pool(pool_id=CUSTOMER_TEST_POOL_ID),
-            "item": self.get_item(item_id=f"customer-test-{visit_id.lower()}"),
+            "item": self.get_item(item_id=item_id),
             "visit_id": visit_id,
             "mr_no": mr_no,
             "patient_id": patient_id,
