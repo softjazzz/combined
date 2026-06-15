@@ -18,7 +18,6 @@
         <div class="synthetic-case-summary">
           <span>模板 {{ syntheticCaseTemplates.length }} 个</span>
           <span>文书 {{ enabledDocumentCount }} 份</span>
-          <span>预期 {{ form.goldenAnswers.length }} 条</span>
           <span>独立样本池</span>
         </div>
       </div>
@@ -63,12 +62,6 @@
           <strong>编辑文书</strong>
           <p>修改记录时间、提交时间和正文内容。</p>
         </div>
-        <div class="synthetic-case-step-card">
-          <span>03</span>
-          <strong>绑定预期</strong>
-          <p>定义 golden answer 用于后续效果评估。</p>
-        </div>
-
         <div class="synthetic-case-panel-title">
           <Layers :size="16" />
           模板库
@@ -292,86 +285,6 @@
           </div>
         </section>
       </div>
-
-      <aside class="synthetic-case-right">
-        <section class="synthetic-case-card synthetic-case-sticky-card">
-          <div class="synthetic-case-section-head">
-            <div>
-              <h2>预期结果</h2>
-              <p>用于后续评估系统结论是否符合人工预期。</p>
-            </div>
-            <span class="synthetic-case-section-chip">Golden</span>
-            <a-button
-              size="small"
-              @click="addGoldenAnswer"
-            >
-              新增
-            </a-button>
-          </div>
-
-          <div class="synthetic-case-golden-list">
-            <article
-              v-for="(answer, index) in form.goldenAnswers"
-              :key="answer.id || index"
-              class="synthetic-case-golden"
-            >
-              <div class="synthetic-case-golden-head">
-                <strong>预期 {{ index + 1 }}</strong>
-                <a-button
-                  size="small"
-                  danger
-                  @click="removeGoldenAnswer(index)"
-                >
-                  删除
-                </a-button>
-              </div>
-              <label>
-                <span>质控点 ID</span>
-                <a-input
-                  v-model:value="answer.qc_point_id"
-                  placeholder="LX0609-001"
-                />
-              </label>
-              <label>
-                <span>期望状态</span>
-                <a-select
-                  v-model:value="answer.expected_status"
-                  :options="expectedStatusOptions"
-                />
-              </label>
-              <label>
-                <span>触发事实</span>
-                <a-textarea
-                  :value="answer.trigger_facts.join('\n')"
-                  :rows="3"
-                  placeholder="每行一个触发事实"
-                  @change="answer.trigger_facts = splitLines($event.target.value)"
-                />
-              </label>
-              <label>
-                <span>证据关键词</span>
-                <a-textarea
-                  :value="answer.evidence_keywords.join('\n')"
-                  :rows="3"
-                  placeholder="每行一个证据关键词"
-                  @change="answer.evidence_keywords = splitLines($event.target.value)"
-                />
-              </label>
-              <label>
-                <span>人工判定理由</span>
-                <a-textarea
-                  v-model:value="answer.human_reason"
-                  :rows="3"
-                />
-              </label>
-            </article>
-            <a-empty
-              v-if="form.goldenAnswers.length === 0"
-              description="暂未设置预期结果"
-            />
-          </div>
-        </section>
-      </aside>
     </section>
 
     <a-modal
@@ -386,7 +299,6 @@
           <strong>{{ form.caseTitle || '未命名测试病历' }}</strong>
           <span>{{ form.patientName }} · {{ form.department }}</span>
           <span>文书 {{ enabledDocumentCount }} 份</span>
-          <span>预期 {{ form.goldenAnswers.length }} 条</span>
         </aside>
         <pre>{{ previewText }}</pre>
       </div>
@@ -408,14 +320,11 @@ import { syntheticCaseTemplates } from './syntheticCaseTemplates'
 import type { TestRecordDocumentForm } from './types'
 import {
   createDefaultSyntheticCaseForm,
-  createGoldenAnswer,
   createSyntheticDocument,
   documentTypeLabel,
-  expectedStatusOptions,
   findForbiddenSelfHints,
   normalizeSyntheticCasePayload,
   sexOptions,
-  splitLines,
   testRecordDocumentTypeOptions,
 } from './syntheticCaseBuilder'
 
@@ -514,14 +423,6 @@ function syncDocumentTitle(document: TestRecordDocumentForm) {
   }
 }
 
-function addGoldenAnswer() {
-  form.value.goldenAnswers.push(createGoldenAnswer())
-}
-
-function removeGoldenAnswer(index: number) {
-  form.value.goldenAnswers.splice(index, 1)
-}
-
 function validateForm(): boolean {
   if (!form.value.caseTitle.trim()) {
     message.warning('请填写测试病历名称')
@@ -546,15 +447,6 @@ function validateForm(): boolean {
   const forbiddenDocuments = findForbiddenSelfHints(form.value)
   if (forbiddenDocuments.length) {
     message.warning(`请移除文书中的自我提示文本：${forbiddenDocuments.join('、')}`)
-    return false
-  }
-  const invalidGolden = form.value.goldenAnswers.find(
-    (answer) =>
-      answer.expected_status === 'non_compliant' &&
-      (!answer.trigger_facts.length || !answer.evidence_keywords.length),
-  )
-  if (invalidGolden) {
-    message.warning(`${invalidGolden.qc_point_id || '未命名质控点'} 缺少触发事实或证据关键词`)
     return false
   }
   return true
@@ -772,7 +664,7 @@ async function handleSave(runAfterSave: boolean) {
 
 .synthetic-case-shell {
   display: grid;
-  grid-template-columns: 244px minmax(0, 1fr) 340px;
+  grid-template-columns: 244px minmax(0, 1fr);
   gap: 14px;
   margin: 0 auto;
   max-width: 1600px;
@@ -783,8 +675,7 @@ async function handleSave(runAfterSave: boolean) {
     0 18px 42px rgba(0, 0, 0, 0.055);
 }
 
-.synthetic-case-sidebar,
-.synthetic-case-right {
+.synthetic-case-sidebar {
   min-width: 0;
 }
 
@@ -846,8 +737,7 @@ async function handleSave(runAfterSave: boolean) {
 
 .synthetic-case-template-list,
 .synthetic-case-doc-nav,
-.synthetic-case-doc-list,
-.synthetic-case-golden-list {
+.synthetic-case-doc-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -968,8 +858,7 @@ async function handleSave(runAfterSave: boolean) {
 }
 
 .synthetic-case-form-grid label,
-.synthetic-case-doc-grid label,
-.synthetic-case-golden label {
+.synthetic-case-doc-grid label {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -995,8 +884,7 @@ async function handleSave(runAfterSave: boolean) {
   border-color: rgba(0, 102, 204, 0.18);
 }
 
-.synthetic-case-doc-head,
-.synthetic-case-golden-head {
+.synthetic-case-doc-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1011,8 +899,7 @@ async function handleSave(runAfterSave: boolean) {
   font-weight: 700;
 }
 
-.synthetic-case-doc-head strong,
-.synthetic-case-golden-head strong {
+.synthetic-case-doc-head strong {
   font-size: 14px;
   font-weight: 650;
   line-height: 20px;
@@ -1052,24 +939,6 @@ async function handleSave(runAfterSave: boolean) {
   border-color: rgba(0, 0, 0, 0.08);
   background: rgba(0, 0, 0, 0.04);
   color: rgba(29, 29, 31, 0.46);
-}
-
-.synthetic-case-sticky-card {
-  position: sticky;
-  top: 118px;
-  max-height: calc(100vh - 138px);
-  overflow: auto;
-}
-
-.synthetic-case-golden {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.7);
-  padding: 12px 12px 14px;
-}
-
-.synthetic-case-golden label + label {
-  margin-top: 10px;
 }
 
 .synthetic-case-preview {
@@ -1169,15 +1038,6 @@ async function handleSave(runAfterSave: boolean) {
 
   .synthetic-case-shell {
     grid-template-columns: 220px minmax(0, 1fr);
-  }
-
-  .synthetic-case-right {
-    grid-column: 1 / -1;
-  }
-
-  .synthetic-case-sticky-card {
-    position: static;
-    max-height: none;
   }
 }
 
