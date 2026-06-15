@@ -3249,8 +3249,15 @@ class CustomQCSamplePoolService:
                 inserted_summary[table_name] = self._upsert_reflected_rows(session, table, rows)
 
             item_id = f"customer-test-{visit_id.lower()}"
+            golden_answers = [
+                item
+                for item in (payload.get("golden_answers") or [])
+                if isinstance(item, dict) and _safe_text(item.get("qc_point_id"))
+            ]
             item_payload = {
                 "builder_version": "v1",
+                "source": "customer_synthetic_case_builder",
+                "template_key": _safe_text(payload.get("template_key")),
                 "case_title": case_title,
                 "visit_id": visit_id,
                 "mr_no": mr_no,
@@ -3258,6 +3265,7 @@ class CustomQCSamplePoolService:
                 "department": department,
                 "document_count": len(enabled_documents),
                 "selected_rule_ids": payload.get("selected_rule_ids") or [],
+                "golden_answers": golden_answers,
             }
             candidate_rule_ids = [
                 _safe_text(rule_id).upper()

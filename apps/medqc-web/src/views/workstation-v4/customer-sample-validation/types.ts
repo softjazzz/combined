@@ -219,6 +219,45 @@ export type ManualTestRecordDocument = {
   enabled?: boolean
 }
 
+export type SyntheticCaseExpectedStatus =
+  | 'non_compliant'
+  | 'compliant'
+  | 'not_applicable'
+  | 'data_gap'
+  | 'uncertain'
+
+export type SyntheticCaseGoldenAnswer = {
+  id?: string
+  qc_point_id: string
+  expected_status: SyntheticCaseExpectedStatus
+  trigger_facts: string[]
+  evidence_keywords: string[]
+  human_reason?: string
+}
+
+export type TestRecordDocumentForm = ManualTestRecordDocument & {
+  key: string
+  enabled: boolean
+}
+
+export type TestRecordForm = {
+  caseTitle: string
+  patientName: string
+  sex: string
+  age: number
+  mrNo: string
+  department: string
+  admissionTime: string
+  dischargeTime: string
+  mainDiagnosis: string
+  otherDiagnosesText: string
+  manualIssueText: string
+  templateKey?: string
+  selectedRuleIds: string[]
+  goldenAnswers: SyntheticCaseGoldenAnswer[]
+  documents: TestRecordDocumentForm[]
+}
+
 export type ManualTestRecordCreateRequest = {
   case_title: string
   basic_info: {
@@ -238,6 +277,8 @@ export type ManualTestRecordCreateRequest = {
   documents: ManualTestRecordDocument[]
   selected_rule_ids?: string[]
   manual_issue_text?: string
+  template_key?: string
+  golden_answers?: SyntheticCaseGoldenAnswer[]
 }
 
 export type ManualTestRecordCreateResult = {

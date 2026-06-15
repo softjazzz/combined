@@ -995,6 +995,13 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '客户样本验证', permission: ['admin', 'qc_manager'] },
       },
       {
+        path: 'customer-sample-validation/synthetic-case/new',
+        name: 'WorkstationV4SyntheticCaseNew',
+        component: () =>
+          import('@/views/workstation-v4/customer-sample-validation/SyntheticCaseBuilderView.vue'),
+        meta: { title: '创建测试病历', permission: ['admin', 'qc_manager'] },
+      },
+      {
         path: 'custom-qc-experience',
         name: 'WorkstationV4CustomQCExperience',
         component: () => import('@/views/workstation-v4/CustomQCExperienceView.vue'),

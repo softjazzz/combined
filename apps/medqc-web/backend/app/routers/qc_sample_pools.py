@@ -5,7 +5,7 @@ import os
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -142,12 +142,24 @@ class TestRecordDocument(BaseModel):
     enabled: bool = Field(default=True, description="是否写入")
 
 
+class TestRecordGoldenAnswer(BaseModel):
+    qc_point_id: str = Field(..., description="客户质控点 ID，如 LX0609-001")
+    expected_status: Literal["non_compliant", "compliant", "not_applicable", "data_gap", "uncertain"] = Field(
+        ..., description="人工预期状态"
+    )
+    trigger_facts: list[str] = Field(default_factory=list, description="触发事实")
+    evidence_keywords: list[str] = Field(default_factory=list, description="证据关键词")
+    human_reason: Optional[str] = Field(default=None, description="人工判定理由")
+
+
 class TestRecordCreateRequest(BaseModel):
     case_title: str = Field(..., description="测试病历名称")
     basic_info: TestRecordBasicInfo
     documents: list[TestRecordDocument] = Field(..., min_length=1, description="文书列表")
     selected_rule_ids: list[str] = Field(default_factory=list, description="重点验证规则")
     manual_issue_text: Optional[str] = Field(default=None, description="样本说明")
+    template_key: Optional[str] = Field(default=None, description="使用的测试病历模板 key")
+    golden_answers: list[TestRecordGoldenAnswer] = Field(default_factory=list, description="人工预期结果")
 
 
 def _run_sample_pool_sync_job(job_id: str) -> None:
