@@ -24,6 +24,7 @@ from ..services.customer_rule_sets import (
     CUSTOMER_LUXIAN_RULE_SET_KEY,
     get_customer_luxian_rule_set,
 )
+from ..services.detached_task_runner import submit_detached_task
 from ..services.sample_validation_rule_sets import (
     FORMAL_FAST_SCREEN_FULL_MODE,
     FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
@@ -529,7 +530,6 @@ async def run_sample_pool_intrinsic_validation(
     request: Request,
     pool_id: str,
     payload: SamplePoolRunRequest,
-    background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     service = _service()
@@ -732,7 +732,11 @@ async def run_sample_pool_intrinsic_validation(
         rule_count=len(rule_ids),
     )
     service.update_pool_latest_job(pool_id=pool_id, job_id=job["id"], job_status="queued")
-    background_tasks.add_task(_run_sichuan_workspace_batch_job, job["id"])
+    submit_detached_task(
+        "sample_pool_sichuan_workspace_batch_job",
+        _run_sichuan_workspace_batch_job,
+        job["id"],
+    )
     return success_response(
         data={
             "pool_id": pool_id,

@@ -7,7 +7,7 @@ import re
 import time
 from pathlib import Path
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException, Query, Request, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Query, Request, Depends
 from fastapi.responses import StreamingResponse
 from datetime import datetime, timezone
 
@@ -21,6 +21,7 @@ from ..services.fast_screen_qc import (
     normalize_execution_strategy,
     run_final_fast_screen,
 )
+from ..services.detached_task_runner import submit_detached_task
 from ..services.qc_rule_sets import get_sichuan_rule_set, list_sichuan_rule_sets
 from ..services.luxian_0609_rule_catalog import (
     LUXIAN_0609_RULE_SET_KEY,
@@ -2136,7 +2137,6 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 async def create_workspace_batch_job(
     request: Request,
     payload: SichuanWorkspaceBatchJobCreateRequest,
-    background_tasks: BackgroundTasks,
     qc_service: SichuanQCService = Depends(get_qc_service),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
@@ -2237,7 +2237,11 @@ async def create_workspace_batch_job(
         run_mode=run_mode,
         rule_count=len(rule_ids),
     )
-    background_tasks.add_task(_run_sichuan_workspace_batch_job, job["id"])
+    submit_detached_task(
+        "sichuan_workspace_batch_job",
+        _run_sichuan_workspace_batch_job,
+        job["id"],
+    )
     return success_response(
         data={
             **job,
@@ -2396,14 +2400,17 @@ async def cancel_workspace_batch_job(
 async def retry_workspace_batch_job(
     request: Request,
     job_id: str,
-    background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service()
     job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
-    background_tasks.add_task(_run_sichuan_workspace_batch_job, job_id)
+    submit_detached_task(
+        "sichuan_workspace_batch_job_retry",
+        _run_sichuan_workspace_batch_job,
+        job_id,
+    )
     return success_response(
         data=job,
         message="批量任务已重新入队",
