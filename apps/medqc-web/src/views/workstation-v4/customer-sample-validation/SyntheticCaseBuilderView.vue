@@ -1,7 +1,7 @@
 <template>
   <main class="synthetic-case-page">
     <header class="synthetic-case-header">
-      <div>
+      <div class="synthetic-case-header-copy">
         <button
           class="synthetic-case-back"
           type="button"
@@ -10,22 +10,31 @@
           <ArrowLeft :size="16" />
           返回样本验证
         </button>
+        <div class="synthetic-case-eyebrow">
+          客户样本验证 / 测试病历构建
+        </div>
         <h1>创建测试病历</h1>
         <p>通过模板或复制粘贴创建客户自建测试病历，保存到独立样本池后验证泸县0609质控点。</p>
+        <div class="synthetic-case-summary">
+          <span>模板 {{ syntheticCaseTemplates.length }} 个</span>
+          <span>文书 {{ enabledDocumentCount }} 份</span>
+          <span>预期 {{ form.goldenAnswers.length }} 条</span>
+          <span>独立样本池</span>
+        </div>
       </div>
       <div class="synthetic-case-header-actions">
         <a-button
-          class="!rounded-lg"
+          class="synthetic-case-ghost-button"
           @click="showPreview = true"
         >
           <template #icon>
-            <EyeOutlined />
+            <Eye :size="15" />
           </template>
           预览病历包
         </a-button>
         <a-button
           type="primary"
-          class="!rounded-lg"
+          class="synthetic-case-primary-button"
           :loading="saving"
           @click="handleSave(false)"
         >
@@ -33,7 +42,7 @@
         </a-button>
         <a-button
           type="primary"
-          class="!rounded-lg"
+          class="synthetic-case-primary-button is-strong"
           :loading="savingAndRunning"
           @click="handleSave(true)"
         >
@@ -44,6 +53,22 @@
 
     <section class="synthetic-case-shell">
       <aside class="synthetic-case-sidebar">
+        <div class="synthetic-case-step-card">
+          <span>01</span>
+          <strong>选择模板</strong>
+          <p>从典型质控场景起步，也可完全手工编辑。</p>
+        </div>
+        <div class="synthetic-case-step-card">
+          <span>02</span>
+          <strong>编辑文书</strong>
+          <p>修改记录时间、提交时间和正文内容。</p>
+        </div>
+        <div class="synthetic-case-step-card">
+          <span>03</span>
+          <strong>绑定预期</strong>
+          <p>定义 golden answer 用于后续效果评估。</p>
+        </div>
+
         <div class="synthetic-case-panel-title">
           <Layers :size="16" />
           模板库
@@ -74,9 +99,11 @@
             type="button"
             @click="scrollToDocument(document.key)"
           >
-            <span>{{ index + 1 }}</span>
-            <strong>{{ document.title || documentTypeLabel(document.document_type) }}</strong>
-            <small>{{ documentTypeLabel(document.document_type) }}</small>
+            <span>{{ String(index + 1).padStart(2, '0') }}</span>
+            <div>
+              <strong>{{ document.title || documentTypeLabel(document.document_type) }}</strong>
+              <small>{{ documentTypeLabel(document.document_type) }}</small>
+            </div>
           </button>
         </div>
       </aside>
@@ -88,6 +115,9 @@
               <h2>基本信息</h2>
               <p>这些字段会写入测试病历主索引和样本池列表。</p>
             </div>
+            <span class="synthetic-case-section-chip">
+              {{ currentTemplate?.name || '手工创建' }}
+            </span>
           </div>
           <div class="synthetic-case-form-grid">
             <label>
@@ -197,6 +227,12 @@
                   <strong>{{ document.title || documentTypeLabel(document.document_type) }}</strong>
                 </div>
                 <div class="synthetic-case-inline-actions">
+                  <span
+                    class="synthetic-case-doc-status"
+                    :class="{ 'is-disabled': !document.enabled }"
+                  >
+                    {{ document.enabled ? '已纳入' : '已停用' }}
+                  </span>
                   <a-switch
                     v-model:checked="document.enabled"
                     size="small"
@@ -263,6 +299,7 @@
               <h2>预期结果</h2>
               <p>用于后续评估系统结论是否符合人工预期。</p>
             </div>
+            <span class="synthetic-case-section-chip">Golden</span>
             <a-button
               size="small"
               @click="addGoldenAnswer"
@@ -360,8 +397,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { EyeOutlined } from '@ant-design/icons-vue'
-import { ArrowLeft, FileText, Layers } from 'lucide-vue-next'
+import { ArrowLeft, Eye, FileText, Layers } from 'lucide-vue-next'
 import {
   createManualTestMedicalRecord,
   runManualSamplePool,
@@ -394,6 +430,9 @@ const showPreview = ref(false)
 const enabledDocumentCount = computed(
   () =>
     form.value.documents.filter((document) => document.enabled && document.content.trim()).length,
+)
+const currentTemplate = computed(() =>
+  syntheticCaseTemplates.find((template) => template.key === form.value.templateKey),
 )
 
 const previewText = computed(() => {
@@ -569,7 +608,7 @@ async function handleSave(runAfterSave: boolean) {
 <style scoped>
 .synthetic-case-page {
   min-height: 100%;
-  padding: 18px 22px 24px;
+  padding: 20px 24px 28px;
   background: #f5f5f7;
   color: #1d1d1f;
   font-family:
@@ -581,29 +620,38 @@ async function handleSave(runAfterSave: boolean) {
 .synthetic-case-shell,
 .synthetic-case-card {
   border: 1px solid rgba(0, 0, 0, 0.08);
-  background: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.88);
+  -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
-    0 10px 28px rgba(0, 0, 0, 0.06);
+    0 10px 28px rgba(0, 0, 0, 0.055);
 }
 
 .synthetic-case-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  margin: 0 auto 16px;
+  gap: 24px;
+  margin: 0 auto 14px;
   max-width: 1600px;
-  border-radius: 20px;
-  padding: 18px 20px;
+  border-radius: 18px;
+  padding: 16px 18px;
+}
+
+.synthetic-case-header-copy {
+  min-width: 0;
 }
 
 .synthetic-case-header h1 {
-  margin: 6px 0 4px;
-  font-size: 28px;
+  margin: 2px 0 5px;
+  font-size: 27px;
   font-weight: 700;
   line-height: 31px;
+  letter-spacing: 0;
 }
 
 .synthetic-case-header p {
@@ -625,6 +673,43 @@ async function handleSave(runAfterSave: boolean) {
   padding: 0;
 }
 
+.synthetic-case-eyebrow {
+  margin-top: 10px;
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.synthetic-case-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.synthetic-case-summary span,
+.synthetic-case-section-chip,
+.synthetic-case-doc-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 3px 10px;
+  color: rgba(29, 29, 31, 0.64);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.synthetic-case-section-chip {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(0, 102, 204, 0.07);
+  color: #0066cc;
+}
+
 .synthetic-case-header-actions,
 .synthetic-case-inline-actions {
   display: flex;
@@ -632,14 +717,51 @@ async function handleSave(runAfterSave: boolean) {
   gap: 10px;
 }
 
+.synthetic-case-header-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.synthetic-case-ghost-button,
+.synthetic-case-primary-button {
+  height: 34px;
+  border-radius: 9px !important;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.synthetic-case-ghost-button {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(29, 29, 31, 0.78);
+}
+
+.synthetic-case-primary-button {
+  background: #0066cc;
+  border-color: #0066cc;
+  box-shadow: 0 7px 18px rgba(0, 102, 204, 0.18);
+}
+
+.synthetic-case-primary-button.is-strong {
+  box-shadow: 0 9px 22px rgba(0, 102, 204, 0.24);
+}
+
+.synthetic-case-ghost-button:hover,
+.synthetic-case-primary-button:hover {
+  transform: translateY(-1px);
+}
+
 .synthetic-case-shell {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 360px;
-  gap: 16px;
+  grid-template-columns: 244px minmax(0, 1fr) 340px;
+  gap: 14px;
   margin: 0 auto;
   max-width: 1600px;
-  border-radius: 22px;
-  padding: 16px;
+  border-radius: 20px;
+  padding: 14px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.035),
+    0 18px 42px rgba(0, 0, 0, 0.055);
 }
 
 .synthetic-case-sidebar,
@@ -647,11 +769,53 @@ async function handleSave(runAfterSave: boolean) {
   min-width: 0;
 }
 
+.synthetic-case-step-card {
+  position: relative;
+  border-radius: 15px;
+  background: rgba(0, 0, 0, 0.025);
+  padding: 12px 13px 12px 42px;
+}
+
+.synthetic-case-step-card + .synthetic-case-step-card {
+  margin-top: 8px;
+}
+
+.synthetic-case-step-card span {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  background: rgba(0, 102, 204, 0.09);
+  color: #0066cc;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.synthetic-case-step-card strong {
+  display: block;
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.synthetic-case-step-card p {
+  margin: 3px 0 0;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .synthetic-case-panel-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin: 18px 0 10px;
   color: rgba(29, 29, 31, 0.72);
   font-size: 13px;
   font-weight: 700;
@@ -674,11 +838,11 @@ async function handleSave(runAfterSave: boolean) {
 .synthetic-case-doc-nav button {
   width: 100%;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.72);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.66);
   color: #1d1d1f;
   cursor: pointer;
-  padding: 12px;
+  padding: 11px 12px;
   text-align: left;
   transition: 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
@@ -686,7 +850,9 @@ async function handleSave(runAfterSave: boolean) {
 .synthetic-case-template:hover,
 .synthetic-case-doc-nav button:hover {
   border-color: rgba(0, 102, 204, 0.28);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 2px 12px rgba(0, 0, 0, 0.08),
+    0 6px 22px rgba(0, 0, 0, 0.055);
   transform: translateY(-1px);
 }
 
@@ -698,8 +864,9 @@ async function handleSave(runAfterSave: boolean) {
 .synthetic-case-template strong,
 .synthetic-case-doc-nav strong {
   display: block;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 19px;
 }
 
 .synthetic-case-template span,
@@ -718,22 +885,44 @@ async function handleSave(runAfterSave: boolean) {
   line-height: 18px;
 }
 
+.synthetic-case-doc-nav button {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.synthetic-case-doc-nav button > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  background: rgba(0, 102, 204, 0.08);
+}
+
 .synthetic-case-editor {
   min-width: 0;
 }
 
 .synthetic-case-card {
-  border-radius: 18px;
-  padding: 18px;
+  border-radius: 17px;
+  padding: 18px 18px 20px;
+  transition: 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 .synthetic-case-card + .synthetic-case-card {
-  margin-top: 16px;
+  margin-top: 14px;
+}
+
+.synthetic-case-card:hover {
+  border-color: rgba(0, 0, 0, 0.12);
 }
 
 .synthetic-case-section-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 16px;
@@ -742,7 +931,7 @@ async function handleSave(runAfterSave: boolean) {
 .synthetic-case-section-head h2 {
   margin: 0;
   font-size: 17px;
-  font-weight: 700;
+  font-weight: 650;
   line-height: 22px;
 }
 
@@ -756,7 +945,7 @@ async function handleSave(runAfterSave: boolean) {
 .synthetic-case-doc-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 13px;
 }
 
 .synthetic-case-form-grid label,
@@ -768,7 +957,7 @@ async function handleSave(runAfterSave: boolean) {
   gap: 6px;
   color: rgba(29, 29, 31, 0.64);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 .synthetic-case-form-grid .is-wide {
@@ -777,10 +966,14 @@ async function handleSave(runAfterSave: boolean) {
 
 .synthetic-case-doc {
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.74);
-  padding: 14px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 14px 14px 15px;
   scroll-margin-top: 20px;
+}
+
+.synthetic-case-doc:hover {
+  border-color: rgba(0, 102, 204, 0.18);
 }
 
 .synthetic-case-doc-head,
@@ -801,8 +994,9 @@ async function handleSave(runAfterSave: boolean) {
 
 .synthetic-case-doc-head strong,
 .synthetic-case-golden-head strong {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
 }
 
 .synthetic-case-doc-grid {
@@ -811,21 +1005,34 @@ async function handleSave(runAfterSave: boolean) {
 }
 
 .synthetic-case-doc-select {
-  width: 180px;
+  width: 168px;
+}
+
+.synthetic-case-doc-status {
+  min-height: 24px;
+  border-color: rgba(16, 185, 129, 0.18);
+  background: rgba(16, 185, 129, 0.08);
+  color: #047857;
+}
+
+.synthetic-case-doc-status.is-disabled {
+  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.46);
 }
 
 .synthetic-case-sticky-card {
   position: sticky;
-  top: 12px;
-  max-height: calc(100vh - 150px);
+  top: 118px;
+  max-height: calc(100vh - 138px);
   overflow: auto;
 }
 
 .synthetic-case-golden {
   border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.74);
-  padding: 12px;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 12px 12px 14px;
 }
 
 .synthetic-case-golden label + label {
@@ -881,7 +1088,52 @@ async function handleSave(runAfterSave: boolean) {
     'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
+.synthetic-case-page :deep(.ant-input),
+.synthetic-case-page :deep(.ant-input-number),
+.synthetic-case-page :deep(.ant-select-selector) {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.synthetic-case-page :deep(.ant-input:not(textarea)),
+.synthetic-case-page :deep(.ant-input-number),
+.synthetic-case-page :deep(.ant-select-selector) {
+  min-height: 34px;
+}
+
+.synthetic-case-page :deep(.ant-input-number-input),
+.synthetic-case-page :deep(.ant-select-selection-item),
+.synthetic-case-page :deep(.ant-select-selection-placeholder) {
+  font-weight: 400;
+}
+
+.synthetic-case-page :deep(textarea.ant-input) {
+  font-weight: 400;
+  line-height: 1.85;
+}
+
+.synthetic-case-page :deep(.ant-input:focus),
+.synthetic-case-page :deep(.ant-input-focused),
+.synthetic-case-page :deep(.ant-select-focused .ant-select-selector) {
+  border-color: rgba(0, 102, 204, 0.46) !important;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+}
+
 @media (max-width: 1280px) {
+  .synthetic-case-header {
+    position: static;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .synthetic-case-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .synthetic-case-shell {
     grid-template-columns: 220px minmax(0, 1fr);
   }
@@ -893,6 +1145,29 @@ async function handleSave(runAfterSave: boolean) {
   .synthetic-case-sticky-card {
     position: static;
     max-height: none;
+  }
+}
+
+@media (max-width: 960px) {
+  .synthetic-case-page {
+    padding: 14px;
+  }
+
+  .synthetic-case-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .synthetic-case-form-grid,
+  .synthetic-case-doc-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .synthetic-case-form-grid .is-wide {
+    grid-column: span 2;
+  }
+
+  .synthetic-case-header-actions {
+    flex-wrap: wrap;
   }
 }
 </style>
