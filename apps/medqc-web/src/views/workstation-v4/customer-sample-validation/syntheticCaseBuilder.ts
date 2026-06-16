@@ -1,5 +1,6 @@
 import type {
   ManualTestRecordCreateRequest,
+  SyntheticCaseBuilderMode,
   SyntheticCaseGoldenAnswer,
   TestRecordDocumentForm,
   TestRecordForm,
@@ -38,6 +39,14 @@ export const expectedStatusOptions = [
   { label: '不适用', value: 'not_applicable' },
   { label: '数据不足', value: 'data_gap' },
   { label: '需人工复核', value: 'uncertain' },
+]
+
+export const syntheticCaseBuilderModeOptions: Array<{
+  label: string
+  value: SyntheticCaseBuilderMode
+}> = [
+  { label: '按病历创建', value: 'case' },
+  { label: '按质控点创建', value: 'rule' },
 ]
 
 export function toDateTimeLocal(value: Date): string {
@@ -84,6 +93,7 @@ export function createDefaultSyntheticCaseForm(): TestRecordForm {
   const admission = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
   const firstCourse = new Date(admission.getTime() + 4 * 60 * 60 * 1000)
   return {
+    builderMode: 'case',
     caseTitle: '客户自建质控测试病历',
     patientName: '测试患者',
     sex: '男',
@@ -96,6 +106,7 @@ export function createDefaultSyntheticCaseForm(): TestRecordForm {
     otherDiagnosesText: '',
     manualIssueText: '',
     templateKey: '',
+    selectedRuleFamilyKey: '',
     selectedRuleIds: [],
     goldenAnswers: [],
     documents: [

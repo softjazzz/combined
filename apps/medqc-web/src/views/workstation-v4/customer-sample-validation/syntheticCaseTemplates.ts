@@ -1,4 +1,8 @@
-import type { SyntheticCaseGoldenAnswer, TestRecordDocumentForm } from './types'
+import type {
+  SyntheticCaseGoldenAnswer,
+  SyntheticCaseRuleFamily,
+  TestRecordDocumentForm,
+} from './types'
 import {
   createGoldenAnswer,
   createSyntheticDocument,
@@ -76,6 +80,13 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
         trigger_facts: ['入院时间为2026-06-01 08:00', '入院记录记录时间为2026-06-02 10:00'],
         evidence_keywords: ['入院记录', '2026-06-02', '超过24小时'],
         human_reason: '入院记录完成时间晚于入院后24小时。',
+      }),
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-002',
+        expected_status: 'non_compliant',
+        trigger_facts: ['入院时间为2026-06-01 08:00', '首次病程记录时间为2026-06-01 19:00'],
+        evidence_keywords: ['首次病程记录', '8小时', '11小时'],
+        human_reason: '首次病程记录晚于入院后8小时。',
       }),
       createGoldenAnswer({
         qc_point_id: 'LX0609-005',
@@ -271,6 +282,91 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
         evidence_keywords: ['麻醉记录', '麻醉方式', '填写不完整'],
         human_reason: '麻醉记录关键字段不完整。',
       }),
+    ],
+  },
+]
+
+export const syntheticCaseRuleFamilies: SyntheticCaseRuleFamily[] = [
+  {
+    key: 'basic_timeliness',
+    name: '基础时限',
+    description: '覆盖入院记录 24 小时、首次病程 8 小时、48 小时主治首次查房。',
+    templateKey: 'basic-timeliness-defect',
+    rules: [
+      {
+        ruleId: 'LX0609-001',
+        name: '入院记录：入院后24小时内是否完成',
+        requiredDocumentsLabel: '入院记录',
+      },
+      {
+        ruleId: 'LX0609-002',
+        name: '首次病程：入院后 8 小时内无首次病程记录',
+        requiredDocumentsLabel: '首次病程记录',
+      },
+      {
+        ruleId: 'LX0609-005',
+        name: '上级医生查房记录：入院后 48 小时内无主治医师首次查房记录',
+        requiredDocumentsLabel: '上级查房记录',
+      },
+    ],
+  },
+  {
+    key: 'ct_mri_culture',
+    name: '检查检验',
+    description: '覆盖 CT/MRI 阳性结果分析与细菌培养结果分析。',
+    templateKey: 'ct-mri-culture-defect',
+    rules: [
+      {
+        ruleId: 'LX0609-012',
+        name: 'CT/MRI 检查记录：影像报告结果出具后24小时内阳性结果未进行分析',
+        requiredDocumentsLabel: '病程记录、检查结果',
+      },
+      {
+        ruleId: 'LX0609-014',
+        name: '细菌培养记录：细菌培养结果在病程中未记录（报告出具后24小时内）',
+        requiredDocumentsLabel: '病程记录、检验报告',
+      },
+    ],
+  },
+  {
+    key: 'consultation_quality',
+    name: '会诊质量',
+    description: '覆盖会诊目的不明确、意见不明确、无执行记录。',
+    templateKey: 'consultation-quality-defect',
+    rules: [
+      {
+        ruleId: 'LX0609-020',
+        name: '会诊记录：有会诊记录单无请会诊执行记录',
+        requiredDocumentsLabel: '会诊记录、日常病程记录',
+      },
+      {
+        ruleId: 'LX0609-021',
+        name: '会诊记录：会诊申请单会诊目的不明确',
+        requiredDocumentsLabel: '会诊记录',
+      },
+      {
+        ruleId: 'LX0609-022',
+        name: '会诊记录：会诊记录单会诊意见不明确',
+        requiredDocumentsLabel: '会诊记录',
+      },
+    ],
+  },
+  {
+    key: 'surgery_anesthesia',
+    name: '手术麻醉',
+    description: '覆盖术后记录时限与麻醉记录关键字段缺陷。',
+    templateKey: 'surgery-anesthesia-defect',
+    rules: [
+      {
+        ruleId: 'LX0609-003',
+        name: '手术记录：手术后24小时内是否完成',
+        requiredDocumentsLabel: '手术记录',
+      },
+      {
+        ruleId: 'LX0609-038',
+        name: '麻醉记录单：无麻醉记录单（局麻除外）',
+        requiredDocumentsLabel: '麻醉记录、手术记录',
+      },
     ],
   },
 ]

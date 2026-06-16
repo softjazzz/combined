@@ -235,12 +235,29 @@ export type SyntheticCaseGoldenAnswer = {
   human_reason?: string
 }
 
+export type SyntheticCaseBuilderMode = 'case' | 'rule'
+
+export type SyntheticCaseRuleOption = {
+  ruleId: string
+  name: string
+  requiredDocumentsLabel: string
+}
+
+export type SyntheticCaseRuleFamily = {
+  key: string
+  name: string
+  description: string
+  templateKey: string
+  rules: SyntheticCaseRuleOption[]
+}
+
 export type TestRecordDocumentForm = ManualTestRecordDocument & {
   key: string
   enabled: boolean
 }
 
 export type TestRecordForm = {
+  builderMode: SyntheticCaseBuilderMode
   caseTitle: string
   patientName: string
   sex: string
@@ -253,6 +270,7 @@ export type TestRecordForm = {
   otherDiagnosesText: string
   manualIssueText: string
   templateKey?: string
+  selectedRuleFamilyKey?: string
   selectedRuleIds: string[]
   goldenAnswers: SyntheticCaseGoldenAnswer[]
   documents: TestRecordDocumentForm[]
