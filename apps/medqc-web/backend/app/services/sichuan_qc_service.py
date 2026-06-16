@@ -1145,6 +1145,10 @@ class SichuanQCService:
                 execution_results=list(orchestrated.get("results") or []),
                 gate_decisions=luxian_gate_decisions,
                 format_evidence=luxian_evidence_formatter_enabled,
+                audit_context={
+                    "visit_id": str(document_id or ""),
+                    "model_name": model_version,
+                },
             )
             orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])
             orchestrated["results"] = customer_results
@@ -4238,6 +4242,10 @@ class SichuanQCService:
                     execution_results=list(orchestrated.get("results") or []),
                     gate_decisions=gate_decisions,
                     format_evidence=bool(settings.LUXIAN_0609_EVIDENCE_FORMATTER_ENABLED),
+                    audit_context={
+                        "visit_id": str((bundle or {}).get("visit_id") or document_id or ""),
+                        "model_name": model_version,
+                    },
                 )
                 orchestrated["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
                 orchestrated["luxian_0609_raw_result_count"] = len(orchestrated.get("results") or [])

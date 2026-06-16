@@ -313,6 +313,120 @@ def test_aggregator_should_strip_nested_sensitive_fields():
     assert metadata["items"][0]["safe_item"] == "kept"
 
 
+def test_aggregator_should_add_schema_fields_for_non_compliant_result():
+    rules = [
+        _wrapper(
+            "LX0609-017",
+            name="不合理复制病历：2次以上病程记录完全相同",
+            mapped_rule_ids=["CL-275"],
+            trigger_condition="当存在多篇日常病程记录时检查相似度。",
+            dependency_type="同域多文书文本相似度",
+        )
+    ]
+    execution_results = [
+        {
+            "rule_id": "CL-275",
+            "status": "non_compliant",
+            "is_compliant": False,
+            "findings": "2次以上病程记录高度重复。",
+            "evidence": "2026-06-03 日常病程记录与 2026-06-04 日常病程记录重复片段：患者一般情况尚可。",
+            "suggestion": "请补充每日病情变化分析。",
+            "confidence": 0.93,
+            "metadata": {"executor_type": "cross_document", "document_type": "日常病程记录"},
+        }
+    ]
+
+    aggregated = aggregate_luxian_0609_results(
+        wrapper_rules=rules,
+        execution_results=execution_results,
+        gate_decisions={},
+        audit_context={"visit_id": "2313364", "model_name": "unit-test-model"},
+    )
+
+    row = aggregated[0]
+    assert row["qc_point_id"] == "LX0609-017"
+    assert row["rule_set_key"] == "luxian_0609_qc_v1"
+    assert row["rule_set_version"] == "2026-06-09"
+    assert row["result_status"] == "non_compliant"
+    assert row["executor_type"] == "cross_document"
+    assert row["trigger"]["applicable"] is True
+    assert row["dependencies"]["source_coverage_level"] in {"full", "unknown"}
+    assert row["evidence_items"][0]["source_document_type"] == "日常病程记录"
+    assert "重复片段" in row["evidence_items"][0]["quote"]
+    assert row["decision"]["is_violation"] is True
+    assert row["review"]["review_status"] == "pending"
+    assert row["audit"]["visit_id"] == "2313364"
+    assert row["audit"]["model_name"] == "unit-test-model"
+
+
+def test_aggregator_should_add_schema_fields_for_data_gap_result():
+    rules = [
+        _wrapper(
+            "LX0609-008",
+            name="病重患者2天内无查房病程记录",
+            mapped_rule_ids=["SC-051"],
+            trigger_condition="当存在病重医嘱时检查2天内查房病程记录。",
+            data_dependencies=["病重医嘱起止时间", "记录时间轴"],
+            dependency_type="跨表联查",
+        )
+    ]
+    gate = Luxian0609GateDecision(
+        rule_id="LX0609-008",
+        status=TRIGGER_DATA_GAP,
+        reason="已发现病重触发事实，但缺少医嘱起止时间",
+        data_gap_fields=("病重医嘱起止时间",),
+        matched_keywords=("病重",),
+    )
+
+    aggregated = aggregate_luxian_0609_results(
+        wrapper_rules=rules,
+        execution_results=[],
+        gate_decisions={"LX0609-008": gate},
+    )
+
+    row = aggregated[0]
+    assert row["status"] == "data_gap"
+    assert row["result_status"] == "data_gap"
+    assert row["trigger"]["applicable"] is True
+    assert row["trigger"]["trigger_facts"][0]["fact_value"] == "病重"
+    assert row["dependencies"]["source_coverage_level"] == "partial"
+    assert row["dependencies"]["missing_sources"][0]["source_name"] == "病重医嘱起止时间"
+    assert "病重医嘱起止时间" in row["dependencies"]["data_gap_reason"]
+    assert row["review"]["review_status"] == "pending"
+
+
+def test_aggregator_should_add_schema_fields_for_not_applicable_result():
+    rules = [
+        _wrapper(
+            "LX0609-049",
+            name="输血医嘱与收费不一致",
+            mapped_rule_ids=["SC-146"],
+            trigger_condition="当存在输血记录时检查医嘱与费用一致性。",
+            data_dependencies=["输血医嘱", "费用明细"],
+            dependency_type="跨表联查",
+        )
+    ]
+    gate = Luxian0609GateDecision(
+        rule_id="LX0609-049",
+        status=TRIGGER_ABSENT,
+        reason="病历文本和证据中未发现transfusion相关触发事实",
+    )
+
+    aggregated = aggregate_luxian_0609_results(
+        wrapper_rules=rules,
+        execution_results=[],
+        gate_decisions={"LX0609-049": gate},
+    )
+
+    row = aggregated[0]
+    assert row["status"] == "not_applicable"
+    assert row["result_status"] == "not_applicable"
+    assert row["trigger"]["applicable"] is False
+    assert "未发现" in row["trigger"]["not_applicable_reason"]
+    assert row["dependencies"]["missing_sources"] == []
+    assert row["review"]["review_status"] == "not_required"
+
+
 def test_aggregator_should_prioritize_data_gap_over_compliant():
     rules = [
         _wrapper(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .luxian_0609_evidence_formatter import format_luxian_0609_evidence
+from .luxian_0609_result_schema import apply_luxian_0609_result_schema
 from .luxian_0609_trigger_gate import (
     Luxian0609GateDecision,
     TRIGGER_ABSENT,
@@ -139,6 +140,7 @@ def aggregate_luxian_0609_results(
     execution_results: list[dict[str, Any]],
     gate_decisions: dict[str, Luxian0609GateDecision] | None = None,
     format_evidence: bool = True,
+    audit_context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     result_by_rule: dict[str, list[dict[str, Any]]] = {}
     for item in execution_results:
@@ -175,6 +177,12 @@ def aggregate_luxian_0609_results(
                     wrapper_rule=wrapper,
                     gate_decision=decision,
                 )
+            result = apply_luxian_0609_result_schema(
+                result=result,
+                wrapper_rule=wrapper,
+                gate_decision=decision,
+                audit_context=audit_context,
+            )
             customer_results.append(result)
             continue
         if decision and decision.status in {TRIGGER_ABSENT, TRIGGER_DATA_GAP}:
@@ -224,6 +232,12 @@ def aggregate_luxian_0609_results(
                 wrapper_rule=wrapper,
                 gate_decision=decision,
             )
+        result = apply_luxian_0609_result_schema(
+            result=result,
+            wrapper_rule=wrapper,
+            gate_decision=decision,
+            audit_context=audit_context,
+        )
         customer_results.append(result)
     return customer_results
 
