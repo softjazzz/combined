@@ -344,6 +344,17 @@ export interface StructuredQCIssue {
   visitId: string
   patientName: string
   department: string
+  qcPointId?: string
+  ruleSetKey?: string
+  ruleSetVersion?: string
+  schemaVersion?: string
+  resultStatus?: string
+  trigger?: Record<string, unknown> | null
+  dependencies?: Record<string, unknown> | null
+  evidenceItems?: Array<Record<string, unknown>>
+  decision?: Record<string, unknown> | null
+  review?: Record<string, unknown> | null
+  audit?: Record<string, unknown> | null
   metadata: {
     traceId: string
     cacheHit: boolean | null

@@ -198,6 +198,19 @@ function normalizeSubitemAnchorList(value: unknown): StructuredQCSubitemAnchor[]
     .filter((item): item is StructuredQCSubitemAnchor => Boolean(item))
 }
 
+function toObjectRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function toObjectRecordList(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return []
+  return value.filter(
+    (item): item is Record<string, unknown> =>
+      !!item && typeof item === 'object' && !Array.isArray(item),
+  )
+}
+
 function toStructuredIssue(
   raw: Record<string, unknown>,
   fallback: Partial<StructuredQCIssue> = {},
@@ -254,6 +267,22 @@ function toStructuredIssue(
     visitId: toText(raw.visit_id) || toText(raw.visitId) || fallback.visitId || '',
     patientName: toText(raw.patient_name) || toText(raw.patientName) || fallback.patientName || '',
     department: toText(raw.department) || fallback.department || '',
+    qcPointId: toText(raw.qc_point_id) || toText(raw.qcPointId) || fallback.qcPointId,
+    ruleSetKey: toText(raw.rule_set_key) || toText(raw.ruleSetKey) || fallback.ruleSetKey,
+    ruleSetVersion:
+      toText(raw.rule_set_version) || toText(raw.ruleSetVersion) || fallback.ruleSetVersion,
+    schemaVersion:
+      toText(raw.schema_version) || toText(raw.schemaVersion) || fallback.schemaVersion,
+    resultStatus: toText(raw.result_status) || toText(raw.resultStatus) || fallback.resultStatus,
+    trigger: toObjectRecord(raw.trigger) || fallback.trigger || null,
+    dependencies: toObjectRecord(raw.dependencies) || fallback.dependencies || null,
+    evidenceItems:
+      toObjectRecordList(raw.evidence_items).length > 0
+        ? toObjectRecordList(raw.evidence_items)
+        : fallback.evidenceItems || [],
+    decision: toObjectRecord(raw.decision) || fallback.decision || null,
+    review: toObjectRecord(raw.review) || fallback.review || null,
+    audit: toObjectRecord(raw.audit) || fallback.audit || null,
     metadata: {
       traceId: toText(raw.trace_id) || toText(metadataSource.trace_id),
       cacheHit: toBoolean(raw.cache_hit) ?? toBoolean(metadataSource.cache_hit),

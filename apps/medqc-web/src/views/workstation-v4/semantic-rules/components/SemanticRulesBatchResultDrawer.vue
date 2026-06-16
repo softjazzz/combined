@@ -241,6 +241,126 @@
                   {{ resolveDisplayStatusText(item) || resolveStatusText(item.status) }}
                 </a-tag>
               </div>
+              <div
+                v-if="hasEvidenceChain(item)"
+                class="evidence-chain-strip"
+              >
+                <span>
+                  状态口径：{{ resolveEvidenceStatusText(item.result_status || item.status) }}
+                </span>
+                <span v-if="resolveTriggerFacts(item).length">
+                  触发事实 {{ resolveTriggerFacts(item).length }} 条
+                </span>
+                <span v-if="resolveEvidenceChainItems(item).length">
+                  证据 {{ resolveEvidenceChainItems(item).length }} 条
+                </span>
+                <span v-if="resolveMissingSources(item).length">
+                  缺少数据 {{ resolveMissingSources(item).length }} 项
+                </span>
+              </div>
+              <div
+                v-if="isIssueExpanded(item) && hasEvidenceChain(item)"
+                class="evidence-chain-panel"
+              >
+                <div class="evidence-chain-panel-head">
+                  <div>
+                    <div class="evidence-chain-title">
+                      证据链
+                    </div>
+                    <div class="evidence-chain-subtitle">
+                      按触发事实、依赖数据、来源证据和判断口径展示
+                    </div>
+                  </div>
+                  <a-tag class="evidence-chain-tag">
+                    {{ resolveExecutorTypeText(item.executor_type) }}
+                  </a-tag>
+                </div>
+                <div class="evidence-chain-grid">
+                  <div
+                    v-if="resolveTriggerFacts(item).length"
+                    class="evidence-chain-block"
+                  >
+                    <div class="evidence-chain-block-title">
+                      触发事实
+                    </div>
+                    <div
+                      v-for="fact in resolveTriggerFacts(item)"
+                      :key="fact.key"
+                      class="evidence-chain-line"
+                    >
+                      <span>{{ fact.label }}</span>
+                      <strong>{{ fact.value }}</strong>
+                    </div>
+                  </div>
+                  <div class="evidence-chain-block">
+                    <div class="evidence-chain-block-title">
+                      数据依赖
+                    </div>
+                    <div
+                      v-for="row in resolveDependencyRows(item)"
+                      :key="row.key"
+                      class="evidence-chain-line"
+                    >
+                      <span>{{ row.label }}</span>
+                      <strong>{{ row.value }}</strong>
+                    </div>
+                  </div>
+                  <div
+                    v-if="resolveDecisionRows(item).length"
+                    class="evidence-chain-block"
+                  >
+                    <div class="evidence-chain-block-title">
+                      判断过程
+                    </div>
+                    <div
+                      v-for="row in resolveDecisionRows(item)"
+                      :key="row.key"
+                      class="evidence-chain-line"
+                    >
+                      <span>{{ row.label }}</span>
+                      <strong>{{ row.value }}</strong>
+                    </div>
+                  </div>
+                  <div
+                    v-if="resolveReviewRows(item).length"
+                    class="evidence-chain-block"
+                  >
+                    <div class="evidence-chain-block-title">
+                      人工复核
+                    </div>
+                    <div
+                      v-for="row in resolveReviewRows(item)"
+                      :key="row.key"
+                      class="evidence-chain-line"
+                    >
+                      <span>{{ row.label }}</span>
+                      <strong>{{ row.value }}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  v-if="resolveEvidenceChainItems(item).length"
+                  class="evidence-chain-evidence-list"
+                >
+                  <div class="evidence-chain-block-title">
+                    关键证据
+                  </div>
+                  <div
+                    v-for="evidence in resolveEvidenceChainItems(item)"
+                    :key="evidence.key"
+                    class="evidence-chain-evidence"
+                  >
+                    <div class="evidence-chain-evidence-meta">
+                      <span>{{ evidence.source }}</span>
+                      <span v-if="evidence.recordTime">{{ evidence.recordTime }}</span>
+                      <span v-if="evidence.fieldPath">{{ evidence.fieldPath }}</span>
+                    </div>
+                    <div class="evidence-chain-quote">
+                      {{ evidence.quote }}
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div class="issue-conclusion-summary">
                 <div class="issue-conclusion-row">
                   <span class="issue-conclusion-label">结论</span>
@@ -879,6 +999,113 @@
             <span>{{ selectedDeepReviewIssue.defect_level || '未分级' }}</span>
             <span v-if="selectedDeepReviewIssue.refined">单条精审</span>
           </div>
+          <div
+            v-if="hasEvidenceChain(selectedDeepReviewIssue)"
+            class="deep-review-chain"
+          >
+            <div class="evidence-chain-panel-head">
+              <div>
+                <div class="evidence-chain-title">
+                  证据链
+                </div>
+                <div class="evidence-chain-subtitle">
+                  触发事实、依赖数据、来源证据和判断阈值
+                </div>
+              </div>
+              <a-tag class="evidence-chain-tag">
+                {{
+                  resolveEvidenceStatusText(
+                    selectedDeepReviewIssue.result_status || selectedDeepReviewIssue.status,
+                  )
+                }}
+              </a-tag>
+            </div>
+            <div class="evidence-chain-grid">
+              <div
+                v-if="resolveTriggerFacts(selectedDeepReviewIssue).length"
+                class="evidence-chain-block"
+              >
+                <div class="evidence-chain-block-title">
+                  触发事实
+                </div>
+                <div
+                  v-for="fact in resolveTriggerFacts(selectedDeepReviewIssue)"
+                  :key="fact.key"
+                  class="evidence-chain-line"
+                >
+                  <span>{{ fact.label }}</span>
+                  <strong>{{ fact.value }}</strong>
+                </div>
+              </div>
+              <div class="evidence-chain-block">
+                <div class="evidence-chain-block-title">
+                  数据依赖
+                </div>
+                <div
+                  v-for="row in resolveDependencyRows(selectedDeepReviewIssue)"
+                  :key="row.key"
+                  class="evidence-chain-line"
+                >
+                  <span>{{ row.label }}</span>
+                  <strong>{{ row.value }}</strong>
+                </div>
+              </div>
+              <div
+                v-if="resolveDecisionRows(selectedDeepReviewIssue).length"
+                class="evidence-chain-block"
+              >
+                <div class="evidence-chain-block-title">
+                  判断过程
+                </div>
+                <div
+                  v-for="row in resolveDecisionRows(selectedDeepReviewIssue)"
+                  :key="row.key"
+                  class="evidence-chain-line"
+                >
+                  <span>{{ row.label }}</span>
+                  <strong>{{ row.value }}</strong>
+                </div>
+              </div>
+              <div
+                v-if="resolveAuditRows(selectedDeepReviewIssue).length"
+                class="evidence-chain-block"
+              >
+                <div class="evidence-chain-block-title">
+                  执行审计
+                </div>
+                <div
+                  v-for="row in resolveAuditRows(selectedDeepReviewIssue)"
+                  :key="row.key"
+                  class="evidence-chain-line"
+                >
+                  <span>{{ row.label }}</span>
+                  <strong>{{ row.value }}</strong>
+                </div>
+              </div>
+            </div>
+            <div
+              v-if="resolveEvidenceChainItems(selectedDeepReviewIssue).length"
+              class="evidence-chain-evidence-list"
+            >
+              <div class="evidence-chain-block-title">
+                关键证据
+              </div>
+              <div
+                v-for="evidence in resolveEvidenceChainItems(selectedDeepReviewIssue)"
+                :key="evidence.key"
+                class="evidence-chain-evidence"
+              >
+                <div class="evidence-chain-evidence-meta">
+                  <span>{{ evidence.source }}</span>
+                  <span v-if="evidence.recordTime">{{ evidence.recordTime }}</span>
+                  <span v-if="evidence.fieldPath">{{ evidence.fieldPath }}</span>
+                </div>
+                <div class="evidence-chain-quote">
+                  {{ evidence.quote }}
+                </div>
+              </div>
+            </div>
+          </div>
           <a-alert
             v-if="deepReviewError"
             type="warning"
@@ -1420,6 +1647,20 @@ const issueItems = computed<SichuanBatchIssueItem[]>(() => {
       cost_class: item.metadata.costClass,
       document_type: item.documentType,
       defect_level: item.defectLevel,
+      qc_point_id: item.qcPointId || sourceIssue.qc_point_id,
+      rule_set_key: item.ruleSetKey || sourceIssue.rule_set_key,
+      rule_set_version: item.ruleSetVersion || sourceIssue.rule_set_version,
+      schema_version: item.schemaVersion || sourceIssue.schema_version,
+      result_status: item.resultStatus || sourceIssue.result_status,
+      trigger: item.trigger || sourceIssue.trigger,
+      dependencies: item.dependencies || sourceIssue.dependencies,
+      evidence_items:
+        item.evidenceItems && item.evidenceItems.length > 0
+          ? item.evidenceItems
+          : sourceIssue.evidence_items,
+      decision: item.decision || sourceIssue.decision,
+      review: item.review || sourceIssue.review,
+      audit: item.audit || sourceIssue.audit,
       llm_fallback: item.metadata.llmFallback === null ? undefined : item.metadata.llmFallback,
       refined: item.metadata.refined === null ? undefined : item.metadata.refined,
       refine_reason: item.metadata.refineReason,
@@ -2366,6 +2607,283 @@ function resolveDeepReviewText(field: 'findings' | 'evidence' | 'suggestion') {
   )
 }
 
+type EvidenceDisplayRow = {
+  key: string
+  label: string
+  value: string
+}
+
+type EvidenceDisplayItem = {
+  key: string
+  source: string
+  recordTime: string
+  fieldPath: string
+  quote: string
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function toRecordList(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return []
+  return value.filter(
+    (item): item is Record<string, unknown> =>
+      !!item && typeof item === 'object' && !Array.isArray(item),
+  )
+}
+
+function normalizeEvidenceText(value: unknown, limit = 120) {
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!text) return ''
+  return text.length > limit ? `${text.slice(0, limit)}...` : text
+}
+
+function hasEvidenceChain(item?: Partial<SichuanBatchIssueItem> | null) {
+  if (!item) return false
+  return Boolean(
+    item.result_status ||
+      item.qc_point_id ||
+      item.schema_version ||
+      item.trigger ||
+      item.dependencies ||
+      item.decision ||
+      item.review ||
+      item.audit ||
+      (Array.isArray(item.evidence_items) && item.evidence_items.length > 0),
+  )
+}
+
+function resolveEvidenceStatusText(status?: string) {
+  const normalized = String(status || '')
+    .trim()
+    .toLowerCase()
+  const map: Record<string, string> = {
+    non_compliant: '不合规',
+    compliant: '合规',
+    not_applicable: '不适用',
+    data_gap: '数据不足',
+    uncertain: '待复核',
+    failed: '失败',
+    error: '错误',
+  }
+  return map[normalized] || resolveStatusText(normalized)
+}
+
+function resolveExecutorTypeText(value?: string) {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+  if (normalized === 'program') return '程序化规则'
+  if (normalized === 'llm') return 'LLM 语义规则'
+  if (normalized === 'hybrid') return '混合执行'
+  return value || '执行器未标注'
+}
+
+function resolveTriggerFacts(item: Partial<SichuanBatchIssueItem>): EvidenceDisplayRow[] {
+  const trigger = toRecord(item.trigger)
+  const facts = toRecordList(trigger?.trigger_facts)
+  const rows = facts
+    .map((fact, index) => {
+      const label =
+        normalizeEvidenceText(fact.fact_label, 30) ||
+        normalizeEvidenceText(fact.fact_type, 30) ||
+        `触发事实 ${index + 1}`
+      const sourceParts = [
+        normalizeEvidenceText(fact.source_document_type, 24),
+        normalizeEvidenceText(fact.source_document_id, 24),
+        normalizeEvidenceText(fact.record_time, 24),
+      ].filter(Boolean)
+      const value = [
+        normalizeEvidenceText(fact.fact_value, 120),
+        sourceParts.length ? `来源：${sourceParts.join(' / ')}` : '',
+      ]
+        .filter(Boolean)
+        .join('；')
+      return {
+        key: `trigger-${index}`,
+        label,
+        value,
+      }
+    })
+    .filter((row) => row.value)
+  const notApplicableReason = normalizeEvidenceText(trigger?.not_applicable_reason, 120)
+  if (notApplicableReason) {
+    rows.push({
+      key: 'not-applicable-reason',
+      label: '不适用原因',
+      value: notApplicableReason,
+    })
+  }
+  return rows
+}
+
+function resolveSourceNames(value: unknown) {
+  const rows = toRecordList(value)
+    .map((item) => {
+      return (
+        normalizeEvidenceText(item.source_name, 40) ||
+        normalizeEvidenceText(item.table, 40) ||
+        normalizeEvidenceText(item.source_table, 40)
+      )
+    })
+    .filter(Boolean)
+  return rows.length ? rows.join('、') : ''
+}
+
+function resolveMissingSources(item: Partial<SichuanBatchIssueItem>) {
+  const dependencies = toRecord(item.dependencies)
+  return toRecordList(dependencies?.missing_sources)
+}
+
+function resolveDependencyRows(item: Partial<SichuanBatchIssueItem>): EvidenceDisplayRow[] {
+  const dependencies = toRecord(item.dependencies)
+  if (!dependencies) {
+    return [
+      {
+        key: 'dependency-empty',
+        label: '依赖数据',
+        value: '未返回依赖数据结构',
+      },
+    ]
+  }
+  const rows: EvidenceDisplayRow[] = []
+  const requiredSources = resolveSourceNames(dependencies.required_sources)
+  if (requiredSources) {
+    rows.push({ key: 'required-sources', label: '需要数据', value: requiredSources })
+  }
+  const missingSources = resolveSourceNames(dependencies.missing_sources)
+  if (missingSources) {
+    rows.push({ key: 'missing-sources', label: '缺失数据', value: missingSources })
+  }
+  const gapReason = normalizeEvidenceText(dependencies.data_gap_reason, 120)
+  if (gapReason) rows.push({ key: 'data-gap-reason', label: '缺口说明', value: gapReason })
+  const coverage = normalizeEvidenceText(dependencies.source_coverage_level, 32)
+  if (coverage) {
+    const coverageMap: Record<string, string> = {
+      full: '数据完整',
+      partial: '部分覆盖',
+      missing: '缺少关键数据',
+      unknown: '未标注',
+    }
+    rows.push({
+      key: 'coverage',
+      label: '覆盖程度',
+      value: coverageMap[coverage] || coverage,
+    })
+  }
+  return rows.length
+    ? rows
+    : [
+        {
+          key: 'dependency-empty',
+          label: '依赖数据',
+          value: '未返回可展示的依赖数据',
+        },
+      ]
+}
+
+function resolveEvidenceChainItems(item: Partial<SichuanBatchIssueItem>): EvidenceDisplayItem[] {
+  return toRecordList(item.evidence_items)
+    .map((evidence, index) => {
+      const source =
+        normalizeEvidenceText(evidence.source_document_name, 40) ||
+        normalizeEvidenceText(evidence.source_document_type, 40) ||
+        normalizeEvidenceText(evidence.source_table, 40) ||
+        '来源未标注'
+      return {
+        key: normalizeEvidenceText(evidence.evidence_id, 24) || `evidence-${index}`,
+        source,
+        recordTime: normalizeEvidenceText(evidence.record_time, 32),
+        fieldPath: normalizeEvidenceText(evidence.field_path, 40),
+        quote: normalizeEvidenceText(evidence.quote, 260) || '未返回原文片段',
+      }
+    })
+    .filter((item) => item.quote)
+}
+
+function resolveDecisionRows(item: Partial<SichuanBatchIssueItem>): EvidenceDisplayRow[] {
+  const decision = toRecord(item.decision)
+  if (!decision) return []
+  const rows: EvidenceDisplayRow[] = [
+    {
+      key: 'decision-summary',
+      label: '判断摘要',
+      value: normalizeEvidenceText(decision.decision_summary, 160),
+    },
+    {
+      key: 'threshold',
+      label: '判断阈值',
+      value: normalizeEvidenceText(decision.threshold, 120),
+    },
+    {
+      key: 'expected',
+      label: '期望值',
+      value: normalizeEvidenceText(decision.expected_value, 120),
+    },
+    {
+      key: 'actual',
+      label: '实际值',
+      value: normalizeEvidenceText(decision.actual_value, 120),
+    },
+    {
+      key: 'delta',
+      label: '差值',
+      value: normalizeEvidenceText(decision.delta, 80),
+    },
+    {
+      key: 'suggestion',
+      label: '处理建议',
+      value: normalizeEvidenceText(decision.suggestion, 160),
+    },
+  ]
+  return rows.filter((row) => row.value)
+}
+
+function resolveReviewRows(item: Partial<SichuanBatchIssueItem>): EvidenceDisplayRow[] {
+  const review = toRecord(item.review)
+  if (!review) return []
+  const reviewStatus = normalizeEvidenceText(review.review_status, 32)
+  const statusMap: Record<string, string> = {
+    pending: '待人工复核',
+    not_required: '无需复核',
+    reviewed: '已复核',
+  }
+  const rows: EvidenceDisplayRow[] = []
+  if (reviewStatus) {
+    rows.push({
+      key: 'review-status',
+      label: '复核状态',
+      value: statusMap[reviewStatus] || reviewStatus,
+    })
+  }
+  const finalStatus = normalizeEvidenceText(review.final_status, 32)
+  if (finalStatus) rows.push({ key: 'final-status', label: '最终状态', value: finalStatus })
+  const comment = normalizeEvidenceText(review.review_comment, 140)
+  if (comment) rows.push({ key: 'review-comment', label: '复核意见', value: comment })
+  return rows
+}
+
+function resolveAuditRows(item: Partial<SichuanBatchIssueItem>): EvidenceDisplayRow[] {
+  const audit = toRecord(item.audit)
+  if (!audit) return []
+  const rows: EvidenceDisplayRow[] = [
+    { key: 'visit-id', label: '住院号', value: normalizeEvidenceText(audit.visit_id, 48) },
+    { key: 'model-name', label: '模型/执行器', value: normalizeEvidenceText(audit.model_name, 80) },
+    { key: 'executed-at', label: '执行时间', value: normalizeEvidenceText(audit.executed_at, 48) },
+    { key: 'elapsed', label: '耗时', value: normalizeEvidenceText(audit.elapsed_ms, 32) },
+    {
+      key: 'technical-status',
+      label: '技术状态',
+      value: normalizeEvidenceText(audit.technical_status, 40),
+    },
+  ]
+  return rows.filter((row) => row.value)
+}
+
 type StructuredTextSection = {
   title: string
   paragraphs: string[]
@@ -2940,6 +3458,140 @@ watch(
   color: #475569;
   padding: 2px 7px;
   font-size: 11px;
+}
+
+.evidence-chain-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.evidence-chain-strip span,
+.evidence-chain-tag {
+  border-radius: 999px;
+  border: 1px solid rgba(0, 102, 204, 0.18);
+  background: rgba(0, 102, 204, 0.06);
+  color: #0066cc;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+.evidence-chain-panel,
+.deep-review-chain {
+  border-radius: 16px;
+  border: 1px solid rgba(0, 102, 204, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.86));
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+  padding: 12px 14px;
+  margin: 8px 0 12px;
+}
+
+.evidence-chain-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.evidence-chain-title {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.evidence-chain-subtitle {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.evidence-chain-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.evidence-chain-block {
+  border-radius: 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.78);
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.evidence-chain-block-title {
+  margin-bottom: 8px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+.evidence-chain-line {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.evidence-chain-line + .evidence-chain-line {
+  border-top: 1px dashed rgba(203, 213, 225, 0.75);
+}
+
+.evidence-chain-line strong {
+  min-width: 0;
+  color: #0f172a;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.evidence-chain-evidence-list {
+  margin-top: 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.86);
+  padding-top: 10px;
+}
+
+.evidence-chain-evidence {
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.88);
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  padding: 10px 12px;
+}
+
+.evidence-chain-evidence + .evidence-chain-evidence {
+  margin-top: 8px;
+}
+
+.evidence-chain-evidence-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.evidence-chain-evidence-meta span {
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #475569;
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.evidence-chain-quote {
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 1.75;
+  word-break: break-word;
 }
 
 .issue-conclusion-summary {

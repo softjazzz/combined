@@ -160,6 +160,19 @@ const AInputStub = defineComponent({
   },
 })
 
+const drawerStubs = {
+  'a-drawer': ADrawerStub,
+  'a-table': ATableStub,
+  'a-select': ASelectStub,
+  'a-button': AButtonStub,
+  'a-tag': ATagStub,
+  'a-progress': AProgressStub,
+  'a-radio-group': ARadioGroupStub,
+  'a-radio-button': ARadioButtonStub,
+  'a-switch': ASwitchStub,
+  'a-input': AInputStub,
+}
+
 function buildProps() {
   const batchJobDetail: SichuanBatchJob = {
     id: 'job-1',
@@ -308,18 +321,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const wrapper = mount(SemanticRulesBatchResultDrawer, {
       props: buildProps(),
       global: {
-        stubs: {
-          'a-drawer': ADrawerStub,
-          'a-table': ATableStub,
-          'a-select': ASelectStub,
-          'a-button': AButtonStub,
-          'a-tag': ATagStub,
-          'a-progress': AProgressStub,
-          'a-radio-group': ARadioGroupStub,
-          'a-radio-button': ARadioButtonStub,
-          'a-switch': ASwitchStub,
-          'a-input': AInputStub,
-        },
+        stubs: drawerStubs,
       },
     })
 
@@ -334,18 +336,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const wrapper = mount(SemanticRulesBatchResultDrawer, {
       props,
       global: {
-        stubs: {
-          'a-drawer': ADrawerStub,
-          'a-table': ATableStub,
-          'a-select': ASelectStub,
-          'a-button': AButtonStub,
-          'a-tag': ATagStub,
-          'a-progress': AProgressStub,
-          'a-radio-group': ARadioGroupStub,
-          'a-radio-button': ARadioButtonStub,
-          'a-switch': ASwitchStub,
-          'a-input': AInputStub,
-        },
+        stubs: drawerStubs,
       },
     })
 
@@ -373,18 +364,7 @@ describe('SemanticRulesBatchResultDrawer', () => {
     const wrapper = mount(SemanticRulesBatchResultDrawer, {
       props: buildProps(),
       global: {
-        stubs: {
-          'a-drawer': ADrawerStub,
-          'a-table': ATableStub,
-          'a-select': ASelectStub,
-          'a-button': AButtonStub,
-          'a-tag': ATagStub,
-          'a-progress': AProgressStub,
-          'a-radio-group': ARadioGroupStub,
-          'a-radio-button': ARadioButtonStub,
-          'a-switch': ASwitchStub,
-          'a-input': AInputStub,
-        },
+        stubs: drawerStubs,
       },
     })
 
@@ -396,5 +376,75 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('涉及问题病历')
     expect(wrapper.text()).toContain('规则一命中')
     expect(wrapper.text()).toContain('规则二命中')
+  })
+
+  it('应按证据链展示泸县0609结果的触发事实、依赖数据和关键证据', async () => {
+    const props = buildProps()
+    const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
+    Object.assign(firstItem || {}, {
+      qc_point_id: 'LX0609-014',
+      rule_set_key: 'luxian_0609_qc_v1',
+      schema_version: 'luxian_0609_evidence_chain_v1',
+      result_status: 'non_compliant',
+      executor_type: 'llm',
+      trigger: {
+        applicable: true,
+        trigger_facts: [
+          {
+            fact_label: '阳性培养报告',
+            fact_value: '尿培养报告阳性',
+            source_document_type: '检验报告',
+            record_time: '2026-06-03 14:20',
+          },
+        ],
+      },
+      dependencies: {
+        required_sources: [{ source_name: '检验报告' }, { source_name: '病程记录' }],
+        missing_sources: [{ source_name: '24小时内病程分析' }],
+        source_coverage_level: 'partial',
+      },
+      evidence_items: [
+        {
+          evidence_id: 'E-001',
+          source_document_type: '日常病程记录',
+          record_time: '2026-06-04 09:10',
+          field_path: 'daily_course_record.record_content',
+          quote: '病程记录未分析尿培养阳性结果与抗感染方案关系。',
+        },
+      ],
+      decision: {
+        decision_summary: '细菌培养阳性结果未在病程中及时分析。',
+        threshold: '报告后24小时内完成分析',
+        actual_value: '未见分析记录',
+        suggestion: '补充阳性培养结果与诊疗方案关系分析。',
+      },
+    })
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    expect(wrapper.text()).toContain('状态口径：不合规')
+    expect(wrapper.text()).toContain('触发事实 1 条')
+    expect(wrapper.text()).toContain('缺少数据 1 项')
+
+    const expandButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('展开完整说明'))
+    expect(expandButton).toBeTruthy()
+    await expandButton?.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('证据链')
+    expect(wrapper.text()).toContain('阳性培养报告')
+    expect(wrapper.text()).toContain('尿培养报告阳性')
+    expect(wrapper.text()).toContain('缺失数据')
+    expect(wrapper.text()).toContain('24小时内病程分析')
+    expect(wrapper.text()).toContain('日常病程记录')
+    expect(wrapper.text()).toContain('病程记录未分析尿培养阳性结果与抗感染方案关系')
+    expect(wrapper.text()).toContain('报告后24小时内完成分析')
   })
 })

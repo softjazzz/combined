@@ -282,6 +282,17 @@ export interface SichuanBatchIssueItem {
   adjudicator_supporting_quote?: string
   adjudicator_confidence?: number
   rule_requirement_match?: string
+  qc_point_id?: string
+  rule_set_key?: string
+  rule_set_version?: string
+  schema_version?: string
+  result_status?: string
+  trigger?: Record<string, unknown>
+  dependencies?: Record<string, unknown>
+  evidence_items?: Array<Record<string, unknown>>
+  decision?: Record<string, unknown>
+  review?: Record<string, unknown>
+  audit?: Record<string, unknown>
 }
 
 export interface SichuanBatchFailedItem {
