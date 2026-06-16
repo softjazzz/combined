@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -39,6 +40,11 @@ CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
 
 def _now_utc() -> datetime:
     return datetime.utcnow()
+
+
+def _sleep_seconds(value: float) -> None:
+    if value > 0:
+        time.sleep(value)
 
 
 def _schema() -> Optional[str]:
@@ -3358,11 +3364,31 @@ class CustomQCSamplePoolService:
 
         session = _session()
         try:
-            bundle_status = "ready" if not bundle_error and self._check_running_bundle_status(
-                institute_id=CUSTOMER_TEST_INSTITUTE_ID,
-                patient_id=patient_id,
-                visit_id=visit_id,
-            ) == "ready" else "pending"
+            bundle_status = "pending"
+            if not bundle_error:
+                bundle_status = self._wait_running_bundle_ready(
+                    institute_id=CUSTOMER_TEST_INSTITUTE_ID,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
+                    attempts=5,
+                    sleep_seconds=0.4,
+                )
+                if bundle_status != "ready":
+                    try:
+                        refresh_scene_bundles_for_rows(
+                            scene="running",
+                            rows=bundle_rows,
+                            policy_version="customer_test_record_builder",
+                        )
+                        bundle_status = self._wait_running_bundle_ready(
+                            institute_id=CUSTOMER_TEST_INSTITUTE_ID,
+                            patient_id=patient_id,
+                            visit_id=visit_id,
+                            attempts=3,
+                            sleep_seconds=0.4,
+                        )
+                    except Exception:
+                        bundle_status = "pending"
             session.execute(
                 update(self._item_table)
                 .where(self._item_table.c.id == item_id)
@@ -3508,8 +3534,9 @@ class CustomQCSamplePoolService:
                 .limit(page_size)
             )
             rows = session.execute(stmt).mappings().all()
+            healed_rows = self._heal_customer_test_bundle_statuses(session=session, rows=[dict(row) for row in rows])
             return SamplePoolListResult(
-                items=[self._row_to_item(dict(row)) for row in rows],
+                items=[self._row_to_item(row) for row in healed_rows],
                 total=total,
                 page=page,
                 page_size=page_size,
@@ -3550,7 +3577,8 @@ class CustomQCSamplePoolService:
             where_clause = and_(*clauses)
             stmt = select(self._item_table).where(where_clause).order_by(self._item_table.c.row_no.asc())
             rows = session.execute(stmt).mappings().all()
-            items = [self._row_to_item(dict(row)) for row in rows]
+            healed_rows = self._heal_customer_test_bundle_statuses(session=session, rows=[dict(row) for row in rows])
+            items = [self._row_to_item(row) for row in healed_rows]
             items = self._apply_dynamic_candidate_rule_ids(items=items)
             source_table_map = self._load_bundle_source_table_map(
                 visit_ids=[
@@ -3700,6 +3728,90 @@ class CustomQCSamplePoolService:
             return "ready" if row else "missing"
         except Exception:
             return "pending"
+
+    def _wait_running_bundle_ready(
+        self,
+        *,
+        institute_id: str,
+        patient_id: str,
+        visit_id: str,
+        attempts: int = 5,
+        sleep_seconds: float = 0.4,
+    ) -> str:
+        last_status = "pending"
+        for index in range(max(attempts, 1)):
+            last_status = self._check_running_bundle_status(
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+            )
+            if last_status == "ready":
+                return last_status
+            if index < max(attempts, 1) - 1:
+                _sleep_seconds(sleep_seconds)
+        return last_status
+
+    def _heal_customer_test_bundle_statuses(
+        self,
+        *,
+        session: Session,
+        rows: Sequence[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        healed_rows: List[Dict[str, Any]] = []
+        updated = False
+        for row in rows:
+            row_dict = dict(row)
+            if _safe_text(row_dict.get("pool_id")) != CUSTOMER_TEST_POOL_ID:
+                healed_rows.append(row_dict)
+                continue
+            if _safe_text(row_dict.get("bundle_status")) == "ready":
+                healed_rows.append(row_dict)
+                continue
+
+            institute_id = _safe_text(row_dict.get("matched_institute_id"))
+            patient_id = _safe_text(row_dict.get("matched_patient_id"))
+            visit_id = _safe_text(row_dict.get("matched_visit_id"))
+            if not institute_id or not patient_id or not visit_id:
+                healed_rows.append(row_dict)
+                continue
+
+            bundle_status = self._wait_running_bundle_ready(
+                institute_id=institute_id,
+                patient_id=patient_id,
+                visit_id=visit_id,
+                attempts=3,
+                sleep_seconds=0.25,
+            )
+            if bundle_status != "ready":
+                try:
+                    refresh_scene_bundles_for_rows(
+                        rows=[{"institute_id": institute_id, "patient_id": patient_id, "visit_id": visit_id}],
+                        scene="running",
+                        allow_frontpage_only=False,
+                    )
+                    bundle_status = self._wait_running_bundle_ready(
+                        institute_id=institute_id,
+                        patient_id=patient_id,
+                        visit_id=visit_id,
+                        attempts=2,
+                        sleep_seconds=0.25,
+                    )
+                except Exception:
+                    bundle_status = "pending"
+
+            if bundle_status != _safe_text(row_dict.get("bundle_status")):
+                session.execute(
+                    update(self._item_table)
+                    .where(self._item_table.c.id == row_dict["id"])
+                    .values(bundle_status=bundle_status, updated_at=_now_utc())
+                )
+                row_dict["bundle_status"] = bundle_status
+                updated = True
+            healed_rows.append(row_dict)
+
+        if updated:
+            session.commit()
+        return healed_rows
 
     def match_pool_items(self, *, pool_id: str) -> Dict[str, Any]:
         session = _session()
