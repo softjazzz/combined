@@ -1217,7 +1217,7 @@ const currentScopeDescription = computed(() => {
   const total = pagination.value.total || 0
   const matched = records.value.filter((record) => record.match_status === 'matched').length
   const ready = records.value.filter((record) => record.bundle_status === 'ready').length
-  const synced = records.value.filter((record) => record.sync_status === 'synced').length
+  const synced = records.value.filter((record) => isRecordSyncedForValidation(record)).length
   const filterLabels = [
     `验证规则集：${selectedRuleSet.value?.rule_set_name || validationModeLabel(selectedValidationMode.value)}`,
     filters.value.coverageType ? `样本范围：${coverageLabel(filters.value.coverageType)}` : '',
@@ -1709,17 +1709,21 @@ function resolvePrimaryAction(record: ManualSamplePoolRecord): {
   }
 }
 
+function isRecordSyncedForValidation(record: ManualSamplePoolRecord): boolean {
+  return record.sync_status === 'synced' || record.sync_status === 'synthetic_seeded'
+}
+
 function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
   if (isSyncedOnlyValidationMode.value) {
     return (
       record.match_status === 'matched' &&
-      record.sync_status === 'synced' &&
+      isRecordSyncedForValidation(record) &&
       !!record.matched_visit_id
     )
   }
   return (
     record.match_status === 'matched' &&
-    record.sync_status === 'synced' &&
+    isRecordSyncedForValidation(record) &&
     record.bundle_status === 'ready' &&
     !!record.matched_visit_id
   )

@@ -983,32 +983,24 @@ describe('CustomerSampleValidationView', () => {
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
       },
-      undefined,
+      { timeout: 90000 },
     )
     expect(message.success).toHaveBeenCalled()
   })
 
-  it('客户样本复现模式未选择病历时保持整池提交行为', async () => {
+  it('客户样本复现模式未选择病历时提示先选择病历', async () => {
     const wrapper = await mountView()
 
     const runButton = wrapper
       .findAll('button')
-      .find((node) => node.text().includes('发起泸县0609验证'))
+      .find((node) => node.text().includes('请选择病历后发起泸县0609验证'))
     expect(runButton).toBeTruthy()
     expect(runButton!.attributes('disabled')).toBeUndefined()
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(runManualSamplePool).toHaveBeenCalledWith(
-      'pool-1',
-      {
-        record_ids: [],
-        max_parallel_records: 4,
-        validation_mode: 'customer',
-        rule_set_key: 'luxian_0609_qc_v1',
-      },
-      undefined,
-    )
+    expect(message.warning).toHaveBeenCalledWith('请先选择要质控的病历')
+    expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 
   it('点击同步样本病历后展示同步进度区块', async () => {
@@ -1293,6 +1285,53 @@ describe('CustomerSampleValidationView', () => {
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 
+  it('允许已种入PG的合成样本直接发起验证', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool({ name: '泸县0609合成质控样本 v1' }),
+        items: [
+          buildRecord({
+            id: 'LX0609_SYN_001',
+            matched_visit_id: 'LX0609_SYN_001',
+            mr_no: 'LX0609_SYN_001',
+            patient_name: '合成样本001',
+            sync_status: 'synthetic_seeded',
+            bundle_status: 'ready',
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起泸县0609验证'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(message.warning).not.toHaveBeenCalledWith(
+      '当前选中的病历还未完成匹配、同步或 bundle 准备，暂时无法发起验证',
+    )
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
+        record_ids: ['LX0609_SYN_001'],
+        max_parallel_records: 4,
+        validation_mode: 'customer',
+        rule_set_key: 'luxian_0609_qc_v1',
+      },
+      { timeout: 90000 },
+    )
+  })
+
   it('选中部分不可执行病历时仅提交可执行病历并提示跳过数量', async () => {
     getManualSamplePoolRecords.mockResolvedValueOnce({
       success: true,
@@ -1336,7 +1375,7 @@ describe('CustomerSampleValidationView', () => {
         validation_mode: 'customer',
         rule_set_key: 'luxian_0609_qc_v1',
       },
-      undefined,
+      { timeout: 90000 },
     )
   })
 
@@ -1526,10 +1565,10 @@ describe('CustomerSampleValidationView', () => {
       .findAll('button')
       .find((node) => node.text().includes('请选择病历后发起SC全量验证'))
     expect(runButton).toBeTruthy()
-    expect(runButton!.attributes('disabled')).toBeDefined()
     await runButton!.trigger('click')
     await flushPromises()
 
+    expect(message.warning).toHaveBeenCalledWith('请先选择要质控的病历')
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 

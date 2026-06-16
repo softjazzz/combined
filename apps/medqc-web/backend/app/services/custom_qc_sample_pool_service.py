@@ -3816,7 +3816,7 @@ class CustomQCSamplePoolService:
             clauses = [
                 self._item_table.c.pool_id == pool_id,
                 self._item_table.c.match_status == "matched",
-                self._item_table.c.sync_status == "synced",
+                self._item_table.c.sync_status.in_(["synced", "synthetic_seeded"]),
             ]
             if normalized_mode == "customer":
                 clauses.append(self._item_table.c.bundle_status == "ready")
