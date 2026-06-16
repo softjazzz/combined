@@ -1292,7 +1292,7 @@ describe('CustomerSampleValidationView', () => {
         pool: buildPool({ name: '泸县0609合成质控样本 v1' }),
         items: [
           buildRecord({
-            id: 'LX0609_SYN_001',
+            id: 'sample-item-syn-001',
             matched_visit_id: 'LX0609_SYN_001',
             mr_no: 'LX0609_SYN_001',
             patient_name: '合成样本001',

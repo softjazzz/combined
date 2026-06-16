@@ -1242,7 +1242,9 @@ const selectedRecordStats = computed(() => {
     selectedCount: selectedRecords.length,
     runnableCount: runnableRecords.length,
     skippedCount: Math.max(0, selectedRecords.length - runnableRecords.length),
-    runnableRecordIds: runnableRecords.map((record) => record.id),
+    runnableRecordIds: runnableRecords
+      .map((record) => String(record.matched_visit_id || '').trim())
+      .filter((recordId) => Boolean(recordId)),
   }
 })
 
