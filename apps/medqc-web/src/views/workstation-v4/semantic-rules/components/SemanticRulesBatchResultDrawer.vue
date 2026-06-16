@@ -1426,6 +1426,20 @@ const PROGRESS_STEP_LABEL_MAP: Record<string, string> = {
   canceled: '已取消',
 }
 
+function parseBackendDateTimeMs(value?: string | Date | null): number {
+  if (!value) return 0
+  if (value instanceof Date) {
+    const timestamp = value.getTime()
+    return Number.isFinite(timestamp) ? timestamp : 0
+  }
+  const text = String(value).trim()
+  if (!text) return 0
+  const normalized = text.includes('T') ? text : text.replace(' ', 'T')
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
+  const timestamp = Date.parse(hasTimezone ? normalized : `${normalized}Z`)
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
 const liveNow = ref(Date.now())
 let liveTicker: ReturnType<typeof setInterval> | null = null
 
@@ -2037,8 +2051,7 @@ const streamUpdatedAtText = computed(() => {
 
 const liveStartedAtMs = computed(() => {
   const startValue = props.batchJobDetail?.started_at || streamState.value?.started_at
-  const startedAt = startValue ? new Date(startValue).getTime() : 0
-  return startedAt && !Number.isNaN(startedAt) ? startedAt : 0
+  return parseBackendDateTimeMs(startValue)
 })
 
 const liveElapsedSeconds = computed(() => {
