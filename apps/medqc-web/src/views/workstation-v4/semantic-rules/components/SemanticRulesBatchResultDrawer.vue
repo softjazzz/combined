@@ -85,7 +85,7 @@
                 <span v-if="currentStreamRecordLabel">
                   正在分析：{{ currentStreamRecordLabel }}
                 </span>
-                <span>运行 {{ liveElapsedText }}</span>
+                <span>{{ liveElapsedLabel }}</span>
                 <span v-if="streamUpdatedAtText">最近更新：{{ streamUpdatedAtText }}</span>
               </div>
               <div
@@ -2035,6 +2035,12 @@ const streamUpdatedAtText = computed(() => {
   return props.formatDateTime(updatedAt)
 })
 
+const liveStartedAtMs = computed(() => {
+  const startValue = props.batchJobDetail?.started_at || streamState.value?.started_at
+  const startedAt = startValue ? new Date(startValue).getTime() : 0
+  return startedAt && !Number.isNaN(startedAt) ? startedAt : 0
+})
+
 const liveElapsedSeconds = computed(() => {
   const detail = props.batchJobDetail
   if (!detail) return 0
@@ -2042,13 +2048,17 @@ const liveElapsedSeconds = computed(() => {
     detail.summary?.wall_clock_time ?? detail.wall_clock_time ?? detail.total_processing_time ?? 0,
   )
   if (!isRunningBatchJob.value) return finalSeconds
-  const startValue = detail.started_at || detail.created_at
-  const startedAt = startValue ? new Date(startValue).getTime() : 0
-  if (!startedAt || Number.isNaN(startedAt)) return finalSeconds
-  return Math.max(finalSeconds, (liveNow.value - startedAt) / 1000)
+  if (!liveStartedAtMs.value) return finalSeconds
+  return Math.max(finalSeconds, (liveNow.value - liveStartedAtMs.value) / 1000)
 })
 
 const liveElapsedText = computed(() => formatProcessingTime(liveElapsedSeconds.value))
+const liveElapsedLabel = computed(() => {
+  if (isRunningBatchJob.value && !liveStartedAtMs.value && liveElapsedSeconds.value <= 0) {
+    return '运行中'
+  }
+  return `运行 ${liveElapsedText.value}`
+})
 
 const incrementalResultTip = computed(() => {
   if (!isRunningBatchJob.value) return ''

@@ -195,6 +195,7 @@ export interface SichuanBatchJobSummary {
     latest_result_count?: number
     partial_item_count?: number
     partial_rule_result_count?: number
+    started_at?: string
     updated_at?: string
   }
   updated_at?: string

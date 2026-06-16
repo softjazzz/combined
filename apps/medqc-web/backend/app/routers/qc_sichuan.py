@@ -1119,6 +1119,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             bucket_strategy=bucket_strategy,
         )
         enable_incremental_results = bool(filters.get("sample_pool_id"))
+        job_started_at = datetime.now(timezone.utc)
 
         def _is_cancelled() -> bool:
             latest = workspace.get_batch_job_for_processing(job_id=job_id)
@@ -1288,6 +1289,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "latest_result_count": latest_result_count,
                 "partial_item_count": len(all_items),
                 "partial_rule_result_count": len(output_rule_ids),
+                "started_at": job_started_at.isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
@@ -2026,6 +2028,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     "latest_result_count": 0,
                     "partial_item_count": 0,
                     "partial_rule_result_count": len(output_rule_ids),
+                    "started_at": job_started_at.isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
                 "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -2205,6 +2208,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "latest_result_count": 0,
                 "partial_item_count": len(all_items),
                 "partial_rule_result_count": len(output_rule_ids),
+                "started_at": job_started_at.isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
             "updated_at": datetime.now(timezone.utc).isoformat(),
