@@ -186,6 +186,17 @@ export interface SichuanBatchJobSummary {
     miss: number
   }
   result_aggregation?: SichuanBatchResultAggregation
+  stream_state?: {
+    enabled?: boolean
+    processed_records?: number
+    total_records?: number
+    latest_record_id?: string
+    latest_visit_id?: string
+    latest_result_count?: number
+    partial_item_count?: number
+    partial_rule_result_count?: number
+    updated_at?: string
+  }
   updated_at?: string
 }
 

@@ -1118,6 +1118,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             execution_strategy=execution_strategy,
             bucket_strategy=bucket_strategy,
         )
+        enable_incremental_results = bool(filters.get("sample_pool_id"))
 
         def _is_cancelled() -> bool:
             latest = workspace.get_batch_job_for_processing(job_id=job_id)
@@ -1159,6 +1160,135 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 "total_processing_time": float(total_processing_time),
                 "executor_breakdown": {"program": executor_program, "llm": executor_llm},
                 "cache_breakdown": {"hit": cache_hit, "miss": cache_miss},
+            }
+
+        def _item_is_confirmed_defect(item: Dict[str, Any]) -> bool:
+            if should_postprocess_job:
+                return _safe_bool(item.get("can_show_as_defect")) or str(item.get("display_status") or "") == "confirmed_defect"
+            return str(item.get("status") or "") == "non_compliant"
+
+        def _item_needs_review(item: Dict[str, Any]) -> bool:
+            if should_postprocess_job:
+                return False
+            return str(item.get("status") or "") == "uncertain"
+
+        def _item_data_quality_gap(item: Dict[str, Any]) -> bool:
+            if str(item.get("status") or "") == "data_gap":
+                return True
+            return should_postprocess_job and str(item.get("display_status") or "") == "data_quality_gap"
+
+        def _item_rejected_by_system(item: Dict[str, Any]) -> bool:
+            return should_postprocess_job and str(item.get("display_status") or "") == "rejected_by_system"
+
+        def _build_rule_results_snapshot(
+            *,
+            processed_records_count: int,
+            final: bool = False,
+        ) -> List[Dict[str, Any]]:
+            effective_total_records = total_records if final else max(0, processed_records_count)
+            rule_results_snapshot: List[Dict[str, Any]] = []
+            for rule_index, rule_id in enumerate(output_rule_ids):
+                state = output_rule_states[rule_id]
+                rule_items = list(state.get("items") or [])
+                rule_failed = list(state.get("failed_records") or [])
+                confirmed_record_ids = {
+                    str(item.get("record_id") or "")
+                    for item in rule_items
+                    if _item_is_confirmed_defect(item)
+                }
+                uncertain_record_ids_for_rule = {
+                    str(item.get("record_id") or "")
+                    for item in rule_items
+                    if _item_needs_review(item)
+                }
+                data_gap_record_ids_for_rule = {
+                    str(item.get("record_id") or "")
+                    for item in rule_items
+                    if _item_data_quality_gap(item)
+                }
+                rejected_record_ids_for_rule = {
+                    str(item.get("record_id") or "")
+                    for item in rule_items
+                    if _item_rejected_by_system(item)
+                }
+                rule_summary = {
+                    "total_records": effective_total_records,
+                    "success_count": max(0, effective_total_records - len(rule_failed)),
+                    "failed_count": len(rule_failed),
+                    "issue_records": len(confirmed_record_ids),
+                    "uncertain_records": len(uncertain_record_ids_for_rule),
+                    "data_quality_gap_records": len(data_gap_record_ids_for_rule),
+                    "rejected_by_system_records": len(rejected_record_ids_for_rule),
+                    "compliant_records": max(
+                        0,
+                        effective_total_records
+                        - len(rule_failed)
+                        - len(confirmed_record_ids)
+                        - len(uncertain_record_ids_for_rule)
+                        - len(data_gap_record_ids_for_rule)
+                        - len(rejected_record_ids_for_rule),
+                    ),
+                    "total_tokens": int(state.get("total_tokens") or 0),
+                    "total_processing_time": float(state.get("total_processing_time") or 0.0),
+                }
+                has_valid_rule = state.get("rule") is not None
+                failed_threshold = effective_total_records if effective_total_records > 0 else total_records
+                rule_status = (
+                    "failed"
+                    if (not has_valid_rule or (rule_failed and len(rule_failed) >= failed_threshold))
+                    else ("completed" if final else "running")
+                )
+                rule_results_snapshot.append(
+                    {
+                        "id": state.get("rule_job_id"),
+                        "job_id": job_id,
+                        "rule_code": state.get("rule_code"),
+                        "rule_name": state.get("rule_name"),
+                        "status": rule_status,
+                        "items": rule_items,
+                        "failed_records": rule_failed,
+                        "total_records": rule_summary["total_records"],
+                        "success_count": rule_summary["success_count"],
+                        "failed_count": rule_summary["failed_count"],
+                        "issue_records": rule_summary["issue_records"],
+                        "uncertain_records": rule_summary["uncertain_records"],
+                        "data_quality_gap_records": rule_summary["data_quality_gap_records"],
+                        "rejected_by_system_records": rule_summary["rejected_by_system_records"],
+                        "compliant_records": rule_summary["compliant_records"],
+                        "total_tokens": rule_summary["total_tokens"],
+                        "total_processing_time": rule_summary["total_processing_time"],
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                        "progress": {
+                            "rule_index": rule_index + 1,
+                            "rule_count": len(output_rule_ids),
+                            "processed_records": effective_total_records,
+                        },
+                        "debug": {
+                            "executor_breakdown": {
+                                "program": int(state.get("executor_program") or 0),
+                                "llm": int(state.get("executor_llm") or 0),
+                            }
+                        },
+                    }
+                )
+            return rule_results_snapshot
+
+        def _build_stream_state(
+            record_result: Dict[str, Any],
+            processed_records_count: int,
+        ) -> Dict[str, Any]:
+            items_by_rule = dict(record_result.get("items_by_rule") or {})
+            latest_result_count = sum(len(list(value or [])) for value in items_by_rule.values())
+            return {
+                "enabled": True,
+                "processed_records": processed_records_count,
+                "total_records": total_records,
+                "latest_record_id": str(record_result.get("record_id") or ""),
+                "latest_visit_id": str(record_result.get("visit_id") or ""),
+                "latest_result_count": latest_result_count,
+                "partial_item_count": len(all_items),
+                "partial_rule_result_count": len(output_rule_ids),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
 
         async def _evaluate_single_record(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -1690,6 +1820,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
 
                 return {
                     "record_id": record_id,
+                    "visit_id": visit_id,
                     "items_by_rule": items_by_rule,
                     "failed_by_rule": failed_by_rule,
                     "rule_stats": rule_stats,
@@ -1731,6 +1862,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     )
                 return {
                     "record_id": record_id,
+                    "visit_id": visit_id,
                     "items_by_rule": items_by_rule,
                     "failed_by_rule": failed_by_rule,
                     "rule_stats": rule_stats,
@@ -1852,6 +1984,23 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     state["failed_records"].append(failed)
                     all_failed_records.append(failed)
 
+            summary_patch = _build_progress_patch(processed_records_count)
+            update_kwargs: Dict[str, Any] = {}
+            if enable_incremental_results:
+                summary_patch = {
+                    **summary_patch,
+                    "rule_results": _build_rule_results_snapshot(
+                        processed_records_count=processed_records_count,
+                        final=False,
+                    ),
+                    "stream_state": _build_stream_state(record_result, processed_records_count),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+                update_kwargs = {
+                    "items": list(all_items),
+                    "failed_records": list(all_failed_records),
+                }
+
             workspace.update_batch_job_progress(
                 job_id=job_id,
                 step_key="run",
@@ -1859,8 +2008,28 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 rule_count=total_rules,
                 processed_records=processed_records_count,
                 total_records=total_records,
-                summary_patch=_build_progress_patch(processed_records_count),
+                summary_patch=summary_patch,
+                **update_kwargs,
             )
+
+        initial_progress_patch = _build_progress_patch(0)
+        if enable_incremental_results:
+            initial_progress_patch = {
+                **initial_progress_patch,
+                "rule_results": _build_rule_results_snapshot(processed_records_count=0, final=False),
+                "stream_state": {
+                    "enabled": True,
+                    "processed_records": 0,
+                    "total_records": total_records,
+                    "latest_record_id": "",
+                    "latest_visit_id": "",
+                    "latest_result_count": 0,
+                    "partial_item_count": 0,
+                    "partial_rule_result_count": len(output_rule_ids),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
 
         workspace.update_batch_job_progress(
             job_id=job_id,
@@ -1869,7 +2038,7 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             rule_count=total_rules,
             processed_records=0,
             total_records=total_records,
-            summary_patch=_build_progress_patch(0),
+            summary_patch=initial_progress_patch,
         )
 
         if run_mode == "parallel" and total_records > 1:
@@ -1912,92 +2081,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                     return
                 _merge_record_result(record_result, processed_index)
 
-        def _item_is_confirmed_defect(item: Dict[str, Any]) -> bool:
-            if should_postprocess_job:
-                return _safe_bool(item.get("can_show_as_defect")) or str(item.get("display_status") or "") == "confirmed_defect"
-            return str(item.get("status") or "") == "non_compliant"
-
-        def _item_needs_review(item: Dict[str, Any]) -> bool:
-            if should_postprocess_job:
-                return False
-            return str(item.get("status") or "") == "uncertain"
-
-        def _item_data_quality_gap(item: Dict[str, Any]) -> bool:
-            if str(item.get("status") or "") == "data_gap":
-                return True
-            return should_postprocess_job and str(item.get("display_status") or "") == "data_quality_gap"
-
-        def _item_rejected_by_system(item: Dict[str, Any]) -> bool:
-            return should_postprocess_job and str(item.get("display_status") or "") == "rejected_by_system"
-
-        rule_results: List[Dict[str, Any]] = []
-        for rule_index, rule_id in enumerate(output_rule_ids):
-            state = output_rule_states[rule_id]
-            rule_items = list(state.get("items") or [])
-            rule_failed = list(state.get("failed_records") or [])
-            rule_summary = {
-                "total_records": total_records,
-                "success_count": max(0, total_records - len(rule_failed)),
-                "failed_count": len(rule_failed),
-                "issue_records": len(
-                    {str(item.get("record_id") or "") for item in rule_items if _item_is_confirmed_defect(item)}
-                ),
-                "uncertain_records": len(
-                    {str(item.get("record_id") or "") for item in rule_items if _item_needs_review(item)}
-                ),
-                "data_quality_gap_records": len(
-                    {str(item.get("record_id") or "") for item in rule_items if _item_data_quality_gap(item)}
-                ),
-                "rejected_by_system_records": len(
-                    {str(item.get("record_id") or "") for item in rule_items if _item_rejected_by_system(item)}
-                ),
-                "compliant_records": max(
-                    0,
-                    total_records
-                    - len(rule_failed)
-                    - len({str(item.get("record_id") or "") for item in rule_items if _item_is_confirmed_defect(item)})
-                    - len({str(item.get("record_id") or "") for item in rule_items if _item_needs_review(item)})
-                    - len({str(item.get("record_id") or "") for item in rule_items if _item_data_quality_gap(item)})
-                    - len({str(item.get("record_id") or "") for item in rule_items if _item_rejected_by_system(item)}),
-                ),
-                "total_tokens": int(state.get("total_tokens") or 0),
-                "total_processing_time": float(state.get("total_processing_time") or 0.0),
-            }
-            has_valid_rule = state.get("rule") is not None
-            rule_status = "failed" if (not has_valid_rule or (rule_failed and len(rule_failed) >= total_records)) else "completed"
-            rule_results.append(
-                {
-                    "id": state.get("rule_job_id"),
-                    "job_id": job_id,
-                    "rule_code": state.get("rule_code"),
-                    "rule_name": state.get("rule_name"),
-                    "status": rule_status,
-                    "items": rule_items,
-                    "failed_records": rule_failed,
-                    "total_records": rule_summary["total_records"],
-                    "success_count": rule_summary["success_count"],
-                    "failed_count": rule_summary["failed_count"],
-                    "issue_records": rule_summary["issue_records"],
-                    "uncertain_records": rule_summary["uncertain_records"],
-                    "data_quality_gap_records": rule_summary["data_quality_gap_records"],
-                    "rejected_by_system_records": rule_summary["rejected_by_system_records"],
-                    "compliant_records": rule_summary["compliant_records"],
-                    "total_tokens": rule_summary["total_tokens"],
-                    "total_processing_time": rule_summary["total_processing_time"],
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                    "progress": {
-                        "rule_index": rule_index + 1,
-                        "rule_count": len(output_rule_ids),
-                        "processed_records": total_records,
-                    },
-                    "debug": {
-                        "executor_breakdown": {
-                            "program": int(state.get("executor_program") or 0),
-                            "llm": int(state.get("executor_llm") or 0),
-                        }
-                    },
-                }
-            )
+        rule_results = _build_rule_results_snapshot(
+            processed_records_count=total_records,
+            final=True,
+        )
 
         postprocess_summary = summarize_postprocessed_results(all_items) if should_postprocess_job else {}
         display_status_counts = dict(postprocess_summary.get("display_status_counts") or {})
@@ -2109,6 +2196,17 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             "cot_summary": cot_summary_total,
             "result_aggregation": _build_result_aggregation(all_items),
             "rule_results": rule_results,
+            "stream_state": {
+                "enabled": enable_incremental_results,
+                "processed_records": total_records,
+                "total_records": total_records,
+                "latest_record_id": "",
+                "latest_visit_id": "",
+                "latest_result_count": 0,
+                "partial_item_count": len(all_items),
+                "partial_rule_result_count": len(output_rule_ids),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         workspace.update_batch_job_progress(

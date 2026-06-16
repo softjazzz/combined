@@ -378,6 +378,69 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('规则二命中')
   })
 
+  it('运行中暂无返回结果时应展示等待首份病历的动态提示', () => {
+    const props = buildProps()
+    if (props.batchJobDetail.summary) {
+      props.batchJobDetail.summary.stream_state = {
+        enabled: true,
+        processed_records: 0,
+        total_records: 3,
+        latest_result_count: 0,
+        partial_item_count: 0,
+        updated_at: '2026-04-13T12:01:00Z',
+      }
+    }
+    props.batchJobDetail.total_records = 3
+    props.batchJobDetail.success_count = 0
+    props.batchJobDetail.issue_records = 0
+    props.batchJobDetail.items = []
+    props.batchJobDetail.rule_results = (props.batchJobDetail.rule_results || []).map((rule) => ({
+      ...rule,
+      items: [],
+      issue_records: 0,
+      success_count: 0,
+    }))
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    expect(wrapper.text()).toContain('正在等待首份病历结果')
+    expect(wrapper.text()).toContain('模型仍在处理首份病历，结果会自动出现在这里')
+    expect(wrapper.find('.stream-waiting-card').exists()).toBe(true)
+  })
+
+  it('运行中已有部分结果时应立即展示结果卡并提示后续会追加', () => {
+    const props = buildProps()
+    if (props.batchJobDetail.summary) {
+      props.batchJobDetail.summary.stream_state = {
+        enabled: true,
+        processed_records: 1,
+        total_records: 3,
+        latest_record_id: 'record-1',
+        latest_visit_id: 'V001',
+        latest_result_count: 2,
+        partial_item_count: 2,
+        updated_at: '2026-04-13T12:02:00Z',
+      }
+    }
+    props.batchJobDetail.total_records = 3
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    expect(wrapper.text()).toContain('已返回 2 条结果，任务仍在继续')
+    expect(wrapper.text()).toContain('正在分析：V001')
+    expect(wrapper.findAll('.issue-conclusion-card')).toHaveLength(2)
+  })
+
   it('应按证据链展示泸县0609结果的触发事实、依赖数据和关键证据', async () => {
     const props = buildProps()
     const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
