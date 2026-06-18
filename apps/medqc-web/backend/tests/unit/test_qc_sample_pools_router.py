@@ -10,6 +10,27 @@ from app.services.qc_rule_sets import get_sichuan_rule_set
 from app.services.sample_validation_rule_sets import SAMPLE_PROGRAMMATIC_RULE_IDS, SAMPLE_VALIDATION_DRAFTS
 
 
+@pytest.fixture(autouse=True)
+def _capture_detached_tasks(monkeypatch):
+    submitted_tasks: list[dict[str, object]] = []
+
+    def _fake_submit_detached_task(name, func, *args, **kwargs):
+        submitted_tasks.append(
+            {
+                "name": name,
+                "func": func,
+                "args": args,
+                "kwargs": kwargs,
+            }
+        )
+        return SimpleNamespace(done=lambda: False)
+
+    monkeypatch.setattr(qc_sample_pools, "submit_detached_task", _fake_submit_detached_task)
+    monkeypatch.setattr(qc_sample_pools, "_submitted_tasks_for_test", submitted_tasks, raising=False)
+    yield submitted_tasks
+    monkeypatch.delattr(qc_sample_pools, "_submitted_tasks_for_test", raising=False)
+
+
 class _SamplePoolServiceStub:
     def __init__(self) -> None:
         self.get_runnable_items_calls = []
@@ -94,6 +115,37 @@ class _WorkspaceServiceStub:
             }
         )
         return list(self.records_by_scope.get(scope, []))
+
+    def count_records(
+        self,
+        *,
+        scope: str,
+        department: str | None,
+        doctor: str | None,
+        date_field: str,
+        start_date: str | None,
+        end_date: str | None,
+        keyword: str | None,
+        record_ids: list[str] | None = None,
+    ) -> int:
+        records = self.collect_records(
+            scope=scope,
+            department=department,
+            doctor=doctor,
+            date_field=date_field,
+            start_date=start_date,
+            end_date=end_date,
+            keyword=keyword,
+            record_ids=record_ids,
+        )
+        requested_ids = {str(record_id or "").strip() for record_id in list(record_ids or []) if str(record_id or "").strip()}
+        if not requested_ids:
+            return len(records)
+        return sum(
+            1
+            for record in records
+            if str(record.get("visit_id") or record.get("record_id") or "").strip() in requested_ids
+        )
 
     def create_batch_job(
         self,
@@ -414,7 +466,6 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
         request=request,
         pool_id="pool-1",
         payload=payload,
-        background_tasks=background_tasks,
         current_user=current_user,
     )
 
@@ -464,7 +515,8 @@ async def test_run_sample_pool_intrinsic_validation_should_forward_record_ids_sa
         "job_id": "job-sample-pool-1",
         "job_status": "queued",
     }
-    assert len(background_tasks.tasks) == 1
+    assert len(qc_sample_pools._submitted_tasks_for_test) == 1
+    assert qc_sample_pools._submitted_tasks_for_test[0]["name"] == "sample_pool_sichuan_workspace_batch_job"
     assert response["success"] is True
     assert response["data"]["sample_item_count"] == 2
     assert response["data"]["selected_record_count"] == 2
@@ -523,7 +575,6 @@ async def test_import_list_records_and_run_should_form_sample_pool_validation_ch
             max_parallel_records=4,
             validation_mode="sc",
         ),
-        background_tasks=background_tasks,
         current_user=current_user,
     )
 
@@ -553,7 +604,7 @@ async def test_import_list_records_and_run_should_form_sample_pool_validation_ch
         "job_id": "job-sample-pool-1",
         "job_status": "queued",
     }
-    assert len(background_tasks.tasks) == 1
+    assert len(qc_sample_pools._submitted_tasks_for_test) == 1
 
 
 @pytest.mark.asyncio
@@ -584,7 +635,6 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_all_scope
         request=request,
         pool_id="pool-1",
         payload=payload,
-        background_tasks=background_tasks,
         current_user=current_user,
     )
 
@@ -638,7 +688,6 @@ async def test_run_sample_pool_intrinsic_validation_should_use_customer_rule_pac
             sample_item_ids=["item-1"],
             max_parallel_records=2,
         ),
-        background_tasks=BackgroundTasks(),
         current_user={"id": "tester"},
     )
 
@@ -671,7 +720,6 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
             max_parallel_records=2,
             rule_set_key="luxian_0609_qc_v1",
         ),
-        background_tasks=BackgroundTasks(),
         current_user={"id": "tester"},
     )
 
@@ -708,7 +756,6 @@ async def test_run_sample_pool_intrinsic_validation_should_reject_unknown_rule_s
                 sample_item_ids=["item-1"],
                 rule_set_key="unknown_rule_set",
             ),
-            background_tasks=BackgroundTasks(),
             current_user={"id": "tester"},
         )
 
@@ -736,7 +783,6 @@ async def test_run_sample_pool_intrinsic_validation_should_use_fixed_programmati
             max_parallel_records=2,
             validation_mode="programmatic",
         ),
-        background_tasks=BackgroundTasks(),
         current_user={"id": "tester"},
     )
 
@@ -770,7 +816,6 @@ async def test_run_sample_pool_intrinsic_validation_should_use_formal_fast_scree
             validation_mode="formal_fast_screen_full",
             rule_set_key="sc_content_full_v1",
         ),
-        background_tasks=BackgroundTasks(),
         current_user={"id": "tester"},
     )
 
@@ -822,7 +867,6 @@ async def test_run_sample_pool_intrinsic_validation_formal_mode_requires_selecte
                 validation_mode="formal_fast_screen_full",
                 rule_set_key="sc_content_full_v1",
             ),
-            background_tasks=BackgroundTasks(),
             current_user={"id": "tester"},
         )
 
@@ -855,7 +899,6 @@ async def test_run_sample_pool_intrinsic_validation_formal_mode_should_not_fallb
                 validation_mode="formal_fast_screen_full",
                 rule_set_key="sc_content_full_v1",
             ),
-            background_tasks=BackgroundTasks(),
             current_user={"id": "tester"},
         )
 
@@ -901,7 +944,6 @@ async def test_run_sample_pool_intrinsic_validation_should_fallback_to_standard_
             max_parallel_records=2,
             validation_mode="sc",
         ),
-        background_tasks=BackgroundTasks(),
         current_user={"id": "tester"},
     )
 

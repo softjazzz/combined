@@ -282,6 +282,7 @@ class _ServiceStub:
         source_schema: Optional[str] = None,
         bundle_schema: str = "public",
         force_refresh_bundle: bool = False,
+        **_: Any,
     ) -> Dict[str, Any]:
         self.evaluate_rule_for_visit_calls += 1
         self.evaluate_rule_for_visit_args.append(
@@ -547,14 +548,14 @@ async def test_workspace_batch_formal_full_should_persist_postprocess_fields(mon
     assert postprocess_summary["confirmed_defect_count"] == 0
     assert postprocess_summary["qc_review_candidate_count"] == 0
     assert postprocess_summary["needs_review_count"] == 0
-    assert postprocess_summary["data_quality_gap_count"] == 4
-    assert postprocess_summary["rejected_by_system_count"] == 5
+    assert postprocess_summary["data_quality_gap_count"] == 5
+    assert postprocess_summary["rejected_by_system_count"] == 4
     assert postprocess_summary["technical_error_internal_count"] == 0
     assert workspace.summary["confirmed_defect_count"] == 0
     assert workspace.summary["qc_review_candidate_count"] == 0
     assert workspace.summary["needs_review_count"] == 0
-    assert workspace.summary["data_quality_gap_count"] == 4
-    assert workspace.summary["rejected_by_system_count"] == 5
+    assert workspace.summary["data_quality_gap_count"] == 5
+    assert workspace.summary["rejected_by_system_count"] == 4
     sc036 = next(item for item in workspace.items if item["rule_id"] == "SC-036")
     assert sc036["status"] == "non_compliant"
     assert sc036["display_status"] == "rejected_by_system"

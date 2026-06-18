@@ -1110,7 +1110,10 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
                 record_rule_map[normalized_record_id] = normalized_rule_ids
         prefer_rule_level_visit_eval = (
             validation_mode == "sc"
-            and str(filters.get("source") or "").strip().lower().startswith("manual_problem_sample_pool")
+            and (
+                str(filters.get("source") or "").strip().lower().startswith("manual_problem_sample_pool")
+                or bool(record_rule_map)
+            )
         )
         should_postprocess_job = _should_postprocess_formal_qc_results(
             rule_set_key=rule_set_key,
