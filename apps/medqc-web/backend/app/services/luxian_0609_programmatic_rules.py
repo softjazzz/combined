@@ -153,8 +153,11 @@ def _result(
     suggestion: str,
     confidence: float = 0.94,
     reason: str = "",
+    metadata: dict[str, Any] | None = None,
+    evidence_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     rule_id = _norm_id(rule.get("rule_id") or rule.get("rule_code"))
+    extra_metadata = dict(metadata or {})
     return {
         "rule_id": rule_id,
         "rule_code": rule_id,
@@ -164,6 +167,7 @@ def _result(
         "issues": [],
         "findings": findings,
         "evidence": evidence,
+        "evidence_items": list(evidence_items or []),
         "suggestion": suggestion,
         "confidence": confidence,
         "llm_raw_output": None,
@@ -180,6 +184,7 @@ def _result(
             "model_version": "luxian-0609-programmatic-v1",
             "evidence_source": "programmatic_timeline",
             "customer_rule_id": rule_id,
+            **extra_metadata,
         },
     }
 
@@ -218,6 +223,29 @@ def _evaluate_admission_24h(rule: dict[str, Any], timeline: dict[str, Any]) -> d
         findings="入院记录在入院后24小时内完成。" if status == "compliant" else "入院记录未在入院后24小时内完成。",
         evidence=f"入院时间：{admission_time:%Y-%m-%d %H:%M:%S}；{title}记录时间：{record_time:%Y-%m-%d %H:%M:%S}；间隔：{delta:.1f}小时",
         suggestion="" if status == "compliant" else "请核对入院记录完成时间，超过24小时需纳入缺陷复核。",
+        metadata={
+            "threshold": "入院记录应在入院后24小时内完成",
+            "expected_value": "<=24小时",
+            "actual_value": f"{delta:.1f}小时",
+            "delta": f"{delta - 24:.1f}小时",
+            "source_table": "admission_record",
+            "document_type": title,
+            "record_time": record_time.isoformat(sep=" "),
+        },
+        evidence_items=[
+            {
+                "evidence_id": "E-001",
+                "source_table": "admission_record",
+                "source_document_type": title,
+                "source_document_name": title,
+                "source_document_id": _norm((record or {}).get("document_id")),
+                "record_time": record_time.isoformat(sep=" "),
+                "field_path": "authored_at",
+                "quote": f"{title}记录时间：{record_time:%Y-%m-%d %H:%M:%S}",
+                "normalized_value": record_time.isoformat(sep=" "),
+                "evidence_role": "actual_time",
+            }
+        ],
     )
 
 
@@ -243,6 +271,29 @@ def _evaluate_first_course_8h(rule: dict[str, Any], timeline: dict[str, Any]) ->
         findings="首次病程记录在入院后8小时内完成。" if status == "compliant" else "首次病程记录未在入院后8小时内完成。",
         evidence=f"入院时间：{admission_time:%Y-%m-%d %H:%M:%S}；{title}记录时间：{record_time:%Y-%m-%d %H:%M:%S}；间隔：{delta:.1f}小时",
         suggestion="" if status == "compliant" else "请核对首次病程记录完成时间，超过8小时需纳入缺陷复核。",
+        metadata={
+            "threshold": "首次病程记录应在入院后8小时内完成",
+            "expected_value": "<=8小时",
+            "actual_value": f"{delta:.1f}小时",
+            "delta": f"{delta - 8:.1f}小时",
+            "source_table": "first_course_record",
+            "document_type": title,
+            "record_time": record_time.isoformat(sep=" "),
+        },
+        evidence_items=[
+            {
+                "evidence_id": "E-001",
+                "source_table": "first_course_record",
+                "source_document_type": title,
+                "source_document_name": title,
+                "source_document_id": _norm((record or {}).get("document_id")),
+                "record_time": record_time.isoformat(sep=" "),
+                "field_path": "authored_at",
+                "quote": f"{title}记录时间：{record_time:%Y-%m-%d %H:%M:%S}",
+                "normalized_value": record_time.isoformat(sep=" "),
+                "evidence_role": "actual_time",
+            }
+        ],
     )
 
 
@@ -298,6 +349,29 @@ def _evaluate_round(rule: dict[str, Any], timeline: dict[str, Any], *, role: str
         findings=f"{label}在入院后{hours}小时内完成。" if status == "compliant" else f"{label}超过入院后{hours}小时完成。",
         evidence=f"入院时间：{admission_time:%Y-%m-%d %H:%M:%S}；{title}记录时间：{record_time:%Y-%m-%d %H:%M:%S}；间隔：{delta:.1f}小时",
         suggestion="" if status == "compliant" else f"请核对{label}记录，超过{hours}小时需纳入缺陷复核。",
+        metadata={
+            "threshold": f"{label}应在入院后{hours}小时内完成",
+            "expected_value": f"<={hours}小时",
+            "actual_value": f"{delta:.1f}小时",
+            "delta": f"{delta - hours:.1f}小时",
+            "source_table": "senior_course_record",
+            "document_type": title,
+            "record_time": record_time.isoformat(sep=" "),
+        },
+        evidence_items=[
+            {
+                "evidence_id": "E-001",
+                "source_table": "senior_course_record",
+                "source_document_type": title,
+                "source_document_name": title,
+                "source_document_id": _norm(record.get("document_id")),
+                "record_time": record_time.isoformat(sep=" "),
+                "field_path": "authored_at",
+                "quote": f"{title}记录时间：{record_time:%Y-%m-%d %H:%M:%S}",
+                "normalized_value": record_time.isoformat(sep=" "),
+                "evidence_role": "actual_time",
+            }
+        ],
     )
 
 

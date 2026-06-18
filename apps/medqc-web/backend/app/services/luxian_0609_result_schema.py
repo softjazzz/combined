@@ -277,12 +277,24 @@ def _first_evidence_item(evidence_items: list[dict[str, Any]]) -> dict[str, Any]
 
 
 def _decision(result_status: str, result: dict[str, Any], wrapper_rule: dict[str, Any]) -> dict[str, Any]:
+    metadata = result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
     return {
-        "decision_summary": _trim(result.get("findings") or result.get("summary") or result.get("evidence"), 500),
-        "threshold": _text(wrapper_rule.get("trigger_condition")),
-        "expected_value": _text(wrapper_rule.get("non_trigger_condition")),
-        "actual_value": _trim(result.get("evidence"), 500),
-        "delta": _text(result.get("delta") or (result.get("metadata") or {}).get("delta")),
+        "decision_summary": _trim(
+            result.get("decision_summary")
+            or metadata.get("decision_summary")
+            or result.get("findings")
+            or result.get("summary")
+            or result.get("evidence"),
+            500,
+        ),
+        "threshold": _text(result.get("threshold") or metadata.get("threshold") or wrapper_rule.get("trigger_condition")),
+        "expected_value": _text(
+            result.get("expected_value")
+            or metadata.get("expected_value")
+            or wrapper_rule.get("non_trigger_condition")
+        ),
+        "actual_value": _trim(result.get("actual_value") or metadata.get("actual_value") or result.get("evidence"), 500),
+        "delta": _text(result.get("delta") or metadata.get("delta")),
         "is_violation": result_status == "non_compliant",
         "suggestion": _trim(result.get("suggestion"), 300),
     }
@@ -392,8 +404,11 @@ def apply_luxian_0609_result_schema(
             "source_field": _text(first_evidence.get("field_path") or metadata.get("source_field") or metadata.get("field_path")),
             "quote": _text(first_evidence.get("quote")),
             "decision": decision,
+            "decision_summary": decision["decision_summary"],
             "threshold": decision["threshold"],
+            "expected_value": decision["expected_value"],
             "actual_value": decision["actual_value"],
+            "delta": decision["delta"],
             "review": review,
             "review_status": review["review_status"],
             "audit": _audit(audit_context=audit_context, metadata=metadata),

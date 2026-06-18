@@ -541,8 +541,8 @@ def test_luxian_0609_summary_should_use_canonical_statuses_and_exclude_not_appli
     assert summary["not_applicable_count"] == 1
     assert summary["data_gap_count"] == 1
     assert summary["technical_error_count"] == 1
-    assert summary["compliance_denominator"] == 4
-    assert summary["compliance_rate"] == 25.0
+    assert summary["compliance_denominator"] == 2
+    assert summary["compliance_rate"] == 50.0
 
 
 def test_aggregator_should_prioritize_direct_customer_programmatic_result():
@@ -649,6 +649,113 @@ def test_luxian_programmatic_rules_should_evaluate_core_timeline_rules():
     assert "77.5小时" in by_id["LX0609-006"]["evidence"]
 
 
+def test_programmatic_timeline_schema_should_include_threshold_actual_and_delta():
+    rules = [
+        _wrapper(
+            "LX0609-002",
+            name="首次病程8小时内完成",
+            mapped_rule_ids=["CL-081", "SC-021"],
+            trigger_condition="首次病程是否8小时内完成。",
+        )
+    ]
+    evidence_payload = {
+        "programmatic_timeline": {
+            "admission_time": "2026-06-01 08:00:00",
+            "documents": {
+                "first_course_record": [
+                    {"document_id": "F1", "title": "首次病程记录", "authored_at": "2026-06-01 18:30:00"}
+                ],
+            },
+        }
+    }
+
+    execution_results = evaluate_luxian_0609_programmatic_rules(
+        wrapper_rules=rules,
+        evidence_payload=evidence_payload,
+    )
+    aggregated = aggregate_luxian_0609_results(
+        wrapper_rules=rules,
+        execution_results=execution_results,
+        gate_decisions={},
+    )
+
+    row = aggregated[0]
+    assert row["status"] == "non_compliant"
+    assert row["is_compliant"] is False
+    assert row["threshold"] == "首次病程记录应在入院后8小时内完成"
+    assert row["expected_value"] == "<=8小时"
+    assert row["actual_value"] == "10.5小时"
+    assert row["delta"] == "2.5小时"
+    assert row["source_table"] == "first_course_record"
+    assert row["source_document"] == "首次病程记录"
+    assert "2026-06-01 18:30:00" in row["quote"]
+
+
+def test_cross_document_schema_should_keep_multiple_source_documents_and_quotes():
+    rules = [
+        _wrapper(
+            "LX0609-017",
+            name="不合理复制病历：2次以上病程记录完全相同",
+            mapped_rule_ids=["CL-275"],
+            trigger_condition="当存在多篇日常病程记录时检查相似度。",
+            dependency_type="同域多文书文本相似度",
+        )
+    ]
+    execution_results = [
+        {
+            "rule_id": "CL-275",
+            "status": "non_compliant",
+            "is_compliant": False,
+            "findings": "两份病程记录相似度0.99，超过70%阈值。",
+            "evidence": "两份病程记录重复。",
+            "suggestion": "请复核复制病历。",
+            "confidence": 0.94,
+            "metadata": {"executor_type": "cross_document"},
+            "evidence_items": [
+                {
+                    "source_table": "daily_course_record",
+                    "source_document_type": "日常病程记录",
+                    "source_document_name": "2026-06-03日常病程记录",
+                    "record_time": "2026-06-03 09:00:00",
+                    "field_path": "record_content",
+                    "quote": "患者一般情况尚可，生命体征平稳。",
+                },
+                {
+                    "source_table": "daily_course_record",
+                    "source_document_type": "日常病程记录",
+                    "source_document_name": "2026-06-04日常病程记录",
+                    "record_time": "2026-06-04 09:00:00",
+                    "field_path": "record_content",
+                    "quote": "患者一般情况尚可，生命体征平稳。",
+                },
+            ],
+            "threshold": "相似度<=70%",
+            "actual_value": "相似度99%",
+            "delta": "超出29个百分点",
+        }
+    ]
+
+    aggregated = aggregate_luxian_0609_results(
+        wrapper_rules=rules,
+        execution_results=execution_results,
+        gate_decisions={},
+    )
+
+    row = aggregated[0]
+    assert row["executor_type"] == "cross_document"
+    assert len(row["evidence_items"]) == 2
+    assert {item["source_document_name"] for item in row["evidence_items"]} == {
+        "2026-06-03日常病程记录",
+        "2026-06-04日常病程记录",
+    }
+    assert all(item["quote"] for item in row["evidence_items"])
+    assert row["threshold"] == "相似度<=70%"
+    assert row["actual_value"] == "相似度99%"
+    assert row["delta"] == "超出29个百分点"
+    assert row["status"] == "non_compliant"
+    assert row["is_compliant"] is False
+
+
 def test_document_result_should_use_display_rule_count_and_not_count_data_gap_compliant():
     service = SichuanQCService.__new__(SichuanQCService)
     service.client = type("Client", (), {"model": "unit-test-model"})()
@@ -695,8 +802,9 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
     assert result["applicable_rules"] == ["LX0609-001", "LX0609-002", "LX0609-003"]
     assert result["evaluation_summary"]["compliant_rules"] == 1
     assert result["evaluation_summary"]["not_applicable"] == 1
-    assert result["evaluation_summary"]["compliance_denominator"] == 2
-    assert result["evaluation_summary"]["compliance_rate"] == 50.0
+    assert result["evaluation_summary"]["data_gap_count"] == 1
+    assert result["evaluation_summary"]["compliance_denominator"] == 1
+    assert result["evaluation_summary"]["compliance_rate"] == 100.0
     assert result["evaluation_summary"]["luxian_0609_summary"]["data_gap_count"] == 1
 
 

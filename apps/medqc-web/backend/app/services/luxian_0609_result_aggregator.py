@@ -263,7 +263,10 @@ def summarize_luxian_0609_results(results: list[dict[str, Any]]) -> dict[str, An
         status_counts[status] = int(status_counts.get(status) or 0) + 1
     total = len(results)
     not_applicable = int(status_counts.get("not_applicable") or 0)
-    compliance_denominator = max(0, total - not_applicable)
+    data_gap = int(status_counts.get("data_gap") or 0)
+    not_executed = int(status_counts.get("not_executed") or 0)
+    technical_error = int(status_counts.get("technical_error") or 0)
+    compliance_denominator = max(0, total - not_applicable - data_gap - not_executed - technical_error)
     compliant = int(status_counts.get("compliant") or 0)
     compliance_rate = round((compliant / compliance_denominator * 100.0), 2) if compliance_denominator else 100.0
     return {
@@ -271,10 +274,10 @@ def summarize_luxian_0609_results(results: list[dict[str, Any]]) -> dict[str, An
         "status_counts": status_counts,
         "defect_count": int(status_counts.get("non_compliant") or 0),
         "not_applicable_count": not_applicable,
-        "data_gap_count": int(status_counts.get("data_gap") or 0),
+        "data_gap_count": data_gap,
         "uncertain_count": int(status_counts.get("uncertain") or 0),
-        "not_executed_count": int(status_counts.get("not_executed") or 0),
-        "technical_error_count": int(status_counts.get("technical_error") or 0),
+        "not_executed_count": not_executed,
+        "technical_error_count": technical_error,
         "compliant_count": compliant,
         "compliance_denominator": compliance_denominator,
         "compliance_rate": compliance_rate,

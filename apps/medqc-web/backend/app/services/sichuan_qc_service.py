@@ -1425,8 +1425,14 @@ class SichuanQCService:
             if r.get("status") == "compliant"
         )
         not_applicable_count = sum(1 for r in rule_results if r.get("status") == "not_applicable")
+        data_gap_count = sum(1 for r in rule_results if r.get("status") == "data_gap")
+        not_executed_count = sum(1 for r in rule_results if r.get("status") == "not_executed")
+        technical_error_count = sum(1 for r in rule_results if r.get("status") in {"technical_error", "technical_error_internal"})
         issues_found = sum(1 for r in rule_results if r.get("status") == "non_compliant")
-        compliance_denominator = max(0, total_rules - not_applicable_count)
+        compliance_denominator = max(
+            0,
+            total_rules - not_applicable_count - data_gap_count - not_executed_count - technical_error_count,
+        )
         compliance_rate = (compliant_rules / compliance_denominator * 100.0) if compliance_denominator else 100.0
 
         evaluation_results = []
@@ -1459,9 +1465,12 @@ class SichuanQCService:
                 "source_document": item.get("source_document"),
                 "source_field": item.get("source_field"),
                 "quote": item.get("quote"),
+                "decision_summary": item.get("decision_summary"),
                 "decision": item.get("decision"),
                 "threshold": item.get("threshold"),
+                "expected_value": item.get("expected_value"),
                 "actual_value": item.get("actual_value"),
+                "delta": item.get("delta"),
                 "review": item.get("review"),
                 "review_status": item.get("review_status"),
                 "audit": item.get("audit"),
@@ -1469,7 +1478,7 @@ class SichuanQCService:
 
         logger.info(
             f"质控评估完成: {compliant_rules}/{compliance_denominator} 条适用规则符合，"
-            f"不适用 {not_applicable_count} 条，合规率 {compliance_rate:.1f}%"
+            f"不适用 {not_applicable_count} 条，数据缺口 {data_gap_count} 条，合规率 {compliance_rate:.1f}%"
         )
 
         return {
@@ -1481,6 +1490,9 @@ class SichuanQCService:
                 "compliance_rate": round(compliance_rate, 2),
                 "issues_found": issues_found,
                 "not_applicable": not_applicable_count,
+                "data_gap_count": data_gap_count,
+                "not_executed_count": not_executed_count,
+                "technical_error_count": technical_error_count,
                 "total_rules": total_rules,
                 "compliance_denominator": compliance_denominator,
                 "compliant_rules": compliant_rules,
