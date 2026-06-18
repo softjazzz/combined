@@ -1422,11 +1422,12 @@ class SichuanQCService:
         total_rules = int(orchestrated.get("display_rule_count") or len(rules))
         compliant_rules = sum(
             1 for r in rule_results
-            if r.get("status") in ("compliant", "not_applicable")
+            if r.get("status") == "compliant"
         )
         not_applicable_count = sum(1 for r in rule_results if r.get("status") == "not_applicable")
         issues_found = sum(1 for r in rule_results if r.get("status") == "non_compliant")
-        compliance_rate = (compliant_rules / total_rules * 100.0) if total_rules else 100.0
+        compliance_denominator = max(0, total_rules - not_applicable_count)
+        compliance_rate = (compliant_rules / compliance_denominator * 100.0) if compliance_denominator else 100.0
 
         evaluation_results = []
         for item in rule_results:
@@ -1442,10 +1443,33 @@ class SichuanQCService:
                 "applicability": item.get("applicability"),
                 "evidence_verified": item.get("evidence_verified"),
                 "metadata": item.get("metadata"),
+                "qc_point_id": item.get("qc_point_id"),
+                "rule_set_key": item.get("rule_set_key"),
+                "rule_set_version": item.get("rule_set_version"),
+                "rule_version": item.get("rule_version"),
+                "schema_version": item.get("schema_version"),
+                "executor_type": item.get("executor_type"),
+                "result_status": item.get("result_status"),
+                "trigger": item.get("trigger"),
+                "trigger_facts": item.get("trigger_facts"),
+                "dependencies": item.get("dependencies"),
+                "missing_sources": item.get("missing_sources"),
+                "evidence_items": item.get("evidence_items"),
+                "source_table": item.get("source_table"),
+                "source_document": item.get("source_document"),
+                "source_field": item.get("source_field"),
+                "quote": item.get("quote"),
+                "decision": item.get("decision"),
+                "threshold": item.get("threshold"),
+                "actual_value": item.get("actual_value"),
+                "review": item.get("review"),
+                "review_status": item.get("review_status"),
+                "audit": item.get("audit"),
             })
 
         logger.info(
-            f"质控评估完成: {compliant_rules}/{total_rules} 条规则符合（含不适用），合规率 {compliance_rate:.1f}%"
+            f"质控评估完成: {compliant_rules}/{compliance_denominator} 条适用规则符合，"
+            f"不适用 {not_applicable_count} 条，合规率 {compliance_rate:.1f}%"
         )
 
         return {
@@ -1458,6 +1482,7 @@ class SichuanQCService:
                 "issues_found": issues_found,
                 "not_applicable": not_applicable_count,
                 "total_rules": total_rules,
+                "compliance_denominator": compliance_denominator,
                 "compliant_rules": compliant_rules,
                 "model": self.client.model,
                 "executor_breakdown": orchestrated.get("executor_breakdown") or {},

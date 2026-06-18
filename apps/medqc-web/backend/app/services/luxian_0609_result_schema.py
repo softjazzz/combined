@@ -269,6 +269,13 @@ def _evidence_items(result: dict[str, Any], metadata: dict[str, Any]) -> list[di
     ]
 
 
+def _first_evidence_item(evidence_items: list[dict[str, Any]]) -> dict[str, Any]:
+    if not evidence_items:
+        return {}
+    first = evidence_items[0]
+    return first if isinstance(first, dict) else {}
+
+
 def _decision(result_status: str, result: dict[str, Any], wrapper_rule: dict[str, Any]) -> dict[str, Any]:
     return {
         "decision_summary": _trim(result.get("findings") or result.get("summary") or result.get("evidence"), 500),
@@ -342,6 +349,24 @@ def apply_luxian_0609_result_schema(
         coverage = "partial"
     else:
         coverage = "full" if required_sources else "unknown"
+    trigger = _trigger(
+        result_status=result_status,
+        wrapper_rule=wrapper_rule,
+        result=normalized,
+        metadata=metadata,
+        gate_decision=gate_decision,
+    )
+    dependencies = {
+        "required_sources": required_sources,
+        "missing_sources": missing_sources,
+        "data_gap_reason": _text(metadata.get("data_gap_reason"))
+        or ("、".join(item["source_name"] for item in missing_sources) if result_status == "data_gap" else None),
+        "source_coverage_level": coverage,
+    }
+    evidence_items = _evidence_items(normalized, metadata)
+    first_evidence = _first_evidence_item(evidence_items)
+    decision = _decision(result_status, normalized, wrapper_rule)
+    review = _review(result_status)
 
     normalized.update(
         {
@@ -352,23 +377,25 @@ def apply_luxian_0609_result_schema(
             "schema_version": SCHEMA_VERSION,
             "executor_type": _executor_type(wrapper_rule=wrapper_rule, result=normalized, metadata=metadata),
             "result_status": result_status,
-            "trigger": _trigger(
-                result_status=result_status,
-                wrapper_rule=wrapper_rule,
-                result=normalized,
-                metadata=metadata,
-                gate_decision=gate_decision,
+            "trigger": trigger,
+            "trigger_facts": trigger["trigger_facts"],
+            "dependencies": dependencies,
+            "missing_sources": missing_sources,
+            "evidence_items": evidence_items,
+            "source_table": _text(first_evidence.get("source_table") or metadata.get("source_table")),
+            "source_document": _text(
+                first_evidence.get("source_document_name")
+                or first_evidence.get("source_document_type")
+                or metadata.get("source_document")
+                or metadata.get("document_type")
             ),
-            "dependencies": {
-                "required_sources": required_sources,
-                "missing_sources": missing_sources,
-                "data_gap_reason": _text(metadata.get("data_gap_reason"))
-                or ("、".join(item["source_name"] for item in missing_sources) if result_status == "data_gap" else None),
-                "source_coverage_level": coverage,
-            },
-            "evidence_items": _evidence_items(normalized, metadata),
-            "decision": _decision(result_status, normalized, wrapper_rule),
-            "review": _review(result_status),
+            "source_field": _text(first_evidence.get("field_path") or metadata.get("source_field") or metadata.get("field_path")),
+            "quote": _text(first_evidence.get("quote")),
+            "decision": decision,
+            "threshold": decision["threshold"],
+            "actual_value": decision["actual_value"],
+            "review": review,
+            "review_status": review["review_status"],
             "audit": _audit(audit_context=audit_context, metadata=metadata),
         }
     )

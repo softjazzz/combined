@@ -14,11 +14,23 @@ from .luxian_0609_trigger_gate import (
 
 _STATUS_PRIORITY = {
     "non_compliant": 50,
+    "data_gap": 45,
     "uncertain": 40,
-    "data_gap": 35,
     "compliant": 20,
     "not_applicable": 10,
+    "not_executed": 5,
+    "technical_error": 60,
 }
+
+CANONICAL_RESULT_STATUSES = (
+    "non_compliant",
+    "compliant",
+    "not_applicable",
+    "data_gap",
+    "uncertain",
+    "not_executed",
+    "technical_error",
+)
 
 _SENSITIVE_KEYS = {
     "raw_response",
@@ -47,8 +59,12 @@ def _confidence(value: Any) -> float:
 
 def _status(item: dict[str, Any]) -> str:
     status = str(item.get("status") or "").strip().lower()
-    if status:
+    if status in CANONICAL_RESULT_STATUSES:
         return status
+    if status in {"technical_error_internal", "error"}:
+        return "technical_error"
+    if status in {"skipped", "unsupported"}:
+        return "not_executed"
     return "compliant" if item.get("is_compliant") is True else "non_compliant"
 
 
@@ -73,22 +89,20 @@ def _select_best_result(
         return None, "missing_mapped_result"
 
     primary = [item for item in mapped_results if _norm_id(item.get("rule_id") or item.get("rule_code")) == primary_rule_id]
-    non_compliant = [item for item in mapped_results if _status(item) == "non_compliant"]
-    if non_compliant:
-        non_compliant.sort(key=lambda item: (_confidence(item.get("confidence")), _norm_id(item.get("rule_id"))), reverse=True)
-        if primary and _status(primary[0]) == "non_compliant":
-            return primary[0], "primary_non_compliant"
-        return non_compliant[0], "mapped_non_compliant"
-
-    uncertain = [item for item in mapped_results if _status(item) == "uncertain"]
-    if uncertain:
-        uncertain.sort(key=lambda item: (_confidence(item.get("confidence")), _norm_id(item.get("rule_id"))), reverse=True)
-        return uncertain[0], "mapped_uncertain"
-
-    data_gap = [item for item in mapped_results if _status(item) == "data_gap"]
-    if data_gap:
-        data_gap.sort(key=lambda item: (_confidence(item.get("confidence")), _norm_id(item.get("rule_id"))), reverse=True)
-        return data_gap[0], "mapped_data_gap"
+    for target_status, source in (
+        ("technical_error", "mapped_technical_error"),
+        ("non_compliant", "mapped_non_compliant"),
+        ("data_gap", "mapped_data_gap"),
+        ("uncertain", "mapped_uncertain"),
+        ("not_executed", "mapped_not_executed"),
+    ):
+        candidates = [item for item in mapped_results if _status(item) == target_status]
+        if candidates:
+            candidates.sort(key=lambda item: (_confidence(item.get("confidence")), _norm_id(item.get("rule_id"))), reverse=True)
+            primary_match = [item for item in primary if _status(item) == target_status]
+            if primary_match:
+                return primary_match[0], f"primary_{target_status}"
+            return candidates[0], source
 
     if primary:
         return primary[0], "primary_result"
@@ -243,16 +257,25 @@ def aggregate_luxian_0609_results(
 
 
 def summarize_luxian_0609_results(results: list[dict[str, Any]]) -> dict[str, Any]:
-    status_counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {status: 0 for status in CANONICAL_RESULT_STATUSES}
     for item in results:
         status = _status(item)
         status_counts[status] = int(status_counts.get(status) or 0) + 1
+    total = len(results)
+    not_applicable = int(status_counts.get("not_applicable") or 0)
+    compliance_denominator = max(0, total - not_applicable)
+    compliant = int(status_counts.get("compliant") or 0)
+    compliance_rate = round((compliant / compliance_denominator * 100.0), 2) if compliance_denominator else 100.0
     return {
-        "customer_rule_count": len(results),
+        "customer_rule_count": total,
         "status_counts": status_counts,
         "defect_count": int(status_counts.get("non_compliant") or 0),
-        "not_applicable_count": int(status_counts.get("not_applicable") or 0),
+        "not_applicable_count": not_applicable,
         "data_gap_count": int(status_counts.get("data_gap") or 0),
         "uncertain_count": int(status_counts.get("uncertain") or 0),
-        "compliant_count": int(status_counts.get("compliant") or 0),
+        "not_executed_count": int(status_counts.get("not_executed") or 0),
+        "technical_error_count": int(status_counts.get("technical_error") or 0),
+        "compliant_count": compliant,
+        "compliance_denominator": compliance_denominator,
+        "compliance_rate": compliance_rate,
     }

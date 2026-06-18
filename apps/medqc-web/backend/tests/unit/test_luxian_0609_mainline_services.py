@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results
+from app.services.luxian_0609_result_aggregator import aggregate_luxian_0609_results, summarize_luxian_0609_results
 from app.services.luxian_0609_evidence_formatter import format_luxian_0609_evidence
 from app.services.luxian_0609_programmatic_rules import evaluate_luxian_0609_programmatic_rules
 from app.services.sichuan_qc_service import SichuanQCService
@@ -353,8 +353,15 @@ def test_aggregator_should_add_schema_fields_for_non_compliant_result():
     assert row["dependencies"]["source_coverage_level"] in {"full", "unknown"}
     assert row["evidence_items"][0]["source_document_type"] == "日常病程记录"
     assert "重复片段" in row["evidence_items"][0]["quote"]
+    assert row["trigger_facts"] == row["trigger"]["trigger_facts"]
+    assert row["missing_sources"] == row["dependencies"]["missing_sources"]
+    assert row["source_document"] == "日常病程记录"
+    assert "重复片段" in row["quote"]
+    assert row["threshold"] == "当存在多篇日常病程记录时检查相似度。"
+    assert "重复片段" in row["actual_value"]
     assert row["decision"]["is_violation"] is True
     assert row["review"]["review_status"] == "pending"
+    assert row["review_status"] == "pending"
     assert row["audit"]["visit_id"] == "2313364"
     assert row["audit"]["model_name"] == "unit-test-model"
 
@@ -468,6 +475,74 @@ def test_aggregator_should_prioritize_data_gap_over_compliant():
     assert aggregated[0]["is_compliant"] is False
     assert aggregated[0]["metadata"]["selected_execution_rule_id"] == "LXE-52"
     assert aggregated[0]["metadata"]["aggregation_source"] == "mapped_data_gap"
+
+
+def test_aggregator_should_prioritize_data_gap_over_uncertain():
+    rules = [
+        _wrapper(
+            "LX0609-043",
+            name="输血前常规检查不完整",
+            mapped_rule_ids=["SC-133", "LXE-52"],
+            primary="SC-133",
+            trigger_condition="存在输血事件时检查输血申请、医嘱、记录和费用。",
+        )
+    ]
+    execution_results = [
+        {
+            "rule_id": "SC-133",
+            "status": "uncertain",
+            "is_compliant": False,
+            "findings": "证据边界不清，需人工复核",
+            "confidence": 0.95,
+            "metadata": {},
+        },
+        {
+            "rule_id": "LXE-52",
+            "status": "data_gap",
+            "is_compliant": False,
+            "findings": "缺少输血费用明细，无法判断一致性",
+            "evidence": "输血记录存在，但费用数据缺失",
+            "confidence": 0.82,
+            "metadata": {},
+        },
+    ]
+
+    aggregated = aggregate_luxian_0609_results(
+        wrapper_rules=rules,
+        execution_results=execution_results,
+        gate_decisions={},
+    )
+
+    assert aggregated[0]["status"] == "data_gap"
+    assert aggregated[0]["metadata"]["aggregation_source"] == "mapped_data_gap"
+
+
+def test_luxian_0609_summary_should_use_canonical_statuses_and_exclude_not_applicable_denominator():
+    summary = summarize_luxian_0609_results(
+        [
+            {"status": "compliant", "is_compliant": True},
+            {"status": "not_applicable", "is_compliant": True},
+            {"status": "data_gap", "is_compliant": False},
+            {"status": "uncertain", "is_compliant": False},
+            {"status": "technical_error_internal", "is_compliant": False},
+        ]
+    )
+
+    assert summary["status_counts"] == {
+        "non_compliant": 0,
+        "compliant": 1,
+        "not_applicable": 1,
+        "data_gap": 1,
+        "uncertain": 1,
+        "not_executed": 0,
+        "technical_error": 1,
+    }
+    assert summary["compliant_count"] == 1
+    assert summary["not_applicable_count"] == 1
+    assert summary["data_gap_count"] == 1
+    assert summary["technical_error_count"] == 1
+    assert summary["compliance_denominator"] == 4
+    assert summary["compliance_rate"] == 25.0
 
 
 def test_aggregator_should_prioritize_direct_customer_programmatic_result():
@@ -618,9 +693,10 @@ def test_document_result_should_use_display_rule_count_and_not_count_data_gap_co
 
     assert result["total_rules"] == 3
     assert result["applicable_rules"] == ["LX0609-001", "LX0609-002", "LX0609-003"]
-    assert result["evaluation_summary"]["compliant_rules"] == 2
+    assert result["evaluation_summary"]["compliant_rules"] == 1
     assert result["evaluation_summary"]["not_applicable"] == 1
-    assert result["evaluation_summary"]["compliance_rate"] == 66.67
+    assert result["evaluation_summary"]["compliance_denominator"] == 2
+    assert result["evaluation_summary"]["compliance_rate"] == 50.0
     assert result["evaluation_summary"]["luxian_0609_summary"]["data_gap_count"] == 1
 
 
