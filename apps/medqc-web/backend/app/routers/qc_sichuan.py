@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Optional
 import asyncio
 import uuid
 import json
+import hashlib
 import logging
 import re
 import time
@@ -2301,6 +2302,67 @@ async def create_workspace_batch_job(
     if not records:
         raise HTTPException(status_code=422, detail="当前筛选条件下没有可执行病历")
 
+    effective_record_ids = sorted(
+        {
+            str(record.get("record_id") or record.get("visit_id") or "").strip()
+            for record in records
+            if str(record.get("record_id") or record.get("visit_id") or "").strip()
+        }
+    )
+    idempotency_payload = {
+        "scope": normalized_scope,
+        "department": payload.department or "",
+        "doctor": payload.doctor or "",
+        "date_field": _normalize_date_field(payload.date_field),
+        "start_date": payload.start_date or "",
+        "end_date": payload.end_date or "",
+        "keyword": payload.keyword or "",
+        "record_ids": effective_record_ids,
+        "rule_set_key": rule_set_key,
+        "rule_ids": sorted({str(rule_id).strip().upper() for rule_id in rule_ids if str(rule_id).strip()}),
+        "execution_strategy": execution_strategy,
+        "quality_profile": quality_profile,
+        "bucket_strategy": bucket_strategy,
+        "batch_output_mode": batch_output_mode,
+        "run_mode": run_mode,
+    }
+    idempotency_digest = hashlib.sha256(
+        json.dumps(idempotency_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:24]
+    idempotency_key = f"sichuan-workspace-run:{idempotency_digest}"
+    created_by = _current_user_id(current_user)
+    for active_status in ("queued", "running"):
+        active_jobs = workspace.list_batch_jobs(
+            created_by=created_by,
+            status=active_status,
+            page=1,
+            page_size=100,
+        )
+        for active_job in list(getattr(active_jobs, "items", []) or []):
+            active_filters = dict(active_job.get("filters") or {})
+            if active_filters.get("idempotency_key") == idempotency_key:
+                return success_response(
+                    data={
+                        **active_job,
+                        "execution_mode": "batch",
+                        "rule_count": len(rule_ids),
+                        "draft_ids": rule_ids,
+                        "rule_set_key": rule_set_key,
+                        "rule_set_name": rule_set_name,
+                        "rule_set_version": rule_set_version,
+                        "execution_strategy": execution_strategy,
+                        "quality_profile": quality_profile,
+                        "bucket_strategy": bucket_strategy,
+                        "batch_output_mode": batch_output_mode,
+                        "max_refine_candidates": max_refine_candidates,
+                        "run_mode": run_mode,
+                        "refine_summary": (active_job.get("summary") or {}).get("refine_summary"),
+                        "idempotency_reused": True,
+                    },
+                    message="已复用运行中的四川规则批量任务",
+                    trace_id=get_trace_id(request),
+                )
+
     pseudo_draft = {
         "id": "sichuan-rule-library",
         "rule_code": "SC-BATCH",
@@ -2309,7 +2371,7 @@ async def create_workspace_batch_job(
     }
     job = workspace.create_batch_job(
         draft=pseudo_draft,
-        created_by=_current_user_id(current_user),
+        created_by=created_by,
         scope=normalized_scope,
         filters={
             "department": payload.department,
@@ -2331,6 +2393,8 @@ async def create_workspace_batch_job(
             "max_refine_candidates": max_refine_candidates,
             "source": "sichuan_rule_workspace",
             "run_mode": run_mode,
+            "idempotency_key": idempotency_key,
+            "idempotency_payload": idempotency_payload,
         },
         record_ids=payload.record_ids or [],
         total_records=len(records),
@@ -2360,6 +2424,7 @@ async def create_workspace_batch_job(
             "max_refine_candidates": max_refine_candidates,
             "run_mode": run_mode,
             "refine_summary": None,
+            "idempotency_reused": False,
         },
         message="四川规则批量任务已创建",
         trace_id=get_trace_id(request),

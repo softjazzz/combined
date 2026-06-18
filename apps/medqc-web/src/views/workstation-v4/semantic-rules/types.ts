@@ -423,6 +423,7 @@ export interface SichuanBatchJob {
   total_processing_time?: number
   wall_clock_time?: number
   rule_results?: SichuanBatchJobRuleResult[]
+  idempotency_reused?: boolean
 }
 
 export interface SichuanBatchJobQuery {

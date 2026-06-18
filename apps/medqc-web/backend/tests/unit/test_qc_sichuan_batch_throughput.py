@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any, Dict, List, Optional
 from types import SimpleNamespace
 
 import pytest
-from fastapi import BackgroundTasks
 
 from app.routers import qc_sichuan
 from app.services.qc_rule_sets import SC_CONTENT_V1_RULE_IDS
@@ -33,9 +34,11 @@ class _WorkspaceStub:
             return None
         return dict(self.job)
 
-    def mark_batch_job_running(self, *, job_id: str) -> None:
+    def mark_batch_job_running(self, *, job_id: str) -> bool:
         if job_id == self.job["id"]:
             self.job["status"] = "running"
+            return True
+        return False
 
     def collect_records(
         self,
@@ -97,6 +100,17 @@ class _WorkspaceStub:
         }
         return dict(self.created_job)
 
+    def list_batch_jobs(
+        self,
+        *,
+        created_by: str,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 100,
+        **_: Any,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(items=[], total=0, page=page, page_size=page_size)
+
     def update_batch_job_progress(
         self,
         *,
@@ -145,6 +159,45 @@ class _WorkspaceStub:
     def fail_batch_job(self, *, job_id: str, error_message: str) -> None:
         self.job["status"] = "failed"
         self.job["error_message"] = error_message
+
+
+class _IdempotentWorkspaceStub(_WorkspaceStub):
+    def __init__(self) -> None:
+        super().__init__()
+        self.job = {
+            **self.job,
+            "id": "job-idempotent-active",
+            "status": "running",
+            "filters": {},
+            "record_ids": ["visit-001", "visit-002"],
+        }
+        self.list_calls: List[Dict[str, Any]] = []
+        self.create_called = False
+
+    def list_batch_jobs(
+        self,
+        *,
+        created_by: str,
+        status: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 100,
+        **_: Any,
+    ) -> SimpleNamespace:
+        self.list_calls.append(
+            {
+                "created_by": created_by,
+                "status": status,
+                "page": page,
+                "page_size": page_size,
+            }
+        )
+        if status == "running":
+            return SimpleNamespace(items=[dict(self.job)], total=1, page=page, page_size=page_size)
+        return SimpleNamespace(items=[], total=0, page=page, page_size=page_size)
+
+    def create_batch_job(self, **_: Any) -> Dict[str, Any]:
+        self.create_called = True
+        raise AssertionError("复用 active job 时不应创建新任务")
 
 
 class _ServiceStub:
@@ -1015,7 +1068,6 @@ async def test_create_workspace_batch_job_should_resolve_content_rule_set(monkey
     response = await qc_sichuan.create_workspace_batch_job(
         request=request,  # type: ignore[arg-type]
         payload=payload,
-        background_tasks=BackgroundTasks(),
         qc_service=service,  # type: ignore[arg-type]
         current_user={"id": "tester"},
     )
@@ -1054,7 +1106,6 @@ async def test_create_workspace_batch_job_should_resolve_fast_screen_rule_set(mo
     response = await qc_sichuan.create_workspace_batch_job(
         request=request,  # type: ignore[arg-type]
         payload=payload,
-        background_tasks=BackgroundTasks(),
         qc_service=service,  # type: ignore[arg-type]
         current_user={"id": "tester"},
     )
@@ -1092,7 +1143,6 @@ async def test_create_workspace_batch_job_should_resolve_full_intrinsic_fast_scr
     response = await qc_sichuan.create_workspace_batch_job(
         request=request,  # type: ignore[arg-type]
         payload=payload,
-        background_tasks=BackgroundTasks(),
         qc_service=service,  # type: ignore[arg-type]
         current_user={"id": "tester"},
     )
@@ -1111,3 +1161,89 @@ async def test_create_workspace_batch_job_should_resolve_full_intrinsic_fast_scr
     assert len(filters["rule_ids"]) == 84
     assert workspace.created_job["run_mode"] == "parallel"
     assert response["data"]["execution_strategy"] == "fast_screen"
+
+
+@pytest.mark.asyncio
+async def test_create_workspace_batch_job_should_reuse_active_idempotent_job(monkeypatch):
+    workspace = _IdempotentWorkspaceStub()
+    service = _ServiceStub()
+    submitted_tasks: List[Dict[str, Any]] = []
+
+    monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(
+        qc_sichuan,
+        "submit_detached_task",
+        lambda task_name, func, job_id: submitted_tasks.append(
+            {"task_name": task_name, "func": func, "job_id": job_id}
+        ),
+    )
+
+    request = SimpleNamespace(state=SimpleNamespace())
+    payload = qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
+        rule_ids=["SC-002", "SC-001"],
+        scope="final",
+        department="骨科",
+        doctor="张医生",
+        date_field="discharge",
+        start_date="2026-06-01",
+        end_date="2026-06-18",
+        keyword="出院",
+        record_ids=["visit-002", "visit-001"],
+        run_mode="parallel",
+    )
+
+    first_records = workspace.collect_records(
+        scope="final",
+        department="骨科",
+        doctor="张医生",
+        date_field="discharge",
+        start_date="2026-06-01",
+        end_date="2026-06-18",
+        keyword="出院",
+        record_ids=["visit-002", "visit-001"],
+    )
+    idempotency_payload = {
+        "scope": "final",
+        "department": "骨科",
+        "doctor": "张医生",
+        "date_field": "discharge",
+        "start_date": "2026-06-01",
+        "end_date": "2026-06-18",
+        "keyword": "出院",
+        "record_ids": sorted(
+            {
+                str(record.get("record_id") or record.get("visit_id") or "").strip()
+                for record in first_records
+                if str(record.get("record_id") or record.get("visit_id") or "").strip()
+            }
+        ),
+        "rule_set_key": "",
+        "rule_ids": ["SC-001", "SC-002"],
+        "execution_strategy": "standard",
+        "quality_profile": "throughput_v1",
+        "bucket_strategy": "domain_only",
+        "batch_output_mode": "full",
+        "run_mode": "parallel",
+    }
+    workspace.job["filters"] = {
+        "idempotency_key": "sichuan-workspace-run:"
+        + hashlib.sha256(
+            json.dumps(idempotency_payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:24],
+        "idempotency_payload": idempotency_payload,
+    }
+
+    response = await qc_sichuan.create_workspace_batch_job(
+        request=request,  # type: ignore[arg-type]
+        payload=payload,
+        qc_service=service,  # type: ignore[arg-type]
+        current_user={"id": "tester"},
+    )
+
+    assert response["success"] is True
+    assert response["message"] == "已复用运行中的四川规则批量任务"
+    assert response["data"]["id"] == "job-idempotent-active"
+    assert response["data"]["idempotency_reused"] is True
+    assert workspace.create_called is False
+    assert submitted_tasks == []
+    assert [call["status"] for call in workspace.list_calls] == ["queued", "running"]

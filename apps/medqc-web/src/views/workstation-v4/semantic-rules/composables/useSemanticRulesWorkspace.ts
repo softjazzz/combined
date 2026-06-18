@@ -626,7 +626,11 @@ export function useSemanticRulesWorkspace() {
       if (!response.success || !response.data) {
         throw new Error(response.message || '创建批量任务失败')
       }
-      message.success('批量任务已创建')
+      if (response.data.idempotency_reused) {
+        message.info('已存在相同参数的运行中任务，正在打开进度')
+      } else {
+        message.success('批量任务已创建')
+      }
       batchLaunchModalOpen.value = false
       await loadBatchJobs()
       await openBatchJobDrawer(response.data)
