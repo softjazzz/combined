@@ -14,16 +14,17 @@
           客户样本验证 / 测试病历构建
         </div>
         <h1>创建测试病历</h1>
-        <p>支持按病历直接创建，也支持先选泸县0609质控点，再自动生成一份可编辑的测试病历骨架。</p>
+        <p>选择质控点后生成可编辑病历，用于验证规则效果。</p>
         <div class="synthetic-case-summary">
-          <span>模板 {{ syntheticCaseTemplates.length }} 个</span>
-          <span>规则族 {{ syntheticCaseRuleFamilies.length }} 个</span>
+          <span>规则集：泸县0609质控点验证 v1</span>
+          <span>已选 {{ selectedRuleSelection.length }} 条</span>
           <span>文书 {{ enabledDocumentCount }} 份</span>
           <span>独立样本池</span>
         </div>
       </div>
       <div class="synthetic-case-header-actions">
         <a-button
+          v-if="wizardStep > 1"
           class="synthetic-case-ghost-button"
           @click="showPreview = true"
         >
@@ -33,82 +34,80 @@
           预览病历包
         </a-button>
         <a-button
+          v-if="wizardStep === 1"
+          type="primary"
+          class="synthetic-case-primary-button"
+          @click="generateRuleDrivenCase"
+        >
+          生成并进入编辑
+        </a-button>
+        <a-button
+          v-if="wizardStep === 2"
+          class="synthetic-case-ghost-button"
+          @click="goWizardStep(1)"
+        >
+          返回选择
+        </a-button>
+        <a-button
+          v-if="wizardStep === 2"
+          type="primary"
+          class="synthetic-case-primary-button is-strong"
+          @click="goWizardStep(3)"
+        >
+          下一步
+        </a-button>
+        <a-button
+          v-if="wizardStep === 3"
           type="primary"
           class="synthetic-case-primary-button"
           :loading="saving"
           @click="handleSave(false)"
         >
-          保存到测试样本池
+          仅保存测试病历
         </a-button>
         <a-button
+          v-if="wizardStep === 3"
           type="primary"
           class="synthetic-case-primary-button is-strong"
           :loading="savingAndRunning"
           @click="handleSave(true)"
         >
-          保存并立即验证
+          保存并验证选中质控点
         </a-button>
       </div>
     </header>
 
+    <nav
+      class="synthetic-case-wizard"
+      aria-label="创建测试病历步骤"
+    >
+      <button
+        v-for="step in builderSteps"
+        :key="step.key"
+        type="button"
+        :class="{
+          'is-active': wizardStep === step.key,
+          'is-complete': wizardStep > step.key,
+        }"
+        @click="goWizardStep(step.key)"
+      >
+        <span>{{ String(step.key).padStart(2, '0') }}</span>
+        <div>
+          <strong>{{ step.title }}</strong>
+          <small>{{ step.description }}</small>
+        </div>
+      </button>
+    </nav>
+
     <section class="synthetic-case-shell">
       <aside class="synthetic-case-sidebar">
-        <div class="synthetic-case-mode-switch">
-          <button
-            v-for="option in syntheticCaseBuilderModeOptions"
-            :key="option.value"
-            type="button"
-            :class="{ 'is-active': form.builderMode === option.value }"
-            @click="switchBuilderMode(option.value)"
-          >
-            {{ option.label }}
-          </button>
-        </div>
-        <div class="synthetic-case-step-card">
-          <span>01</span>
-          <strong>{{ form.builderMode === 'rule' ? '选择质控点' : '选择模板' }}</strong>
-          <p>
-            {{
-              form.builderMode === 'rule'
-                ? '先选一个规则族，再勾选本次要验证的质控点。'
-                : '从典型质控场景起步，也可完全手工编辑。'
-            }}
-          </p>
-        </div>
-        <div class="synthetic-case-step-card">
-          <span>02</span>
-          <strong>{{ form.builderMode === 'rule' ? '生成病历骨架' : '编辑文书' }}</strong>
-          <p>
-            {{
-              form.builderMode === 'rule'
-                ? '自动带出推荐文书和 golden 结果，再继续修改时间和正文。'
-                : '修改记录时间、提交时间和正文内容。'
-            }}
-          </p>
+        <div class="synthetic-case-rule-set-card">
+          <span>固定规则集</span>
+          <strong>泸县0609质控点验证 v1</strong>
+          <small>保存后仅验证本页选中的 LX0609 质控点。</small>
         </div>
 
-        <template v-if="form.builderMode === 'case'">
-          <div class="synthetic-case-panel-title">
-            <Layers :size="16" />
-            模板库
-          </div>
-          <div class="synthetic-case-template-list">
-            <button
-              v-for="template in syntheticCaseTemplates"
-              :key="template.key"
-              class="synthetic-case-template"
-              :class="{ 'is-active': form.templateKey === template.key }"
-              type="button"
-              @click="applyTemplate(template.key)"
-            >
-              <strong>{{ template.name }}</strong>
-              <span>{{ template.family }}</span>
-              <small>{{ template.description }}</small>
-            </button>
-          </div>
-        </template>
-
-        <template v-else>
+        <template v-if="wizardStep === 1">
           <div class="synthetic-case-panel-title">
             <Layers :size="16" />
             规则族
@@ -172,11 +171,17 @@
           </div>
         </template>
 
-        <div class="synthetic-case-panel-title synthetic-case-doc-title">
+        <div
+          v-if="wizardStep > 1"
+          class="synthetic-case-panel-title synthetic-case-doc-title"
+        >
           <FileText :size="16" />
           文书目录
         </div>
-        <div class="synthetic-case-doc-nav">
+        <div
+          v-if="wizardStep > 1"
+          class="synthetic-case-doc-nav"
+        >
           <button
             v-for="(document, index) in form.documents"
             :key="document.key"
@@ -193,7 +198,122 @@
       </aside>
 
       <div class="synthetic-case-editor">
-        <section class="synthetic-case-card">
+        <div
+          v-if="wizardStep === 2"
+          class="synthetic-case-editor-tabs"
+        >
+          <button
+            v-for="tab in editorTabs"
+            :key="tab.key"
+            type="button"
+            :class="{ 'is-active': editorTab === tab.key }"
+            @click="editorTab = tab.key"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+
+        <section
+          v-if="wizardStep === 1"
+          class="synthetic-case-card synthetic-case-selection-card"
+        >
+          <div class="synthetic-case-section-head">
+            <div>
+              <h2>选择要验证的质控点</h2>
+              <p>先选规则族，再勾选质控点。系统会根据所选规则生成可编辑病历草稿。</p>
+            </div>
+            <span class="synthetic-case-section-chip">
+              已选 {{ selectedRuleSelection.length }} 条
+            </span>
+          </div>
+
+          <div class="synthetic-case-selection-layout">
+            <div class="synthetic-case-selection-main">
+              <div
+                v-if="selectedRuleFamily"
+                class="synthetic-case-rule-grid"
+              >
+                <label
+                  v-for="rule in selectedRuleFamily.rules"
+                  :key="rule.ruleId"
+                  class="synthetic-case-rule-card"
+                  :class="{ 'is-selected': selectedRuleSelection.includes(rule.ruleId) }"
+                >
+                  <input
+                    :checked="selectedRuleSelection.includes(rule.ruleId)"
+                    type="checkbox"
+                    @change="
+                      toggleRuleSelection(rule.ruleId, ($event.target as HTMLInputElement).checked)
+                    "
+                  >
+                  <div>
+                    <strong>{{ rule.ruleId }}</strong>
+                    <span>{{ rule.name }}</span>
+                    <small>需要材料：{{ rule.requiredDocumentsLabel }}</small>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <aside class="synthetic-case-selection-summary">
+              <div>
+                <span>本轮期望结果</span>
+                <a-select
+                  v-model:value="selectedExpectedStatus"
+                  popup-class-name="synthetic-case-doc-type-dropdown"
+                  :options="expectedStatusOptions"
+                />
+              </div>
+              <div>
+                <span>关键材料</span>
+                <ul
+                  v-if="selectedRequiredMaterials.length"
+                  class="synthetic-case-material-list"
+                >
+                  <li
+                    v-for="material in selectedRequiredMaterials"
+                    :key="material"
+                  >
+                    {{ material }}
+                  </li>
+                </ul>
+                <p v-else>
+                  请选择质控点后查看需要准备的文书和结构化材料。
+                </p>
+              </div>
+              <div>
+                <span>已选质控点</span>
+                <div
+                  v-if="selectedRules.length"
+                  class="synthetic-case-selected-rules"
+                >
+                  <em
+                    v-for="rule in selectedRules"
+                    :key="rule.ruleId"
+                  >
+                    {{ rule.ruleId }} · {{ rule.familyName }}
+                  </em>
+                </div>
+                <p v-else>
+                  尚未选择质控点。
+                </p>
+              </div>
+              <a-button
+                type="primary"
+                block
+                class="synthetic-case-generate-button"
+                @click="generateRuleDrivenCase"
+              >
+                生成病历草稿
+              </a-button>
+            </aside>
+          </div>
+        </section>
+
+        <section
+          v-if="wizardStep === 2 && editorTab === 'overview'"
+          class="synthetic-case-card"
+        >
           <div class="synthetic-case-section-head">
             <div>
               <h2>基本信息</h2>
@@ -286,7 +406,10 @@
           </div>
         </section>
 
-        <section class="synthetic-case-card">
+        <section
+          v-if="wizardStep === 2 && editorTab === 'documents'"
+          class="synthetic-case-card"
+        >
           <div class="synthetic-case-section-head">
             <div>
               <h2>病历文书</h2>
@@ -381,6 +504,150 @@
             </article>
           </div>
         </section>
+
+        <section
+          v-if="wizardStep === 2 && editorTab === 'orders'"
+          class="synthetic-case-card"
+        >
+          <div class="synthetic-case-section-head">
+            <div>
+              <h2>医嘱费用</h2>
+              <p>这里集中编辑医嘱、输血申请、输血记录等与跨表质控相关的材料。</p>
+            </div>
+            <span class="synthetic-case-section-chip">
+              {{ tabDocumentCount('orders') }} 份材料
+            </span>
+          </div>
+          <div class="synthetic-case-tab-doc-list">
+            <button
+              v-for="document in tabDocuments('orders')"
+              :key="document.key"
+              type="button"
+              @click="
+                scrollToDocument(document.key)
+                editorTab = 'documents'
+              "
+            >
+              <strong>{{ document.title || documentTypeLabel(document.document_type) }}</strong>
+              <span>{{ documentTypeLabel(document.document_type) }}</span>
+            </button>
+            <p v-if="!tabDocumentCount('orders')">
+              当前所选质控点未生成医嘱费用材料，可在“文书”中手动添加。
+            </p>
+          </div>
+        </section>
+
+        <section
+          v-if="wizardStep === 2 && editorTab === 'exams'"
+          class="synthetic-case-card"
+        >
+          <div class="synthetic-case-section-head">
+            <div>
+              <h2>检查检验</h2>
+              <p>集中查看检查报告、检验报告和对应病程分析材料。</p>
+            </div>
+            <span class="synthetic-case-section-chip">
+              {{ tabDocumentCount('exams') }} 份材料
+            </span>
+          </div>
+          <div class="synthetic-case-tab-doc-list">
+            <button
+              v-for="document in tabDocuments('exams')"
+              :key="document.key"
+              type="button"
+              @click="
+                scrollToDocument(document.key)
+                editorTab = 'documents'
+              "
+            >
+              <strong>{{ document.title || documentTypeLabel(document.document_type) }}</strong>
+              <span>{{ documentTypeLabel(document.document_type) }}</span>
+            </button>
+            <p v-if="!tabDocumentCount('exams')">
+              当前所选质控点未生成检查检验材料，可在“文书”中手动添加。
+            </p>
+          </div>
+        </section>
+
+        <section
+          v-if="wizardStep === 2 && editorTab === 'preview'"
+          class="synthetic-case-card"
+        >
+          <div class="synthetic-case-section-head">
+            <div>
+              <h2>预览</h2>
+              <p>保存前检查整份病历包文本，不展示 PG 表字段或内部 bundle。</p>
+            </div>
+          </div>
+          <pre class="synthetic-case-inline-preview">{{ previewText }}</pre>
+        </section>
+
+        <section
+          v-if="wizardStep === 3"
+          class="synthetic-case-card synthetic-case-confirm-card"
+        >
+          <div class="synthetic-case-section-head">
+            <div>
+              <h2>保存并验证</h2>
+              <p>确认后会保存到客户自建样本池，并只验证本次选择的 LX0609 质控点。</p>
+            </div>
+            <span class="synthetic-case-section-chip">
+              期望：{{ selectedExpectedStatusLabel }}
+            </span>
+          </div>
+
+          <div class="synthetic-case-confirm-grid">
+            <div class="synthetic-case-confirm-block">
+              <span>测试病历</span>
+              <strong>{{ form.caseTitle }}</strong>
+              <p>
+                {{ form.patientName }} · {{ form.sex }} · {{ form.age }}岁 · {{ form.department }}
+              </p>
+            </div>
+            <div class="synthetic-case-confirm-block">
+              <span>验证范围</span>
+              <strong>{{ form.selectedRuleIds.length }} 条 LX0609 质控点</strong>
+              <p>不会扩展到 49 条全集。</p>
+            </div>
+            <div class="synthetic-case-confirm-block">
+              <span>病历材料</span>
+              <strong>{{ enabledDocumentCount }} 份文书</strong>
+              <p>{{ selectedRequiredMaterials.join('、') || '按当前文书内容保存' }}</p>
+            </div>
+          </div>
+
+          <div class="synthetic-case-confirm-list">
+            <div
+              v-for="rule in selectedRules"
+              :key="rule.ruleId"
+            >
+              <strong>{{ rule.ruleId }}</strong>
+              <span>{{ rule.name }}</span>
+              <small>{{ rule.familyName }} · {{ rule.requiredDocumentsLabel }}</small>
+            </div>
+          </div>
+
+          <div class="synthetic-case-confirm-actions">
+            <a-button @click="goWizardStep(2)">
+              返回编辑
+            </a-button>
+            <a-button
+              type="primary"
+              :loading="saving"
+              @click="handleSave(false)"
+            >
+              仅保存测试病历
+            </a-button>
+            <a-button
+              type="primary"
+              class="synthetic-case-primary-button is-strong"
+              :loading="savingAndRunning"
+              @click="handleSave(true)"
+            >
+              保存并验证选中质控点
+            </a-button>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -414,15 +681,19 @@ import {
 } from '@/services/manual-case-sample-service'
 import type { SyntheticCaseTemplate } from './syntheticCaseTemplates'
 import { syntheticCaseRuleFamilies, syntheticCaseTemplates } from './syntheticCaseTemplates'
-import type { SyntheticCaseBuilderMode, TestRecordDocumentForm } from './types'
+import type {
+  SyntheticCaseBuilderMode,
+  SyntheticCaseExpectedStatus,
+  TestRecordDocumentForm,
+} from './types'
 import {
   createDefaultSyntheticCaseForm,
   createSyntheticDocument,
   documentTypeLabel,
+  expectedStatusOptions,
   findForbiddenSelfHints,
   normalizeSyntheticCasePayload,
   sexOptions,
-  syntheticCaseBuilderModeOptions,
   testRecordDocumentTypeOptions,
 } from './syntheticCaseBuilder'
 
@@ -434,26 +705,84 @@ const newDocumentType = ref('daily_course_record')
 const saving = ref(false)
 const savingAndRunning = ref(false)
 const showPreview = ref(false)
+const wizardStep = ref<1 | 2 | 3>(1)
+const editorTab = ref<'overview' | 'documents' | 'orders' | 'exams' | 'preview'>('overview')
 const selectedRuleSelection = ref<string[]>([])
+const selectedExpectedStatus = ref<SyntheticCaseExpectedStatus>('non_compliant')
+
+const builderSteps = [
+  {
+    key: 1,
+    title: '选择质控点',
+    description: '固定泸县0609规则集，选择本次要验证的质控点。',
+  },
+  {
+    key: 2,
+    title: '编辑测试病历',
+    description: '系统生成真实病历风格草稿，客户只调整关键事实。',
+  },
+  {
+    key: 3,
+    title: '保存并验证',
+    description: '保存到客户自建样本池，并只跑选中的 LX0609 规则。',
+  },
+] as const
+const editorTabs = [
+  { key: 'overview', label: '病历概览' },
+  { key: 'documents', label: '文书' },
+  { key: 'orders', label: '医嘱费用' },
+  { key: 'exams', label: '检查检验' },
+  { key: 'preview', label: '预览' },
+] as const
 
 const enabledDocumentCount = computed(
   () =>
     form.value.documents.filter((document) => document.enabled && document.content.trim()).length,
 )
-const currentTemplate = computed(() =>
-  syntheticCaseTemplates.find((template) => template.key === form.value.templateKey),
-)
 const selectedRuleFamily = computed(() =>
   syntheticCaseRuleFamilies.find((family) => family.key === form.value.selectedRuleFamilyKey),
 )
+const selectedRules = computed(() =>
+  syntheticCaseRuleFamilies
+    .flatMap((family) =>
+      family.rules.map((rule) => ({
+        ...rule,
+        familyKey: family.key,
+        familyName: family.name,
+        templateKey: family.templateKey,
+      })),
+    )
+    .filter((rule) => selectedRuleSelection.value.includes(rule.ruleId)),
+)
+const selectedRuleFamilies = computed(() =>
+  syntheticCaseRuleFamilies.filter((family) =>
+    family.rules.some((rule) => selectedRuleSelection.value.includes(rule.ruleId)),
+  ),
+)
+const selectedRequiredMaterials = computed(() => {
+  const materials = new Set<string>()
+  selectedRules.value.forEach((rule) => {
+    rule.requiredDocumentsLabel
+      .split(/[、,，/]/u)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .forEach((item) => materials.add(item))
+  })
+  return Array.from(materials)
+})
+const selectedExpectedStatusLabel = computed(
+  () =>
+    expectedStatusOptions.find((item) => item.value === selectedExpectedStatus.value)?.label ||
+    '不合规',
+)
 const currentCaseSourceLabel = computed(() => {
   if (form.value.builderMode === 'rule') {
-    if (selectedRuleFamily.value && form.value.selectedRuleIds.length) {
-      return `${selectedRuleFamily.value.name} · ${form.value.selectedRuleIds.length} 条规则`
+    if (form.value.selectedRuleIds.length) {
+      return `泸县0609 · ${form.value.selectedRuleIds.length} 条规则`
     }
     return '按质控点创建'
   }
-  return currentTemplate.value?.name || '手工创建'
+  return '手工创建'
 })
 
 const previewText = computed(() => {
@@ -477,6 +806,23 @@ const previewText = computed(() => {
     })
   return lines.join('\n')
 })
+
+function isTabDocument(document: TestRecordDocumentForm, tab: 'orders' | 'exams'): boolean {
+  if (tab === 'orders') {
+    return ['medical_order', 'blood_application', 'bloodtrans_record'].includes(
+      document.document_type,
+    )
+  }
+  return ['exam_report', 'lab_report', 'daily_course_record'].includes(document.document_type)
+}
+
+function tabDocuments(tab: 'orders' | 'exams') {
+  return form.value.documents.filter((document) => document.enabled && isTabDocument(document, tab))
+}
+
+function tabDocumentCount(tab: 'orders' | 'exams') {
+  return tabDocuments(tab).length
+}
 
 function goBack() {
   router.push({ name: 'WorkstationV4CustomerSampleValidation' })
@@ -525,29 +871,63 @@ function createFormFromTemplate(
   }
 }
 
-function applyTemplate(key: string) {
-  const template = syntheticCaseTemplates.find((item) => item.key === key)
-  if (!template) return
-  form.value = createFormFromTemplate(template, { builderMode: 'case' })
+function cloneTemplateDocument(document: TestRecordDocumentForm): TestRecordDocumentForm {
+  return {
+    ...document,
+    key: createSyntheticDocument(document.document_type).key,
+  }
 }
 
-function switchBuilderMode(mode: SyntheticCaseBuilderMode) {
-  form.value.builderMode = mode
-  if (mode === 'rule') {
-    const fallbackFamily =
-      form.value.selectedRuleFamilyKey || syntheticCaseRuleFamilies[0]?.key || ''
-    if (fallbackFamily) {
-      selectRuleFamily(fallbackFamily)
-    }
-    return
-  }
-  selectedRuleSelection.value = []
+function uniqueDocumentsFromTemplates(
+  templates: SyntheticCaseTemplate[],
+): TestRecordDocumentForm[] {
+  const seen = new Set<string>()
+  const documents: TestRecordDocumentForm[] = []
+  templates.forEach((template) => {
+    template.documents.forEach((document) => {
+      const key = `${document.document_type}:${document.title}:${document.content.slice(0, 36)}`
+      if (seen.has(key)) return
+      seen.add(key)
+      documents.push(cloneTemplateDocument(document))
+    })
+  })
+  return documents
+}
+
+function createRuleDrivenForm() {
+  const selectedRuleSet = new Set(selectedRuleSelection.value)
+  const families = selectedRuleFamilies.value
+  const templates = families
+    .map((family) => syntheticCaseTemplates.find((template) => template.key === family.templateKey))
+    .filter((template): template is SyntheticCaseTemplate => Boolean(template))
+  const seedTemplate = templates[0]
+  if (!seedTemplate) return null
+
+  const nextForm = createFormFromTemplate(seedTemplate, {
+    builderMode: 'rule',
+    selectedRuleIds: selectedRuleSelection.value,
+    selectedRuleFamilyKey: families[0]?.key || form.value.selectedRuleFamilyKey || '',
+  })
+  const familyNames = families.map((family) => family.name)
+  nextForm.caseTitle = `${familyNames.join('、')}测试病历`
+  nextForm.manualIssueText = `按质控点创建：${selectedRuleSelection.value.join('、')}。`
+  nextForm.documents = uniqueDocumentsFromTemplates(templates)
+  nextForm.goldenAnswers = templates
+    .flatMap((template) => template.goldenAnswers)
+    .filter((answer) => selectedRuleSet.has(answer.qc_point_id))
+    .map((answer) => ({
+      ...answer,
+      id: answer.id || `rule-driven-${answer.qc_point_id}`,
+      expected_status: selectedExpectedStatus.value,
+      trigger_facts: [...answer.trigger_facts],
+      evidence_keywords: [...answer.evidence_keywords],
+    }))
+  nextForm.selectedRuleIds = [...selectedRuleSelection.value]
+  return nextForm
 }
 
 function selectRuleFamily(key: string) {
   form.value.selectedRuleFamilyKey = key
-  const family = syntheticCaseRuleFamilies.find((item) => item.key === key)
-  selectedRuleSelection.value = family ? family.rules.map((rule) => rule.ruleId) : []
 }
 
 function toggleRuleSelection(ruleId: string, checked: boolean) {
@@ -561,8 +941,7 @@ function toggleRuleSelection(ruleId: string, checked: boolean) {
 }
 
 function generateRuleDrivenCase() {
-  const family = selectedRuleFamily.value
-  if (!family) {
+  if (!selectedRuleFamily.value) {
     message.warning('请先选择一个规则族')
     return
   }
@@ -570,19 +949,23 @@ function generateRuleDrivenCase() {
     message.warning('请至少勾选一个质控点')
     return
   }
-  const template = syntheticCaseTemplates.find((item) => item.key === family.templateKey)
-  if (!template) {
+  const nextForm = createRuleDrivenForm()
+  if (!nextForm) {
     message.error('当前规则族缺少对应模板，请先补齐模板配置')
     return
   }
-  form.value = createFormFromTemplate(template, {
-    builderMode: 'rule',
-    selectedRuleIds: selectedRuleSelection.value,
-    selectedRuleFamilyKey: family.key,
-  })
-  form.value.caseTitle = `${family.name}测试病历`
-  form.value.manualIssueText = `按质控点创建：${selectedRuleSelection.value.join('、')}。`
+  form.value = nextForm
+  wizardStep.value = 2
+  editorTab.value = 'overview'
   message.success(`已根据 ${selectedRuleSelection.value.length} 条质控点生成病历骨架`)
+}
+
+function goWizardStep(step: 1 | 2 | 3) {
+  if (step > 1 && !form.value.selectedRuleIds.length) {
+    message.warning('请先选择质控点并生成测试病历')
+    return
+  }
+  wizardStep.value = step
 }
 
 function scrollToDocument(key: string) {
@@ -674,7 +1057,7 @@ async function handleSave(runAfterSave: boolean) {
         { timeout: 90000 },
       )
       if (!runResult.success || !runResult.data) {
-        message.warning(result.message || '测试病历已保存，但验证任务创建失败')
+        message.warning(runResult.message || '测试病历已保存，但验证任务创建失败')
       } else {
         message.success('测试病历已保存，验证任务已创建')
       }
@@ -692,6 +1075,7 @@ async function handleSave(runAfterSave: boolean) {
 }
 
 if (syntheticCaseRuleFamilies.length) {
+  form.value.builderMode = 'rule'
   selectRuleFamily(syntheticCaseRuleFamilies[0].key)
 }
 </script>
@@ -731,6 +1115,76 @@ if (syntheticCaseRuleFamilies.length) {
   max-width: 1600px;
   border-radius: 18px;
   padding: 16px 18px;
+}
+
+.synthetic-case-wizard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 auto 14px;
+  max-width: 1600px;
+}
+
+.synthetic-case-wizard button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  color: rgba(29, 29, 31, 0.64);
+  cursor: pointer;
+  padding: 10px 12px;
+  text-align: left;
+  transition: 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.synthetic-case-wizard button:hover {
+  border-color: rgba(0, 102, 204, 0.22);
+  transform: translateY(-1px);
+}
+
+.synthetic-case-wizard button > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.54);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.synthetic-case-wizard strong {
+  display: block;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.synthetic-case-wizard small {
+  display: block;
+  margin-top: 2px;
+  color: rgba(29, 29, 31, 0.54);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.synthetic-case-wizard button.is-active {
+  border-color: rgba(0, 102, 204, 0.28);
+  background: rgba(0, 102, 204, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.08);
+}
+
+.synthetic-case-wizard button.is-active > span,
+.synthetic-case-wizard button.is-complete > span {
+  background: #0066cc;
+  color: #fff;
 }
 
 .synthetic-case-header-copy {
@@ -877,33 +1331,34 @@ if (syntheticCaseRuleFamilies.length) {
   min-width: 0;
 }
 
-.synthetic-case-mode-switch {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+.synthetic-case-rule-set-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   margin-bottom: 12px;
-  padding: 4px;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.76);
+  padding: 12px;
 }
 
-.synthetic-case-mode-switch button {
-  height: 34px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
+.synthetic-case-rule-set-card span {
   color: rgba(29, 29, 31, 0.62);
-  cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 650;
-  transition: 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
-.synthetic-case-mode-switch button.is-active {
-  background: rgba(0, 102, 204, 0.1);
+.synthetic-case-rule-set-card strong {
   color: #0066cc;
-  box-shadow: inset 0 0 0 1px rgba(0, 102, 204, 0.12);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.synthetic-case-rule-set-card small {
+  color: rgba(29, 29, 31, 0.54);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .synthetic-case-step-card {
@@ -1140,6 +1595,34 @@ if (syntheticCaseRuleFamilies.length) {
   min-width: 0;
 }
 
+.synthetic-case-editor-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 4px;
+}
+
+.synthetic-case-editor-tabs button {
+  min-width: 82px;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(29, 29, 31, 0.6);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.synthetic-case-editor-tabs button.is-active {
+  background: rgba(0, 102, 204, 0.1);
+  color: #0066cc;
+}
+
 .synthetic-case-card {
   border-radius: 17px;
   padding: 18px 18px 20px;
@@ -1173,6 +1656,140 @@ if (syntheticCaseRuleFamilies.length) {
   margin: 4px 0 0;
   color: rgba(29, 29, 31, 0.58);
   font-size: 13px;
+}
+
+.synthetic-case-selection-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 14px;
+}
+
+.synthetic-case-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.synthetic-case-rule-card {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-height: 116px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.74);
+  cursor: pointer;
+  padding: 12px;
+  transition: 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.synthetic-case-rule-card:hover {
+  border-color: rgba(0, 102, 204, 0.22);
+  transform: translateY(-1px);
+}
+
+.synthetic-case-rule-card.is-selected {
+  border-color: rgba(0, 102, 204, 0.36);
+  background: rgba(0, 102, 204, 0.07);
+}
+
+.synthetic-case-rule-card input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: #0066cc;
+}
+
+.synthetic-case-rule-card strong {
+  display: inline-flex;
+  margin-bottom: 6px;
+  border-radius: 9px;
+  background: rgba(0, 102, 204, 0.08);
+  padding: 2px 8px;
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.synthetic-case-rule-card span {
+  display: block;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.synthetic-case-rule-card small {
+  display: block;
+  margin-top: 8px;
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.synthetic-case-selection-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.74);
+  padding: 14px;
+}
+
+.synthetic-case-selection-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.synthetic-case-selection-summary span {
+  color: rgba(29, 29, 31, 0.62);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.synthetic-case-selection-summary p {
+  margin: 0;
+  color: rgba(29, 29, 31, 0.52);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.synthetic-case-material-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.synthetic-case-material-list li,
+.synthetic-case-selected-rules em {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.045);
+  color: rgba(29, 29, 31, 0.68);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 18px;
+  padding: 3px 9px;
+}
+
+.synthetic-case-selected-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.synthetic-case-selected-rules em {
+  background: rgba(0, 102, 204, 0.08);
+  color: #0066cc;
 }
 
 .synthetic-case-form-grid,
@@ -1238,6 +1855,129 @@ if (syntheticCaseRuleFamilies.length) {
 .synthetic-case-doc-select {
   width: 184px;
   min-width: 184px;
+}
+
+.synthetic-case-tab-doc-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.synthetic-case-tab-doc-list button {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.74);
+  cursor: pointer;
+  padding: 12px;
+  text-align: left;
+}
+
+.synthetic-case-tab-doc-list button:hover {
+  border-color: rgba(0, 102, 204, 0.22);
+}
+
+.synthetic-case-tab-doc-list strong {
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.synthetic-case-tab-doc-list span,
+.synthetic-case-tab-doc-list p {
+  margin: 0;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 13px;
+}
+
+.synthetic-case-inline-preview {
+  max-height: 62vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  border-radius: 16px;
+  background: #f8fafc;
+  color: #1d1d1f;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.9;
+  margin: 0;
+  padding: 16px;
+}
+
+.synthetic-case-confirm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.synthetic-case-confirm-block {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.74);
+  padding: 14px;
+}
+
+.synthetic-case-confirm-block span {
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.synthetic-case-confirm-block strong {
+  display: block;
+  margin-top: 6px;
+  color: #1d1d1f;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.synthetic-case-confirm-block p {
+  margin: 6px 0 0;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.synthetic-case-confirm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.synthetic-case-confirm-list div {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr) 220px;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding-top: 8px;
+}
+
+.synthetic-case-confirm-list strong {
+  color: #0066cc;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.synthetic-case-confirm-list span {
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.synthetic-case-confirm-list small {
+  color: rgba(29, 29, 31, 0.54);
+  font-size: 12px;
+}
+
+.synthetic-case-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 :global(.synthetic-case-doc-type-dropdown) {
@@ -1371,21 +2111,29 @@ if (syntheticCaseRuleFamilies.length) {
     padding: 14px;
   }
 
+  .synthetic-case-wizard,
+  .synthetic-case-selection-layout,
   .synthetic-case-shell {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .synthetic-case-rule-grid,
+  .synthetic-case-confirm-grid,
   .synthetic-case-form-grid,
   .synthetic-case-doc-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .synthetic-case-form-grid .is-wide {
-    grid-column: span 2;
+    grid-column: auto;
   }
 
   .synthetic-case-header-actions {
     flex-wrap: wrap;
+  }
+
+  .synthetic-case-confirm-list div {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

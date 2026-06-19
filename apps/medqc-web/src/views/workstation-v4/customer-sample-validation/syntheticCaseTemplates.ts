@@ -284,6 +284,234 @@ export const syntheticCaseTemplates: SyntheticCaseTemplate[] = [
       }),
     ],
   },
+  {
+    key: 'critical-round-defect',
+    name: '病重病危查房缺陷样本',
+    family: '查房病程',
+    description: '用于验证病重、病危医嘱期间的查房和病程记录频次。',
+    suggestedRuleIds: ['LX0609-008', 'LX0609-009'],
+    basic: {
+      caseTitle: '病重病危查房测试',
+      patientName: '测试患者戊',
+      sex: '男',
+      age: 78,
+      department: '呼吸与危重症医学科',
+      mainDiagnosis: '重症肺炎',
+      otherDiagnosesText: '呼吸衰竭\n低氧血症',
+    },
+    documents: [
+      createSyntheticDocument('medical_order', {
+        record_time: at(base, 1),
+        submit_time: at(base, 1),
+        title: '病重病危医嘱',
+        content:
+          '医嘱记录\n2026-06-01 09:00 下达病重医嘱，持续执行。2026-06-02 09:00 因氧合下降下达病危医嘱，持续执行。予吸氧、抗感染、化痰、监测生命体征。允许根据病情变化调整抗菌药物。',
+      }),
+      createSyntheticDocument('first_course_record', {
+        record_time: at(base, 2),
+        submit_time: at(base, 2.1),
+        title: '2026-06-01 首次病程记录',
+        content:
+          '首次病程记录\n患者因发热、咳嗽咳痰伴气促入院，诊断重症肺炎。入院后予抗感染、化痰、氧疗，密切观察体温、血氧饱和度和呼吸频率。',
+      }),
+      createSyntheticDocument('daily_course_record', {
+        record_time: at(base, 73),
+        submit_time: at(base, 73.2),
+        title: '2026-06-04 病重病危病程记录',
+        content:
+          '病程记录\n患者仍有咳嗽咳痰及活动后气促，鼻导管吸氧3L/分，SpO2 94%。2026-06-02全天未见病危日常病程记录、查房记录或病情变化记录；2026-06-03未见病重患者日常病程或上级医师查房记录。本次继续抗感染、化痰和氧疗。',
+      }),
+      createSyntheticDocument('senior_course_record', {
+        record_time: at(base, 76),
+        submit_time: at(base, 76.2),
+        title: '2026-06-04 上级医师查房记录',
+        content:
+          '上级医师查房记录\n主任医师查房后认为患者重症肺炎诊断明确，需继续氧疗和抗感染治疗，关注培养结果及呼吸功能变化。',
+      }),
+    ],
+    goldenAnswers: [
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-008',
+        expected_status: 'non_compliant',
+        trigger_facts: ['2026-06-01 09:00 下达病重医嘱', '病重期间2天内未见查房病程记录'],
+        evidence_keywords: ['病重医嘱', '未见病重患者日常病程', '上级医师查房记录'],
+        human_reason: '病重医嘱持续期间，2天内缺少规定的查房或病程记录。',
+      }),
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-009',
+        expected_status: 'non_compliant',
+        trigger_facts: ['2026-06-02 09:00 下达病危医嘱', '病危当天未见每日病程或查房记录'],
+        evidence_keywords: ['病危医嘱', '全天未见病危日常病程记录', '病情变化记录'],
+        human_reason: '病危医嘱期间未按日记录病程或病情变化。',
+      }),
+    ],
+  },
+  {
+    key: 'transfusion-defect',
+    name: '输血闭环缺陷样本',
+    family: '输血',
+    description: '用于验证输血知情同意、输血前检查、评估、后评价和医嘱收费一致性。',
+    suggestedRuleIds: ['LX0609-041', 'LX0609-043', 'LX0609-044', 'LX0609-047', 'LX0609-049'],
+    basic: {
+      caseTitle: '输血闭环测试',
+      patientName: '测试患者己',
+      sex: '女',
+      age: 66,
+      department: '胃肠外科',
+      mainDiagnosis: '胃恶性肿瘤',
+      otherDiagnosesText: '中度贫血',
+    },
+    documents: [
+      createSyntheticDocument('medical_order', {
+        record_time: at(base, 29),
+        submit_time: at(base, 29),
+        title: '输血医嘱与费用记录',
+        content:
+          '医嘱记录\n2026-06-02 13:00 医嘱：输注去白悬浮红细胞2U。收费明细：去白悬浮红细胞4U，血型鉴定1次，交叉配血1次。医嘱与收费数量存在差异。',
+      }),
+      createSyntheticDocument('blood_application', {
+        record_time: at(base, 27),
+        submit_time: at(base, 27.2),
+        title: '输血申请及输血前检查',
+        content:
+          '输血申请\n患者术前血红蛋白68g/L，拟输注去白悬浮红细胞2U。输血前检查已见ABO血型、Rh(D)、血常规、凝血功能、肝功能、乙肝表面抗原结果；未见丙肝抗体、HIV抗体、梅毒抗体完整报告。未见本次输血知情同意书扫描件。',
+      }),
+      createSyntheticDocument('daily_course_record', {
+        record_time: at(base, 28),
+        submit_time: at(base, 28.1),
+        title: '输血前病程记录',
+        content:
+          '病程记录\n患者贫血，拟按医嘱输血。记录中未完整说明输血适应证、既往输血反应史、输血风险评估及输血必要性判断。',
+      }),
+      createSyntheticDocument('bloodtrans_record', {
+        record_time: at(base, 31),
+        submit_time: at(base, 31.2),
+        title: '输血记录',
+        content:
+          '输血记录\n2026-06-02 15:00 开始输注去白悬浮红细胞2U，17:10 输注结束。输血过程未见明显寒战、皮疹或呼吸困难。',
+      }),
+      createSyntheticDocument('daily_course_record', {
+        record_time: at(base, 34),
+        submit_time: at(base, 34.1),
+        title: '输血后病程记录',
+        content:
+          '病程记录\n患者输血后生命体征平稳，但未见输血结束后的疗效评价、血红蛋白复查结果或迟发性输血反应观察记录。',
+      }),
+    ],
+    goldenAnswers: [
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-041',
+        expected_status: 'non_compliant',
+        trigger_facts: ['存在输血医嘱和输血记录', '未见输血知情同意书'],
+        evidence_keywords: ['输血申请', '未见本次输血知情同意书', '输血记录'],
+        human_reason: '有输血行为但缺少输血知情同意书。',
+      }),
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-043',
+        expected_status: 'non_compliant',
+        trigger_facts: ['存在输血治疗', '输血前常规检查不完整'],
+        evidence_keywords: ['丙肝抗体', 'HIV抗体', '梅毒抗体', '未见完整报告'],
+        human_reason: '输血前相关检查资料不完整。',
+      }),
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-044',
+        expected_status: 'non_compliant',
+        trigger_facts: ['存在输血治疗', '输血前评估记录不完整'],
+        evidence_keywords: ['输血适应证', '输血风险评估', '未完整说明'],
+        human_reason: '输血前评估缺少核心要素。',
+      }),
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-047',
+        expected_status: 'non_compliant',
+        trigger_facts: ['输血已完成', '未见输血后评价'],
+        evidence_keywords: ['输血后', '未见', '疗效评价'],
+        human_reason: '输血结束后缺少疗效评价和反应观察。',
+      }),
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-049',
+        expected_status: 'non_compliant',
+        trigger_facts: ['医嘱红细胞2U', '收费红细胞4U'],
+        evidence_keywords: ['输血医嘱', '收费明细', '数量存在差异'],
+        human_reason: '输血医嘱与收费数量不一致。',
+      }),
+    ],
+  },
+  {
+    key: 'tumor-pathology-chemo-defect',
+    name: '肿瘤病理化疗缺陷样本',
+    family: '肿瘤病理',
+    description: '用于验证病理结果、取材情况和化疗医嘱/病程记录一致性。',
+    suggestedRuleIds: ['LX0609-013', 'LX0609-019', 'LX0609-026'],
+    basic: {
+      caseTitle: '肿瘤病理化疗测试',
+      patientName: '测试患者庚',
+      sex: '男',
+      age: 61,
+      department: '胃肠外科',
+      mainDiagnosis: '胃腺癌',
+      otherDiagnosesText: '贫血\n低蛋白血症',
+    },
+    documents: [
+      createSyntheticDocument('admission_record', {
+        record_time: at(base, 1),
+        submit_time: at(base, 1.1),
+        title: '入院记录',
+        content:
+          '入院记录\n患者因上腹胀痛伴消瘦2月入院。胃镜提示胃窦占位，考虑胃恶性肿瘤。拟完善术前检查后行胃癌根治术。',
+      }),
+      createSyntheticDocument('surgery_record', {
+        record_time: at(base, 32),
+        submit_time: at(base, 32.2),
+        title: '胃癌根治术手术记录',
+        content:
+          '手术记录\n手术名称：腹腔镜远端胃癌根治术。术中见胃窦部肿物，行远端胃切除及淋巴结清扫。手术记录未详细记录病理取材部位、标本固定方式及送检标签。',
+      }),
+      createSyntheticDocument('lab_report', {
+        record_time: at(base, 72),
+        submit_time: at(base, 72),
+        title: '病理检查报告',
+        content:
+          '病理检查报告\n标本：远端胃及淋巴结。病理诊断：胃中分化腺癌，浸润至浆膜下层，淋巴结转移2/18。建议结合临床分期制定后续治疗计划。',
+      }),
+      createSyntheticDocument('daily_course_record', {
+        record_time: at(base, 76),
+        submit_time: at(base, 76.1),
+        title: '术后病程记录',
+        content:
+          '病程记录\n患者术后恢复可，腹部切口干燥，继续补液、营养支持及抗感染治疗。病程记录未体现病理结果回看、取材情况说明及后续肿瘤治疗计划。',
+      }),
+      createSyntheticDocument('medical_order', {
+        record_time: at(base, 96),
+        submit_time: at(base, 96),
+        title: '化疗医嘱',
+        content:
+          '医嘱记录\n2026-06-05 08:00 医嘱：奥沙利铂 130mg d1 静滴；卡培他滨 1.5g bid po d1-d14。病程记录未同步记录化疗药物名称、剂量、使用方法和时间。',
+      }),
+    ],
+    goldenAnswers: [
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-013',
+        expected_status: 'non_compliant',
+        trigger_facts: ['存在胃癌手术和病理报告', '病程未记录病理结果分析'],
+        evidence_keywords: ['病理检查报告', '胃中分化腺癌', '病程记录未体现病理结果'],
+        human_reason: '病理结果未在手术记录或病程中充分记录和分析。',
+      }),
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-019',
+        expected_status: 'non_compliant',
+        trigger_facts: ['手术记录存在取材送检场景', '取材情况记录不完整'],
+        evidence_keywords: ['手术记录', '未详细记录病理取材部位', '送检标签'],
+        human_reason: '手术记录中病理取材信息不完整。',
+      }),
+      createGoldenAnswer({
+        qc_point_id: 'LX0609-026',
+        expected_status: 'non_compliant',
+        trigger_facts: ['存在化疗医嘱', '病程未记录化疗药物名称、剂量和时间'],
+        evidence_keywords: ['化疗医嘱', '奥沙利铂', '病程记录未同步记录'],
+        human_reason: '化疗病程记录与医嘱信息不一致或缺失。',
+      }),
+    ],
+  },
 ]
 
 export const syntheticCaseRuleFamilies: SyntheticCaseRuleFamily[] = [
@@ -366,6 +594,80 @@ export const syntheticCaseRuleFamilies: SyntheticCaseRuleFamily[] = [
         ruleId: 'LX0609-038',
         name: '麻醉记录单：无麻醉记录单（局麻除外）',
         requiredDocumentsLabel: '麻醉记录、手术记录',
+      },
+    ],
+  },
+  {
+    key: 'critical_rounds',
+    name: '查房病程',
+    description: '覆盖病重、病危医嘱期间的查房和病程频次。',
+    templateKey: 'critical-round-defect',
+    rules: [
+      {
+        ruleId: 'LX0609-008',
+        name: '查房记录：病重患者2天内无查房病程记录',
+        requiredDocumentsLabel: '病重医嘱、日常病程、上级查房记录',
+      },
+      {
+        ruleId: 'LX0609-009',
+        name: '查房记录：病危患者未每天记录查房病程或病情变化记录',
+        requiredDocumentsLabel: '病危医嘱、日常病程、病情变化记录',
+      },
+    ],
+  },
+  {
+    key: 'transfusion',
+    name: '输血',
+    description: '覆盖输血知情同意、输血前检查、输血前后评价和医嘱收费一致性。',
+    templateKey: 'transfusion-defect',
+    rules: [
+      {
+        ruleId: 'LX0609-041',
+        name: '输血知情同意书：无输血知情同意书',
+        requiredDocumentsLabel: '输血医嘱、输血申请、输血记录',
+      },
+      {
+        ruleId: 'LX0609-043',
+        name: '输血前辅助检查：输血前常规检查不完整',
+        requiredDocumentsLabel: '输血申请、检验报告',
+      },
+      {
+        ruleId: 'LX0609-044',
+        name: '输血前评估：无输血前评估记录或记录不完整',
+        requiredDocumentsLabel: '病程记录、输血申请',
+      },
+      {
+        ruleId: 'LX0609-047',
+        name: '输血后评价：无输血后评价',
+        requiredDocumentsLabel: '输血记录、输血后病程',
+      },
+      {
+        ruleId: 'LX0609-049',
+        name: '输血医嘱：输血医嘱与收费不一致',
+        requiredDocumentsLabel: '输血医嘱、费用明细、输血记录',
+      },
+    ],
+  },
+  {
+    key: 'tumor_pathology',
+    name: '肿瘤病理',
+    description: '覆盖病理结果、取材情况和化疗记录与医嘱一致性。',
+    templateKey: 'tumor-pathology-chemo-defect',
+    rules: [
+      {
+        ruleId: 'LX0609-013',
+        name: '病理检查：病理检查结果在手术记录、病程中未记录',
+        requiredDocumentsLabel: '手术记录、病理报告、病程记录',
+      },
+      {
+        ruleId: 'LX0609-019',
+        name: '病理检查：取材情况未在病程记录或手术记录中记录',
+        requiredDocumentsLabel: '手术记录、病理报告',
+      },
+      {
+        ruleId: 'LX0609-026',
+        name: '化疗记录：病程中化疗记录情况与医嘱不一致',
+        requiredDocumentsLabel: '化疗医嘱、病程记录',
       },
     ],
   },

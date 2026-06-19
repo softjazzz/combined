@@ -34,8 +34,8 @@ export const testRecordDocumentTypeOptions = [
 ]
 
 export const expectedStatusOptions = [
-  { label: '不合规', value: 'non_compliant' },
-  { label: '合规', value: 'compliant' },
+  { label: '有缺陷', value: 'non_compliant' },
+  { label: '无缺陷', value: 'compliant' },
   { label: '不适用', value: 'not_applicable' },
   { label: '数据不足', value: 'data_gap' },
   { label: '需人工复核', value: 'uncertain' },
@@ -93,7 +93,7 @@ export function createDefaultSyntheticCaseForm(): TestRecordForm {
   const admission = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
   const firstCourse = new Date(admission.getTime() + 4 * 60 * 60 * 1000)
   return {
-    builderMode: 'case',
+    builderMode: 'rule',
     caseTitle: '客户自建质控测试病历',
     patientName: '测试患者',
     sex: '男',
