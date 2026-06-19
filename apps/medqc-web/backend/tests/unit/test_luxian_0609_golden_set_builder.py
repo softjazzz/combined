@@ -72,7 +72,14 @@ def test_build_outputs_should_generate_annotation_and_comparison_framework(tmp_p
                 }
             )
 
-    payload = builder.build_outputs(source, tmp_path, target_size=7, coverage_path=tmp_path / "missing-coverage.json")
+    payload = builder.build_outputs(
+        source,
+        tmp_path,
+        target_size=7,
+        coverage_path=tmp_path / "missing-coverage.json",
+        review_queue_path=tmp_path / "missing-review-queue.csv",
+        rule_catalog_path=tmp_path / "missing-catalog.json",
+    )
 
     assert payload["candidate_count"] == 7
     assert payload["accuracy_statement"] == "未完成人工标注前，不计算真实样本准确率。"
@@ -100,8 +107,142 @@ def test_build_outputs_should_generate_annotation_and_comparison_framework(tmp_p
     assert annotation_rows[0]["human_status"] == "pending"
     assert annotation_rows[0]["is_match"] == "pending"
     assert annotation_rows[0]["evidence_ok"] == "pending"
+    assert annotation_rows[0]["candidate_status"] == "candidate"
+    assert annotation_rows[0]["data_source"] == source.name
+    assert annotation_rows[0]["pending_rule"] == annotation_rows[0]["qc_point_id"]
 
     loaded = json.loads(candidate_json.read_text(encoding="utf-8"))
     assert loaded["rule_set_key"] == "luxian_0609_qc_v1"
+    assert all(item["coverage_status"] == "candidate_ready" for item in loaded["family_coverage"])
     assert "不计算真实样本准确率" in loaded["accuracy_statement"]
     assert "不声明真实样本准确率" in report.read_text(encoding="utf-8")
+
+
+def test_build_outputs_should_mark_missing_required_family_as_sample_gap(tmp_path):
+    source = tmp_path / "review.csv"
+    fieldnames = [
+        "review_id",
+        "qc_point_id",
+        "customer_text",
+        "accepted_case_type",
+        "visit_id",
+        "patient_name",
+        "department",
+        "manual_issue_text",
+        "evidence_status",
+        "priority_score",
+        "priority_reasons",
+        "document_inventory",
+        "evidence_snippets",
+    ]
+    rows = [
+        ("r1", "LX0609-001", "入院记录24小时", "positive", "V001", "甲", "内科"),
+        ("r2", "LX0609-008", "病重患者查房", "positive", "V002", "乙", "ICU"),
+        ("r4", "LX0609-021", "会诊目的", "positive", "V004", "丁", "外科"),
+        ("r5", "LX0609-032", "手术安全核查", "positive", "V005", "戊", "外科"),
+    ]
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for review_id, rule_id, text, case_type, visit_id, patient, department in rows:
+            writer.writerow(
+                {
+                    "review_id": review_id,
+                    "qc_point_id": rule_id,
+                    "customer_text": text,
+                    "accepted_case_type": case_type,
+                    "visit_id": visit_id,
+                    "patient_name": patient,
+                    "department": department,
+                    "manual_issue_text": text,
+                    "evidence_status": "ready",
+                    "priority_score": "100",
+                    "priority_reasons": "unit-test",
+                    "document_inventory": "文书清单",
+                    "evidence_snippets": "短证据片段",
+                }
+            )
+    coverage = tmp_path / "coverage.json"
+    coverage.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "qc_point_id": "LX0609-012",
+                        "customer_text": "MRI阳性报告",
+                        "candidate_coverage_status": "no_candidates",
+                        "sample_visit_ids": [],
+                        "sample_review_ids": [],
+                        "next_action": "当前没有可复核候选，需先从样本池发现阳性、阴性和边界样本。",
+                        "implementation_status": "needs_data_linkage",
+                        "evidence_ready": 0,
+                    },
+                    {
+                        "qc_point_id": "LX0609-043",
+                        "customer_text": "输血前检查",
+                        "candidate_coverage_status": "no_candidates",
+                        "sample_visit_ids": [],
+                        "sample_review_ids": [],
+                        "next_action": "当前没有可复核候选，需先从样本池发现阳性、阴性和边界样本。",
+                        "implementation_status": "needs_data_linkage",
+                        "evidence_ready": 0,
+                    },
+                    {
+                        "qc_point_id": "LX0609-013",
+                        "customer_text": "病理提示胃癌",
+                        "candidate_coverage_status": "no_candidates",
+                        "sample_visit_ids": [],
+                        "sample_review_ids": [],
+                        "next_action": "当前没有可复核候选，需先从样本池发现阳性、阴性和边界样本。",
+                        "implementation_status": "needs_cross_document",
+                        "evidence_ready": 0,
+                    },
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(
+        json.dumps(
+            [
+                {"qc_point_id": "LX0609-012", "customer_text": "MRI阳性报告", "gap": "样本池无影像阳性候选"},
+                {"qc_point_id": "LX0609-043", "customer_text": "输血前检查", "gap": "样本池无输血候选"},
+                {"qc_point_id": "LX0609-013", "customer_text": "病理提示胃癌", "gap": "样本池无病理肿瘤候选"},
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    payload = builder.build_outputs(
+        source,
+        tmp_path,
+        target_size=7,
+        coverage_path=coverage,
+        review_queue_path=tmp_path / "missing-review-queue.csv",
+        rule_catalog_path=catalog,
+    )
+
+    assert payload["candidate_count"] == 7
+    assert payload["missing_family_gaps"] == ["检查检验", "输血", "肿瘤病理/化疗"]
+    sample_gap_families = {
+        item["rule_family"]
+        for item in payload["candidates"]
+        if item["candidate_status"] == "sample_gap"
+    }
+    assert sample_gap_families == {"检查检验", "输血", "肿瘤病理/化疗"}
+    family_coverage = {item["rule_family"]: item for item in payload["family_coverage"]}
+    assert family_coverage["检查检验"]["coverage_status"] == "sample_gap"
+    assert family_coverage["检查检验"]["candidate_visit_ids"] == []
+    assert "LX0609-012" in "、".join(family_coverage["检查检验"]["pending_rules"])
+
+    annotation_rows = list(csv.DictReader((tmp_path / "泸县0609真实样本GoldenSet标注表.csv").open("r", encoding="utf-8")))
+    gap_rows = [row for row in annotation_rows if row["candidate_status"] == "sample_gap"]
+    assert len(gap_rows) == 3
+    assert all(row["visit_id"] == "" for row in gap_rows)
+    assert all(row["system_status"] == "sample_gap" for row in gap_rows)
+    report_text = (tmp_path / "泸县0609真实样本GoldenSet候选报告.md").read_text(encoding="utf-8")
+    assert "`sample_gap`" in report_text
+    assert "样本池无输血候选" in report_text
