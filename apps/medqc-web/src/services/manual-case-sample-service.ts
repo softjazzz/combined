@@ -228,6 +228,7 @@ export async function runManualSamplePool(
     max_parallel_records?: number
     sample_item_ids?: string[]
     record_ids?: string[]
+    selected_rule_ids?: string[]
     validation_mode?: string
     rule_set_key?: string
   },

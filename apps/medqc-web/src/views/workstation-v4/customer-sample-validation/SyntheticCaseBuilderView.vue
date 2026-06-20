@@ -14,9 +14,10 @@
           客户样本验证 / 测试病历构建
         </div>
         <h1>创建测试病历</h1>
-        <p>选择质控点后生成可编辑病历，用于验证规则效果。</p>
+        <p>选择已配置模板的主要质控点后生成可编辑病历，用于验证规则效果。</p>
         <div class="synthetic-case-summary">
           <span>规则集：泸县0609质控点验证 v1</span>
+          <span>模板质控点 {{ configuredRuleCount }} 条</span>
           <span>已选 {{ selectedRuleSelection.length }} 条</span>
           <span>文书 {{ enabledDocumentCount }} 份</span>
           <span>独立样本池</span>
@@ -220,11 +221,17 @@
           <div class="synthetic-case-section-head">
             <div>
               <h2>选择要验证的质控点</h2>
-              <p>先选规则族，再勾选质控点。系统会根据所选规则生成可编辑病历草稿。</p>
+              <p>先选规则族，再勾选质控点。系统会根据已配置模板生成可编辑病历草稿。</p>
             </div>
             <span class="synthetic-case-section-chip">
               已选 {{ selectedRuleSelection.length }} 条
             </span>
+          </div>
+          <div
+            v-if="isDraftStale"
+            class="synthetic-case-warning-banner"
+          >
+            质控点选择已变更，当前病历草稿仍是旧范围。请重新生成病历草稿后再保存或验证。
           </div>
 
           <div class="synthetic-case-selection-layout">
@@ -258,11 +265,10 @@
             <aside class="synthetic-case-selection-summary">
               <div>
                 <span>本轮期望结果</span>
-                <a-select
-                  v-model:value="selectedExpectedStatus"
-                  popup-class-name="synthetic-case-doc-type-dropdown"
-                  :options="expectedStatusOptions"
-                />
+                <div class="synthetic-case-fixed-status">
+                  <strong>有缺陷</strong>
+                  <small>当前版本提供缺陷验证模板；无缺陷、不适用和数据不足需专用模板后开放。</small>
+                </div>
               </div>
               <div>
                 <span>关键材料</span>
@@ -591,9 +597,7 @@
               <h2>保存并验证</h2>
               <p>确认后会保存到客户自建样本池，并只验证本次选择的 LX0609 质控点。</p>
             </div>
-            <span class="synthetic-case-section-chip">
-              期望：{{ selectedExpectedStatusLabel }}
-            </span>
+            <span class="synthetic-case-section-chip"> 期望：有缺陷 </span>
           </div>
 
           <div class="synthetic-case-confirm-grid">
@@ -612,13 +616,13 @@
             <div class="synthetic-case-confirm-block">
               <span>病历材料</span>
               <strong>{{ enabledDocumentCount }} 份文书</strong>
-              <p>{{ selectedRequiredMaterials.join('、') || '按当前文书内容保存' }}</p>
+              <p>{{ generatedRequiredMaterials.join('、') || '按当前文书内容保存' }}</p>
             </div>
           </div>
 
           <div class="synthetic-case-confirm-list">
             <div
-              v-for="rule in selectedRules"
+              v-for="rule in generatedRules"
               :key="rule.ruleId"
             >
               <strong>{{ rule.ruleId }}</strong>
@@ -681,23 +685,19 @@ import {
 } from '@/services/manual-case-sample-service'
 import type { SyntheticCaseTemplate } from './syntheticCaseTemplates'
 import { syntheticCaseRuleFamilies, syntheticCaseTemplates } from './syntheticCaseTemplates'
-import type {
-  SyntheticCaseBuilderMode,
-  SyntheticCaseExpectedStatus,
-  TestRecordDocumentForm,
-} from './types'
+import type { SyntheticCaseBuilderMode, TestRecordDocumentForm } from './types'
 import {
+  buildSyntheticCaseRunPayload,
   createDefaultSyntheticCaseForm,
   createSyntheticDocument,
   documentTypeLabel,
-  expectedStatusOptions,
   findForbiddenSelfHints,
+  hasSameRuleScope,
   normalizeSyntheticCasePayload,
+  normalizeRuleIds,
   sexOptions,
   testRecordDocumentTypeOptions,
 } from './syntheticCaseBuilder'
-
-const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
 
 const router = useRouter()
 const form = ref(createDefaultSyntheticCaseForm())
@@ -708,7 +708,6 @@ const showPreview = ref(false)
 const wizardStep = ref<1 | 2 | 3>(1)
 const editorTab = ref<'overview' | 'documents' | 'orders' | 'exams' | 'preview'>('overview')
 const selectedRuleSelection = ref<string[]>([])
-const selectedExpectedStatus = ref<SyntheticCaseExpectedStatus>('non_compliant')
 
 const builderSteps = [
   {
@@ -739,20 +738,36 @@ const enabledDocumentCount = computed(
   () =>
     form.value.documents.filter((document) => document.enabled && document.content.trim()).length,
 )
+const configuredRuleCount = computed(
+  () =>
+    new Set(
+      syntheticCaseRuleFamilies.flatMap((family) =>
+        family.rules.map((rule) =>
+          String(rule.ruleId || '')
+            .trim()
+            .toUpperCase(),
+        ),
+      ),
+    ).size,
+)
 const selectedRuleFamily = computed(() =>
   syntheticCaseRuleFamilies.find((family) => family.key === form.value.selectedRuleFamilyKey),
 )
+const allRuleOptions = computed(() =>
+  syntheticCaseRuleFamilies.flatMap((family) =>
+    family.rules.map((rule) => ({
+      ...rule,
+      familyKey: family.key,
+      familyName: family.name,
+      templateKey: family.templateKey,
+    })),
+  ),
+)
 const selectedRules = computed(() =>
-  syntheticCaseRuleFamilies
-    .flatMap((family) =>
-      family.rules.map((rule) => ({
-        ...rule,
-        familyKey: family.key,
-        familyName: family.name,
-        templateKey: family.templateKey,
-      })),
-    )
-    .filter((rule) => selectedRuleSelection.value.includes(rule.ruleId)),
+  allRuleOptions.value.filter((rule) => selectedRuleSelection.value.includes(rule.ruleId)),
+)
+const generatedRules = computed(() =>
+  allRuleOptions.value.filter((rule) => form.value.selectedRuleIds.includes(rule.ruleId)),
 )
 const selectedRuleFamilies = computed(() =>
   syntheticCaseRuleFamilies.filter((family) =>
@@ -770,10 +785,22 @@ const selectedRequiredMaterials = computed(() => {
   })
   return Array.from(materials)
 })
-const selectedExpectedStatusLabel = computed(
+const generatedRequiredMaterials = computed(() => {
+  const materials = new Set<string>()
+  generatedRules.value.forEach((rule) => {
+    rule.requiredDocumentsLabel
+      .split(/[、,，/]/u)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .forEach((item) => materials.add(item))
+  })
+  return Array.from(materials)
+})
+const isDraftStale = computed(
   () =>
-    expectedStatusOptions.find((item) => item.value === selectedExpectedStatus.value)?.label ||
-    '不合规',
+    form.value.builderMode === 'rule' &&
+    form.value.selectedRuleIds.length > 0 &&
+    !hasSameRuleScope(selectedRuleSelection.value, form.value.selectedRuleIds),
 )
 const currentCaseSourceLabel = computed(() => {
   if (form.value.builderMode === 'rule') {
@@ -895,7 +922,8 @@ function uniqueDocumentsFromTemplates(
 }
 
 function createRuleDrivenForm() {
-  const selectedRuleSet = new Set(selectedRuleSelection.value)
+  const normalizedSelection = normalizeRuleIds(selectedRuleSelection.value)
+  const selectedRuleSet = new Set(normalizedSelection)
   const families = selectedRuleFamilies.value
   const templates = families
     .map((family) => syntheticCaseTemplates.find((template) => template.key === family.templateKey))
@@ -905,12 +933,12 @@ function createRuleDrivenForm() {
 
   const nextForm = createFormFromTemplate(seedTemplate, {
     builderMode: 'rule',
-    selectedRuleIds: selectedRuleSelection.value,
+    selectedRuleIds: normalizedSelection,
     selectedRuleFamilyKey: families[0]?.key || form.value.selectedRuleFamilyKey || '',
   })
   const familyNames = families.map((family) => family.name)
   nextForm.caseTitle = `${familyNames.join('、')}测试病历`
-  nextForm.manualIssueText = `按质控点创建：${selectedRuleSelection.value.join('、')}。`
+  nextForm.manualIssueText = `按质控点创建：${normalizedSelection.join('、')}。`
   nextForm.documents = uniqueDocumentsFromTemplates(templates)
   nextForm.goldenAnswers = templates
     .flatMap((template) => template.goldenAnswers)
@@ -918,11 +946,10 @@ function createRuleDrivenForm() {
     .map((answer) => ({
       ...answer,
       id: answer.id || `rule-driven-${answer.qc_point_id}`,
-      expected_status: selectedExpectedStatus.value,
       trigger_facts: [...answer.trigger_facts],
       evidence_keywords: [...answer.evidence_keywords],
     }))
-  nextForm.selectedRuleIds = [...selectedRuleSelection.value]
+  nextForm.selectedRuleIds = normalizedSelection
   return nextForm
 }
 
@@ -955,6 +982,7 @@ function generateRuleDrivenCase() {
     return
   }
   form.value = nextForm
+  selectedRuleSelection.value = [...nextForm.selectedRuleIds]
   wizardStep.value = 2
   editorTab.value = 'overview'
   message.success(`已根据 ${selectedRuleSelection.value.length} 条质控点生成病历骨架`)
@@ -963,6 +991,10 @@ function generateRuleDrivenCase() {
 function goWizardStep(step: 1 | 2 | 3) {
   if (step > 1 && !form.value.selectedRuleIds.length) {
     message.warning('请先选择质控点并生成测试病历')
+    return
+  }
+  if (step > 1 && isDraftStale.value) {
+    message.warning('质控点选择已变更，请重新生成病历草稿')
     return
   }
   wizardStep.value = step
@@ -998,6 +1030,10 @@ function validateForm(): boolean {
     }
     if (!form.value.selectedRuleIds.length) {
       message.warning('请先按质控点生成测试病历骨架')
+      return false
+    }
+    if (isDraftStale.value) {
+      message.warning('质控点选择已变更，请重新生成病历草稿')
       return false
     }
   }
@@ -1048,12 +1084,7 @@ async function handleSave(runAfterSave: boolean) {
     if (runAfterSave && poolId && visitId) {
       const runResult = await runManualSamplePool(
         poolId,
-        {
-          rule_set_key: LUXIAN_0609_RULE_SET_KEY,
-          validation_mode: 'customer',
-          record_ids: [visitId],
-          max_parallel_records: 1,
-        },
+        buildSyntheticCaseRunPayload(form.value, visitId),
         { timeout: 90000 },
       )
       if (!runResult.success || !runResult.data) {
@@ -1755,6 +1786,40 @@ if (syntheticCaseRuleFamilies.length) {
   color: rgba(29, 29, 31, 0.52);
   font-size: 12px;
   line-height: 19px;
+}
+
+.synthetic-case-warning-banner {
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 14px;
+  background: rgba(255, 251, 235, 0.86);
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 20px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.synthetic-case-fixed-status {
+  border: 1px solid rgba(0, 102, 204, 0.14);
+  border-radius: 14px;
+  background: rgba(0, 102, 204, 0.055);
+  padding: 10px 11px;
+}
+
+.synthetic-case-fixed-status strong {
+  display: block;
+  color: #0066cc;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.synthetic-case-fixed-status small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .synthetic-case-material-list {

@@ -6,6 +6,8 @@ import type {
   TestRecordForm,
 } from './types'
 
+export const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
+
 export const sexOptions = [
   { label: '男', value: '男' },
   { label: '女', value: '女' },
@@ -198,6 +200,37 @@ export function normalizeSyntheticCasePayload(form: TestRecordForm): ManualTestR
           .map((item) => String(item || '').trim())
           .filter(Boolean),
       })),
+  }
+}
+
+export function normalizeRuleIds(ruleIds: string[]): string[] {
+  return Array.from(
+    new Set(
+      ruleIds
+        .map((ruleId) =>
+          String(ruleId || '')
+            .trim()
+            .toUpperCase(),
+        )
+        .filter(Boolean),
+    ),
+  ).sort()
+}
+
+export function hasSameRuleScope(left: string[], right: string[]): boolean {
+  const normalizedLeft = normalizeRuleIds(left)
+  const normalizedRight = normalizeRuleIds(right)
+  if (normalizedLeft.length !== normalizedRight.length) return false
+  return normalizedLeft.every((ruleId, index) => ruleId === normalizedRight[index])
+}
+
+export function buildSyntheticCaseRunPayload(form: TestRecordForm, visitId: string) {
+  return {
+    rule_set_key: LUXIAN_0609_RULE_SET_KEY,
+    validation_mode: 'customer',
+    record_ids: [visitId],
+    selected_rule_ids: normalizeRuleIds(form.selectedRuleIds),
+    max_parallel_records: 1,
   }
 }
 

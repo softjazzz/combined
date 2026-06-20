@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildSyntheticCaseRunPayload,
   createDefaultSyntheticCaseForm,
   createGoldenAnswer,
   createSyntheticDocument,
@@ -84,5 +85,20 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
     expect(payload.golden_answers?.[0]?.qc_point_id).toBe('LX0609-020')
     expect(payload.documents).toHaveLength(1)
     expect(payload.documents[0]?.document_type).toBe('consultation_record')
+  })
+
+  it('保存并验证 payload 只请求选中的 LX0609 质控点', () => {
+    const form = createDefaultSyntheticCaseForm()
+    form.selectedRuleIds = ['lx0609-020', 'LX0609-021', 'LX0609-020']
+
+    const payload = buildSyntheticCaseRunPayload(form, 'VISIT-SCOPE-001')
+
+    expect(payload).toMatchObject({
+      rule_set_key: 'luxian_0609_qc_v1',
+      validation_mode: 'customer',
+      record_ids: ['VISIT-SCOPE-001'],
+      max_parallel_records: 1,
+    })
+    expect(payload.selected_rule_ids).toEqual(['LX0609-020', 'LX0609-021'])
   })
 })

@@ -1068,6 +1068,11 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             rule_set_key == LUXIAN_0609_RULE_SET_KEY
             and settings.LUXIAN_0609_CUSTOMER_AGGREGATION_ENABLED
         )
+        scoped_customer_rule_ids = {
+            str(rule_id or "").strip().upper()
+            for rule_id in list(filters.get("scoped_customer_rule_ids") or [])
+            if str(rule_id or "").strip()
+        }
         output_rule_states: Dict[str, Dict[str, Any]] = rule_states
         output_rule_ids: List[str] = list(valid_rule_ids)
         if use_luxian_customer_results:
@@ -1076,6 +1081,8 @@ async def _run_sichuan_workspace_batch_job(job_id: str) -> None:
             for wrapper in load_luxian_0609_rules():
                 customer_rule_id = str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper()
                 if not customer_rule_id:
+                    continue
+                if scoped_customer_rule_ids and customer_rule_id not in scoped_customer_rule_ids:
                     continue
                 output_rule_ids.append(customer_rule_id)
                 output_rule_states[customer_rule_id] = {

@@ -740,6 +740,43 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
 
 
 @pytest.mark.asyncio
+async def test_run_sample_pool_intrinsic_validation_should_scope_luxian_0609_selected_rules(monkeypatch):
+    sample_service = _SamplePoolServiceStub()
+    workspace_service = _WorkspaceServiceStub()
+
+    monkeypatch.setattr(qc_sample_pools, "_service", lambda: sample_service)
+    monkeypatch.setattr(qc_sample_pools, "_workspace_service", lambda: workspace_service)
+    monkeypatch.setattr(qc_sample_pools, "_run_sichuan_workspace_batch_job", lambda job_id: None)
+
+    response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
+        request=_build_request(),
+        pool_id="pool-1",
+        payload=qc_sample_pools.SamplePoolRunRequest(
+            record_ids=["V001"],
+            sample_item_ids=["item-1"],
+            max_parallel_records=1,
+            rule_set_key="luxian_0609_qc_v1",
+            selected_rule_ids=["lx0609-020", "LX0609-021", "LX0609-020"],
+        ),
+        current_user={"id": "tester"},
+    )
+
+    expected_execution_rule_ids = ["LX-017", "CL-250", "SC-068"]
+    created = workspace_service.create_batch_job_calls[0]
+    assert response["success"] is True
+    assert created["draft_ids"] == expected_execution_rule_ids
+    assert created["rule_count"] == len(expected_execution_rule_ids)
+    assert created["filters"]["rule_ids"] == expected_execution_rule_ids
+    assert created["filters"]["record_rule_map"] == {
+        "V001": expected_execution_rule_ids,
+        "V002": expected_execution_rule_ids,
+    }
+    assert created["filters"]["scoped_customer_rule_ids"] == ["LX0609-020", "LX0609-021"]
+    assert response["data"]["rule_count"] == len(expected_execution_rule_ids)
+    assert response["data"]["rule_ids"] == expected_execution_rule_ids
+
+
+@pytest.mark.asyncio
 async def test_run_sample_pool_intrinsic_validation_should_reject_unknown_rule_set_key(monkeypatch):
     sample_service = _SamplePoolServiceStub()
     workspace_service = _WorkspaceServiceStub()

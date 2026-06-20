@@ -25,6 +25,7 @@ from ..services.customer_rule_sets import (
     get_customer_luxian_rule_set,
 )
 from ..services.detached_task_runner import submit_detached_task
+from ..services.luxian_0609_rule_catalog import load_luxian_0609_rules
 from ..services.sample_validation_rule_sets import (
     FORMAL_FAST_SCREEN_FULL_MODE,
     FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
@@ -86,6 +87,47 @@ def _resolve_sample_validation_execution_strategy(*, validation_mode: str, rule_
     return EXECUTION_STRATEGY_STANDARD
 
 
+def _normalize_rule_id_list(rule_ids: list[str]) -> list[str]:
+    return sorted(
+        {
+            str(rule_id or "").strip().upper()
+            for rule_id in list(rule_ids or [])
+            if str(rule_id or "").strip()
+        }
+    )
+
+
+def _resolve_luxian_0609_execution_rule_ids(customer_rule_ids: list[str]) -> tuple[list[str], list[str]]:
+    """Map LX0609 customer-facing ids to executable SC/LX/CL rule ids."""
+
+    normalized_customer_ids = _normalize_rule_id_list(customer_rule_ids)
+    if not normalized_customer_ids:
+        return [], []
+    wrappers_by_id = {
+        str(wrapper.get("rule_id") or wrapper.get("rule_code") or "").strip().upper(): wrapper
+        for wrapper in load_luxian_0609_rules()
+    }
+    invalid_rule_ids = [rule_id for rule_id in normalized_customer_ids if rule_id not in wrappers_by_id]
+    execution_rule_ids: list[str] = []
+    for customer_rule_id in normalized_customer_ids:
+        wrapper = wrappers_by_id.get(customer_rule_id) or {}
+        mapped_rule_ids = [
+            rule_id
+            for rule_id in (
+                str(item or "").strip().upper()
+                for item in list(wrapper.get("mapped_rule_ids") or [])
+            )
+            if rule_id
+        ]
+        if not mapped_rule_ids:
+            primary_rule_id = str(wrapper.get("primary_execution_rule_id") or "").strip()
+            mapped_rule_ids = _normalize_rule_id_list([primary_rule_id])
+        for mapped_rule_id in mapped_rule_ids:
+            if mapped_rule_id and mapped_rule_id not in execution_rule_ids:
+                execution_rule_ids.append(mapped_rule_id)
+    return execution_rule_ids, invalid_rule_ids
+
+
 class SamplePoolImportRequest(BaseModel):
     pool_name: str = Field(..., description="样本池名称")
     source_file: str = Field(..., description="Excel 文件路径")
@@ -104,6 +146,7 @@ class SamplePoolRunRequest(BaseModel):
     max_parallel_records: Optional[int] = Field(default=None, description="病历级并发数")
     sample_item_ids: list[str] = Field(default_factory=list, description="选中的样本项 ID")
     record_ids: list[str] = Field(default_factory=list, description="选中的真实病历 visit_id")
+    selected_rule_ids: list[str] = Field(default_factory=list, description="仅验证这些客户质控点 ID")
     validation_mode: str = Field(default="customer", description="验证模式：customer/sc/programmatic/formal_fast_screen_full")
     rule_set_key: Optional[str] = Field(default=None, description="指定规则包 key")
 
@@ -550,6 +593,9 @@ async def run_sample_pool_intrinsic_validation(
     if validation_mode not in {"customer", "sc", "programmatic", FORMAL_FAST_SCREEN_FULL_MODE}:
         raise HTTPException(status_code=422, detail="未知验证模式，仅支持 customer、sc、programmatic 或 formal_fast_screen_full")
     is_formal_fast_screen_full = validation_mode == FORMAL_FAST_SCREEN_FULL_MODE
+    requested_selected_rule_ids = _normalize_rule_id_list(payload.selected_rule_ids)
+    if requested_selected_rule_ids and validation_mode != "customer":
+        raise HTTPException(status_code=422, detail="selected_rule_ids 仅支持客户专项规则验证模式")
     requested_record_ids = [
         str(record_id or "").strip()
         for record_id in list(payload.record_ids or [])
@@ -637,6 +683,22 @@ async def run_sample_pool_intrinsic_validation(
         rule_set_name = formal_rule_set.name
         rule_set_version = formal_rule_set.version
 
+    if requested_selected_rule_ids:
+        if rule_set_key != "luxian_0609_qc_v1":
+            raise HTTPException(status_code=422, detail="selected_rule_ids 当前仅支持泸县0609质控点验证")
+        execution_rule_ids, invalid_rule_ids = _resolve_luxian_0609_execution_rule_ids(requested_selected_rule_ids)
+        if invalid_rule_ids:
+            raise HTTPException(
+                status_code=422,
+                detail=f"所选质控点不属于当前规则集: {', '.join(invalid_rule_ids)}",
+            )
+        allowed_rule_ids = {str(rule_id or "").strip().upper() for rule_id in list(rule_ids or [])}
+        execution_rule_ids = [rule_id for rule_id in execution_rule_ids if rule_id in allowed_rule_ids]
+        if not execution_rule_ids:
+            raise HTTPException(status_code=422, detail="所选质控点当前没有可执行的映射规则")
+        rule_ids = execution_rule_ids
+        record_rule_map = {record_id: list(execution_rule_ids) for record_id in record_ids}
+
     if not rule_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有可执行规则")
     execution_strategy = (
@@ -703,6 +765,7 @@ async def run_sample_pool_intrinsic_validation(
         "source": "manual_sample_formal_fast_screen_full" if is_formal_fast_screen_full else "manual_problem_sample_pool",
         "sample_pool_id": pool_id,
         "selected_record_ids": requested_record_ids,
+        "scoped_customer_rule_ids": requested_selected_rule_ids,
         "selected_sample_item_ids": [str(item.get("id") or "").strip() for item in runnable_items if str(item.get("id") or "").strip()],
         "selected_sample_count": len(runnable_items),
         "dedup_record_count": len(record_ids),
