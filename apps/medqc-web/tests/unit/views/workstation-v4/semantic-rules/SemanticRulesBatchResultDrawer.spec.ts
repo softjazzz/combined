@@ -378,6 +378,40 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('规则二命中')
   })
 
+  it('泸县0609任务即使带正式后处理字段，也应按客户质控点状态展示不合规', () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'completed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    props.batchJobDetail.filters = {
+      rule_set_key: 'luxian_0609_qc_v1',
+      selected_rule_ids: ['LX0609-020', 'LX0609-021'],
+      scoped_customer_rule_ids: ['LX0609-020', 'LX0609-021'],
+      record_rule_map: { record_1: ['LX-017', 'SC-068'] },
+    }
+    Object.assign(props.batchJobDetail.summary || {}, {
+      rule_set_key: 'luxian_0609_qc_v1',
+      display_status_counts: {
+        confirmed_defect: 0,
+        data_quality_gap: 0,
+        technical_error_internal: 0,
+      },
+    })
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('任务已完成，已发现泸县0609质控点问题')
+    expect(text).toContain('不合规 2 条')
+    expect(text).toContain('当前为泸县0609 scoped run 结果，共 2 条客户质控点结果')
+    expect(text).toContain('LX0609 客户质控点结果')
+    expect(text).not.toContain('本次未发现泸县0609质控点问题')
+  })
+
   it('运行中暂无返回结果时应展示等待首份病历的动态提示', () => {
     const props = buildProps()
     if (props.batchJobDetail.summary) {

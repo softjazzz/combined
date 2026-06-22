@@ -2385,6 +2385,12 @@ const luxianStatusDistribution = computed(() => {
 })
 
 function isConfirmedDefectItem(item: SichuanBatchIssueItem): boolean {
+  if (isLuxian0609BatchJob.value) {
+    return (
+      normalizeLuxianStatusKey(item.result_status || item.status || item.display_status) ===
+      'non_compliant'
+    )
+  }
   if (isPostprocessedFormalResult.value) {
     return item.can_show_as_defect === true || item.display_status === 'confirmed_defect'
   }
@@ -2392,6 +2398,12 @@ function isConfirmedDefectItem(item: SichuanBatchIssueItem): boolean {
 }
 
 function isNeedsReviewItem(item: SichuanBatchIssueItem): boolean {
+  if (isLuxian0609BatchJob.value) {
+    return (
+      normalizeLuxianStatusKey(item.result_status || item.status || item.display_status) ===
+      'uncertain'
+    )
+  }
   if (isPostprocessedFormalResult.value) {
     return false
   }
@@ -2547,7 +2559,22 @@ const statusHero = computed(() => {
     const focusCount =
       issueRecords +
       uncertainRecords +
-      (isPostprocessedFormalResult.value ? dataQualityGapRecords : 0)
+      (isLuxian0609BatchJob.value || isPostprocessedFormalResult.value ? dataQualityGapRecords : 0)
+    if (isLuxian0609BatchJob.value) {
+      return {
+        tone: 'completed',
+        title:
+          focusCount > 0
+            ? '任务已完成，已发现泸县0609质控点问题'
+            : '任务已完成，本次未发现泸县0609质控点问题',
+        description:
+          focusCount > 0
+            ? `请查看下方客户质控点明细：不合规 ${issueRecords} 条，数据不足 ${dataQualityGapRecords} 条，待复核 ${uncertainRecords} 条。`
+            : '当前所选 LX0609 质控点未返回不合规、数据不足或待复核结果。',
+        meta,
+        pulse: false,
+      }
+    }
     return {
       tone: 'completed',
       title: focusCount > 0 ? '任务已完成，已产出可处理问题' : '任务已完成，本次未发现问题',
@@ -2855,6 +2882,9 @@ const issueFocusSummary = computed(() => {
   const dataQualityGapCount = issueItems.value.filter((item) => isDataQualityGapItem(item)).length
   const rejectedBySystemCount = ruleLevelSummary.value.rejectedBySystemCount
   const technicalErrorCount = ruleLevelSummary.value.technicalErrorCount
+  if (isLuxian0609BatchJob.value) {
+    return `当前为泸县0609 scoped run 结果，共 ${total} 条客户质控点结果，其中不合规 ${nonCompliantCount} 条，数据不足 ${dataQualityGapCount} 条，待复核 ${uncertainCount} 条，技术异常 ${technicalErrorCount} 条。`
+  }
   if (isPostprocessedFormalResult.value) {
     return `当前为正式质控四层准入结果，共 ${total} 条可查看结果，其中确认缺陷 ${nonCompliantCount} 条，数据缺口 ${dataQualityGapCount} 条，系统驳回 ${rejectedBySystemCount} 条，技术异常 ${technicalErrorCount} 条。原始 LLM 不合规不会直接计入确认缺陷。`
   }
@@ -2868,11 +2898,19 @@ const issueFocusSummary = computed(() => {
 })
 
 const issueSectionTitle = computed(() =>
-  isPostprocessedFormalResult.value ? '确认缺陷/数据缺口/系统驳回' : '问题/待复核明细',
+  isLuxian0609BatchJob.value
+    ? 'LX0609 客户质控点结果'
+    : isPostprocessedFormalResult.value
+      ? '确认缺陷/数据缺口/系统驳回'
+      : '问题/待复核明细',
 )
 
 const emptyIssueText = computed(() =>
-  isPostprocessedFormalResult.value ? '暂无确认缺陷、数据缺口或系统驳回项' : '暂无问题/待复核明细',
+  isLuxian0609BatchJob.value
+    ? '暂无 LX0609 不合规、数据不足或待复核结果'
+    : isPostprocessedFormalResult.value
+      ? '暂无确认缺陷、数据缺口或系统驳回项'
+      : '暂无问题/待复核明细',
 )
 
 watch(

@@ -865,3 +865,91 @@ def test_synthetic_text_overrides_should_not_run_for_real_visit_payloads():
 
     assert results[0]["rule_id"] == "LX0609-012"
     assert results[0]["status"] == "non_compliant"
+
+
+def test_customer_created_test_case_text_overrides_should_run_without_affecting_real_visits():
+    rules = [
+        _wrapper(
+            "LX0609-021",
+            name="会诊申请目的不明确",
+            mapped_rule_ids=["SC-068"],
+            trigger_condition="会诊申请单会诊目的不明确。",
+        )
+    ]
+    payload = {
+        "primary_document_text": "会诊申请单\n申请科室：消化内科。申请目的：请会诊。",
+        "programmatic_timeline": {
+            "visit_id": "REAL_VISIT_001",
+            "documents": {
+                "consultation_record": [
+                    {"title": "会诊申请单", "content_preview": "申请目的：请会诊。"}
+                ],
+            },
+        },
+    }
+
+    assert evaluate_luxian_0609_programmatic_rules(wrapper_rules=rules, evidence_payload=payload) == []
+
+    payload["programmatic_timeline"]["visit_id"] = "CUSTOMER_TEST_20260622120059B36C80"
+    results = evaluate_luxian_0609_programmatic_rules(wrapper_rules=rules, evidence_payload=payload)
+
+    assert results[0]["rule_id"] == "LX0609-021"
+    assert results[0]["status"] == "non_compliant"
+    assert "会诊目的" in results[0]["findings"]
+
+
+def test_customer_created_consultation_template_should_hit_selected_lx0609_points():
+    rules = [
+        _wrapper(
+            "LX0609-020",
+            name="有会诊记录单无请会诊执行记录",
+            mapped_rule_ids=["LX-017", "CL-250"],
+            trigger_condition="会诊后病程未记录执行情况。",
+        ),
+        _wrapper(
+            "LX0609-021",
+            name="会诊申请目的不明确",
+            mapped_rule_ids=["SC-068"],
+            trigger_condition="会诊申请单会诊目的不明确。",
+        ),
+        _wrapper(
+            "LX0609-022",
+            name="会诊意见不明确",
+            mapped_rule_ids=["SC-069"],
+            trigger_condition="会诊记录单会诊意见不明确。",
+        ),
+    ]
+    payload = {
+        "primary_document_text": "",
+        "programmatic_timeline": {
+            "visit_id": "CUSTOMER_TEST_20260622120059B36C80",
+            "documents": {
+                "consultation_record": [
+                    {
+                        "title": "会诊申请单",
+                        "content_preview": "申请科室：消化内科。申请目的：请会诊。",
+                    },
+                    {
+                        "title": "会诊记录单",
+                        "content_preview": "会诊意见：建议完善相关检查，继续目前治疗，必要时调整用药。",
+                    },
+                ],
+                "daily_course_record": [
+                    {
+                        "title": "2026-06-02 日常病程记录",
+                        "content_preview": "患者黑便较前减少，继续抑酸、补液、止血治疗。未记录执行情况。",
+                    },
+                ],
+            },
+        },
+    }
+
+    results = evaluate_luxian_0609_programmatic_rules(wrapper_rules=rules, evidence_payload=payload)
+    by_id = {item["rule_id"]: item for item in results}
+
+    assert by_id["LX0609-020"]["status"] == "non_compliant"
+    assert "执行情况" in by_id["LX0609-020"]["findings"]
+    assert by_id["LX0609-021"]["status"] == "non_compliant"
+    assert "会诊目的" in by_id["LX0609-021"]["findings"]
+    assert by_id["LX0609-022"]["status"] == "non_compliant"
+    assert "会诊意见" in by_id["LX0609-022"]["findings"]

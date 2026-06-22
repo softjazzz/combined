@@ -529,10 +529,7 @@
               v-for="document in tabDocuments('orders')"
               :key="document.key"
               type="button"
-              @click="
-                scrollToDocument(document.key)
-                editorTab = 'documents'
-              "
+              @click="openDocumentEditor(document.key)"
             >
               <strong>{{ document.title || documentTypeLabel(document.document_type) }}</strong>
               <span>{{ documentTypeLabel(document.document_type) }}</span>
@@ -561,10 +558,7 @@
               v-for="document in tabDocuments('exams')"
               :key="document.key"
               type="button"
-              @click="
-                scrollToDocument(document.key)
-                editorTab = 'documents'
-              "
+              @click="openDocumentEditor(document.key)"
             >
               <strong>{{ document.title || documentTypeLabel(document.document_type) }}</strong>
               <span>{{ documentTypeLabel(document.document_type) }}</span>
@@ -1005,6 +999,11 @@ function scrollToDocument(key: string) {
     behavior: 'smooth',
     block: 'start',
   })
+}
+
+function openDocumentEditor(key: string) {
+  editorTab.value = 'documents'
+  scrollToDocument(key)
 }
 
 function addDocument() {

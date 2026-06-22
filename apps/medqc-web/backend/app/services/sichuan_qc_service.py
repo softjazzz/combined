@@ -4253,6 +4253,7 @@ class SichuanQCService:
                 "refined_rule_count": sum(1 for item in result_items if bool((item.get("metadata") or {}).get("refined"))),
                 "refine_reasons": refine_reasons_agg,
             }
+            model_version = str(getattr(getattr(self, "client", None), "model", "") or "")
             settings = get_settings()
             if (
                 str(rule_set_key or "").strip() == LUXIAN_0609_RULE_SET_KEY

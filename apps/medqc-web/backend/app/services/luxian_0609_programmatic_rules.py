@@ -74,7 +74,8 @@ def _timeline(evidence_payload: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _is_synthetic_timeline(timeline: dict[str, Any]) -> bool:
-    return _norm(timeline.get("visit_id")).upper().startswith("LX0609_SYN_")
+    visit_id = _norm(timeline.get("visit_id")).upper()
+    return visit_id.startswith("LX0609_SYN_") or visit_id.startswith("CUSTOMER_TEST_")
 
 
 def _documents(timeline: dict[str, Any], key: str) -> list[dict[str, Any]]:
@@ -489,21 +490,34 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str) -> dict[str, An
             suggestion="首次病程应补充第一诊断的诊断依据和鉴别诊断分析。",
         )
 
-    if rule_id == "LX0609-020" and _contains(text, "会诊目的：请会诊"):
+    if (
+        rule_id == "LX0609-020"
+        and _contains(text, "会诊记录单", "会诊意见")
+        and not _contains(text, "请会诊执行记录", "会诊意见执行", "采纳会诊", "按会诊意见")
+    ):
+        return _text_result(
+            rule,
+            status="non_compliant",
+            findings="会诊后病程未记录会诊意见执行情况。",
+            evidence_parts=["后续病程未记录会诊意见执行情况", "会诊记录单", "会诊意见"],
+            suggestion="病程记录应说明会诊意见采纳情况、已执行医嘱和未执行原因。",
+        )
+
+    if rule_id == "LX0609-021" and _contains(text, "会诊目的：请会诊", "申请目的：请会诊"):
         return _text_result(
             rule,
             status="non_compliant",
             findings="会诊目的仅写“请会诊”。",
-            evidence_parts=["会诊目的仅写“请会诊”", "会诊目的：请会诊"],
+            evidence_parts=["会诊目的仅写“请会诊”", "会诊目的：请会诊", "申请目的：请会诊"],
             suggestion="会诊申请应明确需会诊科室解决的具体诊疗问题。",
         )
 
-    if rule_id == "LX0609-021" and _contains(text, "建议完善相关检查，继续目前治疗"):
+    if rule_id == "LX0609-022" and _contains(text, "建议完善相关检查，继续目前治疗", "必要时调整用药"):
         return _text_result(
             rule,
             status="non_compliant",
             findings="会诊意见笼统，缺少针对性诊疗建议。",
-            evidence_parts=["会诊意见笼统，缺少针对性诊疗建议", "建议完善相关检查，继续目前治疗"],
+            evidence_parts=["会诊意见笼统，缺少针对性诊疗建议", "建议完善相关检查，继续目前治疗", "必要时调整用药"],
             suggestion="会诊意见应明确诊断判断、具体检查或治疗建议、执行条件和随访要求。",
         )
 
