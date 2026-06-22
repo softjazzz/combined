@@ -144,6 +144,78 @@
           </div>
         </div>
 
+        <div
+          v-if="isLuxian0609BatchJob"
+          class="drawer-card luxian-scope-card"
+        >
+          <div class="drawer-section-head">
+            <div class="drawer-section-title-group">
+              <div class="drawer-section-title">
+                泸县0609验证范围
+              </div>
+              <span class="summary-mode-badge"> scoped run </span>
+            </div>
+          </div>
+          <div class="luxian-scope-grid">
+            <div
+              v-for="item in luxianScopeCards"
+              :key="item.key"
+              class="luxian-scope-stat"
+            >
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.desc }}</small>
+            </div>
+          </div>
+          <div class="luxian-scope-section">
+            <div class="luxian-scope-label">
+              用户选择的 LX0609 质控点
+            </div>
+            <div class="luxian-scope-chips">
+              <span
+                v-for="ruleId in luxianSelectedRuleIdsPreview"
+                :key="ruleId"
+                class="luxian-scope-chip"
+              >
+                {{ ruleId }}
+              </span>
+              <span
+                v-if="!luxianSelectedRuleIds.length"
+                class="luxian-scope-muted"
+              > 未返回 </span>
+              <span
+                v-else-if="luxianSelectedRuleIds.length > luxianSelectedRuleIdsPreview.length"
+                class="luxian-scope-muted"
+              >
+                另有 {{ luxianSelectedRuleIds.length - luxianSelectedRuleIdsPreview.length }} 条
+              </span>
+            </div>
+          </div>
+          <div class="luxian-scope-section">
+            <div class="luxian-scope-label">
+              record_rule_map 摘要
+            </div>
+            <div class="luxian-scope-map">
+              {{ luxianRecordRuleMapSummary }}
+            </div>
+          </div>
+          <div class="luxian-scope-section">
+            <div class="luxian-scope-label">
+              状态分布
+            </div>
+            <div class="luxian-status-grid">
+              <span
+                v-for="item in luxianStatusDistribution"
+                :key="item.key"
+                class="luxian-status-pill"
+                :class="item.className"
+              >
+                {{ item.label }} {{ item.value }}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div class="drawer-card">
           <div class="drawer-section-head">
             <div class="drawer-section-title-group">
@@ -1379,7 +1451,11 @@ import type {
   SichuanBatchResultAggregation,
 } from '@/views/workstation-v4/semantic-rules/types'
 import { evaluateSichuanRuleForVisit } from '@/services/sichuan-rule-workspace-service'
-import type { StructuredQCFilterState, StructuredQCIssue } from '@/views/workstation-v4/types'
+import type {
+  StructuredQCFilterState,
+  StructuredQCIssue,
+  StructuredQCStatus,
+} from '@/views/workstation-v4/types'
 import {
   createDefaultStructuredQCFilter,
   filterStructuredQCIssues,
@@ -1424,6 +1500,54 @@ const PROGRESS_STEP_LABEL_MAP: Record<string, string> = {
   completed: '已完成',
   failed: '执行失败',
   canceled: '已取消',
+}
+
+const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
+const LUXIAN_0609_FOCUS_STATUSES: StructuredQCStatus[] = [
+  'non_compliant',
+  'uncertain',
+  'data_gap',
+  'not_executed',
+  'technical_error',
+  'failed',
+]
+const LUXIAN_0609_STATUS_ORDER = [
+  'non_compliant',
+  'compliant',
+  'not_applicable',
+  'data_gap',
+  'uncertain',
+  'not_executed',
+  'technical_error',
+]
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const result: string[] = []
+  value.forEach((item) => {
+    const normalized = String(item || '').trim()
+    if (!normalized || seen.has(normalized)) return
+    seen.add(normalized)
+    result.push(normalized)
+  })
+  return result
+}
+
+function optionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function normalizeLuxianStatusKey(status?: string) {
+  const normalized = String(status || '')
+    .trim()
+    .toLowerCase()
+  if (normalized === 'technical_error_internal' || normalized === 'error') return 'technical_error'
+  if (normalized === 'unsupported' || normalized === 'not_run') return 'not_executed'
+  if (normalized === 'data_quality_gap') return 'data_gap'
+  return normalized
 }
 
 function parseBackendDateTimeMs(value?: string | Date | null): number {
@@ -1630,9 +1754,12 @@ const scopedStructuredIssues = computed<StructuredQCIssue[]>(() => {
 })
 
 const structuredIssues = computed<StructuredQCIssue[]>(() => {
+  const defaultStatusList = isLuxian0609BatchJob.value
+    ? LUXIAN_0609_FOCUS_STATUSES
+    : (['non_compliant', 'uncertain'] satisfies StructuredQCStatus[])
   const baseFilter: StructuredQCFilterState = {
     ...issueFilter.value,
-    statusList: showAllStatuses.value ? [] : ['non_compliant', 'uncertain'],
+    statusList: showAllStatuses.value ? [] : defaultStatusList,
   }
   let list = filterStructuredQCIssues(scopedStructuredIssues.value, baseFilter)
   if (!showAllStatuses.value) {
@@ -2122,6 +2249,141 @@ const isPostprocessedFormalResult = computed(() => {
   )
 })
 
+const batchJobFilters = computed<Record<string, unknown>>(() => {
+  const filters = props.batchJobDetail?.filters
+  return filters && typeof filters === 'object' ? filters : {}
+})
+
+const isLuxian0609BatchJob = computed(() => {
+  const detail = props.batchJobDetail
+  const summary = detail?.summary
+  const filters = batchJobFilters.value
+  return (
+    String(detail?.rule_set_key || summary?.rule_set_key || filters.rule_set_key || '')
+      .trim()
+      .toLowerCase() === LUXIAN_0609_RULE_SET_KEY
+  )
+})
+
+const luxianSelectedRuleIds = computed(() => {
+  const filters = batchJobFilters.value
+  return normalizeStringList(filters.selected_rule_ids).length
+    ? normalizeStringList(filters.selected_rule_ids)
+    : normalizeStringList(filters.scoped_customer_rule_ids)
+})
+
+const luxianSelectedRuleIdsPreview = computed(() => luxianSelectedRuleIds.value.slice(0, 12))
+
+const luxianExecutionRuleIds = computed(() => {
+  const filters = batchJobFilters.value
+  return normalizeStringList(filters.rule_ids).length
+    ? normalizeStringList(filters.rule_ids)
+    : normalizeStringList(props.batchJobDetail?.draft_ids)
+})
+
+const luxianCustomerRuleCount = computed(() => {
+  const detail = props.batchJobDetail
+  const summary = detail?.summary
+  const filters = batchJobFilters.value
+  return (
+    optionalNumber(detail?.customer_rule_count) ??
+    optionalNumber(summary?.customer_rule_count) ??
+    optionalNumber(filters.customer_rule_count) ??
+    luxianSelectedRuleIds.value.length
+  )
+})
+
+const luxianExecutionRuleCount = computed(() => {
+  const detail = props.batchJobDetail
+  const summary = detail?.summary
+  const filters = batchJobFilters.value
+  return (
+    optionalNumber(detail?.execution_rule_count) ??
+    optionalNumber(summary?.execution_rule_count) ??
+    optionalNumber(filters.execution_rule_count) ??
+    luxianExecutionRuleIds.value.length
+  )
+})
+
+const luxianGenericRuleCount = computed(() => {
+  const detail = props.batchJobDetail
+  const summary = detail?.summary
+  const filters = batchJobFilters.value
+  return (
+    optionalNumber(summary?.rule_count) ??
+    optionalNumber(detail?.rule_count) ??
+    optionalNumber(filters.rule_count)
+  )
+})
+
+const luxianRecordRuleMapSummary = computed(() => {
+  const rawMap = batchJobFilters.value.record_rule_map
+  if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) return '未返回'
+  const entries = Object.entries(rawMap as Record<string, unknown>)
+  if (!entries.length) return '未返回'
+  const uniqueRules = new Set<string>()
+  entries.forEach(([, ruleIds]) => {
+    normalizeStringList(ruleIds).forEach((ruleId) => uniqueRules.add(ruleId))
+  })
+  const sample = entries
+    .slice(0, 2)
+    .map(
+      ([recordId, ruleIds]) =>
+        `${recordId}: ${normalizeStringList(ruleIds).slice(0, 4).join('、') || '未返回'}`,
+    )
+    .join('；')
+  const suffix = entries.length > 2 ? `；另有 ${entries.length - 2} 份病历` : ''
+  return `${entries.length} 份病历映射到 ${uniqueRules.size} 条底层执行规则。${sample}${suffix}`
+})
+
+const luxianScopeCards = computed(() => [
+  {
+    key: 'customer',
+    label: '客户质控点数',
+    value: luxianCustomerRuleCount.value > 0 ? luxianCustomerRuleCount.value : '未返回',
+    desc: '来自 selected/scoped LX0609 质控点',
+  },
+  {
+    key: 'execution',
+    label: '底层执行规则数',
+    value: luxianExecutionRuleCount.value > 0 ? luxianExecutionRuleCount.value : '未返回',
+    desc: '映射到 SC/LX/CL 的实际执行规则',
+  },
+  {
+    key: 'rule-count',
+    label: '通用 rule_count',
+    value: luxianGenericRuleCount.value !== null ? luxianGenericRuleCount.value : '未返回',
+    desc: '任务通用字段，不代替客户质控点数',
+  },
+])
+
+const luxianStatusDistribution = computed(() => {
+  const counts = new Map<string, number>()
+  const sourceItems = scopedStructuredIssues.value.length
+    ? scopedStructuredIssues.value.map((item) => ({ status: item.status }))
+    : (props.batchJobDetail?.items || []).map((item) => ({
+        status: item.result_status || item.status || item.display_status,
+      }))
+  sourceItems.forEach((item) => {
+    const key = normalizeLuxianStatusKey(item.status)
+    if (!key) return
+    counts.set(key, Number(counts.get(key) || 0) + 1)
+  })
+  return LUXIAN_0609_STATUS_ORDER.map((key) => ({
+    key,
+    label: resolveEvidenceStatusText(key),
+    value: Number(counts.get(key) || 0),
+    className:
+      key === 'non_compliant' || key === 'technical_error'
+        ? 'is-danger'
+        : key === 'data_gap' || key === 'uncertain' || key === 'not_executed'
+          ? 'is-warning'
+          : key === 'compliant'
+            ? 'is-success'
+            : 'is-muted',
+  }))
+})
+
 function isConfirmedDefectItem(item: SichuanBatchIssueItem): boolean {
   if (isPostprocessedFormalResult.value) {
     return item.can_show_as_defect === true || item.display_status === 'confirmed_defect'
@@ -2137,6 +2399,12 @@ function isNeedsReviewItem(item: SichuanBatchIssueItem): boolean {
 }
 
 function isDataQualityGapItem(item: SichuanBatchIssueItem): boolean {
+  if (isLuxian0609BatchJob.value) {
+    return (
+      normalizeLuxianStatusKey(item.result_status || item.status || item.display_status) ===
+      'data_gap'
+    )
+  }
   return isPostprocessedFormalResult.value && item.display_status === 'data_quality_gap'
 }
 
@@ -2162,7 +2430,11 @@ const ruleLevelSummary = computed(() => {
           issueItemsList.filter((item) => item.display_status === 'technical_error_internal')
             .length,
       )
-    : 0
+    : issueItemsList.filter(
+        (item) =>
+          normalizeLuxianStatusKey(item.result_status || item.status || item.display_status) ===
+          'technical_error',
+      ).length
   const rejectedBySystemCount = isPostprocessedFormalResult.value
     ? Number(
         summary?.rejected_by_system_count ??
@@ -2816,6 +3088,8 @@ function resolveEvidenceStatusText(status?: string) {
     not_applicable: '不适用',
     data_gap: '数据不足',
     uncertain: '待复核',
+    not_executed: '未执行',
+    technical_error: '技术异常',
     failed: '失败',
     error: '错误',
   }
@@ -3166,6 +3440,10 @@ function resolveStatusText(status?: string) {
   if (normalized === 'non_compliant') return '不合规'
   if (normalized === 'uncertain') return '待复核'
   if (normalized === 'not_applicable') return '不适用'
+  if (normalized === 'data_gap') return '数据不足'
+  if (normalized === 'not_executed') return '未执行'
+  if (normalized === 'technical_error' || normalized === 'technical_error_internal')
+    return '技术异常'
   if (normalized === 'failed') return '失败'
   return '合规'
 }
@@ -3579,6 +3857,110 @@ onUnmounted(() => {
   background: #fff;
   padding: 14px 16px;
   box-shadow: 0 10px 24px rgba(148, 163, 184, 0.1);
+}
+
+.luxian-scope-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.luxian-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.luxian-scope-stat {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.luxian-scope-stat span,
+.luxian-scope-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.luxian-scope-stat strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+  line-height: 1.2;
+  color: #0f172a;
+}
+
+.luxian-scope-stat small,
+.luxian-scope-muted {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.luxian-scope-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.luxian-scope-chips,
+.luxian-status-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.luxian-scope-chip,
+.luxian-status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  padding: 4px 9px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #334155;
+}
+
+.luxian-scope-map {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 9px 11px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #334155;
+}
+
+.luxian-status-pill.is-danger {
+  border-color: #fecdd3;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.luxian-status-pill.is-warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.luxian-status-pill.is-success {
+  border-color: #bbf7d0;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.luxian-status-pill.is-muted {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
 }
 
 .summary-label {

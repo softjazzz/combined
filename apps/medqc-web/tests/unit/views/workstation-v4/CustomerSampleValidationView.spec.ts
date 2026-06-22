@@ -4,6 +4,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
 import CustomerSampleValidationView from '@/views/workstation-v4/CustomerSampleValidationView.vue'
 
+let latestBatchResultDrawerProps: Record<string, unknown> | null = null
+
 const {
   message,
   listManualSamplePools,
@@ -536,8 +538,13 @@ const SemanticRulesBatchResultDrawerStub = defineComponent({
   name: 'SemanticRulesBatchResultDrawerStub',
   props: {
     open: Boolean,
+    batchJobDetail: {
+      type: Object,
+      default: null,
+    },
   },
   setup(props) {
+    latestBatchResultDrawerProps = props as unknown as Record<string, unknown>
     return () =>
       h('div', {
         class: 'batch-result-drawer-stub',
@@ -825,6 +832,7 @@ describe('CustomerSampleValidationView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    latestBatchResultDrawerProps = null
     vi.stubGlobal('URL', {
       ...URL,
       createObjectURL: vi.fn(() => 'blob:luxian-0609-report'),
@@ -1245,6 +1253,59 @@ describe('CustomerSampleValidationView', () => {
 
     expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-1')
     expect(wrapper.find('.batch-result-drawer-stub').exists()).toBe(true)
+  })
+
+  it('打开泸县0609任务详情时保留 scoped run 计数和映射字段', async () => {
+    getSichuanWorkspaceBatchJob.mockResolvedValueOnce({
+      success: true,
+      data: {
+        id: 'job-0609',
+        status: 'completed',
+        rule_set_key: 'luxian_0609_qc_v1',
+        rule_count: 3,
+        customer_rule_count: 2,
+        execution_rule_count: 3,
+        filters: {
+          rule_set_key: 'luxian_0609_qc_v1',
+          selected_rule_ids: ['LX0609-020', 'LX0609-021'],
+          scoped_customer_rule_ids: ['LX0609-020', 'LX0609-021'],
+          rule_ids: ['LX-017', 'CL-250', 'SC-068'],
+          record_rule_map: {
+            V001: ['LX-017', 'CL-250', 'SC-068'],
+          },
+          customer_rule_count: 2,
+          execution_rule_count: 3,
+        },
+        items: [
+          {
+            rule_id: 'LX0609-020',
+            record_id: 'V001',
+            status: 'data_gap',
+            result_status: 'data_gap',
+            is_compliant: false,
+          },
+        ],
+      },
+    })
+    const wrapper = await mountView()
+
+    const resultLink = wrapper.findAll('a').find((node) => node.text() === '查看结果')
+    expect(resultLink).toBeTruthy()
+    await resultLink!.trigger('click')
+    await flushPromises()
+
+    const detail = latestBatchResultDrawerProps?.batchJobDetail as {
+      customer_rule_count?: number
+      execution_rule_count?: number
+      filters?: Record<string, unknown>
+    }
+    expect(detail.customer_rule_count).toBe(2)
+    expect(detail.execution_rule_count).toBe(3)
+    expect(detail.filters?.selected_rule_ids).toEqual(['LX0609-020', 'LX0609-021'])
+    expect(detail.filters?.scoped_customer_rule_ids).toEqual(['LX0609-020', 'LX0609-021'])
+    expect(detail.filters?.record_rule_map).toEqual({
+      V001: ['LX-017', 'CL-250', 'SC-068'],
+    })
   })
 
   it('只选中不可执行病历时提示并阻止发起验证', async () => {

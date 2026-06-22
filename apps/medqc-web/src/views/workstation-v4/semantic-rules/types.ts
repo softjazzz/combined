@@ -112,6 +112,8 @@ export interface SichuanBatchJobSummary {
   total_processing_time: number
   wall_clock_time?: number
   rule_count?: number
+  customer_rule_count?: number
+  execution_rule_count?: number
   processed_rule_count?: number
   progress_percent?: number
   retryable_rule_count?: number
@@ -392,6 +394,8 @@ export interface SichuanBatchJob {
   scope: 'all' | 'running' | 'final'
   execution_mode?: SichuanBatchExecutionMode
   rule_count?: number
+  customer_rule_count?: number
+  execution_rule_count?: number
   status: SichuanBatchJobStatus
   filters?: Record<string, unknown>
   record_ids?: string[]

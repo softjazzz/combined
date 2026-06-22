@@ -267,6 +267,9 @@ export type StructuredQCStatus =
   | 'uncertain'
   | 'compliant'
   | 'not_applicable'
+  | 'data_gap'
+  | 'not_executed'
+  | 'technical_error'
   | 'failed'
   | 'error'
 

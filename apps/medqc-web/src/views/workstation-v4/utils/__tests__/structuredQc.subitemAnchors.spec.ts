@@ -98,6 +98,48 @@ describe('formal qc subitem anchors mapping', () => {
     expect(result.issues[0].metadata.subitemAnchors).toHaveLength(0)
   })
 
+  it('保留0609数据缺口和未执行状态，不降级为合规或不合规', () => {
+    const result = mapSichuanEvaluationToStructuredQC({
+      evaluation_results: [
+        {
+          rule_id: 'LX0609-001',
+          rule_name: '入院记录时限',
+          status: 'data_gap',
+          is_compliant: false,
+          findings: '缺少入院记录时间。',
+        },
+        {
+          rule_id: 'LX0609-002',
+          rule_name: '会诊闭环',
+          status: 'data_quality_gap',
+          is_compliant: false,
+          findings: '缺少会诊执行记录。',
+        },
+        {
+          rule_id: 'LX0609-003',
+          rule_name: '输血记录',
+          status: 'unsupported',
+          is_compliant: true,
+          findings: '该执行链路暂未接入。',
+        },
+        {
+          rule_id: 'LX0609-004',
+          rule_name: '手术麻醉',
+          status: 'technical_error_internal',
+          is_compliant: true,
+          findings: '执行器异常。',
+        },
+      ],
+    })
+
+    expect(result.issues.map((item) => item.status)).toEqual([
+      'data_gap',
+      'data_gap',
+      'not_executed',
+      'technical_error',
+    ])
+  })
+
   it('正式质控在线任务优先使用后处理统计和展示字段', () => {
     const result = mapBatchJobToStructuredQC(
       {

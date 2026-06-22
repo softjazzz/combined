@@ -18,6 +18,9 @@ const STATUS_LABEL_MAP: Record<StructuredQCStatus, string> = {
   uncertain: '待复核',
   compliant: '合规',
   not_applicable: '不适用',
+  data_gap: '数据不足',
+  not_executed: '未执行',
+  technical_error: '技术异常',
   failed: '失败',
   error: '错误',
 }
@@ -61,11 +64,17 @@ function toBoolean(value: unknown): boolean | null {
 
 function normalizeStatus(status: unknown, isCompliant: unknown): StructuredQCStatus {
   const normalized = toText(status).toLowerCase()
+  if (normalized === 'data_quality_gap') return 'data_gap'
+  if (normalized === 'technical_error_internal') return 'technical_error'
+  if (normalized === 'unsupported' || normalized === 'not_run') return 'not_executed'
   if (
     normalized === 'non_compliant' ||
     normalized === 'uncertain' ||
     normalized === 'compliant' ||
     normalized === 'not_applicable' ||
+    normalized === 'data_gap' ||
+    normalized === 'not_executed' ||
+    normalized === 'technical_error' ||
     normalized === 'failed' ||
     normalized === 'error'
   ) {
