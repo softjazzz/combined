@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_discharge_consistency_v1",
+    "issue_type": "Z07_discharge_consistency",
+    "display_name": "出院诊断一致性",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-125"],
+    "bucket_id": "discharge_consistency"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P107",
+    "visit_id": "SYN-RUN-107",
+    "mr_no": "SYN0107",
+    "patient_name": "合成患者庚",
+    "gender": "男",
+    "age": 61,
+    "department": "肾内科"
+  },
+  "documents": [
+    {
+      "document_type": "discharge_record",
+      "title": "出院记录",
+      "content": "入院诊断：慢性肾功能不全急性加重，2型糖尿病。出院诊断：慢性肾功能不全急性加重；2型糖尿病。诊疗经过与病程一致，无死亡相关内容。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["慢性肾功能不全急性加重", "2型糖尿病"],
+    "orders": [],
+    "exams": ["肌酐升高"]
+  }
+}

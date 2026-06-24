@@ -1,0 +1,168 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T17:16:25.469648",
+  "run_finished_at": "2026-04-22T17:16:27.619360",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_daily_course_antibiotic_not_documented_v1_defect.json",
+      "issue_type": "C2_daily_course_antibiotic_not_documented",
+      "display_name": "抗菌药物使用未在病程中记录",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-032",
+        "SC-033"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 1.999,
+      "total_tokens": 1028,
+      "prompt_tokens": 791,
+      "completion_tokens": 237,
+      "api_time": 1.996,
+      "packs": [
+        {
+          "pack_id": "daily_course_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-032",
+            "SC-033"
+          ],
+          "tokens_used": 1028,
+          "prompt_tokens": 791,
+          "completion_tokens": 237,
+          "api_time": 1.996325969696045
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-032",
+          "rule_name": "病程记录重要病情变化(症状及体征)未记录或记录不全",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程仅写体温稍降及套话，未记录其他重要症状体征变化。",
+          "evidence": "患者今日体温较前稍降，继续治疗。",
+          "suggestion": "补充具体症状体征变化描述。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-032\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程仅写体温稍降及套话，未记录其他重要症状体征变化。\",\n      \"evidence\": \"患者今日体温较前稍降，继续治疗。\",\n      \"suggestion\": \"补充具体症状体征变化描述。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-033\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"有感染线索但无病情分析及具体处理意见。\",\n      \"evidence\": \"患者今日体温较前稍降，继续治疗。\",\n      \"suggestion\": \"补充对体温变化的分析及后续治疗计划。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            16
+          ],
+          "metadata": {
+            "tokens_used": 514,
+            "prompt_tokens": 395,
+            "completion_tokens": 118,
+            "input_tokens": 395,
+            "output_tokens": 118,
+            "api_time": 0.9981629848480225,
+            "first_result_latency": 1.996325969696045,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 65
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-033",
+          "rule_name": "病程记录中对病情变化无分析判断或无具体处理意见",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "有感染线索但无病情分析及具体处理意见。",
+          "evidence": "患者今日体温较前稍降，继续治疗。",
+          "suggestion": "补充对体温变化的分析及后续治疗计划。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-032\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程仅写体温稍降及套话，未记录其他重要症状体征变化。\",\n      \"evidence\": \"患者今日体温较前稍降，继续治疗。\",\n      \"suggestion\": \"补充具体症状体征变化描述。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-033\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"有感染线索但无病情分析及具体处理意见。\",\n      \"evidence\": \"患者今日体温较前稍降，继续治疗。\",\n      \"suggestion\": \"补充对体温变化的分析及后续治疗计划。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            16
+          ],
+          "metadata": {
+            "tokens_used": 514,
+            "prompt_tokens": 395,
+            "completion_tokens": 118,
+            "input_tokens": 395,
+            "output_tokens": 118,
+            "api_time": 0.9981629848480225,
+            "first_result_latency": 1.996325969696045,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 65
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-032": "non_compliant",
+          "SC-033": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-032": "non_compliant",
+          "SC-033": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    }
+  ]
+}

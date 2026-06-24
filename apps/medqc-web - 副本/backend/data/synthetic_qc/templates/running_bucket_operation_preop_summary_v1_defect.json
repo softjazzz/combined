@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_preop_summary_v1",
+    "issue_type": "Z10_operation_preop",
+    "display_name": "术前准备闭环-术前小结",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-081"],
+    "bucket_id": "operation_preop"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P110A",
+    "visit_id": "SYN-RUN-110A",
+    "mr_no": "SYN0110A",
+    "patient_name": "合成患者癸甲",
+    "gender": "女",
+    "age": 52,
+    "department": "普外科"
+  },
+  "documents": [
+    {
+      "document_type": "presurg_summary",
+      "title": "术前小结",
+      "content": "患者拟手术治疗，已向家属交代风险。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["胆囊结石", "急性胆囊炎"],
+    "orders": ["手术治疗"],
+    "exams": ["腹部超声提示胆囊结石并急性胆囊炎"]
+  }
+}

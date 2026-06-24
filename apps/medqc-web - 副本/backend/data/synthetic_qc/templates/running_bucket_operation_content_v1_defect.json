@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_content_v1",
+    "issue_type": "Z09_operation_content",
+    "display_name": "手术相关内容完整性",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-089", "SC-091", "SC-097", "SC-110", "SC-113"],
+    "bucket_id": "operation_content"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P109",
+    "visit_id": "SYN-RUN-109",
+    "mr_no": "SYN0109",
+    "patient_name": "合成患者壬",
+    "gender": "男",
+    "age": 46,
+    "department": "普外科"
+  },
+  "documents": [
+    {
+      "document_type": "consent_form",
+      "title": "手术知情同意书",
+      "content": "手术知情同意书：患者同意急诊手术。未写明具体手术名称、手术方式、主要风险、替代方案。麻醉同意内容未见记录，患者仅签了一个名字。"
+    },
+    {
+      "document_type": "presurg_summary",
+      "title": "术前小结",
+      "content": "术前小结：患者3日前已在外院行腹腔镜探查术，现拟再次手术处理，但本次术前小结未对上一次手术经过、存在问题及本次再次手术原因作出总结说明。病情变化后今晚拟急诊再次手术治疗。"
+    },
+    {
+      "document_type": "surgery_record",
+      "title": "手术记录",
+      "content": "急诊手术记录：今晚急诊行剖腹探查术。记录仅写“行手术，过程顺利”，未写麻醉方式、术中所见、关键操作、标本去向及术后去向。病历中也未见主治及以上医师注明姓名和职称的急诊手术指示记录。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["术后腹腔出血", "胆囊结石术后并发症"],
+    "orders": ["急诊再次手术治疗"],
+    "exams": []
+  }
+}

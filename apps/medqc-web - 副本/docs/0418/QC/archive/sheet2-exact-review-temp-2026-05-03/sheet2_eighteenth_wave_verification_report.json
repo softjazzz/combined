@@ -1,0 +1,14 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 0,
+  "families": [],
+  "verification_status_breakdown": {
+    "pending": 197,
+    "exact_hit": 20,
+    "miss": 28,
+    "same_family_hit": 30,
+    "skip": 8
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 14,
+  "families": [
+    {
+      "issue_family": "不合理复制病历内容",
+      "row_count": 4,
+      "job_id": "8854dbfa-0717-41dd-996f-326527448265",
+      "result_breakdown": {
+        "same_family_hit": 3,
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 4
+      },
+      "items_count": 3,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "危急值记录不完整/处理不充分",
+      "row_count": 5,
+      "job_id": "3372176f-afc0-40e1-9696-4bcc4737c65f",
+      "result_breakdown": {
+        "same_family_hit": 3,
+        "miss": 2
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 5
+      },
+      "items_count": 3,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "诊疗医嘱与病程记录不一致",
+      "row_count": 5,
+      "job_id": "507787e1-f9b7-4cad-a5fa-f5857e6b09fe",
+      "result_breakdown": {
+        "same_family_hit": 4,
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 5
+      },
+      "items_count": 4,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 209,
+    "miss": 50,
+    "same_family_hit": 22,
+    "skip": 2
+  }
+}

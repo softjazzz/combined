@@ -1,0 +1,237 @@
+{
+  "id": "8afd619b-b585-456e-9a09-2c3cfc9ed89a",
+  "mode": "optimized_batch",
+  "document_type": "出院记录",
+  "document_id": "test_1762937206332",
+  "rule_ids": [
+    "LX-029",
+    "LX-030"
+  ],
+  "medical_text": "出院记录\n\n姓名：张三\n性别：男\n年龄：58岁\n住院号：2025100123\n入院日期：2025-10-01\n出院日期：2025-10-15\n住院天数：14天\n\n入院诊断：\n1. 冠心病 急性非ST段抬高型心肌梗死\n2. 心功能不全 心功能Ⅲ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n\n出院诊断：\n1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n\n入院情况：\n患者因\"反复胸闷、气促3年，加重伴晕厥1天\"于2025-10-01入院。入院时神志清楚，精神一般，诉胸闷、气促明显，活动后加重，伴心悸、出汗。查体：T 36.8℃，P 88次/分，R 20次/分，BP 145/90mmHg。双肺底可闻及少许湿性啰音，心界向左下扩大，心尖部可闻及3/6级收缩期吹风样杂音，双下肢轻度水肿。心电图示完全性左束支传导阻滞，心肌酶谱升高，BNP 1250pg/ml，超声心动图示左室扩大、射血分数35%。\n\n诊疗经过：\n入院后完善相关检查，明确诊断为急性非ST段抬高型心肌梗死、心功能不全。予以CCU监护，心电监护、吸氧，给予抗血小板聚集、抗凝、改善心肌代谢、强心利尿、降压、控制血糖等治疗。入院第3天行冠状动脉造影检查，示前降支近段95%狭窄，回旋支远段50%狭窄，右冠状动脉未见明显狭窄。行前降支病变处支架植入术（药物洗脱支架1枚，规格3.0×23mm），术后造影示血流通畅，TIMI 3级。术后继续抗血小板、抗凝、强心利尿等治疗。患者病情逐渐好转，胸闷、气促症状明显缓解，双下肢水肿消退，复查心肌酶谱降至正常，BNP下降至450pg/ml，超声心动图复查示左室射血分数改善至45%。病情稳定，今日出院。\n\n出院情况：\n患者一般情况良好，无胸闷、气促，活动耐量较前明显改善。查体：T 36.5℃，P 72次/分，R 18次/分，BP 130/80mmHg。神志清楚，精神可，双肺呼吸音清，未闻及干湿啰音，心律齐，心尖部可闻及2/6级收缩期杂音，双下肢无水肿。\n\n出院医嘱：\n1. 休息：出院后注意休息，避免剧烈活动，可适当进行康复锻炼\n2. 饮食：低盐低脂糖尿病饮食，控制总热量摄入\n3. 药物治疗：\n   - 阿司匹林肠溶片 100mg qd 口服（餐后服用）\n   - 替格瑞洛片 90mg bid 口服（服用至少12个月）\n   - 阿托伐他汀钙片 20mg qn 口服\n   - 美托洛尔缓释片 47.5mg qd 口服\n   - 培哚普利片 4mg qd 口服\n   - 螺内酯片 20mg qd 口服\n   - 二甲双胍片 0.5g tid 口服\n4. 复查：出院后1周、1个月、3个月门诊复查，监测血压、血糖、血脂、肝肾功能、心肌酶谱等\n5. 注意事项：\n   - 规律服药，不可自行停药或调整剂量\n   - 监测血压、血糖，如有异常及时就诊\n   - 如出现胸痛、胸闷、气促加重等不适，立即就诊\n   - 戒烟限酒，保持心情舒畅\n   - 预防感冒，避免感染\n\n出院带药：\n阿司匹林肠溶片、替格瑞洛片、阿托伐他汀钙片、美托洛尔缓释片、培哚普利片、螺内酯片、二甲双胍片（各带1个月用量）\n\n医师签名：李医生\n日期：2025-10-15",
+  "medical_text_length": 1419,
+  "stats": {
+    "total": 9,
+    "compliant": 6,
+    "passed": 4,
+    "notApplicable": 2,
+    "issues": 3,
+    "errors": 0
+  },
+  "performance": {
+    "totalTokens": 12747,
+    "totalTime": 38.556907176971436
+  },
+  "results": null,
+  "payload": {
+    "document_id": "test_1762937206332",
+    "evaluation_summary": {
+      "total_rules": 9,
+      "compliant_rules": 6,
+      "not_applicable": 2,
+      "issues_found": 3,
+      "compliance_rate": 66.67,
+      "overall_grade": "C",
+      "critical_violations": 3,
+      "model": "qwen2.5-14b-instruct"
+    },
+    "evaluation_results": [
+      {
+        "rule_id": "LX-001",
+        "rule_name": "主诉书写不规范或不能导出第一诊断",
+        "is_compliant": true,
+        "status": "compliant",
+        "findings": "主诉与现病史、入院诊断一致，符合质控要求。",
+        "evidence": "主诉：体检发现肺部结节1周。\n现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\n入院诊断：右肺占位性病变。",
+        "suggestion": "",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1791,
+          "api_time": 4.018823146820068
+        }
+      },
+      {
+        "rule_id": "LX-002",
+        "rule_name": "入院记录-现病史缺少一般情况",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "现病史缺少一般情况的描述，如饮食、睡眠、体力、精神状态等。",
+        "evidence": "现病史记载：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\"",
+        "suggestion": "① 在现病史中补充患者的一般情况，包括饮食、睡眠、体力、精神状态等。例如，可以描述患者是否有食欲下降、睡眠质量如何、体力是否有所下降、精神状态是否良好等。(1)\n② 明确记录患者发病的时间或起病缓急，确保现病史的完整性。(2)",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1839,
+          "api_time": 5.957043409347534
+        }
+      },
+      {
+        "rule_id": "LX-003",
+        "rule_name": "入院记录-婴幼儿个人史缺少喂养史",
+        "is_compliant": true,
+        "status": "not_applicable",
+        "findings": "病历不属于婴幼儿范围（年龄 44 岁 > 7 岁）",
+        "evidence": "",
+        "suggestion": "",
+        "confidence": 0.9,
+        "applicability": {
+          "is_applicable": false,
+          "reason": "病历不属于婴幼儿范围（年龄 44 岁 > 7 岁）",
+          "method": "lx003_age_guard"
+        },
+        "evidence_verified": true,
+        "metadata": {
+          "tokens_used": 0,
+          "api_time": 0
+        }
+      },
+      {
+        "rule_id": "LX-004",
+        "rule_name": "入院记录-专科检查缺失",
+        "is_compliant": true,
+        "status": "compliant",
+        "findings": "患者属于呼吸与危重症医学科，无需外科或神经内科的专科体格检查。因此，规则不适用。",
+        "evidence": "患者信息显示患者入院科室为呼吸与危重症医学科，病区为呼吸内一科。体格检查部分详细记录了患者的全身状况，包括皮肤、淋巴结、肺部、心脏、腹部等部位的检查结果。记载：\"体格检查：T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。神志清楚，精神可，自主体位，查体合作。全身皮肤黏膜无黄染，浅表淋巴结未触及肿大。双肺呼吸音清，未闻及干湿啰音。心律齐，各瓣膜听诊区未闻及杂音。腹部平软，无压痛，肝脾肋下未触及。双下肢无水肿。\"",
+        "suggestion": "",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1823,
+          "api_time": 5.858644008636475
+        }
+      },
+      {
+        "rule_id": "LX-005",
+        "rule_name": "入院记录-体格检查缺生命体征-血压",
+        "is_compliant": true,
+        "status": "compliant",
+        "findings": "患者为成年男性，体格检查部分记录了血压值125/78 mmHg，符合质控要求。",
+        "evidence": "体格检查部分记载：\"T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。\"",
+        "suggestion": "",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1708,
+          "api_time": 3.166325092315674
+        }
+      },
+      {
+        "rule_id": "LX-006",
+        "rule_name": "入院记录-7岁以上人群体格检查缺生命体征-血压",
+        "is_compliant": true,
+        "status": "not_applicable",
+        "findings": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+        "evidence": "",
+        "suggestion": "",
+        "confidence": 0.9,
+        "applicability": {
+          "is_applicable": false,
+          "reason": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+          "method": "lx006_age_guard"
+        },
+        "evidence_verified": true,
+        "metadata": {
+          "tokens_used": 0,
+          "api_time": 0
+        }
+      },
+      {
+        "rule_id": "LX-007",
+        "rule_name": "入院记录缺辅助检查",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "现病史中提到了院外胸部CT检查，但辅助检查章节中未详细记录该检查的时间和结果。",
+        "evidence": "现病史记载：\"胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\" 辅助检查记载：\"胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大。\"",
+        "suggestion": "(1) 在辅助检查章节中补充胸部CT检查的时间和结果，确保与现病史一致。\n(2) 确保所有提到的院外辅助检查均在辅助检查章节中有详细记录，包括检查名称、时间和结果。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1786,
+          "api_time": 6.158620357513428
+        }
+      },
+      {
+        "rule_id": "LX-008",
+        "rule_name": "入院记录-检查结果未记录",
+        "is_compliant": true,
+        "status": "compliant",
+        "findings": "现病史中提到的胸部CT检查已在辅助检查中记录了完整的结果。",
+        "evidence": "现病史提到：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\" 辅助检查中记录了：\"胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大。\"",
+        "suggestion": "",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 2009,
+          "api_time": 6.89384126663208
+        }
+      },
+      {
+        "rule_id": "LX-009",
+        "rule_name": "入院记录缺初步诊断",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "病历中现病史和既往史均提到了右肺占位性病变，但入院诊断仅记录了主要诊断，未提及可能存在的次要诊断。因此，存在次要诊断遗漏的可能性。",
+        "evidence": "现病史记载：\"患者无咳嗽、咳痰、咯血、胸痛、气促等不适。\" 入院诊断记载：\"右肺占位性病变。\"",
+        "suggestion": "1) 在入院诊断中补充可能存在的次要诊断，例如排除慢性阻塞性肺疾病(COPD)或其他呼吸系统疾病；\n2) 若无其他明确的次要诊断，需在入院记录中明确说明无其他相关症状或体征；\n3) 确保入院诊断的主次顺序正确，确保主要诊断为'右肺占位性病变'，次要诊断如有需按重要性排序。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1791,
+          "api_time": 6.503609895706177
+        }
+      }
+    ],
+    "performance_metrics": {
+      "processing_time": 38.556907176971436,
+      "token_usage": 12747,
+      "estimated_cost": 0.025494
+    },
+    "optimization_metrics": {
+      "token_savings_rate": 0.8,
+      "estimated_original_tokens": 63735,
+      "actual_tokens_saved": 50988,
+      "cost_savings": 0.101976
+    }
+  },
+  "metadata": {
+    "trigger": "quick_qc_ui",
+    "prompt_mode": "plan_a"
+  },
+  "model": "qwen2.5-14b-instruct",
+  "created_at": "2025-11-12T08:47:24.723196+00:00"
+}

@@ -1,0 +1,165 @@
+{
+  "input_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "summary": {
+    "record_count": 8,
+    "skip_allowed_count": 2,
+    "fallback_available_count": 0,
+    "missing_document_type_breakdown": {
+      "入院记录": 2
+    }
+  },
+  "results": [
+    {
+      "sheet2_row_id": "Sheet2-R0010",
+      "visit_id": "1430048",
+      "patient_name": "任利",
+      "manual_issue_text": "入院记录-体格检查缺体重",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0016",
+      "visit_id": "1891128",
+      "patient_name": "徐朝华",
+      "manual_issue_text": "入院记录中无专科检查",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0075",
+      "visit_id": "2049419",
+      "patient_name": "陈巧",
+      "manual_issue_text": "入院记录中，既往口服易善复，未明确具体剂量，孕期体重增加1公斤，记录不准确。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0118",
+      "visit_id": "2097761",
+      "patient_name": "张成燕",
+      "manual_issue_text": "患者行剖宫产2次，体格检查中腹部情况未做相关描述。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0143",
+      "visit_id": "2153245",
+      "patient_name": "杜心烨",
+      "manual_issue_text": "体格检查中，双膝部外伤未详细记录，超过24小时未录入主诊断。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-011|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0167",
+      "visit_id": "200245",
+      "patient_name": "徐玉彬",
+      "manual_issue_text": "入院记录体格检查中生命体征处患者“轮椅入病房”，但在一般状况检查中描述为“步入病房”前后不一致",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": true,
+      "missing_document_types": ["入院记录"],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:no_row"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 入院记录，且无可回退文书，可判 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0223",
+      "visit_id": "2229247",
+      "patient_name": "陈正权",
+      "manual_issue_text": "入院诊断疼痛，诊断不准确，专科查体中显示主被动活动受限，但入院诊断未体现",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-011|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0261",
+      "visit_id": "371729",
+      "patient_name": "朱恩富",
+      "manual_issue_text": "体格检查中写四肢各关节活动自如，后面又记录肌力检查不配合，疼痛刺激可见四肢活动，前后不相符",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": true,
+      "missing_document_types": ["入院记录"],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:no_row"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 入院记录，且无可回退文书，可判 skip",
+      "target_document_types": ["入院记录"]
+    }
+  ]
+}

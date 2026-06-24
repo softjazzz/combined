@@ -1,0 +1,539 @@
+visit_id,patient_name,rule_id,rule_name,original_status,second_pass_status,source_file,original_conclusion,original_evidence,surgery_record_coverage,pathology_source_coverage,pathology_trigger_status,trigger_strength,trigger_source,specimen_terms_detected,pathology_record_count,surgery_record_rows,surgery_record_assembled_len,surgery_record_text_chars,postsurg_firstcourse_record_rows,pathology_exam_master_rows,pathology_exam_report_rows,pathology_master_assembled_len,pathology_report_assembled_len,final_bundle_has_surgery_record,final_bundle_has_pathology_exam_master,final_bundle_has_pathology_exam_report,surgery_domain_has_surgery_record,surgery_domain_has_pathology_exam_master,surgery_domain_has_pathology_exam_report,course_domain_has_pathology_exam_master,course_domain_has_pathology_exam_report,surgery_record_specimen_quote,pathology_report_quote,gate_decision,gate_reason,evidence_quote,source_or_sync_gap_reason,data_source,needs_second_pass_gate
+2229247,陈正权,SC-099,术中取材情况和病理结果未在手术记录中记录,rejected_by_system,,formal_qc_random10_original_chain_issue_review.csv,手术记录未明确记载术中取材及病理结果。,【当前文书】记录时间: 2026-02-28 14:44:33,present,no_pathology_rows,absent,absent,no_specimen_or_pathology_trigger,"取材,病理结果,送检",0,1,664,1163,1,0,0,0,0,True,False,False,True,False,False,False,False,"记录时间: 2026-02-28 14:44:33
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 肩关节镜下关节腔清理+肩袖修补+肩峰成形术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1、麻醉满意后患者取左侧半侧卧位,行右肩部及右上肢常规消毒辅巾。
+2、建立右肩关节后侧入路,进入光源,在关节镜监视下建立前方入路,关节镜下沿肩袖间隙进入用等离子刀及骨微动力系统一次性刨刀(型号详",,rejected_by_system,手术记录和病理来源均未发现取材、标本、送病理、快速病理等触发条件，SC-099 不适用。,"记录时间: 2026-02-28 14:44:33
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 肩关节镜下关节腔清理+肩袖修补+肩峰成形术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1、麻醉满意后患者取左侧半侧卧位,行右肩部及右上肢常规消毒辅巾。
+2、建立右肩关节后侧入路,进入光源,在关节镜监视下建立前方入路,关节镜下沿肩袖间隙进入用等离子刀及骨微动力系统一次性刨刀(型号详","source_no_data:pathology_exam_master,source_no_data:pathology_exam_report,bundle_missing:final.pathology_exam_master,bundle_missing:final.pathology_exam_report,bundle_missing:surgery.pathology_exam_master,bundle_missing:surgery.pathology_exam_report,bundle_missing:course.pathology_exam_master,bundle_missing:course.pathology_exam_report",history_issue_review+local_cdm_bundle_readonly,False
+2310639,朱瑞银,SC-099,术中取材情况和病理结果未在手术记录中记录,rejected_by_system,,formal_qc_random10_original_chain_issue_review.csv,手术记录未明确记载术中取材及病理结果，但脑血管造影通常无需取材。,"【当前文书】手术经过: 1.病人平卧于手术台上,常规会阴部及双侧腹股沟消毒,铺无菌巾",present,no_pathology_rows,absent,absent,no_specimen_or_pathology_trigger,"取材,病理结果",0,1,647,1129,1,0,0,0,0,True,False,False,True,False,False,False,False,"记录时间: 2026-04-07 10:23:54
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 脑血管造影
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.病人平卧于手术台上,常规会阴部及双侧腹股沟消毒,铺无菌巾。2.用2%利多卡因5ml行右侧腹股沟局部麻醉。采用Seldinger技术穿刺右侧股动脉,置入5F动脉鞘组。通过动脉鞘组,在0.035“导丝引导下5F的造影导管插入超",,rejected_by_system,手术记录和病理来源均未发现取材、标本、送病理、快速病理等触发条件，SC-099 不适用。,"记录时间: 2026-04-07 10:23:54
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 脑血管造影
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.病人平卧于手术台上,常规会阴部及双侧腹股沟消毒,铺无菌巾。2.用2%利多卡因5ml行右侧腹股沟局部麻醉。采用Seldinger技术穿刺右侧股动脉,置入5F动脉鞘组。通过动脉鞘组,在0.035“导丝引导下5F的造影导管插入超","source_no_data:pathology_exam_master,source_no_data:pathology_exam_report,bundle_missing:final.pathology_exam_master,bundle_missing:final.pathology_exam_report,bundle_missing:surgery.pathology_exam_master,bundle_missing:surgery.pathology_exam_report,bundle_missing:course.pathology_exam_master,bundle_missing:course.pathology_exam_report",history_issue_review+local_cdm_bundle_readonly,False
+2191573,廖小平,SC-099,术中取材情况和病理结果未在手术记录中记录,rejected_by_system,,formal_qc_random10_original_chain_issue_review.csv,手术记录未明确提及术中取材及病理结果。,【当前文书】记录时间: 2026-01-29 13:18:29,present,no_pathology_rows,absent,absent,no_specimen_or_pathology_trigger,"取材,病理结果,送检",0,2,1059,1789,2,0,0,0,0,True,False,False,True,False,False,False,False,"记录时间: 2026-01-29 13:18:29
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 为肾透析的动静脉造瘘术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 患者取平卧位,有上肢外展位,常规消毒、铺巾。左腕部沿术前标记线沿长轴一次性切开皮肤,皮下长约4cm,探查头静脉,头静脉直径约2.5mm,完善止血切断并结扎头静脉远端,充分剥离近端血管表面筋膜,探查桡动脉,桡动脉直径",,rejected_by_system,手术记录和病理来源均未发现取材、标本、送病理、快速病理等触发条件，SC-099 不适用。,"记录时间: 2026-01-29 13:18:29
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 为肾透析的动静脉造瘘术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 患者取平卧位,有上肢外展位,常规消毒、铺巾。左腕部沿术前标记线沿长轴一次性切开皮肤,皮下长约4cm,探查头静脉,头静脉直径约2.5mm,完善止血切断并结扎头静脉远端,充分剥离近端血管表面筋膜,探查桡动脉,桡动脉直径","source_no_data:pathology_exam_master,source_no_data:pathology_exam_report,bundle_missing:final.pathology_exam_master,bundle_missing:final.pathology_exam_report,bundle_missing:surgery.pathology_exam_master,bundle_missing:surgery.pathology_exam_report,bundle_missing:course.pathology_exam_master,bundle_missing:course.pathology_exam_report",history_issue_review+local_cdm_bundle_readonly,False
+2142472,张泽芳,SC-099,术中取材情况和病理结果未在手术记录中记录,rejected_by_system,,formal_qc_random10_original_chain_issue_review.csv,手术记录未明确记录术中取材情况及病理结果。,【当前文书】记录时间: 2025-12-28 09:29:37,present,present,present,strong,pathology_exam_source,"取材,病理结果,送检",2,1,1178,2191,1,1,1,47,148,True,True,True,True,True,True,True,True,"记录时间: 2025-12-28 09:29:37
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 全膝关节假体翻修术(金属对聚乙烯)+髌骨成形术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.麻醉成功后,患者取仰卧位,左大腿根部绑充气止血带,左足及左下肢常规碘伏消毒后铺无菌巾,贴皮肤抗菌膜,抬高患肢1分钟后止血带充气30kmp。
+2.取左膝前正中纵形切口,长约15cm,切开皮","2138800||172
+H258360
+宫颈3.6.9.12
+膝关节滑膜：灰黄色不规则组织一堆，共18.0x13.0x6.0cm，表面见大量乳头状赘生物，直径0.1-1.0cm，切面灰白色，实性、质中，选包6盒-1-6。
+严
+膝关节滑膜：纤维组织增生伴胶原化、玻变，灶性区域见钙化及多核巨细胞。
+宫颈3.6.9.12
+膝关节滑膜：灰黄色不规则组织一堆，共18.0x13.0x6.0cm，表面见大量乳头状赘生物，直径0.1-1.0cm，切面灰白色，实性、质中，选包6盒-1-6。
+严
+膝关节滑膜：纤维组织增生伴胶原化、玻",pass_to_second_gate,存在病理申请/报告来源，但手术记录未明确取材/送检/病理结果，需要二轮核对是否属于缺陷或数据缺口。,"2138800||172
+H258360
+左膝关节置换术后10+年，膝关节疼痛1年
+膝关节滑膜
+膝关节滑膜
+左膝关节置换术后10+年，膝关节疼痛1年
+H258360
+2138800||172",,history_issue_review+local_cdm_bundle_readonly,True
+2200664,朱泰廷,SC-099,术中取材情况和病理结果未在手术记录中记录,data_quality_gap,,formal_qc_random10_batch2_original_chain_issue_review.csv,手术记录仅提及送检，未记录术中具体取材部位及病理结果。,切除标本常规送病检,present,present,present,strong,surgery_or_postsurg_record_explicit_specimen_pathology,"取材,标本,病理结果,送检",4,1,953,1741,1,2,2,134,89,True,True,True,True,True,True,True,True,"缩功能正常。Ellick将切除腺体冲洗出,切除组织约50g。前列腺窝彻底予以电凝止血。观察术野无明显活动性出血,前列腺包膜无穿孔,尿道外括约肌环收缩良好。放置F22三腔尿管,气囊充水30ml,牵引加压止血,给予持续膀胱冲洗,冲洗液清亮。切除标本常规送病检。术毕。
+4、术中麻醉满意,手术顺利,术中平稳,出血少,术后安返病房。
+切口愈合等级:
+手术开始时间: 2026-02-09 09:15:00+08
+手术结束时间:
+失血量:
+其他内容:
+记录内容: 术中予以心电监测,吸氧","2196904||234
+M260071
+全子宫
+全子宫
+M260071
+2196904||234
+2196904||165
+H260958
+宫颈脱落细胞
+前列腺组织：灰白灰褐碎组织1堆，共6.0x6.0x2.0cm，选包1-8.
+宫颈脱落细胞
+前列腺组织：灰白灰褐碎组织1堆，共6.0x6.0x2.0cm，选包1-8.
+H260958
+2196904||165",pass_to_second_gate,手术/术后记录存在取材、标本或送病理触发，需二轮核对手术记录是否完整记录取材情况和病理结果。,"缩功能正常。Ellick将切除腺体冲洗出,切除组织约50g。前列腺窝彻底予以电凝止血。观察术野无明显活动性出血,前列腺包膜无穿孔,尿道外括约肌环收缩良好。放置F22三腔尿管,气囊充水30ml,牵引加压止血,给予持续膀胱冲洗,冲洗液清亮。切除标本常规送病检。术毕。
+4、术中麻醉满意,手术顺利,术中平稳,出血少,术后安返病房。
+切口愈合等级:
+手术开始时间: 2026-02-09 09:15:00+08
+手术结束时间:
+失血量:
+其他内容:
+记录内容: 术中予以心电监测,吸氧",,history_issue_review+local_cdm_bundle_readonly,True
+2218469,刘光蓉,SC-099,术中取材情况和病理结果未在手术记录中记录,rejected_by_system,,formal_qc_random10_batch2_original_chain_issue_review.csv,手术记录未明确记录术中取材情况及病理结果。,"【当前文书】2.于左膝前外侧做0.6cm皮肤切口,直钳钝性分离至关节腔,插入镜鞘及关节镜,注入冲洗液,行关节腔镜检,同时在关节镜监视下建立前内侧入路,置入骨微动...",present,no_pathology_rows,absent,absent,no_specimen_or_pathology_trigger,"取材,病理结果,送检",0,2,1965,3601,2,0,0,0,0,True,False,False,True,False,False,False,False,"记录时间: 2026-03-03 07:49:19
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 关节镜下左膝关节腔探查清理+外侧半月板缝合+取同侧半腱肌、股薄肌、腓骨长肌行后交叉韧带重建术+支具外固定术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.麻醉成功后,患者取仰卧位,左膝关节侧方应力试验及拨号征阴性,后抽屉及反Lachman试验阳性,左大腿根部绑充气止血带,术野常规",,rejected_by_system,手术记录和病理来源均未发现取材、标本、送病理、快速病理等触发条件，SC-099 不适用。,"记录时间: 2026-03-03 07:49:19
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 关节镜下左膝关节腔探查清理+外侧半月板缝合+取同侧半腱肌、股薄肌、腓骨长肌行后交叉韧带重建术+支具外固定术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.麻醉成功后,患者取仰卧位,左膝关节侧方应力试验及拨号征阴性,后抽屉及反Lachman试验阳性,左大腿根部绑充气止血带,术野常规","source_no_data:pathology_exam_master,source_no_data:pathology_exam_report,bundle_missing:final.pathology_exam_master,bundle_missing:final.pathology_exam_report,bundle_missing:surgery.pathology_exam_master,bundle_missing:surgery.pathology_exam_report,bundle_missing:course.pathology_exam_master,bundle_missing:course.pathology_exam_report",history_issue_review+local_cdm_bundle_readonly,False
+2172686,胡启华,SC-099,术中取材情况和病理结果未在手术记录中记录,rejected_by_system,,formal_qc_random10_batch2_original_chain_issue_review.csv,手术记录未明确提及术中取材及病理结果。,【当前文书】记录时间: 2026-01-20 17:07:18,present,present,present,strong,pathology_exam_source,"取材,病理结果,送检",2,2,1127,1925,2,1,1,68,87,True,True,True,True,True,True,True,True,"记录时间: 2026-01-13 14:09:26
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 泪囊摘除术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.常规消毒铺巾,暴露右眼泪囊区;
+2.用利多卡因作右眼泪囊区皮下浸润麻醉及眶上、眶下神经阻滞麻醉;
+3.在右眼泪囊区做一长约2cm弧形皮肤切口,分离皮下组织,暴露泪囊后摘除;
+4.泪囊窝内碘酒烧灼后生理盐水冲洗;
+5.可吸收","2168974||70
+H260238
+宫颈脱落细胞
+右眼泪囊：囊壁样组织1块，大小1.1x0.8x0.2cm，囊壁光滑，厚0.1cm，全包-1.
+严
+右眼泪囊：慢性泪囊炎。
+宫颈脱落细胞
+右眼泪囊：囊壁样组织1块，大小1.1x0.8x0.2cm，囊壁光滑，厚0.1cm，全包-1.
+严
+右眼泪囊：慢性泪囊炎。
+H260238
+2168974||70",pass_to_second_gate,存在病理申请/报告来源，但手术记录未明确取材/送检/病理结果，需要二轮核对是否属于缺陷或数据缺口。,"2168974||70
+H260238
+右眼视物模糊5年，伴胀痛2天。患者于5年前，无明显诱因起病，出现右眼视物模糊、视力下降
+右眼泪囊
+右眼泪囊
+右眼视物模糊5年，伴胀痛2天。患者于5年前，无明显诱因起病，出现右眼视物模糊、视力下降
+H260238
+2168974||70",,history_issue_review+local_cdm_bundle_readonly,True
+2327691,邹世科,SC-099,术中取材情况和病理结果未在手术记录中记录,rejected_by_system,,formal_qc_random10_batch2_original_chain_issue_review.csv,手术记录未提及术中取材及病理结果，但射频术通常无需常规取材。,"【当前文书】手术经过: 患者坐位,头放于靠背上,颈部屈曲,暴露颈后部,常规消毒铺巾,超声下定位左侧颈2棘突及颈1横突间之头下斜肌,局部麻醉,射频针穿刺,靶点为头...",present,no_pathology_rows,absent,absent,no_specimen_or_pathology_trigger,"取材,病理结果",0,1,514,863,1,0,0,0,0,True,False,False,True,False,False,False,False,"记录时间: 2026-04-07 16:37:26
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 周围神经松解术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 患者坐位,头放于靠背上,颈部屈曲,暴露颈后部,常规消毒铺巾,超声下定位左侧颈2棘突及颈1横突间之头下斜肌,局部麻醉,射频针穿刺,靶点为头下斜肌与头半棘肌筋脉间中点,超声引导下至患者有胀痛感停止进针,拔出穿刺针针芯,接上射频",,rejected_by_system,手术记录和病理来源均未发现取材、标本、送病理、快速病理等触发条件，SC-099 不适用。,"记录时间: 2026-04-07 16:37:26
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 周围神经松解术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 患者坐位,头放于靠背上,颈部屈曲,暴露颈后部,常规消毒铺巾,超声下定位左侧颈2棘突及颈1横突间之头下斜肌,局部麻醉,射频针穿刺,靶点为头下斜肌与头半棘肌筋脉间中点,超声引导下至患者有胀痛感停止进针,拔出穿刺针针芯,接上射频","source_no_data:pathology_exam_master,source_no_data:pathology_exam_report,bundle_missing:final.pathology_exam_master,bundle_missing:final.pathology_exam_report,bundle_missing:surgery.pathology_exam_master,bundle_missing:surgery.pathology_exam_report,bundle_missing:course.pathology_exam_master,bundle_missing:course.pathology_exam_report",history_issue_review+local_cdm_bundle_readonly,False
+2214679,田正群,SC-099,术中取材情况和病理结果未在手术记录中记录,rejected_by_system,,formal_qc_random10_batch3_original_chain_issue_review.csv,手术记录未明确记录术中取材及病理结果。,大标本:阴道前后壁、子宫及双侧输卵管卵巢家属过目后送病检。,present,present,present,strong,surgery_or_postsurg_record_explicit_specimen_pathology,"取材,标本,病理结果",3,1,1307,2449,1,2,1,70,22,True,True,True,True,True,True,True,True,"血100ml,输液1100ml,尿量300ml,色清,患者清醒后安返病房。
+切口愈合等级:
+手术开始时间: 2026-02-09 12:10:00+08
+手术结束时间:
+失血量:
+其他内容:
+记录内容: 麻醉效果满意,生命征平稳。大标本:阴道前后壁、子宫及双侧输卵管卵巢家属过目后送病检。
+麻醉效果满意,生命征平稳。大标本:阴道前后壁、子宫及双侧输卵管卵巢家属过目后送病检。
+患者麻醉成功后,取膀胱截石位,常规消毒手术区域皮肤及阴道,铺无菌手术巾,留置尿管。经阴道置入举宫器,","2210905||18
+C260378
+息肉
+息肉
+C260378
+2210905||18",pass_to_second_gate,手术/术后记录存在取材、标本或送病理触发，需二轮核对手术记录是否完整记录取材情况和病理结果。,"血100ml,输液1100ml,尿量300ml,色清,患者清醒后安返病房。
+切口愈合等级:
+手术开始时间: 2026-02-09 12:10:00+08
+手术结束时间:
+失血量:
+其他内容:
+记录内容: 麻醉效果满意,生命征平稳。大标本:阴道前后壁、子宫及双侧输卵管卵巢家属过目后送病检。
+麻醉效果满意,生命征平稳。大标本:阴道前后壁、子宫及双侧输卵管卵巢家属过目后送病检。
+患者麻醉成功后,取膀胱截石位,常规消毒手术区域皮肤及阴道,铺无菌手术巾,留置尿管。经阴道置入举宫器,",,history_issue_review+local_cdm_bundle_readonly,True
+2263757,杨光中,SC-099,术中取材情况和病理结果未在手术记录中记录,rejected_by_system,,formal_qc_random10_batch3_original_chain_issue_review.csv,手术记录未明确记载术中取材及病理结果。,【当前文书】记录时间: 2026-03-12 16:29:12,present,no_pathology_rows,absent,absent,no_specimen_or_pathology_trigger,"取材,病理结果",0,1,971,1777,1,0,0,0,0,True,False,False,True,False,False,False,False,"记录时间: 2026-03-12 16:29:12
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 关节骨折切开复位钢板螺钉内固定术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.患者取右侧卧位,左大腿上止血带,常规消毒铺巾。
+    2.先沿腓骨下段后缘至外踝尖作左踝外侧直形切口,长约20cm,逐层切开皮肤、皮下组织、深筋膜,电刀电凝止血,适当剥离腓骨下端骨膜,见腓骨下段(外",,rejected_by_system,手术记录和病理来源均未发现取材、标本、送病理、快速病理等触发条件，SC-099 不适用。,"记录时间: 2026-03-12 16:29:12
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 关节骨折切开复位钢板螺钉内固定术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.患者取右侧卧位,左大腿上止血带,常规消毒铺巾。
+    2.先沿腓骨下段后缘至外踝尖作左踝外侧直形切口,长约20cm,逐层切开皮肤、皮下组织、深筋膜,电刀电凝止血,适当剥离腓骨下端骨膜,见腓骨下段(外","source_no_data:pathology_exam_master,source_no_data:pathology_exam_report,bundle_missing:final.pathology_exam_master,bundle_missing:final.pathology_exam_report,bundle_missing:surgery.pathology_exam_master,bundle_missing:surgery.pathology_exam_report,bundle_missing:course.pathology_exam_master,bundle_missing:course.pathology_exam_report",history_issue_review+local_cdm_bundle_readonly,False
+1961270,何维珍,SC-099,术中取材情况和病理结果未在手术记录中记录,rejected_by_system,,formal_qc_random10_batch3_original_chain_issue_review.csv,手术记录未明确记载术中取材及病理结果，但脑血管造影通常无需取材。,【当前文书】记录时间: 2025-09-04 11:08:54,present,no_pathology_rows,absent,absent,no_specimen_or_pathology_trigger,"取材,病理结果",0,1,802,1439,1,0,0,0,0,True,False,False,True,False,False,False,False,"记录时间: 2025-09-04 11:08:54
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 脑血管造影
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.病人平卧于手术台上,常规会阴部及双侧腹股沟消毒,铺无菌巾。2.用2%利多卡因5ml行右侧腹股沟局部麻醉。采用Seldinger技术穿刺右侧股动脉,置入5F动脉鞘组。通过动脉鞘组,在0.035“导丝引导下5F猪尾造影导管插入",,rejected_by_system,手术记录和病理来源均未发现取材、标本、送病理、快速病理等触发条件，SC-099 不适用。,"记录时间: 2025-09-04 11:08:54
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 脑血管造影
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.病人平卧于手术台上,常规会阴部及双侧腹股沟消毒,铺无菌巾。2.用2%利多卡因5ml行右侧腹股沟局部麻醉。采用Seldinger技术穿刺右侧股动脉,置入5F动脉鞘组。通过动脉鞘组,在0.035“导丝引导下5F猪尾造影导管插入","source_no_data:pathology_exam_master,source_no_data:pathology_exam_report,bundle_missing:final.pathology_exam_master,bundle_missing:final.pathology_exam_report,bundle_missing:surgery.pathology_exam_master,bundle_missing:surgery.pathology_exam_report,bundle_missing:course.pathology_exam_master,bundle_missing:course.pathology_exam_report",history_issue_review+local_cdm_bundle_readonly,False
+2270715,马建倡,SC-099,术中取材情况和病理结果未在手术记录中记录,data_quality_gap,,formal_qc_random10_batch3_original_chain_issue_review.csv,术中取材已记录，但病理结果缺失。,切除肠段标本向家属展示后送病理检查,present,present,present,strong,surgery_or_postsurg_record_explicit_specimen_pathology,"取材,标本,病理结果,病理诊断,送病理",1,1,1647,3129,1,1,0,33,0,True,True,False,True,True,False,True,False,"G*1、一次性使用引流管装置18FR*1、一次性使用穿刺器套件*1、壳聚糖季铵盐生物胶体液*2、一次性切口牵开固定器*1、一次性不可吸收结扎夹(S/M/L)*2。
+6.手术经过顺利,出血约30ml,生命体征稳定。术毕安返病房。
+7.切除肠段标本向家属展示后送病理检查。
+切口愈合等级:
+手术开始时间: 2026-03-19 09:54:00+08
+手术结束时间:
+失血量:
+其他内容:
+记录内容: 盆腔底部水肿增厚明显,直肠残端粘连严重,结合患者术前直肠指检情况,考虑分离直肠","2266833||148
+H262102
+腹痛1+天
+部分乙状结肠
+部分乙状结肠
+腹痛1+天
+H262102
+2266833||148",pass_to_second_gate,手术/术后记录存在取材、标本或送病理触发，需二轮核对手术记录是否完整记录取材情况和病理结果。,"G*1、一次性使用引流管装置18FR*1、一次性使用穿刺器套件*1、壳聚糖季铵盐生物胶体液*2、一次性切口牵开固定器*1、一次性不可吸收结扎夹(S/M/L)*2。
+6.手术经过顺利,出血约30ml,生命体征稳定。术毕安返病房。
+7.切除肠段标本向家属展示后送病理检查。
+切口愈合等级:
+手术开始时间: 2026-03-19 09:54:00+08
+手术结束时间:
+失血量:
+其他内容:
+记录内容: 盆腔底部水肿增厚明显,直肠残端粘连严重,结合患者术前直肠指检情况,考虑分离直肠","source_no_data:pathology_exam_report,bundle_missing:final.pathology_exam_report,bundle_missing:surgery.pathology_exam_report,bundle_missing:course.pathology_exam_report",history_issue_review+local_cdm_bundle_readonly,True
+1915580,雷德超,SC-099,术中取材情况和病理结果未在手术记录中记录,data_quality_gap,,formal_qc_aliyun_bailian_10_visit_issue_review.csv,手术记录未明确提及术中取材及病理结果。,【当前文书】记录时间: 2025-08-12 19:29:40,present,no_pathology_rows,absent,absent,no_specimen_or_pathology_trigger,"取材,病理结果",0,1,730,1295,1,0,0,0,0,True,False,False,True,False,False,False,False,"记录时间: 2025-08-12 19:29:40
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 胸12椎骨折切开复位内固定术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.患者麻醉实施成功后取俯卧位,垫空腹部,常规消毒、铺巾。
+2.以T12棘突为中心作背正中切口约15cm。逐层切开皮肤、皮下组织至腰背筋膜,经棘突左、右侧多裂肌间隙入路适当剥离,显露T10-L1关节突关节和部",,rejected_by_system,手术记录和病理来源均未发现取材、标本、送病理、快速病理等触发条件，SC-099 不适用。,"记录时间: 2025-08-12 19:29:40
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 胸12椎骨折切开复位内固定术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.患者麻醉实施成功后取俯卧位,垫空腹部,常规消毒、铺巾。
+2.以T12棘突为中心作背正中切口约15cm。逐层切开皮肤、皮下组织至腰背筋膜,经棘突左、右侧多裂肌间隙入路适当剥离,显露T10-L1关节突关节和部","source_no_data:pathology_exam_master,source_no_data:pathology_exam_report,bundle_missing:final.pathology_exam_master,bundle_missing:final.pathology_exam_report,bundle_missing:surgery.pathology_exam_master,bundle_missing:surgery.pathology_exam_report,bundle_missing:course.pathology_exam_master,bundle_missing:course.pathology_exam_report",history_issue_review+local_cdm_bundle_readonly,False
+2246915,黄金莲,SC-099,术中取材情况和病理结果未在手术记录中记录,data_quality_gap,,formal_qc_aliyun_bailian_10_visit_after_evidence_enrichment_issue_review.csv,手术记录未记录术中冰冻病理最终诊断结果。,"【当前文书】送冰冻病理检查,2026-02-27 病理冰冻切片(1个部位) 左侧附件:卵巢上皮性肿瘤,倾向乳头状浆液性肿瘤,最终诊断待慢速石蜡广泛取材",present,present,present,strong,surgery_or_postsurg_record_explicit_specimen_pathology,"冰冻病理,取材",4,1,1363,2561,1,3,1,106,22,True,True,True,True,True,True,True,True,"峡部、卵巢固有韧带及圆韧带,切断缝扎,双处理同。保留缝线。取出切除子宫及阴道前壁交台下。检查双附件,见左侧卵巢增大,有一约4×3.5×2.5cm大小囊性包块,左侧输卵管积右侧附件未见明显异常,沿左侧卵巢固有韧带逐步切除左侧附件,断端缝扎。送冰冻病理检查,2026-02-27 病理冰冻切片(1个部位) 左侧附件:卵巢上皮性肿瘤,倾向乳头状浆液性肿瘤,最终诊断待慢速石蜡广泛取材。 将双侧附件缝线对应打结。4号丝线于尿道表面“U”型缝合两次折叠尿道,4号丝线于游离出的膀胱表面行荷包缝合两次","2243199||19
+C260529
+息肉
+息肉
+C260529
+2243199||19",pass_to_second_gate,手术/术后记录存在取材、标本或送病理触发，需二轮核对手术记录是否完整记录取材情况和病理结果。,"峡部、卵巢固有韧带及圆韧带,切断缝扎,双处理同。保留缝线。取出切除子宫及阴道前壁交台下。检查双附件,见左侧卵巢增大,有一约4×3.5×2.5cm大小囊性包块,左侧输卵管积右侧附件未见明显异常,沿左侧卵巢固有韧带逐步切除左侧附件,断端缝扎。送冰冻病理检查,2026-02-27 病理冰冻切片(1个部位) 左侧附件:卵巢上皮性肿瘤,倾向乳头状浆液性肿瘤,最终诊断待慢速石蜡广泛取材。 将双侧附件缝线对应打结。4号丝线于尿道表面“U”型缝合两次折叠尿道,4号丝线于游离出的膀胱表面行荷包缝合两次",,history_issue_review+local_cdm_bundle_readonly,True
+1966656,周光容,SC-099,术中取材情况和病理结果未在手术记录中记录,confirmed_defect,,formal_qc_aliyun_bailian_10_visit_issue_review.csv,手术记录未记录术中取材情况及病理结果。,切下标本向患方展示后送病检,present,present,present,strong,surgery_or_postsurg_record_explicit_specimen_pathology,"取材,标本,病理结果",2,1,688,1211,1,1,1,35,99,True,True,True,True,True,True,True,True,"予以5ml空针于3、7、11点钟位痔上粘膜下注射,充盈为佳。
+5.肛门内填塞入痔疮栓,肛周切口处予以亚甲蓝+罗哌卡因注射液封闭治疗,并予以无菌碘伏纱条填塞压迫止血,外加敷料加压包扎,结束手术。
+6.手术顺利,术中出血约5ml,麻醉满意,切下标本向患方展示后送病检,术后送回病房观察。
+切口愈合等级:
+手术开始时间: 2025-09-02 10:25:00+08
+手术结束时间:
+失血量:
+其他内容:
+记录内容: 无
+无
+1麻醉满意后,患者取截石位,常规消毒会阴部,铺无菌巾;","1963145||44
+H255637
+胃粘膜
+肛门组织：带皮肤的灰白灰褐色不规则组织一个，大小2.2x1.7x0.8cm，切面灰白色，实性、质软，全包2盒-1-2。
+严
+肛门组织：符合肛裂伴出血。
+胃粘膜
+肛门组织：带皮肤的灰白灰褐色不规则组织一个，大小2.2x1.7x0.8cm，切面灰白色，实性、质软，全包2盒-1-2。
+严
+肛门组织：符合肛裂伴出血。
+H255637
+1963145||44",pass_to_second_gate,手术/术后记录存在取材、标本或送病理触发，需二轮核对手术记录是否完整记录取材情况和病理结果。,"予以5ml空针于3、7、11点钟位痔上粘膜下注射,充盈为佳。
+5.肛门内填塞入痔疮栓,肛周切口处予以亚甲蓝+罗哌卡因注射液封闭治疗,并予以无菌碘伏纱条填塞压迫止血,外加敷料加压包扎,结束手术。
+6.手术顺利,术中出血约5ml,麻醉满意,切下标本向患方展示后送病检,术后送回病房观察。
+切口愈合等级:
+手术开始时间: 2025-09-02 10:25:00+08
+手术结束时间:
+失血量:
+其他内容:
+记录内容: 无
+无
+1麻醉满意后,患者取截石位,常规消毒会阴部,铺无菌巾;",,history_issue_review+local_cdm_bundle_readonly,True
+2311318,范永勤,SC-099,术中取材情况和病理结果未在手术记录中记录,data_quality_gap,,formal_qc_aliyun_bailian_10_visit_after_evidence_enrichment_issue_review.csv,手术记录未记录术中取材情况及病理结果。,【当前文书】记录时间: 2026-04-06 12:50:53,present,no_pathology_rows,absent,absent,no_specimen_or_pathology_trigger,"取材,病理结果",0,1,663,1161,1,0,0,0,0,True,False,False,True,False,False,False,False,"记录时间: 2026-04-06 12:50:53
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 左侧内踝骨折闭合复位空心螺钉内固定+左侧外踝骨折切开复位钢板内固定术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.全麻满意后,患者取仰卧位,常规消毒铺巾左下肢。
+
+    2.取左踝外侧纵行切口,长约8cm,依次切开皮肤及皮下软组织,电凝止血,直达骨折断端,见左侧外踝粉碎性骨折",,rejected_by_system,手术记录和病理来源均未发现取材、标本、送病理、快速病理等触发条件，SC-099 不适用。,"记录时间: 2026-04-06 12:50:53
+科室:
+病房:
+记录者:
+手术医生签名:
+术前小结:
+手术项目: 左侧内踝骨折闭合复位空心螺钉内固定+左侧外踝骨折切开复位钢板内固定术
+手术编码:
+手术等级:
+手术医师:
+手术I助:
+手术II助:
+麻醉医师:
+麻醉方式:
+术前诊断:
+术中诊断:
+术后诊断:
+手术经过: 1.全麻满意后,患者取仰卧位,常规消毒铺巾左下肢。
+
+    2.取左踝外侧纵行切口,长约8cm,依次切开皮肤及皮下软组织,电凝止血,直达骨折断端,见左侧外踝粉碎性骨折","source_no_data:pathology_exam_master,source_no_data:pathology_exam_report,bundle_missing:final.pathology_exam_master,bundle_missing:final.pathology_exam_report,bundle_missing:surgery.pathology_exam_master,bundle_missing:surgery.pathology_exam_report,bundle_missing:course.pathology_exam_master,bundle_missing:course.pathology_exam_report",history_issue_review+local_cdm_bundle_readonly,False
+1870471,蒲云鹏,SC-099,术中取材情况和病理结果未在手术记录中记录,data_quality_gap,,formal_qc_aliyun_bailian_10_visit_after_evidence_enrichment_issue_review.csv,手术记录仅提及送病检，未记录术中取材细节及病理结果。,阑尾标本送病检,present,present,present,strong,surgery_or_postsurg_record_explicit_specimen_pathology,"取材,标本,病理结果",2,1,756,1347,1,1,1,58,91,True,True,True,True,True,True,True,True,"从右下腹另戳孔引出固定。检查腹腔无出血,清点器械无误,排尽CO2气体,逐一直视下拨除各trocar,脐部trocar口筋膜及皮肤各间断缝合,其余trocar口各间断缝合一针。
+4.手术经过顺利,出血约5ml,生命体征稳定,术毕安返病房。阑尾标本送病检。
+切口愈合等级:
+手术开始时间: 2025-06-29 23:25:00+08
+手术结束时间:
+失血量:
+其他内容:
+记录内容: 术中病情稳定,无特殊处理。
+术中病情稳定,无特殊处理。
+1.麻醉成功后,用碘伏常规消毒铺巾。于","1867191||43
+H254110
+结节
+阑尾：带系膜的灰红色阑尾一条，长4.7cm，管径0.8-0.9cm，表面充血水肿，管腔结构欠清，部分管腔扩张，可见粪石，选包2盒1-2.
+结节
+阑尾：带系膜的灰红色阑尾一条，长4.7cm，管径0.8-0.9cm，表面充血水肿，管腔结构欠清，部分管腔扩张，可见粪石，选包2盒1-2.
+H254110
+1867191||43",pass_to_second_gate,手术/术后记录存在取材、标本或送病理触发，需二轮核对手术记录是否完整记录取材情况和病理结果。,"从右下腹另戳孔引出固定。检查腹腔无出血,清点器械无误,排尽CO2气体,逐一直视下拨除各trocar,脐部trocar口筋膜及皮肤各间断缝合,其余trocar口各间断缝合一针。
+4.手术经过顺利,出血约5ml,生命体征稳定,术毕安返病房。阑尾标本送病检。
+切口愈合等级:
+手术开始时间: 2025-06-29 23:25:00+08
+手术结束时间:
+失血量:
+其他内容:
+记录内容: 术中病情稳定,无特殊处理。
+术中病情稳定,无特殊处理。
+1.麻醉成功后,用碘伏常规消毒铺巾。于",,history_issue_review+local_cdm_bundle_readonly,True

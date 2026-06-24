@@ -1,0 +1,288 @@
+{
+  "input_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_exact_review_matrix.csv",
+  "summary": {
+    "record_count": 12,
+    "skip_allowed_count": 1,
+    "fallback_available_count": 29,
+    "missing_document_type_breakdown": {
+      "日常病程记录": 6,
+      "首次病程记录": 1,
+      "会诊记录": 1
+    }
+  },
+  "results": [
+    {
+      "sheet2_row_id": "Sheet2-R0044",
+      "visit_id": "1966724",
+      "patient_name": "兰世群",
+      "manual_issue_text": "患者入院时血压升高，未持续监测血压，未请相关科室会诊，未送检病原微生物，9月2日周凤霞主治医师查房及9月3日陈光怀副主任医师查房未书写相关内容。",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:content(rows=2,content=2)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:content(rows=2,content=2)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=2,content=2)",
+        "local_pg@local_pg::senior_course_record:content(rows=3,content=3)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:content(rows=3,content=3)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=3,content=3)",
+        "local_pg@local_pg::consultation_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\consultation_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\consultation_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "目标原始文书 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录", "会诊记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0224",
+      "visit_id": "2268827",
+      "patient_name": "朱敦群",
+      "manual_issue_text": "胸部CT提示双肺感染，未请呼吸内科会诊，病程记录及出院诊断均未提及",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": ["会诊记录"],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:content(rows=2,content=2)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:content(rows=2,content=2)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=2,content=2)",
+        "local_pg@local_pg::senior_course_record:content(rows=3,content=3)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=3,content=3)",
+        "local_pg@local_pg::consultation_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\consultation_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\consultation_record.csv:no_row"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "会诊记录 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录", "会诊记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0225",
+      "visit_id": "2262981",
+      "patient_name": "屈义田",
+      "manual_issue_text": "胸部CT提示双肺结节，检验结果提示低钾，病程记录未提及",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": ["日常病程记录"],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:no_row",
+        "local_pg@local_pg::senior_course_record:content(rows=8,content=8)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=8,content=8)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "日常病程记录 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0226",
+      "visit_id": "2255288",
+      "patient_name": "王树成",
+      "manual_issue_text": "3月11日检查检验结果数据异常未进行分析和记录",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:content(rows=4,content=3)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:content(rows=4,content=3)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=4,content=3)",
+        "local_pg@local_pg::senior_course_record:content(rows=9,content=9)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=9,content=9)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "目标原始文书 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0242",
+      "visit_id": "2281076",
+      "patient_name": "蒋光琼",
+      "manual_issue_text": "病程记录对检验结果未分析",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=1,content=1)",
+        "local_pg@local_pg::senior_course_record:content(rows=6,content=6)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=6,content=6)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "目标原始文书 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0243",
+      "visit_id": "2273134",
+      "patient_name": "李宗良",
+      "manual_issue_text": "异常检验结果在病程记录中未体现",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:content(rows=6,content=6)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:content(rows=6,content=6)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=6,content=6)",
+        "local_pg@local_pg::senior_course_record:content(rows=15,content=15)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=15,content=15)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "目标原始文书 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0255",
+      "visit_id": "2286259",
+      "patient_name": "曾昌荣",
+      "manual_issue_text": "病程中未记录3月15日胃镜检查结果。患者拟于3月17日行TAPP术，术前3月17日3:50,患者自述胸痛，未做详细查体，辅助检查不全面，仅查心电图及心肌标志物未见异常。考虑范围局限。未及时暂停手术而仍按计划于当日在全麻下行TAPP术，术后一天，患者出现寒战、高热、腹痛、诊断化脓性胆管炎、感染性休克。病历书写不完整，围手术期管理不到位。",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:content(rows=8,content=8)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:content(rows=5,content=5)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=8,content=8)",
+        "local_pg@local_pg::senior_course_record:content(rows=8,content=8)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=8,content=8)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "目标原始文书 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0262",
+      "visit_id": "2300354",
+      "patient_name": "刘德荣",
+      "manual_issue_text": "有血管彩超，且结果阳性 （动脉粥样硬化），无诊断，无相关处理。",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:content(rows=3,content=3)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=3,content=3)",
+        "local_pg@local_pg::senior_course_record:content(rows=8,content=8)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=8,content=8)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "目标原始文书 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0265",
+      "visit_id": "2306811",
+      "patient_name": "罗亨金",
+      "manual_issue_text": "尿常规阳性结果无诊断分析及处理。",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": ["日常病程记录"],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:no_row",
+        "local_pg@local_pg::senior_course_record:content(rows=8,content=8)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=8,content=8)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "日常病程记录 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0268",
+      "visit_id": "2286345",
+      "patient_name": "钟光田",
+      "manual_issue_text": "4.1异常检查检验结果病程记录未分析和记录",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:content(rows=12,content=10)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=12,content=10)",
+        "local_pg@local_pg::senior_course_record:content(rows=15,content=15)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=15,content=15)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "目标原始文书 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0272",
+      "visit_id": "2301040",
+      "patient_name": "温怀兵",
+      "manual_issue_text": "4.1日病程记录中检查检验结果停留在3.22，而最新的4.1检验结果在病程记录中未体现",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:content(rows=15,content=15)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=15,content=15)",
+        "local_pg@local_pg::senior_course_record:content(rows=17,content=17)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=17,content=17)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "目标原始文书 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0283",
+      "visit_id": "2311318",
+      "patient_name": "范永勤",
+      "manual_issue_text": "4.7检验结果肾功异常，病程记录未分析，未请相应科室会诊",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "primary_rule_id": "SC-036",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::daily_course_record:content(rows=4,content=4)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=4,content=4)",
+        "local_pg@local_pg::senior_course_record:content(rows=7,content=7)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=7,content=7)",
+        "local_pg@local_pg::consultation_record:content(rows=4,content=4)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\consultation_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\consultation_record.csv:content(rows=4,content=4)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "目标原始文书 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["日常病程记录", "会诊记录"]
+    }
+  ]
+}

@@ -76,17 +76,20 @@ export function createSyntheticDocument(
 ): TestRecordDocumentForm {
   const label = documentTypeLabel(type)
   const nowText = toDateTimeLocal(new Date())
+  const content = String(overrides.content ?? '')
   return {
     key: buildDocumentKey(),
     document_type: type,
     title: label,
     record_time: nowText,
     submit_time: nowText,
-    content: '',
+    content,
     doctor_name: '测试医师',
     doctor_code: '',
     enabled: true,
     ...overrides,
+    originalContent: String(overrides.originalContent ?? content),
+    appliedContent: String(overrides.appliedContent ?? content),
   }
 }
 
@@ -97,7 +100,7 @@ export function createDefaultSyntheticCaseForm(): TestRecordForm {
   return {
     builderMode: 'rule',
     caseTitle: '客户自建质控测试病历',
-    patientName: '测试患者',
+    patientName: '李某某',
     sex: '男',
     age: 56,
     mrNo: '',
@@ -133,6 +136,20 @@ export function createDefaultSyntheticCaseForm(): TestRecordForm {
       }),
     ],
   }
+}
+
+export function buildRuleDrivenCaseTitle(ruleFamilyNames: string[], ruleIds: string[], now = new Date()): string {
+  const families = ruleFamilyNames
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+  const normalizedRuleIds = normalizeRuleIds(ruleIds)
+  const familyText = families.length ? families.join('、') : '泸县0609'
+  const ruleText = normalizedRuleIds
+    .map((ruleId) => ruleId.replace(/^LX0609-/u, ''))
+    .join('/')
+  const pad = (input: number) => String(input).padStart(2, '0')
+  const timeText = `${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
+  return `${familyText}质控病历｜LX${ruleText || '全量'}｜${timeText}`
 }
 
 export function createGoldenAnswer(

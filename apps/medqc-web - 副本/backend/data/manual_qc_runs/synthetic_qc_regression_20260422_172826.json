@@ -1,0 +1,158 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T17:28:23.655583",
+  "run_finished_at": "2026-04-22T17:28:26.026676",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 0,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 1,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_first_course_features_not_summarized_v1_pass.json",
+      "issue_type": "B2_first_course_features_not_summarized",
+      "display_name": "病例特点未提炼",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-023",
+        "SC-024"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 2.224,
+      "total_tokens": 1096,
+      "prompt_tokens": 878,
+      "completion_tokens": 218,
+      "api_time": 2.222,
+      "packs": [
+        {
+          "pack_id": "first_course_features",
+          "document_type": "首次病程记录",
+          "rule_ids": [
+            "SC-023",
+            "SC-024"
+          ],
+          "tokens_used": 1096,
+          "prompt_tokens": 878,
+          "completion_tokens": 218,
+          "api_time": 2.221942901611328
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-023",
+          "rule_name": "首次病程记录无病例特点",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "首次病程记录包含病例特点，内容完整。",
+          "evidence": "病例特点：1. 中年男性...4. 查体见上腹轻压痛...",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-023\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"首次病程记录包含病例特点，内容完整。\",\n      \"evidence\": \"病例特点：1. 中年男性...4. 查体见上腹轻压痛...\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-024\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病例特点已归纳提炼，非原文堆砌。\",\n      \"evidence\": \"胃镜示胃窦溃疡...支持胃窦溃疡诊断。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 548,
+            "prompt_tokens": 439,
+            "completion_tokens": 109,
+            "input_tokens": 439,
+            "output_tokens": 109,
+            "api_time": 1.110971450805664,
+            "first_result_latency": 2.221942901611328,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_features",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 172
+          },
+          "target_document_type": "首次病程记录"
+        },
+        {
+          "rule_id": "SC-024",
+          "rule_name": "首次病程记录病例特点未归纳提炼或不全面",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病例特点已归纳提炼，非原文堆砌。",
+          "evidence": "胃镜示胃窦溃疡...支持胃窦溃疡诊断。",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-023\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"首次病程记录包含病例特点，内容完整。\",\n      \"evidence\": \"病例特点：1. 中年男性...4. 查体见上腹轻压痛...\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-024\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病例特点已归纳提炼，非原文堆砌。\",\n      \"evidence\": \"胃镜示胃窦溃疡...支持胃窦溃疡诊断。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 548,
+            "prompt_tokens": 439,
+            "completion_tokens": 109,
+            "input_tokens": 439,
+            "output_tokens": 109,
+            "api_time": 1.110971450805664,
+            "first_result_latency": 2.221942901611328,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_features",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 172
+          },
+          "target_document_type": "首次病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-023": "compliant",
+          "SC-024": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ]
+}

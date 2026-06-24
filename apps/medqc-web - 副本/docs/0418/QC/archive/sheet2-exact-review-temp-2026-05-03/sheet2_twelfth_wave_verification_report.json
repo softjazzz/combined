@@ -1,0 +1,30 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 4,
+  "families": [
+    {
+      "issue_family": "出院记录缺失/提前书写/时效异常/签名缺失",
+      "row_count": 4,
+      "job_id": "104d96c3-6506-4ced-a171-6452791fbdea",
+      "result_breakdown": {
+        "exact_hit": 3,
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 3,
+        "llm": 0
+      },
+      "items_count": 3,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 203,
+    "miss": 32,
+    "exact_hit": 16,
+    "same_family_hit": 27,
+    "skip": 5
+  }
+}

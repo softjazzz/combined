@@ -1,0 +1,285 @@
+
+> medical-qc-system@1.0.0 type-check
+> vue-tsc --noEmit
+
+src/components/qc/RectificationForm.vue(12,7): error TS2322: Type 'string' is not assignable to type 'number | Partial<Record<Breakpoint, number>>'.
+src/components/QCLLMConfig.vue(78,36): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'LLMConfig'.
+  Type 'Record<string, any>' is missing the following properties from type 'LLMConfig': config_id, config_name, provider_id, provider_name, and 2 more.
+src/components/QCLLMConfig.vue(84,36): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'LLMConfig'.
+  Type 'Record<string, any>' is missing the following properties from type 'LLMConfig': config_id, config_name, provider_id, provider_name, and 2 more.
+src/components/QCLLMConfig.vue(90,40): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'LLMConfig'.
+  Type 'Record<string, any>' is missing the following properties from type 'LLMConfig': config_id, config_name, provider_id, provider_name, and 2 more.
+src/components/running-qc/RunningQCDashboard.vue(76,44): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'InpatientRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'InpatientRecord': id, patientName, patientAge, patientGender, and 7 more.
+src/components/running-qc/RunningQCDashboard.vue(82,41): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'InpatientRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'InpatientRecord': id, patientName, patientAge, patientGender, and 7 more.
+src/components/running-qc/RunningQCDashboardComponent.vue(76,44): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'InpatientRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'InpatientRecord': id, patientName, patientAge, patientGender, and 7 more.
+src/components/running-qc/RunningQCDashboardComponent.vue(82,41): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'InpatientRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'InpatientRecord': id, patientName, patientAge, patientGender, and 7 more.
+src/mr/components/CreateDocumentModal.vue(13,8): error TS2322: Type '{ documentType: { required: boolean; message: string; trigger: string; }[]; title: ({ required: boolean; message: string; trigger: string; min?: undefined; max?: undefined; } | { min: number; max: number; message: string; trigger: string; required?: undefined; })[]; content: ({ ...; } | { ...; })[]; }' is not assignable to type '{ [k: string]: RuleObject | RuleObject[]; }'.
+  Property 'documentType' is incompatible with index signature.
+    Type '{ required: boolean; message: string; trigger: string; }[]' is not assignable to type 'RuleObject | RuleObject[]'.
+      Type '{ required: boolean; message: string; trigger: string; }[]' is not assignable to type 'RuleObject[]'.
+        Type '{ required: boolean; message: string; trigger: string; }' is not assignable to type 'RuleObject'.
+          Property 'type' is missing in type '{ required: boolean; message: string; trigger: string; }' but required in type 'ArrayRule'.
+src/views/auth/ForgotPasswordView.vue(116,18): error TS2322: Type '{ email: ({ required: boolean; message: string; trigger: string; type?: undefined; } | { type: string; message: string; trigger: string; required?: undefined; })[]; }' is not assignable to type '{ [k: string]: RuleObject | RuleObject[]; }'.
+  Property 'email' is incompatible with index signature.
+    Type '({ required: boolean; message: string; trigger: string; type?: undefined; } | { type: string; message: string; trigger: string; required?: undefined; })[]' is not assignable to type 'RuleObject | RuleObject[]'.
+      Type '({ required: boolean; message: string; trigger: string; type?: undefined; } | { type: string; message: string; trigger: string; required?: undefined; })[]' is not assignable to type 'RuleObject[]'.
+        Type '{ required: boolean; message: string; trigger: string; type?: undefined; } | { type: string; message: string; trigger: string; required?: undefined; }' is not assignable to type 'RuleObject'.
+          Type '{ required: boolean; message: string; trigger: string; type?: undefined; }' is not assignable to type 'RuleObject'.
+            Type '{ required: boolean; message: string; trigger: string; type?: undefined; }' is not assignable to type 'ArrayRule'.
+              Property 'type' is optional in type '{ required: boolean; message: string; trigger: string; type?: undefined; }' but required in type 'ArrayRule'.
+src/views/dashboard/notifications/NotificationsView.vue(63,21): error TS2322: Type 'boolean' is not assignable to type 'SelectValue'.
+src/views/dashboard/permissions/PermissionsView.vue(145,16): error TS2322: Type '({ title: string; dataIndex: string; key: string; width: number; fixed?: undefined; } | { title: string; key: string; width: number; fixed: string; dataIndex?: undefined; })[]' is not assignable to type 'ColumnsType<any>'.
+  Type '{ title: string; dataIndex: string; key: string; width: number; fixed?: undefined; } | { title: string; key: string; width: number; fixed: string; dataIndex?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+    Type '{ title: string; key: string; width: number; fixed: string; dataIndex?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+      Type '{ title: string; key: string; width: number; fixed: string; dataIndex?: undefined; }' is not assignable to type 'ColumnType<any>'.
+        Types of property 'fixed' are incompatible.
+          Type 'string' is not assignable to type 'FixedType'.
+src/views/dashboard/permissions/PermissionsView.vue(174,46): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'UserRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'UserRecord': id, username, name, department, and 3 more.
+src/views/dashboard/permissions/PermissionsView.vue(182,53): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'UserRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'UserRecord': id, username, name, department, and 3 more.
+src/views/dashboard/permissions/PermissionsView.vue(191,54): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'UserRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'UserRecord': id, username, name, department, and 3 more.
+src/views/dashboard/permissions/PermissionsView.vue(383,25): error TS2322: Type 'unknown[]' is not assignable to type '[string, string] | [Dayjs, Dayjs]'.
+  Type 'unknown[]' is not assignable to type '[Dayjs, Dayjs]'.
+    Target requires 2 element(s) but source may have fewer.
+src/views/dashboard/permissions/PermissionsView.vue(384,17): error TS2322: Type 'string' is not assignable to type 'string[]'.
+src/views/dashboard/quality-control/QualityControlPointCreate.vue(55,10): error TS2322: Type '{ name: ({ required: boolean; message: string; trigger: string; max?: undefined; } | { max: number; message: string; trigger: string; required?: undefined; })[]; category: { required: boolean; message: string; trigger: string; }[]; type: { ...; }[]; document: { ...; }[]; }' is not assignable to type '{ [k: string]: RuleObject | RuleObject[]; }'.
+  Property 'name' is incompatible with index signature.
+    Type '({ required: boolean; message: string; trigger: string; max?: undefined; } | { max: number; message: string; trigger: string; required?: undefined; })[]' is not assignable to type 'RuleObject | RuleObject[]'.
+      Type '({ required: boolean; message: string; trigger: string; max?: undefined; } | { max: number; message: string; trigger: string; required?: undefined; })[]' is not assignable to type 'RuleObject[]'.
+        Type '{ required: boolean; message: string; trigger: string; max?: undefined; } | { max: number; message: string; trigger: string; required?: undefined; }' is not assignable to type 'RuleObject'.
+          Type '{ required: boolean; message: string; trigger: string; max?: undefined; }' is not assignable to type 'RuleObject'.
+            Property 'type' is missing in type '{ required: boolean; message: string; trigger: string; max?: undefined; }' but required in type 'ArrayRule'.
+src/views/dashboard/quality-control/QualityControlPointManagement.vue(122,10): error TS2322: Type '{ selectedRowKeys: Ref<string[], string[]>; onChange: (keys: string[]) => void; }' is not assignable to type 'TableRowSelection<any>'.
+  Types of property 'selectedRowKeys' are incompatible.
+    Type 'Ref<string[], string[]>' is missing the following properties from type 'Key[]': length, pop, push, concat, and 29 more.
+src/views/dashboard/quality-control/QualityControlPointManagement.vue(147,65): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'QualityControlPoint'.
+  Type 'Record<string, any>' is missing the following properties from type 'QualityControlPoint': id, name, source, category, and 3 more.
+src/views/dashboard/quality-control/QualityControlPointManagement.vue(157,36): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'QualityControlPoint'.
+  Type 'Record<string, any>' is missing the following properties from type 'QualityControlPoint': id, name, source, category, and 3 more.
+src/views/dashboard/quality-control/QualityControlPointManagement.vue(164,36): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'QualityControlPoint'.
+  Type 'Record<string, any>' is missing the following properties from type 'QualityControlPoint': id, name, source, category, and 3 more.
+src/views/dashboard/quality-control/QualityControlPointManagement.vue(172,38): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'QualityControlPoint'.
+  Type 'Record<string, any>' is missing the following properties from type 'QualityControlPoint': id, name, source, category, and 3 more.
+src/views/dashboard/records/FinalRecordsView.vue(113,21): error TS2322: Type '[] | [{ clone: () => Dayjs; isValid: () => boolean; year: { (): number; (value: number): Dayjs; }; month: { (): number; (value: number): Dayjs; }; date: { (): number; (value: number): Dayjs; }; ... 24 more ...; locale: { ...; }; }, { ...; }]' is not assignable to type '[string, string] | [Dayjs, Dayjs]'.
+  Type '[]' is not assignable to type '[string, string] | [Dayjs, Dayjs]'.
+    Type '[]' is not assignable to type '[Dayjs, Dayjs]'.
+      Source has 0 element(s) but target requires 2.
+src/views/dashboard/records/FinalRecordsView.vue(157,12): error TS2322: Type '({ title: string; dataIndex: string; key: string; width: number; sorter?: undefined; fixed?: undefined; } | { title: string; key: string; width: number; dataIndex?: undefined; sorter?: undefined; fixed?: undefined; } | { ...; } | { ...; })[]' is not assignable to type 'ColumnsType<any>'.
+  Type '{ title: string; dataIndex: string; key: string; width: number; sorter?: undefined; fixed?: undefined; } | { title: string; key: string; width: number; dataIndex?: undefined; sorter?: undefined; fixed?: undefined; } | { ...; } | { ...; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+    Type '{ title: string; key: string; width: number; fixed: string; dataIndex?: undefined; sorter?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+      Type '{ title: string; key: string; width: number; fixed: string; dataIndex?: undefined; sorter?: undefined; }' is not assignable to type 'ColumnType<any>'.
+        Types of property 'fixed' are incompatible.
+          Type 'string' is not assignable to type 'FixedType'.
+src/views/dashboard/records/FinalRecordsView.vue(171,36): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'AdminRecordItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'AdminRecordItem': id, task_id, record_id, status, and 2 more.
+src/views/dashboard/records/FinalRecordsView.vue(278,40): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'AdminRecordItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'AdminRecordItem': id, task_id, record_id, status, and 2 more.
+src/views/dashboard/records/FinalRecordsView.vue(286,44): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'AdminRecordItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'AdminRecordItem': id, task_id, record_id, status, and 2 more.
+src/views/dashboard/records/FinalRecordsView.vue(297,43): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'AdminRecordItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'AdminRecordItem': id, task_id, record_id, status, and 2 more.
+src/views/dashboard/records/OutpatientEmergencyRecordsView.vue(96,21): error TS2322: Type '[] | [{ clone: () => Dayjs; isValid: () => boolean; year: { (): number; (value: number): Dayjs; }; month: { (): number; (value: number): Dayjs; }; date: { (): number; (value: number): Dayjs; }; ... 24 more ...; locale: { ...; }; }, { ...; }]' is not assignable to type '[string, string] | [Dayjs, Dayjs]'.
+  Type '[]' is not assignable to type '[string, string] | [Dayjs, Dayjs]'.
+    Type '[]' is not assignable to type '[Dayjs, Dayjs]'.
+      Source has 0 element(s) but target requires 2.
+src/views/dashboard/records/OutpatientEmergencyRecordsView.vue(192,36): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'AdminRecordItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'AdminRecordItem': id, task_id, record_id, status, and 2 more.
+src/views/dashboard/records/OutpatientEmergencyRecordsView.vue(208,38): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'AdminRecordItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'AdminRecordItem': id, task_id, record_id, status, and 2 more.
+src/views/dashboard/records/OutpatientEmergencyRecordsView.vue(216,44): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'AdminRecordItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'AdminRecordItem': id, task_id, record_id, status, and 2 more.
+src/views/dashboard/records/OutpatientEmergencyRecordsView.vue(224,47): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'AdminRecordItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'AdminRecordItem': id, task_id, record_id, status, and 2 more.
+src/views/dashboard/records/RunningRecordsView.vue(42,27): error TS2322: Type '[unknown, unknown]' is not assignable to type '[string, string] | [Dayjs, Dayjs]'.
+  Type '[unknown, unknown]' is not assignable to type '[string, string]'.
+    Type at position 0 in source is not compatible with type at position 0 in target.
+      Type 'unknown' is not assignable to type 'string'.
+src/views/dashboard/records/RunningRecordsView.vue(130,17): error TS2322: Type '"default"' is not assignable to type 'SizeType'.
+src/views/dashboard/records/RunningRecordsView.vue(182,22): error TS2322: Type '({ key }: { key: string; }) => void' is not assignable to type 'MenuClickEventHandler'.
+  Types of parameters '__0' and 'info' are incompatible.
+    Type 'MenuInfo' is not assignable to type '{ key: string; }'.
+      Types of property 'key' are incompatible.
+        Type 'Key' is not assignable to type 'string'.
+          Type 'number' is not assignable to type 'string'.
+src/views/dashboard/records/RunningRecordsView.vue(378,14): error TS2322: Type '({ title: string; dataIndex: string; key: string; width: number; fixed?: undefined; } | { title: string; key: string; width: number; fixed: string; dataIndex?: undefined; })[]' is not assignable to type 'ColumnsType<any>'.
+  Type '{ title: string; dataIndex: string; key: string; width: number; fixed?: undefined; } | { title: string; key: string; width: number; fixed: string; dataIndex?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+    Type '{ title: string; key: string; width: number; fixed: string; dataIndex?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+      Type '{ title: string; key: string; width: number; fixed: string; dataIndex?: undefined; }' is not assignable to type 'ColumnType<any>'.
+        Types of property 'fixed' are incompatible.
+          Type 'string' is not assignable to type 'FixedType'.
+src/views/dashboard/records/RunningRecordsView.vue(391,44): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'RunningRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'RunningRecord': id, registrationNo, serialNo, caseNo, and 5 more.
+src/views/dashboard/records/RunningRecordsView.vue(399,44): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'RunningRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'RunningRecord': id, registrationNo, serialNo, caseNo, and 5 more.
+src/views/dashboard/records/RunningRecordsView.vue(407,44): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'RunningRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'RunningRecord': id, registrationNo, serialNo, caseNo, and 5 more.
+src/views/dashboard/records/RunningRecordsView.vue(422,46): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'RunningRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'RunningRecord': id, registrationNo, serialNo, caseNo, and 5 more.
+src/views/dashboard/records/RunningRecordsView.vue(430,46): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'RunningRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'RunningRecord': id, registrationNo, serialNo, caseNo, and 5 more.
+src/views/dashboard/records/RunningRecordsView.vue(584,27): error TS2322: Type 'unknown' is not assignable to type 'string | Dayjs'.
+src/views/dashboard/records/RunningRecordsView.vue(629,25): error TS2322: Type 'unknown' is not assignable to type 'string | Dayjs'.
+src/views/dashboard/records/RunningRecordsView.vue(635,25): error TS2322: Type 'unknown' is not assignable to type 'string | Dayjs'.
+src/views/dashboard/StatisticsView.vue(21,21): error TS2322: Type '{ clone: () => Dayjs; isValid: () => boolean; year: { (): number; (value: number): Dayjs; }; month: { (): number; (value: number): Dayjs; }; date: { (): number; (value: number): Dayjs; }; ... 24 more ...; locale: { ...; }; }[]' is not assignable to type '[string, string] | [Dayjs, Dayjs]'.
+  Type '{ clone: () => Dayjs; isValid: () => boolean; year: { (): number; (value: number): Dayjs; }; month: { (): number; (value: number): Dayjs; }; date: { (): number; (value: number): Dayjs; }; ... 24 more ...; locale: { ...; }; }[]' is not assignable to type '[Dayjs, Dayjs]'.
+    Target requires 2 element(s) but source may have fewer.
+src/views/dashboard/StatisticsView.vue(208,10): error TS2322: Type '({ title: string; dataIndex: string; key: string; width: number; sorter?: undefined; fixed?: undefined; } | { title: string; dataIndex: string; key: string; width: number; sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => number; fixed?: undefined; } | { ...; })[]' is not assignable to type 'ColumnsType<any>'.
+  Type '{ title: string; dataIndex: string; key: string; width: number; sorter?: undefined; fixed?: undefined; } | { title: string; dataIndex: string; key: string; width: number; sorter: (a: DepartmentStatsRow, b: DepartmentStatsRow) => number; fixed?: undefined; } | { ...; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+    Type '{ title: string; key: string; width: number; fixed: string; dataIndex?: undefined; sorter?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+      Type '{ title: string; key: string; width: number; fixed: string; dataIndex?: undefined; sorter?: undefined; }' is not assignable to type 'ColumnType<any>'.
+        Types of property 'fixed' are incompatible.
+          Type 'string' is not assignable to type 'FixedType'.
+src/views/dashboard/StatisticsView.vue(247,42): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'DepartmentStatsRow'.
+  Type 'Record<string, any>' is missing the following properties from type 'DepartmentStatsRow': department, totalRecords, passedRecords, passRate, and 2 more.
+src/views/dashboard/StatisticsView.vue(255,48): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'DepartmentStatsRow'.
+  Type 'Record<string, any>' is missing the following properties from type 'DepartmentStatsRow': department, totalRecords, passedRecords, passRate, and 2 more.
+src/views/dashboard/tasks/AllTasksView.vue(179,19): error TS2322: Type 'any[]' is not assignable to type '[string, string] | [Dayjs, Dayjs]'.
+  Type 'any[]' is not assignable to type '[Dayjs, Dayjs]'.
+    Target requires 2 element(s) but source may have fewer.
+src/views/dashboard/tasks/AllTasksView.vue(180,11): error TS2322: Type 'string' is not assignable to type 'string[]'.
+src/views/dashboard/tasks/AllTasksView.vue(235,10): error TS2322: Type '{ selectedRowKeys: Ref<string[], string[]>; onChange: (keys: string[]) => void; }' is not assignable to type 'TableRowSelection<any>'.
+  Types of property 'selectedRowKeys' are incompatible.
+    Type 'Ref<string[], string[]>' is missing the following properties from type 'Key[]': length, pop, push, concat, and 29 more.
+src/views/dashboard/tasks/MyTasksView.vue(142,19): error TS2322: Type 'any[]' is not assignable to type '[string, string] | [Dayjs, Dayjs]'.
+  Type 'any[]' is not assignable to type '[Dayjs, Dayjs]'.
+    Target requires 2 element(s) but source may have fewer.
+src/views/dashboard/tasks/MyTasksView.vue(211,41): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'TaskItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'TaskItem': id, task_number, task_name, task_type, and 8 more.
+src/views/dashboard/tasks/MyTasksView.vue(220,44): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'TaskItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'TaskItem': id, task_number, task_name, task_type, and 8 more.
+src/views/dashboard/tasks/MyTasksView.vue(228,42): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'TaskItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'TaskItem': id, task_number, task_name, task_type, and 8 more.
+src/views/demo/components/DocumentNavigator.vue(31,8): error TS2322: Type '({ key }: { key: string; }) => void' is not assignable to type 'SelectEventHandler'.
+  Types of parameters '__0' and 'info' are incompatible.
+    Type 'SelectInfo' is not assignable to type '{ key: string; }'.
+      Types of property 'key' are incompatible.
+        Type 'Key' is not assignable to type 'string'.
+          Type 'number' is not assignable to type 'string'.
+src/views/demo/components/DocumentViewer.vue(141,24): error TS2322: Type '({ key }: { key: string; }) => void' is not assignable to type 'MenuClickEventHandler'.
+  Types of parameters '__0' and 'info' are incompatible.
+    Type 'MenuInfo' is not assignable to type '{ key: string; }'.
+      Types of property 'key' are incompatible.
+        Type 'Key' is not assignable to type 'string'.
+          Type 'number' is not assignable to type 'string'.
+src/views/demo/FeedbacksView.vue(160,10): error TS2322: Type '({ title: string; dataIndex: string; key: string; width: number; ellipsis?: undefined; align?: undefined; fixed?: undefined; } | { title: string; dataIndex: string; key: string; width: number; ellipsis: boolean; align?: undefined; fixed?: undefined; } | { ...; } | { ...; } | { ...; })[]' is not assignable to type 'ColumnsType<any>'.
+  Type '{ title: string; dataIndex: string; key: string; width: number; ellipsis?: undefined; align?: undefined; fixed?: undefined; } | { title: string; dataIndex: string; key: string; width: number; ellipsis: boolean; align?: undefined; fixed?: undefined; } | { ...; } | { ...; } | { ...; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+    Type '{ title: string; key: string; width: number; align: string; dataIndex?: undefined; ellipsis?: undefined; fixed?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+      Type '{ title: string; key: string; width: number; align: string; dataIndex?: undefined; ellipsis?: undefined; fixed?: undefined; }' is not assignable to type 'ColumnType<any>'.
+        Types of property 'align' are incompatible.
+          Type 'string' is not assignable to type 'AlignType'.
+src/views/demo/FeedbacksView.vue(212,42): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'FeedbackRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'FeedbackRecord': feedback_id, created_at, rule_id, rule_code, and 4 more.
+src/views/demo/FeedbacksView.vue(220,38): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'FeedbackRecord'.
+  Type 'Record<string, any>' is missing the following properties from type 'FeedbackRecord': feedback_id, created_at, rule_id, rule_code, and 4 more.
+src/views/demo/frontpage/components/InProcessMonitoringView.vue(40,24): error TS2322: Type '({ key }: { key: string; }) => void' is not assignable to type 'MenuClickEventHandler'.
+  Types of parameters '__0' and 'info' are incompatible.
+    Type 'MenuInfo' is not assignable to type '{ key: string; }'.
+      Types of property 'key' are incompatible.
+        Type 'Key' is not assignable to type 'string'.
+          Type 'number' is not assignable to type 'string'.
+src/views/demo/frontpage/components/PaymentMonitoringView.vue(16,20): error TS2322: Type '({ key }: { key: string; }) => void' is not assignable to type 'MenuClickEventHandler'.
+  Types of parameters '__0' and 'info' are incompatible.
+    Type 'MenuInfo' is not assignable to type '{ key: string; }'.
+      Types of property 'key' are incompatible.
+        Type 'Key' is not assignable to type 'string'.
+          Type 'number' is not assignable to type 'string'.
+src/views/demo/frontpage/components/PostEventAnalysisView.vue(74,20): error TS2322: Type '({ key }: { key: string; }) => Promise<void>' is not assignable to type 'MenuClickEventHandler'.
+  Types of parameters '__0' and 'info' are incompatible.
+    Type 'MenuInfo' is not assignable to type '{ key: string; }'.
+      Types of property 'key' are incompatible.
+        Type 'Key' is not assignable to type 'string'.
+          Type 'number' is not assignable to type 'string'.
+src/views/demo/LLMQCDemoEnhanced.vue(20,24): error TS2322: Type '({ key }: { key: string; }) => Promise<void>' is not assignable to type 'MenuClickEventHandler'.
+  Types of parameters '__0' and 'info' are incompatible.
+    Type 'MenuInfo' is not assignable to type '{ key: string; }'.
+      Types of property 'key' are incompatible.
+        Type 'Key' is not assignable to type 'string'.
+          Type 'number' is not assignable to type 'string'.
+src/views/demo/LLMQCDemoEnhanced.vue(144,26): error TS2322: Type '({ key }: { key: string; }) => Promise<void>' is not assignable to type 'MenuClickEventHandler'.
+  Types of parameters '__0' and 'info' are incompatible.
+    Type 'MenuInfo' is not assignable to type '{ key: string; }'.
+      Types of property 'key' are incompatible.
+        Type 'Key' is not assignable to type 'string'.
+          Type 'number' is not assignable to type 'string'.
+src/views/demo/LLMQCDemoEnhanced.vue(289,14): error TS2322: Type 'string' is not assignable to type '"success" | "error" | "warning" | "info"'.
+src/views/demo/LLMQCDemoEnhanced.vue(360,18): error TS2322: Type '(reset?: boolean) => Promise<void>' is not assignable to type 'MouseEventHandler | MouseEventHandler[]'.
+  Type '(reset?: boolean) => Promise<void>' is not assignable to type 'MouseEventHandler'.
+    Types of parameters 'reset' and 'e' are incompatible.
+      Type 'MouseEvent' is not assignable to type 'boolean'.
+src/views/demo/LX33DemoView.vue(130,12): error TS2322: Type '({ title: VNode<RendererNode, RendererElement, { [key: string]: any; }>; key: string; width: number; fixed: string; dataIndex?: undefined; ellipsis?: undefined; } | { ...; } | { ...; } | { ...; })[]' is not assignable to type 'ColumnsType<any>'.
+  Type '{ title: VNode<RendererNode, RendererElement, { [key: string]: any; }>; key: string; width: number; fixed: string; dataIndex?: undefined; ellipsis?: undefined; } | { ...; } | { ...; } | { ...; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+    Type '{ title: VNode<RendererNode, RendererElement, { [key: string]: any; }>; key: string; width: number; fixed: string; dataIndex?: undefined; ellipsis?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+      Type '{ title: VNode<RendererNode, RendererElement, { [key: string]: any; }>; key: string; width: number; fixed: string; dataIndex?: undefined; ellipsis?: undefined; }' is not assignable to type 'ColumnType<any>'.
+        Types of property 'fixed' are incompatible.
+          Type 'string' is not assignable to type 'FixedType'.
+src/views/demo/LX33DemoView.vue(208,44): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'QCRule'.
+  Type 'Record<string, any>' is missing the following properties from type 'QCRule': name, description
+src/views/demo/LX33DemoView.vue(317,10): error TS2322: Type '({ title: string; dataIndex: string; key: string; width: number; fixed: string; } | { title: string; dataIndex: string; key: string; width: number; fixed?: undefined; } | { title: string; dataIndex: string; key: string; width?: undefined; fixed?: undefined; })[]' is not assignable to type 'ColumnsType<any>'.
+  Type '{ title: string; dataIndex: string; key: string; width: number; fixed: string; } | { title: string; dataIndex: string; key: string; width: number; fixed?: undefined; } | { title: string; dataIndex: string; key: string; width?: undefined; fixed?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+    Type '{ title: string; dataIndex: string; key: string; width: number; fixed: string; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+      Type '{ title: string; dataIndex: string; key: string; width: number; fixed: string; }' is not assignable to type 'ColumnType<any>'.
+        Types of property 'fixed' are incompatible.
+          Type 'string' is not assignable to type 'FixedType'.
+src/views/DepartmentConfig.vue(202,65): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'DepartmentRule'.
+  Type 'Record<string, any>' is missing the following properties from type 'DepartmentRule': id, name, description, severity, enabled
+src/views/DepartmentConfig.vue(215,42): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'DepartmentRule'.
+  Type 'Record<string, any>' is missing the following properties from type 'DepartmentRule': id, name, description, severity, enabled
+src/views/DepartmentConfig.vue(221,46): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'DepartmentRule'.
+  Type 'Record<string, any>' is missing the following properties from type 'DepartmentRule': id, name, description, severity, enabled
+src/views/DepartmentConfigTest.vue(138,12): error TS2322: Type '({ title: string; dataIndex: string; key: string; width: number; fixed?: undefined; } | { title: string; key: string; width: number; fixed: string; dataIndex?: undefined; })[]' is not assignable to type 'ColumnsType<any>'.
+  Type '{ title: string; dataIndex: string; key: string; width: number; fixed?: undefined; } | { title: string; key: string; width: number; fixed: string; dataIndex?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+    Type '{ title: string; key: string; width: number; fixed: string; dataIndex?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+      Type '{ title: string; key: string; width: number; fixed: string; dataIndex?: undefined; }' is not assignable to type 'ColumnType<any>'.
+        Types of property 'fixed' are incompatible.
+          Type 'string' is not assignable to type 'FixedType'.
+src/views/DepartmentConfigTest.vue(157,39): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'TestResultItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'TestResultItem': id, testType, departmentId, status, and 6 more.
+src/views/DepartmentConfigTest.vue(165,37): error TS2345: Argument of type 'Record<string, any>' is not assignable to parameter of type 'TestResultItem'.
+  Type 'Record<string, any>' is missing the following properties from type 'TestResultItem': id, testType, departmentId, status, and 6 more.
+src/views/drg/Analysis.vue(56,28): error TS2322: Type '(e: { key: string; }) => Promise<void>' is not assignable to type 'MenuClickEventHandler'.
+  Types of parameters 'e' and 'info' are incompatible.
+    Type 'MenuInfo' is not assignable to type '{ key: string; }'.
+      Types of property 'key' are incompatible.
+        Type 'Key' is not assignable to type 'string'.
+          Type 'number' is not assignable to type 'string'.
+src/views/drg/Analysis.vue(310,14): error TS2322: Type '(format?: ExportFormat) => Promise<void>' is not assignable to type 'MouseEventHandler | MouseEventHandler[]'.
+  Type '(format?: ExportFormat) => Promise<void>' is not assignable to type 'MouseEventHandler'.
+    Types of parameters 'format' and 'e' are incompatible.
+      Type 'MouseEvent' is not assignable to type 'ExportFormat'.
+src/views/drg/Analysis.vue(322,22): error TS2339: Property 'profit' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/Analysis.vue(327,22): error TS2339: Property 'costRate' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/CodingAssistant.vue(107,12): error TS2322: Type '({ title: string; dataIndex: string; width: number; fixed: string; align?: undefined; key?: undefined; } | { title: string; dataIndex: string; width: number; fixed?: undefined; align?: undefined; key?: undefined; } | { ...; } | { ...; })[]' is not assignable to type 'ColumnsType<any>'.
+  Type '{ title: string; dataIndex: string; width: number; fixed: string; align?: undefined; key?: undefined; } | { title: string; dataIndex: string; width: number; fixed?: undefined; align?: undefined; key?: undefined; } | { ...; } | { ...; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+    Type '{ title: string; dataIndex: string; width: number; fixed: string; align?: undefined; key?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+      Type '{ title: string; dataIndex: string; width: number; fixed: string; align?: undefined; key?: undefined; }' is not assignable to type 'ColumnType<any>'.
+        Types of property 'fixed' are incompatible.
+          Type 'string' is not assignable to type 'FixedType'.
+src/views/drg/FeeMonitoring.vue(53,12): error TS2322: Type '({ title: string; dataIndex: string; width: number; ellipsis?: undefined; customRender?: undefined; key?: undefined; slots?: undefined; fixed?: undefined; } | { title: string; dataIndex: string; width: number; ... 4 more ...; fixed?: undefined; } | { ...; } | { ...; } | { ...; })[]' is not assignable to type 'ColumnsType<any>'.
+  Type '{ title: string; dataIndex: string; width: number; ellipsis?: undefined; customRender?: undefined; key?: undefined; slots?: undefined; fixed?: undefined; } | { title: string; dataIndex: string; width: number; ... 4 more ...; fixed?: undefined; } | { ...; } | { ...; } | { ...; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+    Type '{ title: string; key: string; width: number; fixed: string; slots: { customRender: string; }; dataIndex?: undefined; ellipsis?: undefined; customRender?: undefined; }' is not assignable to type 'ColumnGroupType<any> | ColumnType<any>'.
+      Type '{ title: string; key: string; width: number; fixed: string; slots: { customRender: string; }; dataIndex?: undefined; ellipsis?: undefined; customRender?: undefined; }' is not assignable to type 'ColumnType<any>'.
+        Types of property 'fixed' are incompatible.
+          Type 'string' is not assignable to type 'FixedType'.
+src/views/drg/FeeMonitoring.vue(60,22): error TS2339: Property 'groupingStatus' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/FeeMonitoring.vue(75,22): error TS2339: Property 'drg' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/FeeMonitoring.vue(83,22): error TS2339: Property 'baseline' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/FeeMonitoring.vue(88,22): error TS2339: Property 'actualCost' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/FeeMonitoring.vue(92,22): error TS2339: Property 'costRate' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/FeeMonitoring.vue(101,22): error TS2339: Property 'profit' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/FeeMonitoring.vue(111,22): error TS2339: Property 'ungroupedReason' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/FeeMonitoring.vue(127,22): error TS2339: Property 'fixSuggestion' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/FeeMonitoring.vue(143,22): error TS2339: Property 'action' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/MonitorDashboard.vue(131,22): error TS2339: Property 'type' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/MonitorDashboard.vue(138,22): error TS2339: Property 'severity' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/MonitorDashboard.vue(144,22): error TS2339: Property 'action' does not exist on type 'Readonly<{ emptyText?: any; expandIcon?: Slot<RenderExpandIconProps<any>>; title?: any; footer?: any; summary?: any; expandedRowRender?: any; expandColumnTitle?: any; bodyCell?: (props: { ...; }) => void; headerCell?: (props: { ...; }) => void; customFilterIcon?: any; customFilterDropdown?: any; default: any; }>'.
+src/views/drg/SettlementForm.vue(687,47): error TS2538: Type 'readonly (string | number)[]' cannot be used as an index type.
+src/views/drg/SettlementForm.vue(716,47): error TS2538: Type 'readonly (string | number)[]' cannot be used as an index type.
+src/views/drg/SettlementForm.vue(868,47): error TS2538: Type 'readonly (string | number)[]' cannot be used as an index type.
+src/views/medical-records/MedicalRecordDetail.legacy.vue(867,12): error TS2322: Type 'string' is not assignable to type '"success" | "error" | "warning" | "info"'.
+src/views/settings/SettingsView.vue(231,8): error TS2739: Type 'Record<string, unknown>' is missing the following properties from type 'RoleInfo': key, name, description

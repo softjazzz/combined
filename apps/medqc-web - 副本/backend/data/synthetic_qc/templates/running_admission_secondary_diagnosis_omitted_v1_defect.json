@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_admission_secondary_diagnosis_omitted_v1",
+    "issue_type": "A5_admission_secondary_diagnosis_omitted",
+    "display_name": "入院诊断遗漏重要并存疾病",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-020"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P004",
+    "visit_id": "SYN-RUN-034",
+    "mr_no": "SYN0034",
+    "patient_name": "合成患者四",
+    "gender": "女",
+    "age": 58,
+    "department": "风湿免疫科"
+  },
+  "documents": [
+    {
+      "document_type": "admission_record",
+      "title": "入院记录",
+      "content": "主诉：双膝关节疼痛肿胀10年，加重1周。现病史：患者既往明确类风湿关节炎，长期口服甲氨蝶呤及来氟米特治疗，近1周关节疼痛加重来院。既往史：类风湿关节炎10年。体格检查：双膝关节肿胀压痛。入院诊断：双膝关节滑膜炎。"
+    },
+    {
+      "document_type": "first_course_record",
+      "title": "首次病程记录",
+      "content": "病例特点：双膝关节疼痛肿胀10年。诊断依据：病史及查体支持滑膜炎。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["类风湿关节炎活动期", "双膝关节滑膜炎"],
+    "orders": ["继续甲氨蝶呤"],
+    "exams": ["类风湿因子阳性"]
+  }
+}

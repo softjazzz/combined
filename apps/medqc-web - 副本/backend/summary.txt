@@ -1,0 +1,10 @@
+﻿Total: 66  PASS: 62  FAIL: 4
+--- FAILED ---
+LX-017 [positive] expected=True, got=False
+  Findings: 常规会诊申请时间为2023年10月09日15:00，会诊记录完成时间为2023年10月11日14:35，耗时49小时35分钟，超过48小时时限要求，且未说明紧急会诊理由，应判定为常规会诊超时。
+LX-026 [positive] expected=True, got=False
+  Findings: 手术记录书写时间为2023年10月05日18:10，距手术结束时间12:15已超过24小时，违反“术后24小时内完成手术记录”的要求。
+LX-029 [negative] expected=False, got=True
+  Findings: 病历中未提供出院记录书写完成时间，证据不足，无法确认是否在出院后24小时内完成，不应直接判定为合规。
+LX-030 [positive] expected=True, got=False
+  Findings: 出院诊断包含“白细胞升高（反应性）”等检验结果描述，非规范诊断条目；且未将“肺炎链球菌肺炎”等明确病原学诊断完整纳入，存在诊断名称不规范与漏填问题。

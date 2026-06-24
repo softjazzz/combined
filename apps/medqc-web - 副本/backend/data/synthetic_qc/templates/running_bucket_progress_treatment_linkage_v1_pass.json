@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_progress_treatment_linkage_v1",
+    "issue_type": "Z19_progress_treatment_linkage",
+    "display_name": "病程治疗闭环",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-034", "SC-036", "SC-070"],
+    "bucket_id": "progress_treatment_linkage"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P119",
+    "visit_id": "SYN-RUN-119",
+    "mr_no": "SYN0119",
+    "patient_name": "合成患者申",
+    "gender": "男",
+    "age": 60,
+    "department": "血液内科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "今日复查血红蛋白由82g/L降至74g/L，结合黑便考虑上消化道出血可能，已暂停阿司匹林，予PPI静滴并补液支持治疗。消化内科会诊建议完善凝血功能、监测血红蛋白变化并视情况安排胃镜检查，病程中已记录会诊意见及执行：已开凝血功能、已停止抗血小板、继续禁食补液，今晚复查血常规。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["上消化道出血待查"],
+    "orders": ["暂停阿司匹林", "PPI静滴", "申请胃镜", "输注红细胞2U"],
+    "exams": ["血红蛋白下降", "黑便"]
+  }
+}

@@ -48,6 +48,8 @@ export type ManualSamplePoolItem = {
   latest_job_id?: string
   latest_match_status?: string
   raw_payload?: Record<string, unknown>
+  created_at?: string
+  updated_at?: string
 }
 
 export type ManualSamplePoolRecord = {
@@ -69,6 +71,8 @@ export type ManualSamplePoolRecord = {
   issue_preview_text: string
   sample_item_ids: string[]
   sample_items: ManualSamplePoolItem[]
+  created_at?: string
+  updated_at?: string
 }
 
 export type ManualSampleValidationMode =
@@ -200,6 +204,11 @@ export type ManualSamplePoolRunResult = {
   selected_record_count: number
   record_count: number
   rule_count: number
+  customer_rule_count?: number
+  execution_rule_count?: number
+  selected_rule_ids?: string[]
+  scoped_customer_rule_ids?: string[]
+  record_rule_map?: Record<string, string[]>
   record_ids: string[]
   rule_ids: string[]
   validation_mode?: ManualSampleValidationMode | string
@@ -254,6 +263,8 @@ export type SyntheticCaseRuleFamily = {
 export type TestRecordDocumentForm = ManualTestRecordDocument & {
   key: string
   enabled: boolean
+  originalContent: string
+  appliedContent: string
 }
 
 export type TestRecordForm = {

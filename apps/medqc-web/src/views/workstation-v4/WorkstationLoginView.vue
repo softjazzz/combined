@@ -12,6 +12,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const loading = ref(false)
 const showDemoAccounts = ref(false)
+const demoLoginTarget = '/workstation-v4/customer-sample-validation?tour=1'
 
 const redirectTarget = computed(() => {
   const raw = route.query.redirect
@@ -30,8 +31,7 @@ const demoAccounts = [
   },
 ]
 
-const navigateAfterLogin = async () => {
-  const target = redirectTarget.value
+const navigateAfterLogin = async (target = redirectTarget.value) => {
   try {
     await router.replace(target)
   } catch (error) {
@@ -61,7 +61,7 @@ const handleLogin = async (loginData: LoginRequest) => {
     }
 
     message.success('登录成功')
-    await navigateAfterLogin()
+    await navigateAfterLogin(isDemoLogin ? demoLoginTarget : redirectTarget.value)
   } catch (error) {
     console.error('workstation 登录失败:', error)
     message.error('登录失败，请稍后重试')

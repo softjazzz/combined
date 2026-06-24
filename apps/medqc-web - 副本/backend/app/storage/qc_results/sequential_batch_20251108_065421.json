@@ -1,0 +1,56 @@
+{
+  "mode": "sequential_batch",
+  "document_type": "入院记录",
+  "document_id": "seq_1762584861166",
+  "rule_ids": [
+    "LX-008"
+  ],
+  "medical_text_length": 684,
+  "stats": {
+    "total": 1,
+    "compliant": 1,
+    "notApplicable": 0,
+    "issues": 0,
+    "errors": 0
+  },
+  "performance": {
+    "totalTokens": 2024,
+    "totalTime": 7.079599142074585,
+    "avgTime": 7.079599142074585
+  },
+  "results": [
+    {
+      "rule_id": "LX-008",
+      "rule_name": "入院记录-检查结果未记录",
+      "is_compliant": true,
+      "issues": [],
+      "findings": "现病史中提到的胸部CT检查已在辅助检查中记录了完整的结果。",
+      "evidence": "现病史提到：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\" 辅助检查中记录了：\"胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大。\"",
+      "suggestion": "",
+      "confidence": 0.5,
+      "llm_raw_output": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"现病史中提到的胸部CT检查已在辅助检查中记录了完整的结果。\",\n  \"issues\": [],\n  \"evidence\": \"现病史提到：\\\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\\\" 辅助检查中记录了：\\\"胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大。\\\"\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.9\n}\n```\n\n### 解释：\n1. **第一步**：提取现病史中提到的辅助检查项目。\n   - 提到的检查项目为：胸部CT。\n\n2. **第二步**：在辅助检查章节中逐项查找对应结果。\n   - 在辅助检查中找到了\"胸部CT平扫（2024-10-25，外院）\"，并且有详细的结果描述：\"右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大\"。\n\n3. **第三步**：判定合规性。\n   - 所有提到的检查项目（胸部CT）都在辅助检查中找到了结果，因此判定为合规。",
+      "status": "compliant",
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "not_applicable": false,
+      "not_applicable_reason": "",
+      "evidence_verified": false,
+      "evidence_span": null,
+      "token_usage": {
+        "total_tokens": 2024
+      },
+      "metadata": {
+        "tokens_used": 2024,
+        "api_time": 7.079599142074585
+      }
+    }
+  ],
+  "payload": null,
+  "metadata": {
+    "trigger": "compare_qc_results_script"
+  },
+  "saved_at": "2025-11-08T06:54:21.168801+00:00"
+}

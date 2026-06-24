@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_first_course_basis_not_structured_v1",
+    "issue_type": "B3_first_course_basis_not_structured",
+    "display_name": "诊断依据书写不规范",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-025", "SC-026"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P002",
+    "visit_id": "SYN-RUN-010",
+    "mr_no": "SYN0010",
+    "patient_name": "合成患者二",
+    "gender": "女",
+    "age": 47,
+    "department": "消化内科"
+  },
+  "documents": [
+    {
+      "document_type": "admission_record",
+      "title": "入院记录",
+      "content": "主诉：反复上腹痛伴反酸1月。现病史：1月来反复上腹痛，餐后明显，伴反酸嗳气。"
+    },
+    {
+      "document_type": "first_course_record",
+      "title": "首次病程记录",
+      "content": "病例特点：上腹痛1月。诊断依据：结合病史考虑胃病。鉴别诊断：待进一步明确。诊疗计划：对症处理。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["上腹痛待查"],
+    "orders": ["对症处理"],
+    "exams": []
+  }
+}

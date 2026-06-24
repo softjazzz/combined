@@ -412,6 +412,82 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(text).not.toContain('本次未发现泸县0609质控点问题')
   })
 
+  it('泸县0609全量任务不应显示为 scoped run', () => {
+    const props = buildProps()
+    props.batchJobDetail.status = 'completed'
+    props.batchJobDetail.rule_set_key = 'luxian_0609_qc_v1'
+    props.batchJobDetail.customer_rule_count = 49
+    props.batchJobDetail.execution_rule_count = 59
+    props.batchJobDetail.rule_count = 49
+    props.batchJobDetail.filters = {
+      rule_set_key: 'luxian_0609_qc_v1',
+      rule_ids: ['SC-002', 'CL-081'],
+      customer_rule_count: 49,
+      execution_rule_count: 59,
+      rule_count: 59,
+    }
+    Object.assign(props.batchJobDetail.summary || {}, {
+      rule_set_key: 'luxian_0609_qc_v1',
+      rule_count: 49,
+      execution_rule_count: 59,
+    })
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('全量 0609 规则集')
+    expect(text).toContain('未限定，执行全量 0609 质控点')
+    expect(text).toContain('全量运行，不按单病历限定执行规则')
+    expect(text).toContain('当前为泸县0609 全量 0609 规则集 结果')
+    expect(text).not.toContain('scoped run')
+  })
+
+  it('客户结果卡不应暴露内部触发状态，应优先展示执行证据', async () => {
+    const props = buildProps()
+    const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
+    Object.assign(firstItem || {}, {
+      rule_code: 'LX0609-002',
+      rule_name: '首次病程：入院后 8 小时内无首次病程记录',
+      status: 'non_compliant',
+      result_status: 'non_compliant',
+      evidence:
+        '证据模板：时限类 质控点：LX0609-002 首次病程：入院后 8 小时内无首次病程记录 ' +
+        '触发状态：unknown 触发说明：未识别到可安全门控的触发族，进入常规执行 ' +
+        '映射执行规则：CL-081、SC-021 应包含证据要素：触发时间、截止时间、实际记录时间、超时或缺失结论、来源文书/表字段 ' +
+        '执行证据：入院时间：2026-06-01 08:00:00；2026-06-01 首次病程记录记录时间：2026-06-01 19:00:00；间隔：11.0小时',
+    })
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    const issueCard = wrapper.findAll('.issue-conclusion-card')[0]
+    expect(issueCard?.text()).toContain('入院时间：2026-06-01 08:00:00')
+    expect(issueCard?.text()).toContain('间隔：11.0小时')
+    expect(issueCard?.text()).not.toContain('触发状态')
+    expect(issueCard?.text()).not.toContain('触发说明')
+    expect(issueCard?.text()).not.toContain('unknown')
+
+    const expandButton = issueCard
+      ?.findAll('button')
+      .find((button) => button.text().includes('展开完整说明'))
+    expect(expandButton).toBeTruthy()
+    await expandButton?.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(issueCard?.text()).toContain('首次病程记录记录时间：2026-06-01 19:00:00')
+    expect(issueCard?.text()).not.toContain('映射执行规则')
+    expect(issueCard?.text()).not.toContain('应包含证据要素')
+  })
+
   it('运行中暂无返回结果时应展示等待首份病历的动态提示', () => {
     const props = buildProps()
     if (props.batchJobDetail.summary) {
@@ -543,5 +619,49 @@ describe('SemanticRulesBatchResultDrawer', () => {
     expect(wrapper.text()).toContain('日常病程记录')
     expect(wrapper.text()).toContain('病程记录未分析尿培养阳性结果与抗感染方案关系')
     expect(wrapper.text()).toContain('报告后24小时内完成分析')
+  })
+
+  it('应在结果卡片摘要中展示多条关键原文证据', () => {
+    const props = buildProps()
+    const firstItem = props.batchJobDetail.rule_results?.[0]?.items?.[0]
+    Object.assign(firstItem || {}, {
+      rule_code: 'LX0609-026',
+      rule_name: '化疗记录：病程中化学治疗记录情况与医嘱不一致',
+      qc_point_id: 'LX0609-026',
+      rule_set_key: 'luxian_0609_qc_v1',
+      schema_version: 'luxian_0609_evidence_chain_v1',
+      result_status: 'non_compliant',
+      status: 'non_compliant',
+      findings: '化疗医嘱已开具具体药物、剂量、用法和时间，但病程记录仅泛化描述辅助化疗。',
+      evidence_items: [
+        {
+          evidence_id: 'E-001',
+          source_document_type: '化疗医嘱',
+          field_path: '化疗医嘱',
+          quote: '长期医嘱：奥沙利铂 130mg d1 静脉滴注；卡培他滨 1.5g bid po d1-d14。',
+        },
+        {
+          evidence_id: 'E-002',
+          source_document_type: '化疗前病程记录',
+          field_path: '病程记录',
+          quote: '今日准备开始辅助化疗，已交代可能出现恶心、呕吐等不良反应。',
+        },
+      ],
+      decision: {
+        decision_summary: '化疗医嘱与病程记录不一致。',
+        suggestion: '在病程记录中补充化疗方案名称、药物名称、剂量、给药方式和时间。',
+      },
+    })
+
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: {
+        stubs: drawerStubs,
+      },
+    })
+
+    expect(wrapper.text()).toContain('奥沙利铂 130mg')
+    expect(wrapper.text()).toContain('今日准备开始辅助化疗')
+    expect(wrapper.text()).not.toContain('触发状态：unknown')
   })
 })

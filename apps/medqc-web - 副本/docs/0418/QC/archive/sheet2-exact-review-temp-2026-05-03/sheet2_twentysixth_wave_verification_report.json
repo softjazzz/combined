@@ -1,0 +1,99 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 7,
+  "families": [
+    {
+      "issue_family": "上级医师查房缺失/未及时书写；出院前一天/当天上级医师查房或病程缺失",
+      "row_count": 1,
+      "job_id": "ea27e202-0be3-4a9a-a4c4-44df34510726",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "主治首次查房48小时；病程记录缺分析/缺处理意见",
+      "row_count": 1,
+      "job_id": "1eda4e77-40cd-4eb9-82f3-5e15e046dd9e",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "上级医师查房缺失/未及时书写",
+      "row_count": 2,
+      "job_id": "66dd9f6d-d977-460c-86e0-5fb3d9325a57",
+      "result_breakdown": {
+        "same_family_hit": 2
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 2
+      },
+      "items_count": 2,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
+      "row_count": 1,
+      "job_id": "2f2473cd-c64b-4250-9d6a-a5f675cc4628",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；病程记录病情变化记录不全",
+      "row_count": 1,
+      "job_id": "1d3f9e4b-8238-4256-bfa9-c40c99d1300f",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "四级手术未 MDT；术前讨论结论未入病历/缺项",
+      "row_count": 1,
+      "job_id": "db76baaa-140c-4cec-b5d7-c082aa56c854",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 177,
+    "exact_hit": 22,
+    "miss": 37,
+    "same_family_hit": 39,
+    "skip": 8
+  }
+}

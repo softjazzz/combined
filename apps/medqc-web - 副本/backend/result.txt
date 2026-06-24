@@ -1,0 +1,27 @@
+﻿{
+    "ed_diagnosis_texts":  [
+                               "????????????",
+                               "????3? ???",
+                               "2????"
+                           ],
+    "admission_main_diagnosis_text":  "????????????",
+    "admission_other_diagnoses_texts":  [
+                                            "????3? ???",
+                                            "2????"
+                                        ],
+    "admission_main_icd":  null,
+    "admission_other_icds":  [
+                                 "",
+                                 ""
+                             ],
+    "discharge_main_diagnosis_text":  "????????????",
+    "discharge_other_diagnoses_texts":  [
+                                            "????3? ???",
+                                            "2????"
+                                        ],
+    "discharge_main_icd":  null,
+    "discharge_other_icds":  [
+                                 "",
+                                 ""
+                             ]
+}

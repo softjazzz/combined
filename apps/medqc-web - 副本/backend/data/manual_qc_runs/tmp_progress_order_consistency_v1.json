@@ -1,0 +1,628 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T09:09:26.736394",
+  "run_finished_at": "2026-04-24T09:09:36.976776",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 1
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_progress_order_consistency_v1_defect.json",
+      "issue_type": "Z20_progress_order_consistency",
+      "display_name": "病程医嘱一致性",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-038",
+        "SC-079",
+        "SC-143",
+        "SC-146"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P120",
+        "visit_id": "SYN-RUN-120",
+        "mr_no": "SYN0120",
+        "patient_name": "合成患者酉",
+        "gender": "女",
+        "age": 29,
+        "department": "产科"
+      },
+      "elapsed_seconds": 5.28,
+      "total_tokens": 3051,
+      "prompt_tokens": 2562,
+      "completion_tokens": 489,
+      "api_time": 5.276,
+      "packs": [
+        {
+          "pack_id": "daily_course_consistency",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-038"
+          ],
+          "tokens_used": 740,
+          "prompt_tokens": 617,
+          "completion_tokens": 123,
+          "api_time": 1.380035400390625
+        },
+        {
+          "pack_id": "newborn_consistency",
+          "document_type": "新生儿记录",
+          "rule_ids": [
+            "SC-079"
+          ],
+          "tokens_used": 744,
+          "prompt_tokens": 628,
+          "completion_tokens": 116,
+          "api_time": 1.1168129444122314
+        },
+        {
+          "pack_id": "daily_order_procedure",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-143"
+          ],
+          "tokens_used": 794,
+          "prompt_tokens": 675,
+          "completion_tokens": 119,
+          "api_time": 1.3630125522613525
+        },
+        {
+          "pack_id": "daily_order_consistency",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-146"
+          ],
+          "tokens_used": 773,
+          "prompt_tokens": 642,
+          "completion_tokens": 131,
+          "api_time": 1.416245937347412
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-038",
+          "rule_name": "病历中转抄的辅助检查结果与原报告单内容不一致",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程转抄B超结果与原报告胎位情况不一致。",
+          "evidence": "【日常病程记录】病程转抄B超结果为胎位异常，与原报告不符",
+          "suggestion": "核对并修正病程记录中的检查结果。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-038\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程转抄B超结果与原报告胎位情况不一致。\",\n      \"evidence\": \"B超原报告胎位正常，病程转抄异常\",\n      \"suggestion\": \"核对并修正病程记录中的检查结果。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            20
+          ],
+          "metadata": {
+            "tokens_used": 740,
+            "prompt_tokens": 617,
+            "completion_tokens": 123,
+            "input_tokens": 617,
+            "output_tokens": 123,
+            "api_time": 1.380035400390625,
+            "first_result_latency": 1.380035400390625,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_consistency",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 125
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-079",
+          "rule_name": "新生儿性别各处记录不一致",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病历未提供新生儿性别记录，无法判定一致性。",
+          "evidence": "【新生儿记录】记录与病程不一致",
+          "suggestion": "补充新生儿性别记录并核对一致。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-079\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"病历未提供新生儿性别记录，无法判定一致性。\",\n      \"evidence\": \"诊断：待产；医嘱：观察\",\n      \"suggestion\": \"补充新生儿性别记录并核对一致。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            8
+          ],
+          "metadata": {
+            "tokens_used": 744,
+            "prompt_tokens": 628,
+            "completion_tokens": 116,
+            "input_tokens": 628,
+            "output_tokens": 116,
+            "api_time": 1.1168129444122314,
+            "first_result_latency": 1.1168129444122314,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "newborn_consistency",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 126
+          },
+          "target_document_type": "新生儿记录"
+        },
+        {
+          "rule_id": "SC-143",
+          "rule_name": "长期医嘱单描述不清(患者姓名、科别、住院病历号(或病案号)、页码、起始日期和时间、长期医嘱内容、停止",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "医嘱仅写观察，缺乏起止时间及签名等关键要素，无法判定是否描述不清。",
+          "evidence": "【日常病程记录】记录称继续观察，但医嘱单未见对应监测医嘱",
+          "suggestion": "补充医嘱起止时间及医师签名。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.6,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-143\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"医嘱仅写观察，缺乏起止时间及签名等关键要素，无法判定是否描述不清。\",\n      \"evidence\": \"长期医嘱：观察\",\n      \"suggestion\": \"补充医嘱起止时间及医师签名。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            21,
+            41
+          ],
+          "metadata": {
+            "tokens_used": 794,
+            "prompt_tokens": 675,
+            "completion_tokens": 119,
+            "input_tokens": 675,
+            "output_tokens": 119,
+            "api_time": 1.3630125522613525,
+            "first_result_latency": 1.3630125522613525,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_order_procedure",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 125
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-146",
+          "rule_name": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程记录胎位异常但医嘱仅见观察，缺乏对应监测或处理医嘱。",
+          "evidence": "【日常病程记录】病程转抄B超结果为胎位异常，与原报告不符",
+          "suggestion": "补充胎位异常的针对性诊疗医嘱。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-146\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程记录胎位异常但医嘱仅见观察，缺乏对应监测或处理医嘱。\",\n      \"evidence\": \"病程转抄B超结果为胎位异常；长期医嘱：观察。\",\n      \"suggestion\": \"补充胎位异常的针对性诊疗医嘱。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            20
+          ],
+          "metadata": {
+            "tokens_used": 773,
+            "prompt_tokens": 642,
+            "completion_tokens": 131,
+            "input_tokens": 642,
+            "output_tokens": 131,
+            "api_time": 1.416245937347412,
+            "first_result_latency": 1.416245937347412,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_order_consistency",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 125
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-038": "non_compliant",
+          "SC-079": "uncertain",
+          "SC-143": "uncertain",
+          "SC-146": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-038": "non_compliant",
+          "SC-146": "non_compliant"
+        },
+        "soft_hits": {
+          "SC-079": "uncertain",
+          "SC-143": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_order_consistency_v1_pass.json",
+      "issue_type": "Z20_progress_order_consistency",
+      "display_name": "病程医嘱一致性",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-038",
+        "SC-079",
+        "SC-143",
+        "SC-146"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P120",
+        "visit_id": "SYN-RUN-120",
+        "mr_no": "SYN0120",
+        "patient_name": "合成患者酉",
+        "gender": "女",
+        "age": 29,
+        "department": "产科"
+      },
+      "elapsed_seconds": 4.5,
+      "total_tokens": 3330,
+      "prompt_tokens": 2865,
+      "completion_tokens": 465,
+      "api_time": 4.5,
+      "packs": [
+        {
+          "pack_id": "daily_course_consistency",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-038"
+          ],
+          "tokens_used": 809,
+          "prompt_tokens": 693,
+          "completion_tokens": 116,
+          "api_time": 1.2328662872314453
+        },
+        {
+          "pack_id": "newborn_consistency",
+          "document_type": "新生儿记录",
+          "rule_ids": [
+            "SC-079"
+          ],
+          "tokens_used": 820,
+          "prompt_tokens": 703,
+          "completion_tokens": 117,
+          "api_time": 1.0829834938049316
+        },
+        {
+          "pack_id": "daily_order_procedure",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-143"
+          ],
+          "tokens_used": 875,
+          "prompt_tokens": 751,
+          "completion_tokens": 124,
+          "api_time": 1.0137155055999756
+        },
+        {
+          "pack_id": "daily_order_consistency",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-146"
+          ],
+          "tokens_used": 826,
+          "prompt_tokens": 718,
+          "completion_tokens": 108,
+          "api_time": 1.1702089309692383
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-038",
+          "rule_name": "病历中转抄的辅助检查结果与原报告单内容不一致",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病历中转抄的辅助检查结果与原报告单内容一致。",
+          "evidence": "今日复核B超提示胎位正常、羊水适中，与原报告一致。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-038\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病历中转抄的辅助检查结果与原报告单内容一致。\",\n      \"evidence\": \"今日复核B超提示胎位正常、羊水适中，与原报告一致。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            25
+          ],
+          "metadata": {
+            "tokens_used": 809,
+            "prompt_tokens": 693,
+            "completion_tokens": 116,
+            "input_tokens": 693,
+            "output_tokens": 116,
+            "api_time": 1.2328662872314453,
+            "first_result_latency": 1.2328662872314453,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_consistency",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 198
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-079",
+          "rule_name": "新生儿性别各处记录不一致",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病历未记录新生儿性别，无法判定一致性。",
+          "evidence": "【新生儿记录】新生儿情况记录完整，与产程病程描述一致",
+          "suggestion": "补充新生儿性别记录。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-079\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"病历未记录新生儿性别，无法判定一致性。\",\n      \"evidence\": \"诊断：待产；医嘱：胎心监护；补液\",\n      \"suggestion\": \"补充新生儿性别记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            19
+          ],
+          "metadata": {
+            "tokens_used": 820,
+            "prompt_tokens": 703,
+            "completion_tokens": 117,
+            "input_tokens": 703,
+            "output_tokens": 117,
+            "api_time": 1.0829834938049316,
+            "first_result_latency": 1.0829834938049316,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "newborn_consistency",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 199
+          },
+          "target_document_type": "新生儿记录"
+        },
+        {
+          "rule_id": "SC-143",
+          "rule_name": "长期医嘱单描述不清(患者姓名、科别、住院病历号(或病案号)、页码、起始日期和时间、长期医嘱内容、停止",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "长期医嘱单要素齐全，内容清晰规范。",
+          "evidence": "【日常病程记录】长期医嘱单患者姓名、病案号、起始停止时间及内容清晰，诊疗医嘱与病程一致",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-143\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"长期医嘱单要素齐全，内容清晰规范。\",\n      \"evidence\": \"长期医嘱单患者姓名、病案号、起始停止时间及内容清晰；胎心监护 bid，补液 qd\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            40,
+            75
+          ],
+          "metadata": {
+            "tokens_used": 875,
+            "prompt_tokens": 751,
+            "completion_tokens": 124,
+            "input_tokens": 751,
+            "output_tokens": 124,
+            "api_time": 1.0137155055999756,
+            "first_result_latency": 1.0137155055999756,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_order_procedure",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 198
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-146",
+          "rule_name": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "诊疗医嘱与病程记录一致，无缺失。",
+          "evidence": "【日常病程记录】长期医嘱单患者姓名、病案号、起始停止时间及内容清晰，诊疗医嘱与病程一致",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-146\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"诊疗医嘱与病程记录一致，无缺失。\",\n      \"evidence\": \"长期医嘱单...诊疗医嘱与病程一致\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            40,
+            75
+          ],
+          "metadata": {
+            "tokens_used": 826,
+            "prompt_tokens": 718,
+            "completion_tokens": 108,
+            "input_tokens": 718,
+            "output_tokens": 108,
+            "api_time": 1.1702089309692383,
+            "first_result_latency": 1.1702089309692383,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_order_consistency",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 198
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-038": "compliant",
+          "SC-079": "uncertain",
+          "SC-143": "compliant",
+          "SC-146": "compliant"
+        },
+        "unexpected_hits": {
+          "SC-079": "uncertain"
+        }
+      }
+    }
+  ],
+  "bucket_filters": [
+    "progress_order_consistency"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 4,
+    "stabilized": 0,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-038",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_order_consistency_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_order_consistency_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-079",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_order_consistency_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_order_consistency_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-143",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_order_consistency_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_order_consistency_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-146",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_order_consistency_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_order_consistency_v1_defect.json"
+        ],
+        "stabilized": false
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

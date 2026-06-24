@@ -1,0 +1,117 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T20:17:58.649488",
+  "run_finished_at": "2026-04-22T20:17:59.975630",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_admission_external_exam_inaccurate_v1_defect.json",
+      "issue_type": "A4_admission_external_exam_inaccurate",
+      "display_name": "入院前辅助检查记录错误或描述不清",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-019"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P003",
+        "visit_id": "SYN-RUN-032",
+        "mr_no": "SYN0032",
+        "patient_name": "合成患者三",
+        "gender": "男",
+        "age": 63,
+        "department": "骨科"
+      },
+      "elapsed_seconds": 1.232,
+      "total_tokens": 870,
+      "prompt_tokens": 718,
+      "completion_tokens": 152,
+      "api_time": 1.225,
+      "packs": [
+        {
+          "pack_id": "admission_consistency_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-019"
+          ],
+          "tokens_used": 870,
+          "prompt_tokens": 718,
+          "completion_tokens": 152,
+          "api_time": 1.224628210067749
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-019",
+          "rule_name": "入院前若有辅助检查未记录或记录不完善或抄写不准确或描述不清",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "入院前检查记录存在明显错误，将X线结果误记为头颅CT且描述混乱。",
+          "evidence": "病历中记为“头颅CT示左股骨粗隆间骨折”；门诊X线：左股骨粗隆间骨折",
+          "suggestion": "修正检查名称及结果，确保与客观检查报告一致。",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"入院前检查记录存在明显错误，将X线结果误记为头颅CT且描述混乱。\",\n      \"evidence\": \"病历中记为“头颅CT示左股骨粗隆间骨折”；门诊X线：左股骨粗隆间骨折\",\n      \"suggestion\": \"修正检查名称及结果，确保与客观检查报告一致。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 870,
+            "prompt_tokens": 718,
+            "completion_tokens": 152,
+            "input_tokens": 718,
+            "output_tokens": 152,
+            "api_time": 1.224628210067749,
+            "first_result_latency": 1.224628210067749,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 180
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-019": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-019": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    }
+  ]
+}

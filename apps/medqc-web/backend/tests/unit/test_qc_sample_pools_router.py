@@ -732,7 +732,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     assert created["filters"]["rule_set_name"] == "泸县0609质控点验证 v1"
     assert created["filters"]["rule_set_version"] == luxian_rule_set.version
     assert created["filters"]["rule_count"] == len(luxian_rule_set.rule_ids)
-    assert created["filters"]["customer_rule_count"] == len(luxian_rule_set.rule_ids)
+    assert created["filters"]["customer_rule_count"] == len(qc_sample_pools.load_luxian_0609_rules())
     assert created["filters"]["execution_rule_count"] == len(luxian_rule_set.rule_ids)
     assert created["filters"]["selected_rule_ids"] == []
     assert created["filters"]["scoped_customer_rule_ids"] == []
@@ -740,7 +740,7 @@ async def test_run_sample_pool_intrinsic_validation_should_use_luxian_0609_rule_
     assert response["data"]["validation_mode"] == "customer"
     assert response["data"]["rule_set_key"] == "luxian_0609_qc_v1"
     assert response["data"]["rule_count"] == len(luxian_rule_set.rule_ids)
-    assert response["data"]["customer_rule_count"] == len(luxian_rule_set.rule_ids)
+    assert response["data"]["customer_rule_count"] == len(qc_sample_pools.load_luxian_0609_rules())
     assert response["data"]["execution_rule_count"] == len(luxian_rule_set.rule_ids)
     assert response["data"]["selected_rule_ids"] == []
     assert response["data"]["scoped_customer_rule_ids"] == []

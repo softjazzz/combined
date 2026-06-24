@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildSyntheticCaseRunPayload,
+  buildRuleDrivenCaseTitle,
   createDefaultSyntheticCaseForm,
   createGoldenAnswer,
   createSyntheticDocument,
@@ -100,5 +101,201 @@ describe('SyntheticCaseBuilder 按质控点创建', () => {
       max_parallel_records: 1,
     })
     expect(payload.selected_rule_ids).toEqual(['LX0609-020', 'LX0609-021'])
+  })
+
+  it('按质控点生成的测试病历名称应包含规则族、质控点和创建时间', () => {
+    const title = buildRuleDrivenCaseTitle(
+      ['会诊质量'],
+      ['LX0609-021', 'lx0609-020', 'LX0609-020'],
+      new Date('2026-06-23T15:30:00'),
+    )
+
+    expect(title).toBe('会诊质量质控病历｜LX020/021｜0623-1530')
+    expect(title).not.toMatch(/测试患者|测试病历/u)
+  })
+
+  it('五组演示关键模板生成真实住院病历风格多文书', () => {
+    const templateByKey = new Map(
+      syntheticCaseTemplates.map((template) => [template.key, template]),
+    )
+    const forbiddenSelfHints =
+      /测试患者|模拟患者|样例患者|模拟|为了测试|本条为反例|故意缺失|备注[:：].*缺陷/u
+
+    const timeliness = templateByKey.get('basic-timeliness-defect')
+    const admissionRecord = timeliness?.documents.find(
+      (document) => document.document_type === 'admission_record',
+    )
+
+    expect(admissionRecord?.content.length).toBeGreaterThan(650)
+    expect(admissionRecord?.content).toContain('主诉')
+    expect(admissionRecord?.content).toContain('现病史')
+    expect(admissionRecord?.content).toContain('既往史')
+    expect(admissionRecord?.content).toContain('体格检查')
+    expect(admissionRecord?.content).toContain('专科检查')
+    expect(admissionRecord?.content).toContain('辅助检查')
+    expect(admissionRecord?.content).toContain('初步诊断')
+    expect(admissionRecord?.content).toContain('诊疗计划')
+    expect(admissionRecord?.content).not.toMatch(forbiddenSelfHints)
+
+    const consultation = templateByKey.get('consultation-quality-defect')
+    expect(consultation?.documents.map((document) => document.document_type)).toEqual(
+      expect.arrayContaining(['admission_record', 'consultation_record', 'daily_course_record']),
+    )
+    expect(
+      consultation?.documents.some(
+        (document) => document.title === '会诊申请单' && document.content.includes('会诊目的：请会诊'),
+      ),
+    ).toBe(true)
+    expect(
+      consultation?.documents.some(
+        (document) =>
+          document.title === '会诊记录单' &&
+          document.content.includes('建议完善相关检查，继续目前治疗，必要时调整用药'),
+      ),
+    ).toBe(true)
+    consultation?.documents.forEach((document) => {
+      expect(document.content.length).toBeGreaterThan(180)
+      expect(document.content).not.toMatch(forbiddenSelfHints)
+    })
+
+    const examLab = templateByKey.get('ct-mri-culture-defect')
+    expect(examLab?.documents.map((document) => document.document_type)).toEqual(
+      expect.arrayContaining([
+        'admission_record',
+        'exam_report',
+        'lab_report',
+        'daily_course_record',
+      ]),
+    )
+    const examAdmission = examLab?.documents.find(
+      (document) => document.document_type === 'admission_record',
+    )
+    const mriReport = examLab?.documents.find((document) => document.title === '腰椎MRI检查报告')
+    const cultureReport = examLab?.documents.find((document) => document.title === '尿培养报告')
+    const firstCourse = examLab?.documents.find(
+      (document) => document.title === '2026-06-01 日常病程记录',
+    )
+    const secondCourse = examLab?.documents.find(
+      (document) => document.title === '2026-06-03 日常病程记录',
+    )
+    expect(examAdmission?.content.length).toBeGreaterThan(650)
+    expect(examAdmission?.content).toContain('主诉')
+    expect(examAdmission?.content).toContain('现病史')
+    expect(examAdmission?.content).toContain('专科检查')
+    expect(examAdmission?.content).toContain('诊疗计划')
+    expect(mriReport?.content).toContain('L4/5椎间盘突出并右侧神经根受压')
+    expect(mriReport?.content).toContain('建议结合患者右下肢放射痛')
+    expect(cultureReport?.content).toContain('大肠埃希菌生长')
+    expect(cultureReport?.content).toContain('左氧氟沙星：耐药')
+    expect(firstCourse?.content).toContain('已完善腰椎MRI检查')
+    expect(firstCourse?.content).toContain('继续予塞来昔布镇痛、甲钴胺营养神经')
+    expect(secondCourse?.content).toContain('偶有尿频')
+    expect(secondCourse?.content).toContain('暂维持现有处理')
+    examLab?.documents.forEach((document) => {
+      expect(document.content.length).toBeGreaterThan(180)
+      expect(document.content).not.toMatch(forbiddenSelfHints)
+    })
+
+    const surgery = templateByKey.get('surgery-anesthesia-defect')
+    expect(surgery?.documents.map((document) => document.document_type)).toEqual(
+      expect.arrayContaining([
+        'presurg_summary',
+        'presurg_discussion',
+        'surgery_record',
+        'anesthesia_record',
+        'daily_course_record',
+      ]),
+    )
+    const surgeryRecord = surgery?.documents.find(
+      (document) => document.document_type === 'surgery_record',
+    )
+    const anesthesiaRecord = surgery?.documents.find(
+      (document) => document.document_type === 'anesthesia_record',
+    )
+    expect(surgeryRecord?.content).toContain('手术结束时间：2026-06-01 11:30')
+    expect(surgeryRecord?.content).toContain('记录时间：2026-06-03 12:00')
+    expect(anesthesiaRecord?.content).toContain('麻醉方式：')
+    expect(anesthesiaRecord?.content).toContain('麻醉医师代码：')
+    surgery?.documents.forEach((document) => {
+      expect(document.content.length).toBeGreaterThan(180)
+      expect(document.content).not.toMatch(forbiddenSelfHints)
+    })
+
+    const transfusion = templateByKey.get('transfusion-defect')
+    expect(transfusion?.documents.map((document) => document.document_type)).toEqual(
+      expect.arrayContaining([
+        'admission_record',
+        'medical_order',
+        'blood_application',
+        'daily_course_record',
+        'bloodtrans_record',
+      ]),
+    )
+    expect(transfusion?.documents.length).toBeGreaterThanOrEqual(6)
+    const transfusionAdmission = transfusion?.documents.find(
+      (document) => document.document_type === 'admission_record',
+    )
+    const bloodApplication = transfusion?.documents.find(
+      (document) => document.document_type === 'blood_application',
+    )
+    const transfusionOrder = transfusion?.documents.find(
+      (document) => document.document_type === 'medical_order',
+    )
+    const transfusionRecord = transfusion?.documents.find(
+      (document) => document.document_type === 'bloodtrans_record',
+    )
+    const afterTransfusionCourse = transfusion?.documents.find(
+      (document) => document.title === '输血后病程记录',
+    )
+    expect(transfusionAdmission?.content.length).toBeGreaterThan(650)
+    expect(transfusionAdmission?.content).toContain('主诉')
+    expect(transfusionAdmission?.content).toContain('现病史')
+    expect(transfusionAdmission?.content).toContain('输血相关风险')
+    expect(bloodApplication?.content).toContain('输血前检查摘要')
+    expect(bloodApplication?.content).toContain('未见丙肝抗体、HIV抗体、梅毒抗体完整报告')
+    expect(bloodApplication?.content).toContain('未检索到本次输血治疗知情同意书')
+    expect(transfusionOrder?.content).toContain('费用明细摘要')
+    expect(transfusionOrder?.content).toContain('去白悬浮红细胞4U')
+    expect(transfusionRecord?.content).toContain('血袋号')
+    expect(transfusionRecord?.content).toContain('输血前核对')
+    expect(afterTransfusionCourse?.content).toContain('未记录输血后血红蛋白复查结果')
+    transfusion?.documents.forEach((document) => {
+      expect(document.content.length).toBeGreaterThan(180)
+      expect(document.content).not.toMatch(forbiddenSelfHints)
+    })
+
+    const tumor = templateByKey.get('tumor-pathology-chemo-defect')
+    expect(tumor?.documents.map((document) => document.document_type)).toEqual(
+      expect.arrayContaining([
+        'admission_record',
+        'surgery_record',
+        'lab_report',
+        'daily_course_record',
+        'medical_order',
+      ]),
+    )
+    expect(tumor?.documents.length).toBeGreaterThanOrEqual(6)
+    const tumorAdmission = tumor?.documents.find(
+      (document) => document.document_type === 'admission_record',
+    )
+    const tumorSurgery = tumor?.documents.find(
+      (document) => document.document_type === 'surgery_record',
+    )
+    const tumorPathology = tumor?.documents.find((document) => document.title === '病理检查报告')
+    const tumorChemoCourse = tumor?.documents.find((document) => document.title === '化疗前病程记录')
+    expect(tumorAdmission?.content.length).toBeGreaterThan(650)
+    expect(tumorAdmission?.content).toContain('主诉')
+    expect(tumorAdmission?.content).toContain('现病史')
+    expect(tumorAdmission?.content).toContain('体格检查')
+    expect(tumorAdmission?.content).toContain('诊疗计划')
+    expect(tumorSurgery?.content).toContain('标本处理')
+    expect(tumorSurgery?.content).toContain('未逐项标明近端切缘、远端切缘、肿瘤部位')
+    expect(tumorPathology?.content).toContain('中分化腺癌')
+    expect(tumorChemoCourse?.content).toContain('今日准备开始辅助化疗')
+    expect(tumorChemoCourse?.content).not.toContain('奥沙利铂 130mg')
+    tumor?.documents.forEach((document) => {
+      expect(document.content.length).toBeGreaterThan(180)
+      expect(document.content).not.toMatch(forbiddenSelfHints)
+    })
   })
 })

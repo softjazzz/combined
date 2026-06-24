@@ -1,0 +1,673 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T09:29:09.712338",
+  "run_finished_at": "2026-04-24T09:29:17.266113",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 1,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_admission_history_extended_v1_defect.json",
+      "issue_type": "Z02_admission_history_extended",
+      "display_name": "入院记录扩展内容",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-012",
+        "SC-013",
+        "SC-014",
+        "SC-016",
+        "SC-018"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P102-D",
+        "visit_id": "SYN-RUN-102-D",
+        "mr_no": "SYN0102D",
+        "patient_name": "合成患儿乙",
+        "gender": "男",
+        "age": 3,
+        "department": "儿科"
+      },
+      "elapsed_seconds": 3.539,
+      "total_tokens": 1816,
+      "prompt_tokens": 1252,
+      "completion_tokens": 564,
+      "api_time": 3.536,
+      "packs": [
+        {
+          "pack_id": "admission_content_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-012",
+            "SC-013",
+            "SC-014",
+            "SC-016",
+            "SC-018"
+          ],
+          "tokens_used": 1816,
+          "prompt_tokens": 1252,
+          "completion_tokens": 564,
+          "api_time": 3.5358800888061523
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-012",
+          "rule_name": "未描述发病后到入院前，在院内、外接受检查与治疗的详细经过及效果或欠缺",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "现病史未描述发病后到入院前的检查治疗经过及效果。",
+          "evidence": "发热咳嗽3天。体格检查：咽红，双肺呼吸音粗。",
+          "suggestion": "补充发病后门诊或外院诊治经过及效果。",
+          "rewrite_example": "建议补写：补充与本次诊疗直接相关的病史要点、查体结果及入院诊断依据。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史未描述发病后到入院前的检查治疗经过及效果。\",\n      \"evidence\": \"发热咳嗽3天。体格检查：咽红，双肺呼吸音粗。\",\n      \"suggestion\": \"补充发病后门诊或外院诊治经过及效果。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-013\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示既往史内容，无法判断是否记录不全。\",\n      \"evidence\": \"主诉：发热咳嗽3天。现病史：发热咳嗽3天。\",\n      \"suggestion\": \"核实并完善既往史各要素记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-014\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示个人史等章节，无法判断是否缺失。\",\n      \"evidence\": \"主诉：发热咳嗽3天。现病史：发热咳嗽3天。\",\n      \"suggestion\": \"核实并完善个人史、婚育史等记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-016\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者诊断为支气管肺炎且病程短，非婴幼儿。\",\n      \"evidence\": \"入院诊断：支气管肺炎。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"已记录主要阳性体征咽红、双肺呼吸音粗。\",\n      \"evidence\": \"体格检查：咽红，双肺呼吸音粗。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            14,
+            36
+          ],
+          "metadata": {
+            "tokens_used": 363,
+            "prompt_tokens": 250,
+            "completion_tokens": 112,
+            "input_tokens": 250,
+            "output_tokens": 112,
+            "api_time": 0.7071760177612305,
+            "first_result_latency": 3.5358800888061523,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 66
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-013",
+          "rule_name": "既往史记录不全(包括既往疾病史、传染病史、输血史、过敏史、预防接种史、手术外伤史等)",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "证据未显示既往史内容，无法判断是否记录不全。",
+          "evidence": "主诉：发热咳嗽3天。现病史：发热咳嗽3天。",
+          "suggestion": "核实并完善既往史各要素记录。",
+          "rewrite_example": "建议补写：补充与本次诊疗直接相关的病史要点、查体结果及入院诊断依据。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史未描述发病后到入院前的检查治疗经过及效果。\",\n      \"evidence\": \"发热咳嗽3天。体格检查：咽红，双肺呼吸音粗。\",\n      \"suggestion\": \"补充发病后门诊或外院诊治经过及效果。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-013\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示既往史内容，无法判断是否记录不全。\",\n      \"evidence\": \"主诉：发热咳嗽3天。现病史：发热咳嗽3天。\",\n      \"suggestion\": \"核实并完善既往史各要素记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-014\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示个人史等章节，无法判断是否缺失。\",\n      \"evidence\": \"主诉：发热咳嗽3天。现病史：发热咳嗽3天。\",\n      \"suggestion\": \"核实并完善个人史、婚育史等记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-016\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者诊断为支气管肺炎且病程短，非婴幼儿。\",\n      \"evidence\": \"入院诊断：支气管肺炎。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"已记录主要阳性体征咽红、双肺呼吸音粗。\",\n      \"evidence\": \"体格检查：咽红，双肺呼吸音粗。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            21
+          ],
+          "metadata": {
+            "tokens_used": 363,
+            "prompt_tokens": 250,
+            "completion_tokens": 112,
+            "input_tokens": 250,
+            "output_tokens": 112,
+            "api_time": 0.7071760177612305,
+            "first_result_latency": 3.5358800888061523,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 66
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-014",
+          "rule_name": "未描述个人史、婚育史、月经史、家族史",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "证据未显示个人史等章节，无法判断是否缺失。",
+          "evidence": "主诉：发热咳嗽3天。现病史：发热咳嗽3天。",
+          "suggestion": "核实并完善个人史、婚育史等记录。",
+          "rewrite_example": "建议补写：补充与本次诊疗直接相关的病史要点、查体结果及入院诊断依据。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史未描述发病后到入院前的检查治疗经过及效果。\",\n      \"evidence\": \"发热咳嗽3天。体格检查：咽红，双肺呼吸音粗。\",\n      \"suggestion\": \"补充发病后门诊或外院诊治经过及效果。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-013\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示既往史内容，无法判断是否记录不全。\",\n      \"evidence\": \"主诉：发热咳嗽3天。现病史：发热咳嗽3天。\",\n      \"suggestion\": \"核实并完善既往史各要素记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-014\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示个人史等章节，无法判断是否缺失。\",\n      \"evidence\": \"主诉：发热咳嗽3天。现病史：发热咳嗽3天。\",\n      \"suggestion\": \"核实并完善个人史、婚育史等记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-016\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者诊断为支气管肺炎且病程短，非婴幼儿。\",\n      \"evidence\": \"入院诊断：支气管肺炎。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"已记录主要阳性体征咽红、双肺呼吸音粗。\",\n      \"evidence\": \"体格检查：咽红，双肺呼吸音粗。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            21
+          ],
+          "metadata": {
+            "tokens_used": 363,
+            "prompt_tokens": 250,
+            "completion_tokens": 112,
+            "input_tokens": 250,
+            "output_tokens": 112,
+            "api_time": 0.7071760177612305,
+            "first_result_latency": 3.5358800888061523,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 66
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-016",
+          "rule_name": "儿童患者无婴幼儿喂养史和生长发育史",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "患者诊断为支气管肺炎且病程短，非婴幼儿。",
+          "evidence": "入院诊断：支气管肺炎。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史未描述发病后到入院前的检查治疗经过及效果。\",\n      \"evidence\": \"发热咳嗽3天。体格检查：咽红，双肺呼吸音粗。\",\n      \"suggestion\": \"补充发病后门诊或外院诊治经过及效果。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-013\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示既往史内容，无法判断是否记录不全。\",\n      \"evidence\": \"主诉：发热咳嗽3天。现病史：发热咳嗽3天。\",\n      \"suggestion\": \"核实并完善既往史各要素记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-014\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示个人史等章节，无法判断是否缺失。\",\n      \"evidence\": \"主诉：发热咳嗽3天。现病史：发热咳嗽3天。\",\n      \"suggestion\": \"核实并完善个人史、婚育史等记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-016\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者诊断为支气管肺炎且病程短，非婴幼儿。\",\n      \"evidence\": \"入院诊断：支气管肺炎。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"已记录主要阳性体征咽红、双肺呼吸音粗。\",\n      \"evidence\": \"体格检查：咽红，双肺呼吸音粗。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            36,
+            47
+          ],
+          "metadata": {
+            "tokens_used": 363,
+            "prompt_tokens": 250,
+            "completion_tokens": 112,
+            "input_tokens": 250,
+            "output_tokens": 112,
+            "api_time": 0.7071760177612305,
+            "first_result_latency": 3.5358800888061523,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 66
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-018",
+          "rule_name": "体格检查遗漏主要阳性体征及有鉴别诊断意义的阴性体征，或记录不准确",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "已记录主要阳性体征咽红、双肺呼吸音粗。",
+          "evidence": "体格检查：咽红，双肺呼吸音粗。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史未描述发病后到入院前的检查治疗经过及效果。\",\n      \"evidence\": \"发热咳嗽3天。体格检查：咽红，双肺呼吸音粗。\",\n      \"suggestion\": \"补充发病后门诊或外院诊治经过及效果。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-013\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示既往史内容，无法判断是否记录不全。\",\n      \"evidence\": \"主诉：发热咳嗽3天。现病史：发热咳嗽3天。\",\n      \"suggestion\": \"核实并完善既往史各要素记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-014\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示个人史等章节，无法判断是否缺失。\",\n      \"evidence\": \"主诉：发热咳嗽3天。现病史：发热咳嗽3天。\",\n      \"suggestion\": \"核实并完善个人史、婚育史等记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-016\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者诊断为支气管肺炎且病程短，非婴幼儿。\",\n      \"evidence\": \"入院诊断：支气管肺炎。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"已记录主要阳性体征咽红、双肺呼吸音粗。\",\n      \"evidence\": \"体格检查：咽红，双肺呼吸音粗。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            21,
+            36
+          ],
+          "metadata": {
+            "tokens_used": 363,
+            "prompt_tokens": 250,
+            "completion_tokens": 112,
+            "input_tokens": 250,
+            "output_tokens": 112,
+            "api_time": 0.7071760177612305,
+            "first_result_latency": 3.5358800888061523,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 66
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-012": "non_compliant",
+          "SC-013": "uncertain",
+          "SC-014": "uncertain",
+          "SC-016": "not_applicable",
+          "SC-018": "compliant"
+        },
+        "strict_hits": {
+          "SC-012": "non_compliant"
+        },
+        "soft_hits": {
+          "SC-013": "uncertain",
+          "SC-014": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_bucket_admission_history_extended_v1_pass.json",
+      "issue_type": "Z02_admission_history_extended",
+      "display_name": "入院记录扩展内容",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-012",
+        "SC-013",
+        "SC-014",
+        "SC-016",
+        "SC-018"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P102",
+        "visit_id": "SYN-RUN-102",
+        "mr_no": "SYN0102",
+        "patient_name": "合成患者乙",
+        "gender": "女",
+        "age": 48,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 3.582,
+      "total_tokens": 2189,
+      "prompt_tokens": 1568,
+      "completion_tokens": 621,
+      "api_time": 3.579,
+      "packs": [
+        {
+          "pack_id": "admission_content_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-012",
+            "SC-013",
+            "SC-014",
+            "SC-016",
+            "SC-018"
+          ],
+          "tokens_used": 2189,
+          "prompt_tokens": 1568,
+          "completion_tokens": 621,
+          "api_time": 3.5794677734375
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-012",
+          "rule_name": "未描述发病后到入院前，在院内、外接受检查与治疗的详细经过及效果或欠缺",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "现病史已详细描述发病后在社区门诊的检查及药物治疗经过和效果。",
+          "evidence": "在社区门诊查血常规和粪便隐血未见明显异常，门诊予奥美拉唑、铝碳酸镁口服治疗1周后症状仅部分缓解",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史已详细描述发病后在社区门诊的检查及药物治疗经过和效果。\",\n      \"evidence\": \"在社区门诊查血常规和粪便隐血未见明显异常，门诊予奥美拉唑、铝碳酸镁口服治疗1周后症状仅部分缓解\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-013\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"既往史完整记录了手术、传染病、过敏、预防接种及输血外伤史。\",\n      \"evidence\": \"5年前因胆囊结石行腹腔镜胆囊切除术...否认药物及食物过敏史，预防接种史按当地要求完成，否认输血史及重大外伤史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-014\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"个人史、婚育史、月经史、家族史记录完整且清晰。\",\n      \"evidence\": \"生于四川泸州...已婚，孕1产1。月经史：14岁初潮...父亲有胃溃疡病史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-016\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者为成人，非儿童患者，本规则不适用。\",\n      \"evidence\": \"主诉：上腹痛伴反酸2周。既往有慢性胃炎病史，5年前因胆囊结石行腹腔镜胆囊切除术\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"体格检查记录了主要阳性体征（上腹轻压痛）及有鉴别意义的阴性体征。\",\n      \"evidence\": \"腹平软，上腹轻压痛，无反跳痛及肌紧张，Murphy征阴性，肝脾肋下未触及，移动性浊音阴性\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            48,
+            95
+          ],
+          "metadata": {
+            "tokens_used": 437,
+            "prompt_tokens": 313,
+            "completion_tokens": 124,
+            "input_tokens": 313,
+            "output_tokens": 124,
+            "api_time": 0.7158935546875,
+            "first_result_latency": 3.5794677734375,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 417
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-013",
+          "rule_name": "既往史记录不全(包括既往疾病史、传染病史、输血史、过敏史、预防接种史、手术外伤史等)",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "既往史完整记录了手术、传染病、过敏、预防接种及输血外伤史。",
+          "evidence": "【入院记录】否认高血压、糖尿病、冠心病史，否认肝炎、结核等传染病史，否认药物及食物过敏史，预防接种史按当地要求完成，否认输血史及重大外伤史",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史已详细描述发病后在社区门诊的检查及药物治疗经过和效果。\",\n      \"evidence\": \"在社区门诊查血常规和粪便隐血未见明显异常，门诊予奥美拉唑、铝碳酸镁口服治疗1周后症状仅部分缓解\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-013\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"既往史完整记录了手术、传染病、过敏、预防接种及输血外伤史。\",\n      \"evidence\": \"5年前因胆囊结石行腹腔镜胆囊切除术...否认药物及食物过敏史，预防接种史按当地要求完成，否认输血史及重大外伤史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-014\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"个人史、婚育史、月经史、家族史记录完整且清晰。\",\n      \"evidence\": \"生于四川泸州...已婚，孕1产1。月经史：14岁初潮...父亲有胃溃疡病史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-016\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者为成人，非儿童患者，本规则不适用。\",\n      \"evidence\": \"主诉：上腹痛伴反酸2周。既往有慢性胃炎病史，5年前因胆囊结石行腹腔镜胆囊切除术\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"体格检查记录了主要阳性体征（上腹轻压痛）及有鉴别意义的阴性体征。\",\n      \"evidence\": \"腹平软，上腹轻压痛，无反跳痛及肌紧张，Murphy征阴性，肝脾肋下未触及，移动性浊音阴性\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            149,
+            212
+          ],
+          "metadata": {
+            "tokens_used": 437,
+            "prompt_tokens": 313,
+            "completion_tokens": 124,
+            "input_tokens": 313,
+            "output_tokens": 124,
+            "api_time": 0.7158935546875,
+            "first_result_latency": 3.5794677734375,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 417
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-014",
+          "rule_name": "未描述个人史、婚育史、月经史、家族史",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "个人史、婚育史、月经史、家族史记录完整且清晰。",
+          "evidence": "【入院记录】个人史：生于四川泸州，长期居住本地，否认疫区及毒物接触史，无吸烟饮酒嗜好",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史已详细描述发病后在社区门诊的检查及药物治疗经过和效果。\",\n      \"evidence\": \"在社区门诊查血常规和粪便隐血未见明显异常，门诊予奥美拉唑、铝碳酸镁口服治疗1周后症状仅部分缓解\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-013\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"既往史完整记录了手术、传染病、过敏、预防接种及输血外伤史。\",\n      \"evidence\": \"5年前因胆囊结石行腹腔镜胆囊切除术...否认药物及食物过敏史，预防接种史按当地要求完成，否认输血史及重大外伤史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-014\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"个人史、婚育史、月经史、家族史记录完整且清晰。\",\n      \"evidence\": \"生于四川泸州...已婚，孕1产1。月经史：14岁初潮...父亲有胃溃疡病史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-016\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者为成人，非儿童患者，本规则不适用。\",\n      \"evidence\": \"主诉：上腹痛伴反酸2周。既往有慢性胃炎病史，5年前因胆囊结石行腹腔镜胆囊切除术\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"体格检查记录了主要阳性体征（上腹轻压痛）及有鉴别意义的阴性体征。\",\n      \"evidence\": \"腹平软，上腹轻压痛，无反跳痛及肌紧张，Murphy征阴性，肝脾肋下未触及，移动性浊音阴性\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            213,
+            249
+          ],
+          "metadata": {
+            "tokens_used": 437,
+            "prompt_tokens": 313,
+            "completion_tokens": 124,
+            "input_tokens": 313,
+            "output_tokens": 124,
+            "api_time": 0.7158935546875,
+            "first_result_latency": 3.5794677734375,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 417
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-016",
+          "rule_name": "儿童患者无婴幼儿喂养史和生长发育史",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "患者为成人，非儿童患者，本规则不适用。",
+          "evidence": "【入院记录】主诉：上腹痛伴反酸2周",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史已详细描述发病后在社区门诊的检查及药物治疗经过和效果。\",\n      \"evidence\": \"在社区门诊查血常规和粪便隐血未见明显异常，门诊予奥美拉唑、铝碳酸镁口服治疗1周后症状仅部分缓解\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-013\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"既往史完整记录了手术、传染病、过敏、预防接种及输血外伤史。\",\n      \"evidence\": \"5年前因胆囊结石行腹腔镜胆囊切除术...否认药物及食物过敏史，预防接种史按当地要求完成，否认输血史及重大外伤史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-014\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"个人史、婚育史、月经史、家族史记录完整且清晰。\",\n      \"evidence\": \"生于四川泸州...已婚，孕1产1。月经史：14岁初潮...父亲有胃溃疡病史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-016\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者为成人，非儿童患者，本规则不适用。\",\n      \"evidence\": \"主诉：上腹痛伴反酸2周。既往有慢性胃炎病史，5年前因胆囊结石行腹腔镜胆囊切除术\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"体格检查记录了主要阳性体征（上腹轻压痛）及有鉴别意义的阴性体征。\",\n      \"evidence\": \"腹平软，上腹轻压痛，无反跳痛及肌紧张，Murphy征阴性，肝脾肋下未触及，移动性浊音阴性\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            11
+          ],
+          "metadata": {
+            "tokens_used": 437,
+            "prompt_tokens": 313,
+            "completion_tokens": 124,
+            "input_tokens": 313,
+            "output_tokens": 124,
+            "api_time": 0.7158935546875,
+            "first_result_latency": 3.5794677734375,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 417
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-018",
+          "rule_name": "体格检查遗漏主要阳性体征及有鉴别诊断意义的阴性体征，或记录不准确",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "体格检查记录了主要阳性体征（上腹轻压痛）及有鉴别意义的阴性体征。",
+          "evidence": "腹平软，上腹轻压痛，无反跳痛及肌紧张，Murphy征阴性，肝脾肋下未触及，移动性浊音阴性",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史已详细描述发病后在社区门诊的检查及药物治疗经过和效果。\",\n      \"evidence\": \"在社区门诊查血常规和粪便隐血未见明显异常，门诊予奥美拉唑、铝碳酸镁口服治疗1周后症状仅部分缓解\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-013\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"既往史完整记录了手术、传染病、过敏、预防接种及输血外伤史。\",\n      \"evidence\": \"5年前因胆囊结石行腹腔镜胆囊切除术...否认药物及食物过敏史，预防接种史按当地要求完成，否认输血史及重大外伤史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-014\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"个人史、婚育史、月经史、家族史记录完整且清晰。\",\n      \"evidence\": \"生于四川泸州...已婚，孕1产1。月经史：14岁初潮...父亲有胃溃疡病史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-016\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者为成人，非儿童患者，本规则不适用。\",\n      \"evidence\": \"主诉：上腹痛伴反酸2周。既往有慢性胃炎病史，5年前因胆囊结石行腹腔镜胆囊切除术\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"体格检查记录了主要阳性体征（上腹轻压痛）及有鉴别意义的阴性体征。\",\n      \"evidence\": \"腹平软，上腹轻压痛，无反跳痛及肌紧张，Murphy征阴性，肝脾肋下未触及，移动性浊音阴性\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            385,
+            429
+          ],
+          "metadata": {
+            "tokens_used": 437,
+            "prompt_tokens": 313,
+            "completion_tokens": 124,
+            "input_tokens": 313,
+            "output_tokens": 124,
+            "api_time": 0.7158935546875,
+            "first_result_latency": 3.5794677734375,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 417
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-012": "compliant",
+          "SC-013": "compliant",
+          "SC-014": "compliant",
+          "SC-016": "not_applicable",
+          "SC-018": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ],
+  "bucket_filters": [
+    "admission_history_extended"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 5,
+    "stabilized": 5,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-012",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_history_extended_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_history_extended_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-013",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_history_extended_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_history_extended_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-014",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_history_extended_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_history_extended_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-016",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_history_extended_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_history_extended_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-018",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_history_extended_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_history_extended_v1_defect.json"
+        ],
+        "stabilized": true
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

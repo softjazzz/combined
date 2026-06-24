@@ -1,0 +1,105 @@
+{
+  "summary": {
+    "source": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0508\\formal_qc_deepseek_v4flash_no_thinking_random10_quality_review.json",
+    "input_sc118_confirmed_count": 6,
+    "after_status_counts": {
+      "data_quality_gap": 6
+    },
+    "remaining_confirmed_count": 0,
+    "all_sc118_confirmed_blocked": true,
+    "output_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0508\\formal_qc_sc118_discharge_field_matrix_replay.csv",
+    "output_json": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0508\\formal_qc_sc118_discharge_field_matrix_replay.json"
+  },
+  "rows": [
+    {
+      "visit_id": "2013648",
+      "patient_name": "鲁明山",
+      "rule_id": "SC-118",
+      "before_display_status": "confirmed_defect",
+      "after_display_status": "data_quality_gap",
+      "review_decision": "downgrade_to_data_gap",
+      "adjudicator_reason": "出院记录缺少入院日期、出院日期、出院诊断、医师签名等关键字段，仅见部分诊疗经过和出院医嘱",
+      "adjudicator_supporting_quote": "患者鲁明山,性别男,年龄79岁,以“车祸伤致左小腿疼痛出血1+小时",
+      "confirmed_guardrail_failed": true,
+      "confirmed_blocked_reason": "SC-118 缺少结构化字段矩阵；不得仅凭出院记录文本未出现字段标题确认缺项。",
+      "sc118_missing_fields": "[]",
+      "sc118_unknown_fields": "[]",
+      "sc118_source_status": ""
+    },
+    {
+      "visit_id": "1965856",
+      "patient_name": "彭中玉",
+      "rule_id": "SC-118",
+      "before_display_status": "confirmed_defect",
+      "after_display_status": "data_quality_gap",
+      "review_decision": "downgrade_to_data_gap",
+      "adjudicator_reason": "出院记录缺少入院日期、出院日期、出院情况、医师签名等核心要素",
+      "adjudicator_supporting_quote": "患者以“咽部异物感1+月”入院,专科情况:...在全麻下经支撑喉镜下行喉肿物激光切除术。 1、软食,糖尿病饮食;2、不适门诊随访,1月后门复查喉镜。",
+      "confirmed_guardrail_failed": true,
+      "confirmed_blocked_reason": "SC-118 缺少结构化字段矩阵；不得仅凭出院记录文本未出现字段标题确认缺项。",
+      "sc118_missing_fields": "[]",
+      "sc118_unknown_fields": "[]",
+      "sc118_source_status": ""
+    },
+    {
+      "visit_id": "2262370",
+      "patient_name": "李昭云",
+      "rule_id": "SC-118",
+      "before_display_status": "confirmed_defect",
+      "after_display_status": "data_quality_gap",
+      "review_decision": "downgrade_to_data_gap",
+      "adjudicator_reason": "出院记录近完整上下文中缺少入院情况、诊疗经过、出院情况等核心字段",
+      "adjudicator_supporting_quote": "discharge_record: 患者李昭云,性别男,年龄75岁,以“左膝关节反复疼痛10+年。”为主诉于入院。...（无入院情况、诊疗经过、出院情况）",
+      "confirmed_guardrail_failed": true,
+      "confirmed_blocked_reason": "SC-118 缺少结构化字段矩阵；不得仅凭出院记录文本未出现字段标题确认缺项。",
+      "sc118_missing_fields": "[]",
+      "sc118_unknown_fields": "[]",
+      "sc118_source_status": ""
+    },
+    {
+      "visit_id": "1962863",
+      "patient_name": "王良友",
+      "rule_id": "SC-118",
+      "before_display_status": "confirmed_defect",
+      "after_display_status": "data_quality_gap",
+      "review_decision": "downgrade_to_data_gap",
+      "adjudicator_reason": "出院记录上下文近完整，但缺少出院日期、医师签名等关键字段",
+      "adjudicator_supporting_quote": "患者王良友,性别男,年龄78岁,以“反复咳嗽、咳痰、呼吸困难5+年,加重3天”为主诉于2025年08月29日 18:27入院",
+      "confirmed_guardrail_failed": true,
+      "confirmed_blocked_reason": "SC-118 缺少结构化字段矩阵；不得仅凭出院记录文本未出现字段标题确认缺项。",
+      "sc118_missing_fields": "[]",
+      "sc118_unknown_fields": "[]",
+      "sc118_source_status": ""
+    },
+    {
+      "visit_id": "2328501",
+      "patient_name": "余菊芳",
+      "rule_id": "SC-118",
+      "before_display_status": "confirmed_defect",
+      "after_display_status": "data_quality_gap",
+      "review_decision": "downgrade_to_data_gap",
+      "adjudicator_reason": "根据targeted_evidence_context，出院记录上下文近完整，但缺少出院情况、出院医嘱、医师签名等核心字段，符合confirmed_conditions。",
+      "adjudicator_supporting_quote": "以“呼吸困难4天”为主诉于2026年04月06日 09:42入院",
+      "confirmed_guardrail_failed": true,
+      "confirmed_blocked_reason": "SC-118 缺少结构化字段矩阵；不得仅凭出院记录文本未出现字段标题确认缺项。",
+      "sc118_missing_fields": "[]",
+      "sc118_unknown_fields": "[]",
+      "sc118_source_status": ""
+    },
+    {
+      "visit_id": "2262981",
+      "patient_name": "屈义田",
+      "rule_id": "SC-118",
+      "before_display_status": "confirmed_defect",
+      "after_display_status": "data_quality_gap",
+      "review_decision": "downgrade_to_data_gap",
+      "adjudicator_reason": "出院记录上下文近完整，但缺失入院日期字段，核心字段缺失成立。",
+      "adjudicator_supporting_quote": "患者因“左侧腰腹部 胀痛10+天。”入院,入院查体:...",
+      "confirmed_guardrail_failed": true,
+      "confirmed_blocked_reason": "SC-118 缺少结构化字段矩阵；不得仅凭出院记录文本未出现字段标题确认缺项。",
+      "sc118_missing_fields": "[]",
+      "sc118_unknown_fields": "[]",
+      "sc118_source_status": ""
+    }
+  ]
+}

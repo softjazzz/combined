@@ -1,0 +1,51 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_postop_followup_v1",
+    "issue_type": "Z12_operation_postop_followup",
+    "display_name": "术后随访闭环",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-105", "SC-106", "SC-107", "SC-108", "SC-114", "SC-115"],
+    "bucket_id": "operation_postop_followup"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P112",
+    "visit_id": "SYN-RUN-112",
+    "mr_no": "SYN0112",
+    "patient_name": "合成患者丑",
+    "gender": "女",
+    "age": 44,
+    "department": "甲乳外科"
+  },
+  "documents": [
+    {
+      "document_type": "surgery_record",
+      "title": "手术记录",
+      "content": "2026-04-12 09:30行乳腺肿物切除术，I级手术，经科主任授权后由主治医师实施。术中见左乳外上象限约2cm肿物，边界清，周围无活动性出血，术区创面平整、止血彻底，无异常渗血渗液，完整切除后送快速病理。"
+    },
+    {
+      "document_type": "postsurg_firstcourse_record",
+      "title": "术后首次病程记录",
+      "content": "术后首次病程记录：患者于2026-04-12 10:20术毕返回病房，手术名称为左乳腺肿物切除术，麻醉方式为全麻插管，术中诊断左乳腺良性肿物。术中经过顺利，出血约10ml，无输血。当前生命体征平稳，切口敷料干燥，无活动性出血，术区无红肿及皮下血肿。术后特别注意观察引流、切口渗血及恶心呕吐，继续心电监护、止痛及抗感染治疗。"
+    },
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "术后第1日：上级医师查房，复查血常规及电解质平稳，已分析并继续当前治疗。术后第2日：上级医师查房，切口无渗血，无红肿。术后第3日：上级医师查房，患者恢复良好，准予出院。"
+    },
+    {
+      "document_type": "anesthesia_record",
+      "title": "麻醉记录",
+      "content": "麻醉术后访视记录：患者姓名合成患者丑，女，44岁，甲乳外科，病案号SYN0112，床号12床。麻醉方式全麻插管，术毕10:20清醒，10:35拔除气管导管。访视时神志清楚，无恶心呕吐，疼痛评分2分，无咽痛及呼吸困难，访视医师王某已签名。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["乳腺良性肿物"],
+    "orders": ["术后心电监护", "止痛治疗"],
+    "exams": ["术后血常规", "术后电解质"],
+    "rounds_days": 3
+  }
+}

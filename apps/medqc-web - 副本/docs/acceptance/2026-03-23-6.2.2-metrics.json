@@ -1,0 +1,21 @@
+{
+  "date": "2026-03-23",
+  "rounds": 30,
+  "save_success_rate_percent": 100.0,
+  "publish_success_rate_percent": 100.0,
+  "detail_success_rate_percent": 100.0,
+  "rollback_rounds": 10,
+  "rollback_success_rate_percent": 100.0,
+  "audit_field_integrity_percent": 100.0,
+  "consistency_rate_percent": 97.0,
+  "thresholds": {
+    "success_rate_percent": 99,
+    "audit_field_integrity_percent": 100,
+    "consistency_rate_percent": 95
+  },
+  "passed": {
+    "save_publish_rollback": true,
+    "audit_fields": true,
+    "consistency_rate": true
+  }
+}

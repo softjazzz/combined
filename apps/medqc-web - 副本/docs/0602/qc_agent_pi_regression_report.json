@@ -1,0 +1,246 @@
+{
+  "generated_at": "2026-06-05T02:47:33+00:00",
+  "python_version": "3.11.9",
+  "pi_agent_installed": "0.1.0",
+  "pi_agent_core_installed": "0.1.1",
+  "requests_installed": "2.34.2",
+  "orchestration_mode": "requests_fallback",
+  "base_url": "http://127.0.0.1:8001",
+  "visit_id": "2298532",
+  "auth_mode": "auto_login_args",
+  "login_attempted": true,
+  "masked_account": "a***@medqc.com",
+  "patient_name_provided": false,
+  "department_provided": false,
+  "case_results": [
+    {
+      "case_id": "direct_ward_round_qc",
+      "message": "对 visit_id=2298532 的查房记录做质控",
+      "status": "completed",
+      "passed": true,
+      "skipped": false,
+      "warnings": ["10 条规则因执行边界限制被跳过"],
+      "plan_tools": [
+        "get_record_context",
+        "select_record_documents",
+        "resolve_rule_scope",
+        "run_document_qc"
+      ],
+      "sensitive_leak_found": false,
+      "sensitive_paths": [],
+      "error": null,
+      "response_summary": {
+        "status": "completed",
+        "http_status": null,
+        "code": null,
+        "message": "",
+        "trace_id": "5f8a3c63-f021-4393-87cb-02a625fb3e15",
+        "parsed_intent_summary": {
+          "document_alias": "ward_round",
+          "document_type": null,
+          "qc_point_type": null,
+          "rule_ids": [],
+          "has_visit_id": true,
+          "has_patient_id": false,
+          "has_patient_name": false,
+          "has_department": false
+        },
+        "qc_summary": {
+          "rule_count": 20,
+          "total_rules": 10,
+          "passed": 9,
+          "failed": 1,
+          "passed_count": 9,
+          "skipped_count": 10,
+          "issue_count": 1,
+          "pass_rate": 0.9
+        },
+        "selected_rule_count": 20,
+        "skipped_rule_count": 10,
+        "candidate_count": 0
+      }
+    },
+    {
+      "case_id": "explicit_rule_id_qc",
+      "message": "用 WR-001 检查 visit_id=2298532 的查房记录",
+      "status": "completed",
+      "passed": true,
+      "skipped": false,
+      "warnings": ["已识别显式 rule_ids，将优先按 rule_ids 执行或跳过"],
+      "plan_tools": [
+        "get_record_context",
+        "select_record_documents",
+        "resolve_rule_scope",
+        "run_document_qc"
+      ],
+      "sensitive_leak_found": false,
+      "sensitive_paths": [],
+      "error": null,
+      "response_summary": {
+        "status": "completed",
+        "http_status": null,
+        "code": null,
+        "message": "",
+        "trace_id": "0c6e7cbd-2223-4e83-8ba9-30c27d35e3cb",
+        "parsed_intent_summary": {
+          "document_alias": "ward_round",
+          "document_type": null,
+          "qc_point_type": null,
+          "rule_ids": ["WR-001"],
+          "has_visit_id": true,
+          "has_patient_id": false,
+          "has_patient_name": false,
+          "has_department": false
+        },
+        "qc_summary": {
+          "rule_count": 1,
+          "total_rules": 1,
+          "passed": 1,
+          "failed": 0,
+          "passed_count": 1,
+          "skipped_count": 0,
+          "issue_count": 0,
+          "pass_rate": 1.0
+        },
+        "selected_rule_count": 1,
+        "skipped_rule_count": 0,
+        "candidate_count": 0
+      }
+    },
+    {
+      "case_id": "unsupported_write_intent",
+      "message": "删除这个病人的质控结果",
+      "status": "unsupported",
+      "passed": true,
+      "skipped": false,
+      "warnings": ["当前受控 Agent 不支持写入、删除、导出或持久化类操作"],
+      "plan_tools": [],
+      "sensitive_leak_found": false,
+      "sensitive_paths": [],
+      "error": null,
+      "response_summary": {
+        "status": "unsupported",
+        "http_status": null,
+        "code": null,
+        "message": "",
+        "trace_id": "a7ef4ee6-3d39-473c-b1de-6e7828770857",
+        "parsed_intent_summary": {
+          "document_alias": null,
+          "document_type": null,
+          "qc_point_type": null,
+          "rule_ids": [],
+          "has_visit_id": true,
+          "has_patient_id": false,
+          "has_patient_name": true,
+          "has_department": false
+        },
+        "qc_summary": null,
+        "selected_rule_count": null,
+        "skipped_rule_count": null,
+        "candidate_count": 0
+      }
+    },
+    {
+      "case_id": "discharge_record_qc",
+      "message": "对 visit_id=2298532 的出院记录做完整性质控",
+      "status": "completed",
+      "passed": true,
+      "skipped": false,
+      "warnings": ["11 条规则因执行边界限制被跳过"],
+      "plan_tools": [
+        "get_record_context",
+        "select_record_documents",
+        "resolve_rule_scope",
+        "run_document_qc"
+      ],
+      "sensitive_leak_found": false,
+      "sensitive_paths": [],
+      "error": null,
+      "response_summary": {
+        "status": "completed",
+        "http_status": null,
+        "code": null,
+        "message": "",
+        "trace_id": "b8a13f5c-5f15-49c9-bec2-13956c740079",
+        "parsed_intent_summary": {
+          "document_alias": "discharge",
+          "document_type": null,
+          "qc_point_type": "completeness",
+          "rule_ids": [],
+          "has_visit_id": true,
+          "has_patient_id": false,
+          "has_patient_name": false,
+          "has_department": false
+        },
+        "qc_summary": {
+          "rule_count": 13,
+          "total_rules": 2,
+          "passed": 2,
+          "failed": 0,
+          "passed_count": 2,
+          "skipped_count": 11,
+          "issue_count": 0,
+          "pass_rate": 1.0
+        },
+        "selected_rule_count": 13,
+        "skipped_rule_count": 11,
+        "candidate_count": 0
+      }
+    },
+    {
+      "case_id": "vague_request",
+      "message": "帮我看看这个病人有没有问题",
+      "status": "needs_clarification",
+      "passed": true,
+      "skipped": false,
+      "warnings": [
+        "未识别到明确文书类型，请说明查房记录、病程记录、出院记录或会诊记录",
+        "needs_clarification 在病历不明确或文书缺失时允许通过。"
+      ],
+      "plan_tools": [],
+      "sensitive_leak_found": false,
+      "sensitive_paths": [],
+      "error": null,
+      "response_summary": {
+        "status": "needs_clarification",
+        "http_status": null,
+        "code": null,
+        "message": "",
+        "trace_id": "15e0835f-9db7-40d0-96dc-da3b94b81c97",
+        "parsed_intent_summary": {
+          "document_alias": null,
+          "document_type": null,
+          "qc_point_type": null,
+          "rule_ids": [],
+          "has_visit_id": true,
+          "has_patient_id": false,
+          "has_patient_name": true,
+          "has_department": false
+        },
+        "qc_summary": null,
+        "selected_rule_count": null,
+        "skipped_rule_count": null,
+        "candidate_count": 0
+      }
+    },
+    {
+      "case_id": "patient_search_qc",
+      "message": "",
+      "status": "skipped",
+      "passed": true,
+      "skipped": true,
+      "warnings": ["未提供 --patient-name 和 --department，跳过搜索类测试。"],
+      "plan_tools": [],
+      "sensitive_leak_found": false,
+      "sensitive_paths": [],
+      "error": null,
+      "response_summary": null
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "passed": 5,
+    "failed": 0,
+    "skipped": 1
+  }
+}

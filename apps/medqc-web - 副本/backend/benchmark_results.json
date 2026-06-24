@@ -1,0 +1,309 @@
+{
+  "timestamp": "2026-03-15 09:40:24",
+  "models": [
+    "qwen3.5-35b-a3b",
+    "qwen3.5-27b",
+    "Qwen3.5-4B",
+    "qwen3-14b",
+    "qwen3-8b",
+    "qwen3-4b"
+  ],
+  "test_cases": [
+    {
+      "id": "T1",
+      "title": "主诊断选择 - R码做主诊",
+      "dimension": "primary"
+    },
+    {
+      "id": "T2",
+      "title": "编码合并 - 糖尿病+肾病并发症",
+      "dimension": "merge"
+    },
+    {
+      "id": "T3",
+      "title": "编码互斥 - 1型+2型糖尿病共存",
+      "dimension": "exclusion"
+    },
+    {
+      "id": "T4",
+      "title": "编码一致性 - 性别冲突",
+      "dimension": "consistency"
+    },
+    {
+      "id": "T5",
+      "title": "编码一致性 - 年龄冲突",
+      "dimension": "consistency"
+    },
+    {
+      "id": "T6",
+      "title": "正确编码 - 不应报告问题",
+      "dimension": "none"
+    }
+  ],
+  "results": {
+    "qwen3.5-35b-a3b": {
+      "T1": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 3,
+        "detail": "发现1个问题, 关键词命中3/4",
+        "elapsed": 3.4648072719573975
+      },
+      "T2": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现1个问题, 关键词命中4/4",
+        "elapsed": 3.173304557800293
+      },
+      "T3": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现1个问题, 关键词命中4/4",
+        "elapsed": 3.48058819770813
+      },
+      "T4": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现1个问题, 关键词命中4/4",
+        "elapsed": 5.445225477218628
+      },
+      "T5": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 3,
+        "detail": "发现2个问题, 关键词命中3/4",
+        "elapsed": 4.081070899963379
+      },
+      "T6": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 0,
+        "detail": "正确通过，无误报",
+        "elapsed": 1.9897229671478271
+      }
+    },
+    "qwen3.5-27b": {
+      "T1": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 3,
+        "detail": "发现1个问题, 关键词命中3/4",
+        "elapsed": 4.02619194984436
+      },
+      "T2": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现1个问题, 关键词命中4/4",
+        "elapsed": 5.383419752120972
+      },
+      "T3": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现2个问题, 关键词命中4/4",
+        "elapsed": 6.532877445220947
+      },
+      "T4": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现2个问题, 关键词命中4/4",
+        "elapsed": 5.001163721084595
+      },
+      "T5": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现2个问题, 关键词命中4/4",
+        "elapsed": 5.642975091934204
+      },
+      "T6": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 0,
+        "detail": "正确通过，无误报",
+        "elapsed": 2.908393144607544
+      }
+    },
+    "Qwen3.5-4B": {
+      "T1": {
+        "detected": null,
+        "correct": false,
+        "keyword_hits": 0,
+        "detail": "解析失败",
+        "elapsed": 121.25972056388855
+      },
+      "T2": {
+        "detected": null,
+        "correct": false,
+        "keyword_hits": 0,
+        "detail": "解析失败",
+        "elapsed": 121.23697543144226
+      },
+      "T3": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 2,
+        "detail": "发现2个问题, 关键词命中2/4",
+        "elapsed": 17.331993579864502
+      },
+      "T4": {
+        "detected": null,
+        "correct": false,
+        "keyword_hits": 0,
+        "detail": "解析失败",
+        "elapsed": 121.10257029533386
+      },
+      "T5": {
+        "detected": null,
+        "correct": false,
+        "keyword_hits": 0,
+        "detail": "解析失败",
+        "elapsed": 121.24055647850037
+      },
+      "T6": {
+        "detected": null,
+        "correct": false,
+        "keyword_hits": 0,
+        "detail": "解析失败",
+        "elapsed": 121.21124482154846
+      }
+    },
+    "qwen3-14b": {
+      "T1": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 3,
+        "detail": "发现1个问题, 关键词命中3/4",
+        "elapsed": 5.654642581939697
+      },
+      "T2": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现1个问题, 关键词命中4/4",
+        "elapsed": 5.243210792541504
+      },
+      "T3": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现2个问题, 关键词命中4/4",
+        "elapsed": 5.991934776306152
+      },
+      "T4": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现1个问题, 关键词命中4/4",
+        "elapsed": 7.845472097396851
+      },
+      "T5": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 3,
+        "detail": "发现2个问题, 关键词命中3/4",
+        "elapsed": 5.812729358673096
+      },
+      "T6": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 0,
+        "detail": "正确通过，无误报",
+        "elapsed": 2.143951654434204
+      }
+    },
+    "qwen3-8b": {
+      "T1": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 3,
+        "detail": "发现1个问题, 关键词命中3/4",
+        "elapsed": 3.6814749240875244
+      },
+      "T2": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现1个问题, 关键词命中4/4",
+        "elapsed": 3.8942854404449463
+      },
+      "T3": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现1个问题, 关键词命中4/4",
+        "elapsed": 3.2089109420776367
+      },
+      "T4": {
+        "detected": false,
+        "correct": false,
+        "keyword_hits": 0,
+        "detail": "发现0个问题, 关键词命中0/4",
+        "elapsed": 2.6134395599365234
+      },
+      "T5": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 3,
+        "detail": "发现1个问题, 关键词命中3/4",
+        "elapsed": 3.6375961303710938
+      },
+      "T6": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 0,
+        "detail": "正确通过，无误报",
+        "elapsed": 2.546703577041626
+      }
+    },
+    "qwen3-4b": {
+      "T1": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现1个问题, 关键词命中4/4",
+        "elapsed": 2.8855884075164795
+      },
+      "T2": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现2个问题, 关键词命中4/4",
+        "elapsed": 3.5317389965057373
+      },
+      "T3": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 4,
+        "detail": "发现1个问题, 关键词命中4/4",
+        "elapsed": 2.9618194103240967
+      },
+      "T4": {
+        "detected": false,
+        "correct": false,
+        "keyword_hits": 0,
+        "detail": "发现0个问题, 关键词命中0/4",
+        "elapsed": 3.125007152557373
+      },
+      "T5": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 3,
+        "detail": "发现2个问题, 关键词命中3/4",
+        "elapsed": 4.829524040222168
+      },
+      "T6": {
+        "detected": true,
+        "correct": true,
+        "keyword_hits": 0,
+        "detail": "正确通过，无误报",
+        "elapsed": 1.936415672302246
+      }
+    }
+  }
+}

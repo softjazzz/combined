@@ -1,0 +1,88 @@
+{
+  "场景A_肿瘤病理检查": {
+    "success": true,
+    "data": {
+      "total_issues": 1,
+      "errors": 0,
+      "warnings": 1,
+      "infos": 0,
+      "rule_issues": [
+        {
+          "dimension": "consistency",
+          "severity": "warning",
+          "code": "C34.901",
+          "description": "主要诊断含肿瘤编码（C34.901），但未见病理形态学诊断编码（M 码），建议补充病理诊断",
+          "suggestion": "肿瘤相关诊断应同时提供病理形态学编码（M 码），以确保编码完整性",
+          "source": "rule"
+        }
+      ],
+      "llm_issues": [],
+      "overall_assessment": "需修改"
+    },
+    "message": "编码质控完成：需修改（1 个问题）",
+    "trace_id": "f85b5db4-7b63-4278-bb69-1f0c273a09b5"
+  },
+  "场景B_阑尾炎合并编码": {
+    "success": true,
+    "data": {
+      "total_issues": 3,
+      "errors": 0,
+      "warnings": 3,
+      "infos": 0,
+      "rule_issues": [
+        {
+          "dimension": "existence",
+          "severity": "warning",
+          "code": "K35.900",
+          "description": "编码 'K35.900' 与诊断名称 '急性阑尾炎' 不匹配，编码库中该诊断的标准编码为 'K36.x00x003'",
+          "suggestion": "建议将编码修正为 K36.x00x003（亚急性阑尾炎）",
+          "source": "rule"
+        },
+        {
+          "dimension": "existence",
+          "severity": "warning",
+          "code": "47.0901",
+          "description": "手术编码 '47.0901' 与手术名称 '腹腔镜下阑尾切除术' 不匹配，编码库中标准编码为 '47.0100'",
+          "suggestion": "建议将编码修正为 47.0100（腹腔镜下阑尾切除术）",
+          "source": "rule"
+        }
+      ],
+      "llm_issues": [
+        {
+          "dimension": "merge",
+          "severity": "warning",
+          "code": "K35.900, K65.900",
+          "description": "急性阑尾炎伴局限性腹膜炎应使用合并编码，而非分别编码",
+          "suggestion": "建议将主诊断改为 K35.900+K65.900 的合并编码（如 K35.900+K65.900），或根据具体临床情况选择更合适的编码",
+          "source": "llm"
+        }
+      ],
+      "overall_assessment": "需修改"
+    },
+    "message": "编码质控完成：需修改（3 个问题）",
+    "trace_id": "5b578eb6-5d10-4a13-876b-cc79f1d5037b"
+  },
+  "场景C_支架附加编码": {
+    "success": true,
+    "data": {
+      "total_issues": 1,
+      "errors": 0,
+      "warnings": 1,
+      "infos": 0,
+      "rule_issues": [
+        {
+          "dimension": "existence",
+          "severity": "warning",
+          "code": "I21.900",
+          "description": "编码 'I21.900' 与诊断名称 '急性心肌梗死' 不匹配，编码库中该诊断的标准编码为 'I23.300x001'",
+          "suggestion": "建议将编码修正为 I23.300x001（急性心肌梗死后心脏破裂）",
+          "source": "rule"
+        }
+      ],
+      "llm_issues": [],
+      "overall_assessment": "需修改"
+    },
+    "message": "编码质控完成：需修改（1 个问题）",
+    "trace_id": "62eabbb5-c755-4bb9-b7a6-84f5588ebd11"
+  }
+}

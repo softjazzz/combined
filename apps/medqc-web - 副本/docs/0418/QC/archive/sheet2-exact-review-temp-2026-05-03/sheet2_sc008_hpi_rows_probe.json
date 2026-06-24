@@ -1,0 +1,710 @@
+{
+  "input_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "summary": {
+    "record_count": 35,
+    "skip_allowed_count": 1,
+    "fallback_available_count": 2,
+    "missing_document_type_breakdown": {
+      "入院记录": 1,
+      "首次病程记录": 1
+    }
+  },
+  "results": [
+    {
+      "sheet2_row_id": "Sheet2-R0021",
+      "visit_id": "1915821",
+      "patient_name": "魏治伦",
+      "manual_issue_text": "现病史中主诉有咽痛，但未详细记录疼痛的性质、持续时间、是否有缓解方式等；诉有咳痰，未记录痰液的性状、咳痰的频率、是否有伴随症状等；未记录在当地卫生院具体的治疗情况；未记录在我院门诊的检查项目及结果；无体重变化情况的记录。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0022",
+      "visit_id": "2074438",
+      "patient_name": "文至远",
+      "manual_issue_text": "现病史中，患儿门诊口服药物的用法、剂量等未详细记录",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0035",
+      "visit_id": "1965433",
+      "patient_name": "马建友",
+      "manual_issue_text": "外伤病人未描述受伤地点",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0053",
+      "visit_id": "1991072",
+      "patient_name": "徐光芬",
+      "manual_issue_text": "现病史中检查项目记录有错误，阴性症状应位于诊治经过前面，既往史记录双手麻木但无相关诊断。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0057",
+      "visit_id": "2305194",
+      "patient_name": "杨琼芳",
+      "manual_issue_text": "患者为肾功能不全患者，入院记录，现病史中未描述小便情况。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0058",
+      "visit_id": "2024757",
+      "patient_name": "游得利",
+      "manual_issue_text": "现病史未描述疼痛性质、持续时间、缓解方式等，既往史未询问出患者既往有肺结核病史。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0060",
+      "visit_id": "2032008",
+      "patient_name": "何莲",
+      "manual_issue_text": "患者月经史书写错误，现病史对疼痛的描述不详细，治疗经过未清楚描述，患者2025年10月14日14:10入住内四科，10月14日15:01分转入外二科，门诊收治入内四科欠妥。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0061",
+      "visit_id": "2273484",
+      "patient_name": "周永书",
+      "manual_issue_text": "患者双膝疼痛10年，现病史治疗经过不详细，不能很好的指导本次住院治疗；患者既往有类风湿关节炎，入院诊断未体现。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0067",
+      "visit_id": "2042774",
+      "patient_name": "张世坤",
+      "manual_issue_text": "入院记录中现病史缺患者发病时间，初步诊断中腰椎病未诊断。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0070",
+      "visit_id": "2045034",
+      "patient_name": "李再秀",
+      "manual_issue_text": "入院记录初步诊断不全：高脂血症未诊断，患者活动后呼吸困难，病历记录为无诱因出现呼吸困难，入院查体中缺专科查体。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0071",
+      "visit_id": "2236769",
+      "patient_name": "唐登森",
+      "manual_issue_text": "现病史中患者既往十年只有主要症状，无伴随症状及阴性症状。患者长期治疗慢性病的用药情况未记录。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0072",
+      "visit_id": "2038297",
+      "patient_name": "舒珍贤",
+      "manual_issue_text": "病史采集时间未精确到分钟，入院记录脉搏记录错误，慢病用药情况未做记录。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0078",
+      "visit_id": "2050775",
+      "patient_name": "朱德树",
+      "manual_issue_text": "现病史中发病情况描述不完整，未记录本次病情加重的情况",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0081",
+      "visit_id": "2046076",
+      "patient_name": "张兴容",
+      "manual_issue_text": "既往史患者高血压病，口服氨氯地平未记录剂量，主诉为外阴肿物脱出8月，加重10天。现病史未见近10天字样。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0103",
+      "visit_id": "2073404",
+      "patient_name": "古正洪",
+      "manual_issue_text": "主诉书写不完整，“右侧腰腹部1+天”，现病史诊治经过不详，既往史无诊断高血压的时间，既往史描述：2+月前右手因外伤截肢，而体格检查中未描述右手情况，并且记录四肢无畸形，入院诊断也无右手相关诊断。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0104",
+      "visit_id": "2073251",
+      "patient_name": "杨成联",
+      "manual_issue_text": "主诉书写不准确，建议将“腰腹部疼痛 1+月，加重3天”，改为“右侧腰腹部疼痛 1+月，左侧腰腹部疼痛3天”。既往史无诊断高血压和甲减的时间，体格检查：心率和脉搏不一致，入院诊断无甲减的相关诊断。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0105",
+      "visit_id": "2073989",
+      "patient_name": "王良书",
+      "manual_issue_text": "现病史中阴性症状无针对性，体重87kg 身高135cm记录有误，体格检查中：皮肤和黏膜检查：胸部可见陈旧性手术瘢痕，胸部检查： 胸廓对称无畸形，无疤痕，前后矛盾。入院诊断未诊断慢性萎缩性胃炎。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0110",
+      "visit_id": "2326610",
+      "patient_name": "张仕枝",
+      "manual_issue_text": "现病史对于头痛的描述不细致，阴性症状采集不全面，无诊治经过，无门诊初步诊断，既往史书写混乱，无条理。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0111",
+      "visit_id": "2073320",
+      "patient_name": "徐娟",
+      "manual_issue_text": "现病史阴性症状采集不完整，门诊初步诊断“疼痛”不准确。既往史中记录有外伤史及手术史，但未做具体描述。患者有乙肝病史，未做诊断。辅助检查中，仅做两对半定性检查，而未做定量检查欠妥。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0112",
+      "visit_id": "2081312",
+      "patient_name": "冷克蓉",
+      "manual_issue_text": "现病史患病部位描述不准确、阴性病史采集不完整，入院血压138/102mmHg，未做血压监测，未做高血压方面的筛查，既往史1月前重庆大坪医院行胰腺脓肿引流术，未做进一步描述，未做相关的检查。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0115",
+      "visit_id": "2090513",
+      "patient_name": "郑文英",
+      "manual_issue_text": "患者既往有脑梗死病史，入院诊断未诊断；患者右眼失明，入院体格检查中描述为头颅五官无畸形，专科情况未记录。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0119",
+      "visit_id": "2092076",
+      "patient_name": "刘友琼",
+      "manual_issue_text": "现病史书写思路跳跃：未按照主要症状、伴随症状、阴性症状、整治经过、一般情况这个步骤书写，体格检查身高体重存在明显错误。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0124",
+      "visit_id": "2151657",
+      "patient_name": "何英芬",
+      "manual_issue_text": "患者现病史“进食蔬菜时呛咳起病，主要表现为咳嗽、气促，伴少量咳痰，咳痰较费力，伴精神欠佳、饮食较差、浑身乏力”。诊断：社区获得性肺炎。诊断不合理。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0141",
+      "visit_id": "2131765",
+      "patient_name": "李元娟",
+      "manual_issue_text": "现病史围绕主诉头晕的阴性症状采集不全面，患者有手术史，查体未体现，主治医师查房记录，未对疾病做出相应分析，无法体现上级医师诊疗水平。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)",
+        "local_pg@local_pg::senior_course_record:content(rows=5,content=5)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:content(rows=5,content=5)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=5,content=5)",
+        "local_pg@local_pg::daily_course_record:content(rows=2,content=2)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:content(rows=2,content=2)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=2,content=2)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "目标原始文书 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["入院记录", "上级医师查房记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0144",
+      "visit_id": "2150972",
+      "patient_name": "刘曦",
+      "manual_issue_text": "女性患者无月经婚育史、现病史患者发热的描述不详细，本次诊断急性化脓性扁桃体炎，既往史中患者既往扁桃体手术史未明确手术类型。患者有抑郁症病史，长期服药，入院诊断未诊断。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0157",
+      "visit_id": "2194387",
+      "patient_name": "钟志春",
+      "manual_issue_text": "主诉及现病史无法推导出主要诊断",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0209",
+      "visit_id": "2263757",
+      "patient_name": "杨光中",
+      "manual_issue_text": "入院记录慢病史用药情况记录不全，心率和脉搏不一致，也无相关诊断，患者有腹部手术史，查体未做描述。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0210",
+      "visit_id": "2256518",
+      "patient_name": "赖世成",
+      "manual_issue_text": "入院记录主诉“无明显诱因出现左膝疼痛3月”描述不规范；慢病史记录不全，心率和脉搏不一致，也无相关诊断，患者有腹部手术史，查体未做描述；四肢检查中记录为四肢关节活动正常，与专科情况中描述左膝屈膝活动受限，前后不一致。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0211",
+      "visit_id": "371674",
+      "patient_name": "邱家芬",
+      "manual_issue_text": "现病史描述2月前在西南医科大学附属医院行“右下肢外支架固定+下肢植皮术”，而既往史中又记录2月前在西南医科大学附属医院行“右下肢骨折内固定术+下肢植皮术”，出现前后矛盾；现病史中描述患者为观察伤口及下肢情况收入院。明显扩大入院指针。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": true,
+      "missing_document_types": ["入院记录"],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:no_row"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 入院记录，且无可回退文书，可判 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0216",
+      "visit_id": "2255882",
+      "patient_name": "黄永秀",
+      "manual_issue_text": "患者主诉行走不稳1年入院，根据现病史患者3天前呕吐就诊，主诉内容不完整。首次病程，无高血压，肺结节等疾病诊断依据。诊疗计划中对于高血压疾病且入院血压偏高，无监测血压，无用药记录。2026-03-01术前主刀查房与手术记录 无主刀医生签名，均为主管医生签名",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-023|SC-036|SC-098",
+      "skip_allowed": false,
+      "missing_document_types": ["首次病程记录"],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)",
+        "local_pg@local_pg::first_course_record:row_empty(rows=1,content=0)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\first_course_record.csv:row_empty(rows=1,content=0)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\first_course_record.csv:row_empty(rows=1,content=0)",
+        "local_pg@local_pg::senior_course_record:content(rows=8,content=8)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\senior_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\senior_course_record.csv:content(rows=8,content=8)",
+        "local_pg@local_pg::daily_course_record:content(rows=3,content=3)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:content(rows=3,content=3)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=3,content=3)",
+        "local_pg@local_pg::surgery_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\surgery_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\surgery_record.csv:content(rows=1,content=1)",
+        "local_pg@local_pg::presurg_summary:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\presurg_summary.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\presurg_summary.csv:content(rows=1,content=1)",
+        "local_pg@local_pg::postsurg_firstcourse_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\postsurg_firstcourse_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\postsurg_firstcourse_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "首次病程记录 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": [
+        "入院记录",
+        "首次病程记录",
+        "日常病程记录",
+        "手术记录",
+        "手术/操作记录",
+        "上级医师查房记录"
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0219",
+      "visit_id": "2332781",
+      "patient_name": "屈成坤",
+      "manual_issue_text": "现病史中未描述包块一年时间内大小情况变化，体格检查中，全身浅表淋巴结检查：全身浅表淋巴结无肿大‭。‭而专科情况为：左侧腋窝可扪及数枚大小不等肿大淋巴结。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0222",
+      "visit_id": "2262726",
+      "patient_name": "王莉雪",
+      "manual_issue_text": "主诉书写内涵错误：“检查发现右侧真菌性鼻窦炎10+天”而患者主要症状为面部疼痛不适伴右侧头部疼痛不适。既往史患者诊断慢性胃炎的时间及用药情况未明确。",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0254",
+      "visit_id": "2275999",
+      "patient_name": "王美锡",
+      "manual_issue_text": "外伤病人未描述受伤地点",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0260",
+      "visit_id": "2288550",
+      "patient_name": "张永书",
+      "manual_issue_text": "现病史中无患者一般情况描述",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0264",
+      "visit_id": "2270715",
+      "patient_name": "马建倡",
+      "manual_issue_text": "既往史中有直肠癌手术病史，但入院诊断无相关诊断",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "primary_rule_id": "SC-008",
+      "secondary_rule_ids": "SC-009|SC-010|SC-011|SC-012|SC-018|SC-019|SC-020",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::admission_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\admission_record.csv:content(rows=1,content=1)",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\admission_record.csv:content(rows=1,content=1)"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["入院记录"]
+    }
+  ]
+}

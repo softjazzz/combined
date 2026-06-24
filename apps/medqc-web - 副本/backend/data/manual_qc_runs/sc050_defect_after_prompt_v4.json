@@ -1,0 +1,117 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T17:02:57.842816",
+  "run_finished_at": "2026-04-22T17:03:00.478626",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 0,
+    "partial_hit": 1,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_senior_round_copy_paste_v1_defect.json",
+      "issue_type": "E2_senior_round_copy_paste",
+      "display_name": "上级查房记录复制粘贴",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-050"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-022",
+        "mr_no": "SYN0022",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 2.459,
+      "total_tokens": 760,
+      "prompt_tokens": 618,
+      "completion_tokens": 142,
+      "api_time": 2.456,
+      "packs": [
+        {
+          "pack_id": "senior_course_content",
+          "document_type": "上级查房记录",
+          "rule_ids": [
+            "SC-050"
+          ],
+          "tokens_used": 760,
+          "prompt_tokens": 618,
+          "completion_tokens": 142,
+          "api_time": 2.4562606811523438
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-050",
+          "rule_name": "上级医师查房无病情分析或欠缺、无诊疗意见或住院期间每周内无副主任医师以上的医师或医疗组长查房记录;上",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "证据仅显示日常病程，未提供上级查房记录原文以判定是否缺失分析或意见。",
+          "evidence": "【主文书】患者夜间无发热，腹痛较前缓解，继续抑酸治疗。",
+          "suggestion": "补充上级医师查房记录，明确病情分析及诊疗意见。",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-050\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据仅显示日常病程，未提供上级查房记录原文以判定是否缺失分析或意见。\",\n      \"evidence\": \"【主文书】患者夜间无发热，腹痛较前缓解，继续抑酸治疗。\",\n      \"suggestion\": \"补充上级医师查房记录，明确病情分析及诊疗意见。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 760,
+            "prompt_tokens": 618,
+            "completion_tokens": 142,
+            "input_tokens": 618,
+            "output_tokens": 142,
+            "api_time": 2.4562606811523438,
+            "first_result_latency": 2.4562606811523438,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "senior_course_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 92
+          },
+          "target_document_type": "上级查房记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "partial_hit",
+        "relevant_statuses": {
+          "SC-050": "uncertain"
+        },
+        "strict_hits": {},
+        "soft_hits": {
+          "SC-050": "uncertain"
+        }
+      }
+    }
+  ]
+}

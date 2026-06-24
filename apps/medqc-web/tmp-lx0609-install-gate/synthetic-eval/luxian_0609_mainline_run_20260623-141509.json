@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-06-23T14:15:09",
+  "selected_count": 1,
+  "failed_count": 0,
+  "rows": [
+    {
+      "visit_id": "LX0609_SYN_001",
+      "path": "tmp-lx0609-install-gate\\synthetic-eval\\luxian_0609_trigger_gate_mainline_20260623-141509_LX0609_SYN_001.json",
+      "elapsed_ms": 53763,
+      "error": "",
+      "result_count": 49
+    }
+  ]
+}

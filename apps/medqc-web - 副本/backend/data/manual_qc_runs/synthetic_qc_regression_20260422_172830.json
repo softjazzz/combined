@@ -1,0 +1,161 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T17:28:27.979331",
+  "run_finished_at": "2026-04-22T17:28:30.039680",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 0,
+    "partial_hit": 1,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_first_course_features_not_summarized_v1_defect.json",
+      "issue_type": "B2_first_course_features_not_summarized",
+      "display_name": "病例特点未提炼",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-023",
+        "SC-024"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 1.939,
+      "total_tokens": 1068,
+      "prompt_tokens": 838,
+      "completion_tokens": 230,
+      "api_time": 1.945,
+      "packs": [
+        {
+          "pack_id": "first_course_features",
+          "document_type": "首次病程记录",
+          "rule_ids": [
+            "SC-023",
+            "SC-024"
+          ],
+          "tokens_used": 1068,
+          "prompt_tokens": 838,
+          "completion_tokens": 230,
+          "api_time": 1.9453577995300293
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-023",
+          "rule_name": "首次病程记录无病例特点",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "首次病程记录包含病例特点，内容完整。",
+          "evidence": "病例特点：患者2月来反复上腹痛...胃镜示胃窦溃疡。",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-023\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"首次病程记录包含病例特点，内容完整。\",\n      \"evidence\": \"病例特点：患者2月来反复上腹痛...胃镜示胃窦溃疡。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-024\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病例特点为现病史与检查原文堆砌，缺乏归纳提炼。\",\n      \"evidence\": \"直接复制现病史及胃镜结果，无概括性总结。\",\n      \"suggestion\": \"补充诊断导向的归纳总结。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 534,
+            "prompt_tokens": 419,
+            "completion_tokens": 115,
+            "input_tokens": 419,
+            "output_tokens": 115,
+            "api_time": 0.9726788997650146,
+            "first_result_latency": 1.9453577995300293,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_features",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 125
+          },
+          "target_document_type": "首次病程记录"
+        },
+        {
+          "rule_id": "SC-024",
+          "rule_name": "首次病程记录病例特点未归纳提炼或不全面",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病例特点为现病史与检查原文堆砌，缺乏归纳提炼。",
+          "evidence": "直接复制现病史及胃镜结果，无概括性总结。",
+          "suggestion": "当前原文证据支撑不足，更适合作为待复核问题处理。",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-023\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"首次病程记录包含病例特点，内容完整。\",\n      \"evidence\": \"病例特点：患者2月来反复上腹痛...胃镜示胃窦溃疡。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-024\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病例特点为现病史与检查原文堆砌，缺乏归纳提炼。\",\n      \"evidence\": \"直接复制现病史及胃镜结果，无概括性总结。\",\n      \"suggestion\": \"补充诊断导向的归纳总结。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 534,
+            "prompt_tokens": 419,
+            "completion_tokens": 115,
+            "input_tokens": 419,
+            "output_tokens": 115,
+            "api_time": 0.9726788997650146,
+            "first_result_latency": 1.9453577995300293,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_features",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 125
+          },
+          "target_document_type": "首次病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "partial_hit",
+        "relevant_statuses": {
+          "SC-023": "compliant",
+          "SC-024": "uncertain"
+        },
+        "strict_hits": {},
+        "soft_hits": {
+          "SC-024": "uncertain"
+        }
+      }
+    }
+  ]
+}

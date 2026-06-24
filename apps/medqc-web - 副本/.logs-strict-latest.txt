@@ -1,0 +1,4 @@
+
+> medical-qc-system@1.0.0 type-check:strict
+> vue-tsc --noEmit -p tsconfig.strict.json
+

@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_daily_course_core_v1",
+    "issue_type": "Z15_daily_course_core",
+    "display_name": "日常病程核心分析",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-032", "SC-033"],
+    "bucket_id": "daily_course_core"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P115",
+    "visit_id": "SYN-RUN-115",
+    "mr_no": "SYN0115",
+    "patient_name": "合成患者辰",
+    "gender": "男",
+    "age": 64,
+    "department": "呼吸内科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "今日仍发热，白细胞异常，继续治疗。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["肺部感染"],
+    "orders": ["继续治疗"],
+    "exams": ["白细胞异常"]
+  }
+}

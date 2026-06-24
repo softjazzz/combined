@@ -6,6 +6,7 @@ from app.services.custom_qc_sample_pool_service import (
     load_manual_case_rows_from_excel,
 )
 from app.services.etl_sync import expand_table_groups, list_sync_table_groups, list_sync_tables
+from datetime import datetime
 import pandas as pd
 import pytest
 from types import SimpleNamespace
@@ -104,6 +105,26 @@ def test_sample_full_domain_key_fields_cover_customer_source_tables():
     assert table_map["labtest_item_report"]["key_fields"] == ["patient_id", "visit_id", "test_no", "item_no"]
     assert table_map["exam_item_report"]["key_fields"] == ["patient_id", "visit_id", "exam_no", "item_no"]
     assert table_map["blood_application"]["key_fields"] == ["patient_id", "visit_id", "application_id"]
+
+
+def test_customer_test_record_table_specific_ids_cover_order_and_blood_application():
+    service = CustomQCSamplePoolService()
+
+    assert service._test_record_table_specific_ids(
+        table_name="inpat_nondrug_order",
+        visit_id="CUSTOMER_TEST_001",
+        index=3,
+    ) == {"order_id": "CUSTOMER_TEST_001-ORDER-003"}
+    assert service._test_record_table_specific_ids(
+        table_name="blood_application",
+        visit_id="CUSTOMER_TEST_001",
+        index=4,
+    ) == {"application_id": "CUSTOMER_TEST_001-BLOOD-APP-004"}
+    assert service._test_record_table_specific_ids(
+        table_name="daily_course_record",
+        visit_id="CUSTOMER_TEST_001",
+        index=5,
+    ) == {}
 
 
 def test_first_course_record_model_contains_structured_content_fields():
@@ -1402,6 +1423,67 @@ def test_list_pool_records_should_backfill_patient_name_and_department_from_matc
     assert record["patient_name"] == "张三"
     assert record["department"] == "普外科"
     assert record["mr_no"] == "147640"
+
+
+def test_list_customer_test_pool_records_orders_newest_first(monkeypatch):
+    service = CustomQCSamplePoolService()
+    rows = [
+        {
+            "id": "item-old",
+            "pool_id": sample_pool_module.CUSTOMER_TEST_POOL_ID,
+            "row_no": 1718600000,
+            "patient_name": "陈某某",
+            "mr_no": "CUSTOMER_TEST_OLD",
+            "department": "消化内科",
+            "manual_issue_text": "旧会诊测试病历",
+            "coverage_type": "llm_intrinsic",
+            "candidate_rule_ids_json": '["LX0609-020"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "CUSTOMER_TEST_OLD",
+            "matched_patient_id": "P-OLD",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": '{"case_title":"会诊质量质控病历｜LX020｜0617-0900"}',
+            "created_at": datetime(2026, 6, 17, 9, 0, 0),
+            "updated_at": datetime(2026, 6, 17, 9, 0, 0),
+        },
+        {
+            "id": "item-new",
+            "pool_id": sample_pool_module.CUSTOMER_TEST_POOL_ID,
+            "row_no": 1718700000,
+            "patient_name": "王某某",
+            "mr_no": "CUSTOMER_TEST_NEW",
+            "department": "普通外科",
+            "manual_issue_text": "新手术测试病历",
+            "coverage_type": "llm_intrinsic",
+            "candidate_rule_ids_json": '["LX0609-003"]',
+            "include_in_batch_1": True,
+            "matched_visit_id": "CUSTOMER_TEST_NEW",
+            "matched_patient_id": "P-NEW",
+            "matched_institute_id": "H1",
+            "match_status": "matched",
+            "sync_status": "synced",
+            "bundle_status": "ready",
+            "raw_payload_json": '{"case_title":"手术麻醉质控病历｜LX003｜0618-1015"}',
+            "created_at": datetime(2026, 6, 18, 10, 15, 0),
+            "updated_at": datetime(2026, 6, 18, 10, 15, 0),
+        },
+    ]
+    monkeypatch.setattr(sample_pool_module, "_session", lambda: _FakeSession(rows))
+    monkeypatch.setattr(service, "_load_record_display_map", lambda **kwargs: {})
+
+    result = service.list_pool_records(
+        pool_id=sample_pool_module.CUSTOMER_TEST_POOL_ID,
+        include_in_batch_1=True,
+    )
+
+    assert [item["matched_visit_id"] for item in result.items] == [
+        "CUSTOMER_TEST_NEW",
+        "CUSTOMER_TEST_OLD",
+    ]
+    assert result.items[0]["sample_items"][0]["raw_payload"]["case_title"] == "手术麻醉质控病历｜LX003｜0618-1015"
 
 
 def test_row_to_item_should_read_visit_id_from_raw_payload():

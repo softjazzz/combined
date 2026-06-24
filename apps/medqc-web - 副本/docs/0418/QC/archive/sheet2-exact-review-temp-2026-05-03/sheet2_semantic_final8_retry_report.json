@@ -1,0 +1,99 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 8,
+  "families": [
+    {
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
+      "row_count": 1,
+      "job_id": "ec7a1045-0136-4b43-9ddd-984cc2bd68a2",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "主治首次查房48小时；病程记录缺分析/缺处理意见",
+      "row_count": 1,
+      "job_id": "9d864285-83dd-4154-82fd-21dbb6ddf157",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "术前主刀医生查房/麻醉术前访视缺失",
+      "row_count": 1,
+      "job_id": "f2d0e076-ee3f-463a-8a22-7109c3ec8328",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "输血记录链缺失/不全；输血时间/量/前后记录不一致",
+      "row_count": 1,
+      "job_id": "11e05349-a693-4d4b-871f-74dea5fba59a",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
+      "row_count": 2,
+      "job_id": "f4e574c5-fd95-4d61-96a1-2117a7a5c019",
+      "result_breakdown": {
+        "same_family_hit": 2
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 2
+      },
+      "items_count": 2,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "row_count": 2,
+      "job_id": "0dde0365-f6d8-4b4e-8555-5a2521c20739",
+      "result_breakdown": {
+        "same_family_hit": 2
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 2
+      },
+      "items_count": 2,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 157,
+    "exact_hit": 28,
+    "miss": 7,
+    "same_family_hit": 80,
+    "skip": 11
+  }
+}

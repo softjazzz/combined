@@ -1,0 +1,254 @@
+{
+  "policy_name": "formal_qc_applicability_gate_policy_draft",
+  "status": "draft_read_only_not_connected",
+  "scope": "final_fast_screen_full_sc_content_full_v1",
+  "principles": [
+    "applicability_gate_before_defect_adjudication",
+    "applicable_does_not_mean_defective",
+    "not_applicable_defaults_to_rejected_by_system_or_not_applicable",
+    "insufficient_evidence_defaults_to_data_quality_gap",
+    "confirmed_requires_trigger_evidence_violation_evidence_quote_and_rule_requirement_match"
+  ],
+  "rule_families": [
+    {
+      "family_id": "surgery_level_mdt",
+      "rule_ids": ["SC-083"],
+      "gate_type": "surgery_level_code_gate",
+      "applicability_required_evidence": [
+        "surgery_code from mr_surgery/surgery_application/surgery_record/surgery_inform_consent",
+        "code_exact or code_normalized match to surgery_level_catalog level=4"
+      ],
+      "not_applicable_default_action": "rejected_by_system",
+      "insufficient_evidence_default_action": "data_quality_gap",
+      "confirmed_required_evidence": [
+        "level4_by_code_exact_or_code_normalized",
+        "complete_preoperative_discussion_text_or_structured_conclusion",
+        "participant_evidence",
+        "discussion_conclusion_evidence",
+        "explicitly_missing_mdt_or_required_specialty_opinion",
+        "customer_confirmed_mdt_standard"
+      ],
+      "forbidden_confirmed_evidence": [
+        "name_candidate_only",
+        "code_unmatched",
+        "code_missing",
+        "code_prefix_ext",
+        "participant_fragment_only",
+        "missing_mdt_keyword_only"
+      ],
+      "recommended_integration_point": "second_pass_gate_and_evidence_coverage_flags",
+      "priority": "P0",
+      "notes": "先接适用性 gate 和 data_gap 分流，confirmed 暂缓。"
+    },
+    {
+      "family_id": "surgery_specimen_pathology",
+      "rule_ids": ["SC-099"],
+      "gate_type": "specimen_pathology_trigger_gate",
+      "applicability_required_evidence": [
+        "specimen/pathology/frozen/pathology_report/biopsy trigger from surgery record or pathology tables"
+      ],
+      "not_applicable_default_action": "rejected_by_system",
+      "insufficient_evidence_default_action": "data_quality_gap",
+      "confirmed_required_evidence": [
+        "specimen_or_pathology_trigger_present",
+        "surgery_record_or_pathology_source_coverage",
+        "missing_specimen_or_pathology_record_direct_quote"
+      ],
+      "forbidden_confirmed_evidence": [
+        "any_surgery_without_pathology_trigger",
+        "record_time_only",
+        "short_header_fragment"
+      ],
+      "recommended_integration_point": "postprocessor_evidence_coverage_flags",
+      "priority": "P0",
+      "notes": "不得泛化到所有手术。"
+    },
+    {
+      "family_id": "implant_material",
+      "rule_ids": ["SC-100", "SC-101"],
+      "gate_type": "implant_material_gate",
+      "applicability_required_evidence": [
+        "structured implant/material record or explicit use/implant/placement with quantity",
+        "inventory/bill/barcode/source table coverage when checking barcode"
+      ],
+      "not_applicable_default_action": "rejected_by_system",
+      "insufficient_evidence_default_action": "data_quality_gap",
+      "confirmed_required_evidence": [
+        "strong_implant_trigger",
+        "for SC-100: barcode/traceability source available and missing",
+        "for SC-101: type/quantity completeness none with direct quote"
+      ],
+      "forbidden_confirmed_evidence": [
+        "weak_text_hint_only",
+        "screw/plate/bone_cement_keyword_only",
+        "mixing_barcode_logic_into_SC-101",
+        "record_time_only"
+      ],
+      "recommended_integration_point": "evidence_coverage_flags_and_second_pass_gate",
+      "priority": "P0",
+      "notes": "SC-100 与 SC-101 schema 必须拆分。"
+    },
+    {
+      "family_id": "abnormal_result_followup",
+      "rule_ids": ["SC-036", "SC-038", "SC-138", "SC-139", "SC-140"],
+      "gate_type": "abnormal_result_followup_gate",
+      "applicability_required_evidence": [
+        "abnormal lab/exam/pathology result with time and source",
+        "follow-up course/diagnosis/order/consultation context"
+      ],
+      "not_applicable_default_action": "rejected_by_system",
+      "insufficient_evidence_default_action": "data_quality_gap",
+      "confirmed_required_evidence": [
+        "abnormal_result_present",
+        "later_course_context_available",
+        "no_analysis_or_treatment_after_abnormal_result"
+      ],
+      "forbidden_confirmed_evidence": [
+        "report_exists_without_abnormality",
+        "missing_original_report_only_when_course_has_analysis",
+        "single_current_document_fragment"
+      ],
+      "recommended_integration_point": "targeted_evidence_package_and_second_pass_gate",
+      "priority": "P0",
+      "notes": "SC-036 已在随机样本中多次被二轮驳回。"
+    },
+    {
+      "family_id": "consultation_implementation",
+      "rule_ids": ["SC-070", "SC-073", "SC-074", "SC-143", "SC-146"],
+      "gate_type": "consultation_order_execution_gate",
+      "applicability_required_evidence": [
+        "consultation advice or explicit treatment/order recommendation",
+        "order/execution/course follow-up context"
+      ],
+      "not_applicable_default_action": "rejected_by_system",
+      "insufficient_evidence_default_action": "data_quality_gap",
+      "confirmed_required_evidence": [
+        "consultation_or_order_trigger_present",
+        "execution/order/course contrast evidence",
+        "explicit non-implementation or inconsistency"
+      ],
+      "forbidden_confirmed_evidence": [
+        "missing_execution_table_only",
+        "consultation_text_without_followup_context"
+      ],
+      "recommended_integration_point": "evidence_coverage_flags_and_second_pass_gate",
+      "priority": "P0",
+      "notes": "缺执行清单时应 data gap，不是医生缺陷。"
+    },
+    {
+      "family_id": "discharge_medication_and_record",
+      "rule_ids": ["SC-118", "SC-119", "SC-121", "SC-122", "SC-123", "SC-125", "SC-127"],
+      "gate_type": "discharge_record_field_and_medication_gate",
+      "applicability_required_evidence": [
+        "complete discharge record field matrix",
+        "explicit discharge medication segment when checking SC-123",
+        "diagnosis/order/course contrast when checking consistency"
+      ],
+      "not_applicable_default_action": "rejected_by_system",
+      "insufficient_evidence_default_action": "data_quality_gap",
+      "confirmed_required_evidence": [
+        "complete_field_matrix_or_medication_segment",
+        "directly missing required field or medication detail"
+      ],
+      "forbidden_confirmed_evidence": [
+        "short_discharge_fragment",
+        "no_discharge_medication_segment_for_SC-123",
+        "header_or_record_time_only"
+      ],
+      "recommended_integration_point": "postprocessor_field_matrix_gate",
+      "priority": "P0",
+      "notes": "SC-118/121/123 是随机样本 first-pass confirmed 误判高发区。"
+    },
+    {
+      "family_id": "document_timing_and_existence",
+      "rule_ids": ["SC-037", "SC-050", "SC-051", "SC-055", "SC-057", "SC-058", "SC-060", "SC-063", "SC-084", "SC-085", "SC-103", "SC-105", "SC-107"],
+      "gate_type": "document_event_timing_gate",
+      "applicability_required_evidence": [
+        "trigger event time",
+        "expected document type",
+        "document list and time range"
+      ],
+      "not_applicable_default_action": "rejected_by_system",
+      "insufficient_evidence_default_action": "data_quality_gap",
+      "confirmed_required_evidence": [
+        "trigger_event_present",
+        "complete_document_index",
+        "missing_or_late_document_interval"
+      ],
+      "forbidden_confirmed_evidence": [
+        "single_record_time",
+        "one_document_fragment",
+        "missing_document_index"
+      ],
+      "recommended_integration_point": "programmatic_gate_before_second_pass",
+      "priority": "P1",
+      "notes": "时效类应优先程序化。"
+    },
+    {
+      "family_id": "diagnosis_condition_trigger",
+      "rule_ids": ["SC-010", "SC-015", "SC-019", "SC-020", "SC-047", "SC-079"],
+      "gate_type": "diagnosis_condition_demographic_gate",
+      "applicability_required_evidence": [
+        "diagnosis list or clinical condition trigger",
+        "sex/age/document-type applicability when relevant"
+      ],
+      "not_applicable_default_action": "rejected_by_system",
+      "insufficient_evidence_default_action": "data_quality_gap",
+      "confirmed_required_evidence": [
+        "condition_trigger_present",
+        "complete relevant section",
+        "diagnosis/history/evidence mismatch or omission directly supported"
+      ],
+      "forbidden_confirmed_evidence": [
+        "male_menstrual_history_requirement",
+        "generic phrase such as unknown only",
+        "short admission fragment"
+      ],
+      "recommended_integration_point": "postprocessor_and_second_pass_gate",
+      "priority": "P1",
+      "notes": "SC-015 在三批中 first-pass confirmed 最多，需先做适用性。"
+    },
+    {
+      "family_id": "universal_document_quality",
+      "rule_ids": [
+        "SC-004", "SC-007", "SC-008", "SC-009", "SC-011", "SC-012", "SC-013", "SC-014", "SC-016", "SC-018",
+        "SC-023", "SC-024", "SC-025", "SC-026", "SC-027", "SC-032", "SC-033", "SC-035", "SC-039", "SC-040",
+        "SC-043", "SC-044", "SC-046", "SC-066", "SC-075", "SC-076", "SC-089", "SC-091", "SC-131", "SC-134", "SC-136"
+      ],
+      "gate_type": "document_text_coverage_gate",
+      "applicability_required_evidence": [
+        "target document exists",
+        "full text or structured sections are available",
+        "special operation/document subtype trigger when relevant"
+      ],
+      "not_applicable_default_action": "rejected_by_system_when_document_type_not_applicable",
+      "insufficient_evidence_default_action": "data_quality_gap",
+      "confirmed_required_evidence": [
+        "complete target document coverage",
+        "direct field/subsection omission or contradiction quote"
+      ],
+      "forbidden_confirmed_evidence": [
+        "header_only",
+        "template_title_only",
+        "truncated_fragment",
+        "field_name_without_full_context"
+      ],
+      "recommended_integration_point": "postprocessor_evidence_coverage_guardrail",
+      "priority": "P1",
+      "notes": "普适文书质量类也必须先保证全文或结构化字段覆盖。"
+    }
+  ],
+  "p0_rule_families": [
+    "surgery_level_mdt",
+    "surgery_specimen_pathology",
+    "implant_material",
+    "abnormal_result_followup",
+    "consultation_implementation",
+    "discharge_medication_and_record"
+  ],
+  "rollout_recommendation": [
+    "first_enable_read_only_replay_for_p0_families",
+    "then_attach_metadata_only_to_postprocessor_under_feature_flag",
+    "do_not_enable_confirmed_defect_without_second_pass_gate_and_quality_review"
+  ]
+}

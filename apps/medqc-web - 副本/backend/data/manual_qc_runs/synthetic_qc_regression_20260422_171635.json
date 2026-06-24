@@ -1,0 +1,164 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T17:16:34.041292",
+  "run_finished_at": "2026-04-22T17:16:35.874066",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_daily_course_overly_brief_v1_defect.json",
+      "issue_type": "C3_daily_course_overly_brief",
+      "display_name": "病程记录过于简略",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-032",
+        "SC-036"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-014",
+        "mr_no": "SYN0014",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 1.706,
+      "total_tokens": 966,
+      "prompt_tokens": 763,
+      "completion_tokens": 203,
+      "api_time": 1.704,
+      "packs": [
+        {
+          "pack_id": "daily_course_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-032",
+            "SC-036"
+          ],
+          "tokens_used": 966,
+          "prompt_tokens": 763,
+          "completion_tokens": 203,
+          "api_time": 1.7038562297821045
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-032",
+          "rule_name": "病程记录重要病情变化(症状及体征)未记录或记录不全",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程仅写病情同前，无具体症状体征变化记录。",
+          "evidence": "病情同前，继续治疗。",
+          "suggestion": "补充具体症状体征变化描述。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-032\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程仅写病情同前，无具体症状体征变化记录。\",\n      \"evidence\": \"病情同前，继续治疗。\",\n      \"suggestion\": \"补充具体症状体征变化描述。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"上下文无重要辅助检查结果或异常线索。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            10
+          ],
+          "metadata": {
+            "tokens_used": 483,
+            "prompt_tokens": 381,
+            "completion_tokens": 101,
+            "input_tokens": 381,
+            "output_tokens": 101,
+            "api_time": 0.8519281148910522,
+            "first_result_latency": 1.7038562297821045,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 42
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-036",
+          "rule_name": "无重要辅助检查结果、无对异常检查结果的分析及处理意见",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "上下文无重要辅助检查结果或异常线索。",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-032\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程仅写病情同前，无具体症状体征变化记录。\",\n      \"evidence\": \"病情同前，继续治疗。\",\n      \"suggestion\": \"补充具体症状体征变化描述。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"上下文无重要辅助检查结果或异常线索。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 483,
+            "prompt_tokens": 381,
+            "completion_tokens": 101,
+            "input_tokens": 381,
+            "output_tokens": 101,
+            "api_time": 0.8519281148910522,
+            "first_result_latency": 1.7038562297821045,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 42
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-032": "non_compliant",
+          "SC-036": "not_applicable"
+        },
+        "strict_hits": {
+          "SC-032": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    }
+  ]
+}

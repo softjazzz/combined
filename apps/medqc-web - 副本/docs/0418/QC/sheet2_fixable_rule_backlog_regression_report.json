@@ -1,0 +1,5493 @@
+{
+  "target": "Sheet2 blocked backlog 可补规则 24 条回归收口",
+  "mode": "writeback",
+  "row_count": 24,
+  "phase_outcome_breakdown": {
+    "same_family_or_effective_confirmed": 10,
+    "still_blocked_with_specific_gap": 13,
+    "exact_confirmed": 1
+  },
+  "target_status_breakdown": {
+    "exact_confirmed": 11,
+    "blocked_with_reason": 13
+  },
+  "target_primary_rule_breakdown": {
+    "SC-064": 1,
+    "SC-020": 5,
+    "SC-105": 2,
+    "SC-080": 1,
+    "SC-023": 1,
+    "SC-146": 2,
+    "SC-032": 1,
+    "SC-036": 2,
+    "SC-083": 1,
+    "SC-049": 1,
+    "SC-081": 1,
+    "SC-010": 2,
+    "SC-008": 1,
+    "CL-275": 1,
+    "SC-050": 1,
+    "SC-097": 1
+  },
+  "blocked_reason_breakdown": {
+    "证据链不足": 9,
+    "人工问题原文不可判": 4
+  },
+  "sc023_row_count": 10,
+  "exact_confirmed_delta_candidates": 11,
+  "results": [
+    {
+      "sheet2_row_id": "Sheet2-R0046",
+      "visit_id": "1972061",
+      "patient_name": "熊殿芳",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "manual_issue_text": "转科记录书写不规范，未按照转入记录模板进行书写，缺少转入时间、目前患者情况总结及下一步诊疗计划等",
+      "before_primary_rule_id": "SC-023",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "same_family_or_effective_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-064",
+      "target_secondary_rule_ids": ["SC-065"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "转入/转出记录在样本验证链路中均为空壳，人工问题核心的转入记录模板缺项、转入时间、患者情况总结和下一步诊疗计划缺失可由转科记录规则族承接；从 SC-023 错挂重映射到 SC-064/SC-065。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 29,
+      "marker_hits": ["转入记录", "转出记录"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "转入记录",
+          "snippet": "断: 术后诊断: 手术经过: 切口愈合等级: 手术开始时间: 手术结束时间: 失血量: 其他内容: 记录内容: 术后首次病程记录 抢救记录 转入记录 转出记录 护理记录 出院记录 出院记录诊断-诊断"
+        },
+        {
+          "marker": "转出记录",
+          "snippet": "诊断: 手术经过: 切口愈合等级: 手术开始时间: 手术结束时间: 失血量: 其他内容: 记录内容: 术后首次病程记录 抢救记录 转入记录 转出记录 护理记录 出院记录 出院记录诊断-诊断"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1601,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 123,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 227,
+          "has_content": true
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 370,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "王标主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 926,
+          "has_content": true
+        },
+        {
+          "title": "彭中主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 2559,
+          "has_content": true
+        },
+        {
+          "title": "张云海主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 556,
+          "has_content": true
+        },
+        {
+          "title": "王标主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 608,
+          "has_content": true
+        },
+        {
+          "title": "王标主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 429,
+          "has_content": true
+        },
+        {
+          "title": "张云海主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 598,
+          "has_content": true
+        },
+        {
+          "title": "王标主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 275,
+          "has_content": true
+        },
+        {
+          "title": "张云海主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 562,
+          "has_content": true
+        },
+        {
+          "title": "王标主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 550,
+          "has_content": true
+        },
+        {
+          "title": "张云海主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 295,
+          "has_content": true
+        },
+        {
+          "title": ",腹部切口无肿胀,无脓性分泌物、腹部无压痛,无反跳痛,肠鸣音4次/分。切口敷料清洁干燥固定,无渗血渗液,今早王标主治医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 286,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0052",
+      "visit_id": "1977580",
+      "patient_name": "夏云辉",
+      "issue_family": "病程记录病情变化记录不全",
+      "manual_issue_text": "现病史记录不全，缺一般情况的描述，专科检查未描述左下肢情况，初步诊断不全。",
+      "before_primary_rule_id": "SC-032",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "same_family_or_effective_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-020",
+      "target_secondary_rule_ids": ["SC-009", "SC-018"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "人工问题实际指向入院现病史、专科检查和初步诊断完整性，非 SC-032 病情变化记录；原文可回收右大腿/右膝关节查体和入院诊断链，按入院诊断/入院记录家族有效确认。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 28,
+      "marker_hits": ["右大腿", "右膝关节", "初步诊断"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "右大腿",
+          "snippet": "入院记录 摔伤致右大腿肿痛活动受限1小时 患者于1小时前骑电瓶车去买菜途中摔倒受伤，右大腿被电瓶车压住，立即感觉右大腿持续性疼痛，难以起身站立及行走，伴右侧膝关节肿胀，患者无昏迷、意"
+        },
+        {
+          "marker": "右膝关节",
+          "snippet": "检查：:脊柱无畸形、叩痛，脊柱屈伸活动可。四肢检查：:见专科神经系统检查：:神清语利，生理反射正常存在，未引出病理性反射。 院内辅助检查：2025-09-08 右膝关节螺旋CT平扫 骨盆骨质疏松；双侧髋关节及骶髂关节退行性改变。右侧股骨远端粉碎性骨折，骨折线累及关节面。右侧膝关节退行性骨关节病；髌股关节间隙增宽、对合欠佳（髌骨"
+        },
+        {
+          "marker": "初步诊断",
+          "snippet": "髌股关节间隙增宽、对合欠佳（髌骨不稳）。右膝部软组织肿胀，髌上囊及膝关节囊积脂血症。 入院记录诊断-出院诊断-3 入院记录诊断-入院诊断-1 入院记录诊断-初步诊断-2 诊断类型: 初步诊断 诊断名称: 1、右侧股骨远端骨折2、高血压病 是否主诊断: 否 诊断时间: 2025-09-24 19:15:11+08 入院记录诊"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1183,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 71,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 216,
+          "has_content": true
+        },
+        {
+          "title": "今日查房",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 213,
+          "has_content": true
+        },
+        {
+          "title": "段超主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 721,
+          "has_content": true
+        },
+        {
+          "title": "马晨曦副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 739,
+          "has_content": true
+        },
+        {
+          "title": "今日马晨曦副主任医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 435,
+          "has_content": true
+        },
+        {
+          "title": "今日段超主治医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 299,
+          "has_content": true
+        },
+        {
+          "title": "今日段超主治医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 186,
+          "has_content": true
+        },
+        {
+          "title": "术前主刀医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 246,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 235,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 408,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 297,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 426,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 372,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0056",
+      "visit_id": "2032392",
+      "patient_name": "李玲",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "manual_issue_text": "手术记录及术后首次病程记录中，关于术中情况描述，“同法处理对侧”不恰当。因患者右侧卵巢无病变，也未做处理。",
+      "before_primary_rule_id": "SC-023",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-105",
+      "target_secondary_rule_ids": ["SC-097"],
+      "blocked_reason_type": "证据链不足",
+      "specific_gap": "缺手术记录正文和术后首次病程正文，当前只能看到空壳文书，无法核对“同法处理对侧”原句。",
+      "evidence_summary": "已重映射到手术记录/术后首次病程质量问题，但样本验证链路仅回收到空壳手术记录和空术后首程，不能精确复现人工原句。",
+      "next_action": "缺手术记录正文和术后首次病程正文，当前只能看到空壳文书，无法核对“同法处理对侧”原句。",
+      "document_count": 30,
+      "marker_hits": ["手术记录", "术后首次病程记录"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "手术记录",
+          "snippet": "合。已遵执。 医生签名:刘敏 手术记录 记录时间: 科室: 病房: 记录者: 手术医生签名: 术前小结: 手术项目: 手术编码: 手术等级: 手术医师: 手术I助: 手术II助"
+        },
+        {
+          "marker": "术后首次病程记录",
+          "snippet": "醉方式: 术前诊断: 术中诊断: 术后诊断: 手术经过: 切口愈合等级: 手术开始时间: 手术结束时间: 失血量: 其他内容: 记录内容: 术后首次病程记录 抢救记录 转入记录 转出记录 护理记录 出院记录 出院记录诊断-诊断"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1622,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 95,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 393,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 296,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 180,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 267,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 227,
+          "has_content": true
+        },
+        {
+          "title": "杨晶主治医师今日查房",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 650,
+          "has_content": true
+        },
+        {
+          "title": "银娟副主任医师查房",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 570,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 143,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 266,
+          "has_content": true
+        },
+        {
+          "title": "杨晶主治医师首次查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1472,
+          "has_content": true
+        },
+        {
+          "title": "杨晶主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 655,
+          "has_content": true
+        },
+        {
+          "title": "银娟副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 575,
+          "has_content": true
+        },
+        {
+          "title": "杨晶主治医师出院前查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 506,
+          "has_content": true
+        },
+        {
+          "title": "术者术前查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 301,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 278,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 195,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0062",
+      "visit_id": "2027741",
+      "patient_name": "朱永枝",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "manual_issue_text": "患者10月15日行肾动脉栓塞术肾动脉造影术，术后手术记录有缺项。缺术后首次病程记录，缺术前小结。",
+      "before_primary_rule_id": "SC-023",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "exact_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-080",
+      "target_secondary_rule_ids": ["SC-104", "SC-046"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "样本验证链路可见手术记录仅为空壳字段，术后首次病程记录为空，术前小结字段也无有效正文，精确覆盖“术后手术记录缺项、缺术后首次病程、缺术前小结”。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 31,
+      "marker_hits": ["肾动脉", "手术记录", "术前小结", "术后首次病程记录"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "肾动脉",
+          "snippet": "1 CRP 72.7mg/L血常规、血生化、凝血功能、心电图、胸部CT平扫等未提示明显相关手术禁忌表现。患者具备手术指征，无绝对手术禁忌症，拟急诊在局麻下行左肾动脉造影+左肾动脉栓塞术，已将手术方式，术中所需耗材及药品，术中，术后易发生的情况告知患者及其家属，均表示了解，并签字同意手术，术前已行手术部位标识。"
+        },
+        {
+          "marker": "手术记录",
+          "snippet": "理并完善BNP。 医生签名: 手术记录 记录时间: 科室: 病房: 记录者: 手术医生签名: 术前小结: 手术项目: 手术编码: 手术等级: 手术医师: 手术I助: 手术II助"
+        },
+        {
+          "marker": "术前小结",
+          "snippet": "医生签名: 手术记录 记录时间: 科室: 病房: 记录者: 手术医生签名: 术前小结: 手术项目: 手术编码: 手术等级: 手术医师: 手术I助: 手术II助: 麻醉医师: 麻醉方式: 术前诊断: 术中诊断: 术后诊断:"
+        },
+        {
+          "marker": "术后首次病程记录",
+          "snippet": "醉方式: 术前诊断: 术中诊断: 术后诊断: 手术经过: 切口愈合等级: 手术开始时间: 手术结束时间: 失血量: 其他内容: 记录内容: 术后首次病程记录 抢救记录 转入记录 转出记录 护理记录 出院记录 出院记录诊断-诊断"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1271,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 224,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 102,
+          "has_content": true
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "余思源主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1184,
+          "has_content": true
+        },
+        {
+          "title": "唐远君副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 498,
+          "has_content": true
+        },
+        {
+          "title": "李杰副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1223,
+          "has_content": true
+        },
+        {
+          "title": "余思源主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 706,
+          "has_content": true
+        },
+        {
+          "title": "术后第一天李杰副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 368,
+          "has_content": true
+        },
+        {
+          "title": "术后第二天余思源主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 385,
+          "has_content": true
+        },
+        {
+          "title": "术后第三天唐远君副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 674,
+          "has_content": true
+        },
+        {
+          "title": "余思源主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 377,
+          "has_content": true
+        },
+        {
+          "title": "李杰副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 715,
+          "has_content": true
+        },
+        {
+          "title": "术前主刀医生查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 605,
+          "has_content": true
+        },
+        {
+          "title": "唐远君副主任医师出院前查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 399,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 172,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 428,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 602,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 264,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0065",
+      "visit_id": "2023362",
+      "patient_name": "程天金",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "manual_issue_text": "首次病程记录鉴别诊断不全面，患者既往有糖尿病史，入院诊断未诊断该疾病。现病史阴性症状采集不全面，不能支撑鉴别诊断。",
+      "before_primary_rule_id": "SC-023",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "same_family_or_effective_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-020",
+      "target_secondary_rule_ids": ["SC-011", "SC-023"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "人工问题跨入院诊断、现病史阴性症状和首程鉴别诊断；原文可回收既往糖尿病及用药史，而初步诊断未覆盖该疾病，首程正文为空，按 SC-020+SC-011+SC-023 组合有效确认。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 24,
+      "marker_hits": ["糖尿病病史", "降糖药", "初步诊断", "首次病程记录"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "糖尿病病史",
+          "snippet": "发病以来精神状态差，睡眠一般，饮食情况一般，大小便通畅。 一般情况欠佳。有慢病病史患者诉既往有高血压病史，长期口服降压药控制血压，具体控制效果不详。患者诉既往有糖尿病病史，长期口服降糖药控制血糖，具体血糖控制情况不详，患者诉既往有银屑病病史，未规律治疗。否认传染病史。否认外伤史 ，否认手术史，否认输血史，不详预防接种史，否认过敏"
+        },
+        {
+          "marker": "降糖药",
+          "snippet": "睡眠一般，饮食情况一般，大小便通畅。 一般情况欠佳。有慢病病史患者诉既往有高血压病史，长期口服降压药控制血压，具体控制效果不详。患者诉既往有糖尿病病史，长期口服降糖药控制血糖，具体血糖控制情况不详，患者诉既往有银屑病病史，未规律治疗。否认传染病史。否认外伤史 ，否认手术史，否认输血史，不详预防接种史，否认过敏史。否认特殊病史"
+        },
+        {
+          "marker": "初步诊断",
+          "snippet": "蛋白血症；6.高脂血症；7.右肺结节病；8.2型糖尿病伴血糖控制不佳 是否主诊断: 是 诊断时间: 2025-10-20 17:03:50+08 入院记录诊断-初步诊断-2 诊断类型: 初步诊断 诊断名称: 1、腰椎间盘突出；2.原发性高血压；3.银屑病；4.2型糖尿病。 是否主诊断: 否 诊断时间: 2025-10-20 1"
+        },
+        {
+          "marker": "首次病程记录",
+          "snippet": "诊断 诊断名称: 1、腰椎间盘突出；2.原发性高血压；3.银屑病；4.2型糖尿病。 是否主诊断: 否 诊断时间: 2025-10-20 17:03:50+08 首次病程记录 日常病程记录 查房内容：:患者一般情况可，诉腰骶部及左下肢疼痛稍好转，无畏寒、发热，无胸闷、气促，无恶心、呕吐，未诉其他不适。查体：腰椎生理弯曲存在，两侧竖"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1130,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 124,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 87,
+          "has_content": true
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 220,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 293,
+          "has_content": true
+        },
+        {
+          "title": "邓腾孝主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 968,
+          "has_content": true
+        },
+        {
+          "title": "黄河副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 462,
+          "has_content": true
+        },
+        {
+          "title": "邓腾孝主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 297,
+          "has_content": true
+        },
+        {
+          "title": "黄河副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 260,
+          "has_content": true
+        },
+        {
+          "title": "邓腾孝主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 419,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 219,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 362,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0066",
+      "visit_id": "2144246",
+      "patient_name": "张世英",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "manual_issue_text": "入院记录诊断不全，患者无房颤，但入院记录心率和脉搏不等，首次病程记录中鉴别诊断不全面。",
+      "before_primary_rule_id": "SC-023",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-020",
+      "target_secondary_rule_ids": ["SC-023"],
+      "blocked_reason_type": "证据链不足",
+      "specific_gap": "缺首次病程正文和可直接核对房颤判断的心电/诊断依据链，当前仅能回收到心率/脉搏一致的入院查体。",
+      "evidence_summary": "该条应拆为入院诊断完整性和首程鉴别诊断问题；当前证据不足以确认“房颤误判/漏诊”和首程鉴别诊断不全面两支。",
+      "next_action": "缺首次病程正文和可直接核对房颤判断的心电/诊断依据链，当前仅能回收到心率/脉搏一致的入院查体。",
+      "document_count": 22,
+      "marker_hits": ["心率", "脉搏", "首次病程记录"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "心率",
+          "snippet": "。胸部检查：:胸廓对称，肋间隙正常，双肺呼吸运动对称，触觉语颤对称，双肺叩诊清音，呼吸音增粗，未闻干细湿罗音及哮鸣音，无胸膜摩擦音。无心前区隆起，心浊音界正常，心率77次/分，心音清晰，节律整齐，各瓣膜听诊区未闻及明显病理性杂音。腹部检查：:外形平坦，腹式呼吸存在；无蠕动波；无腹壁静脉显露。腹壁柔软，无液波感，全腹无压痛，"
+        },
+        {
+          "marker": "脉搏",
+          "snippet": "鼻臭、汗臭、身臭等。 切诊：按肌肤不凹陷，无枯燥、甲错，肤温正常；腰椎棘突旁轻度压痛，无症瘕积聚；手足无异常冷热，虚里搏动应手。脉濡细。 体温36.4℃ 脉搏77次/分 呼吸20次/分 血压128/77mmHg，体重55kg 身高155cm。一般状况检查：:神志清楚，精神良好，发育正常，营养好，表情自如，无特殊"
+        },
+        {
+          "marker": "首次病程记录",
+          "snippet": "椎间盘突出伴神经根受压 是否主诊断: 否 诊断时间: 2026-01-04 16:11:02+08 入院记录诊断-修正诊断-4 入院记录诊断-补充诊断-5 首次病程记录 日常病程记录 查房内容：:今日查房，患者诉神志清楚，精神可，咳嗽、咯痰，心累、气促较前改善，无头痛、视物旋转，无心悸、胸闷，无恶心、呕吐，无畏寒、发热。发病"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1655,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 217,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 175,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 393,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 273,
+          "has_content": true
+        },
+        {
+          "title": "金有莲副主任医师代主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 2223,
+          "has_content": true
+        },
+        {
+          "title": "王良均副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1975,
+          "has_content": true
+        },
+        {
+          "title": "金有莲副主任医师代主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 592,
+          "has_content": true
+        },
+        {
+          "title": "王良均副主任医师出院前查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 524,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 222,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0068",
+      "visit_id": "2040917",
+      "patient_name": "张高芬",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "manual_issue_text": "入院记录初步诊断不全，首次病程诊疗计划止痛、止血未写明具体措施。",
+      "before_primary_rule_id": "SC-023",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "same_family_or_effective_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-020",
+      "target_secondary_rule_ids": ["SC-023", "SC-028"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "人工问题同时指向入院初步诊断不全和首次病程诊疗计划不具体；当前首程正文为空，且入院诊断链可回收，按 SC-020 与首程诊疗计划规则组合有效确认。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 24,
+      "marker_hits": ["初步诊断", "首次病程记录"],
+      "marker_misses": ["止痛", "止血"],
+      "evidence_snippets": [
+        {
+          "marker": "初步诊断",
+          "snippet": "2025年10月28日 是否主诊断: 是 诊断时间: 2025-10-28 17:00:05+08 入院记录诊断-初步诊断-2 诊断类型: 初步诊断 诊断名称: 1、左侧多发肋骨骨折；2、左侧液气胸；3.右肺结节； 是否主诊断: 否 诊断时间: 2025-10-28 17:00:0"
+        },
+        {
+          "marker": "首次病程记录",
+          "snippet": "液气胸；3.右肺结节； 是否主诊断: 否 诊断时间: 2025-10-28 17:00:05+08 入院记录诊断-补充诊断-5 入院记录诊断-修正诊断-4 首次病程记录 日常病程记录 韩平副主任医师代主治医师查房记录 :韩平副主任医师今日查看病员后指出：患者张高芬，性别女，年龄57岁，以“摔伤致左胸部疼痛5+小时。”为主诉"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1095,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 194,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 81,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "韩平副主任医师代主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1006,
+          "has_content": true
+        },
+        {
+          "title": "韩平副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 352,
+          "has_content": true
+        },
+        {
+          "title": "韩平副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 288,
+          "has_content": true
+        },
+        {
+          "title": "上级医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 484,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 277,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 161,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 159,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 160,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0073",
+      "visit_id": "2198524",
+      "patient_name": "候富明",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "manual_issue_text": "入院查体无专科情况描述，患者入院时BP151/121mmHg，首次病程中未做分析、未提出诊疗计划。",
+      "before_primary_rule_id": "SC-036",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-023",
+      "target_secondary_rule_ids": ["SC-018", "SC-036"],
+      "blocked_reason_type": "证据链不足",
+      "specific_gap": "首次病程正文为空，无法核对高血压是否在首程中缺分析/缺诊疗计划；入院查体专科情况并非完全缺失。",
+      "evidence_summary": "该条由 SC-036 重映射为入院查体+首次病程复合问题，但关键首程正文缺失，仍需补首程正文后才能 exact。",
+      "next_action": "首次病程正文为空，无法核对高血压是否在首程中缺分析/缺诊疗计划；入院查体专科情况并非完全缺失。",
+      "document_count": 26,
+      "marker_hits": ["首次病程记录"],
+      "marker_misses": ["高血压", "专科"],
+      "evidence_snippets": [
+        {
+          "marker": "首次病程记录",
+          "snippet": ",3、尺神经炎,4、肘关节积液 ,5、双下肢肌肉萎缩 是否主诊断: 是 诊断时间: 2026-02-13 16:24:46+08 入院记录诊断-入院诊断-1 首次病程记录 日常病程记录 查房内容：:今日查房，患者神清、精神尚可，诉右肘关节疼痛疼痛较前明显缓解，右上臂疼痛较前缓解，右上臂活动受限好转，无畏寒、发热、胸闷、心悸、心"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1134,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 74,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 97,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 195,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 351,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 209,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 219,
+          "has_content": true
+        },
+        {
+          "title": "郑瑞清副主任医师代主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 919,
+          "has_content": true
+        },
+        {
+          "title": "郑瑞清副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 715,
+          "has_content": true
+        },
+        {
+          "title": "郑瑞清副主任医师代主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 405,
+          "has_content": true
+        },
+        {
+          "title": "郑瑞清副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 245,
+          "has_content": true
+        },
+        {
+          "title": "郑瑞清副主任医师代主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 243,
+          "has_content": true
+        },
+        {
+          "title": "今日郑瑞清副主任医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 307,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0093",
+      "visit_id": "2059847",
+      "patient_name": "李忠涛",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "manual_issue_text": "患者入院时主诉为“进食鸡肉后咽痛、吞咽梗阻感4天”，术后首次病程记录描述为“可见一长约2cm鸭骨嵌顿”，病程前后描述存在错误，建议描述为“可见一长约2cm异物嵌顿”",
+      "before_primary_rule_id": "SC-023",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-105",
+      "target_secondary_rule_ids": ["SC-097"],
+      "blocked_reason_type": "证据链不足",
+      "specific_gap": "缺术后首次病程/手术记录有效正文，当前未回收到“鸭骨”或“鸡肉”原句锚点。",
+      "evidence_summary": "人工问题应归入术后首程/手术记录前后描述一致性，而不是 SC-023；但当前缺原句正文，保留 blocked 并明确缺术后首程/手术记录正文。",
+      "next_action": "缺术后首次病程/手术记录有效正文，当前未回收到“鸭骨”或“鸡肉”原句锚点。",
+      "document_count": 52,
+      "marker_hits": ["鸡肉", "异物", "术后首次病程记录", "手术记录"],
+      "marker_misses": ["鸭骨"],
+      "evidence_snippets": [
+        {
+          "marker": "鸡肉",
+          "snippet": "入院记录 进食鸡肉后咽痛、吞咽梗阻感4天。 患者于4天前，进食鸡肉后起病，出现咽喉部疼痛感，自觉咽喉部吞咽梗阻感，无咳血、咳嗽、咳痰，无呼吸困难不适。未予以重视，自行按摩颈部、吞"
+        },
+        {
+          "marker": "异物",
+          "snippet": "喉部吞咽梗阻感，无咳血、咳嗽、咳痰，无呼吸困难不适。未予以重视，自行按摩颈部、吞咽食团，自觉症状无明显好转。今日患者为求进一步治疗，当地卫生院行颈部CT：食管内异物。为求进一步治疗，转入我科住院治疗。发病以来精神状态一般，睡眠一般，饮食情况差，大小便未见明显异常。 一般情况良好。有慢病病史：自诉既往咳累，但未予以诊治。否认"
+        },
+        {
+          "marker": "术后首次病程记录",
+          "snippet": "醉方式: 术前诊断: 术中诊断: 术后诊断: 手术经过: 切口愈合等级: 手术开始时间: 手术结束时间: 失血量: 其他内容: 记录内容: 术后首次病程记录 抢救记录 转入记录 转出记录 护理记录 出院记录 出院记录诊断-诊断"
+        },
+        {
+          "marker": "手术记录",
+          "snippet": "要求出院。 医生签名:尚书羽 手术记录 记录时间: 科室: 病房: 记录者: 手术医生签名: 术前小结: 手术项目: 手术编码: 手术等级: 手术医师: 手术I助: 手术II助"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 863,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 68,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 211,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 345,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 273,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 415,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 515,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 211,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 161,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 119,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 123,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 431,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 147,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 410,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 573,
+          "has_content": true
+        },
+        {
+          "title": "郑凤金主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 351,
+          "has_content": true
+        },
+        {
+          "title": "陈光怀副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 944,
+          "has_content": true
+        },
+        {
+          "title": "彭中主任医师联合耳鼻喉科郑凤金主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1789,
+          "has_content": true
+        },
+        {
+          "title": "石跃主治医师联合耳鼻喉科尚书羽住院医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1665,
+          "has_content": true
+        },
+        {
+          "title": "彭中主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1135,
+          "has_content": true
+        },
+        {
+          "title": "石跃主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1271,
+          "has_content": true
+        },
+        {
+          "title": "彭中主任医师联合耳鼻喉科尚书羽医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1376,
+          "has_content": true
+        },
+        {
+          "title": "郑凤金主刀术前查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 350,
+          "has_content": true
+        },
+        {
+          "title": "石跃主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1166,
+          "has_content": true
+        },
+        {
+          "title": "彭中主任医师联合耳鼻喉科郑凤金主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1687,
+          "has_content": true
+        },
+        {
+          "title": "郑凤金主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1071,
+          "has_content": true
+        },
+        {
+          "title": "陈光怀副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 752,
+          "has_content": true
+        },
+        {
+          "title": "今日陈光怀副主任医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 607,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 467,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 330,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 187,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 603,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 315,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 503,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 280,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 495,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 288,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 229,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 177,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 212,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0107",
+      "visit_id": "2208257",
+      "patient_name": "万先富",
+      "issue_family": "诊疗医嘱与病程记录不一致",
+      "manual_issue_text": "患者既往有高血压病史，入院诊断未诊断高血压，医嘱中未体现高血压用药情况，患者既往行“左侧腹股沟疝修补术”，体格检查无相关描述；2025.11.11行“超声引导下左肾穿刺活检术”，未书写有创操作记录。",
+      "before_primary_rule_id": "SC-146",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-146",
+      "target_secondary_rule_ids": ["SC-020", "SC-046", "SC-013"],
+      "blocked_reason_type": "证据链不足",
+      "specific_gap": "缺可复原的长期/临时医嘱明细和有创操作记录正文，无法闭环“医嘱未体现降压药”和“肾穿刺无有创记录”两支。",
+      "evidence_summary": "该条仍属于 SC-146 跨表一致性问题，但同时混入入院诊断、查体和有创操作记录；当前缺医嘱明细与有创正文，不能提升。",
+      "next_action": "缺可复原的长期/临时医嘱明细和有创操作记录正文，无法闭环“医嘱未体现降压药”和“肾穿刺无有创记录”两支。",
+      "document_count": 19,
+      "marker_hits": ["高血压", "腹股沟疝", "肾穿刺"],
+      "marker_misses": ["有创操作", "医嘱"],
+      "evidence_snippets": [
+        {
+          "marker": "高血压",
+          "snippet": "后出院，2天前患者出现头晕、乏力，伴恶心、呕吐，无腹痛、腹泻，现为进一步治疗就诊于我院。 大小便正常。体重较前无明显变化。 一般情况欠佳。有慢病病史患者诉既往有高血压病史多年，长期口服苯磺酸氨氯地平控制血压，自诉血压控制良好。否认传染病史。否认外伤史 ，有手术史患者诉有左侧腹股沟疝手术史，否认输血史，不详预防接种史，否认过敏"
+        },
+        {
+          "marker": "腹股沟疝",
+          "snippet": "显变化。 一般情况欠佳。有慢病病史患者诉既往有高血压病史多年，长期口服苯磺酸氨氯地平控制血压，自诉血压控制良好。否认传染病史。否认外伤史 ，有手术史患者诉有左侧腹股沟疝手术史，否认输血史，不详预防接种史，否认过敏史。否认特殊病史。 长期居住于原籍， 其他，未到过牧区及疫区，无冶游史，无吸毒史，无吸烟史，无饮酒史。 父亲已故，母"
+        },
+        {
+          "marker": "肾穿刺",
+          "snippet": "化。左肾占位，考虑：1.肾Ca？2.感染性病变？3.其它？左肾静脉可疑受累，腹膜后淋巴结增大；肝内多发异常强化结节，性质待定。于2025-11-11超声引导下左肾穿刺活检术，2025-11-12 (住院)穿刺组织活检病理诊断 (左肾)：穿刺活检小标本，查见恶性肿瘤伴坏死，建议做免疫组化协助诊断。免疫组化结果：尿路上皮癌，CK"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1604,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 103,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 124,
+          "has_content": true
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "田安琴主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1748,
+          "has_content": true
+        },
+        {
+          "title": "今日李永中副主任医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 377,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0128",
+      "visit_id": "2104525",
+      "patient_name": "汪明海",
+      "issue_family": "病程记录病情变化记录不全",
+      "manual_issue_text": "12月7日病程书写错误“嘱患者及家属注意伤口为甚，避免感染。 \"",
+      "before_primary_rule_id": "SC-032",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-032",
+      "target_secondary_rule_ids": ["CL-276"],
+      "blocked_reason_type": "证据链不足",
+      "specific_gap": "当前样本验证链路未回收到 12月7日病程正文，也未命中“伤口为甚”原句。",
+      "evidence_summary": "人工问题实为病程文字错误/错别字，不是 SC-032 病情变化记录；但缺原句正文，不能提升。",
+      "next_action": "当前样本验证链路未回收到 12月7日病程正文，也未命中“伤口为甚”原句。",
+      "document_count": 33,
+      "marker_hits": [],
+      "marker_misses": ["伤口为甚", "12月7日"],
+      "evidence_snippets": [],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1098,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 279,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 71,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 566,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 83,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 153,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 121,
+          "has_content": true
+        },
+        {
+          "title": "马晨曦副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 442,
+          "has_content": true
+        },
+        {
+          "title": "马晨曦副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 477,
+          "has_content": true
+        },
+        {
+          "title": "马晨曦副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 387,
+          "has_content": true
+        },
+        {
+          "title": "马晨曦副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 536,
+          "has_content": true
+        },
+        {
+          "title": "石跃主治医师联合骨科周雨主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1230,
+          "has_content": true
+        },
+        {
+          "title": "段超主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1161,
+          "has_content": true
+        },
+        {
+          "title": "术前主刀医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 222,
+          "has_content": true
+        },
+        {
+          "title": "马晨曦副主任医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 316,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 287,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 604,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 441,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 387,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 286,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 416,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0135",
+      "visit_id": "2119620",
+      "patient_name": "杜沁妤",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "manual_issue_text": "12月9日病程记录书写存在错误“请示上级医师后予以0.9g q12h ivgtt抗感染”",
+      "before_primary_rule_id": "SC-036",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-036",
+      "target_secondary_rule_ids": ["CL-276"],
+      "blocked_reason_type": "人工问题原文不可判",
+      "specific_gap": "当前原文写有“阿莫西林克拉维酸钾0.9g q12h ivgtt”，并非只有“0.9g q12h”而缺药名。",
+      "evidence_summary": "人工问题指向书写错误，但当前可回收正文已包含药名+剂量+频次，原句锚点与现有正文不一致，不能按可补规则提升。",
+      "next_action": "当前原文写有“阿莫西林克拉维酸钾0.9g q12h ivgtt”，并非只有“0.9g q12h”而缺药名。",
+      "document_count": 26,
+      "marker_hits": ["阿莫西林克拉维酸钾0.9g", "0.9g q12h"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "阿莫西林克拉维酸钾0.9g",
+          "snippet": "9/L,2025-12-09 血清淀粉样蛋白SAA测定(小儿指尖血):SAA <5.00mg/L。初步诊断：急性支气管炎，考虑存在细菌性感染，请示上级医师后予以阿莫西林克拉维酸钾0.9g q12h ivgtt抗感染，完善血培养。 医师签名：屈勇"
+        },
+        {
+          "marker": "0.9g q12h",
+          "snippet": "12-09 血清淀粉样蛋白SAA测定(小儿指尖血):SAA <5.00mg/L。初步诊断：急性支气管炎，考虑存在细菌性感染，请示上级医师后予以阿莫西林克拉维酸钾0.9g q12h ivgtt抗感染，完善血培养。 医师签名：屈勇/梁沥丹"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 2299,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 61,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 421,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 351,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 613,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 444,
+          "has_content": true
+        },
+        {
+          "title": "夏利主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1146,
+          "has_content": true
+        },
+        {
+          "title": "今随屈勇副主任医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 532,
+          "has_content": true
+        },
+        {
+          "title": "屈勇副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 660,
+          "has_content": true
+        },
+        {
+          "title": "上级医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 5,
+          "has_content": true
+        },
+        {
+          "title": "夏利主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 447,
+          "has_content": true
+        },
+        {
+          "title": "呼吸音粗,未闻及干湿啰音。心音有力,心律齐,未闻及杂音,腹部平坦,软,肝脾未扪及,肠鸣音正常,颈部软,神经系查体均阴性。查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 546,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 142,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0137",
+      "visit_id": "2123539",
+      "patient_name": "赵金书",
+      "issue_family": "诊疗医嘱与病程记录不一致",
+      "manual_issue_text": "既往史中患者冠心病、高血压、慢性胃炎的患病时间未提及，口服阿托伐他丁及硝苯地平的剂量、用法未记录。医嘱中无治疗冠心病及高血压的药物。",
+      "before_primary_rule_id": "SC-146",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-146",
+      "target_secondary_rule_ids": ["SC-013"],
+      "blocked_reason_type": "证据链不足",
+      "specific_gap": "缺可核对的长期/临时医嘱明细，无法证明“医嘱中无治疗冠心病及高血压药物”；既往史时间和用法剂量又属于入院记录史项规则。",
+      "evidence_summary": "SC-146 只可承接医嘱一致性一支；当前缺医嘱明细，同时人工问题跨既往史缺项，保留 blocked 并说明缺医嘱域。",
+      "next_action": "缺可核对的长期/临时医嘱明细，无法证明“医嘱中无治疗冠心病及高血压药物”；既往史时间和用法剂量又属于入院记录史项规则。",
+      "document_count": 29,
+      "marker_hits": ["阿托伐他", "硝苯地平", "冠心病", "高血压", "医嘱"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "阿托伐他",
+          "snippet": "疗。患者及家属否认伤前饮酒史，伤后无昏迷，无恶心呕吐无呼吸困难，精神可，食欲一般，小便通畅，大便未解。 一般情况差。有慢病病史患者自诉既往有冠心病病史，长期口服阿托伐他汀，患者诉既往有血压病史多年，长期口服硝苯地平控制血压；患者自诉有慢性胃炎病史。否认传染病史。否认外伤史 ，否认手术史，否认输血史，不详预防接种史，否认过敏史。"
+        },
+        {
+          "marker": "硝苯地平",
+          "snippet": "心呕吐无呼吸困难，精神可，食欲一般，小便通畅，大便未解。 一般情况差。有慢病病史患者自诉既往有冠心病病史，长期口服阿托伐他汀，患者诉既往有血压病史多年，长期口服硝苯地平控制血压；患者自诉有慢性胃炎病史。否认传染病史。否认外伤史 ，否认手术史，否认输血史，不详预防接种史，否认过敏史。否认特殊病史。 长期居住于原籍， 农民，未到过"
+        },
+        {
+          "marker": "冠心病",
+          "snippet": "骨折”收入我科住院治疗。患者及家属否认伤前饮酒史，伤后无昏迷，无恶心呕吐无呼吸困难，精神可，食欲一般，小便通畅，大便未解。 一般情况差。有慢病病史患者自诉既往有冠心病病史，长期口服阿托伐他汀，患者诉既往有血压病史多年，长期口服硝苯地平控制血压；患者自诉有慢性胃炎病史。否认传染病史。否认外伤史 ，否认手术史，否认输血史，不详预"
+        },
+        {
+          "marker": "高血压",
+          "snippet": "助检查： 入院记录诊断-初步诊断-2 诊断类型: 初步诊断 诊断名称: 1.右侧股骨颈骨折；2.右肩部软组织挫伤；3.冠心病；4.支气管扩张；5.双肺结节；6.高血压3级 很高危；7.慢性胃炎；8.左侧肋骨骨折？ 是否主诊断: 否 诊断时间: 2025-12-26 17:05:11+08 入院记录诊断-入院诊断-1 入院记"
+        },
+        {
+          "marker": "医嘱",
+          "snippet": "，大小便通畅，生命体征平稳，右髋部伤口无感染迹象，无红肿及渗出。右下肢活动尚可，病情好转平稳，复查X线见假体位置良好，炎性指标正常，上级医师查看后予以出院。出院医嘱：1.饮食指导:普通饮食。2.生活方式指导：建议院外休息3月，加强营养，合理休息，适当行功能锻炼，需在家属陪同及助行器协助下下床活动，避免跌倒。3.健康宣教：术"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1405,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 125,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 323,
+          "has_content": true
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 308,
+          "has_content": true
+        },
+        {
+          "title": "段超主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 865,
+          "has_content": true
+        },
+        {
+          "title": "马晨曦副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 594,
+          "has_content": true
+        },
+        {
+          "title": "马晨曦副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 354,
+          "has_content": true
+        },
+        {
+          "title": "段超主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 470,
+          "has_content": true
+        },
+        {
+          "title": "段超主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 233,
+          "has_content": true
+        },
+        {
+          "title": "马晨曦副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 202,
+          "has_content": true
+        },
+        {
+          "title": "马晨曦副主任医师出院前查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 577,
+          "has_content": true
+        },
+        {
+          "title": "术前主刀医生查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 238,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 350,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 351,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 267,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 247,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 220,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0139",
+      "visit_id": "2137061",
+      "patient_name": "钟朝树",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "manual_issue_text": "患者入院时诊断胸腔积液诊断依据不足，诊断急性胃炎依据不足。现病史中，对主要症状胸痛的描述缺乏相应要素：如疼痛持续时间、具体部位、加重或者缓解方式等。",
+      "before_primary_rule_id": "SC-023",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-020",
+      "target_secondary_rule_ids": ["SC-009"],
+      "blocked_reason_type": "人工问题原文不可判",
+      "specific_gap": "当前入院记录诊断已列结核性胸腔积液和急性胃炎，且现病史未回收到人工所称“胸痛”主症原句。",
+      "evidence_summary": "该条应从 SC-023 拆为入院诊断依据与现病史要素，但现有原文与人工主症锚点不一致，不能提升。",
+      "next_action": "当前入院记录诊断已列结核性胸腔积液和急性胃炎，且现病史未回收到人工所称“胸痛”主症原句。",
+      "document_count": 19,
+      "marker_hits": ["胸腔积液", "急性胃炎"],
+      "marker_misses": ["胸痛"],
+      "evidence_snippets": [
+        {
+          "marker": "胸腔积液",
+          "snippet": "明显咯痰，有纳差、反酸、恶心、乏力，无畏寒、发热、咯血、呼吸困难，无胸闷、心悸，无恶心、呕吐、腹痛腹泻等。院外未行特殊处理，为治疗由当地卫生院送入我院。急诊以“胸腔积液”收入院。发病以来一般，睡眠一般，食欲一般，大小便基本正常，近期体重无变化。 差，5+年前确诊为“HIV感染”，目前抗病毒治疗药物为：拉米夫定1片qd 阿巴卡维"
+        },
+        {
+          "marker": "急性胃炎",
+          "snippet": "入院随机血糖8.6mmol/l，指脉氧96%院外辅助检查： 入院记录诊断-出院诊断-3 诊断类型: 出院诊断 诊断名称: 1、结核性胸腔积液；2、AIDS；3、急性胃炎；4、药物性肝损害；5、肺气肿。 是否主诊断: 是 诊断时间: 2025-12-22 17:01:54+08 入院记录诊断-初步诊断-2 诊断类型: 初步诊断"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1918,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 94,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 79,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 469,
+          "has_content": true
+        },
+        {
+          "title": "张庆主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1168,
+          "has_content": true
+        },
+        {
+          "title": "冯仲秋副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1193,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0195",
+      "visit_id": "2213827",
+      "patient_name": "熊明英",
+      "issue_family": "四级手术未 MDT",
+      "manual_issue_text": "婚育史书写有误：适龄结婚，配偶体质一般，G2P2,平产1子健在。国考四级手术术前无多学科会诊。术前超声提示：左肾未显示。未请泌尿外科或者肾内科会诊，未进一步检查明确，即诊断“左肾缺失”不规范。",
+      "before_primary_rule_id": "SC-083",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "same_family_or_effective_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-083",
+      "target_secondary_rule_ids": ["SC-020", "SC-010"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "人工问题是复合项；当前原文可覆盖四级手术 MDT/左肾未显示后专科会诊评估不足这一主锚点，未回收到规范 MDT 或泌尿/肾内会诊记录，按 SC-083 主规则有效确认。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 25,
+      "marker_hits": ["左肾未显示"],
+      "marker_misses": ["多学科", "MDT", "泌尿外科", "肾内科"],
+      "evidence_snippets": [
+        {
+          "marker": "左肾未显示",
+          "snippet": "低于尿道内口。中腔室：子宫脱垂。后腔室：未见直肠膨出声像。未见肛提肌裂孔扩张声像。未见肛提肌肌肛门括约肌断裂声像。泌尿系、腹部彩超（肝胆胰脾双肾）右肾尿盐结晶。左肾未显示。心脏彩超 主动脉瓣反流（轻度）。二、三尖瓣反流（轻度）。左心功能测定 左室收缩功能测值正常。肺功能测定(手术专用) 可能存在轻度换气功能障碍。白带常规+化学检"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1308,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 94,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "邹红缨主任医师查房",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 420,
+          "has_content": true
+        },
+        {
+          "title": "申威主治医师查房",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 509,
+          "has_content": true
+        },
+        {
+          "title": "邹红缨主任医师查房",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 200,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 166,
+          "has_content": true
+        },
+        {
+          "title": "申威主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 576,
+          "has_content": true
+        },
+        {
+          "title": "申威主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 309,
+          "has_content": true
+        },
+        {
+          "title": "邹红缨主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 425,
+          "has_content": true
+        },
+        {
+          "title": "申威主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 514,
+          "has_content": true
+        },
+        {
+          "title": "邹红缨主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 205,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 184,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0197",
+      "visit_id": "2245464",
+      "patient_name": "杨长菊",
+      "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
+      "manual_issue_text": "入院72小时以内无副主任医师以上的医师（已新建无具体内容）",
+      "before_primary_rule_id": "SC-032",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-049",
+      "target_secondary_rule_ids": ["SC-032"],
+      "blocked_reason_type": "人工问题原文不可判",
+      "specific_gap": "当前原文可见 2026-02-25 陈建霞副主任医师查房记录，和“72小时以内无副主任医师以上查房”冲突。",
+      "evidence_summary": "该条应归入高级医师查房时效/内容规则，而不是 SC-032；但原文已存在副主任医师查房，不能提升。",
+      "next_action": "当前原文可见 2026-02-25 陈建霞副主任医师查房记录，和“72小时以内无副主任医师以上查房”冲突。",
+      "document_count": 23,
+      "marker_hits": ["陈建霞副主任医师", "2026-02-25"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "陈建霞副主任医师",
+          "snippet": "化。 医生签名：王清 李清 陈建霞副主任医师查房记录 :今陈建霞副主任医师查房：患者目前双下肢水肿较前消退，余未诉特殊不适。查体： 胸廓对称，无畸形，胸骨无压痛，胸廓扩张度对称，无胸膜摩擦感，叩诊呈清音，"
+        },
+        {
+          "marker": "2026-02-25",
+          "snippet": "肺呼吸音清，未闻及干湿性啰音；心前区无隆起，无抬举样搏动，无震颤及磨擦感，心界不大，心率74 次/分，心音有力，心律齐，各瓣膜听诊区未闻及病理性杂音。辅助检查：2026-02-25 补体两项(C3,C4):补体3(C3) 0.72g/L,补体4(C4) 0.18g/L,2026-02-25 24小时尿蛋白定量（检验）:UTP 3752.0"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1955,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 84,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 247,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 242,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 242,
+          "has_content": true
+        },
+        {
+          "title": "王清主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 2474,
+          "has_content": true
+        },
+        {
+          "title": "陈建霞副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1158,
+          "has_content": true
+        },
+        {
+          "title": "李正宇主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 253,
+          "has_content": true
+        },
+        {
+          "title": "陈建霞副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 381,
+          "has_content": true
+        },
+        {
+          "title": "陈建霞副主任医师出院前查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1241,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 5,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0205",
+      "visit_id": "2259144",
+      "patient_name": "李欣桂",
+      "issue_family": "围手术期术前评估/讨论/小结缺陷",
+      "manual_issue_text": "患者17岁男性，入院诊断右侧睾丸扭转，急诊手术，存在器官切除的可能，术前缺上级医师意见。手术中，右侧睾丸附睾切除后，行左侧睾丸固定时，使用5-0可吸收线欠妥，文献建议使用丝线固定以确保永久固定。",
+      "before_primary_rule_id": "SC-081",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-081",
+      "target_secondary_rule_ids": ["SC-097"],
+      "blocked_reason_type": "人工问题原文不可判",
+      "specific_gap": "当前原文可见李杰副主任医师查房和术前主刀查房；未回收到“5-0可吸收线”原句，无法核对术中材料合理性。",
+      "evidence_summary": "术前缺上级医师意见与现有原文冲突；手术缝线材料问题缺手术正文锚点，保留 blocked。",
+      "next_action": "当前原文可见李杰副主任医师查房和术前主刀查房；未回收到“5-0可吸收线”原句，无法核对术中材料合理性。",
+      "document_count": 24,
+      "marker_hits": ["李杰副主任医师", "术前主刀"],
+      "marker_misses": ["5-0", "可吸收"],
+      "evidence_snippets": [
+        {
+          "marker": "李杰副主任医师",
+          "snippet": "断: 否 诊断时间: 2026-03-08 16:16:39+08 入院记录诊断-出院诊断-3 入院记录诊断-修正诊断-4 首次病程记录 日常病程记录 李杰副主任医师查房记录 :今日李杰副主任医师查看病人后总结病史特点如下：1、患者青年男性，起病时间短，以右侧阴囊疼痛2天为主。2、既往史：既往有右侧附睾炎病史。3、入院时查体"
+        },
+        {
+          "marker": "术前主刀",
+          "snippet": "康复理疗。 医生签名: 术前主刀医师查房记录 :今术前主刀医生查看患者后指出，患者目前诊断：1.右侧睾丸-附睾扭转，2.右侧急性睾丸附睾炎，3.右侧睾丸鞘膜积液，患者具备手术指征，术前检查已完"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1072,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 89,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "李杰副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 887,
+          "has_content": true
+        },
+        {
+          "title": "术后第一天主刀医师余思源主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 164,
+          "has_content": true
+        },
+        {
+          "title": "李杰副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 180,
+          "has_content": true
+        },
+        {
+          "title": "唐远君副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 186,
+          "has_content": true
+        },
+        {
+          "title": "今日李杰副主任医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 207,
+          "has_content": true
+        },
+        {
+          "title": "术前主刀医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 226,
+          "has_content": true
+        },
+        {
+          "title": "今日唐远君副主任医师代主治医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 185,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 219,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0208",
+      "visit_id": "2262370",
+      "patient_name": "李昭云",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "manual_issue_text": "首次病程记录鉴别诊断不全面，入院记录患者手术史记录不详细，体格检查中，未记录手术相关痕迹，脊柱检查缺失。门诊未做检查就收治入院，仅诊断膝关节痛，有扩大住院指针嫌疑。",
+      "before_primary_rule_id": "SC-023",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "same_family_or_effective_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-010",
+      "target_secondary_rule_ids": ["SC-018", "SC-020", "SC-023"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "人工问题跨鉴别诊断、手术史、体格检查和入院指针；当前入院记录可回收手术史只作概括、脊柱/四肢检查写“详见专科检查”、初步诊断仅“左膝关节痛”，按入院记录子规则组合有效确认。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 23,
+      "marker_hits": ["手术史", "脊柱检查", "膝关节痛", "初步诊断"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "手术史",
+          "snippet": "，门诊以“膝关节痛”收入我科。住院治疗。发病以来精神状态一般，睡眠一般，饮食情况一般，大小便通畅。。 一般情况良好。否认慢病病史。否认传染病史。否认外伤史 ，有手术史有前列腺手术、双侧腹股沟疝手术史；左侧静脉曲张手术史，否认输血史，不详预防接种史，否认过敏史。否认特殊病史。 长期居住于原籍， 农民，未到过牧区及疫区，无冶游史"
+        },
+        {
+          "marker": "脊柱检查",
+          "snippet": "胃肠蠕动波。腹壁软，无压痛，无反跳痛，无振水音，无包块，肝脏未触及；胆囊未触及，莫非氏征阴性；脾脏未触及肛门指诊检查：:肛门指检未查外生殖器检查：:外生殖器未查脊柱检查：:详见专科检查。四肢检查：:详见专科检查。神经系统检查：:神清语利，生理反射正常存在，未引出病理性反射。 院内辅助检查：暂缺院外辅助检查：无。 入院记录诊断-"
+        },
+        {
+          "marker": "膝关节痛",
+          "snippet": "病，左膝关节疼痛不适，活动时加重，休息后缓解，无肢体远端感觉运动障碍。患者曾行针灸等康复理疗，治疗后缓解，患者疼痛反复发作，今日为进一步治疗来我院就诊，门诊以“膝关节痛”收入我科。住院治疗。发病以来精神状态一般，睡眠一般，饮食情况一般，大小便通畅。。 一般情况良好。否认慢病病史。否认传染病史。否认外伤史 ，有手术史有前列腺手术"
+        },
+        {
+          "marker": "初步诊断",
+          "snippet": "：暂缺院外辅助检查：无。 入院记录诊断-出院诊断-3 入院记录诊断-入院诊断-1 入院记录诊断-修正诊断-4 入院记录诊断-补充诊断-5 入院记录诊断-初步诊断-2 诊断类型: 初步诊断 诊断名称: 1、左膝关节痛。 是否主诊断: 否 诊断时间: 2026-03-12 16:33:58+08 首次病程记录 今日查房"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1077,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 63,
+          "has_content": true
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "今日查房",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 392,
+          "has_content": true
+        },
+        {
+          "title": "今日段超主治医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 696,
+          "has_content": true
+        },
+        {
+          "title": "今日马晨曦副主任医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 345,
+          "has_content": true
+        },
+        {
+          "title": "今日段超主治医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 214,
+          "has_content": true
+        },
+        {
+          "title": "今日马晨曦副主任医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 246,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 259,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 280,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 269,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0216",
+      "visit_id": "2255882",
+      "patient_name": "黄永秀",
+      "issue_family": "入院记录内容不完整/前后矛盾",
+      "manual_issue_text": "患者主诉行走不稳1年入院，根据现病史患者3天前呕吐就诊，主诉内容不完整。首次病程，无高血压，肺结节等疾病诊断依据。诊疗计划中对于高血压疾病且入院血压偏高，无监测血压，无用药记录。2026-03-01术前主刀查房与手术记录 无主刀医生签名，均为主管医生签名",
+      "before_primary_rule_id": "SC-008",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "same_family_or_effective_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-008",
+      "target_secondary_rule_ids": ["SC-020", "SC-023", "SC-081"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "主诉只写行走不稳1年，而现病史补充3天前呕吐和本次门诊 MRI 后入院，主诉未覆盖近期入院原因；其余首程/围手术签名问题作为次锚点，按 SC-008 主诉家族有效确认。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 34,
+      "marker_hits": ["行走不稳1年", "3天前患者出现呕吐", "高血压", "肺结节"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "行走不稳1年",
+          "snippet": "入院记录 行走不稳1年。 患者于1年前，无明显诱因起病，初有头晕，后出现行走不稳，步幅小，步频快，不伴呕吐，不伴大小便失禁等。初未重视，患者行走不稳逐渐加重，3天前患者出现呕吐，呕吐"
+        },
+        {
+          "marker": "3天前患者出现呕吐",
+          "snippet": "入院记录 行走不稳1年。 患者于1年前，无明显诱因起病，初有头晕，后出现行走不稳，步幅小，步频快，不伴呕吐，不伴大小便失禁等。初未重视，患者行走不稳逐渐加重，3天前患者出现呕吐，呕吐物为胃内容物，就诊于我院门诊完善颅脑核磁提示：2026-02-27 MRI头颅平扫+增强扫描 左侧桥小脑角区占位，考虑：脑膜瘤可能性大，听神经瘤待排，请结"
+        },
+        {
+          "marker": "高血压",
+          "snippet": "结合临床。脑白质异常信号，Fazekas2级。 现患者为求进一步治疗，入我科。发病以来精神状态一般，睡眠一般，饮食情况一般，二便正常。 一般情况良好。有慢病病史高血压病史，口服药物治疗。否认传染病史。否认外伤史 ，否认手术史，否认输血史，不详预防接种史，否认过敏史。否认特殊病史。 长期居住于原籍， 农民，未到过牧区及疫区，无"
+        },
+        {
+          "marker": "肺结节",
+          "snippet": "院记录诊断-补充诊断-5 入院记录诊断-修正诊断-4 入院记录诊断-出院诊断-3 诊断类型: 出院诊断 诊断名称: 1.左侧桥小脑角脑膜瘤；2.高血压；3.肺结节；4.脾多发结节；5.右侧大脑后动脉狭窄；6.左侧颈内动脉C6段动脉瘤；7.肝囊肿；8.肺气肿；9.社区获得性肺炎，非重症；10.房颤；11.下肢静脉血栓形成；"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1251,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 188,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 84,
+          "has_content": true
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 159,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 613,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 192,
+          "has_content": true
+        },
+        {
+          "title": "曾发林主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1113,
+          "has_content": true
+        },
+        {
+          "title": "石跃主治医师联合神经外科韩平副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1089,
+          "has_content": true
+        },
+        {
+          "title": "曾发林主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 907,
+          "has_content": true
+        },
+        {
+          "title": "韩平副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 478,
+          "has_content": true
+        },
+        {
+          "title": "曾发林主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 631,
+          "has_content": true
+        },
+        {
+          "title": "韩平副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 701,
+          "has_content": true
+        },
+        {
+          "title": "术前主刀医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 345,
+          "has_content": true
+        },
+        {
+          "title": "今日曾发林主治医师查房",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 691,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 453,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 423,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 235,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 261,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 196,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 326,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 204,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 203,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0221",
+      "visit_id": "2276701",
+      "patient_name": "温光秀",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "manual_issue_text": "患者拟行肠镜，请疼痛科会诊，会诊意见原封不动复制，未认真做好病情变化分析及病程书写。",
+      "before_primary_rule_id": "SC-036",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "CL-275",
+      "target_secondary_rule_ids": ["SC-069", "SC-036"],
+      "blocked_reason_type": "证据链不足",
+      "specific_gap": "缺可计算复制相似度的会诊原文对照；当前只能看到会诊后执行式记录，不能证明“原封不动复制”。",
+      "evidence_summary": "人工问题应迁移到复制粘贴/会诊记录质量规则族；当前缺相似度对照证据，仍 blocked。",
+      "next_action": "缺可计算复制相似度的会诊原文对照；当前只能看到会诊后执行式记录，不能证明“原封不动复制”。",
+      "document_count": 21,
+      "marker_hits": ["疼痛科", "遵会诊意见"],
+      "marker_misses": ["复制"],
+      "evidence_snippets": [
+        {
+          "marker": "疼痛科",
+          "snippet": "医生签名:宋莉 马玄 会诊记录 患者拟行内镜检查及必要时治疗,请疼痛科会诊。 疼痛科会诊:病史敬悉,患者否认特殊病史,查体:双肺呼吸音清,未闻及干湿罗音,心律齐,未闻及明显杂音。麻醉耐受可,拟全身麻醉下行胃肠镜检查,术前禁"
+        },
+        {
+          "marker": "遵会诊意见",
+          "snippet": "敬悉,患者否认特殊病史,查体:双肺呼吸音清,未闻及干湿罗音,心律齐,未闻及明显杂音。麻醉耐受可,拟全身麻醉下行胃肠镜检查,术前禁食8小时,禁饮4小时。 遵会诊意见,术前胃肠道准备。 医生签名:"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1185,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 200,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 69,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "宋莉主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1139,
+          "has_content": true
+        },
+        {
+          "title": "康明祥副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 285,
+          "has_content": true
+        },
+        {
+          "title": "上级医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 200,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 200,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 202,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0231",
+      "visit_id": "2272872",
+      "patient_name": "李才贵",
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；病程记录病情变化记录不全",
+      "manual_issue_text": "3月10日副主任医师查房记录内容空洞，无病情分析，无诊疗意见。",
+      "before_primary_rule_id": "SC-032",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "same_family_or_effective_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-050",
+      "target_secondary_rule_ids": ["SC-032"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "3月10日副主任医师查房核心表述为“同意目前诊断及处理，治疗同前，续观”，病情分析和诊疗意见空泛，按 SC-050 上级查房内容空洞有效确认。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 21,
+      "marker_hits": ["同意目前诊断及处理", "治疗同前", "续观", "副主任医师查房"],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "同意目前诊断及处理",
+          "snippet": "流涕，查体：双侧鼻腔黏膜充血，中鼻道少许黄色分泌物，无出血，2026-03-09 一般细菌涂片检查:涂片细菌结果 未查见细菌, 陈光怀副主任医师查看患者后指示：同意目前诊断及处理，治疗同前，续观。 医生签名：陈光怀 刘诗琪 郑凤金主治医师查房记录 :"
+        },
+        {
+          "marker": "治疗同前",
+          "snippet": "黏膜充血，中鼻道少许黄色分泌物，无出血，2026-03-09 一般细菌涂片检查:涂片细菌结果 未查见细菌, 陈光怀副主任医师查看患者后指示：同意目前诊断及处理，治疗同前，续观。 医生签名：陈光怀 刘诗琪 郑凤金主治医师查房记录 :今日查房，"
+        },
+        {
+          "marker": "续观",
+          "snippet": "中鼻道少许黄色分泌物，无出血，2026-03-09 一般细菌涂片检查:涂片细菌结果 未查见细菌, 陈光怀副主任医师查看患者后指示：同意目前诊断及处理，治疗同前，续观。 医生签名：陈光怀 刘诗琪 郑凤金主治医师查房记录 :今日查房，患者一"
+        },
+        {
+          "marker": "副主任医师查房",
+          "snippet": "鼻喷雾剂对症，每日鼻腔冲洗。 医生签名：郑凤金 刘诗琪 陈光怀副主任医师查房记录 :今日陈光怀副主任医师查房，患者一般情况可，鼻塞明显减轻，少许流涕，查体：双侧鼻腔黏膜充血，中鼻道少许黄色分泌物，无出血，2026-03-09 一般细菌涂"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 821,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 60,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 60,
+          "has_content": true
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "郑凤金主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 813,
+          "has_content": true
+        },
+        {
+          "title": "陈光怀副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 186,
+          "has_content": true
+        },
+        {
+          "title": "郑凤金主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 213,
+          "has_content": true
+        },
+        {
+          "title": "陈光怀副主任医师出院前查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 210,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0251",
+      "visit_id": "2287309",
+      "patient_name": "陈光华",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "manual_issue_text": "术中冰冻结果与手术决策： 术中冰冻回报“浸润性腺癌”后，未记录是否据此调整手术范围。若楔形切除即为最终术式，应说明原因（如：患者肺功能差、高龄、多发合并症等）；若需扩大切除，则后续步骤未体现。此部分为关键质控点，建议补充。",
+      "before_primary_rule_id": "SC-036",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "still_blocked_with_specific_gap",
+      "target_exact_review_status": "blocked_with_reason",
+      "target_primary_rule_id": "SC-097",
+      "target_secondary_rule_ids": ["SC-036", "SC-113"],
+      "blocked_reason_type": "证据链不足",
+      "specific_gap": "缺手术记录/冰冻病理回报有效正文，当前不能核对“浸润性腺癌”后是否调整手术范围。",
+      "evidence_summary": "该条应归入围手术期手术决策链，而不是 SC-036；但关键手术和冰冻正文缺失，不能提升。",
+      "next_action": "缺手术记录/冰冻病理回报有效正文，当前不能核对“浸润性腺癌”后是否调整手术范围。",
+      "document_count": 30,
+      "marker_hits": ["冰冻", "楔形切除", "手术记录"],
+      "marker_misses": ["浸润性腺癌"],
+      "evidence_snippets": [
+        {
+          "marker": "冰冻",
+          "snippet": "前诊断：1.左肺上叶占位性病变；2.高血压病；3.慢性阻塞性肺病急性加重期；4.双侧腹股沟斜疝，现患者病情稳定，拟于今日在全麻下行胸腔镜下左肺上叶楔形切除+术中冰冻（备淋巴结采样或清扫），术前准备已完善，术前已行多学科会诊，待术。"
+        },
+        {
+          "marker": "楔形切除",
+          "snippet": "择手术治疗。术前诊断：1.左肺上叶占位性病变；2.高血压病；3.慢性阻塞性肺病急性加重期；4.双侧腹股沟斜疝，现患者病情稳定，拟于今日在全麻下行胸腔镜下左肺上叶楔形切除+术中冰冻（备淋巴结采样或清扫），术前准备已完善，术前已行多学科会诊，待术。"
+        },
+        {
+          "marker": "手术记录",
+          "snippet": "稳定,待术。 医生签名:岳洋 手术记录 记录时间: 科室: 病房: 记录者: 手术医生签名: 术前小结: 手术项目: 手术编码: 手术等级: 手术医师: 手术I助: 手术II助"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1501,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 81,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 222,
+          "has_content": true
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 312,
+          "has_content": true
+        },
+        {
+          "title": "王标主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 595,
+          "has_content": true
+        },
+        {
+          "title": "王飞副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 718,
+          "has_content": true
+        },
+        {
+          "title": "梁应开主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 320,
+          "has_content": true
+        },
+        {
+          "title": "张京副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 303,
+          "has_content": true
+        },
+        {
+          "title": "术前主刀梁应开主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 300,
+          "has_content": true
+        },
+        {
+          "title": "石跃主治医师联合胸外科梁应开主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 1056,
+          "has_content": true
+        },
+        {
+          "title": "梁应开主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 341,
+          "has_content": true
+        },
+        {
+          "title": "张京副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 675,
+          "has_content": true
+        },
+        {
+          "title": "梁应开主治医师出院前查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 446,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 478,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 251,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 5,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 380,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 450,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0255",
+      "visit_id": "2286259",
+      "patient_name": "曾昌荣",
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "manual_issue_text": "病程中未记录3月15日胃镜检查结果。患者拟于3月17日行TAPP术，术前3月17日3:50,患者自述胸痛，未做详细查体，辅助检查不全面，仅查心电图及心肌标志物未见异常。考虑范围局限。未及时暂停手术而仍按计划于当日在全麻下行TAPP术，术后一天，患者出现寒战、高热、腹痛、诊断化脓性胆管炎、感染性休克。病历书写不完整，围手术期管理不到位。",
+      "before_primary_rule_id": "SC-036",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "same_family_or_effective_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-036",
+      "target_secondary_rule_ids": ["SC-081", "SC-113"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "原文可回收术前胸痛后仅完善心肌标志物/心电图、仍计划 TAPP，以及术后急性化脓性胆管炎链路；虽人工问题复合，但病程缺充分分析和围术期处理闭环同家族成立，按有效确认写回。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 35,
+      "marker_hits": ["胸痛", "TAPP", "化脓性胆管炎", "感染性休克"],
+      "marker_misses": ["胃镜"],
+      "evidence_snippets": [
+        {
+          "marker": "胸痛",
+          "snippet": "。 医师签名:杜忠宜 日常病程记录 查房内容：:患者出现胸痛，无明显胸闷等，完善肌钙蛋白等心肌标志物、心电图等检查。"
+        },
+        {
+          "marker": "TAPP",
+          "snippet": "伴钙化。故诊断。术前诊断明确,有手术指征;相关辅助检查未见绝对手术禁忌,术前准备完善,拟定于2026年03月17日在全麻下行腹腔镜下左侧腹股沟斜疝无张力修补术(TAPP)手术。与病员及家属充分沟通,其已了解病情,手术相关风险及并发症(详见手术同意书)已与病人及家属充分沟通并取得理解并选择手术治疗,术前准备已完善,手术部位已标识"
+        },
+        {
+          "marker": "化脓性胆管炎",
+          "snippet": ".00μmol/L,CRP 80.1mg/L。查房后指示：患者上腹部疼痛后出现寒战、发热、感染指标升高，且合并黄疸（直接胆红素升高为主）、肝功能不全，符合“急性化脓性胆管炎”表现，因辅查腹部彩超及上腹部CT未见胆道结石，故行上腹部MRI进一步了解胆囊及胆道情况。"
+        },
+        {
+          "marker": "感染性休克",
+          "snippet": "医生签名: 会诊记录 患者行TAPP术后继发“急性化脓性胆管炎、急性胆囊炎、感染性休克”,予以头孢哌酮钠舒巴坦钠抗感染治疗后复查血象仍较高,PCT较高,血小板持续性下降,故请会诊协助治疗。经重症医学科(ICU)彭中会诊后意见如下:本病人建议使用【"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1760,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 95,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 896,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 530,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 99,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 5,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 5,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 592,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 524,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 518,
+          "has_content": true
+        },
+        {
+          "title": "王标主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 850,
+          "has_content": true
+        },
+        {
+          "title": "王飞副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 300,
+          "has_content": true
+        },
+        {
+          "title": "王标主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 547,
+          "has_content": true
+        },
+        {
+          "title": "王飞副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 790,
+          "has_content": true
+        },
+        {
+          "title": "王标主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 651,
+          "has_content": true
+        },
+        {
+          "title": "王飞副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 647,
+          "has_content": true
+        },
+        {
+          "title": "王飞副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 725,
+          "has_content": true
+        },
+        {
+          "title": "术前主刀医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 535,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 541,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 355,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 295,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 266,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0289",
+      "visit_id": "2328112",
+      "patient_name": "殷孝容",
+      "issue_family": "首次病程诊断依据/鉴别诊断/诊疗计划缺陷",
+      "manual_issue_text": "入院记录中：给予左氧氟沙星片 1片 qd、孟鲁司特钠片1片 qd、甘氨酸氨茶碱缓释片1片 bid等描述不专业、未具体药物剂量。主诉中有咳嗽症状、而未对此进行鉴别诊断。",
+      "before_primary_rule_id": "SC-023",
+      "before_blocked_reason_type": "规则不支持",
+      "before_backlog_category": "可补规则",
+      "phase_outcome": "same_family_or_effective_confirmed",
+      "target_exact_review_status": "exact_confirmed",
+      "target_primary_rule_id": "SC-010",
+      "target_secondary_rule_ids": ["SC-023"],
+      "blocked_reason_type": "",
+      "specific_gap": "",
+      "evidence_summary": "入院记录既往/治疗经过用药以“1片 qd/bid”记录，未写具体剂量；同时主诉含咳嗽但首程正文为空，按入院记录用药史不规范与首程鉴别诊断组合有效确认。",
+      "next_action": "已重映射到正确规则族并完成本轮有效确认。",
+      "document_count": 23,
+      "marker_hits": [
+        "左氧氟沙星片 1片 qd",
+        "孟鲁司特钠片1片 qd",
+        "甘氨酸氨茶碱缓释片1片 bid",
+        "咳嗽"
+      ],
+      "marker_misses": [],
+      "evidence_snippets": [
+        {
+          "marker": "左氧氟沙星片 1片 qd",
+          "snippet": "026.4.1 到我院就诊，胸部螺旋CT平扫(含膈上肋骨) 右肺上叶钙化灶；右肺中下叶斑片影及索条影，伴部分支气管扩张，建议治疗后复查；肺气肿。呼吸内科医师给予左氧氟沙星片 1片 qd、孟鲁司特钠片1片 qd、甘氨酸氨茶碱缓释片1片 bid、肺力咳合剂 15ml tid 口服后咳嗽、咳痰症状缓解。3天前患者到药店自购药物涂外阴（具体用药不详）"
+        },
+        {
+          "marker": "孟鲁司特钠片1片 qd",
+          "snippet": "，胸部螺旋CT平扫(含膈上肋骨) 右肺上叶钙化灶；右肺中下叶斑片影及索条影，伴部分支气管扩张，建议治疗后复查；肺气肿。呼吸内科医师给予左氧氟沙星片 1片 qd、孟鲁司特钠片1片 qd、甘氨酸氨茶碱缓释片1片 bid、肺力咳合剂 15ml tid 口服后咳嗽、咳痰症状缓解。3天前患者到药店自购药物涂外阴（具体用药不详），自觉外阴肿痛症状无明显"
+        },
+        {
+          "marker": "甘氨酸氨茶碱缓释片1片 bid",
+          "snippet": "上肋骨) 右肺上叶钙化灶；右肺中下叶斑片影及索条影，伴部分支气管扩张，建议治疗后复查；肺气肿。呼吸内科医师给予左氧氟沙星片 1片 qd、孟鲁司特钠片1片 qd、甘氨酸氨茶碱缓释片1片 bid、肺力咳合剂 15ml tid 口服后咳嗽、咳痰症状缓解。3天前患者到药店自购药物涂外阴（具体用药不详），自觉外阴肿痛症状无明显缓解，今日门诊以“急性外阴炎”收"
+        },
+        {
+          "marker": "咳嗽",
+          "snippet": "入院记录 外阴 肿痛半月，咳嗽1周 患者于半月前无明显诱因开始出现左侧外阴肿痛，刚开始米粒大小，后逐渐发展到胡豆大小，不伴畏寒、发热、腹痛、腹泻。1周前开始出现咳嗽、咳痰，于2026.4.1"
+        }
+      ],
+      "empty_target_documents": ["首次病程记录", "术后首次病程记录", "转入记录", "转出记录"],
+      "document_summary": [
+        {
+          "title": "入院记录",
+          "type": "admission_record",
+          "source_table": "admission_record",
+          "length": 1315,
+          "has_content": true
+        },
+        {
+          "title": "入院记录诊断-修正诊断-4",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-入院诊断-1",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-补充诊断-5",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-出院诊断-3",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "入院记录诊断-初步诊断-2",
+          "type": "admission_record_diagnosis",
+          "source_table": "admission_record_diagnosis",
+          "length": 95,
+          "has_content": true
+        },
+        {
+          "title": "首次病程记录",
+          "type": "first_course_record",
+          "source_table": "first_course_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "申威副主任医师查房",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 500,
+          "has_content": true
+        },
+        {
+          "title": "日常病程记录",
+          "type": "daily_course_record",
+          "source_table": "daily_course_record",
+          "length": 153,
+          "has_content": true
+        },
+        {
+          "title": "王春萌主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 615,
+          "has_content": true
+        },
+        {
+          "title": "申威副主任医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 507,
+          "has_content": true
+        },
+        {
+          "title": "王春萌主治医师查房记录",
+          "type": "senior_course_record",
+          "source_table": "senior_course_record",
+          "length": 292,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 131,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 277,
+          "has_content": true
+        },
+        {
+          "title": "会诊记录",
+          "type": "consultation_record",
+          "source_table": "consultation_record",
+          "length": 166,
+          "has_content": true
+        },
+        {
+          "title": "手术记录",
+          "type": "surgery_record",
+          "source_table": "surgery_record",
+          "length": 169,
+          "has_content": true
+        },
+        {
+          "title": "术后首次病程记录",
+          "type": "postsurg_firstcourse_record",
+          "source_table": "postsurg_firstcourse_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "抢救记录",
+          "type": "rescue_record",
+          "source_table": "rescue_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转入记录",
+          "type": "transfer_in_record",
+          "source_table": "transfer_in_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "转出记录",
+          "type": "transfer_out_record",
+          "source_table": "transfer_out_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "护理记录",
+          "type": "nursing_record",
+          "source_table": "nursing_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录",
+          "type": "discharge_record",
+          "source_table": "discharge_record",
+          "length": 0,
+          "has_content": false
+        },
+        {
+          "title": "出院记录诊断-诊断",
+          "type": "discharge_record_diagnosis",
+          "source_table": "discharge_record_diagnosis",
+          "length": 0,
+          "has_content": false
+        }
+      ]
+    }
+  ]
+}

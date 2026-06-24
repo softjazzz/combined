@@ -1,0 +1,117 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T20:15:56.198317",
+  "run_finished_at": "2026-04-22T20:15:57.971645",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 0,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 1,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_admission_secondary_diagnosis_omitted_v1_pass.json",
+      "issue_type": "A5_admission_secondary_diagnosis_omitted",
+      "display_name": "入院诊断遗漏重要并存疾病",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-020"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P004",
+        "visit_id": "SYN-RUN-033",
+        "mr_no": "SYN0033",
+        "patient_name": "合成患者四",
+        "gender": "女",
+        "age": 58,
+        "department": "风湿免疫科"
+      },
+      "elapsed_seconds": 1.678,
+      "total_tokens": 769,
+      "prompt_tokens": 651,
+      "completion_tokens": 118,
+      "api_time": 1.676,
+      "packs": [
+        {
+          "pack_id": "admission_consistency_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-020"
+          ],
+          "tokens_used": 769,
+          "prompt_tokens": 651,
+          "completion_tokens": 118,
+          "api_time": 1.6757328510284424
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-020",
+          "rule_name": "入院记录无入院诊断或主次顺序错误或次要诊断有重要遗漏",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "入院诊断明确，主次顺序合理，无重要遗漏。",
+          "evidence": "入院诊断：1. 类风湿关节炎活动期；2. 双膝关节滑膜炎",
+          "suggestion": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院诊断明确，主次顺序合理，无重要遗漏。\",\n      \"evidence\": \"入院诊断：1. 类风湿关节炎活动期；2. 双膝关节滑膜炎\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            93,
+            121
+          ],
+          "metadata": {
+            "tokens_used": 769,
+            "prompt_tokens": 651,
+            "completion_tokens": 118,
+            "input_tokens": 651,
+            "output_tokens": 118,
+            "api_time": 1.6757328510284424,
+            "first_result_latency": 1.6757328510284424,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 231
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-020": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ]
+}

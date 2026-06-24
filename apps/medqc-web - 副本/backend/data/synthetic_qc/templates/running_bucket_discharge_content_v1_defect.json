@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_discharge_content_v1",
+    "issue_type": "Z05_discharge_content",
+    "display_name": "出院记录内容",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-118", "SC-123"],
+    "bucket_id": "discharge_content"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P105",
+    "visit_id": "SYN-RUN-105",
+    "mr_no": "SYN0105",
+    "patient_name": "合成患者戊",
+    "gender": "男",
+    "age": 67,
+    "department": "心内科"
+  },
+  "documents": [
+    {
+      "document_type": "discharge_record",
+      "title": "出院记录",
+      "content": "入院日期：2026-04-01。出院日期：2026-04-08。入院诊断：冠心病。诊疗经过仅写“治疗后好转”，未写住院期间主要检查结果、关键治疗措施及疗效。出院情况：好转。出院带药仅写“带药3种”，未写药物名称、剂量、给药频次、用法及疗程，也未写复诊要求。记录末尾无医师签名。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["冠心病"],
+    "orders": ["带药3种（名称剂量频次疗程均未写明）"],
+    "exams": []
+  }
+}

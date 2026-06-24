@@ -1,0 +1,505 @@
+{
+  "id": "6d9aa33b-141c-4832-8c2c-5f6daa8afaf3",
+  "mode": "sequential_batch",
+  "document_type": "病程记录",
+  "document_id": "batch_1763106476844",
+  "rule_ids": [
+    "LX-010",
+    "LX-011",
+    "LX-012",
+    "LX-013",
+    "LX-014",
+    "LX-016",
+    "LX-031",
+    "LX-032",
+    "LX-033"
+  ],
+  "medical_text": "首次病程记录\n\n病例特点：\n1. 患者为中老年男性，58岁；\n2. 主诉：反复胸闷、气促3年，加重伴晕厥1天；\n3. 现病史：患者3年前无明显诱因出现活动后胸闷、气促，休息后可缓解。近1年来症状逐渐加重，活动耐量明显下降。1天前晨起时突发晕厥，持续约1分钟后自行恢复，伴出汗、心悸。就诊于我院急诊，查心电图示完全性左束支传导阻滞，心肌酶谱升高，为进一步诊治收入我科；\n4. 既往史：高血压病史10年，最高血压180/110mmHg，规律服用降压药物，血压控制尚可；2型糖尿病病史5年，口服降糖药治疗，血糖控制一般；\n5. 体格检查：T 36.8℃，P 88次/分，R 20次/分，BP 145/90mmHg。神志清楚，精神一般。双肺呼吸音粗，双肺底可闻及少许湿性啰音。心界向左下扩大，心率88次/分，律齐，心尖部可闻及3/6级收缩期吹风样杂音。双下肢轻度水肿；\n6. 辅助检查：\n   - 心电图：窦性心律，完全性左束支传导阻滞，ST-T改变；\n   - 心肌酶谱：肌钙蛋白I 0.85ng/ml（正常<0.04），肌酸激酶同工酶58U/L（正常<25）；\n   - 胸片：心影增大，双肺纹理增多，肺淤血征象；\n   - 超声心动图：左室扩大（LVEDd 65mm），左室射血分数35%，二尖瓣中度反流；\n   - 实验室检查：BNP 1250pg/ml（正常<100），血糖8.5mmol/L，肾功能正常。\n\n初步诊断：\n1. 冠心病 急性非ST段抬高型心肌梗死\n2. 心功能不全 心功能Ⅲ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n\n诊断依据：\n1. 中老年男性，有高血压、糖尿病等冠心病危险因素；\n2. 反复胸闷、气促3年，加重伴晕厥1天，符合急性冠脉综合征临床表现；\n3. 心电图示完全性左束支传导阻滞，ST-T改变；\n4. 心肌酶谱明显升高：肌钙蛋白I 0.85ng/ml，肌酸激酶同工酶58U/L；\n5. BNP明显升高（1250pg/ml），提示心功能不全；\n6. 超声心动图示左室扩大、射血分数降低（35%），二尖瓣反流；\n7. 体格检查示心界扩大，双肺底湿啰音，双下肢水肿，符合心功能不全表现。\n\n鉴别诊断：\n1. 扩张型心肌病：需进一步完善冠脉造影明确冠脉情况；\n2. 肺栓塞：患者胸闷、气促症状明显，但D-二聚体正常，胸片未见明显异常；\n3. 主动脉夹层：患者有高血压病史，但无典型撕裂样疼痛，胸片未见纵隔增宽。\n\n诊疗计划：\n1. 冠心病监护病房（CCU）监护，心电监护、吸氧；\n2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；\n3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；\n4. 改善心肌代谢：曲美他嗪20mg tid；\n5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；\n6. 降压治疗：继续原降压方案；\n7. 控制血糖：调整降糖方案；\n8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；\n9. 监测心肌酶谱、肾功能、电解质等；\n10. 一级护理，低盐低脂糖尿病饮食。\n\n医师签名：张医生\n日期：2025-10-31",
+  "medical_text_length": 1314,
+  "stats": {
+    "total": 9,
+    "compliant": 4,
+    "passed": 4,
+    "notApplicable": 0,
+    "issues": 5,
+    "errors": 0
+  },
+  "performance": {
+    "totalTokens": 21023,
+    "totalTime": 97.7328372001648,
+    "avgTime": 10.859204133351644
+  },
+  "results": [
+    {
+      "ruleId": "LX-010",
+      "ruleName": "首次病程记录-缺失诊断依据",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "病历文本中的首次病程记录包含了所有初步诊断的诊断依据、鉴别诊断以及诊疗计划，符合质控规则的要求。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"初步诊断：1. 冠心病 急性非ST段抬高型心肌梗死 2. 心功能不全 心功能Ⅲ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"；记载：\"诊断依据：1. 中老年男性，有高血压、糖尿病等冠心病危险因素；2. 反复胸闷、气促3年，加重伴晕厥1天，符合急性冠脉综合征临床表现；3. 心电图示完全性左束支传导阻滞，ST-T改变；4. 心肌酶谱明显升高：肌钙蛋白I 0.85ng/ml，肌酸激酶同工酶58U/L；5. BNP明显升高（1250pg/ml），提示心功能不全；6. 超声心动图示左室扩大、射血分数降低（35%），二尖瓣反流；7. 体格检查示心界扩大，双肺底湿啰音，双下肢水肿，符合心功能不全表现。\"；记载：\"鉴别诊断：1. 扩张型心肌病：需进一步完善冠脉造影明确冠脉情况；2. 肺栓塞：患者胸闷、气促症状明显，但D-二聚体正常，胸片未见明显异常；3. 主动脉夹层：患者有高血压病史，但无典型撕裂样疼痛，胸片未见纵隔增宽。\"；记载：\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\"",
+      "suggestion": "(1) 继续按照当前诊疗计划执行，并定期复查相关指标。(2) 根据病情变化及时调整治疗方案。",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"病历文本中的首次病程记录包含了所有初步诊断的诊断依据、鉴别诊断以及诊疗计划，符合质控规则的要求。\",\n  \"issues\": [],\n  \"evidence\": \"记载：\\\"初步诊断：1. 冠心病 急性非ST段抬高型心肌梗死 2. 心功能不全 心功能Ⅲ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\\\"；记载：\\\"诊断依据：1. 中老年男性，有高血压、糖尿病等冠心病危险因素；2. 反复胸闷、气促3年，加重伴晕厥1天，符合急性冠脉综合征临床表现；3. 心电图示完全性左束支传导阻滞，ST-T改变；4. 心肌酶谱明显升高：肌钙蛋白I 0.85ng/ml，肌酸激酶同工酶58U/L；5. BNP明显升高（1250pg/ml），提示心功能不全；6. 超声心动图示左室扩大、射血分数降低（35%），二尖瓣反流；7. 体格检查示心界扩大，双肺底湿啰音，双下肢水肿，符合心功能不全表现。\\\"；记载：\\\"鉴别诊断：1. 扩张型心肌病：需进一步完善冠脉造影明确冠脉情况；2. 肺栓塞：患者胸闷、气促症状明显，但D-二聚体正常，胸片未见明显异常；3. 主动脉夹层：患者有高血压病史，但无典型撕裂样疼痛，胸片未见纵隔增宽。\\\"；记载：\\\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\\\"\",\n  \"suggestion\": \"(1) 继续按照当前诊疗计划执行，并定期复查相关指标。(2) 根据病情变化及时调整治疗方案。\",\n  \"confidence\": 0.85\n}\n```",
+      "metadata": {
+        "tokens_used": 2663,
+        "api_time": 17.962618112564087
+      }
+    },
+    {
+      "ruleId": "LX-011",
+      "ruleName": "首次病程记录-未明确诊断患者，鉴别诊断无具体诊断名称",
+      "isCompliant": false,
+      "status": "non_compliant",
+      "findings": "病历中的鉴别诊断部分虽然列出了几个可能的诊断，但没有详细说明排除或支持这些诊断的依据，不符合规则要求。",
+      "issues": [
+        {
+          "description": "鉴别诊断依据不足",
+          "evidence": "鉴别诊断部分仅简单列举了几个可能的诊断，未详细说明依据。"
+        }
+      ],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "鉴别诊断：\n1. 扩张型心肌病：需进一步完善冠脉造影明确冠脉情况；\n2. 肺栓塞：患者胸闷、气促症状明显，但D-二聚体正常，胸片未见明显异常；\n3. 主动脉夹层：患者有高血压病史，但无典型撕裂样疼痛，胸片未见纵隔增宽。",
+      "suggestion": "(1) 补充扩张型心肌病的鉴别依据，例如超声心动图特征或其他实验室检查结果。\n(2) 对于肺栓塞，除了D-二聚体正常外，可以增加其他影像学检查如CT肺动脉造影的结果。\n(3) 对于主动脉夹层，除了胸片未见纵隔增宽外，可以增加其他检查如主动脉CTA的结果。",
+      "evidenceVerified": true,
+      "confidence": 0.8,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": false,\n  \"findings\": \"病历中的鉴别诊断部分虽然列出了几个可能的诊断，但没有详细说明排除或支持这些诊断的依据，不符合规则要求。\",\n  \"issues\": [\n    {\n      \"description\": \"鉴别诊断依据不足\",\n      \"evidence\": \"鉴别诊断部分仅简单列举了几个可能的诊断，未详细说明依据。\"\n    }\n  ],\n  \"evidence\": \"鉴别诊断：\\n1. 扩张型心肌病：需进一步完善冠脉造影明确冠脉情况；\\n2. 肺栓塞：患者胸闷、气促症状明显，但D-二聚体正常，胸片未见明显异常；\\n3. 主动脉夹层：患者有高血压病史，但无典型撕裂样疼痛，胸片未见纵隔增宽。\",\n  \"suggestion\": \"(1) 补充扩张型心肌病的鉴别依据，例如超声心动图特征或其他实验室检查结果。\\n(2) 对于肺栓塞，除了D-二聚体正常外，可以增加其他影像学检查如CT肺动脉造影的结果。\\n(3) 对于主动脉夹层，除了胸片未见纵隔增宽外，可以增加其他检查如主动脉CTA的结果。\",\n  \"confidence\": 0.8\n}\n```",
+      "metadata": {
+        "tokens_used": 2284,
+        "api_time": 11.346126079559326
+      }
+    },
+    {
+      "ruleId": "LX-012",
+      "ruleName": "使用抗菌药物治疗的患者，使用情况未在病程记录中记录",
+      "isCompliant": false,
+      "status": "non_compliant",
+      "findings": "病历中未记录使用抗菌药物的情况，但存在使用抗血小板聚集药物、抗凝药物等治疗措施。由于没有提及抗菌药物的使用，无法确定是否符合规则要求。",
+      "issues": [
+        {
+          "description": "未记录抗菌药物使用",
+          "evidence": "诊疗计划中未提及抗菌药物使用情况"
+        }
+      ],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "诊疗计划记载：\"1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\"",
+      "suggestion": "(1) 若患者使用了系统性抗菌药物，需补充抗菌药物名称、剂量/疗程、疗效或不良反应。(2) 若未使用抗菌药物，需在病程记录中明确说明。",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": false,\n  \"findings\": \"病历中未记录使用抗菌药物的情况，但存在使用抗血小板聚集药物、抗凝药物等治疗措施。由于没有提及抗菌药物的使用，无法确定是否符合规则要求。\",\n  \"issues\": [\n    {\n      \"description\": \"未记录抗菌药物使用\",\n      \"evidence\": \"诊疗计划中未提及抗菌药物使用情况\"\n    }\n  ],\n  \"evidence\": \"诊疗计划记载：\\\"1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\\\"\",\n  \"suggestion\": \"(1) 若患者使用了系统性抗菌药物，需补充抗菌药物名称、剂量/疗程、疗效或不良反应。(2) 若未使用抗菌药物，需在病程记录中明确说明。\",\n  \"confidence\": 0.8\n}\n```",
+      "metadata": {
+        "tokens_used": 2385,
+        "api_time": 11.728042364120483
+      }
+    },
+    {
+      "ruleId": "LX-013",
+      "ruleName": "医嘱中开具化疗药物，病程中未记录",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "病历中未发现化疗药物医嘱，因此无需进一步核查化疗方案或药物名称及执行情况。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\"",
+      "suggestion": "(1) 继续密切监测患者病情变化，及时调整治疗方案。(2) 如后续治疗中涉及化疗药物，务必详细记录化疗方案及药物名称，并跟踪记录执行情况。",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"病历中未发现化疗药物医嘱，因此无需进一步核查化疗方案或药物名称及执行情况。\",\n  \"issues\": [],\n  \"evidence\": \"记载：\\\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\\\"\",\n  \"suggestion\": \"(1) 继续密切监测患者病情变化，及时调整治疗方案。(2) 如后续治疗中涉及化疗药物，务必详细记录化疗方案及药物名称，并跟踪记录执行情况。\",\n  \"confidence\": 0.8\n}\n```",
+      "metadata": {
+        "tokens_used": 2315,
+        "api_time": 10.463743209838867
+      }
+    },
+    {
+      "ruleId": "LX-014",
+      "ruleName": "存在接班记录，缺交班记录",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "病历文本中未发现经治医师变更或接/交班场景，因此规则不适用。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载:\"医师签名：张医生\"，日期：2025-10-31。病历文本中未提及任何医师变更或接/交班记录。",
+      "suggestion": "",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"病历文本中未发现经治医师变更或接/交班场景，因此规则不适用。\",\n  \"issues\": [],\n  \"evidence\": \"记载:\\\"医师签名：张医生\\\"，日期：2025-10-31。病历文本中未提及任何医师变更或接/交班记录。\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.8\n}\n```\n\n根据提供的病历文本，没有发现任何关于医师变更或接/交班的记录。因此，规则LX-014不适用于此病历文本。",
+      "metadata": {
+        "tokens_used": 2254,
+        "api_time": 5.502252817153931
+      }
+    },
+    {
+      "ruleId": "LX-016",
+      "ruleName": "申请会诊医师未在病程记录中记录会诊意见执行情况",
+      "isCompliant": false,
+      "status": "non_compliant",
+      "findings": "病历中没有记录任何会诊意见及其执行情况，不符合规则LX-016的要求。",
+      "issues": [
+        {
+          "description": "未记录会诊意见",
+          "evidence": "病程记录中未提及任何会诊意见及其执行情况"
+        }
+      ],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；...\" 等内容，但未见有关会诊意见及其执行情况的记录。",
+      "suggestion": "(1) 在病程记录中补充会诊意见的详细内容，包括会诊医师的意见要点。\n(2) 记录申请会诊医师对会诊意见的执行情况，包括具体的执行措施和后续处理。\n(3) 如有需要，补充会诊后的随访记录，以确保会诊意见得到充分落实。",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": false,\n  \"findings\": \"病历中没有记录任何会诊意见及其执行情况，不符合规则LX-016的要求。\",\n  \"issues\": [\n    {\n      \"description\": \"未记录会诊意见\",\n      \"evidence\": \"病程记录中未提及任何会诊意见及其执行情况\"\n    }\n  ],\n  \"evidence\": \"记载：\\\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；...\\\" 等内容，但未见有关会诊意见及其执行情况的记录。\",\n  \"suggestion\": \"(1) 在病程记录中补充会诊意见的详细内容，包括会诊医师的意见要点。\\n(2) 记录申请会诊医师对会诊意见的执行情况，包括具体的执行措施和后续处理。\\n(3) 如有需要，补充会诊后的随访记录，以确保会诊意见得到充分落实。\",\n  \"confidence\": 0.8\n}\n```",
+      "metadata": {
+        "tokens_used": 2244,
+        "api_time": 10.129565715789795
+      }
+    },
+    {
+      "ruleId": "LX-031",
+      "ruleName": "检验报告-日常病程记录-检验结果异常在病程记录中无分析、处理记录",
+      "isCompliant": false,
+      "status": "non_compliant",
+      "findings": "病历文本中存在多个异常检验结果，但在病程记录中缺乏对这些异常指标的详细分析和处理记录。",
+      "issues": [
+        {
+          "description": "心肌酶谱异常未分析",
+          "evidence": "心肌酶谱异常，但病程记录中未见分析"
+        },
+        {
+          "description": "BNP异常未分析",
+          "evidence": "BNP异常升高，但病程记录中未见分析"
+        }
+      ],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"心肌酶谱：肌钙蛋白I 0.85ng/ml（正常<0.04），肌酸激酶同工酶58U/L（正常<25）\"；记载：\"BNP 1250pg/ml（正常<100）\"",
+      "suggestion": "(1) 在病程记录中补充对心肌酶谱异常的详细分析，包括可能的原因、对病情的影响以及后续处理措施。(2) 在病程记录中补充对BNP异常升高的详细分析，包括可能的原因、对病情的影响以及后续处理措施。",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": false,\n  \"findings\": \"病历文本中存在多个异常检验结果，但在病程记录中缺乏对这些异常指标的详细分析和处理记录。\",\n  \"issues\": [\n    {\n      \"description\": \"心肌酶谱异常未分析\",\n      \"evidence\": \"心肌酶谱异常，但病程记录中未见分析\"\n    },\n    {\n      \"description\": \"BNP异常未分析\",\n      \"evidence\": \"BNP异常升高，但病程记录中未见分析\"\n    }\n  ],\n  \"evidence\": \"记载：\\\"心肌酶谱：肌钙蛋白I 0.85ng/ml（正常<0.04），肌酸激酶同工酶58U/L（正常<25）\\\"；记载：\\\"BNP 1250pg/ml（正常<100）\\\"\",\n  \"suggestion\": \"(1) 在病程记录中补充对心肌酶谱异常的详细分析，包括可能的原因、对病情的影响以及后续处理措施。(2) 在病程记录中补充对BNP异常升高的详细分析，包括可能的原因、对病情的影响以及后续处理措施。\",\n  \"confidence\": 0.8\n}\n```",
+      "metadata": {
+        "tokens_used": 2276,
+        "api_time": 11.202582836151123
+      }
+    },
+    {
+      "ruleId": "LX-032",
+      "ruleName": "对确诊困难的病例未进行疑难病例讨论",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "病历文本中患者入院后三天内已经明确了诊断，且没有提及需要进行疑难病例讨论的情况。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"初步诊断：1. 冠心病 急性非ST段抬高型心肌梗死 2. 心功能不全 心功能Ⅲ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"。记载：\"诊疗计划：... 8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；...\"。病历中显示患者入院后三天内已经明确了诊断，并制定了相应的诊疗计划，无需进行疑难病例讨论。",
+      "suggestion": "(1) 继续密切监测患者病情变化，及时调整治疗方案。(2) 若后续诊断过程中遇到困难，应及时组织疑难病例讨论并记录详细过程。",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"病历文本中患者入院后三天内已经明确了诊断，且没有提及需要进行疑难病例讨论的情况。\",\n  \"issues\": [],\n  \"evidence\": \"记载：\\\"初步诊断：1. 冠心病 急性非ST段抬高型心肌梗死 2. 心功能不全 心功能Ⅲ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\\\"。记载：\\\"诊疗计划：... 8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；...\\\"。病历中显示患者入院后三天内已经明确了诊断，并制定了相应的诊疗计划，无需进行疑难病例讨论。\",\n  \"suggestion\": \"(1) 继续密切监测患者病情变化，及时调整治疗方案。(2) 若后续诊断过程中遇到困难，应及时组织疑难病例讨论并记录详细过程。\",\n  \"confidence\": 0.8\n}\n```",
+      "metadata": {
+        "tokens_used": 2220,
+        "api_time": 7.2389960289001465
+      }
+    },
+    {
+      "ruleId": "LX-033",
+      "ruleName": "对疗效不确切的病例未进行疑难病例讨论",
+      "isCompliant": false,
+      "status": "non_compliant",
+      "findings": "病历中未提及疗效不佳或非计划再次手术的情况，也未记录任何疑难病例讨论。因此，无法确定是否符合规则LX-033的要求。",
+      "issues": [
+        {
+          "description": "疗效不佳未讨论",
+          "evidence": "病程记录中未提及疗效不佳或非计划再次手术，也未记录疑难病例讨论。"
+        }
+      ],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\"",
+      "suggestion": "(1) 若患者在入院三天后出现疗效不佳或非计划再次手术的情况，应及时记录并组织疑难病例讨论。(2) 讨论记录应详细记录讨论的时间、地点、参加人员、讨论内容及结论，并归档保存。",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": false,\n  \"findings\": \"病历中未提及疗效不佳或非计划再次手术的情况，也未记录任何疑难病例讨论。因此，无法确定是否符合规则LX-033的要求。\",\n  \"issues\": [\n    {\n      \"description\": \"疗效不佳未讨论\",\n      \"evidence\": \"病程记录中未提及疗效不佳或非计划再次手术，也未记录疑难病例讨论。\"\n    }\n  ],\n  \"evidence\": \"记载：\\\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\\\"\",\n  \"suggestion\": \"(1) 若患者在入院三天后出现疗效不佳或非计划再次手术的情况，应及时记录并组织疑难病例讨论。(2) 讨论记录应详细记录讨论的时间、地点、参加人员、讨论内容及结论，并归档保存。\",\n  \"confidence\": 0.7\n}\n```",
+      "metadata": {
+        "tokens_used": 2382,
+        "api_time": 12.158910036087036
+      }
+    }
+  ],
+  "payload": {
+    "document_id": "batch_1763106476844",
+    "evaluation_summary": {
+      "compliance_rate": 44,
+      "issues_found": 5,
+      "total_rules": 9,
+      "compliant_rules": 4,
+      "not_applicable": 0,
+      "model": "qwen2.5-32b-instruct"
+    },
+    "evaluation_results": [
+      {
+        "rule_id": "LX-010",
+        "rule_name": "首次病程记录-缺失诊断依据",
+        "is_compliant": true,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历文本中的首次病程记录包含了所有初步诊断的诊断依据、鉴别诊断以及诊疗计划，符合质控规则的要求。",
+        "evidence": "记载：\"初步诊断：1. 冠心病 急性非ST段抬高型心肌梗死 2. 心功能不全 心功能Ⅲ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"；记载：\"诊断依据：1. 中老年男性，有高血压、糖尿病等冠心病危险因素；2. 反复胸闷、气促3年，加重伴晕厥1天，符合急性冠脉综合征临床表现；3. 心电图示完全性左束支传导阻滞，ST-T改变；4. 心肌酶谱明显升高：肌钙蛋白I 0.85ng/ml，肌酸激酶同工酶58U/L；5. BNP明显升高（1250pg/ml），提示心功能不全；6. 超声心动图示左室扩大、射血分数降低（35%），二尖瓣反流；7. 体格检查示心界扩大，双肺底湿啰音，双下肢水肿，符合心功能不全表现。\"；记载：\"鉴别诊断：1. 扩张型心肌病：需进一步完善冠脉造影明确冠脉情况；2. 肺栓塞：患者胸闷、气促症状明显，但D-二聚体正常，胸片未见明显异常；3. 主动脉夹层：患者有高血压病史，但无典型撕裂样疼痛，胸片未见纵隔增宽。\"；记载：\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\"",
+        "suggestion": "(1) 继续按照当前诊疗计划执行，并定期复查相关指标。(2) 根据病情变化及时调整治疗方案。",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2663,
+          "api_time": 17.962618112564087
+        }
+      },
+      {
+        "rule_id": "LX-011",
+        "rule_name": "首次病程记录-未明确诊断患者，鉴别诊断无具体诊断名称",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": true,
+        "findings": "病历中的鉴别诊断部分虽然列出了几个可能的诊断，但没有详细说明排除或支持这些诊断的依据，不符合规则要求。",
+        "evidence": "鉴别诊断：\n1. 扩张型心肌病：需进一步完善冠脉造影明确冠脉情况；\n2. 肺栓塞：患者胸闷、气促症状明显，但D-二聚体正常，胸片未见明显异常；\n3. 主动脉夹层：患者有高血压病史，但无典型撕裂样疼痛，胸片未见纵隔增宽。",
+        "suggestion": "(1) 补充扩张型心肌病的鉴别依据，例如超声心动图特征或其他实验室检查结果。\n(2) 对于肺栓塞，除了D-二聚体正常外，可以增加其他影像学检查如CT肺动脉造影的结果。\n(3) 对于主动脉夹层，除了胸片未见纵隔增宽外，可以增加其他检查如主动脉CTA的结果。",
+        "confidence": 0.8,
+        "metadata": {
+          "tokens_used": 2284,
+          "api_time": 11.346126079559326
+        }
+      },
+      {
+        "rule_id": "LX-012",
+        "rule_name": "使用抗菌药物治疗的患者，使用情况未在病程记录中记录",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历中未记录使用抗菌药物的情况，但存在使用抗血小板聚集药物、抗凝药物等治疗措施。由于没有提及抗菌药物的使用，无法确定是否符合规则要求。",
+        "evidence": "诊疗计划记载：\"1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\"",
+        "suggestion": "(1) 若患者使用了系统性抗菌药物，需补充抗菌药物名称、剂量/疗程、疗效或不良反应。(2) 若未使用抗菌药物，需在病程记录中明确说明。",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2385,
+          "api_time": 11.728042364120483
+        }
+      },
+      {
+        "rule_id": "LX-013",
+        "rule_name": "医嘱中开具化疗药物，病程中未记录",
+        "is_compliant": true,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历中未发现化疗药物医嘱，因此无需进一步核查化疗方案或药物名称及执行情况。",
+        "evidence": "记载：\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\"",
+        "suggestion": "(1) 继续密切监测患者病情变化，及时调整治疗方案。(2) 如后续治疗中涉及化疗药物，务必详细记录化疗方案及药物名称，并跟踪记录执行情况。",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2315,
+          "api_time": 10.463743209838867
+        }
+      },
+      {
+        "rule_id": "LX-014",
+        "rule_name": "存在接班记录，缺交班记录",
+        "is_compliant": true,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历文本中未发现经治医师变更或接/交班场景，因此规则不适用。",
+        "evidence": "记载:\"医师签名：张医生\"，日期：2025-10-31。病历文本中未提及任何医师变更或接/交班记录。",
+        "suggestion": "",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2254,
+          "api_time": 5.502252817153931
+        }
+      },
+      {
+        "rule_id": "LX-016",
+        "rule_name": "申请会诊医师未在病程记录中记录会诊意见执行情况",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历中没有记录任何会诊意见及其执行情况，不符合规则LX-016的要求。",
+        "evidence": "记载：\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；...\" 等内容，但未见有关会诊意见及其执行情况的记录。",
+        "suggestion": "(1) 在病程记录中补充会诊意见的详细内容，包括会诊医师的意见要点。\n(2) 记录申请会诊医师对会诊意见的执行情况，包括具体的执行措施和后续处理。\n(3) 如有需要，补充会诊后的随访记录，以确保会诊意见得到充分落实。",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2244,
+          "api_time": 10.129565715789795
+        }
+      },
+      {
+        "rule_id": "LX-031",
+        "rule_name": "检验报告-日常病程记录-检验结果异常在病程记录中无分析、处理记录",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历文本中存在多个异常检验结果，但在病程记录中缺乏对这些异常指标的详细分析和处理记录。",
+        "evidence": "记载：\"心肌酶谱：肌钙蛋白I 0.85ng/ml（正常<0.04），肌酸激酶同工酶58U/L（正常<25）\"；记载：\"BNP 1250pg/ml（正常<100）\"",
+        "suggestion": "(1) 在病程记录中补充对心肌酶谱异常的详细分析，包括可能的原因、对病情的影响以及后续处理措施。(2) 在病程记录中补充对BNP异常升高的详细分析，包括可能的原因、对病情的影响以及后续处理措施。",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2276,
+          "api_time": 11.202582836151123
+        }
+      },
+      {
+        "rule_id": "LX-032",
+        "rule_name": "对确诊困难的病例未进行疑难病例讨论",
+        "is_compliant": true,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历文本中患者入院后三天内已经明确了诊断，且没有提及需要进行疑难病例讨论的情况。",
+        "evidence": "记载：\"初步诊断：1. 冠心病 急性非ST段抬高型心肌梗死 2. 心功能不全 心功能Ⅲ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"。记载：\"诊疗计划：... 8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；...\"。病历中显示患者入院后三天内已经明确了诊断，并制定了相应的诊疗计划，无需进行疑难病例讨论。",
+        "suggestion": "(1) 继续密切监测患者病情变化，及时调整治疗方案。(2) 若后续诊断过程中遇到困难，应及时组织疑难病例讨论并记录详细过程。",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2220,
+          "api_time": 7.2389960289001465
+        }
+      },
+      {
+        "rule_id": "LX-033",
+        "rule_name": "对疗效不确切的病例未进行疑难病例讨论",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历中未提及疗效不佳或非计划再次手术的情况，也未记录任何疑难病例讨论。因此，无法确定是否符合规则LX-033的要求。",
+        "evidence": "记载：\"诊疗计划：1. 冠心病监护病房（CCU）监护，心电监护、吸氧；2. 抗血小板聚集：阿司匹林100mg qd，氯吡格雷75mg qd；3. 抗凝治疗：低分子肝素钙5000U q12h 皮下注射；4. 改善心肌代谢：曲美他嗪20mg tid；5. 强心利尿：呋塞米20mg qd，螺内酯20mg qd；6. 降压治疗：继续原降压方案；7. 控制血糖：调整降糖方案；8. 完善冠脉造影检查，明确冠脉病变情况，必要时行PCI治疗；9. 监测心肌酶谱、肾功能、电解质等；10. 一级护理，低盐低脂糖尿病饮食。\"",
+        "suggestion": "(1) 若患者在入院三天后出现疗效不佳或非计划再次手术的情况，应及时记录并组织疑难病例讨论。(2) 讨论记录应详细记录讨论的时间、地点、参加人员、讨论内容及结论，并归档保存。",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2382,
+          "api_time": 12.158910036087036
+        }
+      }
+    ],
+    "performance_metrics": {
+      "processing_time": 97.7328372001648,
+      "token_usage": 21023,
+      "estimated_cost": 0
+    },
+    "prompt_mode": "sequential_batch",
+    "llm_info": {
+      "model": "qwen2.5-32b-instruct"
+    }
+  },
+  "metadata": {
+    "trigger": "batch_test_ui"
+  },
+  "model": "qwen2.5-32b-instruct",
+  "created_at": "2025-11-14T07:47:55.398195+00:00",
+  "source": "demo"
+}

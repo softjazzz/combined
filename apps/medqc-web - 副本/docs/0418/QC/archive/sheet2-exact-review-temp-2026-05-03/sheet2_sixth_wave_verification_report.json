@@ -1,0 +1,42 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 21,
+  "families": [
+    {
+      "issue_family": "病程时效/缺失",
+      "row_count": 17,
+      "job_id": "f89b02cb-8d05-4bc6-be82-b50ac25d3ea0",
+      "result_breakdown": {
+        "miss": 17
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 17
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "出院记录缺失/提前书写/时效异常/签名缺失",
+      "row_count": 4,
+      "job_id": "94f94c79-ecf9-4c95-bc40-e12bdb8eb240",
+      "result_breakdown": {
+        "miss": 4
+      },
+      "executor_breakdown": {
+        "program": 3,
+        "llm": 0
+      },
+      "items_count": 0,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 223,
+    "miss": 46,
+    "same_family_hit": 12,
+    "skip": 2
+  }
+}

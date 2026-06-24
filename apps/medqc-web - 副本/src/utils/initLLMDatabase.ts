@@ -1,0 +1,313 @@
+/**
+ * 初始化LLM数据库数据
+ * 用于在前端直接初始化LLM提供商和模型数据
+ */
+
+import { supabase } from '@/lib/backend-store'
+
+// LLM提供商数据
+const LLM_PROVIDERS = [
+  {
+    provider_code: 'alibaba',
+    provider_name: '阿里通义千问',
+    base_endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    request_format: 'openai',
+    requires_api_key: true,
+    description: '阿里云大模型服务，企业级可靠性，兼容OpenAI格式',
+    features: ['企业级', '高开发', '多模态', '中文优化'],
+    is_active: true,
+    sort_order: 1,
+  },
+  {
+    provider_code: 'siliconflow',
+    provider_name: '硅基流动 SiliconFlow',
+    base_endpoint: 'https://api.siliconflow.cn/v1',
+    request_format: 'openai',
+    requires_api_key: true,
+    description: '兼容 OpenAI 协议的 MaaS 平台，适合补充多种开源模型调用',
+    features: ['OpenAI兼容', '开源模型', '推理模型', '中文支持'],
+    is_active: true,
+    sort_order: 2,
+  },
+  {
+    provider_code: 'ollama',
+    provider_name: '内部 Ollama',
+    base_endpoint: 'http://127.0.0.1:11434/v1',
+    request_format: 'openai',
+    requires_api_key: false,
+    description: '内网 Ollama 服务，适合私有化模型接入',
+    features: ['内网部署', '无需外网', '模型可控'],
+    is_active: true,
+    sort_order: 3,
+  },
+]
+
+// LLM模型数据
+const LLM_MODELS = [
+  // 阿里云模型
+  {
+    provider_code: 'alibaba',
+    model_code: 'qwen-plus',
+    model_name: 'Qwen-Plus (通义千问Plus)',
+    description: '高性能通用模型，适合复杂推理任务',
+    context_length: 32768,
+    pricing_tier: 'medium',
+    capabilities: ['文本生成', '代码生成', '数学推理', '多语言'],
+    parameters: { temperature: 0.7, max_tokens: 8192 },
+    is_default: true, // 阿里云的默认模型
+    is_active: true,
+    sort_order: 1,
+  },
+  {
+    provider_code: 'alibaba',
+    model_code: 'qwen-turbo',
+    model_name: 'Qwen-Turbo (通义千问Turbo)',
+    description: '快速响应模型，适合日常对话和简单任务',
+    context_length: 8192,
+    pricing_tier: 'low',
+    capabilities: ['快速响应', '日常对话', '文本处理'],
+    parameters: { temperature: 0.7, max_tokens: 4096 },
+    is_default: false, // 非默认
+    is_active: true,
+    sort_order: 2,
+  },
+  // SiliconFlow 模型
+  {
+    provider_code: 'siliconflow',
+    model_code: 'Qwen/Qwen3.5-27B',
+    model_name: 'Qwen/Qwen3.5-27B',
+    description: 'Qwen3.5 27B 模型，适合更复杂的生成与推理任务',
+    context_length: 32768,
+    pricing_tier: 'medium',
+    capabilities: ['文本生成', '代码生成', '复杂推理', '中文优化'],
+    parameters: { temperature: 0.7, max_tokens: 8192 },
+    is_default: true,
+    is_active: true,
+    sort_order: 1,
+  },
+  {
+    provider_code: 'siliconflow',
+    model_code: 'Qwen/Qwen3.5-9B',
+    model_name: 'Qwen/Qwen3.5-9B',
+    description: 'Qwen3.5 9B 模型，平衡速度、成本与质量',
+    context_length: 32768,
+    pricing_tier: 'low',
+    capabilities: ['文本生成', '日常推理', '代码生成', '中文优化'],
+    parameters: { temperature: 0.7, max_tokens: 8192 },
+    is_default: false,
+    is_active: true,
+    sort_order: 2,
+  },
+  {
+    provider_code: 'siliconflow',
+    model_code: 'Qwen/Qwen3.5-4B',
+    model_name: 'Qwen/Qwen3.5-4B',
+    description: 'Qwen3.5 4B 轻量模型，适合低成本快速调用',
+    context_length: 32768,
+    pricing_tier: 'low',
+    capabilities: ['快速响应', '轻量生成', '基础代码生成', '中文支持'],
+    parameters: { temperature: 0.7, max_tokens: 4096 },
+    is_default: false,
+    is_active: true,
+    sort_order: 3,
+  },
+  // Ollama 模型
+  {
+    provider_code: 'ollama',
+    model_code: 'qwen2.5:7b-instruct',
+    model_name: 'qwen2.5:7b-instruct',
+    description: '内部 Ollama 默认模型',
+    context_length: 32768,
+    pricing_tier: 'low',
+    capabilities: ['内网部署', '私有化', '基础推理'],
+    parameters: { temperature: 0.7, max_tokens: 4096 },
+    is_default: true,
+    is_active: true,
+    sort_order: 1,
+  },
+]
+
+type ProviderRow = {
+  id: string
+  provider_code: string
+}
+
+type ModelRow = {
+  id: string
+}
+
+/**
+ * 初始化LLM提供商数据
+ */
+export async function initLLMProviders(): Promise<void> {
+  console.log('开始初始化LLM提供商数据...')
+
+  for (const provider of LLM_PROVIDERS) {
+    const { error } = await supabase.from('llm_api_providers').upsert(provider, {
+      onConflict: 'provider_code',
+      ignoreDuplicates: false,
+    })
+
+    if (error) {
+      console.error(`插入提供商 ${provider.provider_code} 失败:`, error)
+      throw error
+    }
+  }
+
+  console.log(`成功初始化 ${LLM_PROVIDERS.length} 个LLM提供商`)
+}
+
+/**
+ * 初始化LLM模型数据
+ */
+export async function initLLMModels(): Promise<void> {
+  console.log('开始初始化LLM模型数据...')
+
+  // 首先获取所有提供商的ID映射
+  const { data: providers, error: providerError } = await supabase
+    .from('llm_api_providers')
+    .select('id, provider_code')
+
+  if (providerError) {
+    console.error('获取提供商数据失败:', providerError)
+    throw providerError
+  }
+
+  const providerRows = (providers ?? []) as ProviderRow[]
+  const providerMap = new Map(providerRows.map((provider) => [provider.provider_code, provider.id]))
+
+  // 插入模型数据
+  for (const model of LLM_MODELS) {
+    const providerId = providerMap.get(model.provider_code)
+    if (!providerId) {
+      console.warn(`未找到提供商 ${model.provider_code}，跳过模型 ${model.model_code}`)
+      continue
+    }
+
+    // 先检查模型是否已存在
+    const { data: existingModel } = await supabase
+      .from('llm_models')
+      .select('id')
+      .eq('provider_id', providerId)
+      .eq('model_code', model.model_code)
+      .single()
+
+    const modelData = {
+      provider_id: providerId,
+      model_code: model.model_code,
+      model_name: model.model_name,
+      description: model.description,
+      context_length: model.context_length,
+      pricing_tier: model.pricing_tier,
+      capabilities: model.capabilities,
+      parameters: model.parameters,
+      is_default: model.is_default,
+      is_active: model.is_active,
+      sort_order: model.sort_order,
+    }
+
+    let error
+    const existingModelRow = existingModel as ModelRow | null
+
+    if (existingModelRow) {
+      // 更新现有模型
+      const { error: updateError } = await supabase
+        .from('llm_models')
+        .update(modelData)
+        .eq('id', existingModelRow.id)
+      error = updateError
+    } else {
+      // 如果是默认模型，先清除该提供商的其他默认模型
+      if (model.is_default) {
+        await supabase
+          .from('llm_models')
+          .update({ is_default: false })
+          .eq('provider_id', providerId)
+          .eq('is_default', true)
+      }
+
+      // 插入新模型
+      const { error: insertError } = await supabase.from('llm_models').insert(modelData)
+      error = insertError
+    }
+
+    if (error) {
+      console.error(`处理模型 ${model.model_code} 失败:`, error)
+      throw error
+    }
+  }
+
+  console.log(`成功初始化 ${LLM_MODELS.length} 个LLM模型`)
+}
+
+/**
+ * 创建默认配置
+ */
+export async function createDefaultConfig(): Promise<void> {
+  console.log('创建默认配置...')
+
+  // 获取阿里通义提供商与 qwen-plus 模型，作为系统默认
+  const { data: provider } = await supabase
+    .from('llm_api_providers')
+    .select('id')
+    .eq('provider_code', 'alibaba')
+    .single()
+
+  const providerRow = provider as ProviderRow | null
+
+  if (!providerRow) {
+    console.warn('未找到阿里通义提供商（alibaba），跳过创建默认配置')
+    return
+  }
+
+  const { data: model } = await supabase
+    .from('llm_models')
+    .select('id')
+    .eq('provider_id', providerRow.id)
+    .eq('model_code', 'qwen-plus')
+    .single()
+
+  const modelRow = model as ModelRow | null
+
+  if (!modelRow) {
+    console.warn('未找到 qwen-plus 模型，跳过创建默认配置')
+    return
+  }
+
+  // 创建默认配置（全局）
+  const { error } = await supabase.from('user_llm_configs').upsert(
+    {
+      user_id: null, // 全局配置
+      config_name: 'default',
+      provider_id: providerRow.id,
+      model_id: modelRow.id,
+      is_active: true,
+    },
+    {
+      onConflict: 'user_id,config_name',
+      ignoreDuplicates: false,
+    },
+  )
+
+  if (error) {
+    console.error('创建默认配置失败:', error)
+    throw error
+  }
+
+  console.log('成功创建默认配置')
+}
+
+/**
+ * 完整初始化LLM数据库
+ */
+export async function initLLMDatabase(): Promise<void> {
+  try {
+    await initLLMProviders()
+    await initLLMModels()
+    await createDefaultConfig()
+    console.log('✅ LLM数据库初始化完成')
+  } catch (error) {
+    console.error('❌ LLM数据库初始化失败:', error)
+    throw error
+  }
+}

@@ -1,0 +1,183 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 15,
+  "families": [
+    {
+      "issue_family": "会诊执行记录缺失/未写执行情况",
+      "row_count": 1,
+      "job_id": "4d907467-eaa1-44f4-aef9-8f78ba047377",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常；输血记录链缺失/不全",
+      "row_count": 1,
+      "job_id": "aa063bf1-078f-4664-a2f2-82435fcc7a1c",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "主治首次查房48小时；病程记录缺分析/缺处理意见",
+      "row_count": 1,
+      "job_id": "2605f18d-3066-40d0-9ad9-340babdfeb62",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "术前主刀医生查房/麻醉术前访视缺失",
+      "row_count": 1,
+      "job_id": "d42e0ba9-c155-4742-a9d6-34df597124c4",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "输血记录链缺失/不全；输血时间/量/前后记录不一致",
+      "row_count": 1,
+      "job_id": "e2fcc252-a552-427f-92eb-77ffa43cd250",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "高级医师首次查房72小时；病程记录病情变化记录不全",
+      "row_count": 2,
+      "job_id": "c406c5ab-fd82-4a27-9d44-3e762adba188",
+      "result_breakdown": {
+        "miss": 2
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 2
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "危急值记录不完整/处理不充分",
+      "row_count": 2,
+      "job_id": "4296237d-0ba4-4394-bcf5-b2dcc261f46a",
+      "result_breakdown": {
+        "same_family_hit": 2
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 2
+      },
+      "items_count": 2,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "row_count": 2,
+      "job_id": "f611e30a-c0b2-4917-b9f2-0d958f7ef31a",
+      "result_breakdown": {
+        "miss": 2
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 2
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
+      "row_count": 1,
+      "job_id": "3346548f-ae28-4621-8119-6fd035787ced",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "四级手术未 MDT",
+      "row_count": 1,
+      "job_id": "22be1b3f-fc05-47e2-913f-3b9d1018d862",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "四级手术未 MDT；术前讨论结论未入病历/缺项",
+      "row_count": 1,
+      "job_id": "16efb8f5-e8c4-42f3-8635-8588bd454a61",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
+      "row_count": 1,
+      "job_id": "337a20ff-3142-4501-9835-d5130cb78149",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 157,
+    "exact_hit": 28,
+    "miss": 15,
+    "same_family_hit": 72,
+    "skip": 11
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 1,
+  "families": [
+    {
+      "issue_family": "病程时效/缺失",
+      "row_count": 1,
+      "job_id": "67b674d9-d96f-477b-8d31-8bbd0b75a86c",
+      "result_breakdown": {
+        "exact_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 1,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 203,
+    "exact_hit": 20,
+    "miss": 25,
+    "same_family_hit": 27,
+    "skip": 8
+  }
+}

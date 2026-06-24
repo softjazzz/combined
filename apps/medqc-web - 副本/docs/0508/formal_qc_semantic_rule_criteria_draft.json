@@ -1,0 +1,3324 @@
+{
+  "schema_version": "v1",
+  "generated_at": "2026-05-21T14:35:26.886971",
+  "rules": [
+    {
+      "rule_id": "SC-004",
+      "rule_name": "再次或多次入院记录未对本次住院前历次有关住院诊疗经过进行小结。",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 入院记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_section_present",
+        "field_matrix_complete",
+        "supporting_quote_from_admission_record"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-007",
+      "rule_name": "无完全民事行为能力的患者填写为病史陈述者。",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 入院记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_section_present",
+        "field_matrix_complete",
+        "supporting_quote_from_admission_record"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-008",
+      "rule_name": "主诉书写不规范或不能导出第一诊断。",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 入院记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_section_present",
+        "field_matrix_complete",
+        "supporting_quote_from_admission_record"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-009",
+      "rule_name": "现病史记录不全或描述不清(包括发病的时间､起病缓急､主要症状､一般情况)。",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 入院记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_section_present",
+        "field_matrix_complete",
+        "supporting_quote_from_admission_record"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-011",
+      "rule_name": "未描述与本次入院有关的重要的阴性症状以及与鉴别诊断有关的阳性症状",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 入院记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_section_present",
+        "field_matrix_complete",
+        "supporting_quote_from_admission_record"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-012",
+      "rule_name": "未描述发病后到入院前，在院内、外接受检查与治疗的详细经过及效果或欠缺",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审以候选召回为主：证据来自入院记录现病史且存在入院前诊疗线索时，不要因最终缺项尚需二审确认而直接消除候选。",
+        "只有明确不是入院记录现病史、仅文书头/记录时间或完全无院前诊疗触发时才不输出候选。"
+      ],
+      "applicability_trigger": ["命中 admission_record/入院记录 / 现病史/发病后到入院前。"],
+      "required_evidence": [
+        "onset_course",
+        "preadmission_visit",
+        "preadmission_exam",
+        "preadmission_treatment",
+        "treatment_effect"
+      ],
+      "supporting_evidence": ["源文书 quote", "字段矩阵", "必要时跨文书对照 quote"],
+      "contradicting_evidence": [
+        "证据不是入院记录现病史。",
+        "患者入院前明确未诊治，且无院前检查治疗触发。",
+        "已记录主要检查、治疗和效果，只是语言简略。",
+        "只看到孤立短句，无法确认所在段落。"
+      ],
+      "confirmed_conditions": [
+        "证据明确来自入院记录现病史。",
+        "现病史提示入院前曾在院外、门诊、急诊或其他机构检查/治疗。",
+        "现病史未记录检查项目、治疗措施/用药或治疗效果中的关键内容。",
+        "supporting_quote 能直接引用“外院治疗具体不详/输液治疗具体不详”等缺项原文。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺完整现病史上下文。",
+        "只看到截断片段，无法判断后文是否补充。",
+        "无法确认患者是否存在入院前检查或治疗。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用或已有证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-013",
+      "rule_name": "既往史记录不全(包括既往疾病史、传染病史、输血史、过敏史、预防接种史、手术外伤史等)",
+      "category": "customer_policy_pending",
+      "first_pass_recall_standard": [
+        "一审以候选召回为主：入院记录既往史字段疑似缺项或前后矛盾时保留候选。",
+        "仅“不详预防接种史”属于客户口径敏感项，一审可保留为复核候选，但二审不得直接 confirmed。"
+      ],
+      "applicability_trigger": ["命中 admission_record/入院记录 / 既往史。"],
+      "required_evidence": [
+        "prior_disease_history",
+        "infectious_disease_history",
+        "surgery_trauma_history",
+        "transfusion_history",
+        "allergy_history",
+        "vaccination_history"
+      ],
+      "supporting_evidence": ["源文书 quote", "字段矩阵", "必要时跨文书对照 quote"],
+      "contradicting_evidence": [
+        "只看到既往史片段，无法确认其他字段是否已记录。",
+        "主要字段已覆盖，仅部分表达简略。",
+        "仅凭“不详预防接种史”不得直接 confirmed。"
+      ],
+      "confirmed_conditions": [
+        "基于完整或足够完整的入院记录既往史段落/结构化字段矩阵。",
+        "能明确指出规定字段缺失、空白、未记录或前后矛盾。",
+        "missing_fields 非空且 supporting_quote 支撑具体缺项。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺完整既往史段落。",
+        "预防接种史“不详”且客户未确认必须明确记录。",
+        "只能看到片段，不能判断字段完整性。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用或已有证据证明缺陷不成立。"],
+      "customer_policy_pending": ["policy_pending_vaccination_unknown"],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-014",
+      "rule_name": "未描述个人史、婚育史、月经史、家族史",
+      "category": "customer_policy_pending",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": [
+        "规则文字较宽或缺陷阈值依赖客户口径；先召回候选，不直接 confirmed。"
+      ],
+      "required_evidence": [
+        "required_section_present",
+        "field_matrix_complete",
+        "supporting_quote_from_admission_record"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": ["仅在客户口径明确且 required_evidence 完整时允许 confirmed。"],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或客户口径下该表达不扣分。"],
+      "customer_policy_pending": [
+        "详略程度阈值、'具体不详' 是否扣分、院内替代文书是否认可等需客户确认。"
+      ],
+      "implementation_recommendation": "defer"
+    },
+    {
+      "rule_id": "SC-016",
+      "rule_name": "儿童患者无婴幼儿喂养史和生长发育史",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 入院记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_section_present",
+        "field_matrix_complete",
+        "supporting_quote_from_admission_record"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-018",
+      "rule_name": "体格检查遗漏主要阳性体征及有鉴别诊断意义的阴性体征，或记录不准确",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["存在外伤、局部症状、专科疾病或需要专科/局部查体支持诊断的情形。"],
+      "required_evidence": [
+        "入院记录体格检查段落。",
+        "对应专科检查/局部查体全文或结构化字段。",
+        "能证明应记录的主要阳性体征或鉴别诊断阴性体征确实缺失。"
+      ],
+      "supporting_evidence": ["字段矩阵", "源文书上下文", "必要时跨文书对照"],
+      "contradicting_evidence": [
+        "出现“详见专科检查”且专科检查全文有具体查体内容时不得 confirmed。"
+      ],
+      "confirmed_conditions": [
+        "已获取体格检查与专科/局部查体上下文，且字段矩阵证明主要阳性体征或必要阴性体征缺失。"
+      ],
+      "data_quality_gap_conditions": ["只看到“详见专科检查”，但缺专科查体/局部查体全文。"],
+      "rejected_by_system_conditions": ["适用性不成立，或已有完整证据证明相关要素已记录。"],
+      "customer_policy_pending": [
+        "哪些体征属于该病种必须记录的阳性/阴性体征需客户或专科口径确认。"
+      ],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-010",
+      "rule_name": "现病史与主诉不符",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_section_present",
+        "field_matrix_complete",
+        "supporting_quote_from_admission_record"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-015",
+      "rule_name": "个人史、婚育史、月经史、家族史记录不全或与实际不符",
+      "category": "customer_policy_pending",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": [
+        "入院记录个人史、婚育史、月经史、家族史字段需要按性别、年龄和病种适用。"
+      ],
+      "required_evidence": [
+        "患者性别、年龄。",
+        "入院记录中个人史/婚育史/月经史/家族史完整字段矩阵。",
+        "缺项或矛盾字段的原文 quote。"
+      ],
+      "supporting_evidence": ["字段矩阵", "源文书上下文", "必要时跨文书对照"],
+      "contradicting_evidence": [
+        "男性病历不得要求月经史。",
+        "仅“具体不详/不详”但客户口径未确认时不得 confirmed。"
+      ],
+      "confirmed_conditions": ["性别年龄适用，完整字段矩阵显示必填字段缺失或与病历事实矛盾。"],
+      "data_quality_gap_conditions": ["缺完整入院记录字段矩阵，或“不详”是否扣分口径未确认。"],
+      "rejected_by_system_conditions": ["适用性不成立，或已有完整证据证明相关要素已记录。"],
+      "customer_policy_pending": ["“具体不详/预防接种史不详/婚育细节不详”是否按缺陷扣分。"],
+      "implementation_recommendation": "defer"
+    },
+    {
+      "rule_id": "SC-019",
+      "rule_name": "入院前若有辅助检查未记录或记录不完善或抄写不准确或描述不清",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_section_present",
+        "field_matrix_complete",
+        "supporting_quote_from_admission_record"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-020",
+      "rule_name": "入院记录无入院诊断或主次顺序错误或次要诊断有重要遗漏",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 入院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_section_present",
+        "field_matrix_complete",
+        "supporting_quote_from_admission_record"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-023",
+      "rule_name": "首次病程记录无病例特点",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 首次病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 首次病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-024",
+      "rule_name": "首次病程记录病例特点未归纳提炼或不全面",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 首次病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 首次病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-025",
+      "rule_name": "首次病程记录无诊断依据、鉴别诊断、诊疗计划任意一项",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 首次病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 首次病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-026",
+      "rule_name": "首次病程记录诊断依据或鉴别诊断不充分、不全面",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 首次病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 首次病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-027",
+      "rule_name": "首次病程记录诊疗计划不全面、不具体",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 首次病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 首次病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-032",
+      "rule_name": "病程记录重要病情变化(症状及体征)未记录或记录不全",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 日常病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-033",
+      "rule_name": "病程记录中对病情变化无分析判断或无具体处理意见",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 日常病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-035",
+      "rule_name": "病程中有不合理的检查或不合理用药",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 日常病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-039",
+      "rule_name": "病程中无危急值报告及处理记录.或未详细记录时间、内容等关键信息",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 日常病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-040",
+      "rule_name": "重要操作未记录或记录不规范、不完善；",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 日常病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-047",
+      "rule_name": "修正或补充诊断时,未记录修改或补充的理由及诊断依据",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["病程中存在明确修正诊断、补充诊断或诊断名称发生变更的动作。"],
+      "required_evidence": [
+        "修正/补充诊断发生前后的诊断 quote。",
+        "修正/补充诊断时间和记录文书。",
+        "病程中理由及诊断依据字段或段落。"
+      ],
+      "supporting_evidence": ["字段矩阵", "源文书上下文", "必要时跨文书对照"],
+      "contradicting_evidence": [
+        "只有病理结果、检查结果或新证据出现，但未证明医生发生修正/补充诊断动作时不得 confirmed。"
+      ],
+      "confirmed_conditions": ["已证明发生修正/补充诊断动作，且对应记录缺少修改理由和诊断依据。"],
+      "data_quality_gap_conditions": ["缺连续病程或诊断变更上下文，无法核对是否发生修正诊断。"],
+      "rejected_by_system_conditions": ["适用性不成立，或已有完整证据证明相关要素已记录。"],
+      "customer_policy_pending": ["何种诊断补充属于必须写明理由依据的修正诊断需客户确认。"],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-066",
+      "rule_name": "值班期间所有的诊疗活动未及时记入病历或记录不全",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 日常病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-075",
+      "rule_name": "重要病情变化向患者及其法定代理人或授权委托人告知情况未记录",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 日常病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-076",
+      "rule_name": "自动出院或放弃治疗无记录",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 日常病程记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-034",
+      "rule_name": "病程中对治疗措施、药物、医嘱变化未记录或分析",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审以候选召回为主：出现病情变化、治疗措施或医嘱调整线索时可以保留候选，由二审核对三段链路。",
+        "仅有症状加普通对症处理且无医嘱/治疗变化线索时，不应作为 confirmed 候选。"
+      ],
+      "applicability_trigger": [
+        "命中 daily_course_record/病程记录 + 医嘱/治疗变化来源 / 病情变化、医嘱变化、治疗措施调整相关病程。"
+      ],
+      "required_evidence": [
+        "trigger_event_present",
+        "trigger_event_quote",
+        "order_or_treatment_change_present",
+        "order_or_treatment_change_quote",
+        "course_analysis_present",
+        "course_analysis_quote",
+        "treatment_effect_or_followup_present"
+      ],
+      "supporting_evidence": ["源文书 quote", "字段矩阵", "必要时跨文书对照 quote"],
+      "contradicting_evidence": [
+        "只有症状 + 对症处理，例如“术后呕吐，予胃复安止吐”。",
+        "只有治疗措施存在，但没有证明发生医嘱/治疗变化。",
+        "病程已记录处理措施和观察计划。"
+      ],
+      "confirmed_conditions": [
+        "同时具备病情变化/异常指标/疗效不佳等触发事件。",
+        "同时具备明确医嘱、药物或治疗措施变化，如新开、停用、调整剂量或改变方案。",
+        "对应病程缺少变化原因、依据、效果评估或后续计划。",
+        "必须提供医嘱变化 quote 和病程上下文 quote。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺医嘱变化来源。",
+        "缺病程上下文。",
+        "无法形成触发事件、变化、缺分析三段链路。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用或已有证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-036",
+      "rule_name": "无重要辅助检查结果、无对异常检查结果的分析及处理意见",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-037",
+      "rule_name": "取材情况和病理结果未在病程记录中记录",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-043",
+      "rule_name": "抗菌药物使用不符合《抗菌药物临床应用指南》,无指征使用抗菌素或者越级使用抗菌药物",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-044",
+      "rule_name": "抗菌药物使用相关医嘱不完整,使用情况未在病程记录 中有相应记录",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-046",
+      "rule_name": "有创诊疗操作记录描述不规范",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-070",
+      "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-073",
+      "rule_name": "输血病人未做输血前相关九项检查",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-074",
+      "rule_name": "输血病人无输血前评估、输血记录、输血后评价记录、输血反应记录或输血记录单填写不全等",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-107",
+      "rule_name": "术后三天无连续病程记录或无术后三天内上级医师查看病人记录",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-114",
+      "rule_name": "非再手术相关的重要检验、检查结果在病程中未记录、分析",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-038",
+      "rule_name": "病历中转抄的辅助检查结果与原报告单内容不一致",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-050",
+      "rule_name": "上级医师查房无病情分析或欠缺、无诊疗意见或住院期间每周内无副主任医师以上的医师或医疗组长查房记录;上",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 上级查房记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 上级查房记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-051",
+      "rule_name": "病危、病重、疑难病人无主(副主)任医师或科主任查房记录",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 上级查房记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 上级查房记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-055",
+      "rule_name": "抢救记录描述不清或抢救记录无标题",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 抢救记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 抢救记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-057",
+      "rule_name": "疑难病例讨论记录缺项或描述不清(讨论日期、主持人、参加人员姓名及专业技术职务、具体讨论意见及主持人小",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 疑难病例讨论记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 疑难病例讨论记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-058",
+      "rule_name": "疑难病例讨论的结论未记入病历",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 疑难病例讨论记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 疑难病例讨论记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-060",
+      "rule_name": "死亡病例讨论记录缺项或描述不清(科主任或副主任医师以上人员主持、参加人员姓名、专业技术职务及记录日期",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 死亡病例讨论记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 死亡病例讨论记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-063",
+      "rule_name": "交(接)班记录内容缺项或描述不清(入院日期、交班或接班日期、患者姓名、性别、年龄、主诉、入院情况、入",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 交接班记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 交接班记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-079",
+      "rule_name": "新生儿性别各处记录不一致",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 新生儿记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-081",
+      "rule_name": "术前小结缺项或描述不清(简要病情、术前诊断、手术指征、拟施手术名称和方式、拟施麻醉方式、注意事项，并",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 术前小结 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-083",
+      "rule_name": "四级手术术前讨论未多学科讨论",
+      "category": "customer_policy_pending",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 术前讨论 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": [
+        "规则文字较宽或缺陷阈值依赖客户口径；先召回候选，不直接 confirmed。"
+      ],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": ["仅在客户口径明确且 required_evidence 完整时允许 confirmed。"],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或客户口径下该表达不扣分。"],
+      "customer_policy_pending": [
+        "详略程度阈值、'具体不详' 是否扣分、院内替代文书是否认可等需客户确认。"
+      ],
+      "implementation_recommendation": "defer"
+    },
+    {
+      "rule_id": "SC-084",
+      "rule_name": "术前讨论的结论未记入病历",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 术前讨论 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-085",
+      "rule_name": "结论记录不完整",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 术前讨论 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-086",
+      "rule_name": "无术前一天内主刀医生查看病人的记录或无麻醉术前访视记录",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 麻醉记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-092",
+      "rule_name": "麻醉术前访视记录缺项或描述不清",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 麻醉记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-093",
+      "rule_name": "无麻醉记录",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 麻醉记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-094",
+      "rule_name": "麻醉记录缺项或描述不清",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 麻醉记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-106",
+      "rule_name": "麻醉术后访视记录缺项或描述不清",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 麻醉记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-089",
+      "rule_name": "手术同意书缺项或描述不清",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 知情同意书 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 知情同意书 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-091",
+      "rule_name": "麻醉同意书缺项或描述不清",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 知情同意书 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 知情同意书 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-131",
+      "rule_name": "特殊检查、特殊治疗、特殊用药、临床试验、药品试验、医疗器械试验、高耗材、自费项目同意书描述不清(特殊",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 知情同意书 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 知情同意书 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-134",
+      "rule_name": "输血治疗知情同意书缺项或描述不清",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 知情同意书 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 知情同意书 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-136",
+      "rule_name": "病危(重)通知书缺项或描述不清",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 知情同意书 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 知情同意书 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-097",
+      "rule_name": "手术记录缺项或描述不清",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 手术记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 手术记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-110",
+      "rule_name": "急诊手术无主治及以上医师(注明姓名及职称)的指示记录",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 手术记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 手术记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-099",
+      "rule_name": "术中取材情况和病理结果未在手术记录中记录",
+      "category": "programmatic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 手术记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": [
+        "存在可程序化判断的记录、时间、签名、编码、结构化字段或规则适用性触发。"
+      ],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "程序化证据或字段矩阵已证明规则适用，并由二审或 guardrail 确认缺陷成立。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["结构化证据证明规则不适用，或必需字段/文书已存在且合规。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-100",
+      "rule_name": "植入物条形码不齐全",
+      "category": "programmatic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 手术记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": [
+        "存在可程序化判断的记录、时间、签名、编码、结构化字段或规则适用性触发。"
+      ],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "程序化证据或字段矩阵已证明规则适用，并由二审或 guardrail 确认缺陷成立。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["结构化证据证明规则不适用，或必需字段/文书已存在且合规。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-101",
+      "rule_name": "植入物种类和数量等情况未在手术记录或病程记录中有相应记录",
+      "category": "programmatic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 手术记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": [
+        "存在可程序化判断的记录、时间、签名、编码、结构化字段或规则适用性触发。"
+      ],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "程序化证据或字段矩阵已证明规则适用，并由二审或 guardrail 确认缺陷成立。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["结构化证据证明规则不适用，或必需字段/文书已存在且合规。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-108",
+      "rule_name": "未按手术分级管理制度开展手术",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 手术记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-115",
+      "rule_name": "手术记录中术中所见未体现第一次手术术区或再次手术部位情况的描述，如术后出血，未描述出血部位和出血情况",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 手术记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-103",
+      "rule_name": "手术安全核查记录缺项或描述不清",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 手术安全核查 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-105",
+      "rule_name": "术后首次病程记录缺项或描述不清",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 术后首次病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-113",
+      "rule_name": "择期非计划再次手术病程记录、术前小结中未对上一次手术做出总结或原因说明",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 术前小结 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 术前小结 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "procedure_applicability_trigger",
+        "operation_record_quote",
+        "required_element_matrix",
+        "source_table_or_bundle_coverage"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "prompt_only"
+    },
+    {
+      "rule_id": "SC-118",
+      "rule_name": "出院记录缺项或内容错误(入院日期、出院日期、入院情况、入院诊断、诊疗经过、出院情况、出院医嘱、医师签",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审以候选召回为主：命中出院记录且疑似缺入院日期、出院日期、诊疗经过、出院情况、出院医嘱或签名等字段时，应保留 qc_review_candidate。",
+        "不要把 confirmed 条件当作一审硬过滤；完整/近完整上下文是否足以 confirmed 交由二审字段矩阵裁决。",
+        "只有证据仅为文书头、记录时间、患者基本信息，或无法确认来自出院记录时，才不输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 discharge_record/出院记录 / 完整出院记录字段矩阵。"],
+      "required_evidence": [
+        "admission_date",
+        "discharge_date",
+        "admission_condition",
+        "admission_diagnosis",
+        "treatment_course",
+        "discharge_condition",
+        "discharge_advice",
+        "doctor_signature"
+      ],
+      "supporting_evidence": ["源文书 quote", "字段矩阵", "必要时跨文书对照 quote"],
+      "contradicting_evidence": [
+        "只有患者姓名、性别、年龄、主诉、记录时间等文书头片段。",
+        "只笼统说关键要素缺失但没有字段矩阵。",
+        "字段存在但表述简略。"
+      ],
+      "confirmed_conditions": [
+        "必须看到完整或近完整出院记录正文，或结构化字段矩阵。",
+        "必须明确列出具体 missing_fields。",
+        "supporting_quote 可以较短，但必须能回连到完整出院记录上下文，并支撑对应字段缺失或内容错误。"
+      ],
+      "data_quality_gap_conditions": [
+        "只看到出院记录片段。",
+        "缺完整出院记录上下文。",
+        "无法判断具体字段是否在后文补充。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用或已有证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-119",
+      "rule_name": "死亡记录缺项或内容错误【入院日期、死亡时间、入院情况、入院诊断、诊疗经过(重点记录病情演变、抢救经过",
+      "category": "semantic",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 出院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 出院记录 中与规则名称相关的缺项、矛盾或不完整线索。"],
+      "required_evidence": [
+        "full_discharge_record_context",
+        "target_section_quote",
+        "required_field_matrix",
+        "cross_document_contrast_if_needed"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "对应文书/段落完整，字段矩阵证明缺项或错误，supporting_quote 可追溯。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["对应字段已记录，或只是表达简略但能满足规则目的。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-123",
+      "rule_name": "出院带药不详细(无药品名称、用药剂量、给药途径、用药时间，或药名、剂量写错)",
+      "category": "programmatic",
+      "first_pass_recall_standard": [
+        "一审以候选召回为主：仅在确认存在出院带药/出院用药药品条目且字段疑似缺失时保留候选。",
+        "无出院带药、非药品出院医嘱或字段完整时不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 discharge_record/出院记录 / 出院带药/出院用药。"],
+      "required_evidence": [
+        "discharge_medication_section_present",
+        "drug_name",
+        "dose",
+        "dose_unit",
+        "route",
+        "frequency",
+        "duration_or_quantity"
+      ],
+      "supporting_evidence": ["源文书 quote", "字段矩阵", "必要时跨文书对照 quote"],
+      "contradicting_evidence": [
+        "没有出院带药证据。",
+        "出院医嘱只是饮食、休养、复查、换药、支具固定等非药品事项。",
+        "药名、剂量、用法/途径、频率等核心字段基本完整。",
+        "不确定是住院期间用药还是出院带药。"
+      ],
+      "confirmed_conditions": [
+        "必须先确认存在出院带药/出院用药段或药品条目。",
+        "逐药品确认药名、剂量、途径、频率、疗程/数量等核心字段确实缺失。",
+        "supporting_quote 必须来自完整或足够完整的出院带药段。"
+      ],
+      "data_quality_gap_conditions": [
+        "证据不是完整出院带药段。",
+        "药品条目被截断，无法判断字段。",
+        "无法确认是否存在出院带药。"
+      ],
+      "rejected_by_system_conditions": [
+        "无出院带药且仅有非药品出院医嘱时 rejected_by_system。",
+        "出院带药核心字段基本完整时 rejected_by_system/defect_absent。"
+      ],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-121",
+      "rule_name": "诊疗经过不全面、不详细(无主要药品名称或名称写错，无与诊断相关的重要辅助检查结果)",
+      "category": "customer_policy_pending",
+      "first_pass_recall_standard": [
+        "一审以候选召回为主：命中出院记录诊疗经过且疑似缺主要治疗、重要检查结果、治疗转归或必要治疗方案时，应保留 qc_review_candidate。",
+        "不要因为 supporting_quote 本身较短或 has_discharge_medication_text=false 直接消除候选；二审需结合 targeted_evidence_context.discharge_record_evidence 的完整/近完整上下文裁决。",
+        "只有证据仅为文书头、记录时间、孤立短句且无法回连诊疗经过上下文时，才不输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["命中 discharge_record/出院记录 / 诊疗经过。"],
+      "required_evidence": [
+        "main_treatment_measures",
+        "main_drug_names_or_treatment_plan",
+        "important_auxiliary_exam_results_related_to_diagnosis",
+        "treatment_response_or_outcome",
+        "cross_document_contrast_present_when_claiming_missing_drug"
+      ],
+      "supporting_evidence": ["源文书 quote", "字段矩阵", "必要时跨文书对照 quote"],
+      "contradicting_evidence": [
+        "仅凭“护胃、补液”等短句 confirmed。",
+        "仅凭主观“不详细”判断 confirmed。",
+        "缺跨文书对照却声称主要药品遗漏。"
+      ],
+      "confirmed_conditions": [
+        "必须看到完整或近完整诊疗经过段。",
+        "能证明主要治疗、主要药品、重要辅助检查结果或治疗转归确实缺失。",
+        "若声称主要药品缺失，必须有医嘱、会诊建议或治疗方案对照。",
+        "若缺陷主张不是主要药品名称缺失，has_discharge_medication_text=false 不能一票否决 confirmed。",
+        "supporting_quote 可以较短，但必须能回连到完整/近完整诊疗经过上下文。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺完整诊疗经过段。",
+        "只有短片段或截断文本。",
+        "需要跨文书对照但缺医嘱/会诊/治疗方案来源。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用或已有证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-122",
+      "rule_name": "无出院医嘱或出院医嘱不全",
+      "category": "customer_policy_pending",
+      "first_pass_recall_standard": [
+        "一审以候选召回为主：命中出院医嘱段且疑似缺核心出院指导内容时保留候选。",
+        "只有随访方式/周期等局部片段时不应直接 confirmed，交由二审或 postprocess 转 data_quality_gap。"
+      ],
+      "applicability_trigger": ["命中 discharge_record/出院记录 / 出院医嘱。"],
+      "required_evidence": [
+        "discharge_advice_section_present",
+        "source_is_full_discharge_advice_section",
+        "medication_advice_present",
+        "followup_advice_present",
+        "diet_or_activity_advice_present",
+        "warning_signs_or_return_visit_present"
+      ],
+      "supporting_evidence": ["源文书 quote", "字段矩阵", "必要时跨文书对照 quote"],
+      "contradicting_evidence": [
+        "只有随访方式、随访周期、随访日期等局部片段。",
+        "只看到出院带药段，未看到完整出院医嘱段。",
+        "出院医嘱包含合理复查、饮食、活动、用药或注意事项。"
+      ],
+      "confirmed_conditions": [
+        "必须看到完整出院医嘱段。",
+        "能证明该段医嘱缺失或明显不全。",
+        "missing_fields 能指出缺少用药、复诊、饮食活动、注意事项或返院提示中的核心内容。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺完整出院医嘱段。",
+        "只有随访/复查/局部建议片段。",
+        "无法确认该片段是否为完整出院医嘱。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用或已有证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "evidence_matrix"
+    },
+    {
+      "rule_id": "SC-125",
+      "rule_name": "出院诊断或死亡诊断错填、漏填、顺序错误",
+      "category": "customer_policy_pending",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 出院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": [
+        "规则文字较宽或缺陷阈值依赖客户口径；先召回候选，不直接 confirmed。"
+      ],
+      "required_evidence": [
+        "full_discharge_record_context",
+        "target_section_quote",
+        "required_field_matrix",
+        "cross_document_contrast_if_needed"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": ["仅在客户口径明确且 required_evidence 完整时允许 confirmed。"],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或客户口径下该表达不扣分。"],
+      "customer_policy_pending": [
+        "详略程度阈值、'具体不详' 是否扣分、院内替代文书是否认可等需客户确认。"
+      ],
+      "implementation_recommendation": "defer"
+    },
+    {
+      "rule_id": "SC-127",
+      "rule_name": "病历中死亡时间记录不一致",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 出院记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "full_discharge_record_context",
+        "target_section_quote",
+        "required_field_matrix",
+        "cross_document_contrast_if_needed"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-138",
+      "rule_name": "辅助检查、检验的相关医嘱、报告单不完整，或医嘱、报告单与病程不一致",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 检查检验报告 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-139",
+      "rule_name": "检验、检查报告单患者基本信息错误",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 检查检验报告 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-140",
+      "rule_name": "病理检查报告单不完整",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 检查检验报告 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "required_document_context",
+        "required_section_quote",
+        "rule_specific_field_matrix",
+        "supporting_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-143",
+      "rule_name": "长期医嘱单描述不清(患者姓名、科别、住院病历号(或病案号)、页码、起始日期和时间、长期医嘱内容、停止",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    },
+    {
+      "rule_id": "SC-146",
+      "rule_name": "缺诊疗医嘱，或诊疗医嘱与病程记录不一致",
+      "category": "mixed",
+      "first_pass_recall_standard": [
+        "一审只负责召回候选，不直接确认缺陷。",
+        "当 日常病程记录 中出现与规则相关的缺项、矛盾或触发事件线索时进入二审。",
+        "只有文书头、记录时间、孤立短 quote 或规则适用性不成立时，不应输出 confirmed 候选。"
+      ],
+      "applicability_trigger": ["先证明规则适用性或触发事件存在，再进入语义裁决。"],
+      "required_evidence": [
+        "trigger_event_quote",
+        "course_record_quote",
+        "order_or_exam_contrast_quote",
+        "analysis_or_followup_quote"
+      ],
+      "supporting_evidence": [
+        "源文书 quote",
+        "完整或近完整上下文",
+        "字段矩阵",
+        "必要时结构化字段或跨文书对照"
+      ],
+      "contradicting_evidence": [
+        "已有完整字段或对应文书段落证明要素已记录。",
+        "证据仅为记录时间、标题、模板字段名或来源不明短片段。",
+        "规则适用性触发不存在。"
+      ],
+      "confirmed_conditions": [
+        "适用性成立，required_evidence 完整，supporting_quote 能直接支撑缺陷，且无反证。"
+      ],
+      "data_quality_gap_conditions": [
+        "缺对应文书完整上下文。",
+        "缺结构化字段或跨文书对照来源。",
+        "只能看到短片段，无法排除后文补充。",
+        "客户口径未确认但会影响是否扣分。"
+      ],
+      "rejected_by_system_conditions": ["规则不适用，或跨文书/结构化证据证明缺陷不成立。"],
+      "customer_policy_pending": [],
+      "implementation_recommendation": "applicability_gate"
+    }
+  ]
+}

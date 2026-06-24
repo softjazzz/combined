@@ -1,0 +1,57 @@
+{
+  "mode": "sequential_batch",
+  "document_type": "入院记录",
+  "document_id": "batch_1762563149877",
+  "rule_ids": [
+    "LX-001"
+  ],
+  "medical_text_length": 644,
+  "stats": {
+    "total": 1,
+    "compliant": 1,
+    "passed": 1,
+    "notApplicable": 0,
+    "issues": 0,
+    "errors": 0
+  },
+  "performance": {
+    "totalTokens": 1758,
+    "totalTime": 3.8080649375915527,
+    "avgTime": 3.8080649375915527
+  },
+  "results": [
+    {
+      "ruleId": "LX-001",
+      "ruleName": "主诉书写不规范或不能导出第一诊断",
+      "isCompliant": true,
+      "status": "compliant",
+      "issues": [
+        {
+          "description": "主诉与现病史、入院诊断一致，符合质控要求。",
+          "evidence": "主诉：体检发现肺部结节1周。\n现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\n入院诊断：右肺占位性病变。"
+        }
+      ],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "主诉：体检发现肺部结节1周。\n现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\n入院诊断：右肺占位性病变。",
+      "suggestion": "",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"主诉与现病史、入院诊断一致，符合质控要求。\",\n  \"issues\": [],\n  \"evidence\": \"主诉：体检发现肺部结节1周。\\n现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\\n入院诊断：右肺占位性病变。\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.9\n}\n```",
+      "metadata": {
+        "tokens_used": 1758,
+        "api_time": 3.8080649375915527
+      }
+    }
+  ],
+  "payload": null,
+  "metadata": {
+    "trigger": "batch_test_ui"
+  },
+  "saved_at": "2025-11-08T00:52:30.171608+00:00"
+}

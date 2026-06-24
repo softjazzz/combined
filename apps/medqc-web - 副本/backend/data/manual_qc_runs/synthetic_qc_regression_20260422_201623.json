@@ -1,0 +1,117 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T20:16:22.390931",
+  "run_finished_at": "2026-04-22T20:16:23.608500",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_consultation_execution_not_followed_v1_defect.json",
+      "issue_type": "D4_consultation_execution_not_followed",
+      "display_name": "会诊意见书面称执行但实际未落实",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-070"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P007",
+        "visit_id": "SYN-RUN-040",
+        "mr_no": "SYN0040",
+        "patient_name": "合成患者七",
+        "gender": "女",
+        "age": 54,
+        "department": "神经内科"
+      },
+      "elapsed_seconds": 1.119,
+      "total_tokens": 777,
+      "prompt_tokens": 638,
+      "completion_tokens": 139,
+      "api_time": 1.115,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-070"
+          ],
+          "tokens_used": 777,
+          "prompt_tokens": 638,
+          "completion_tokens": 139,
+          "api_time": 1.1154208183288574
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程仅笼统提及遵意见执行，未记录具体落实动作或结果。",
+          "evidence": "遵康复科会诊意见执行。;建议给予偏瘫肢体综合训练、关节松动及拍背排痰治疗。",
+          "suggestion": "补充具体执行措施或结果。",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程仅笼统提及遵意见执行，未记录具体落实动作或结果。\",\n      \"evidence\": \"遵康复科会诊意见执行。;建议给予偏瘫肢体综合训练、关节松动及拍背排痰治疗。\",\n      \"suggestion\": \"补充具体执行措施或结果。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 777,
+            "prompt_tokens": 638,
+            "completion_tokens": 139,
+            "input_tokens": 638,
+            "output_tokens": 139,
+            "api_time": 1.1154208183288574,
+            "first_result_latency": 1.1154208183288574,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 92
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-070": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-070": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    }
+  ]
+}

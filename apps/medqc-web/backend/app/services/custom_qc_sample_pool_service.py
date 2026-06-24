@@ -3043,6 +3043,14 @@ class CustomQCSamplePoolService:
         }
         return mapping.get(_safe_text(document_type), "daily_course_record")
 
+    @staticmethod
+    def _test_record_table_specific_ids(*, table_name: str, visit_id: str, index: int) -> Dict[str, str]:
+        if table_name == "inpat_nondrug_order":
+            return {"order_id": f"{visit_id}-ORDER-{index:03d}"}
+        if table_name == "blood_application":
+            return {"application_id": f"{visit_id}-BLOOD-APP-{index:03d}"}
+        return {}
+
     def create_customer_test_record(
         self,
         *,
@@ -3199,6 +3207,11 @@ class CustomQCSamplePoolService:
             content = _safe_text(document.get("content"))
             row = {
                 **common,
+                **self._test_record_table_specific_ids(
+                    table_name=table_name,
+                    visit_id=visit_id,
+                    index=index,
+                ),
                 "document_id": f"{visit_id}-DOC-{index:03d}",
                 "document_title": title,
                 "document_status": "已提交",
@@ -3611,9 +3624,19 @@ class CustomQCSamplePoolService:
                         "issue_preview": [],
                         "sample_item_ids": [],
                         "sample_items": [],
+                        "created_at": item.get("created_at"),
+                        "updated_at": item.get("updated_at"),
                     }
                     grouped[group_key] = current
 
+                current_created_at = current.get("created_at")
+                item_created_at = item.get("created_at")
+                if item_created_at and (not current_created_at or str(item_created_at) > str(current_created_at)):
+                    current["created_at"] = item_created_at
+                current_updated_at = current.get("updated_at")
+                item_updated_at = item.get("updated_at")
+                if item_updated_at and (not current_updated_at or str(item_updated_at) > str(current_updated_at)):
+                    current["updated_at"] = item_updated_at
                 current["issue_count"] += 1
                 current["sample_item_ids"].append(item["id"])
                 current["sample_items"].append(item)
@@ -3650,14 +3673,25 @@ class CustomQCSamplePoolService:
                 if not _safe_text(row.get("mr_no")):
                     row["mr_no"] = _safe_text(display.get("mr_no"))
 
-            grouped_rows = sorted(
-                grouped.values(),
-                key=lambda item: (
-                    0 if item.get("matched_visit_id") else 1,
-                    str(item.get("mr_no") or ""),
-                    str(item.get("patient_name") or ""),
-                ),
-            )
+            if pool_id == CUSTOMER_TEST_POOL_ID:
+                grouped_rows = sorted(
+                    grouped.values(),
+                    key=lambda item: (
+                        str(item.get("created_at") or ""),
+                        str(item.get("updated_at") or ""),
+                        str(item.get("matched_visit_id") or item.get("id") or ""),
+                    ),
+                    reverse=True,
+                )
+            else:
+                grouped_rows = sorted(
+                    grouped.values(),
+                    key=lambda item: (
+                        0 if item.get("matched_visit_id") else 1,
+                        str(item.get("mr_no") or ""),
+                        str(item.get("patient_name") or ""),
+                    ),
+                )
             total = len(grouped_rows)
             start = max(page - 1, 0) * page_size
             paged_rows = grouped_rows[start : start + page_size]

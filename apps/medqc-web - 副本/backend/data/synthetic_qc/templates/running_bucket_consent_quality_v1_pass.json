@@ -1,0 +1,45 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_consent_quality_v1",
+    "issue_type": "Z04_consent_quality",
+    "display_name": "知情同意质量",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-131", "SC-134", "SC-136"],
+    "bucket_id": "consent_quality"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P104",
+    "visit_id": "SYN-RUN-104",
+    "mr_no": "SYN0104",
+    "patient_name": "合成患者丁",
+    "gender": "女",
+    "age": 45,
+    "department": "肿瘤科"
+  },
+  "documents": [
+    {
+      "document_type": "consent_form",
+      "title": "中心静脉置管及化疗知情同意书",
+      "content": "患者诊断乳腺恶性肿瘤，拟行中心静脉置管并实施EC方案化疗。知情同意书中已完整记录治疗名称、治疗目的、主要步骤、常见并发症、药物不良反应、替代方案及不同意治疗风险。患者本人于2026-04-24签字，主管医师同期签字，明确同意接受中心静脉置管及化疗治疗。"
+    },
+    {
+      "document_type": "consent_form",
+      "title": "输血治疗知情同意书",
+      "content": "因化疗后贫血并血红蛋白下降，拟输注悬浮红细胞2单位。输血治疗知情同意书中已记录输血指征、拟输血成分及数量、ABO/Rh血型核对、输血前感染筛查结果、主要输血风险、替代方案及不同意输血后果。患者本人于2026-04-24签字，医师签名完整。"
+    },
+    {
+      "document_type": "consent_form",
+      "title": "病重通知书",
+      "content": "患者因肿瘤化疗后骨髓抑制伴感染，当前病情评估为病重。病重通知书已记录病重原因、当前主要风险、可能并发症、后续监护与抢救方案。患者配偶于2026-04-24签字确认，主管医师签名及日期完整。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["乳腺恶性肿瘤"],
+    "orders": ["中心静脉置管", "化疗前准备", "输注悬浮红细胞2单位", "病重监护"],
+    "exams": []
+  }
+}

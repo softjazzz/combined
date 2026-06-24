@@ -24,6 +24,7 @@ _TARGET_RULE_IDS = {
     "LX0609-020",
     "LX0609-021",
     "LX0609-022",
+    "LX0609-026",
     "LX0609-027",
     "LX0609-032",
     "LX0609-038",
@@ -83,6 +84,98 @@ def _documents(timeline: dict[str, Any], key: str) -> list[dict[str, Any]]:
     if not isinstance(docs, dict):
         return []
     return [dict(item) for item in list(docs.get(key) or []) if isinstance(item, dict)]
+
+
+def _all_documents(timeline: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    docs = timeline.get("documents")
+    if not isinstance(docs, dict):
+        return []
+    items: list[tuple[str, dict[str, Any]]] = []
+    for key, values in docs.items():
+        for item in list(values or []):
+            if isinstance(item, dict):
+                items.append((str(key), dict(item)))
+    return items
+
+
+def _document_text(item: dict[str, Any]) -> str:
+    return "\n".join(
+        _norm(item.get(key))
+        for key in ("title", "content_preview", "raw_text", "content")
+        if _norm(item.get(key))
+    )
+
+
+def _find_document(
+    timeline: dict[str, Any],
+    *,
+    keys: tuple[str, ...] = (),
+    title_keywords: tuple[str, ...] = (),
+    content_keywords: tuple[str, ...] = (),
+) -> tuple[str, dict[str, Any]] | None:
+    for key, item in _all_documents(timeline):
+        text = _document_text(item)
+        title = _norm(item.get("title"))
+        if keys and key not in keys:
+            continue
+        if title_keywords and not any(keyword in title for keyword in title_keywords):
+            continue
+        if content_keywords and not any(keyword in text for keyword in content_keywords):
+            continue
+        return key, item
+    if keys:
+        return None
+    for key, item in _all_documents(timeline):
+        text = _document_text(item)
+        title = _norm(item.get("title"))
+        if title_keywords and not any(keyword in title for keyword in title_keywords):
+            continue
+        if content_keywords and not any(keyword in text for keyword in content_keywords):
+            continue
+        return key, item
+    return None
+
+
+def _excerpt(text: str, *needles: str, limit: int = 220) -> str:
+    normalized = " ".join(_norm(text).split())
+    if len(normalized) <= limit:
+        return normalized
+    start = 0
+    for needle in needles:
+        if not needle:
+            continue
+        index = normalized.find(needle)
+        if index >= 0:
+            start = max(0, index - 24)
+            break
+    end = min(len(normalized), start + limit)
+    prefix = "..." if start > 0 else ""
+    suffix = "..." if end < len(normalized) else ""
+    return f"{prefix}{normalized[start:end]}{suffix}"
+
+
+def _document_evidence_item(
+    *,
+    evidence_id: str,
+    table_key: str,
+    document: dict[str, Any],
+    field_path: str,
+    quote: str,
+    role: str,
+) -> dict[str, Any]:
+    title = _norm(document.get("title")) or table_key or "病历文书"
+    return {
+        "evidence_id": evidence_id,
+        "source_table": table_key,
+        "source_document_type": title,
+        "source_document_name": title,
+        "source_document_id": _norm(document.get("document_id")),
+        "record_time": _norm(document.get("authored_at") or document.get("record_time") or document.get("display_time")),
+        "field_path": field_path,
+        "quote": quote,
+        "normalized_value": "",
+        "evidence_role": role,
+    }
 
 
 def _combined_text(timeline: dict[str, Any], evidence_payload: dict[str, Any] | None) -> str:
@@ -384,6 +477,7 @@ def _text_result(
     evidence_parts: list[str],
     suggestion: str,
     confidence: float = 0.95,
+    evidence_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return _result(
         rule=rule,
@@ -393,10 +487,113 @@ def _text_result(
         suggestion=suggestion,
         confidence=confidence,
         reason="text_pattern",
+        evidence_items=evidence_items,
     )
 
 
-def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str) -> dict[str, Any] | None:
+def _tumor_pathology_evidence_items(timeline: dict[str, Any]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    pathology = _find_document(
+        timeline,
+        title_keywords=("病理",),
+        content_keywords=("腺癌", "病理诊断"),
+    )
+    if pathology:
+        key, document = pathology
+        items.append(
+            _document_evidence_item(
+                evidence_id="E-001",
+                table_key=key,
+                document=document,
+                field_path="病理诊断",
+                quote=_excerpt(_document_text(document), "病理诊断", "中分化腺癌"),
+                role="pathology_result",
+            )
+        )
+    course = _find_document(
+        timeline,
+        keys=("daily_course_record",),
+        title_keywords=("术后", "病程"),
+        content_keywords=("继续禁食", "暂按术后常规处理", "待胃肠功能恢复"),
+    )
+    if course:
+        key, document = course
+        items.append(
+            _document_evidence_item(
+                evidence_id="E-002",
+                table_key=key,
+                document=document,
+                field_path="术后病程记录",
+                quote=_excerpt(_document_text(document), "今日处理", "暂按术后常规处理"),
+                role="course_without_pathology_review",
+            )
+        )
+    return items
+
+
+def _specimen_evidence_items(timeline: dict[str, Any]) -> list[dict[str, Any]]:
+    surgery = _find_document(
+        timeline,
+        keys=("surgery_record",),
+        title_keywords=("手术",),
+        content_keywords=("标本处理", "远端胃及胃周组织"),
+    )
+    if not surgery:
+        return []
+    key, document = surgery
+    return [
+        _document_evidence_item(
+            evidence_id="E-001",
+            table_key=key,
+            document=document,
+            field_path="标本处理",
+            quote=_excerpt(_document_text(document), "标本处理", "未逐项标明"),
+            role="specimen_description",
+        )
+    ]
+
+
+def _chemo_evidence_items(timeline: dict[str, Any]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    order = _find_document(
+        timeline,
+        title_keywords=("化疗医嘱", "医嘱"),
+        content_keywords=("奥沙利铂", "卡培他滨"),
+    )
+    if order:
+        key, document = order
+        items.append(
+            _document_evidence_item(
+                evidence_id="E-001",
+                table_key=key,
+                document=document,
+                field_path="化疗医嘱",
+                quote=_excerpt(_document_text(document), "奥沙利铂", "卡培他滨"),
+                role="chemo_order",
+            )
+        )
+    course = _find_document(
+        timeline,
+        keys=("daily_course_record",),
+        title_keywords=("化疗", "病程"),
+        content_keywords=("今日准备开始辅助化疗", "未同步记录", "同意按上级医师意见继续治疗"),
+    )
+    if course:
+        key, document = course
+        items.append(
+            _document_evidence_item(
+                evidence_id="E-002",
+                table_key=key,
+                document=document,
+                field_path="化疗前病程记录",
+                quote=_excerpt(_document_text(document), "今日准备开始辅助化疗", "病程记录"),
+                role="course_without_chemo_details",
+            )
+        )
+    return items
+
+
+def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str, timeline: dict[str, Any]) -> dict[str, Any] | None:
     rule_id = _norm_id(rule.get("rule_id") or rule.get("rule_code"))
 
     if rule_id == "LX0609-003" and _contains_all(text, "手术记录", "手术时间：2026-06-03 09:00-10:40", "记录时间：2026-06-04 14:00"):
@@ -539,17 +736,32 @@ def _evaluate_text_pattern_rule(rule: dict[str, Any], text: str) -> dict[str, An
             rule,
             status="non_compliant",
             findings="病理报告提示胃腺癌，但病程和首页未充分记录病理诊断分析。",
-            evidence_parts=["病理报告提示胃腺癌", "病程和首页未充分记录病理诊断分析", "胃腺癌，中分化"],
+            evidence_parts=["病理报告提示胃腺癌", "术后病程仅记录常规处理，未回看病理结果", "胃腺癌，中分化"],
             suggestion="补充病理诊断、分化程度和病理结果对诊疗计划的影响。",
+            evidence_items=_tumor_pathology_evidence_items(timeline),
         )
 
-    if rule_id == "LX0609-019" and _contains_all(text, "胃癌根治术", "未明确淋巴结清扫范围"):
+    if rule_id == "LX0609-019" and (
+        _contains_all(text, "胃癌根治术", "未明确淋巴结清扫范围")
+        or _contains_all(text, "标本处理", "未逐项标明近端切缘")
+    ):
         return _text_result(
             rule,
             status="non_compliant",
-            findings="胃癌根治术记录未明确淋巴结清扫范围及送检组数。",
-            evidence_parts=["胃癌根治术记录未明确淋巴结清扫范围及送检组数", "未明确淋巴结清扫范围及送检组数"],
+            findings="手术记录仅笼统描述送检组织，未详细记录取材部位、切缘及淋巴结分组等具体信息。",
+            evidence_parts=["手术记录标本处理仅笼统描述送检组织", "未逐项标明近端切缘、远端切缘、肿瘤部位、各组淋巴结分区及标本对应标签"],
             suggestion="补充淋巴结清扫范围、送检组数和标本信息。",
+            evidence_items=_specimen_evidence_items(timeline),
+        )
+
+    if rule_id == "LX0609-026" and _contains_all(text, "奥沙利铂", "卡培他滨", "今日准备开始辅助化疗"):
+        return _text_result(
+            rule,
+            status="non_compliant",
+            findings="化疗医嘱已开具具体药物、剂量、用法和时间，但病程记录仅泛化描述辅助化疗，未同步记录关键用药信息。",
+            evidence_parts=["化疗医嘱包含奥沙利铂、卡培他滨及剂量用法", "化疗前病程仅写今日准备开始辅助化疗，未记录药物名称、剂量、用法和时间"],
+            suggestion="在病程记录中补充化疗方案名称、药物名称、剂量、给药方式、计划时间和观察要点，并与医嘱核对一致。",
+            evidence_items=_chemo_evidence_items(timeline),
         )
 
     if rule_id == "LX0609-027" and _contains(text, "注意休息，保持切口清洁"):
@@ -652,7 +864,7 @@ def evaluate_luxian_0609_programmatic_rules(
         rule_id = _norm_id(rule.get("rule_id") or rule.get("rule_code"))
         if rule_id not in _TARGET_RULE_IDS:
             continue
-        text_result = _evaluate_text_pattern_rule(rule, combined_text) if is_synthetic_case else None
+        text_result = _evaluate_text_pattern_rule(rule, combined_text, timeline) if is_synthetic_case else None
         if text_result is not None:
             results.append(text_result)
             continue

@@ -1,0 +1,208 @@
+export type ManualSamplePool = {
+  id: string
+  name: string
+  source_file: string
+  source_sheet: string
+  scene: string
+  description?: string
+  created_by: string
+  created_at?: string
+  updated_at?: string
+  total_items: number
+  llm_intrinsic_items: number
+  programmatic_items: number
+  unsupported_items: number
+  matched_items: number
+  ambiguous_items: number
+  unmatched_items: number
+  ready_items: number
+  latest_job_id?: string
+  latest_job_status?: string
+}
+
+export type ManualSamplePoolItem = {
+  id: string
+  pool_id: string
+  row_no: number
+  department: string
+  patient_name: string
+  mr_no: string
+  visit_id: string
+  manual_issue_text: string
+  normalized_issue_text: string
+  doctor_name: string
+  qc_date?: string
+  qc_user: string
+  coverage_type: string
+  issue_category: string
+  expected_scene: string
+  candidate_rule_ids: string[]
+  include_in_batch_1: boolean
+  exclude_reason?: string
+  matched_institute_id?: string
+  matched_patient_id?: string
+  matched_visit_id?: string
+  match_status: string
+  sync_status: string
+  bundle_status: string
+  latest_job_id?: string
+  latest_match_status?: string
+  raw_payload?: Record<string, unknown>
+}
+
+export type ManualSamplePoolRecord = {
+  id: string
+  matched_institute_id?: string
+  matched_patient_id?: string
+  matched_visit_id?: string
+  patient_name: string
+  mr_no: string
+  department: string
+  match_status: string
+  sync_status: string
+  bundle_status: string
+  coverage_types: string[]
+  candidate_rule_ids: string[]
+  document_scope_labels: string[]
+  issue_count: number
+  issue_preview: string[]
+  issue_preview_text: string
+  sample_item_ids: string[]
+  sample_items: ManualSamplePoolItem[]
+}
+
+export type ManualSampleValidationMode =
+  | 'customer'
+  | 'sc'
+  | 'programmatic'
+  | 'formal_fast_screen_full'
+
+export type ManualSamplePoolListResult = {
+  items: ManualSamplePool[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type ManualSamplePoolItemsResult = {
+  pool: ManualSamplePool
+  items: ManualSamplePoolItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type ManualSamplePoolRecordsResult = {
+  pool: ManualSamplePool
+  items: ManualSamplePoolRecord[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type ManualSamplePoolSyncJob = {
+  id: string
+  pool_id: string
+  status: string
+  payload?: Record<string, unknown>
+  summary?: {
+    progress?: {
+      step_key?: string
+      step_label?: string
+      total_candidates?: number
+      eligible_visits?: number
+      processed_tables?: number
+      total_tables?: number
+      current_table?: string
+      remaining_tables?: number
+      matched?: number
+      ambiguous?: number
+      unmatched?: number
+      total_rows_pulled?: number
+      total_rows_upserted?: number
+    }
+    total_rows_pulled?: number
+    total_rows_upserted?: number
+    matched?: number
+    ambiguous?: number
+    unmatched?: number
+    eligible_visits?: number
+  }
+  error_message?: string
+  created_by?: string
+  created_at?: string
+  started_at?: string
+  finished_at?: string
+  updated_at?: string
+}
+
+export type ManualSamplePoolRunResult = {
+  pool_id: string
+  job_id: string
+  sample_item_count: number
+  selected_record_count: number
+  record_count: number
+  rule_count: number
+  record_ids: string[]
+  rule_ids: string[]
+  validation_mode?: ManualSampleValidationMode | string
+  rule_set_key?: string
+  rule_set_name?: string
+  rule_set_version?: string
+}
+
+export type Sheet2ExactReviewBlockedRow = {
+  sheet2_row_id: string
+  visit_id: string
+  patient_name: string
+  issue_family: string
+  primary_rule_id: string
+  manual_issue_text: string
+  blocked_reason_type: string
+  reason: string
+  backlog_category: string
+  backlog_reason: string
+  next_action: string
+}
+
+export type Sheet2ExactReviewBacklogBucket = {
+  category: string
+  count: number
+  definition: string
+  next_action: string
+  blocked_reason_types: Record<string, number>
+  top_issue_families: Array<{
+    issue_family: string
+    count: number
+  }>
+  top_primary_rules: Array<{
+    primary_rule_id: string
+    count: number
+  }>
+  sample_rows: Sheet2ExactReviewBlockedRow[]
+}
+
+export type Sheet2ExactReviewAcceptancePackage = {
+  generated_at: string
+  total_rows: number
+  status_breakdown: {
+    exact_confirmed: number
+    blocked_with_reason: number
+    skip: number
+    needs_exact_review: number
+  }
+  explanations: {
+    exact_confirmed: string
+    blocked_with_reason: string
+    skip: string
+    acceptance_note: string
+  }
+  blocked_reason_breakdown: Record<string, number>
+  blocked_backlog_breakdown: Sheet2ExactReviewBacklogBucket[]
+  blocked_rows: Sheet2ExactReviewBlockedRow[]
+  artifacts?: Record<string, string>
+  archive_summary?: {
+    archive_dir: string
+    archived_file_count: number
+  } | null
+}

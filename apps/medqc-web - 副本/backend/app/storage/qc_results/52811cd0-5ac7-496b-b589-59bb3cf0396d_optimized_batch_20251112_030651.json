@@ -1,0 +1,101 @@
+{
+  "id": "52811cd0-5ac7-496b-b589-59bb3cf0396d",
+  "mode": "optimized_batch",
+  "document_type": "手术记录",
+  "document_id": "test_1762916797415",
+  "rule_ids": [
+    "LX-019",
+    "LX-021",
+    "LX-025",
+    "LX-026",
+    "LX-027",
+    "LX-028"
+  ],
+  "medical_text": "手术记录\n\n手术日期：2025-10-20  09:30-11:20\n术前诊断：急性化脓性阑尾炎\n术后诊断：急性化脓性阑尾炎伴局限性腹膜炎\n手术名称：腹腔镜阑尾切除术\n手术者：李主任医师\n第一助手：王医师\n第二助手：张医师\n器械护士：刘护士\n巡回护士：陈护士\n麻醉方式：气管插管全身麻醉\n麻醉医师：赵医师\n\n手术经过：\n患者入室后取平卧位，常规消毒铺巾，麻醉满意后开始手术。于脐下缘作1cm纵行切口，建立气腹，腹腔内压力维持在12-14mmHg。置入腹腔镜探查，见腹腔内少量浑浊渗液约50ml，阑尾肿胀充血，表面有脓性渗出物附着，局部腹膜充血水肿。于右下腹麦氏点及左下腹各作0.5cm穿刺孔，置入操作器械。\n\n分离阑尾周围粘连，显露阑尾根部，结扎阑尾动脉，荷包缝合阑尾根部浆肌层，距阑尾根部约1cm处套扎阑尾，阑尾根部远端予以电凝离断，荷包缝合内翻残端。标本装入标本袋取出送病理检查。吸净腹腔渗液，彻底冲洗腹腔，放置引流管一根至盆腔，引流通畅。再次检查无活动性出血，逐层关闭切口。\n\n术中出血：约30ml\n输血：无\n输液：乳酸林格液1000ml，0.9%氯化钠注射液500ml\n标本：阑尾一条，长约8cm，直径约1.5cm，表面充血水肿，切面见脓性物\n术中冰冻病理：（待补充）\n\n术后处理：\n1. 禁食水，胃肠减压\n2. 抗感染治疗：头孢哌酮舒巴坦3.0g q12h ivgtt + 甲硝唑0.5g q12h ivgtt\n3. 补液支持治疗\n4. 镇痛治疗：地佐辛5mg im sos\n5. 观察生命体征、腹部体征及引流液性状\n6. 术后24-48小时拔除引流管\n\n手术者签名：李主任医师\n助手签名：王医师  张医师\n日期：2025-10-20",
+  "medical_text_length": 722,
+  "stats": {
+    "total": 2,
+    "compliant": 0,
+    "passed": 0,
+    "notApplicable": 0,
+    "issues": 2,
+    "errors": 0
+  },
+  "performance": {
+    "totalTokens": 3761,
+    "totalTime": 13.28326678276062
+  },
+  "results": null,
+  "payload": {
+    "document_id": "test_1762916797415",
+    "evaluation_summary": {
+      "total_rules": 2,
+      "compliant_rules": 0,
+      "not_applicable": 0,
+      "issues_found": 2,
+      "compliance_rate": 0,
+      "overall_grade": "C",
+      "critical_violations": 2,
+      "model": "qwen2.5-14b-instruct"
+    },
+    "evaluation_results": [
+      {
+        "rule_id": "LX-029",
+        "rule_name": "出院记录-记录未在患者出院后24小时内完成",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "出院记录未在患者出院后24小时内完成，存在提前书写的情况。",
+        "evidence": "记载：\"出院医嘱日期：2025-10-15，医师签名：李医生，日期：2025-10-15。\" 出院记录内容显示已在当天完成，可能存在提前书写的情况。",
+        "suggestion": "① 确保出院记录在患者出院后24小时内完成，避免提前书写。② 若确需提前书写，需在记录中注明实际完成时间，并由相关人员签字确认。③ 定期培训医护人员关于病历书写的时间规范。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 2342,
+          "api_time": 5.68659782409668
+        }
+      },
+      {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "findings": "病历文本中，出院记录与病案首页的诊断存在不一致的情况，具体表现为诊断名称、顺序或主次标识不匹配，且存在遗漏病案首页列出的诊断。",
+        "evidence": "病案首页记载：\"主要诊断：高血压，其他诊断：糖尿病。\" 出院记录记载：\"诊断：糖尿病，治疗经过：控制血糖。\"",
+        "suggestion": "(1) 在出院记录中补充遗漏的诊断'高血压'。(2) 调整出院记录中的诊断顺序，使其与病案首页一致。(3) 确保所有诊断在出院记录和病案首页中保持一致，包括主次标识。",
+        "confidence": 0.5,
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "evidence_verified": false,
+        "metadata": {
+          "tokens_used": 1419,
+          "api_time": 7.59666895866394
+        }
+      }
+    ],
+    "performance_metrics": {
+      "processing_time": 13.28326678276062,
+      "token_usage": 3761,
+      "estimated_cost": 0.007522
+    },
+    "optimization_metrics": {
+      "token_savings_rate": 0.8,
+      "estimated_original_tokens": 18805,
+      "actual_tokens_saved": 15044,
+      "cost_savings": 0.030088
+    }
+  },
+  "metadata": {
+    "trigger": "quick_qc_ui",
+    "prompt_mode": "plan_a"
+  },
+  "model": "qwen2.5-14b-instruct",
+  "created_at": "2025-11-12T03:06:51.074362+00:00"
+}

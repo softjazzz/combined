@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_progress_treatment_linkage_antibiotic_v1",
+    "issue_type": "Z19_progress_treatment_linkage",
+    "display_name": "病程治疗闭环-抗菌药",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-043", "SC-044"],
+    "bucket_id": "progress_treatment_linkage"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P119C",
+    "visit_id": "SYN-RUN-119C",
+    "mr_no": "SYN0119C",
+    "patient_name": "合成患者申",
+    "gender": "男",
+    "age": 60,
+    "department": "呼吸内科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "患者发热、咳脓痰，胸部CT提示右下肺感染，予哌拉西林他唑巴坦抗感染治疗。病程已记录抗菌药名称、剂量、给药频次及使用指征，今日体温降至37.2℃。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["肺部感染"],
+    "orders": ["哌拉西林他唑巴坦抗感染"],
+    "exams": ["胸部CT提示右下肺感染"]
+  }
+}

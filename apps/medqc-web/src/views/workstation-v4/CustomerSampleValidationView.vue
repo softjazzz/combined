@@ -13,7 +13,17 @@
 
             <div class="customer-sample-toolbar-actions">
               <a-button
+                class="customer-sample-guide-action !rounded-lg"
+                data-customer-guide="guide-entry"
+                @click="openCustomerSampleGuide"
+              >
+                <Compass :size="15" />
+                功能导览
+              </a-button>
+              <a-button
                 class="customer-sample-create-action !rounded-lg"
+                data-customer-guide="create-record"
+                :class="customerSampleGuideTargetClass('create-record')"
                 @click="openTestRecordDrawer"
               >
                 <FilePlus2 :size="15" />
@@ -22,6 +32,8 @@
               <a-button
                 type="primary"
                 class="!rounded-lg"
+                data-customer-guide="run-validation"
+                :class="customerSampleGuideTargetClass('run-validation')"
                 :disabled="runButtonDisabled"
                 :loading="runLoading"
                 @click="handleRunPool"
@@ -98,7 +110,11 @@
           </div>
 
           <div class="customer-sample-command-bar">
-            <div class="customer-sample-field">
+            <div
+              class="customer-sample-field"
+              data-customer-guide="sample-pool"
+              :class="customerSampleGuideTargetClass('sample-pool')"
+            >
               <div class="customer-sample-field-label">
                 当前样本池
               </div>
@@ -123,7 +139,11 @@
               </div>
             </div>
 
-            <div class="customer-sample-field">
+            <div
+              class="customer-sample-field"
+              data-customer-guide="sample-rule"
+              :class="customerSampleGuideTargetClass('sample-rule')"
+            >
               <div class="customer-sample-field-label">
                 验证规则集
               </div>
@@ -164,17 +184,87 @@
                 <span class="customer-sample-meta-chip">场景 {{ ruleSetScopeLabel(selectedRuleSet?.scope) }}</span>
               </div>
             </div>
-            <div class="flex flex-wrap gap-2">
-              <span
-                v-for="item in selectedRuleSetCoverageChips"
-                :key="item.label"
-                class="customer-sample-coverage-chip"
-                :class="item.className"
-              >
-                {{ item.label }} {{ item.value }}
+            <div class="customer-sample-rule-summary">
+              <span class="customer-sample-coverage-chip border-sky-200 bg-sky-50 text-sky-700">
+                规则数 {{ selectedRuleSetRuleCountText }}
               </span>
+              <button
+                v-if="selectedRuleSetCoverageChips.length"
+                type="button"
+                class="customer-sample-internal-toggle"
+                @click="toggleInternalDiagnostic"
+              >
+                内部覆盖详情
+              </button>
             </div>
           </div>
+
+          <section
+            v-if="isLuxian0609Mode"
+            class="customer-sample-luxian-scope"
+            data-customer-guide="lx0609-scope"
+            :class="customerSampleGuideTargetClass('lx0609-scope')"
+          >
+            <div class="customer-sample-luxian-scope-head">
+              <div>
+                <div class="customer-sample-luxian-scope-title">
+                  泸县0609质控点范围
+                </div>
+                <p>
+                  默认运行全量 0609 客户质控点；勾选后仅验证选中的 LX0609 质控点。
+                </p>
+              </div>
+              <div class="customer-sample-luxian-scope-actions">
+                <span>{{ luxianScopeModeText }}</span>
+                <a-button
+                  size="small"
+                  class="!rounded-lg"
+                  @click="clearLuxianRuleScope"
+                >
+                  全量运行
+                </a-button>
+              </div>
+            </div>
+            <div class="customer-sample-luxian-rule-groups">
+              <div
+                v-for="family in luxianRuleFamilies"
+                :key="family.key"
+                class="customer-sample-luxian-rule-group"
+              >
+                <div class="customer-sample-luxian-rule-group-head">
+                  <div>
+                    <strong>{{ family.name }}</strong>
+                    <small>{{ family.description }}</small>
+                  </div>
+                  <button
+                    type="button"
+                    @click="selectLuxianRuleFamily(family.ruleIds)"
+                  >
+                    {{ isLuxianRuleFamilySelected(family.ruleIds) ? '取消本组' : '选择本组' }}
+                  </button>
+                </div>
+                <div class="customer-sample-luxian-rule-options">
+                  <label
+                    v-for="rule in family.rules"
+                    :key="rule.ruleId"
+                    class="customer-sample-luxian-rule-option"
+                    :class="{ 'is-selected': selectedLuxianCustomerRuleIds.includes(rule.ruleId) }"
+                    :title="`${rule.ruleId} ${rule.name}`"
+                  >
+                    <input
+                      type="checkbox"
+                      class="luxian-rule-checkbox"
+                      :value="rule.ruleId"
+                      :checked="selectedLuxianCustomerRuleIds.includes(rule.ruleId)"
+                      @change="toggleLuxianRule(rule.ruleId)"
+                    >
+                    <span>{{ rule.ruleId }}</span>
+                    <em>{{ rule.name }}</em>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="customer-sample-diagnostic-panel">
@@ -399,7 +489,11 @@
           </div>
         </section>
 
-        <section class="customer-sample-list-panel">
+        <section
+          class="customer-sample-list-panel"
+          data-customer-guide="record-list"
+          :class="customerSampleGuideTargetClass('record-list')"
+        >
           <div class="border-b border-slate-200/80 px-5 py-4">
             <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div class="min-w-0">
@@ -507,6 +601,64 @@
             />
           </div>
         </section>
+      </div>
+    </div>
+
+    <div
+      v-if="customerSampleGuideOpen"
+      class="customer-sample-tour-layer"
+    >
+      <div class="customer-sample-tour-scrim" />
+      <div
+        class="customer-sample-tour-card"
+        :style="customerSampleTourCardStyle"
+      >
+        <div class="customer-sample-tour-kicker">
+          客户演示主流程
+        </div>
+        <div class="customer-sample-tour-count">
+          {{ customerSampleGuideStepIndex + 1 }} / {{ customerSampleGuideSteps.length }}
+        </div>
+        <h3>{{ currentCustomerSampleGuideStep.title }}</h3>
+        <p>{{ currentCustomerSampleGuideStep.description }}</p>
+        <div class="customer-sample-tour-dots">
+          <button
+            v-for="(_, index) in customerSampleGuideSteps"
+            :key="index"
+            type="button"
+            :class="{ 'is-active': index === customerSampleGuideStepIndex }"
+            :aria-label="`查看第 ${index + 1} 步`"
+            @click="goToCustomerSampleGuideStep(index)"
+          />
+        </div>
+        <div class="customer-sample-guide-footer">
+          <a-button
+            class="customer-sample-guide-dismiss !rounded-lg"
+            @click="closeCustomerSampleGuide"
+          >
+            跳过
+          </a-button>
+          <a-button
+            class="customer-sample-guide-start !rounded-lg"
+            @click="startSyntheticCaseFromGuide"
+          >
+            创建测试病历
+          </a-button>
+          <a-button
+            v-if="customerSampleGuideStepIndex > 0"
+            class="!rounded-lg"
+            @click="goToPreviousCustomerSampleGuideStep"
+          >
+            上一步
+          </a-button>
+          <a-button
+            type="primary"
+            class="customer-sample-guide-next !rounded-lg"
+            @click="goToNextCustomerSampleGuideStep"
+          >
+            {{ isLastCustomerSampleGuideStep ? '完成导览' : '下一步' }}
+          </a-button>
+        </div>
       </div>
     </div>
 
@@ -718,13 +870,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, ref } from 'vue'
+import { computed, h, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import type { CSSProperties } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import type { UploadFile, UploadProps } from 'ant-design-vue'
 import { InboxOutlined } from '@ant-design/icons-vue'
 import type { TableColumnsType } from 'ant-design-vue'
-import { FilePlus2 } from 'lucide-vue-next'
+import { Compass, FilePlus2 } from 'lucide-vue-next'
 import type {
   ManualSamplePool,
   ManualSamplePoolRecord,
@@ -746,6 +899,7 @@ import {
   runManualSamplePool,
   syncManualSamplePoolRecords,
 } from '@/services/manual-case-sample-service'
+import { syntheticCaseRuleFamilies } from './customer-sample-validation/syntheticCaseTemplates'
 import {
   cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
@@ -765,8 +919,13 @@ const runLoading = ref(false)
 const syncLoading = ref(false)
 const importingPool = ref(false)
 const selectedRowKeys = ref<string[]>([])
+const initialQueryJobHandled = ref(false)
+const initialFocusedRecordSearchHandled = ref(false)
 const importModalOpen = ref(false)
 const importFileList = ref<UploadFile[]>([])
+const customerSampleGuideOpen = ref(false)
+const customerSampleGuideStepIndex = ref(0)
+const customerSampleTourCardStyle = ref<CSSProperties>({})
 const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
 const FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY = 'sc_content_full_v1'
 const SC_SAMPLE_RULE_SET_KEY = 'sc_sample_running_v1'
@@ -774,6 +933,54 @@ const PROGRAMMATIC_RULE_SET_KEY = 'sample_programmatic_gate_v1'
 const LEGACY_CUSTOMER_RULE_SET_KEY = 'customer_luxian_full_v1'
 const SAMPLE_RULE_SET_RUN_TIMEOUT_MS = 90000
 const RUN_DUPLICATE_GUARD_MS = 120000
+const CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY = 'medqc_customer_sample_validation_guide_seen_v1'
+let customerSampleGuidePositionTimer: ReturnType<typeof setTimeout> | null = null
+
+type CustomerSampleGuideTarget =
+  | 'sample-pool'
+  | 'sample-rule'
+  | 'lx0609-scope'
+  | 'create-record'
+  | 'record-list'
+  | 'run-validation'
+
+const customerSampleGuideSteps: Array<{
+  target: CustomerSampleGuideTarget
+  title: string
+  description: string
+}> = [
+  {
+    target: 'sample-pool',
+    title: '先选择样本池',
+    description:
+      '这里切换要验证的病历来源：客户自建测试病历用于现场演示，泸县0609合成质控样本用于回归验证，真实样本池用于客户数据复核。',
+  },
+  {
+    target: 'sample-rule',
+    title: '确认验证规则集',
+    description: '这里选择本次运行的规则包。客户演示优先使用泸县0609质控点验证，页面会显示规则数量和覆盖状态。',
+  },
+  {
+    target: 'lx0609-scope',
+    title: '限定 LX0609 质控点范围',
+    description: '默认运行全量 0609；勾选质控点后，只验证选中的 LX0609 客户质控点。',
+  },
+  {
+    target: 'create-record',
+    title: '创建测试病历',
+    description: '点击这里可按质控点生成测试病历，保存后回到病历池继续验证。',
+  },
+  {
+    target: 'record-list',
+    title: '勾选要验证的病历',
+    description: '在病历池中搜索、筛选并勾选病历；未选择病历时页面会提示先选择。',
+  },
+  {
+    target: 'run-validation',
+    title: '查看任务结果与证据链',
+    description: '发起验证后打开结果抽屉，查看进度、状态分布、命中的客户质控点和证据摘要。',
+  },
+]
 
 const fallbackRuleSets: ManualSampleValidationRuleSet[] = [
   {
@@ -899,6 +1106,7 @@ const ruleSets = ref<ManualSampleValidationRuleSet[]>(fallbackRuleSets)
 const selectedRuleSetKey = ref<string>(LUXIAN_0609_RULE_SET_KEY)
 const ruleSetDirectoryFallbackActive = ref(false)
 const internalDiagnosticKeys = ref<string[]>([])
+const selectedLuxianCustomerRuleIds = ref<string[]>([])
 
 const detailOpen = ref(false)
 const activeRecord = ref<ManualSamplePoolRecord>()
@@ -997,6 +1205,26 @@ const selectedRuleSetPayloadKey = computed(() =>
 )
 const isLuxian0609Mode = computed(
   () => selectedRuleSet.value?.rule_set_key === LUXIAN_0609_RULE_SET_KEY,
+)
+const luxianRuleFamilies = computed(() =>
+  syntheticCaseRuleFamilies.map((family) => ({
+    key: family.key,
+    name: family.name,
+    description: family.description,
+    rules: family.rules,
+    ruleIds: family.rules.map((rule) => rule.ruleId),
+  })),
+)
+const luxianScopeModeText = computed(() =>
+  selectedLuxianCustomerRuleIds.value.length
+    ? `scoped run：${selectedLuxianCustomerRuleIds.value.length} 个客户质控点`
+    : '全量 0609 客户质控点',
+)
+const currentCustomerSampleGuideStep = computed(
+  () => customerSampleGuideSteps[customerSampleGuideStepIndex.value] || customerSampleGuideSteps[0],
+)
+const isLastCustomerSampleGuideStep = computed(
+  () => customerSampleGuideStepIndex.value >= customerSampleGuideSteps.length - 1,
 )
 const mainRuleSets = computed(() =>
   ruleSets.value.filter((item) => !item.advanced && (item.display_group || 'main') === 'main'),
@@ -1104,6 +1332,11 @@ const selectedRuleSetCoverageChips = computed(() => {
 
 const workflowSteps = computed(() => {
   const pool = selectedPool.value
+  const runnableValue = isLuxian0609Mode.value
+    ? (pool?.matched_items ?? 0)
+    : isSyncedOnlyValidationMode.value
+      ? (pool?.matched_items ?? 0)
+      : (pool?.ready_items ?? 0)
   return [
     {
       label: '匹配',
@@ -1112,14 +1345,8 @@ const workflowSteps = computed(() => {
     },
     {
       label: isSyncedOnlyValidationMode.value ? '同步' : '就绪',
-      value: isSyncedOnlyValidationMode.value
-        ? (pool?.matched_items ?? 0)
-        : (pool?.ready_items ?? 0),
-      className:
-        (isSyncedOnlyValidationMode.value ? (pool?.matched_items ?? 0) : (pool?.ready_items ?? 0)) >
-        0
-          ? 'is-ready'
-          : '',
+      value: runnableValue,
+      className: runnableValue > 0 ? 'is-ready' : '',
     },
     {
       label: '已选',
@@ -1131,11 +1358,15 @@ const workflowSteps = computed(() => {
 
 const summaryCards = computed(() => {
   const pool = selectedPool.value
-  const runnableValue = isSyncedOnlyValidationMode.value
+  const runnableValue = isLuxian0609Mode.value
     ? (pool?.matched_items ?? 0)
-    : (pool?.ready_items ?? 0)
+    : isSyncedOnlyValidationMode.value
+      ? (pool?.matched_items ?? 0)
+      : (pool?.ready_items ?? 0)
   let runnableHelp = '文书已就绪，可直接发起当前模式质控'
-  if (isFormalFastScreenMode.value) {
+  if (isLuxian0609Mode.value) {
+    runnableHelp = '已关联真实病历即可发起泸县0609验证；可再限定 LX0609 质控点范围'
+  } else if (isFormalFastScreenMode.value) {
     runnableHelp = '已匹配且已同步，可发起正式 84 条质控'
   } else if (selectedValidationMode.value === 'programmatic') {
     runnableHelp = '已匹配且已同步，可直接发起程序规则验证'
@@ -1224,7 +1455,9 @@ const currentScopeDescription = computed(() => {
     filters.value.matchStatus ? `病历关联：${matchStatusLabel(filters.value.matchStatus)}` : '',
     !isSyncedOnlyValidationMode.value && filters.value.includeInBatch ? '仅看首批样本' : '',
   ].filter(Boolean)
-  const base = isSyncedOnlyValidationMode.value
+  const base = isLuxian0609Mode.value
+    ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，可按全量或选定 LX0609 质控点发起验证。`
+    : isSyncedOnlyValidationMode.value
     ? `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份、已同步 ${synced} 份。`
     : `当前列表展示的是去重后的真实病历池，共 ${total} 份病历；其中已关联 ${matched} 份，文书已就绪 ${ready} 份。`
   if (!filterLabels.length) {
@@ -1307,46 +1540,69 @@ const emptyDescription = computed(() => {
 
 const itemColumns: TableColumnsType<ManualSamplePoolRecord> = [
   {
+    title: '编号',
+    key: 'record_code',
+    width: 120,
+    customRender: ({ record, index }) =>
+      h(
+        'span',
+        {
+          class: 'customer-sample-record-code',
+          title: resolveRecordIdentifier(record),
+        },
+        resolveRecordDisplayCode(record, Number(index || 0)),
+      ),
+  },
+  {
+    title: '创建时间',
+    key: 'created_time',
+    width: 150,
+    customRender: ({ record }) =>
+      h(
+        'span',
+        { class: 'customer-sample-created-time' },
+        resolveRecordCreatedTime(record) || '-',
+      ),
+  },
+  {
     title: '患者信息',
     key: 'patient',
-    width: 190,
+    width: 260,
     customRender: ({ record }) =>
       h('div', { class: 'customer-sample-patient-cell' }, [
         h('div', { class: 'customer-sample-patient-avatar' }, patientInitial(record)),
         h('div', { class: 'min-w-0' }, [
-          h('div', { class: 'customer-sample-patient-name' }, resolveRecordPatientName(record)),
-          h('div', { class: 'customer-sample-patient-id' }, resolveRecordIdentifier(record)),
+          h('div', { class: 'customer-sample-patient-name' }, resolveRecordDisplayTitle(record)),
+          h('div', { class: 'customer-sample-patient-meta' }, [
+            h('span', resolveRecordPatientLine(record)),
+          ]),
         ]),
       ]),
   },
   {
     title: '科室',
     dataIndex: 'department',
-    width: 110,
+    width: 120,
     customRender: ({ value }) =>
       h('span', { class: 'customer-sample-department' }, String(value || '-')),
   },
   {
     title: '样本问题与文书范围',
     key: 'issue_scope',
-    width: 620,
+    width: 560,
     customRender: ({ record }) => renderRecordSummary(record),
   },
   {
-    title: '验证状态',
-    key: 'status',
-    width: 180,
-    customRender: ({ record }) => renderRecordStatus(record),
-  },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 140,
-    fixed: 'right',
+    title: '状态与操作',
+    key: 'status_actions',
+    width: 280,
     customRender: ({ record }) =>
-      h('div', { class: 'customer-sample-action-cell' }, [
-        renderPrimaryAction(record),
-        h('div', { class: 'customer-sample-secondary-actions' }, buildSecondaryActions(record)),
+      h('div', { class: 'customer-sample-state-action-cell' }, [
+        renderRecordStatus(record),
+        h('div', { class: 'customer-sample-action-cell' }, [
+          renderPrimaryAction(record),
+          h('div', { class: 'customer-sample-secondary-actions' }, buildSecondaryActions(record)),
+        ]),
       ]),
   },
 ]
@@ -1716,6 +1972,9 @@ function isRecordSyncedForValidation(record: ManualSamplePoolRecord): boolean {
 }
 
 function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
+  if (isLuxian0609Mode.value) {
+    return record.match_status === 'matched' && !!record.matched_visit_id
+  }
   if (isSyncedOnlyValidationMode.value) {
     return (
       record.match_status === 'matched' &&
@@ -1732,6 +1991,9 @@ function isRunnableRecord(record: ManualSamplePoolRecord): boolean {
 }
 
 function runnableRequirementHint(): string {
+  if (isLuxian0609Mode.value) {
+    return '泸县0609支持从已关联真实病历直接发起验证；选择质控族/质控点只限定规则范围，不会限制样本池或病历选择。'
+  }
   if (selectedValidationMode.value === 'formal_fast_screen_full') {
     return '未关联真实病历或尚未同步到本地 PG 的病历不会进入正式质控；若后台 final scope 收集不到，会返回终末病历未同步错误。'
   }
@@ -1742,6 +2004,9 @@ function runnableRequirementHint(): string {
 }
 
 function selectedRecordNotRunnableMessage(): string {
+  if (isLuxian0609Mode.value) {
+    return '当前选中的病历还未完成病历关联，暂时无法发起泸县0609验证'
+  }
   if (selectedValidationMode.value === 'formal_fast_screen_full') {
     return '当前选中的病历还未完成匹配或同步，暂时无法发起正式质控 84 条'
   }
@@ -1820,7 +2085,154 @@ function buildRuleSetDirectory(
 }
 
 function openTestRecordDrawer() {
-  router.push({ name: 'WorkstationV4SyntheticCaseNew' })
+  const selectedRuleIds = isLuxian0609Mode.value
+    ? normalizeLuxianRuleIds(selectedLuxianCustomerRuleIds.value)
+    : []
+  const routeTarget: { name: string; query?: Record<string, string> } = {
+    name: 'WorkstationV4SyntheticCaseNew',
+  }
+  if (selectedRuleIds.length) {
+    routeTarget.query = {
+      ruleIds: selectedRuleIds.join(','),
+      ruleFamily: resolveLuxianRuleFamilyKey(selectedRuleIds),
+    }
+  }
+  router.push(routeTarget)
+}
+
+function hasCustomerSampleGuideTourQuery(): boolean {
+  const raw = route?.query?.tour
+  return Array.isArray(raw) ? raw.includes('1') : raw === '1'
+}
+
+function hasSeenCustomerSampleGuide(): boolean {
+  try {
+    return window.localStorage?.getItem(CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function markCustomerSampleGuideSeen() {
+  try {
+    window.localStorage?.setItem(CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY, 'true')
+  } catch {
+    // localStorage 可能被浏览器策略禁用，不影响导览关闭。
+  }
+}
+
+function customerSampleGuideTargetClass(target: CustomerSampleGuideTarget) {
+  return {
+    'customer-sample-tour-target': customerSampleGuideOpen.value,
+    'is-current-tour-target':
+      customerSampleGuideOpen.value && currentCustomerSampleGuideStep.value.target === target,
+  }
+}
+
+function clampTourPosition(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function updateCustomerSampleTourCardPosition() {
+  if (!customerSampleGuideOpen.value) return
+  const target = currentCustomerSampleGuideStep.value.target
+  const element = document.querySelector(`[data-customer-guide="${target}"]`)
+  if (!element) return
+
+  const rect = element.getBoundingClientRect()
+  const gap = 18
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const cardWidth = Math.min(420, Math.max(280, viewportWidth - 32))
+  const cardHeight = 238
+  const maxLeft = Math.max(gap, viewportWidth - cardWidth - gap)
+  const maxTop = Math.max(gap, viewportHeight - cardHeight - gap)
+
+  let left = rect.right + gap
+  let top = rect.top
+
+  if (left + cardWidth > viewportWidth - gap) {
+    left = rect.left - cardWidth - gap
+  }
+  if (left < gap) {
+    left = clampTourPosition(rect.left, gap, maxLeft)
+    top = rect.bottom + gap
+    if (top + cardHeight > viewportHeight - gap) {
+      top = rect.top - cardHeight - gap
+    }
+  }
+
+  customerSampleTourCardStyle.value = {
+    width: `${cardWidth}px`,
+    left: `${clampTourPosition(left, gap, maxLeft)}px`,
+    top: `${clampTourPosition(top, gap, maxTop)}px`,
+  }
+}
+
+function scheduleCustomerSampleTourCardPositionUpdate() {
+  if (customerSampleGuidePositionTimer) {
+    clearTimeout(customerSampleGuidePositionTimer)
+  }
+  updateCustomerSampleTourCardPosition()
+  customerSampleGuidePositionTimer = setTimeout(updateCustomerSampleTourCardPosition, 320)
+}
+
+function scrollCustomerSampleGuideTarget() {
+  const target = currentCustomerSampleGuideStep.value.target
+  void nextTick(() => {
+    const element = document.querySelector(`[data-customer-guide="${target}"]`)
+    if (typeof element?.scrollIntoView === 'function') {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    }
+    scheduleCustomerSampleTourCardPositionUpdate()
+  })
+}
+
+function openCustomerSampleGuide() {
+  customerSampleGuideStepIndex.value = 0
+  customerSampleGuideOpen.value = true
+  scrollCustomerSampleGuideTarget()
+}
+
+function toggleInternalDiagnostic() {
+  internalDiagnosticKeys.value = internalDiagnosticKeys.value.includes('sheet2') ? [] : ['sheet2']
+}
+
+function closeCustomerSampleGuide() {
+  customerSampleGuideOpen.value = false
+  customerSampleTourCardStyle.value = {}
+  markCustomerSampleGuideSeen()
+}
+
+function startSyntheticCaseFromGuide() {
+  closeCustomerSampleGuide()
+  openTestRecordDrawer()
+}
+
+function goToCustomerSampleGuideStep(index: number) {
+  customerSampleGuideStepIndex.value = Math.min(
+    Math.max(index, 0),
+    customerSampleGuideSteps.length - 1,
+  )
+  scrollCustomerSampleGuideTarget()
+}
+
+function goToPreviousCustomerSampleGuideStep() {
+  goToCustomerSampleGuideStep(customerSampleGuideStepIndex.value - 1)
+}
+
+function goToNextCustomerSampleGuideStep() {
+  if (isLastCustomerSampleGuideStep.value) {
+    closeCustomerSampleGuide()
+    return
+  }
+  goToCustomerSampleGuideStep(customerSampleGuideStepIndex.value + 1)
+}
+
+function openInitialCustomerSampleGuide() {
+  if (hasCustomerSampleGuideTourQuery() || !hasSeenCustomerSampleGuide()) {
+    openCustomerSampleGuide()
+  }
 }
 
 async function loadRuleSets() {
@@ -1865,6 +2277,7 @@ async function loadPools() {
   if (selectedPoolId.value) {
     await loadLatestSyncJob()
     await loadRecords()
+    await openInitialQueryJob()
   }
 }
 
@@ -1902,11 +2315,70 @@ async function loadRecords() {
     return
   }
   selectedPool.value = result.data.pool
-  records.value = result.data.items
+  const focusedRecordId = String(route?.query?.recordId || '').trim()
+  records.value = sortManualSampleRecordsForDisplay(
+    result.data.items,
+    selectedPoolId.value,
+    focusedRecordId,
+  )
   pagination.value.total = result.data.total
+  if (
+    focusedRecordId &&
+    !initialFocusedRecordSearchHandled.value &&
+    !records.value.some((record) => isFocusedRecord(record, focusedRecordId))
+  ) {
+    initialFocusedRecordSearchHandled.value = true
+    filters.value.query = focusedRecordId
+    pagination.value.page = 1
+    await loadRecords()
+    return
+  }
   selectedRowKeys.value = selectedRowKeys.value.filter((key) =>
     records.value.some((item) => item.id === key),
   )
+}
+
+async function openInitialQueryJob() {
+  if (initialQueryJobHandled.value) return
+  const jobId = String(route?.query?.jobId || '').trim()
+  if (!jobId) return
+  initialQueryJobHandled.value = true
+  message.info('验证任务已创建，正在打开任务进度')
+  await openBatchJob(jobId)
+}
+
+function recordSortTime(record: ManualSamplePoolRecord): string {
+  const fromRecord = String(record.created_at || record.updated_at || '').trim()
+  if (fromRecord) return fromRecord
+  return String(
+    record.sample_items?.[0]?.created_at || record.sample_items?.[0]?.updated_at || '',
+  ).trim()
+}
+
+function isFocusedRecord(record: ManualSamplePoolRecord, focusedRecordId: string): boolean {
+  const normalizedFocus = String(focusedRecordId || '').trim()
+  if (!normalizedFocus) return false
+  return [record.id, record.matched_visit_id, record.mr_no].some(
+    (value) => String(value || '').trim() === normalizedFocus,
+  )
+}
+
+function sortManualSampleRecordsForDisplay(
+  items: ManualSamplePoolRecord[],
+  poolId: string,
+  focusedRecordId = '',
+): ManualSamplePoolRecord[] {
+  const shouldSortCustomerTestPool = poolId === 'customer-created-test-records-v1'
+  if (!shouldSortCustomerTestPool && !focusedRecordId) return items
+  return [...items].sort((left, right) => {
+    const leftFocused = isFocusedRecord(left, focusedRecordId)
+    const rightFocused = isFocusedRecord(right, focusedRecordId)
+    if (leftFocused !== rightFocused) return leftFocused ? -1 : 1
+    if (shouldSortCustomerTestPool) {
+      return recordSortTime(right).localeCompare(recordSortTime(left))
+    }
+    return 0
+  })
 }
 
 async function handlePoolChange() {
@@ -1941,12 +2413,75 @@ function applyValidationModeEffects(normalizedMode: ManualSampleValidationMode) 
   }
 }
 
+function normalizeLuxianRuleIds(ruleIds: string[]): string[] {
+  return Array.from(
+    new Set(
+      ruleIds
+        .map((ruleId) => String(ruleId || '').trim().toUpperCase())
+        .filter((ruleId) => /^LX0609-\d{3}$/u.test(ruleId)),
+    ),
+  ).sort()
+}
+
+function resolveLuxianRuleFamilyKey(ruleIds: string[]): string {
+  const normalizedRuleIds = normalizeLuxianRuleIds(ruleIds)
+  if (!normalizedRuleIds.length) return ''
+  const normalizedSet = new Set(normalizedRuleIds)
+  const exactFamily = luxianRuleFamilies.value.find(
+    (family) =>
+      family.ruleIds.length > 0 && family.ruleIds.every((ruleId) => normalizedSet.has(ruleId)),
+  )
+  if (exactFamily) return exactFamily.key
+  return (
+    luxianRuleFamilies.value.find((family) =>
+      family.ruleIds.some((ruleId) => normalizedSet.has(ruleId)),
+    )?.key || ''
+  )
+}
+
+function toggleLuxianRule(ruleId: string) {
+  const normalizedRuleId = normalizeLuxianRuleIds([ruleId])[0]
+  if (!normalizedRuleId) return
+  const current = new Set(selectedLuxianCustomerRuleIds.value)
+  if (current.has(normalizedRuleId)) {
+    current.delete(normalizedRuleId)
+  } else {
+    current.add(normalizedRuleId)
+  }
+  selectedLuxianCustomerRuleIds.value = normalizeLuxianRuleIds([...current])
+}
+
+function isLuxianRuleFamilySelected(ruleIds: string[]): boolean {
+  const normalizedRuleIds = normalizeLuxianRuleIds(ruleIds)
+  if (!normalizedRuleIds.length) return false
+  const current = new Set(selectedLuxianCustomerRuleIds.value)
+  return normalizedRuleIds.every((ruleId) => current.has(ruleId))
+}
+
+function selectLuxianRuleFamily(ruleIds: string[]) {
+  const normalizedRuleIds = normalizeLuxianRuleIds(ruleIds)
+  const current = new Set(selectedLuxianCustomerRuleIds.value)
+  if (normalizedRuleIds.every((ruleId) => current.has(ruleId))) {
+    normalizedRuleIds.forEach((ruleId) => current.delete(ruleId))
+  } else {
+    normalizedRuleIds.forEach((ruleId) => current.add(ruleId))
+  }
+  selectedLuxianCustomerRuleIds.value = normalizeLuxianRuleIds([...current])
+}
+
+function clearLuxianRuleScope() {
+  selectedLuxianCustomerRuleIds.value = []
+}
+
 async function handleRuleSetChange(ruleSetKey: string | number) {
   const nextKey = String(ruleSetKey || '').trim() || LUXIAN_0609_RULE_SET_KEY
   selectedRuleSetKey.value = nextKey
   applyValidationModeEffects(
     normalizeValidationMode(selectedRuleSet.value?.validation_mode || 'customer'),
   )
+  if (!isLuxian0609Mode.value) {
+    clearLuxianRuleScope()
+  }
   pagination.value.page = 1
   selectedRowKeys.value = []
   await loadRecords()
@@ -2124,6 +2659,39 @@ function resolveRecordPatientName(record: ManualSamplePoolRecord): string {
   return String(record.patient_name || '').trim() || '-'
 }
 
+function resolveRecordCaseTitle(record: ManualSamplePoolRecord): string {
+  const caseTitle = record.sample_items
+    .map((item) => {
+      const rawPayload = item.raw_payload || {}
+      return typeof rawPayload.case_title === 'string' ? rawPayload.case_title.trim() : ''
+    })
+    .find(Boolean)
+  return caseTitle || ''
+}
+
+function resolveRecordDisplayTitle(record: ManualSamplePoolRecord): string {
+  const caseTitle = resolveRecordCaseTitle(record)
+  if (caseTitle) {
+    const cleaned = caseTitle
+      .replace(/[-_]\d{10,}$/u, '')
+      .replace(/CUSTOMER_TEST_\d+[A-Z0-9]*$/u, '')
+      .replace(/[｜|]\s*\d{2,4}[-_/年]?\d{1,2}[-_/月]?\d{1,2}日?\s*\d{0,2}:?\d{0,2}\s*$/u, '')
+      .replace(/[｜|]\s*\d{4}[-_/]?\d{2}[-_/]?\d{2}[-_/]?\d{0,6}\s*$/u, '')
+      .replace(/[｜|]\s*\d{4}-\d{4}\s*$/u, '')
+      .replace(/[-_]\d{13,}$/u, '')
+      .replace(/\s+/gu, ' ')
+      .trim()
+    return cleaned || caseTitle
+  }
+  return resolveRecordPatientName(record)
+}
+
+function resolveRecordPatientLine(record: ManualSamplePoolRecord): string {
+  const patientName = resolveRecordPatientName(record)
+  const department = String(record.department || '').trim()
+  return [patientName === '-' ? '' : patientName, department].filter(Boolean).join(' · ') || '-'
+}
+
 function resolveRecordIdentifier(record: ManualSamplePoolRecord): string {
   const rawVisitId = String(record.sample_items?.[0]?.visit_id || '').trim()
   return (
@@ -2132,6 +2700,55 @@ function resolveRecordIdentifier(record: ManualSamplePoolRecord): string {
     String(record.matched_visit_id || '').trim() ||
     '-'
   )
+}
+
+function resolveRecordDisplayCode(record: ManualSamplePoolRecord, index = 0): string {
+  if (/^CUSTOMER_TEST_/u.test(resolveRecordIdentifier(record))) {
+    return `测试-${String(index + 1).padStart(3, '0')}`
+  }
+  return resolveRecordShortIdentifier(record).replace(/^编号\s*/u, '')
+}
+
+function resolveRecordShortIdentifier(record: ManualSamplePoolRecord): string {
+  const identifier = resolveRecordIdentifier(record)
+  if (identifier === '-') return '-'
+  const normalized = identifier.trim()
+  const customerTestMatch = normalized.match(/^CUSTOMER_TEST_(\d{8})(\d{4,6})([A-Z0-9]+)$/u)
+  if (customerTestMatch) {
+    const [, , , suffix] = customerTestMatch
+    return `编号 ${suffix.slice(-6)}`
+  }
+  return normalized.length > 22 ? `编号 ...${normalized.slice(-10)}` : `编号 ${normalized}`
+}
+
+function resolveRecordCreatedTime(record: ManualSamplePoolRecord): string {
+  const raw = recordSortTime(record)
+  if (!raw) return ''
+  return formatCompactDateTime(raw)
+}
+
+function formatCompactDateTime(value: string): string {
+  const text = value.trim()
+  if (!text) return ''
+  const directMatch = text.match(/^(\d{4})[-/](\d{2})[-/](\d{2})[ T](\d{2}):(\d{2})/u)
+  if (directMatch) {
+    const [, year, month, day, hour, minute] = directMatch
+    return `${year}-${month}-${day} ${hour}:${minute}`
+  }
+  const normalized = text.includes('T') ? text : text.replace(' ', 'T')
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
+  const date = new Date(hasTimezone ? normalized : `${normalized}Z`)
+  if (Number.isNaN(date.getTime())) return text
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const getPart = (type: string) => parts.find((part) => part.type === type)?.value || ''
+  return `${getPart('year')}-${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}`
 }
 
 function openRecordDetail(record: ManualSamplePoolRecord) {
@@ -2208,6 +2825,7 @@ async function handleRunPool() {
     selectedRuleSetPayloadKey.value,
     selectedValidationMode.value,
     runnableRecordIds,
+    isLuxian0609Mode.value ? selectedLuxianCustomerRuleIds.value : [],
   )
   const now = Date.now()
   if (
@@ -2247,6 +2865,10 @@ async function handleRunPool() {
     max_parallel_records: number
     validation_mode: ManualSampleValidationMode
     rule_set_key: string
+    selected_rule_ids?: string[]
+  }
+  if (isLuxian0609Mode.value && selectedLuxianCustomerRuleIds.value.length) {
+    runPayload.selected_rule_ids = selectedLuxianCustomerRuleIds.value
   }
   const result = await runManualSamplePool(
     selectedPoolId.value,
@@ -2266,6 +2888,7 @@ async function handleRunPool() {
         previousJobId: selectedPool.value?.latest_job_id,
         runKey,
         ruleSetKey: selectedRuleSetPayloadKey.value,
+        selectedRuleIds: isLuxian0609Mode.value ? selectedLuxianCustomerRuleIds.value : [],
       })
       runLoading.value = false
       if (recovered) {
@@ -2307,11 +2930,17 @@ function buildRunSubmissionKey(
   ruleSetKey: string,
   validationMode: ManualSampleValidationMode,
   recordIds: string[],
+  selectedRuleIds: string[] = [],
 ): string {
   const normalizedRecordIds = recordIds.map((item) => String(item)).sort()
-  return [poolId, ruleSetKey || '-', validationMode, normalizedRecordIds.join(',') || 'all'].join(
-    '|',
-  )
+  const normalizedRuleIds = normalizeLuxianRuleIds(selectedRuleIds)
+  return [
+    poolId,
+    ruleSetKey || '-',
+    validationMode,
+    normalizedRecordIds.join(',') || 'all',
+    normalizedRuleIds.join(',') || 'full',
+  ].join('|')
 }
 
 function isCloseToRunStart(createdAt: string | undefined, startedAt: number): boolean {
@@ -2336,15 +2965,31 @@ function isSameRecordScope(job: SichuanBatchJob, recordIds: string[]): boolean {
   return expected === actual
 }
 
+function isSameLuxianRuleScope(job: SichuanBatchJob, selectedRuleIds: string[]): boolean {
+  const expected = normalizeLuxianRuleIds(selectedRuleIds)
+  const filters = job.filters && typeof job.filters === 'object' ? job.filters : {}
+  const actual = normalizeLuxianRuleIds(
+    Array.isArray(filters.selected_rule_ids)
+      ? filters.selected_rule_ids.map((item) => String(item))
+      : [],
+  )
+  if (!expected.length) {
+    return actual.length === 0
+  }
+  return expected.join('|') === actual.join('|')
+}
+
 function isRecoverableRunJob(
   job: SichuanBatchJob,
   recordIds: string[],
   startedAt: number,
   ruleSetKey = FORMAL_FAST_SCREEN_FULL_RULE_SET_KEY,
+  selectedRuleIds: string[] = [],
 ): boolean {
   return (
     job.rule_set_key === ruleSetKey &&
     isSameRecordScope(job, recordIds) &&
+    isSameLuxianRuleScope(job, selectedRuleIds) &&
     isCloseToRunStart(job.created_at, startedAt)
   )
 }
@@ -2356,6 +3001,7 @@ async function recoverRunAfterSlowRequest(options: {
   previousJobId?: string
   runKey: string
   ruleSetKey: string
+  selectedRuleIds?: string[]
 }): Promise<boolean> {
   await loadPools()
   const refreshedPool = pools.value.find((item) => item.id === options.poolId)
@@ -2368,7 +3014,13 @@ async function recoverRunAfterSlowRequest(options: {
     return false
   }
   if (
-    !isRecoverableRunJob(jobResult.data, options.recordIds, options.startedAt, options.ruleSetKey)
+    !isRecoverableRunJob(
+      jobResult.data,
+      options.recordIds,
+      options.startedAt,
+      options.ruleSetKey,
+      options.selectedRuleIds || [],
+    )
   ) {
     return false
   }
@@ -2614,11 +3266,20 @@ function formatDateTime(value?: string) {
 }
 
 onMounted(async () => {
+  window.addEventListener('resize', updateCustomerSampleTourCardPosition)
+  window.addEventListener('scroll', updateCustomerSampleTourCardPosition, true)
   await loadRuleSets()
   await loadPools()
+  openInitialCustomerSampleGuide()
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', updateCustomerSampleTourCardPosition)
+  window.removeEventListener('scroll', updateCustomerSampleTourCardPosition, true)
+  if (customerSampleGuidePositionTimer) {
+    clearTimeout(customerSampleGuidePositionTimer)
+    customerSampleGuidePositionTimer = null
+  }
   stopBatchJobPolling()
   stopSyncJobPolling()
 })
@@ -2802,6 +3463,18 @@ onUnmounted(() => {
   stroke-width: 2.2;
 }
 
+.customer-sample-toolbar-actions :deep(.customer-sample-guide-action.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #0066cc;
+}
+
+.customer-sample-toolbar-actions :deep(.customer-sample-guide-action svg) {
+  flex: 0 0 auto;
+  stroke-width: 2.2;
+}
+
 .customer-sample-command-bar {
   margin-top: 18px;
   display: grid;
@@ -2955,6 +3628,213 @@ onUnmounted(() => {
   padding: 4px 10px;
 }
 
+.customer-sample-rule-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.customer-sample-internal-toggle {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 4px 10px;
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.customer-sample-internal-toggle:hover {
+  border-color: rgba(0, 102, 204, 0.16);
+  background: rgba(234, 242, 255, 0.72);
+  color: #0066cc;
+}
+
+.customer-sample-luxian-scope {
+  margin-top: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 12px 14px 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.035);
+}
+
+.customer-sample-luxian-scope-head,
+.customer-sample-luxian-rule-group-head,
+.customer-sample-luxian-scope-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.customer-sample-luxian-scope-head,
+.customer-sample-luxian-rule-group-head {
+  justify-content: space-between;
+}
+
+.customer-sample-luxian-scope-head {
+  gap: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding-bottom: 10px;
+}
+
+.customer-sample-luxian-scope-title {
+  color: var(--customer-sample-text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.customer-sample-luxian-scope p,
+.customer-sample-luxian-rule-group-head small {
+  margin: 2px 0 0;
+  color: var(--customer-sample-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.customer-sample-luxian-scope-actions span {
+  white-space: nowrap;
+  border: 1px solid rgba(0, 102, 204, 0.12);
+  border-radius: 999px;
+  background: rgba(234, 242, 255, 0.72);
+  padding: 4px 10px;
+  color: var(--customer-sample-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.customer-sample-luxian-rule-groups {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 10px 12px;
+}
+
+.customer-sample-luxian-rule-group {
+  min-width: 0;
+  border: 1px solid rgba(0, 0, 0, 0.065);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.64);
+  padding: 10px;
+}
+
+.customer-sample-luxian-rule-group-head {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.customer-sample-luxian-rule-group-head > div {
+  min-width: 0;
+}
+
+.customer-sample-luxian-rule-group-head strong {
+  color: var(--customer-sample-text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 19px;
+}
+
+.customer-sample-luxian-rule-group-head small {
+  display: block;
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer-sample-luxian-rule-group-head button {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(0, 102, 204, 0.07);
+  padding: 4px 8px;
+  color: var(--customer-sample-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  cursor: pointer;
+  transition:
+    background 0.2s cubic-bezier(0.25, 0.1, 0.25, 1),
+    color 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.customer-sample-luxian-rule-group-head button:hover {
+  background: rgba(0, 102, 204, 0.12);
+}
+
+.customer-sample-luxian-rule-options {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.customer-sample-luxian-rule-option {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 5px 9px;
+  color: var(--customer-sample-muted);
+  transition:
+    border-color 0.2s cubic-bezier(0.25, 0.1, 0.25, 1),
+    background 0.2s cubic-bezier(0.25, 0.1, 0.25, 1),
+    box-shadow 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.customer-sample-luxian-rule-option.is-selected {
+  border-color: rgba(0, 102, 204, 0.26);
+  background: rgba(234, 242, 255, 0.9);
+  color: var(--customer-sample-primary);
+  box-shadow: 0 1px 3px rgba(0, 102, 204, 0.08);
+}
+
+.customer-sample-luxian-rule-option input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.customer-sample-luxian-rule-option span {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 18px;
+}
+
+.customer-sample-luxian-rule-option em {
+  overflow: hidden;
+  max-width: 260px;
+  color: var(--customer-sample-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+@media (max-width: 900px) {
+  .customer-sample-luxian-scope-head,
+  .customer-sample-luxian-scope-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .customer-sample-luxian-rule-groups {
+    grid-template-columns: 1fr;
+  }
+}
+
 .customer-sample-list-panel {
   overflow: hidden;
   border: 1px solid var(--customer-sample-border);
@@ -3022,15 +3902,15 @@ onUnmounted(() => {
 
 .customer-sample-patient-cell {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 11px;
   min-width: 0;
 }
 
 .customer-sample-patient-avatar {
   display: inline-flex;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -3044,6 +3924,7 @@ onUnmounted(() => {
 
 .customer-sample-patient-name {
   overflow: hidden;
+  max-width: 172px;
   color: var(--customer-sample-text);
   font-size: 14px;
   font-weight: 700;
@@ -3052,10 +3933,39 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.customer-sample-patient-id {
+.customer-sample-patient-meta {
+  display: flex;
+  max-width: 220px;
+  flex-wrap: wrap;
+  gap: 3px 8px;
   color: var(--customer-sample-muted);
   font-size: 12px;
   line-height: 18px;
+}
+
+.customer-sample-record-code {
+  display: inline-flex;
+  max-width: 96px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.8);
+  padding: 3px 8px;
+  color: rgba(29, 29, 31, 0.62);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer-sample-created-time {
+  display: inline-flex;
+  color: rgba(29, 29, 31, 0.64);
+  font-size: 13px;
+  font-weight: 560;
+  line-height: 20px;
+  white-space: nowrap;
 }
 
 .customer-sample-summary-cell {
@@ -3120,15 +4030,16 @@ onUnmounted(() => {
 }
 
 .customer-sample-status-cell {
-  display: grid;
-  gap: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .customer-sample-status-line {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .customer-sample-status-label {
@@ -3177,8 +4088,10 @@ onUnmounted(() => {
 }
 
 .customer-sample-action-cell {
-  display: grid;
-  gap: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
 }
 
 .customer-sample-primary-action {
@@ -3206,7 +4119,7 @@ onUnmounted(() => {
 .customer-sample-secondary-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 10px;
+  gap: 4px 8px;
   font-size: 12px;
   line-height: 18px;
 }
@@ -3225,6 +4138,13 @@ onUnmounted(() => {
   color: rgba(29, 29, 31, 0.72);
   font-size: 13px;
   font-weight: 520;
+  white-space: nowrap;
+}
+
+.customer-sample-state-action-cell {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
 }
 
 .customer-sample-empty-state {
@@ -3260,34 +4180,62 @@ onUnmounted(() => {
 :deep(.customer-sample-record-table .ant-table) {
   overflow: hidden;
   color: rgba(29, 29, 31, 0.76);
-  border: 1px solid var(--customer-sample-border);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(0, 0, 0, 0.075);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+:deep(.customer-sample-record-table .ant-table-container) {
+  border-start-start-radius: 16px;
+  border-start-end-radius: 16px;
+}
+
+:deep(.customer-sample-record-table .ant-table-cell) {
+  border-inline-end: 0 !important;
 }
 
 :deep(.customer-sample-record-table .ant-table-thead > tr > th) {
-  background: rgba(255, 255, 255, 0.92) !important;
+  background: rgba(248, 250, 252, 0.92) !important;
   color: var(--customer-sample-subtle);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  border-color: var(--customer-sample-border);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+:deep(.customer-sample-record-table .ant-table-thead > tr > th::before) {
+  display: none !important;
 }
 
 :deep(.customer-sample-record-table .ant-table-tbody > tr > td) {
-  padding-top: 13px;
-  padding-bottom: 13px;
+  padding: 15px 12px;
   border-color: rgba(0, 0, 0, 0.06);
-  vertical-align: middle;
-  background: rgba(255, 255, 255, 0.78);
+  vertical-align: top;
+  background: rgba(255, 255, 255, 0.86);
 }
 
 :deep(.customer-sample-record-table .ant-table-tbody > tr:hover > td) {
-  background: rgba(0, 0, 0, 0.025) !important;
+  background: rgba(0, 102, 204, 0.035) !important;
 }
 
 :deep(.customer-sample-record-table .ant-table-tbody > tr:nth-child(even) > td) {
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(248, 250, 252, 0.56);
+}
+
+:deep(.customer-sample-record-table .ant-checkbox-wrapper),
+:deep(.customer-sample-record-table .ant-checkbox) {
+  align-self: flex-start;
+}
+
+:deep(.customer-sample-record-table .ant-table-selection-column) {
+  width: 42px;
+  min-width: 42px;
+}
+
+:deep(.customer-sample-record-table .ant-table-cell-fix-right),
+:deep(.customer-sample-record-table .ant-table-cell-fix-right-first::after),
+:deep(.customer-sample-record-table .ant-table-cell-fix-right-last::after) {
+  box-shadow: none !important;
 }
 
 .customer-sample-toolbar-input {
@@ -3508,6 +4456,124 @@ onUnmounted(() => {
 .customer-sample-page :deep(.ant-drawer-title) {
   color: var(--customer-sample-text);
   font-weight: 650;
+}
+
+.customer-sample-tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+}
+
+.customer-sample-tour-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.customer-sample-tour-card {
+  position: absolute;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 12px 36px rgba(15, 23, 42, 0.16),
+    0 2px 8px rgba(15, 23, 42, 0.08);
+  padding: 16px;
+  pointer-events: auto;
+}
+
+.customer-sample-tour-kicker {
+  color: rgba(29, 29, 31, 0.5);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.customer-sample-tour-count {
+  margin-top: 8px;
+  display: inline-flex;
+  border-radius: 999px;
+  background: rgba(0, 102, 204, 0.08);
+  padding: 3px 9px;
+  color: #0066cc;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.customer-sample-tour-card h3 {
+  margin: 10px 0 0;
+  color: #1d1d1f;
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 24px;
+}
+
+.customer-sample-tour-card p {
+  margin: 7px 0 0;
+  color: rgba(29, 29, 31, 0.64);
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.customer-sample-tour-dots {
+  margin-top: 13px;
+  display: flex;
+  gap: 6px;
+}
+
+.customer-sample-tour-dots button {
+  width: 26px;
+  height: 5px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+
+.customer-sample-tour-dots button.is-active {
+  background: #0066cc;
+}
+
+.customer-sample-guide-footer {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.customer-sample-guide-footer :deep(.ant-btn) {
+  height: 34px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.customer-sample-guide-footer :deep(.ant-btn-primary) {
+  border-color: #0066cc;
+  background: #0066cc;
+}
+
+.customer-sample-tour-target {
+  position: relative;
+}
+
+.customer-sample-tour-target.is-current-tour-target {
+  z-index: 80;
+  border-radius: 14px;
+  outline: 3px solid #f59e0b;
+  outline-offset: 5px;
+  box-shadow:
+    0 0 0 10px rgba(245, 158, 11, 0.24),
+    0 0 0 16px rgba(255, 255, 255, 0.82),
+    0 14px 34px rgba(180, 83, 9, 0.22);
+}
+
+@media (max-width: 768px) {
+  .customer-sample-tour-card {
+    max-width: calc(100vw - 32px);
+  }
 }
 
 .customer-sample-page :deep(.ant-switch-checked) {

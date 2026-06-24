@@ -1,0 +1,495 @@
+{
+  "id": "21a21484-2f32-483d-8888-48c0fe844272",
+  "mode": "sequential_batch",
+  "document_type": "入院记录",
+  "document_id": "batch_1763340387610",
+  "rule_ids": [
+    "LX-001",
+    "LX-002",
+    "LX-003",
+    "LX-004",
+    "LX-005",
+    "LX-006",
+    "LX-007",
+    "LX-008",
+    "LX-009"
+  ],
+  "medical_text": "患者信息：张伟，男，44岁，入院科室：呼吸与危重症医学科，病区：呼吸内一科。\n\n主诉：体检发现肺部结节1周。\n\n现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\n\n既往史：既往体健。否认高血压、糖尿病病史。否认肝炎、结核病史。否认手术史、外伤史、输血史。否认食物、药物过敏史。\n\n体格检查：T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。神志清楚，精神可，自主体位，查体合作。全身皮肤黏膜无黄染，浅表淋巴结未触及肿大。双肺呼吸音清，未闻及干湿啰音。心律齐，各瓣膜听诊区未闻及杂音。腹部平软，无压痛，肝脾肋下未触及。双下肢无水肿。\n\n辅助检查：\n1. 血常规：WBC 8.6×10⁹/L，N 72%，Hb 135g/L，PLT 210×10⁹/L\n2. 肝功能：ALT 38U/L，AST 42U/L，TBIL 16μmol/L，ALB 41g/L\n3. 肾功能：Cr 78μmol/L，BUN 5.2mmol/L\n4. 心电图：窦性心律，大致正常心电图\n5. 胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大\n6. 腹部超声：肝胆胰脾未见明显异常，双肾未见结石及积水\n7. 空腹血糖：5.9mmol/L\n8. 凝血功能：PT 12.3s，APTT 31.5s，FIB 3.8g/L\n\n入院诊断：右肺占位性病变",
+  "medical_text_length": 684,
+  "stats": {
+    "total": 9,
+    "compliant": 8,
+    "passed": 6,
+    "notApplicable": 2,
+    "issues": 1,
+    "errors": 0
+  },
+  "performance": {
+    "totalTokens": 15771,
+    "totalTime": 47.545695781707764,
+    "avgTime": 5.282855086856419
+  },
+  "results": [
+    {
+      "ruleId": "LX-001",
+      "ruleName": "主诉中症状/体征/疾病的持续时间与年龄不一致",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "病历文本中主诉与现病史、入院诊断一致，未发现主诉中症状/体征/疾病的持续时间与年龄不一致的情况。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "主诉：体检发现肺部结节1周。\n现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\n入院诊断：右肺占位性病变。",
+      "suggestion": "",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"病历文本中主诉与现病史、入院诊断一致，未发现主诉中症状/体征/疾病的持续时间与年龄不一致的情况。\",\n  \"issues\": [],\n  \"evidence\": \"主诉：体检发现肺部结节1周。\\n现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\\n入院诊断：右肺占位性病变。\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.9\n}\n```",
+      "metadata": {
+        "tokens_used": 1798,
+        "api_time": 5.143623352050781
+      }
+    },
+    {
+      "ruleId": "LX-002",
+      "ruleName": "现病史记录不全或描述不清",
+      "isCompliant": false,
+      "status": "non_compliant",
+      "findings": "现病史记录了发病时间，但未描述主要症状的病程演变，且未交代一般情况。",
+      "issues": [
+        {
+          "description": "未描述主要症状的病程演变",
+          "evidence": "现病史仅提到患者无咳嗽、咳痰、咯血、胸痛、气促等不适，未详细描述病程演变。"
+        },
+        {
+          "description": "未交代一般情况",
+          "evidence": "现病史未提及大小便情况、精神情况、体力情况、睡眠情况、体重变化、饮食情况中的任意一项。"
+        }
+      ],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "现病史记载：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\"",
+      "suggestion": "(1) 补充主要症状的病程演变，例如是否有症状加重或缓解的情况。(2) 在现病史中增加一般情况的描述，至少需包含大小便情况、精神情况、体力情况、睡眠情况、体重变化、饮食情况中的任意一项。例如，可以补充患者的睡眠质量、食欲状况等。",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": false,\n  \"findings\": \"现病史记录了发病时间，但未描述主要症状的病程演变，且未交代一般情况。\",\n  \"issues\": [\n    {\n      \"description\": \"未描述主要症状的病程演变\",\n      \"evidence\": \"现病史仅提到患者无咳嗽、咳痰、咯血、胸痛、气促等不适，未详细描述病程演变。\"\n    },\n    {\n      \"description\": \"未交代一般情况\",\n      \"evidence\": \"现病史未提及大小便情况、精神情况、体力情况、睡眠情况、体重变化、饮食情况中的任意一项。\"\n    }\n  ],\n  \"evidence\": \"现病史记载：\\\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\\\"\",\n  \"suggestion\": \"(1) 补充主要症状的病程演变，例如是否有症状加重或缓解的情况。(2) 在现病史中增加一般情况的描述，至少需包含大小便情况、精神情况、体力情况、睡眠情况、体重变化、饮食情况中的任意一项。例如，可以补充患者的睡眠质量、食欲状况等。\",\n  \"confidence\": 0.8\n}\n```",
+      "metadata": {
+        "tokens_used": 1980,
+        "api_time": 7.894378662109375
+      }
+    },
+    {
+      "ruleId": "LX-003",
+      "ruleName": "儿童患者无婴幼儿喂养史和生长发育史。",
+      "isCompliant": true,
+      "status": "not_applicable",
+      "findings": "该病历为成人患者，不属于儿科或婴幼儿范畴，因此无需检查婴幼儿喂养史和生长发育史。根据规则，此病历应判为不适用。",
+      "issues": [
+        {
+          "description": "该病历为成人患者，不属于儿科或婴幼儿范畴，因此无需检查婴幼儿喂养史和生长发育史。根据规则，此病历应判为不适用。",
+          "evidence": "患者信息明确显示患者为44岁男性，且入院科室为呼吸与危重症医学科，病历中未涉及任何儿科相关内容。"
+        }
+      ],
+      "applicability": {
+        "is_applicable": false,
+        "reason": "该病历为成人患者，不属于儿科或婴幼儿范畴，因此无需检查婴幼儿喂养史和生长发育史。根据规则，此病历应判为不适用。",
+        "method": "lx-003_via_llm"
+      },
+      "notApplicable": true,
+      "notApplicableReason": "该病历为成人患者，不属于儿科或婴幼儿范畴，因此无需检查婴幼儿喂养史和生长发育史。根据规则，此病历应判为不适用。",
+      "evidence": "患者信息明确显示患者为44岁男性，且入院科室为呼吸与危重症医学科，病历中未涉及任何儿科相关内容。",
+      "suggestion": "",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"该病历为成人患者，不属于儿科或婴幼儿范畴，因此无需检查婴幼儿喂养史和生长发育史。根据规则，此病历应判为不适用。\",\n  \"issues\": [],\n  \"evidence\": \"患者信息明确显示患者为44岁男性，且入院科室为呼吸与危重症医学科，病历中未涉及任何儿科相关内容。\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.9\n}\n```",
+      "metadata": {
+        "tokens_used": 1799,
+        "api_time": 3.8468995094299316
+      }
+    },
+    {
+      "ruleId": "LX-004",
+      "ruleName": "入院记录-专科检查缺失",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "本规则不适用，因为患者入院科室为呼吸与危重症医学科，不属于外科或神经内科。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：患者信息中明确显示入院科室为‘呼吸与危重症医学科’，病区为‘呼吸内一科’。",
+      "suggestion": "",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"本规则不适用，因为患者入院科室为呼吸与危重症医学科，不属于外科或神经内科。\",\n  \"issues\": [],\n  \"evidence\": \"记载：患者信息中明确显示入院科室为‘呼吸与危重症医学科’，病区为‘呼吸内一科’。\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.9\n}\n```",
+      "metadata": {
+        "tokens_used": 1935,
+        "api_time": 3.7420878410339355
+      }
+    },
+    {
+      "ruleId": "LX-005",
+      "ruleName": "体格检查缺生命体征",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "该病历符合规则要求，患者为成人，体格检查记录了完整的生命体征，并且与主要诊断相关的阳性体征和阴性体征均有详细记录。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "lx005_via_llm"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "体格检查记载：\"T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。神志清楚，精神可，自主体位，查体合作。全身皮肤黏膜无黄染，浅表淋巴结未触及肿大。双肺呼吸音清，未闻及干湿啰音。心律齐，各瓣膜听诊区未闻及杂音。腹部平软，无压痛，肝脾肋下未触及。双下肢无水肿。\"",
+      "suggestion": "",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"该病历符合规则要求，患者为成人，体格检查记录了完整的生命体征，并且与主要诊断相关的阳性体征和阴性体征均有详细记录。\",\n  \"issues\": [],\n  \"evidence\": \"体格检查记载：\\\"T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。神志清楚，精神可，自主体位，查体合作。全身皮肤黏膜无黄染，浅表淋巴结未触及肿大。双肺呼吸音清，未闻及干湿啰音。心律齐，各瓣膜听诊区未闻及杂音。腹部平软，无压痛，肝脾肋下未触及。双下肢无水肿。\\\"\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.9\n}\n```",
+      "metadata": {
+        "tokens_used": 2094,
+        "api_time": 6.132192611694336
+      }
+    },
+    {
+      "ruleId": "LX-006",
+      "ruleName": "7岁以上人群体格检查缺生命体征",
+      "isCompliant": true,
+      "status": "not_applicable",
+      "findings": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+      "issues": [
+        {
+          "description": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+          "evidence": ""
+        }
+      ],
+      "applicability": {
+        "is_applicable": false,
+        "reason": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+        "method": "lx006_age_guard"
+      },
+      "notApplicable": true,
+      "notApplicableReason": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+      "evidence": "",
+      "suggestion": "",
+      "evidenceVerified": true,
+      "confidence": 0.9,
+      "llmRawOutput": null,
+      "metadata": {
+        "tokens_used": 0,
+        "api_time": 0
+      }
+    },
+    {
+      "ruleId": "LX-007",
+      "ruleName": "院外辅助检查未记录",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "病历中现病史提到的院外辅助检查均已在辅助检查章节中有详细记录，符合规则要求。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "记载：\"现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\"；记载：\"辅助检查：胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大\"",
+      "suggestion": "",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"病历中现病史提到的院外辅助检查均已在辅助检查章节中有详细记录，符合规则要求。\",\n  \"issues\": [],\n  \"evidence\": \"记载：\\\"现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\\\"；记载：\\\"辅助检查：胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大\\\"\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.9\n}\n```",
+      "metadata": {
+        "tokens_used": 1916,
+        "api_time": 5.207963705062866
+      }
+    },
+    {
+      "ruleId": "LX-008",
+      "ruleName": "入院记录-检查结果未记录",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "现病史中提到的胸部CT检查已在辅助检查中完整记录了结果。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "现病史提到：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\" 辅助检查中记录了：\"胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大。\"",
+      "suggestion": "",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"现病史中提到的胸部CT检查已在辅助检查中完整记录了结果。\",\n  \"issues\": [],\n  \"evidence\": \"现病史提到：\\\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\\\" 辅助检查中记录了：\\\"胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大。\\\"\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.9\n}\n```\n\n### 分析过程：\n\n#### 第一步：提取现病史中提到的辅助检查项目\n现病史中提到的检查项目为：\n- 胸部CT\n\n#### 第二步：在辅助检查章节中逐项查找对应结果\n在辅助检查章节中找到了以下内容：\n- 胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大\n\n#### 第三步：判定合规性\n现病史中提到的胸部CT检查已经在辅助检查章节中完整记录了结果，因此判定为合规。\n\n### 结论：\n- `is_compliant`: true\n- `findings`: 现病史中提到的胸部CT检查已在辅助检查中完整记录了结果。\n- `issues`: 无\n- `evidence`: 引用了具体的病历原文片段，证明胸部CT检查在辅助检查中已有完整结果。\n- `suggestion`: 无需整改建议。\n- `confidence`: 0.9（高度可信）",
+      "metadata": {
+        "tokens_used": 2112,
+        "api_time": 9.52554202079773
+      }
+    },
+    {
+      "ruleId": "LX-009",
+      "ruleName": "入院记录缺初步诊断",
+      "isCompliant": true,
+      "status": "compliant",
+      "findings": "病历文本中现病史和既往史未提及任何明确的疾病诊断或重要共病，且入院诊断已明确列出主要诊断‘右肺占位性病变’，未发现漏诊问题。",
+      "issues": [],
+      "applicability": {
+        "is_applicable": true,
+        "reason": "",
+        "method": "default"
+      },
+      "notApplicable": false,
+      "notApplicableReason": "",
+      "evidence": "现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。\n\n既往史：既往体健。否认高血压、糖尿病病史。否认肝炎、结核病史。否认手术史、外伤史、输血史。否认食物、药物过敏史。\n\n入院诊断：右肺占位性病变。",
+      "suggestion": "",
+      "evidenceVerified": false,
+      "confidence": 0.5,
+      "llmRawOutput": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"病历文本中现病史和既往史未提及任何明确的疾病诊断或重要共病，且入院诊断已明确列出主要诊断‘右肺占位性病变’，未发现漏诊问题。\",\n  \"issues\": [],\n  \"evidence\": \"现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。\\n\\n既往史：既往体健。否认高血压、糖尿病病史。否认肝炎、结核病史。否认手术史、外伤史、输血史。否认食物、药物过敏史。\\n\\n入院诊断：右肺占位性病变。\",\n  \"suggestion\": \"\",\n  \"confidence\": 0.9\n}\n```",
+      "metadata": {
+        "tokens_used": 2137,
+        "api_time": 6.053008079528809
+      }
+    }
+  ],
+  "payload": {
+    "document_id": "batch_1763340387610",
+    "evaluation_summary": {
+      "compliance_rate": 67,
+      "issues_found": 1,
+      "total_rules": 9,
+      "compliant_rules": 6,
+      "not_applicable": 2,
+      "model": "qwen2.5-14b-instruct"
+    },
+    "evaluation_results": [
+      {
+        "rule_id": "LX-001",
+        "rule_name": "主诉中症状/体征/疾病的持续时间与年龄不一致",
+        "is_compliant": true,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历文本中主诉与现病史、入院诊断一致，未发现主诉中症状/体征/疾病的持续时间与年龄不一致的情况。",
+        "evidence": "主诉：体检发现肺部结节1周。\n现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\n入院诊断：右肺占位性病变。",
+        "suggestion": "",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 1798,
+          "api_time": 5.143623352050781
+        }
+      },
+      {
+        "rule_id": "LX-002",
+        "rule_name": "现病史记录不全或描述不清",
+        "is_compliant": false,
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "现病史记录了发病时间，但未描述主要症状的病程演变，且未交代一般情况。",
+        "evidence": "现病史记载：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。为进一步诊治来我院就诊，门诊完善相关检查后以'右肺占位性病变'收入院。\"",
+        "suggestion": "(1) 补充主要症状的病程演变，例如是否有症状加重或缓解的情况。(2) 在现病史中增加一般情况的描述，至少需包含大小便情况、精神情况、体力情况、睡眠情况、体重变化、饮食情况中的任意一项。例如，可以补充患者的睡眠质量、食欲状况等。",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 1980,
+          "api_time": 7.894378662109375
+        }
+      },
+      {
+        "rule_id": "LX-003",
+        "rule_name": "儿童患者无婴幼儿喂养史和生长发育史。",
+        "is_compliant": true,
+        "status": "not_applicable",
+        "applicability": {
+          "is_applicable": false,
+          "reason": "该病历为成人患者，不属于儿科或婴幼儿范畴，因此无需检查婴幼儿喂养史和生长发育史。根据规则，此病历应判为不适用。",
+          "method": "lx-003_via_llm"
+        },
+        "not_applicable": true,
+        "not_applicable_reason": "该病历为成人患者，不属于儿科或婴幼儿范畴，因此无需检查婴幼儿喂养史和生长发育史。根据规则，此病历应判为不适用。",
+        "evidence_verified": false,
+        "findings": "该病历为成人患者，不属于儿科或婴幼儿范畴，因此无需检查婴幼儿喂养史和生长发育史。根据规则，此病历应判为不适用。",
+        "evidence": "患者信息明确显示患者为44岁男性，且入院科室为呼吸与危重症医学科，病历中未涉及任何儿科相关内容。",
+        "suggestion": "",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 1799,
+          "api_time": 3.8468995094299316
+        }
+      },
+      {
+        "rule_id": "LX-004",
+        "rule_name": "入院记录-专科检查缺失",
+        "is_compliant": true,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "本规则不适用，因为患者入院科室为呼吸与危重症医学科，不属于外科或神经内科。",
+        "evidence": "记载：患者信息中明确显示入院科室为‘呼吸与危重症医学科’，病区为‘呼吸内一科’。",
+        "suggestion": "",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 1935,
+          "api_time": 3.7420878410339355
+        }
+      },
+      {
+        "rule_id": "LX-005",
+        "rule_name": "体格检查缺生命体征",
+        "is_compliant": true,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "lx005_via_llm"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "该病历符合规则要求，患者为成人，体格检查记录了完整的生命体征，并且与主要诊断相关的阳性体征和阴性体征均有详细记录。",
+        "evidence": "体格检查记载：\"T 36.5℃，P 72次/分，R 18次/分，BP 125/78 mmHg。神志清楚，精神可，自主体位，查体合作。全身皮肤黏膜无黄染，浅表淋巴结未触及肿大。双肺呼吸音清，未闻及干湿啰音。心律齐，各瓣膜听诊区未闻及杂音。腹部平软，无压痛，肝脾肋下未触及。双下肢无水肿。\"",
+        "suggestion": "",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2094,
+          "api_time": 6.132192611694336
+        }
+      },
+      {
+        "rule_id": "LX-006",
+        "rule_name": "7岁以上人群体格检查缺生命体征",
+        "is_compliant": true,
+        "status": "not_applicable",
+        "applicability": {
+          "is_applicable": false,
+          "reason": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+          "method": "lx006_age_guard"
+        },
+        "not_applicable": true,
+        "not_applicable_reason": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+        "evidence_verified": true,
+        "findings": "患者年龄 44 岁，为成人患者，本规则仅适用于儿科≥7岁人群。",
+        "evidence": "",
+        "suggestion": "",
+        "confidence": 0.9,
+        "metadata": {
+          "tokens_used": 0,
+          "api_time": 0
+        }
+      },
+      {
+        "rule_id": "LX-007",
+        "rule_name": "院外辅助检查未记录",
+        "is_compliant": true,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历中现病史提到的院外辅助检查均已在辅助检查章节中有详细记录，符合规则要求。",
+        "evidence": "记载：\"现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\"；记载：\"辅助检查：胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大\"",
+        "suggestion": "",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 1916,
+          "api_time": 5.207963705062866
+        }
+      },
+      {
+        "rule_id": "LX-008",
+        "rule_name": "入院记录-检查结果未记录",
+        "is_compliant": true,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "现病史中提到的胸部CT检查已在辅助检查中完整记录了结果。",
+        "evidence": "现病史提到：\"患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。\" 辅助检查中记录了：\"胸部CT平扫（2024-10-25，外院）：右肺下叶见直径约1.8cm磨玻璃结节，边界清晰，无毛刺征，未见明显淋巴结肿大。\"",
+        "suggestion": "",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2112,
+          "api_time": 9.52554202079773
+        }
+      },
+      {
+        "rule_id": "LX-009",
+        "rule_name": "入院记录缺初步诊断",
+        "is_compliant": true,
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "findings": "病历文本中现病史和既往史未提及任何明确的疾病诊断或重要共病，且入院诊断已明确列出主要诊断‘右肺占位性病变’，未发现漏诊问题。",
+        "evidence": "现病史：患者1周前单位组织体检，行胸部CT发现右肺下叶磨玻璃结节，直径约1.8cm，边界清晰。患者无咳嗽、咳痰、咯血、胸痛、气促等不适。\n\n既往史：既往体健。否认高血压、糖尿病病史。否认肝炎、结核病史。否认手术史、外伤史、输血史。否认食物、药物过敏史。\n\n入院诊断：右肺占位性病变。",
+        "suggestion": "",
+        "confidence": 0.5,
+        "metadata": {
+          "tokens_used": 2137,
+          "api_time": 6.053008079528809
+        }
+      }
+    ],
+    "performance_metrics": {
+      "processing_time": 47.545695781707764,
+      "token_usage": 15771,
+      "estimated_cost": 0
+    },
+    "prompt_mode": "sequential_batch",
+    "llm_info": {
+      "model": "qwen2.5-14b-instruct"
+    }
+  },
+  "metadata": {
+    "trigger": "batch_test_ui"
+  },
+  "model": "qwen2.5-14b-instruct",
+  "created_at": "2025-11-17T00:46:28.370257+00:00",
+  "source": "demo"
+}

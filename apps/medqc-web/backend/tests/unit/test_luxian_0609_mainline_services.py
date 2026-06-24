@@ -953,3 +953,69 @@ def test_customer_created_consultation_template_should_hit_selected_lx0609_point
     assert "会诊目的" in by_id["LX0609-021"]["findings"]
     assert by_id["LX0609-022"]["status"] == "non_compliant"
     assert "会诊意见" in by_id["LX0609-022"]["findings"]
+
+
+def test_customer_created_tumor_chemo_template_should_return_customer_readable_evidence_items():
+    rules = [
+        _wrapper(
+            "LX0609-019",
+            name="病理检查取材情况记录",
+            mapped_rule_ids=["SC-118"],
+            trigger_condition="病理取材情况应在病程记录或手术记录中记录。",
+        ),
+        _wrapper(
+            "LX0609-026",
+            name="化疗记录与医嘱一致性",
+            mapped_rule_ids=["SC-161"],
+            trigger_condition="恶性肿瘤化学治疗记录应与医嘱一致。",
+        ),
+    ]
+    payload = {
+        "primary_document_text": "",
+        "programmatic_timeline": {
+            "visit_id": "CUSTOMER_TEST_20260623151734567BF3",
+            "documents": {
+                "surgery_record": [
+                    {
+                        "title": "胃癌根治术手术记录",
+                        "content_preview": (
+                            "手术名称：腹腔镜远端胃癌根治术。标本处理：远端胃及胃周组织送病理检查。"
+                            "记录中仅注明“远端胃及胃周组织”，未逐项标明近端切缘、远端切缘、"
+                            "肿瘤部位、各组淋巴结分区及标本对应标签。"
+                        ),
+                    }
+                ],
+                "daily_course_record": [
+                    {
+                        "title": "化疗前病程记录",
+                        "content_preview": (
+                            "病程记录：今日准备开始辅助化疗，已交代可能出现恶心、呕吐、腹泻、"
+                            "骨髓抑制及肢端麻木等不良反应，继续营养支持、护胃及对症处理。"
+                        ),
+                    }
+                ],
+                "inpat_nondrug_order": [
+                    {
+                        "title": "化疗医嘱",
+                        "content_preview": (
+                            "长期医嘱：奥沙利铂 130mg d1 静脉滴注；"
+                            "卡培他滨 1.5g bid po d1-d14。"
+                        ),
+                    }
+                ],
+            },
+        },
+    }
+
+    results = evaluate_luxian_0609_programmatic_rules(wrapper_rules=rules, evidence_payload=payload)
+    by_id = {item["rule_id"]: item for item in results}
+
+    assert by_id["LX0609-019"]["status"] == "non_compliant"
+    assert by_id["LX0609-019"]["evidence_items"][0]["field_path"] == "标本处理"
+    assert "未逐项标明近端切缘" in by_id["LX0609-019"]["evidence_items"][0]["quote"]
+
+    assert by_id["LX0609-026"]["status"] == "non_compliant"
+    quotes = [item["quote"] for item in by_id["LX0609-026"]["evidence_items"]]
+    assert any("奥沙利铂 130mg" in quote for quote in quotes)
+    assert any("今日准备开始辅助化疗" in quote for quote in quotes)
+    assert "药物、剂量、用法和时间" in by_id["LX0609-026"]["findings"]

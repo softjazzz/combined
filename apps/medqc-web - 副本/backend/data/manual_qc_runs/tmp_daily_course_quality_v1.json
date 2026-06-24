@@ -1,0 +1,564 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T07:59:01.364236",
+  "run_finished_at": "2026-04-24T07:59:07.192934",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 1
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_daily_course_quality_v1_defect.json",
+      "issue_type": "Z16_daily_course_quality",
+      "display_name": "日常病程质量",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-035",
+        "SC-039",
+        "SC-040",
+        "SC-047"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P116",
+        "visit_id": "SYN-RUN-116",
+        "mr_no": "SYN0116",
+        "patient_name": "合成患者巳",
+        "gender": "女",
+        "age": 71,
+        "department": "肾内科"
+      },
+      "elapsed_seconds": 2.873,
+      "total_tokens": 1432,
+      "prompt_tokens": 1005,
+      "completion_tokens": 427,
+      "api_time": 2.867,
+      "packs": [
+        {
+          "pack_id": "daily_course_content_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-035",
+            "SC-039",
+            "SC-040",
+            "SC-047"
+          ],
+          "tokens_used": 1432,
+          "prompt_tokens": 1005,
+          "completion_tokens": 427,
+          "api_time": 2.8668429851531982
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-035",
+          "rule_name": "病程中有不合理的检查或不合理用药",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "低钾血症患者补钾后未记录血钾复查结果及后续处理，存在不合理用药风险。",
+          "evidence": "病程内容与昨日完全一致，未体现补钾后指标变化及处理",
+          "suggestion": "补充补钾后血钾复查结果及针对性处理措施。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-035\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"低钾血症患者补钾后未记录血钾复查结果及后续处理，存在不合理用药风险。\",\n      \"evidence\": \"病程内容与昨日完全一致，未体现补钾后指标变化及处理\",\n      \"suggestion\": \"补充补钾后血钾复查结果及针对性处理措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-039\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历中无危急值报告记录，无需评估处理情况。\",\n      \"evidence\": \"检查检验：昨日血钾2.9mmol/L\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-040\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前病程未记录重要操作，不涉及操作规范性问题。\",\n      \"evidence\": \"继续原治疗\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-047\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"诊断未发生变更或补充，无需记录修改理由。\",\n      \"evidence\": \"诊断：低钾血症\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            19,
+            44
+          ],
+          "metadata": {
+            "tokens_used": 358,
+            "prompt_tokens": 251,
+            "completion_tokens": 106,
+            "input_tokens": 251,
+            "output_tokens": 106,
+            "api_time": 0.7167107462882996,
+            "first_result_latency": 2.8668429851531982,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 86
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-039",
+          "rule_name": "病程中无危急值报告及处理记录.或未详细记录时间、内容等关键信息",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病历中无危急值报告记录，无需评估处理情况。",
+          "evidence": "【日常病程记录】病情一般，继续原治疗",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-035\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"低钾血症患者补钾后未记录血钾复查结果及后续处理，存在不合理用药风险。\",\n      \"evidence\": \"病程内容与昨日完全一致，未体现补钾后指标变化及处理\",\n      \"suggestion\": \"补充补钾后血钾复查结果及针对性处理措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-039\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历中无危急值报告记录，无需评估处理情况。\",\n      \"evidence\": \"检查检验：昨日血钾2.9mmol/L\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-040\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前病程未记录重要操作，不涉及操作规范性问题。\",\n      \"evidence\": \"继续原治疗\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-047\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"诊断未发生变更或补充，无需记录修改理由。\",\n      \"evidence\": \"诊断：低钾血症\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            10
+          ],
+          "metadata": {
+            "tokens_used": 358,
+            "prompt_tokens": 251,
+            "completion_tokens": 106,
+            "input_tokens": 251,
+            "output_tokens": 106,
+            "api_time": 0.7167107462882996,
+            "first_result_latency": 2.8668429851531982,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 86
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-040",
+          "rule_name": "重要操作未记录或记录不规范、不完善；",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "当前病程未记录重要操作，不涉及操作规范性问题。",
+          "evidence": "继续原治疗",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-035\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"低钾血症患者补钾后未记录血钾复查结果及后续处理，存在不合理用药风险。\",\n      \"evidence\": \"病程内容与昨日完全一致，未体现补钾后指标变化及处理\",\n      \"suggestion\": \"补充补钾后血钾复查结果及针对性处理措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-039\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历中无危急值报告记录，无需评估处理情况。\",\n      \"evidence\": \"检查检验：昨日血钾2.9mmol/L\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-040\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前病程未记录重要操作，不涉及操作规范性问题。\",\n      \"evidence\": \"继续原治疗\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-047\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"诊断未发生变更或补充，无需记录修改理由。\",\n      \"evidence\": \"诊断：低钾血症\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            5,
+            10
+          ],
+          "metadata": {
+            "tokens_used": 358,
+            "prompt_tokens": 251,
+            "completion_tokens": 106,
+            "input_tokens": 251,
+            "output_tokens": 106,
+            "api_time": 0.7167107462882996,
+            "first_result_latency": 2.8668429851531982,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 86
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-047",
+          "rule_name": "修正或补充诊断时,未记录修改或补充的理由及诊断依据",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "诊断未发生变更或补充，无需记录修改理由。",
+          "evidence": "【日常病程记录】病情一般，继续原治疗",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-035\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"低钾血症患者补钾后未记录血钾复查结果及后续处理，存在不合理用药风险。\",\n      \"evidence\": \"病程内容与昨日完全一致，未体现补钾后指标变化及处理\",\n      \"suggestion\": \"补充补钾后血钾复查结果及针对性处理措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-039\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历中无危急值报告记录，无需评估处理情况。\",\n      \"evidence\": \"检查检验：昨日血钾2.9mmol/L\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-040\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前病程未记录重要操作，不涉及操作规范性问题。\",\n      \"evidence\": \"继续原治疗\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-047\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"诊断未发生变更或补充，无需记录修改理由。\",\n      \"evidence\": \"诊断：低钾血症\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            10
+          ],
+          "metadata": {
+            "tokens_used": 358,
+            "prompt_tokens": 251,
+            "completion_tokens": 106,
+            "input_tokens": 251,
+            "output_tokens": 106,
+            "api_time": 0.7167107462882996,
+            "first_result_latency": 2.8668429851531982,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 86
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-035": "non_compliant",
+          "SC-039": "not_applicable",
+          "SC-040": "not_applicable",
+          "SC-047": "not_applicable"
+        },
+        "strict_hits": {
+          "SC-035": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_daily_course_quality_v1_pass.json",
+      "issue_type": "Z16_daily_course_quality",
+      "display_name": "日常病程质量",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-035",
+        "SC-039",
+        "SC-040",
+        "SC-047"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P116",
+        "visit_id": "SYN-RUN-116",
+        "mr_no": "SYN0116",
+        "patient_name": "合成患者巳",
+        "gender": "女",
+        "age": 71,
+        "department": "肾内科"
+      },
+      "elapsed_seconds": 2.481,
+      "total_tokens": 1470,
+      "prompt_tokens": 1035,
+      "completion_tokens": 435,
+      "api_time": 2.481,
+      "packs": [
+        {
+          "pack_id": "daily_course_content_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-035",
+            "SC-039",
+            "SC-040",
+            "SC-047"
+          ],
+          "tokens_used": 1470,
+          "prompt_tokens": 1035,
+          "completion_tokens": 435,
+          "api_time": 2.480509042739868
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-035",
+          "rule_name": "病程中有不合理的检查或不合理用药",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "补钾后复查电解质，指征明确且有效，无不合理检查或用药。",
+          "evidence": "【日常病程记录】复查电解质示血钾由2.9mmol/L升至3.5mmol/L，考虑补钾有效",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-035\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"补钾后复查电解质，指征明确且有效，无不合理检查或用药。\",\n      \"evidence\": \"复查电解质示血钾由2.9mmol/L升至3.5mmol/L；继续口服氯化钾并复查电解质。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-039\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"未提及危急值报告及处理记录，无法判定是否缺失。\",\n      \"evidence\": \"病程记录书写清晰，未见复制粘贴及无关内容。\",\n      \"suggestion\": \"补充危急值接收及处理记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-040\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前文书未涉及重要操作记录。\",\n      \"evidence\": \"今日患者诉乏力较前减轻，无胸闷气促。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-047\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前文书未体现诊断修正或补充情况。\",\n      \"evidence\": \"诊断：低钾血症\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            18,
+            54
+          ],
+          "metadata": {
+            "tokens_used": 367,
+            "prompt_tokens": 258,
+            "completion_tokens": 108,
+            "input_tokens": 258,
+            "output_tokens": 108,
+            "api_time": 0.620127260684967,
+            "first_result_latency": 2.480509042739868,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 117
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-039",
+          "rule_name": "病程中无危急值报告及处理记录.或未详细记录时间、内容等关键信息",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "未提及危急值报告及处理记录，无法判定是否缺失。",
+          "evidence": "病程记录书写清晰，未见复制粘贴及无关内容。",
+          "suggestion": "补充危急值接收及处理记录。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-035\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"补钾后复查电解质，指征明确且有效，无不合理检查或用药。\",\n      \"evidence\": \"复查电解质示血钾由2.9mmol/L升至3.5mmol/L；继续口服氯化钾并复查电解质。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-039\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"未提及危急值报告及处理记录，无法判定是否缺失。\",\n      \"evidence\": \"病程记录书写清晰，未见复制粘贴及无关内容。\",\n      \"suggestion\": \"补充危急值接收及处理记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-040\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前文书未涉及重要操作记录。\",\n      \"evidence\": \"今日患者诉乏力较前减轻，无胸闷气促。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-047\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前文书未体现诊断修正或补充情况。\",\n      \"evidence\": \"诊断：低钾血症\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            69,
+            90
+          ],
+          "metadata": {
+            "tokens_used": 367,
+            "prompt_tokens": 258,
+            "completion_tokens": 108,
+            "input_tokens": 258,
+            "output_tokens": 108,
+            "api_time": 0.620127260684967,
+            "first_result_latency": 2.480509042739868,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 117
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-040",
+          "rule_name": "重要操作未记录或记录不规范、不完善；",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "当前文书未涉及重要操作记录。",
+          "evidence": "今日患者诉乏力较前减轻，无胸闷气促。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-035\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"补钾后复查电解质，指征明确且有效，无不合理检查或用药。\",\n      \"evidence\": \"复查电解质示血钾由2.9mmol/L升至3.5mmol/L；继续口服氯化钾并复查电解质。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-039\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"未提及危急值报告及处理记录，无法判定是否缺失。\",\n      \"evidence\": \"病程记录书写清晰，未见复制粘贴及无关内容。\",\n      \"suggestion\": \"补充危急值接收及处理记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-040\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前文书未涉及重要操作记录。\",\n      \"evidence\": \"今日患者诉乏力较前减轻，无胸闷气促。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-047\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前文书未体现诊断修正或补充情况。\",\n      \"evidence\": \"诊断：低钾血症\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            18
+          ],
+          "metadata": {
+            "tokens_used": 367,
+            "prompt_tokens": 258,
+            "completion_tokens": 108,
+            "input_tokens": 258,
+            "output_tokens": 108,
+            "api_time": 0.620127260684967,
+            "first_result_latency": 2.480509042739868,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 117
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-047",
+          "rule_name": "修正或补充诊断时,未记录修改或补充的理由及诊断依据",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "当前文书未体现诊断修正或补充情况。",
+          "evidence": "【日常病程记录】今日患者诉乏力较前减轻，无胸闷气促",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-035\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"补钾后复查电解质，指征明确且有效，无不合理检查或用药。\",\n      \"evidence\": \"复查电解质示血钾由2.9mmol/L升至3.5mmol/L；继续口服氯化钾并复查电解质。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-039\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"未提及危急值报告及处理记录，无法判定是否缺失。\",\n      \"evidence\": \"病程记录书写清晰，未见复制粘贴及无关内容。\",\n      \"suggestion\": \"补充危急值接收及处理记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-040\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前文书未涉及重要操作记录。\",\n      \"evidence\": \"今日患者诉乏力较前减轻，无胸闷气促。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-047\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前文书未体现诊断修正或补充情况。\",\n      \"evidence\": \"诊断：低钾血症\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            17
+          ],
+          "metadata": {
+            "tokens_used": 367,
+            "prompt_tokens": 258,
+            "completion_tokens": 108,
+            "input_tokens": 258,
+            "output_tokens": 108,
+            "api_time": 0.620127260684967,
+            "first_result_latency": 2.480509042739868,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 117
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-035": "compliant",
+          "SC-039": "uncertain",
+          "SC-040": "not_applicable",
+          "SC-047": "not_applicable"
+        },
+        "unexpected_hits": {
+          "SC-039": "uncertain"
+        }
+      }
+    }
+  ],
+  "bucket_filters": [
+    "daily_course_quality"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 4,
+    "stabilized": 0,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-035",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_daily_course_quality_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_daily_course_quality_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-039",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_daily_course_quality_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_daily_course_quality_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-040",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_daily_course_quality_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_daily_course_quality_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-047",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_daily_course_quality_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_daily_course_quality_v1_defect.json"
+        ],
+        "stabilized": false
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

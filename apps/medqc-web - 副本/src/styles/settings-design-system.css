@@ -1,0 +1,290 @@
+/* ================================================================
+   Settings Design System — 商用级 SaaS 设置页统一 UI 语言
+   从 DataSyncConfig.vue 提取为全局共享 CSS
+   ================================================================ */
+
+/* ==================== Design Tokens ==================== */
+.ds-root {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  max-width: 960px;
+}
+
+/* ---- 1/3 + 2/3 分栏 ---- */
+.ds-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 768px) {
+  .ds-split { grid-template-columns: 260px 1fr; gap: 32px; }
+}
+.ds-split__aside { padding-top: 2px; }
+.ds-split__main { min-width: 0; }
+
+/* ---- Section 标题 ---- */
+.ds-section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px;
+}
+.ds-section-desc {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* ---- 白色卡片 ---- */
+.ds-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.ds-card__body {
+  position: relative;
+}
+.ds-divide > * {
+  border-bottom: 1px solid #f1f5f9;
+}
+.ds-divide > *:last-child {
+  border-bottom: none;
+}
+
+/* ---- Footer（压脚）---- */
+.ds-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+.ds-card__footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- 同行配置行 ---- */
+.ds-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  transition: background 0.12s ease;
+}
+.ds-row:hover {
+  background: rgba(248, 250, 252, 0.6);
+}
+.ds-row__left {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.ds-row__label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1e293b;
+}
+.ds-row__hint {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 1px;
+}
+.ds-row__right-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.ds-row__meta {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* ---- Badge（状态徽章）---- */
+.ds-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ds-badge--ok {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #dcfce7;
+}
+.ds-badge--off {
+  background: #f8fafc;
+  color: #94a3b8;
+  border: 1px solid #e2e8f0;
+}
+.ds-badge--info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+}
+.ds-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.ds-badge__dot--green { background: #22c55e; }
+.ds-badge__dot--slate { background: #94a3b8; }
+.ds-badge__dot--blue  { background: #3b82f6; }
+
+/* ---- Value Box（右侧值的微型背景框）---- */
+.ds-value-box {
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 12.5px;
+  color: #94a3b8;
+  background: #f8fafc;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #f1f5f9;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-value-box--filled {
+  color: #334155;
+  font-weight: 500;
+  border-color: #e2e8f0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+/* ---- 开关 Banner ---- */
+.ds-switch-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+/* ---- 网格区块 ---- */
+.ds-grid-section {
+  padding: 20px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.ds-grid-section:last-of-type { border-bottom: none; }
+.ds-grid-section__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 14px;
+}
+.ds-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
+}
+.ds-grid--3 { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 640px) {
+  .ds-grid, .ds-grid--3 { grid-template-columns: 1fr; }
+}
+
+/* ---- 表单字段 ---- */
+.ds-field { display: flex; flex-direction: column; }
+.ds-field--wide { margin-top: 16px; }
+.ds-field__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 2px;
+}
+.ds-field__hint {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+/* ---- 按钮系统 ---- */
+.ds-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  border: none;
+}
+.ds-btn--primary {
+  padding: 7px 16px;
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.2);
+}
+.ds-btn--primary:hover:not(:disabled) { background: #1d4ed8; }
+.ds-btn--primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.ds-btn--outline {
+  padding: 6px 14px;
+  background: #fff;
+  color: #475569;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.ds-btn--outline:hover { background: #f8fafc; color: #1e293b; }
+.ds-btn--ghost {
+  padding: 6px 8px;
+  background: none;
+  color: #94a3b8;
+}
+.ds-btn--ghost:hover { color: #475569; background: #f1f5f9; }
+.ds-btn--ghost-text {
+  padding: 7px 14px;
+  background: none;
+  color: #64748b;
+}
+.ds-btn--ghost-text:hover { color: #1e293b; }
+
+/* ---- 工具 ---- */
+.ds-code {
+  background: #f1f5f9;
+  color: #475569;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  border: 1px solid #e2e8f0;
+}
+.ds-footer-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #d97706;
+  font-weight: 500;
+}
+.ds-footer-warn__icon { font-size: 13px; }
+.ds-select-native {
+  appearance: none;
+  padding: 6px 28px 6px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%2394a3b8' fill='none' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right 10px center no-repeat;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  outline: none;
+}
+.ds-select-native:focus { border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); }

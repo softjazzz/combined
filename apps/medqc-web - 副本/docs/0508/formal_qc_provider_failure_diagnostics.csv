@@ -1,0 +1,323 @@
+visit_id,patient_name,event_type,pack_id,rule_ids,phase,attempt_index,provider_error_count,timeout_count,rate_limit_count,raw_error,exception_message,elapsed_seconds,total_tokens
+1915580,雷德超,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.036,0
+1915580,雷德超,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.086,0
+1915580,雷德超,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.06,0
+1915580,雷德超,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.032,0
+1915580,雷德超,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.078,0
+1915580,雷德超,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.053,0
+1915580,雷德超,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.051,0
+1915580,雷德超,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.054,0
+1915580,雷德超,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.098,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.066,0
+1915580,雷德超,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.025,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.044,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.034,0
+1915580,雷德超,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.056,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.079,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.046,0
+1915580,雷德超,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.069,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.09,0
+1915580,雷德超,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.025,0
+1915580,雷德超,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.066,0
+1915580,雷德超,llm_generate_exception,presurg_summary_procedure,SC-081,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.046,0
+1915580,雷德超,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.048,0
+1915580,雷德超,llm_generate_exception,presurg_summary_procedure,SC-081,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.071,0
+1915580,雷德超,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.029,0
+1915580,雷德超,llm_generate_exception,presurg_summary_procedure,SC-081,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.074,0
+1915580,雷德超,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.127,0
+1915580,雷德超,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.099,0
+1915580,雷德超,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.069,0
+1915580,雷德超,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.046,0
+1915580,雷德超,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.023,0
+1915580,雷德超,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.047,0
+1915580,雷德超,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.025,0
+1915580,雷德超,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.071,0
+1915580,雷德超,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.055,0
+1915580,雷德超,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.1,0
+1915580,雷德超,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.056,0
+1915580,雷德超,llm_generate_exception,presurg_summary_content,SC-113,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.066,0
+1915580,雷德超,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.045,0
+1915580,雷德超,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.025,0
+1915580,雷德超,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.06,0
+1915580,雷德超,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.04,0
+1915580,雷德超,llm_generate_exception,presurg_summary_content,SC-113,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.086,0
+1915580,雷德超,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.075,0
+1915580,雷德超,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.076,0
+1915580,雷德超,llm_generate_exception,presurg_summary_content,SC-113,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.057,0
+1915580,雷德超,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.068,0
+1915580,雷德超,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.044,0
+1915580,雷德超,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.024,0
+1915580,雷德超,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.054,0
+1915580,雷德超,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.078,0
+1915580,雷德超,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.035,0
+1915580,雷德超,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.08,0
+1915580,雷德超,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.075,0
+1915580,雷德超,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.077,0
+1915580,雷德超,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.066,0
+1915580,雷德超,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.045,0
+1915580,雷德超,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.025,0
+1915580,雷德超,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.076,0
+1915580,雷德超,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.033,0
+1915580,雷德超,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.054,0
+1915580,雷德超,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.055,0
+1915580,雷德超,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.032,0
+1915580,雷德超,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.095,0
+1915580,雷德超,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.045,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.024,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.067,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.068,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.046,0
+1915580,雷德超,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.027,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.072,0
+1915580,雷德超,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.05,0
+1915580,雷德超,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.071,0
+1915580,雷德超,llm_generate_exception,presurg_summary_procedure,SC-081,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.065,0
+1915580,雷德超,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.045,0
+1915580,雷德超,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.022,0
+1915580,雷德超,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.076,0
+1915580,雷德超,llm_generate_exception,presurg_summary_procedure,SC-081,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.053,0
+1915580,雷德超,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.032,0
+1915580,雷德超,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.036,0
+1915580,雷德超,llm_generate_exception,presurg_summary_procedure,SC-081,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.098,0
+1915580,雷德超,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.078,0
+1915580,雷德超,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.067,0
+1915580,雷德超,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.024,0
+1915580,雷德超,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.044,0
+1915580,雷德超,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.074,0
+1915580,雷德超,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.03,0
+1915580,雷德超,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.052,0
+1915580,雷德超,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.077,0
+1915580,雷德超,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.055,0
+1915580,雷德超,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.097,0
+1915580,雷德超,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.067,0
+1915580,雷德超,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.046,0
+1915580,雷德超,llm_generate_exception,presurg_summary_content,SC-113,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.024,0
+1915580,雷德超,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.024,0
+1915580,雷德超,llm_generate_exception,presurg_summary_content,SC-113,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.128,0
+1915580,雷德超,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.047,0
+1915580,雷德超,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.033,0
+1915580,雷德超,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.1,0
+1915580,雷德超,llm_generate_exception,presurg_summary_content,SC-113,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.099,0
+1915580,雷德超,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.07,0
+1915580,雷德超,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.048,0
+1915580,雷德超,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.026,0
+1915580,雷德超,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.055,0
+1915580,雷德超,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.08,0
+1915580,雷德超,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.036,0
+1915580,雷德超,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.055,0
+1915580,雷德超,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.08,0
+1915580,雷德超,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.036,0
+1915580,雷德超,pack_fallback,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,daily_course_consistency,SC-038,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,presurg_summary_procedure,SC-081,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,surgery_content,"SC-097,SC-110",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,presurg_summary_content,SC-113,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,daily_order_procedure,SC-143,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+1915580,雷德超,pack_fallback,daily_order_consistency,SC-146,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.06,0
+2024757,游德利,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.035,0
+2024757,游德利,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.081,0
+2024757,游德利,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.024,0
+2024757,游德利,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.045,0
+2024757,游德利,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.069,0
+2024757,游德利,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.076,0
+2024757,游德利,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.096,0
+2024757,游德利,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.118,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.05,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.071,0
+2024757,游德利,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.028,0
+2024757,游德利,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.041,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.061,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.085,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.036,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.083,0
+2024757,游德利,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.102,0
+2024757,游德利,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.069,0
+2024757,游德利,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.049,0
+2024757,游德利,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.027,0
+2024757,游德利,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.167,0
+2024757,游德利,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.131,0
+2024757,游德利,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.088,0
+2024757,游德利,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.101,0
+2024757,游德利,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.15,0
+2024757,游德利,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.151,0
+2024757,游德利,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.106,0
+2024757,游德利,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.152,0
+2024757,游德利,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.058,0
+2024757,游德利,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.06,0
+2024757,游德利,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.116,0
+2024757,游德利,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.173,0
+2024757,游德利,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.144,0
+2024757,游德利,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.191,0
+2024757,游德利,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.338,0
+2024757,游德利,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.101,0
+2024757,游德利,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.155,0
+2024757,游德利,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.054,0
+2024757,游德利,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.152,0
+2024757,游德利,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.109,0
+2024757,游德利,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.071,0
+2024757,游德利,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.158,0
+2024757,游德利,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.063,0
+2024757,游德利,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.204,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.14,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.094,0
+2024757,游德利,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.05,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.095,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.145,0
+2024757,游德利,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.055,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.088,0
+2024757,游德利,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.123,0
+2024757,游德利,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.13,0
+2024757,游德利,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.125,0
+2024757,游德利,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.084,0
+2024757,游德利,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.047,0
+2024757,游德利,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.098,0
+2024757,游德利,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.057,0
+2024757,游德利,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.151,0
+2024757,游德利,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.094,0
+2024757,游德利,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.176,0
+2024757,游德利,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.105,0
+2024757,游德利,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.139,0
+2024757,游德利,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.048,0
+2024757,游德利,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.093,0
+2024757,游德利,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.124,0
+2024757,游德利,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.075,0
+2024757,游德利,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.176,0
+2024757,游德利,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.1,0
+2024757,游德利,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.063,0
+2024757,游德利,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.149,0
+2024757,游德利,pack_fallback,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,daily_course_consistency,SC-038,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,daily_order_procedure,SC-143,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2024757,游德利,pack_fallback,daily_order_consistency,SC-146,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.15,0
+2287309,陈光华,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.106,0
+2287309,陈光华,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.056,0
+2287309,陈光华,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.107,0
+2287309,陈光华,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.066,0
+2287309,陈光华,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.159,0
+2287309,陈光华,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.084,0
+2287309,陈光华,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.13,0
+2287309,陈光华,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.119,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.122,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.09,0
+2287309,陈光华,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.049,0
+2287309,陈光华,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.066,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.115,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.172,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.032,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.076,0
+2287309,陈光华,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.098,0
+2287309,陈光华,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.072,0
+2287309,陈光华,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.049,0
+2287309,陈光华,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.027,0
+2287309,陈光华,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.052,0
+2287309,陈光华,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.074,0
+2287309,陈光华,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.031,0
+2287309,陈光华,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.075,0
+2287309,陈光华,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.078,0
+2287309,陈光华,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.058,0
+2287309,陈光华,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.071,0
+2287309,陈光华,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.046,0
+2287309,陈光华,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.025,0
+2287309,陈光华,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.045,0
+2287309,陈光华,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.074,0
+2287309,陈光华,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.026,0
+2287309,陈光华,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.039,0
+2287309,陈光华,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.062,0
+2287309,陈光华,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.13,0
+2287309,陈光华,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.049,0
+2287309,陈光华,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.071,0
+2287309,陈光华,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.024,0
+2287309,陈光华,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.033,0
+2287309,陈光华,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.078,0
+2287309,陈光华,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.056,0
+2287309,陈光华,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.034,0
+2287309,陈光华,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.079,0
+2287309,陈光华,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.099,0
+2287309,陈光华,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.073,0
+2287309,陈光华,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.053,0
+2287309,陈光华,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.03,0
+2287309,陈光华,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.05,0
+2287309,陈光华,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.075,0
+2287309,陈光华,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.098,0
+2287309,陈光华,llm_generate_exception,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.034,0
+2287309,陈光华,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.083,0
+2287309,陈光华,llm_generate_exception,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.101,0
+2287309,陈光华,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.071,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.051,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.026,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.032,0
+2287309,陈光华,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.053,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.077,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.046,0
+2287309,陈光华,llm_generate_exception,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.07,0
+2287309,陈光华,llm_generate_exception,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.07,0
+2287309,陈光华,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.048,0
+2287309,陈光华,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.071,0
+2287309,陈光华,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.026,0
+2287309,陈光华,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.06,0
+2287309,陈光华,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.085,0
+2287309,陈光华,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.036,0
+2287309,陈光华,llm_generate_exception,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.061,0
+2287309,陈光华,llm_generate_exception,daily_course_consistency,SC-038,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.092,0
+2287309,陈光华,llm_generate_exception,surgery_content,"SC-097,SC-110",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.088,0
+2287309,陈光华,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.077,0
+2287309,陈光华,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.052,0
+2287309,陈光华,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.027,0
+2287309,陈光华,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.055,0
+2287309,陈光华,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.033,0
+2287309,陈光华,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.078,0
+2287309,陈光华,llm_generate_exception,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.082,0
+2287309,陈光华,llm_generate_exception,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.038,0
+2287309,陈光华,llm_generate_exception,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.101,0
+2287309,陈光华,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.068,0
+2287309,陈光华,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.048,0
+2287309,陈光华,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.025,0
+2287309,陈光华,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.035,0
+2287309,陈光华,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.059,0
+2287309,陈光华,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.174,0
+2287309,陈光华,llm_generate_exception,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.053,0
+2287309,陈光华,llm_generate_exception,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.08,0
+2287309,陈光华,llm_generate_exception,daily_order_procedure,SC-143,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.034,0
+2287309,陈光华,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.025,0
+2287309,陈光华,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,0,1,0,0,All connection attempts failed,All connection attempts failed,0.045,0
+2287309,陈光华,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.029,0
+2287309,陈光华,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,1,1,0,0,All connection attempts failed,All connection attempts failed,0.053,0
+2287309,陈光华,llm_generate_exception,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.046,0
+2287309,陈光华,llm_generate_exception,daily_order_consistency,SC-146,fast_screen_first_pass,2,1,0,0,All connection attempts failed,All connection attempts failed,0.024,0
+2287309,陈光华,pack_fallback,admission_content_core,"SC-004,SC-007,SC-008,SC-009,SC-011,SC-012,SC-013,SC-014,SC-016,SC-018",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,admission_consistency_core,"SC-010,SC-015,SC-019,SC-020",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,daily_course_content_core,"SC-032,SC-033,SC-035,SC-039,SC-040,SC-047,SC-066,SC-075,SC-076",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,daily_course_procedure_core,"SC-034,SC-036,SC-037,SC-043,SC-044",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,daily_course_procedure_followup,"SC-046,SC-070,SC-073,SC-074,SC-107,SC-114",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,daily_course_consistency,SC-038,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,senior_course_content,"SC-050,SC-051",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,presurg_discussion_procedure,"SC-083,SC-084,SC-085",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,surgery_content,"SC-097,SC-110",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,surgery_procedure,"SC-099,SC-100,SC-101,SC-108,SC-115",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,postsurg_firstcourse_procedure,SC-105,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,discharge_content,"SC-118,SC-119,SC-123",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,discharge_procedure,"SC-121,SC-122",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,discharge_consistency,"SC-125,SC-127",fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,daily_order_procedure,SC-143,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0
+2287309,陈光华,pack_fallback,daily_order_consistency,SC-146,fast_screen_first_pass,1,1,0,0,pack_exception,pack_exception,0.0,0

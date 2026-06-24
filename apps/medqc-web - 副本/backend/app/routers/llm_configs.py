@@ -1,0 +1,466 @@
+from typing import Dict, Any, List, Optional
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from datetime import datetime, timezone
+
+from ..storage.memory import llm_configs
+from ..core.supabase_client import get_supabase, async_execute
+from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
+from ..core.security import get_optional_user, require_admin
+from ..services.llm_config_loader import (
+    SUPPORTED_PROVIDER_CODES,
+    LLMConfigLoader,
+    build_provider_runtime_config,
+    get_default_provider_code,
+    get_enabled_provider_codes,
+)
+from ..services.qc_llm_client import SichuanQCLLMClient
+
+
+router = APIRouter(prefix="/api/v1/llm", tags=["llm-configs"])
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _resolve_provider(provider_code: str) -> Dict[str, Any]:
+    code = (provider_code or "").lower()
+    if code in ("alibaba", "aliyun"):
+        return {
+            "id": "alibaba",
+            "provider_code": "alibaba",
+            "provider_name": "Aliyun DashScope",
+            "base_endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "request_format": "openai",
+        }
+    if code in ("deepseek",):
+        return {
+            "id": "deepseek",
+            "provider_code": "deepseek",
+            "provider_name": "DeepSeek 官方 API",
+            "base_endpoint": "https://api.deepseek.com",
+            "request_format": "openai",
+        }
+    if code in ("siliconflow",):
+        return {
+            "id": "siliconflow",
+            "provider_code": "siliconflow",
+            "provider_name": "SiliconFlow",
+            "base_endpoint": "https://api.siliconflow.cn/v1",
+            "request_format": "openai",
+        }
+    if code in ("ollama", "local"):
+        return {
+            "id": "ollama",
+            "provider_code": "ollama",
+            "provider_name": "内部 Ollama",
+            "base_endpoint": "http://127.0.0.1:11434/v1",
+            "request_format": "openai",
+        }
+    # fallback custom
+    return {
+        "id": code or "custom",
+        "provider_code": code or "custom",
+        "provider_name": code or "Custom",
+        "base_endpoint": "",
+        "request_format": "openai",
+    }
+
+
+def _resolve_model(model_code: str) -> Dict[str, Any]:
+    code = (model_code or "").lower()
+    if code in ("qwen3.5-35b-a3b",):
+        return {
+            "id": "qwen3.5-35b-a3b",
+            "model_code": "qwen3.5-35b-a3b",
+            "model_name": "Qwen3.5-35B-A3B",
+            "description": "Qwen3.5 35B A3B 模型",
+        }
+    if code in ("qwen2.5-14b-instruct", "qwen2.5-14b", "qwen2.5-14b-instruct".lower()):
+        return {
+            "id": "qwen2.5-14b-instruct",
+            "model_code": "qwen2.5-14b-instruct",
+            "model_name": "Qwen2.5-14B-Instruct",
+            "description": "14B参数指令优化模型",
+        }
+    if code in ("qwen/qwen3.5-27b",):
+        return {
+            "id": "Qwen/Qwen3.5-27B",
+            "model_code": "Qwen/Qwen3.5-27B",
+            "model_name": "Qwen/Qwen3.5-27B",
+            "description": "Qwen3.5 27B 模型",
+        }
+    if code in ("qwen/qwen3.5-9b",):
+        return {
+            "id": "Qwen/Qwen3.5-9B",
+            "model_code": "Qwen/Qwen3.5-9B",
+            "model_name": "Qwen/Qwen3.5-9B",
+            "description": "Qwen3.5 9B 模型",
+        }
+    if code in ("qwen/qwen3.5-4b",):
+        return {
+            "id": "Qwen/Qwen3.5-4B",
+            "model_code": "Qwen/Qwen3.5-4B",
+            "model_name": "Qwen/Qwen3.5-4B",
+            "description": "Qwen3.5 4B 模型",
+        }
+    if code in ("deepseek-chat",):
+        return {
+            "id": "deepseek-chat",
+            "model_code": "deepseek-chat",
+            "model_name": "DeepSeek Chat",
+            "description": "DeepSeek 通用对话模型",
+        }
+    if code in ("deepseek-reasoner",):
+        return {
+            "id": "deepseek-reasoner",
+            "model_code": "deepseek-reasoner",
+            "model_name": "DeepSeek Reasoner",
+            "description": "DeepSeek 推理模型",
+        }
+    if code in ("deepseek-v4-flash",):
+        return {
+            "id": "deepseek-v4-flash",
+            "model_code": "deepseek-v4-flash",
+            "model_name": "DeepSeek V4 Flash",
+            "description": "DeepSeek V4 Flash 模型",
+        }
+    if code in ("deepseek-v4-pro",):
+        return {
+            "id": "deepseek-v4-pro",
+            "model_code": "deepseek-v4-pro",
+            "model_name": "DeepSeek V4 Pro",
+            "description": "DeepSeek V4 Pro 模型",
+        }
+    return {
+        "id": code or "unknown",
+        "model_code": code or "unknown",
+        "model_name": model_code or "Unknown",
+        "description": "",
+    }
+
+
+def _extract_provider_and_model_codes(payload: Dict[str, Any]) -> tuple[str, str]:
+    default_provider_code = get_default_provider_code()
+    enabled_provider_codes = set(get_enabled_provider_codes())
+    provider_code = str(payload.get("provider_code") or payload.get("provider_id") or default_provider_code).strip().lower()
+    if provider_code not in SUPPORTED_PROVIDER_CODES or provider_code not in enabled_provider_codes:
+        provider_code = default_provider_code
+    model_code = str(payload.get("model_code") or payload.get("model_id") or "").strip()
+    return provider_code, model_code
+
+
+def _extract_roles(current_user: Optional[Dict[str, Any]]) -> set[str]:
+    if not current_user:
+        return set()
+    roles = current_user.get("roles")
+    if isinstance(roles, list):
+        return {str(role).strip().lower() for role in roles if str(role).strip()}
+    role = current_user.get("role")
+    if role:
+        return {str(role).strip().lower()}
+    return set()
+
+
+def _normalize_config_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    provider_code = str(row.get("provider_code") or row.get("provider_id") or "").strip().lower()
+    model_code = str(row.get("model_code") or row.get("model_id") or "").strip()
+    row["provider"] = _resolve_provider(provider_code)
+    row["model"] = _resolve_model(model_code)
+    row["provider_code"] = row["provider"]["provider_code"]
+    row["model_code"] = row["model"]["model_code"]
+    return row
+
+
+async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
+    supabase = get_supabase()
+    provider_code, model_code = _extract_provider_and_model_codes(payload)
+    if not model_code:
+        runtime = build_provider_runtime_config(provider_code)
+        model_code = str(runtime.get("model") or "").strip()
+    cfg_name = payload.get("config_name") or "custom"
+
+    provider = _resolve_provider(provider_code)
+    model = _resolve_model(model_code)
+    now = _now_iso()
+
+    def _save_in_memory() -> Dict[str, Any]:
+        existing_id: Optional[str] = None
+        for cid, cfg in llm_configs.items():
+            if cfg.get("config_name") == cfg_name and cfg.get("user_id") == payload.get("user_id"):
+                existing_id = cid
+                break
+        data = {
+            "id": existing_id or (payload.get("id") or f"cfg-{len(llm_configs)+1:03d}"),
+            "user_id": payload.get("user_id"),
+            "config_name": cfg_name,
+            "provider_code": provider["provider_code"],
+            "model_code": model["model_code"],
+            "provider": provider,
+            "model": model,
+            "api_key_encrypted": None,
+            "custom_endpoint": None,
+            "custom_parameters": payload.get("custom_parameters") or {},
+            "is_active": True if payload.get("is_active") is None else bool(payload.get("is_active")),
+            "updated_at": now,
+        }
+        if existing_id is None:
+            data["created_at"] = now
+        else:
+            data["created_at"] = llm_configs[existing_id].get("created_at", now)
+        llm_configs[data["id"]] = data
+        return data
+
+    if supabase is None:
+        return _save_in_memory()
+
+    row = {
+        "user_id": payload.get("user_id"),
+        "config_name": cfg_name,
+        "provider_code": provider["provider_code"],
+        "model_code": model["model_code"],
+        "api_key_encrypted": None,
+        "custom_endpoint": None,
+        "custom_parameters": payload.get("custom_parameters") or {},
+        "is_active": True if payload.get("is_active") is None else bool(payload.get("is_active")),
+        "updated_at": now,
+    }
+
+    try:
+        q = supabase.table("user_llm_configs").select("id").eq("config_name", cfg_name)
+        if row["user_id"]:
+            q = q.eq("user_id", row["user_id"])
+        else:
+            q = q.is_("user_id", None)  # type: ignore[attr-defined]
+
+        existing_data = None
+        try:
+            existing = await async_execute(q.limit(1))
+            existing_data = existing.data if existing.data else None
+        except Exception as e:
+            if "404" not in str(e):
+                raise
+            existing_data = None
+
+        if existing_data:
+            cfg_id = existing_data[0]["id"]
+            await async_execute(supabase.table("user_llm_configs").update(row).eq("id", cfg_id))
+        else:
+            row["created_at"] = now
+            await async_execute(supabase.table("user_llm_configs").insert(row))
+
+        q2 = supabase.table("user_llm_configs").select("*").eq("config_name", cfg_name)
+        if row["user_id"]:
+            q2 = q2.eq("user_id", row["user_id"])
+        else:
+            q2 = q2.is_("user_id", None)  # type: ignore[attr-defined]
+        full = await async_execute(q2.order("updated_at", desc=True).limit(1))
+        result_data = full.data[0] if full.data else None
+        if result_data:
+            result_data["provider"] = provider
+            result_data["model"] = model
+            result_data["provider_code"] = provider["provider_code"]
+            result_data["model_code"] = model["model_code"]
+        return result_data or _save_in_memory()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("save_config internal failed, fallback memory: %s", exc)
+        return _save_in_memory()
+
+
+@router.get("/configs")
+async def list_configs(request: Request, user_id: Optional[str] = Query(default=None)):
+    supabase = get_supabase()
+
+    def _fallback() -> Dict[str, Any]:
+        items: List[Dict[str, Any]] = list(llm_configs.values())
+        if user_id is not None:
+            items = [c for c in items if c.get("user_id") == user_id]
+        return success_response(
+            data={"items": items, "total": len(items)},
+            trace_id=get_trace_id(request)
+        )
+
+    if supabase is None:
+        return _fallback()
+
+    try:
+        q = supabase.table("user_llm_configs").select("*").eq("is_active", True)
+        if user_id:
+            q = q.eq("user_id", user_id)
+        else:
+            q = q.is_("user_id", None)  # type: ignore[attr-defined]
+        resp = await async_execute(q)
+        data = []
+        for item in (resp.data or []):
+            data.append(_normalize_config_row(dict(item)))
+        return success_response(
+            data={"items": data, "total": len(data)},
+            trace_id=get_trace_id(request)
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Supabase list_configs 失败，回退内存配置: %s", exc)
+        return _fallback()
+
+
+@router.get("/configs/{config_name}")
+async def get_config_by_name(request: Request, config_name: str, user_id: Optional[str] = Query(default=None)):
+    supabase = get_supabase()
+
+    def _fallback() -> Dict[str, Any]:
+        for cfg in llm_configs.values():
+            if cfg.get("config_name") == config_name and (user_id is None or cfg.get("user_id") == user_id):
+                return success_response(data=cfg, trace_id=get_trace_id(request))
+        return success_response(data=None, trace_id=get_trace_id(request))
+
+    if supabase is None:
+        return _fallback()
+
+    try:
+        q = supabase.table("user_llm_configs").select("*").eq("config_name", config_name).eq("is_active", True)
+        if user_id:
+            q = q.eq("user_id", user_id)
+        else:
+            q = q.is_("user_id", None)  # type: ignore[attr-defined]
+        resp = await async_execute(q.order("updated_at", {"ascending": False}).order("created_at", {"ascending": False}).limit(1))
+        if resp.data:
+            row = _normalize_config_row(dict(resp.data[0]))
+            return success_response(data=row, trace_id=get_trace_id(request))
+        return success_response(data=None, trace_id=get_trace_id(request))
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Supabase get_config_by_name 失败，回退内存配置: %s", exc)
+        return _fallback()
+
+
+@router.post("/configs")
+async def save_config(
+    request: Request,
+    payload: Dict[str, Any],
+    admin_user: dict = Depends(require_admin),
+):
+    del admin_user
+    result = await _save_config_internal(payload, request)
+    return success_response(data=result, trace_id=get_trace_id(request))
+
+
+@router.get("/configs/default/summary")
+async def get_default_summary(
+    request: Request,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
+):
+    runtime = await LLMConfigLoader.load_config(config_name="default", user_id=None)
+    runtime = runtime or {}
+    custom_params = runtime.get("custom_parameters") or {}
+    source = str(runtime.get("source") or "env")
+    readonly = "admin" not in _extract_roles(current_user)
+    return success_response(
+        data={
+            "provider_code": str(runtime.get("provider_code") or get_default_provider_code()),
+            "model_code": str(runtime.get("model") or ""),
+            "custom_parameters": {
+                "temperature": float(custom_params.get("temperature", 0.2)),
+                "top_p": float(custom_params.get("top_p", 0.9)),
+                "max_tokens": int(custom_params.get("max_tokens", 4000)),
+            },
+            "source": source,
+            "readonly": readonly,
+        },
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/configs/default/reset")
+async def reset_default_config(
+    request: Request,
+    admin_user: dict = Depends(require_admin),
+):
+    del admin_user
+    default_provider = get_default_provider_code()
+    runtime = build_provider_runtime_config(default_provider)
+    payload = {
+        "config_name": "default",
+        "user_id": None,
+        "provider_code": default_provider,
+        "model_code": str(runtime.get("model") or ""),
+        "custom_parameters": {
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "max_tokens": 4000,
+        },
+        "is_active": True,
+    }
+    await _save_config_internal(payload, request)
+    return success_response(
+        data={
+            "provider_code": payload["provider_code"],
+            "model_code": payload["model_code"],
+            "custom_parameters": payload["custom_parameters"],
+            "source": "database+env",
+            "readonly": False,
+        },
+        message="已恢复默认配置",
+        trace_id=get_trace_id(request),
+    )
+
+
+@router.post("/test")
+async def test_config(request: Request, payload: Dict[str, Any]):
+    try:
+        provider_code, model_code = _extract_provider_and_model_codes(payload)
+        runtime = build_provider_runtime_config(
+            provider_code=provider_code,
+            model_code=model_code or None,
+            custom_parameters=payload.get("custom_parameters") or {},
+        )
+        client = SichuanQCLLMClient(
+            {
+                **runtime,
+                "source": "test",
+            }
+        )
+
+        if not client.api_endpoint:
+            raise HTTPException(
+                status_code=StatusCode.BAD_REQUEST,
+                detail=f"连接测试失败: provider={provider_code} 未配置 API_ENDPOINT（请检查 backend/.env）",
+            )
+        if provider_code in ("alibaba", "deepseek", "siliconflow") and not client.api_key:
+            raise HTTPException(
+                status_code=StatusCode.BAD_REQUEST,
+                detail=f"连接测试失败: provider={provider_code} 未配置 API_KEY（请检查 backend/.env）",
+            )
+
+        result = await client.generate("请只返回“pong”，不要输出其他内容。")
+        content = str(
+            ((result.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+        ).strip()
+        return success_response(
+            data={
+                "provider_code": runtime.get("provider_code"),
+                "model": client.model,
+                "api_endpoint": client.api_endpoint,
+                "content_preview": content[:120],
+                "stats": client.stats(),
+            },
+            message="连接测试成功",
+            trace_id=get_trace_id(request),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.getLogger(__name__).exception(
+            "LLM 连接测试失败: provider=%s model=%s endpoint=%s",
+            locals().get("provider_code", "unknown"),
+            getattr(locals().get("client"), "model", "unknown"),
+            getattr(locals().get("client"), "api_endpoint", "unknown"),
+        )
+        raise HTTPException(
+            status_code=StatusCode.BAD_GATEWAY,
+            detail=(
+                "连接测试失败: "
+                f"provider={locals().get('provider_code', 'unknown')}, "
+                f"model={getattr(locals().get('client'), 'model', 'unknown')}, "
+                f"endpoint={getattr(locals().get('client'), 'api_endpoint', 'unknown')}, "
+                f"reason={exc}"
+            ),
+        )

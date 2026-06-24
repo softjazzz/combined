@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_daily_course_medication_detail_missing_v1",
+    "issue_type": "C4_daily_course_medication_detail_missing",
+    "display_name": "日常病程用药记录不具体",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-033"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P005",
+    "visit_id": "SYN-RUN-036",
+    "mr_no": "SYN0036",
+    "patient_name": "合成患者五",
+    "gender": "男",
+    "age": 71,
+    "department": "呼吸内科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "患者仍有咳嗽咳痰，夜间体温最高38.2℃。今日病程仅笼统记录“继续抗感染及对症治疗”，未分析感染控制是否欠佳、未说明继续沿用何种抗菌药物、也未写明是否需要调整方案或复查指标。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["肺部感染"],
+    "orders": ["继续原抗感染治疗", "对症止咳化痰"],
+    "exams": ["体温38.2℃"]
+  }
+}

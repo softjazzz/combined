@@ -5,6 +5,7 @@ import { defineComponent, h, nextTick } from 'vue'
 import CustomerSampleValidationView from '@/views/workstation-v4/CustomerSampleValidationView.vue'
 
 let latestBatchResultDrawerProps: Record<string, unknown> | null = null
+const CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY = 'medqc_customer_sample_validation_guide_seen_v1'
 
 const {
   message,
@@ -22,6 +23,9 @@ const {
   syncManualSamplePoolRecords,
   getSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
+  routeQuery,
+  routerPush,
+  routerReplace,
   writeFile,
   bookNew,
   aoaToSheet,
@@ -48,6 +52,9 @@ const {
   syncManualSamplePoolRecords: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
   exportSichuanWorkspaceBatchJob: vi.fn(),
+  routeQuery: {} as Record<string, unknown>,
+  routerPush: vi.fn(),
+  routerReplace: vi.fn(),
   writeFile: vi.fn(),
   bookNew: vi.fn(() => ({ sheets: [] })),
   aoaToSheet: vi.fn(() => ({})),
@@ -56,6 +63,16 @@ const {
 
 vi.mock('ant-design-vue', () => ({
   message,
+}))
+
+vi.mock('vue-router', () => ({
+  useRoute: () => ({
+    query: routeQuery,
+  }),
+  useRouter: () => ({
+    push: routerPush,
+    replace: routerReplace,
+  }),
 }))
 
 vi.mock('@/services/manual-case-sample-service', () => ({
@@ -833,6 +850,9 @@ describe('CustomerSampleValidationView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     latestBatchResultDrawerProps = null
+    Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
+    window.localStorage.clear()
+    window.localStorage.setItem(CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY, 'true')
     vi.stubGlobal('URL', {
       ...URL,
       createObjectURL: vi.fn(() => 'blob:luxian-0609-report'),
@@ -914,7 +934,7 @@ describe('CustomerSampleValidationView', () => {
     })
   })
 
-  it('默认选中泸县0609规则集并展示规则集摘要', async () => {
+  it('默认选中泸县0609规则集并弱化内部覆盖标签', async () => {
     const wrapper = await mountView()
 
     expect(listManualSampleValidationRuleSets).toHaveBeenCalled()
@@ -922,17 +942,67 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
     expect(wrapper.text()).toContain('59')
     expect(wrapper.text()).toContain('场景 运行中病历')
-    expect(wrapper.text()).toContain('闸门未过 3/9')
-    expect(wrapper.text()).toContain('三类样本齐备 0')
-    expect(wrapper.text()).toContain('误报 0')
-    expect(wrapper.text()).toContain('漏报 0')
-    expect(wrapper.text()).toContain('不可判定 0')
-    expect(wrapper.text()).toContain('页面待闭环 4/8')
-    expect(wrapper.text()).toContain('已达正式口径 6')
-    expect(wrapper.text()).toContain('证据待补强 10')
-    expect(wrapper.text()).toContain('跨文书待完善 14')
-    expect(wrapper.text()).toContain('跨表联查待接入 15')
-    expect(wrapper.text()).toContain('待实现规则 4')
+    expect(wrapper.text()).toContain('规则数 59 条')
+    expect(wrapper.text()).toContain('内部覆盖详情')
+    expect(wrapper.text()).not.toContain('闸门未过 3/9')
+    expect(wrapper.text()).not.toContain('证据待补强 10')
+
+    const internalButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('内部覆盖详情'))
+    expect(internalButton).toBeTruthy()
+    await internalButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('客户验收口径与规则增强诊断')
+  })
+
+  it('演示导览参数进入页面时自动展示并可关闭记忆', async () => {
+    routeQuery.tour = '1'
+    window.localStorage.removeItem(CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY)
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('客户演示主流程')
+    expect(wrapper.text()).toContain('先选择样本池')
+    expect(wrapper.text()).toContain('客户自建测试病历用于现场演示')
+
+    const nextButton = wrapper.find('.customer-sample-guide-next')
+    expect(nextButton.exists()).toBe(true)
+    await nextButton.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('确认验证规则集')
+
+    await nextButton.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('限定 LX0609 质控点范围')
+
+    const dismissButton = wrapper.find('.customer-sample-guide-dismiss')
+    expect(dismissButton.exists()).toBe(true)
+    await dismissButton.trigger('click')
+    await nextTick()
+
+    expect(window.localStorage.getItem(CUSTOMER_SAMPLE_GUIDE_STORAGE_KEY)).toBe('true')
+    expect(wrapper.text()).not.toContain('客户演示主流程')
+  })
+
+  it('可从工具栏重新打开导览并进入创建测试病历', async () => {
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).not.toContain('客户演示主流程')
+    const guideButton = wrapper.findAll('button').find((node) => node.text().includes('功能导览'))
+    expect(guideButton).toBeTruthy()
+    await guideButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('客户演示主流程')
+    const startButton = wrapper.find('.customer-sample-guide-start')
+    expect(startButton.exists()).toBe(true)
+    await startButton.trigger('click')
+
+    expect(routerPush).toHaveBeenCalledWith({ name: 'WorkstationV4SyntheticCaseNew' })
   })
 
   it('规则集目录接口失败时使用内置 fallback', async () => {
@@ -1316,9 +1386,10 @@ describe('CustomerSampleValidationView', () => {
         items: [
           buildRecord({
             id: 'V003',
-            matched_visit_id: 'V003',
+            matched_visit_id: '',
             mr_no: '2250001',
             patient_name: '王五',
+            match_status: 'unmatched',
             sync_status: 'missing',
             bundle_status: 'pending',
           }),
@@ -1341,7 +1412,7 @@ describe('CustomerSampleValidationView', () => {
     await flushPromises()
 
     expect(message.warning).toHaveBeenCalledWith(
-      '当前选中的病历还未完成匹配、同步或 bundle 准备，暂时无法发起验证',
+      '当前选中的病历还未完成病历关联，暂时无法发起泸县0609验证',
     )
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
@@ -1393,6 +1464,250 @@ describe('CustomerSampleValidationView', () => {
     )
   })
 
+  it('客户自建病历列表优先显示可记忆的病历标题', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool({ id: 'customer-created-test-records-v1', name: '客户自建测试病历' }),
+        items: [
+          buildRecord({
+            id: 'CUSTOMER_TEST_202606231530ABCDEF',
+            matched_visit_id: 'CUSTOMER_TEST_202606231530ABCDEF',
+            mr_no: 'CUSTOMER_TEST_202606231530ABCDEF',
+            patient_name: '测试患者丙',
+            department: '消化内科',
+            created_at: '2026-06-23 15:30:12',
+            sample_items: [
+              {
+                id: 'item-memory-title',
+                created_at: '2026-06-23 15:30:12',
+                raw_payload: {
+                  case_title: '会诊质量质控病历｜LX020/021/022｜202606231530',
+                },
+              },
+            ],
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+
+    const wrapper = await mountView()
+
+    expect(wrapper.text()).toContain('会诊质量质控病历｜LX020/021/022')
+    expect(wrapper.find('.customer-sample-patient-name').text()).toBe(
+      '会诊质量质控病历｜LX020/021/022',
+    )
+    expect(wrapper.find('.customer-sample-created-time').text()).toBe('2026-06-23 15:30')
+    expect(wrapper.find('.customer-sample-patient-meta').text()).not.toContain('2026-06-23 15:30')
+    expect(wrapper.find('.customer-sample-patient-cell').text()).not.toContain('ABCDEF')
+    expect(wrapper.find('.customer-sample-record-code').text()).toBe('测试-001')
+    expect(wrapper.find('.customer-sample-record-code').attributes('title')).toBe(
+      'CUSTOMER_TEST_202606231530ABCDEF',
+    )
+  })
+
+  it('合成样本可勾选 LX0609 质控点并只提交 selected_rule_ids', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool({ name: '泸县0609合成质控样本 v1' }),
+        items: [
+          buildRecord({
+            id: 'sample-item-syn-001',
+            matched_visit_id: 'LX0609_SYN_001',
+            mr_no: 'LX0609_SYN_001',
+            patient_name: '合成样本001',
+            sync_status: 'synthetic_seeded',
+            bundle_status: 'ready',
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+
+    const lx020 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-020"]')
+    const lx021 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-021"]')
+    expect(lx020.exists()).toBe(true)
+    expect(lx021.exists()).toBe(true)
+    await lx020.setValue(true)
+    await lx021.setValue(true)
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起泸县0609验证'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-1',
+      {
+        record_ids: ['LX0609_SYN_001'],
+        max_parallel_records: 4,
+        validation_mode: 'customer',
+        rule_set_key: 'luxian_0609_qc_v1',
+        selected_rule_ids: ['LX0609-020', 'LX0609-021'],
+      },
+      { timeout: 90000 },
+    )
+  })
+
+  it('0426真实样本池选择 LX0609 质控点后仍可勾选已关联病历发起验证', async () => {
+    listManualSamplePools.mockResolvedValueOnce({
+      success: true,
+      data: {
+        items: [
+          buildPool({
+            id: 'pool-0426',
+            name: '0426',
+            total_items: 1,
+            matched_items: 1,
+            ready_items: 0,
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+    })
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool({
+          id: 'pool-0426',
+          name: '0426',
+          total_items: 1,
+          matched_items: 1,
+          ready_items: 0,
+        }),
+        items: [
+          buildRecord({
+            id: 'sample-item-0426-001',
+            matched_visit_id: 'VISIT_0426_001',
+            mr_no: '0426-001',
+            patient_name: '0426样本患者',
+            sync_status: 'missing',
+            bundle_status: 'pending',
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+
+    const lx013 = wrapper.find('input.luxian-rule-checkbox[value="LX0609-013"]')
+    expect(lx013.exists()).toBe(true)
+    await lx013.setValue(true)
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起泸县0609验证'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    expect(message.warning).not.toHaveBeenCalledWith(
+      expect.stringContaining('还未完成匹配、同步或 bundle 准备'),
+    )
+    expect(runManualSamplePool).toHaveBeenCalledWith(
+      'pool-0426',
+      {
+        record_ids: ['VISIT_0426_001'],
+        max_parallel_records: 4,
+        validation_mode: 'customer',
+        rule_set_key: 'luxian_0609_qc_v1',
+        selected_rule_ids: ['LX0609-013'],
+      },
+      { timeout: 90000 },
+    )
+  })
+
+  it('LX0609 质控点范围支持选择多组规则', async () => {
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: {
+        pool: buildPool({ name: '泸县0609合成质控样本 v1' }),
+        items: [
+          buildRecord({
+            id: 'sample-item-syn-001',
+            matched_visit_id: 'LX0609_SYN_001',
+            mr_no: 'LX0609_SYN_001',
+            patient_name: '合成样本001',
+            sync_status: 'synthetic_seeded',
+            bundle_status: 'ready',
+          }),
+        ],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    })
+    const wrapper = await mountView()
+
+    const familyButtons = wrapper
+      .findAll('button')
+      .filter((node) => node.text().includes('选择本组'))
+    expect(familyButtons.length).toBeGreaterThanOrEqual(2)
+    await familyButtons[0].trigger('click')
+    await familyButtons[1].trigger('click')
+
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+
+    const runButton = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('发起泸县0609验证'))
+    expect(runButton).toBeTruthy()
+    await runButton!.trigger('click')
+    await flushPromises()
+
+    const payload = runManualSamplePool.mock.calls.at(-1)?.[1] as { selected_rule_ids?: string[] }
+    expect(payload.selected_rule_ids).toEqual([
+      'LX0609-001',
+      'LX0609-002',
+      'LX0609-005',
+      'LX0609-012',
+      'LX0609-014',
+    ])
+  })
+
+  it('创建测试病历时带入当前已选 LX0609 质控点范围', async () => {
+    const wrapper = await mountView()
+
+    const familyButtons = wrapper
+      .findAll('button')
+      .filter((node) => node.text().includes('选择本组'))
+    expect(familyButtons.length).toBeGreaterThanOrEqual(2)
+    await familyButtons[1].trigger('click')
+    await nextTick()
+
+    const createButton = wrapper.find('.customer-sample-create-action')
+    expect(createButton.exists()).toBe(true)
+    await createButton.trigger('click')
+
+    expect(routerPush).toHaveBeenLastCalledWith({
+      name: 'WorkstationV4SyntheticCaseNew',
+      query: {
+        ruleIds: 'LX0609-012,LX0609-014',
+        ruleFamily: 'ct_mri_culture',
+      },
+    })
+  })
+
   it('选中部分不可执行病历时仅提交可执行病历并提示跳过数量', async () => {
     getManualSamplePoolRecords.mockResolvedValueOnce({
       success: true,
@@ -1402,9 +1717,10 @@ describe('CustomerSampleValidationView', () => {
           buildRecord(),
           buildRecord({
             id: 'V004',
-            matched_visit_id: 'V004',
+            matched_visit_id: '',
             mr_no: '2250002',
             patient_name: '赵六',
+            match_status: 'unmatched',
             sync_status: 'missing',
             bundle_status: 'pending',
           }),

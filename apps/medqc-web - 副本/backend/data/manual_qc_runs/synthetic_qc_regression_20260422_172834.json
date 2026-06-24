@@ -1,0 +1,117 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T17:28:32.160879",
+  "run_finished_at": "2026-04-22T17:28:34.660821",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 0,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 1,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_consultation_execution_copy_paste_v1_pass.json",
+      "issue_type": "D2_consultation_execution_copy_paste",
+      "display_name": "会诊执行记录复制粘贴严重",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-070"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-015",
+        "mr_no": "SYN0015",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 2.406,
+      "total_tokens": 807,
+      "prompt_tokens": 678,
+      "completion_tokens": 129,
+      "api_time": 2.404,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-070"
+          ],
+          "tokens_used": 807,
+          "prompt_tokens": 678,
+          "completion_tokens": 129,
+          "api_time": 2.403977155685425
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录明确记录了会诊意见的采纳及具体执行措施。",
+          "evidence": "根据呼吸科会诊意见，今日已送检降钙素原，停用原头孢方案，改用左氧氟沙星抗感染",
+          "suggestion": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录明确记录了会诊意见的采纳及具体执行措施。\",\n      \"evidence\": \"根据呼吸科会诊意见，今日已送检降钙素原，停用原头孢方案，改用左氧氟沙星抗感染\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            38
+          ],
+          "metadata": {
+            "tokens_used": 807,
+            "prompt_tokens": 678,
+            "completion_tokens": 129,
+            "input_tokens": 678,
+            "output_tokens": 129,
+            "api_time": 2.403977155685425,
+            "first_result_latency": 2.403977155685425,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 130
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-070": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ]
+}

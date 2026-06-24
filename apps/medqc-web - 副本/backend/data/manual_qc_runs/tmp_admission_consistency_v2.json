@@ -1,0 +1,564 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T09:29:02.391584",
+  "run_finished_at": "2026-04-24T09:29:08.862377",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 1,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_admission_consistency_v1_defect.json",
+      "issue_type": "Z03_admission_consistency",
+      "display_name": "入院记录一致性",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-010",
+        "SC-015",
+        "SC-019",
+        "SC-020"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P103",
+        "visit_id": "SYN-RUN-103",
+        "mr_no": "SYN0103",
+        "patient_name": "合成患者丙",
+        "gender": "男",
+        "age": 58,
+        "department": "骨科"
+      },
+      "elapsed_seconds": 3.213,
+      "total_tokens": 1653,
+      "prompt_tokens": 1155,
+      "completion_tokens": 498,
+      "api_time": 3.208,
+      "packs": [
+        {
+          "pack_id": "admission_consistency_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-010",
+            "SC-015",
+            "SC-019",
+            "SC-020"
+          ],
+          "tokens_used": 1653,
+          "prompt_tokens": 1155,
+          "completion_tokens": 498,
+          "api_time": 3.2080016136169434
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-010",
+          "rule_name": "现病史与主诉不符",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "现病史提及右股骨头置换术，既往史却否认手术史，存在直接矛盾。",
+          "evidence": "【入院记录】既往史：否认手术史",
+          "suggestion": "核实手术史并统一修改现病史或既往史记录。",
+          "rewrite_example": "建议补写：补充与本次诊疗直接相关的病史要点、查体结果及入院诊断依据。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史提及右股骨头置换术，既往史却否认手术史，存在直接矛盾。\",\n      \"evidence\": \"现病史：曾行右股骨头置换术；既往史：否认手术史\",\n      \"suggestion\": \"核实手术史并统一修改现病史或既往史记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-015\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"个人史、婚育史、家族史均明确记录为“未记录”，属于内容缺失。\",\n      \"evidence\": \"个人史：未记录。婚育史：未记录。家族史：未记录。\",\n      \"suggestion\": \"补充完善个人史、婚育史及家族史的具体内容。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"入院前辅助检查仅描述骨折，缺乏具体部位、时间及结果细节，记录不完善。\",\n      \"evidence\": \"外院拍片提示骨折，具体部位、检查时间及结果未写清。\",\n      \"suggestion\": \"补充外院检查的具体部位、时间及详细影像结果。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院诊断明确记录为右股骨颈骨折，无遗漏或顺序错误。\",\n      \"evidence\": \"入院诊断：右股骨颈骨折。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            51,
+            60
+          ],
+          "metadata": {
+            "tokens_used": 413,
+            "prompt_tokens": 288,
+            "completion_tokens": 124,
+            "input_tokens": 288,
+            "output_tokens": 124,
+            "api_time": 0.8020004034042358,
+            "first_result_latency": 3.2080016136169434,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 216
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-015",
+          "rule_name": "个人史、婚育史、月经史、家族史记录不全或与实际不符",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "个人史、婚育史、家族史均明确记录为“未记录”，属于内容缺失。",
+          "evidence": "个人史：未记录。婚育史：未记录。家族史：未记录。",
+          "suggestion": "补充完善个人史、婚育史及家族史的具体内容。",
+          "rewrite_example": "建议补写：补充与本次诊疗直接相关的病史要点、查体结果及入院诊断依据。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史提及右股骨头置换术，既往史却否认手术史，存在直接矛盾。\",\n      \"evidence\": \"现病史：曾行右股骨头置换术；既往史：否认手术史\",\n      \"suggestion\": \"核实手术史并统一修改现病史或既往史记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-015\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"个人史、婚育史、家族史均明确记录为“未记录”，属于内容缺失。\",\n      \"evidence\": \"个人史：未记录。婚育史：未记录。家族史：未记录。\",\n      \"suggestion\": \"补充完善个人史、婚育史及家族史的具体内容。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"入院前辅助检查仅描述骨折，缺乏具体部位、时间及结果细节，记录不完善。\",\n      \"evidence\": \"外院拍片提示骨折，具体部位、检查时间及结果未写清。\",\n      \"suggestion\": \"补充外院检查的具体部位、时间及详细影像结果。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院诊断明确记录为右股骨颈骨折，无遗漏或顺序错误。\",\n      \"evidence\": \"入院诊断：右股骨颈骨折。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            61,
+            85
+          ],
+          "metadata": {
+            "tokens_used": 413,
+            "prompt_tokens": 288,
+            "completion_tokens": 124,
+            "input_tokens": 288,
+            "output_tokens": 124,
+            "api_time": 0.8020004034042358,
+            "first_result_latency": 3.2080016136169434,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 216
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-019",
+          "rule_name": "入院前若有辅助检查未记录或记录不完善或抄写不准确或描述不清",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "入院前辅助检查仅描述骨折，缺乏具体部位、时间及结果细节，记录不完善。",
+          "evidence": "外院拍片提示骨折，具体部位、检查时间及结果未写清。",
+          "suggestion": "补充外院检查的具体部位、时间及详细影像结果。",
+          "rewrite_example": "建议补写：补充与本次诊疗直接相关的病史要点、查体结果及入院诊断依据。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史提及右股骨头置换术，既往史却否认手术史，存在直接矛盾。\",\n      \"evidence\": \"现病史：曾行右股骨头置换术；既往史：否认手术史\",\n      \"suggestion\": \"核实手术史并统一修改现病史或既往史记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-015\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"个人史、婚育史、家族史均明确记录为“未记录”，属于内容缺失。\",\n      \"evidence\": \"个人史：未记录。婚育史：未记录。家族史：未记录。\",\n      \"suggestion\": \"补充完善个人史、婚育史及家族史的具体内容。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"入院前辅助检查仅描述骨折，缺乏具体部位、时间及结果细节，记录不完善。\",\n      \"evidence\": \"外院拍片提示骨折，具体部位、检查时间及结果未写清。\",\n      \"suggestion\": \"补充外院检查的具体部位、时间及详细影像结果。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院诊断明确记录为右股骨颈骨折，无遗漏或顺序错误。\",\n      \"evidence\": \"入院诊断：右股骨颈骨折。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            90,
+            115
+          ],
+          "metadata": {
+            "tokens_used": 413,
+            "prompt_tokens": 288,
+            "completion_tokens": 124,
+            "input_tokens": 288,
+            "output_tokens": 124,
+            "api_time": 0.8020004034042358,
+            "first_result_latency": 3.2080016136169434,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 216
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-020",
+          "rule_name": "入院记录无入院诊断或主次顺序错误或次要诊断有重要遗漏",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "入院诊断明确记录为右股骨颈骨折，无遗漏或顺序错误。",
+          "evidence": "入院诊断：右股骨颈骨折。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史提及右股骨头置换术，既往史却否认手术史，存在直接矛盾。\",\n      \"evidence\": \"现病史：曾行右股骨头置换术；既往史：否认手术史\",\n      \"suggestion\": \"核实手术史并统一修改现病史或既往史记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-015\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"个人史、婚育史、家族史均明确记录为“未记录”，属于内容缺失。\",\n      \"evidence\": \"个人史：未记录。婚育史：未记录。家族史：未记录。\",\n      \"suggestion\": \"补充完善个人史、婚育史及家族史的具体内容。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"入院前辅助检查仅描述骨折，缺乏具体部位、时间及结果细节，记录不完善。\",\n      \"evidence\": \"外院拍片提示骨折，具体部位、检查时间及结果未写清。\",\n      \"suggestion\": \"补充外院检查的具体部位、时间及详细影像结果。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院诊断明确记录为右股骨颈骨折，无遗漏或顺序错误。\",\n      \"evidence\": \"入院诊断：右股骨颈骨折。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            115,
+            127
+          ],
+          "metadata": {
+            "tokens_used": 413,
+            "prompt_tokens": 288,
+            "completion_tokens": 124,
+            "input_tokens": 288,
+            "output_tokens": 124,
+            "api_time": 0.8020004034042358,
+            "first_result_latency": 3.2080016136169434,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 216
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-010": "non_compliant",
+          "SC-015": "non_compliant",
+          "SC-019": "non_compliant",
+          "SC-020": "compliant"
+        },
+        "strict_hits": {
+          "SC-010": "non_compliant",
+          "SC-015": "non_compliant",
+          "SC-019": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_admission_consistency_v1_pass.json",
+      "issue_type": "Z03_admission_consistency",
+      "display_name": "入院记录一致性",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-010",
+        "SC-015",
+        "SC-019",
+        "SC-020"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P103",
+        "visit_id": "SYN-RUN-103",
+        "mr_no": "SYN0103",
+        "patient_name": "合成患者丙",
+        "gender": "男",
+        "age": 58,
+        "department": "骨科"
+      },
+      "elapsed_seconds": 2.784,
+      "total_tokens": 1708,
+      "prompt_tokens": 1247,
+      "completion_tokens": 461,
+      "api_time": 2.783,
+      "packs": [
+        {
+          "pack_id": "admission_consistency_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-010",
+            "SC-015",
+            "SC-019",
+            "SC-020"
+          ],
+          "tokens_used": 1708,
+          "prompt_tokens": 1247,
+          "completion_tokens": 461,
+          "api_time": 2.7829856872558594
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-010",
+          "rule_name": "现病史与主诉不符",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "现病史与主诉时间、症状及诱因一致。",
+          "evidence": "主诉：右髋部疼痛活动受限3天。现病史：3天前跌倒后右髋持续疼痛",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史与主诉时间、症状及诱因一致。\",\n      \"evidence\": \"主诉：右髋部疼痛活动受限3天。现病史：3天前跌倒后右髋持续疼痛\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-015\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"个人史、婚育史、家族史记录完整且逻辑自洽。\",\n      \"evidence\": \"个人史：无吸烟饮酒嗜好...婚育史：已婚，育有1子...家族史：否认家族遗传病\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院前辅助检查已明确记录名称及关键结果。\",\n      \"evidence\": \"2026-04-20当地医院骨盆X线示右股骨颈骨折，无明显脱位。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院诊断齐全，主次顺序合理，无重要遗漏。\",\n      \"evidence\": \"入院诊断：1.右股骨颈骨折；2.高血压病。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            31
+          ],
+          "metadata": {
+            "tokens_used": 427,
+            "prompt_tokens": 311,
+            "completion_tokens": 115,
+            "input_tokens": 311,
+            "output_tokens": 115,
+            "api_time": 0.6957464218139648,
+            "first_result_latency": 2.7829856872558594,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 316
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-015",
+          "rule_name": "个人史、婚育史、月经史、家族史记录不全或与实际不符",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "个人史、婚育史、家族史记录完整且逻辑自洽。",
+          "evidence": "【入院记录】个人史：无吸烟饮酒嗜好，无粉尘毒物接触史",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史与主诉时间、症状及诱因一致。\",\n      \"evidence\": \"主诉：右髋部疼痛活动受限3天。现病史：3天前跌倒后右髋持续疼痛\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-015\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"个人史、婚育史、家族史记录完整且逻辑自洽。\",\n      \"evidence\": \"个人史：无吸烟饮酒嗜好...婚育史：已婚，育有1子...家族史：否认家族遗传病\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院前辅助检查已明确记录名称及关键结果。\",\n      \"evidence\": \"2026-04-20当地医院骨盆X线示右股骨颈骨折，无明显脱位。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院诊断齐全，主次顺序合理，无重要遗漏。\",\n      \"evidence\": \"入院诊断：1.右股骨颈骨折；2.高血压病。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            99,
+            119
+          ],
+          "metadata": {
+            "tokens_used": 427,
+            "prompt_tokens": 311,
+            "completion_tokens": 115,
+            "input_tokens": 311,
+            "output_tokens": 115,
+            "api_time": 0.6957464218139648,
+            "first_result_latency": 2.7829856872558594,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 316
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-019",
+          "rule_name": "入院前若有辅助检查未记录或记录不完善或抄写不准确或描述不清",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "入院前辅助检查已明确记录名称及关键结果。",
+          "evidence": "2026-04-20当地医院骨盆X线示右股骨颈骨折，无明显脱位。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史与主诉时间、症状及诱因一致。\",\n      \"evidence\": \"主诉：右髋部疼痛活动受限3天。现病史：3天前跌倒后右髋持续疼痛\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-015\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"个人史、婚育史、家族史记录完整且逻辑自洽。\",\n      \"evidence\": \"个人史：无吸烟饮酒嗜好...婚育史：已婚，育有1子...家族史：否认家族遗传病\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院前辅助检查已明确记录名称及关键结果。\",\n      \"evidence\": \"2026-04-20当地医院骨盆X线示右股骨颈骨折，无明显脱位。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院诊断齐全，主次顺序合理，无重要遗漏。\",\n      \"evidence\": \"入院诊断：1.右股骨颈骨折；2.高血压病。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            163,
+            195
+          ],
+          "metadata": {
+            "tokens_used": 427,
+            "prompt_tokens": 311,
+            "completion_tokens": 115,
+            "input_tokens": 311,
+            "output_tokens": 115,
+            "api_time": 0.6957464218139648,
+            "first_result_latency": 2.7829856872558594,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 316
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-020",
+          "rule_name": "入院记录无入院诊断或主次顺序错误或次要诊断有重要遗漏",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "入院诊断齐全，主次顺序合理，无重要遗漏。",
+          "evidence": "入院诊断：1.右股骨颈骨折；2.高血压病。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史与主诉时间、症状及诱因一致。\",\n      \"evidence\": \"主诉：右髋部疼痛活动受限3天。现病史：3天前跌倒后右髋持续疼痛\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-015\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"个人史、婚育史、家族史记录完整且逻辑自洽。\",\n      \"evidence\": \"个人史：无吸烟饮酒嗜好...婚育史：已婚，育有1子...家族史：否认家族遗传病\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院前辅助检查已明确记录名称及关键结果。\",\n      \"evidence\": \"2026-04-20当地医院骨盆X线示右股骨颈骨折，无明显脱位。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院诊断齐全，主次顺序合理，无重要遗漏。\",\n      \"evidence\": \"入院诊断：1.右股骨颈骨折；2.高血压病。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            195,
+            216
+          ],
+          "metadata": {
+            "tokens_used": 427,
+            "prompt_tokens": 311,
+            "completion_tokens": 115,
+            "input_tokens": 311,
+            "output_tokens": 115,
+            "api_time": 0.6957464218139648,
+            "first_result_latency": 2.7829856872558594,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 316
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-010": "compliant",
+          "SC-015": "compliant",
+          "SC-019": "compliant",
+          "SC-020": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ],
+  "bucket_filters": [
+    "admission_consistency"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 4,
+    "stabilized": 4,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-010",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_consistency_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_consistency_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-015",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_consistency_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_consistency_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-019",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_consistency_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_consistency_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-020",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_consistency_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_consistency_v1_defect.json"
+        ],
+        "stabilized": true
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

@@ -1,0 +1,43 @@
+[
+  {
+    "row_id": "Sheet2-R0205",
+    "visit_id": "2259144",
+    "manual_issue_text": "患者17岁男性，入院诊断右侧睾丸扭转，急诊手术，存在器官切除的可能，术前缺上级医师意见。手术中，右侧睾丸附睾切除后，行左侧睾丸固定时，使用5-0可吸收线欠妥，文献建议使用丝线固定以确保永久固定。",
+    "primary_rule_id": "SC-081",
+    "decision": "blocked_with_reason",
+    "blocked_reason": "规则不支持",
+    "decision_reason": "release/0426_full_auto 已回收到 2026-03-01 李杰副主任医师查房和术前主刀医师查房，均已写明急诊手术指征及坏死后可能切除右侧睾丸附睾，不能支持“术前缺上级医师意见”；另 postsurg_firstcourse_record 虽可见左侧睾丸固定使用 5-0 可吸收缝线，但该子问题属于术中材料/技术合理性判断，已超出单一 SC-081 术前评估规则边界，不能按整条判 exact。",
+    "review_round": "SC-081-精确复核-第一轮",
+    "doc_types": ["admission_record", "senior_course_record", "postsurg_firstcourse_record"],
+    "release_tables": ["senior_course_record", "postsurg_firstcourse_record"]
+  },
+  {
+    "row_id": "Sheet2-R0213",
+    "visit_id": "2295919",
+    "manual_issue_text": "2026.2.9急诊手术术前准备不充分，预案不清晰，拟急诊行髋关节脱位手法复位术，而实际术中情况是“假体脱位不能复位”，需择期行髋关节翻修术。",
+    "primary_rule_id": "SC-081",
+    "decision": "blocked_with_reason",
+    "blocked_reason": "人工问题原文不可判",
+    "decision_reason": "local_pg 与 release/0426_full_auto 当前回收到的是 2026-03-19 因“右髋关节翻修术后1月 伤口愈合不良5天”再次入院后的感染处理记录，未回收到人工问题所称 2026-02-09 “拟急诊行髋关节脱位手法复位术 而实际术中假体脱位不能复位 需择期翻修术”的原始术前/术中文书锚点，不能按该原句判 exact。",
+    "review_round": "SC-081-精确复核-第一轮",
+    "doc_types": ["admission_record", "senior_course_record", "consultation_record"],
+    "release_tables": ["admission_record", "consultation_record"]
+  },
+  {
+    "row_id": "Sheet2-R0286",
+    "visit_id": "2319104",
+    "manual_issue_text": "平滑肌肉瘤二期手术，术前未复查胸部、腹部及盆腔CT或者磁共振，术前评估不充分，未充分认识到该病例的复杂性，而导致术中更改手术方式。",
+    "primary_rule_id": "SC-081",
+    "decision": "blocked_with_reason",
+    "blocked_reason": "人工问题原文不可判",
+    "decision_reason": "release/0426_full_auto admission_record presurg_summary 及多学科会诊已明确回收到 2026-03-09 胸部CT 下腹部CT增强及盆腔MRI 结果，不能支持“术前未复查胸部 腹部及盆腔CT或者磁共振”；postsurg_firstcourse_record 虽可见术中因广泛转移与肠管致密粘连改为开腹探查+病灶活检+小肠浆膜修补，但人工问题整句与现存原始文书并不一致，不能判 exact。",
+    "review_round": "SC-081-精确复核-第一轮",
+    "doc_types": [
+      "admission_record",
+      "presurg_summary",
+      "consultation_record",
+      "postsurg_firstcourse_record"
+    ],
+    "release_tables": ["presurg_summary", "consultation_record", "postsurg_firstcourse_record"]
+  }
+]

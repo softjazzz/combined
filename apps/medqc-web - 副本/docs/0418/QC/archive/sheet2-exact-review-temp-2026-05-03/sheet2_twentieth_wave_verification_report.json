@@ -1,0 +1,30 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 2,
+  "families": [
+    {
+      "issue_family": "会诊记录内容质量/复制粘贴/结论不足",
+      "row_count": 2,
+      "job_id": "d18273e1-99cb-41d9-b46c-534b4c3efd63",
+      "result_breakdown": {
+        "same_family_hit": 1,
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 194,
+    "exact_hit": 20,
+    "miss": 30,
+    "same_family_hit": 31,
+    "skip": 8
+  }
+}

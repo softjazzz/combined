@@ -1,0 +1,1679 @@
+﻿<template>
+  <div class="workstation-shell relative h-full flex overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_48%,#edf2f7_100%)] dark:bg-slate-950">
+    <!-- ====== 鍒楄〃妯″紡 ====== -->
+    <template v-if="viewMode === 'list'">
+      <main class="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div class="sticky top-0 z-10 border-b border-slate-200/60 bg-white/72 px-4 py-3 backdrop-blur-xl xl:px-5">
+          <div class="rounded-[26px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(247,250,252,0.94))] px-5 py-4 shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
+            <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+              <div class="min-w-0">
+                <div class="flex items-center gap-3">
+                  <h2 class="truncate text-[34px] font-black leading-none tracking-[-0.05em] text-slate-900">&#30149;&#26696;&#24037;&#20316;&#21488;</h2>
+                  <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-semibold text-slate-500">
+                    {{ filteredRecords.length }} &#20363;
+                  </span>
+                </div>
+                <div class="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-slate-500">
+                  <span class="font-semibold text-slate-700">{{ activeDept }}</span>
+                  <span class="h-1 w-1 rounded-full bg-slate-300"></span>
+                  <span>&#20808;&#31579;&#39640;&#20248;&#20808;&#30149;&#21382;&#65292;&#20877;&#36827;&#20837;&#21333;&#26696;&#35814;&#24773;</span>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2.5">
+                <a-input-search
+                  v-model:value="searchText"
+                  placeholder="&#25628;&#32034;&#30149;&#26696;&#21495; / &#22995;&#21517;"
+                  style="width: 240px"
+                  size="large"
+                  allow-clear
+                />
+                <a-select v-model:value="hospFilter" style="width: 128px" size="large" :options="hospOptions" />
+                <button
+                  type="button"
+                  @click="refreshData"
+                  class="flex h-11 w-11 items-center justify-center rounded-[16px] border border-slate-200 bg-white text-slate-500 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700 hover:shadow-[0_10px_18px_rgba(37,99,235,0.08)]"
+                  title="&#21047;&#26032;"
+                >
+                  <SyncOutlined :spin="loading" />
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                v-for="dept in visibleDepartments"
+                :key="dept.name"
+                type="button"
+                @click="selectDept(dept.name)"
+                :class="[
+                  'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-[13px] font-semibold transition-all duration-200',
+                  activeDept === dept.name
+                    ? 'border-blue-200 bg-blue-50 text-blue-700 shadow-[0_8px_16px_rgba(37,99,235,0.08)]'
+                    : 'border-slate-200 bg-white/90 text-slate-500 hover:border-slate-300 hover:text-slate-800',
+                ]"
+              >
+                <span>{{ dept.name }}</span>
+                <span :class="[activeDept === dept.name ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500', 'inline-flex min-w-[24px] items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-bold']">
+                  {{ dept.total }}
+                </span>
+              </button>
+
+              <a-dropdown v-if="overflowDepartments.length > 0" trigger="click">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-3 py-2 text-[13px] font-semibold text-slate-600 transition-all duration-200 hover:border-slate-300 hover:text-slate-800"
+                >
+                  <span>鏇村绉戝</span>
+                  <span class="inline-flex min-w-[24px] items-center justify-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                    {{ overflowDepartments.length }}
+                  </span>
+                </button>
+                <template #overlay>
+                  <a-menu class="max-h-[320px] w-[220px] overflow-y-auto">
+                    <a-menu-item
+                      v-for="dept in overflowDepartments"
+                      :key="`overflow-${dept.name}`"
+                      @click="selectDept(dept.name)"
+                    >
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="truncate">{{ dept.name }}</span>
+                        <span class="text-xs text-slate-400">{{ dept.total }}</span>
+                      </div>
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
+          </div>
+        </div>
+
+        <div class="custom-scrollbar flex-1 overflow-y-auto px-4 pb-5 pt-4 xl:px-5">
+          <section v-if="priorityRecords.length > 0" class="mb-5">
+            <div class="mb-3 flex items-center justify-between">
+              <div>
+                <div class="text-[12px] font-semibold tracking-[0.08em] text-slate-400">&#39640;&#20248;&#20808;&#30149;&#21382;</div>
+                <h3 class="mt-1 text-[22px] font-black tracking-[-0.04em] text-slate-900">&#20808;&#30475;&#36825;&#19968;&#25209;</h3>
+              </div>
+              <div class="text-[12px] text-slate-400">&#26368;&#22810;&#23637;&#31034; 4 &#24352;</div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 xl:grid-cols-4">
+              <article
+                v-for="record in priorityRecords"
+                :key="record.id"
+                @click="openRecord(record)"
+                :class="[
+                  'cursor-pointer rounded-[20px] border px-3.5 py-3 transition-all duration-200',
+                  priorityCardClass(record),
+                ]"
+              >
+                <div class="flex items-start gap-3">
+                  <div class="min-w-0">
+                    <div class="truncate text-[19px] font-black leading-none tracking-[-0.03em] text-slate-900">{{ record.name || '\u672a\u77e5\u60a3\u8005' }}</div>
+                    <div class="mt-1 truncate text-[13px] font-semibold text-slate-500">{{ record.id }}</div>
+                  </div>
+                </div>
+                <div class="mt-3 flex items-center gap-2 text-[12px] text-slate-600">
+                  <span class="truncate font-semibold">{{ record.department || '\u672a\u5206\u79d1\u5ba4' }}</span>
+                  <span class="h-1 w-1 rounded-full bg-slate-300"></span>
+                  <span :class="stayTextTone(record.days)" class="font-semibold">{{ stayText(record.days) }}</span>
+                </div>
+                <div class="mt-2 text-[11px] font-medium text-slate-400">&#20303;&#38498;&#21306;&#38388;</div>
+                <div class="mt-0.5 text-[16px] font-bold tracking-[-0.01em] text-slate-700">{{ dateRange(record) }}</div>
+                <div class="mt-2 truncate text-[12px] font-medium text-slate-500">
+                  <span class="mr-1 text-slate-400">&#39118;&#38505;&#65306;</span>{{ priorityReason(record) }}
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="rounded-[24px] border border-slate-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_10px_28px_rgba(15,23,42,0.04)]">
+            <div class="flex items-center justify-between border-b border-slate-200/70 px-5 py-4">
+              <div>
+                <div class="text-[12px] font-semibold tracking-[0.08em] text-slate-400">&#20840;&#37096;&#30149;&#21382;</div>
+                <h3 class="mt-1 text-[22px] font-black tracking-[-0.04em] text-slate-900">&#25209;&#37327;&#25195;&#35835;</h3>
+              </div>
+              <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[12px] font-semibold text-slate-500">
+                {{ filteredRecords.length }} &#26465;
+              </span>
+            </div>
+
+            <div v-if="filteredRecords.length === 0" class="flex min-h-[260px] flex-col items-center justify-center px-5 py-10 text-center">
+              <InboxOutlined class="mb-3 text-4xl text-slate-300" />
+              <div class="text-sm font-medium text-slate-500">&#24403;&#21069;&#31579;&#36873;&#26465;&#20214;&#19979;&#26242;&#26080;&#30149;&#21382;</div>
+            </div>
+
+            <div v-else class="overflow-x-auto">
+              <table class="min-w-full border-collapse">
+                <thead class="bg-slate-50/85">
+                  <tr>
+                    <th class="px-5 py-3 text-left text-[12px] font-bold text-slate-400">&#22995;&#21517;</th>
+                    <th class="px-5 py-3 text-left text-[12px] font-bold text-slate-400">&#30149;&#26696;&#21495;</th>
+                    <th class="px-5 py-3 text-left text-[12px] font-bold text-slate-400">&#31185;&#23460;</th>
+                    <th class="px-5 py-3 text-left text-[12px] font-bold text-slate-400">&#20303;&#38498;&#22825;&#25968;</th>
+                    <th class="px-5 py-3 text-left text-[12px] font-bold text-slate-400">&#20303;&#38498;&#21306;&#38388;</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="record in filteredRecords"
+                    :key="record.id"
+                    @click="openRecord(record)"
+                    :class="[
+                      'cursor-pointer border-t border-slate-100 transition-colors hover:bg-slate-50/70',
+                      isPriorityRecord(record.id) ? 'bg-blue-50/35' : '',
+                    ]"
+                  >
+                    <td class="px-5 py-4">
+                      <div class="text-[16px] font-bold tracking-[-0.02em] text-slate-900">{{ record.name || '\u672a\u77e5\u60a3\u8005' }}</div>
+                    </td>
+                    <td class="px-5 py-4 text-[13px] font-semibold text-slate-500">{{ record.id }}</td>
+                    <td class="px-5 py-4 text-[14px] font-semibold text-slate-700">{{ record.department || '\u672a\u5206\u79d1\u5ba4' }}</td>
+                    <td class="px-5 py-4">
+                      <span :class="stayTextTone(record.days)" class="text-[14px] font-semibold">{{ stayText(record.days) }}</span>
+                    </td>
+                    <td class="px-5 py-4 text-[14px] font-semibold text-slate-700">{{ dateRange(record) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-if="serverTotalPages > 1" class="flex justify-center border-t border-slate-200/70 px-5 py-4">
+              <a-pagination
+                :current="currentPage"
+                :total="serverTotal"
+                :page-size="50"
+                size="small"
+                show-quick-jumper
+                :show-total="(value: number) => `\u5171 ${value} \u4f8b`"
+                @change="handlePageChange"
+              />
+            </div>
+          </section>
+        </div>
+      </main>
+    </template>
+
+    <!-- ====== 璇︽儏妯″紡锛堝叏灞忥級 ====== -->
+    <template v-else-if="viewMode === 'detail'">
+      <div class="relative z-10 flex-1 flex flex-col min-w-0 h-full bg-[linear-gradient(180deg,rgba(248,250,252,0.9),rgba(241,245,249,0.96))]">
+        <!-- 璇︽儏椤堕儴鏍?-->
+        <DetailHeader
+          :record="selectedRecord"
+          :current-index="currentRecordIndex"
+          :total-count="filteredRecords.length"
+          :generating="frontpageGenerating"
+          :has-draft="!!frontpageDraft"
+          :can-generate="canGenerateFrontpage"
+          :disabled-reason="frontpageDisabledReason"
+          @back="goBackToList"
+          @prev="goToPrevRecord"
+          @next="goToNextRecord"
+          @open-icd="icdDrawerVisible = true"
+          @generate-frontpage="handleGenerateFrontpage"
+        />
+
+        <!-- 璇︽儏涓讳綋锛氬乏鍙冲垎鏍?-->
+        <div class="flex flex-1 overflow-hidden">
+          <!-- 宸︿晶锛氭偅鑰呬俊鎭?-->
+          <DetailSidebar
+            :record="selectedRecord"
+            :documents="documentsList"
+            :documents-loading="documentsLoading"
+            @preview-doc="openDocPreview"
+          />
+
+          <!-- 鏂囦功棰勮鎶藉眽 -->
+          <a-drawer
+            v-model:open="docDrawerVisible"
+            :title="docDrawerTitle"
+            placement="right"
+            :width="560"
+            :headerStyle="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
+            :bodyStyle="{ padding: '16px', background: 'linear-gradient(180deg, #f8fafc 0%, #f3f6fa 100%)' }"
+          >
+            <div class="rounded-[20px] border border-slate-200/70 bg-white/92 p-4 shadow-[0_8px_18px_rgba(15,23,42,0.045)]">
+              <pre class="m-0 whitespace-pre-wrap font-sans text-[13px] leading-7 text-slate-700">{{ docDrawerContent }}</pre>
+            </div>
+          </a-drawer>
+
+
+          <!-- 鍙充晶锛氫笁 Tab 鍐呭鍖?-->
+          <main class="relative flex flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_100%)] dark:bg-slate-950">
+            <!-- 鑷畾涔?Tab 鏍?-->
+            <div class="sticky top-0 z-10 border-b border-slate-200/55 bg-white/40 px-3 pb-1 pt-1 backdrop-blur-xl lg:px-4">
+              <div class="inline-flex items-center gap-1.5 rounded-[18px] border border-slate-200/75 bg-white/90 p-1.5 shadow-[0_8px_22px_rgba(15,23,42,0.05)]">
+              <button @click="detailMainTab = 'records'" :class="['rounded-[14px] border px-4 py-2 text-[13px] transition-all duration-200 cursor-pointer', detailMainTab === 'records' ? 'font-bold text-slate-900 bg-[linear-gradient(180deg,rgba(239,246,255,0.95),rgba(226,232,240,0.72))] border-blue-200/85 shadow-[0_8px_16px_rgba(37,99,235,0.12)]' : 'font-semibold text-slate-500 border-transparent hover:bg-slate-50/90 hover:text-slate-800']">
+                <span class="flex items-center gap-1.5"><FileTextOutlined />鐥呭巻璇︽儏</span>
+              </button>
+              <button @click="detailMainTab = 'frontpage'" :class="['rounded-[14px] border px-4 py-2 text-[13px] transition-all duration-200 cursor-pointer', detailMainTab === 'frontpage' ? 'font-bold text-slate-900 bg-[linear-gradient(180deg,rgba(239,246,255,0.95),rgba(226,232,240,0.72))] border-blue-200/85 shadow-[0_8px_16px_rgba(37,99,235,0.12)]' : 'font-semibold text-slate-500 border-transparent hover:bg-slate-50/90 hover:text-slate-800']">
+                <span class="flex items-center gap-1.5"><FileSearchOutlined />鐥呮棣栭〉</span>
+              </button>
+              <button @click="detailMainTab = 'settlement'" :class="['rounded-[14px] border px-4 py-2 text-[13px] transition-all duration-200 cursor-pointer', detailMainTab === 'settlement' ? 'font-bold text-slate-900 bg-[linear-gradient(180deg,rgba(255,251,235,0.96),rgba(254,240,138,0.26))] border-amber-200/90 shadow-[0_8px_16px_rgba(245,158,11,0.12)]' : 'font-semibold text-slate-500 border-transparent hover:bg-slate-50/90 hover:text-slate-800']">
+                <span class="flex items-center gap-1.5">
+                  <span style="font-size:14px">馃挵</span>缁撶畻娓呭崟
+                  <span v-if="settlementQcFailed > 0" class="ml-1 inline-flex min-w-[18px] h-[18px] items-center justify-center rounded-full border border-blue-200/80 bg-blue-50 text-blue-700 text-[10px] font-bold px-1 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.7)]">{{ settlementQcFailed }}</span>
+                </span>
+              </button>
+              </div>
+            </div>
+
+            <!-- Tab 鍐呭鍖?-->
+            <div class="flex-1 overflow-y-auto custom-scrollbar">
+              <!-- ====== Tab 1: 鐥呭巻璇︽儏 ====== -->
+              <div v-if="detailMainTab === 'records'" class="px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5">
+                <div class="relative mx-auto w-full max-w-[1200px] rounded-[16px] border border-slate-200/45 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(252,253,255,0.98))] px-1 py-1.5 shadow-[0_6px_16px_rgba(15,23,42,0.02)] lg:px-1.5 lg:py-2">
+                  <!-- AI 棰勫鐘舵€佸皬鏍囩 -->
+                  <div v-if="selectedRecord" class="absolute right-4 top-0 flex items-center gap-1 rounded-b-md border-x border-b px-2 py-0.5 text-[10px] font-bold opacity-75"
+                    :class="selectedRecord.status === 'completed' ? 'bg-blue-50 text-blue-600 border-blue-100/50' : selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning' ? 'bg-slate-50 text-slate-500 border-slate-200/70' : 'bg-blue-50 text-blue-600 border-blue-100/50'">
+                    <CheckCircleOutlined v-if="selectedRecord.status === 'completed'" />
+                    <WarningOutlined v-else-if="selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning'" />
+                    <ThunderboltOutlined v-else />
+                    {{ selectedRecord.status === 'completed' ? 'AI 棰勫閫氳繃' : selectedRecord.status === 'has_defects' || selectedRecord.status === 'warning' ? 'AI 鍙戠幇缂洪櫡' : 'AI 寰呭' }}
+                  </div>
+
+                  <EMRViewer
+                    v-if="selectedRecord && emrRenderState !== 'fallback'"
+                    ref="emrViewerRef"
+                    :record-id="selectedRecord.id"
+                    :visit-id="selectedRecord.visitId || selectedRecord.id"
+                    :patient-id="selectedRecord.patientId"
+                    :institute-id="selectedRecord.instituteId"
+                    :max-height="760"
+                    :hide-doc-tabs="true"
+                    @loaded="handleEmrLoaded"
+                    @error="handleEmrError"
+                    @defect-click="handleEmrDefectClick"
+                  />
+
+                  <template v-else>
+                    <div v-if="concatLoading" class="flex flex-col items-center py-20">
+                      <a-spin size="large" />
+                      <div class="text-sm text-slate-400 mt-4">鍔犺浇鐥呭巻鏂囦功涓?..</div>
+                    </div>
+                    <div v-else-if="concatText" class="medical-record-document mx-auto max-w-[124ch] px-3 py-0.5">
+                      <div class="mb-4 flex items-center gap-2 rounded-[10px] border border-blue-100/80 bg-blue-50/55 px-3 py-2 text-xs text-blue-700">
+                        <WarningOutlined />
+                        <span>EMR 楂樹寒瑙嗗浘鏆備笉鍙敤锛屽凡鑷姩鍒囨崲鍒板師濮嬫枃涔﹂瑙堛€</span>
+                      </div>
+                      <div v-for="(section, idx) in concatSections" :key="idx" class="mb-7">
+                        <div class="mb-3 flex items-center gap-2 pb-1">
+                          <FileTextOutlined class="text-blue-400" />
+                          <h3 class="m-0 text-[16px] font-bold text-slate-800 dark:text-white">{{ section.title }}</h3>
+                        </div>
+                        <pre class="m-0 whitespace-pre-wrap rounded-[6px] bg-transparent px-0 py-0 font-sans text-[14px] leading-[2.15] text-slate-700 dark:text-slate-300">{{ section.content }}</pre>
+                      </div>
+                    </div>
+                    <div v-else class="flex flex-col items-center justify-center py-20 text-slate-300">
+                      <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200 dark:border-slate-700">
+                        <FileTextOutlined class="text-3xl" />
+                      </div>
+                      <div class="text-sm font-medium mb-1">鏆傛棤鐥呭巻鏂囦功</div>
+                      <div class="text-xs text-slate-400">璇ユ偅鑰呭綋鍓嶆殏鏃犲彲灞曠ず鐨勭梾鍘嗘枃涔﹀唴瀹广€</div>
+                    </div>
+                  </template>
+                </div>
+              </div>
+
+              <!-- ====== Tab 2: 鐥呮棣栭〉 ====== -->
+              <div v-if="detailMainTab === 'frontpage'" class="px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5">
+                <div class="mx-auto w-full max-w-[1200px] rounded-[18px] border border-slate-200/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(250,252,255,0.98))] p-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.03)]">
+                  <FrontpageWorkspacePanel
+                    :generating="frontpageGenerating"
+                    :post-processing="frontpagePostProcessing"
+                    :draft="frontpageDraft"
+                    :frontpage-tab="frontpageTab"
+                    :module-cards="frontpageModuleCards"
+                    :completed-count="completedModules.length"
+                    :total-count="ALL_MODULE_KEYS.length"
+                    :sheet-loading="frontpageSheetLoading"
+                    :sheet-data="frontpageSheetData"
+                    @update:frontpage-tab="frontpageTab = $event"
+                    @export-frontpage="handleExportFrontpage"
+                    @save-frontpage="handleSaveFrontpage"
+                  />
+                </div>
+              </div>
+              <!-- ====== Tab 3: 缁撶畻娓呭崟 ====== -->
+              <div v-if="detailMainTab === 'settlement'" class="min-h-[400px] px-3 pb-4 pt-1.5 lg:px-4 lg:pb-5">
+                <div class="mx-auto w-full max-w-[1200px] rounded-[18px] border border-slate-200/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(250,252,255,0.98))] p-2.5 shadow-[0_8px_20px_rgba(15,23,42,0.03)]">
+                  <div v-if="settlementLoading" class="flex flex-col items-center py-20">
+                    <a-spin size="large" />
+                    <div class="text-sm text-slate-400 mt-4">鍔犺浇缁撶畻娓呭崟...</div>
+                  </div>
+                  <div v-else-if="settlementData">
+                    <!-- AI 鑽夌妯箙 -->
+                    <div v-if="settlementData?.data_source === 'generated_from_frontpage'" class="mx-1 mb-3 flex items-center gap-3 rounded-[14px] border border-blue-100/80 bg-[linear-gradient(180deg,rgba(244,248,255,0.94),rgba(255,255,255,0.98))] px-4 py-3">
+                      <span class="text-base text-blue-500">鈽</span>
+                      <div class="min-w-0">
+                        <div class="text-sm font-semibold text-blue-700">AI 鐢熸垚鑽夌</div>
+                        <div class="text-xs text-slate-500">鏈竻鍗曠敱鐥呮棣栭〉 AI 鎶藉彇缁撴灉鍜?CDM 鏁版嵁鑷姩缁勮锛岄渶浜哄伐瀹℃牳鍚庢柟鍙笂浼犲尰淇濈郴缁熴€</div>
+                      </div>
+                      <a-tag color="blue" class="ml-auto flex-shrink-0 !rounded-full">Draft</a-tag>
+                    </div>
+                    <!-- 鎿嶄綔鏍?-->
+                    <div class="mb-4 flex items-center justify-between rounded-[14px] border border-slate-200/80 bg-white/72 px-4 py-3">
+                      <div class="text-[13px] text-slate-500">
+                        娓呭崟娴佹按鍙? <span class="font-mono font-bold text-slate-700">{{ settlementData.medinsur_serial_no || '-' }}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <a-button size="small" class="!rounded-full !border-slate-200/80 !shadow-none" @click="runSettlementQc" :loading="settlementQcLoading">
+                          <template #icon><CheckOutlined /></template>
+                          鎵ц璐ㄦ帶
+                        </a-button>
+                      </div>
+                    </div>
+                    <!-- 绯荤粺缁撶畻娓呭崟 -->
+                    <SettlementSheet :data="settlementData" />
+
+                    <!-- 璐ㄦ帶缁撴灉鎽樿 -->
+                    <div v-if="settlementQcReport" class="mb-6">
+                      <h4 class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                        <CheckCircleOutlined class="text-blue-500" /> 璐ㄦ帶缁撴灉
+                      </h4>
+                      <div class="mb-4 grid grid-cols-4 gap-2.5">
+                        <div class="rounded-[14px] border border-blue-100/80 bg-blue-50/70 p-3 text-center">
+                          <div class="text-2xl font-black text-blue-600">{{ settlementQcReport.summary.total }}</div>
+                          <div class="text-[10px] text-slate-400 mt-1">鎬昏鍒欐暟</div>
+                        </div>
+                        <div class="rounded-[14px] border border-slate-200/80 bg-slate-50/88 p-3 text-center">
+                          <div class="text-2xl font-black text-slate-700">{{ settlementQcReport.summary.passed }}</div>
+                          <div class="text-[10px] text-slate-400 mt-1">閫氳繃</div>
+                        </div>
+                        <div class="rounded-[14px] border border-blue-100/80 bg-blue-50/50 p-3 text-center">
+                          <div class="text-2xl font-black text-blue-700">{{ settlementQcReport.summary.failed }}</div>
+                          <div class="text-[10px] text-slate-400 mt-1">鏈€氳繃</div>
+                        </div>
+                        <div class="rounded-[14px] border border-slate-200/80 bg-white/88 p-3 text-center">
+                          <div class="text-2xl font-black text-slate-700">{{ settlementQcReport.summary.pass_rate }}</div>
+                          <div class="text-[10px] text-slate-400 mt-1">閫氳繃鐜</div>
+                        </div>
+                      </div>
+                      <div class="space-y-2">
+                        <div v-for="r in settlementQcReport.results.filter((x: any) => !x.passed)" :key="r.rule_id"
+                          class="flex items-start gap-3 rounded-[14px] border bg-white/88 px-4 py-3 dark:bg-slate-800"
+                          :class="r.severity === 'error' ? 'border-blue-200 bg-blue-50/35' : 'border-slate-200/80'"
+                        >
+                          <a-tag color="blue" class="mt-0.5 flex-shrink-0">{{ r.rule_id }}</a-tag>
+                          <div class="min-w-0">
+                            <div class="text-sm font-medium text-slate-800 dark:text-slate-200">{{ r.field_name }}</div>
+                            <div class="text-xs text-slate-500 mt-0.5">{{ r.message }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else>
+                    <!-- 鏃犳暟鎹椂灞曠ず绌虹櫧缁撶畻娓呭崟鏍疯〃 -->
+                    <SettlementSheet :data="{}" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+
+        <WorkstationAssistPanel
+          v-if="selectedRecord"
+          v-model:visible="assistPanelVisible"
+          :default-tab="assistTab"
+          :patient-info="assistPatientInfo"
+          :content-count="contentQCCount"
+          :qc-count="assistBadgeCount"
+          :profile-count="frontpageDraft ? 1 : 0"
+          :drg-count="drgResult ? 1 : 0"
+          :message-count="notificationUnreadCount"
+          @tab-change="handleAssistTabChange"
+          @refresh-tab="handleAssistTabRefresh"
+        >
+          <template #content>
+            <ContentQCTab
+              :patient-id="selectedRecord?.patientId"
+              :visit-id="selectedRecord?.id"
+              :institute-id="selectedRecord?.instituteId"
+              :documents="documentsList"
+              @issues-change="(count: number) => contentQCCount = count"
+            />
+          </template>
+          <template #qc="{ activeSubTab }">
+            <QCResultTab
+              ref="qcResultTabRef"
+              :frontpage="frontpageDraft"
+              :analyzing="frontpageGenerating"
+              :refresh-seed="qcRefreshSeed"
+              :active-tab="activeSubTab"
+              :visit-id="selectedId"
+              :patient-id="selectedRecord?.patientId"
+              @issues-change="handleAssistIssuesChange"
+              @locate-field="handleLocateFromQC"
+              @jump-evidence="handleJumpEvidenceFromQC"
+            />
+          </template>
+          <template #profile>
+            <div class="space-y-3 p-3">
+              <div class="rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(247,250,252,0.98))] p-3.5 shadow-[0_10px_22px_rgba(15,23,42,0.04)]">
+                <div class="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-blue-600">褰撳墠鍒嗘瀽</div>
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="text-[15px] font-black text-slate-900">AI 娣卞害鐢诲儚</div>
+                    <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">瀵圭梾鍘嗗叏鏂囪繘琛屾繁搴﹂槄璇伙紝鐢熸垚鏃堕棿杞淬€侀闄╃嚎绱笌缁撴瀯鍖栨偅鑰呯敾鍍忋€</div>
+                  </div>
+                  <div v-if="profileAnalyzed" class="rounded-[14px] border border-blue-200 bg-blue-50/85 px-3 py-2 text-right">
+                    <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">鐘舵€</div>
+                    <div class="mt-1 text-[13px] font-black text-blue-700">宸茬敓鎴</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 鏈垎鏋愮姸鎬?-->
+              <div v-if="!profileAnalyzed && !profileAnalyzing" class="flex min-h-[268px] flex-col items-center justify-center rounded-[20px] border border-dashed border-blue-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,251,255,0.98))] px-5 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_16px_34px_rgba(148,163,184,0.1)]">
+                <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-[16px] border border-blue-200 bg-[linear-gradient(180deg,#eef4ff,#dbeafe)] shadow-[0_10px_20px_rgba(59,130,246,0.12),inset_0_1px_0_rgba(255,255,255,0.72)]">
+                  <ScanOutlined class="text-[24px] text-blue-600" />
+                </div>
+                <div class="mb-1 text-[15px] font-black text-slate-800">AI 娣卞害鐢诲儚</div>
+                <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">瀵圭梾鍘嗗叏鏂囪繘琛屾繁搴﹂槄璇伙紝鏋勫缓璇婃柇鏃堕棿杞翠笌鎮ｈ€呴闄╃敾鍍忋€</div>
+                <a-button type="primary" size="small" @click="aiProfileModalVisible = true; profileAnalyzed = true" :disabled="!combinedMedicalText" class="!h-9 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18),inset_0_1px_0_rgba(255,255,255,0.14)]">
+                  <template #icon><ThunderboltOutlined /></template>
+                  寮€濮嬪垎鏋?                </a-button>
+              </div>
+
+              <!-- 宸插垎鏋?/ 鎽樿鍗?-->
+              <template v-else>
+                <div class="rounded-[18px] border border-slate-200/80 bg-white/80 p-3.5">
+                  <div class="mb-2 flex items-center gap-2">
+                    <ScanOutlined class="text-blue-500" />
+                    <span class="text-xs font-bold text-slate-700">鐢诲儚鎽樿</span>
+                    <span class="ml-auto rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600">宸茬敓鎴</span>
+                  </div>
+                  <div class="space-y-1.5 text-xs text-slate-600">
+                    <div v-if="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text" class="flex items-center gap-1.5 rounded-[12px] bg-slate-50/85 px-2.5 py-2">
+                      <span class="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0"></span>
+                      <span class="truncate">{{ frontpageDraft.diagnoses.discharge_main_diagnosis_text }}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 rounded-[12px] bg-slate-50/85 px-2.5 py-2">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0"></span>
+                      <span>璇婃柇鏃堕棿杞?+ 浜轰綋閫忚 + 鍣ㄥ畼鐢诲儚</span>
+                    </div>
+                  </div>
+                </div>
+                <a-button block @click="aiProfileModalVisible = true" class="!h-9 !rounded-full !border-slate-200/90 !bg-white/85 !text-sm !font-bold !text-slate-700 !shadow-none hover:!border-blue-200 hover:!text-blue-700">
+                  <template #icon><EyeOutlined /></template>
+                  鏌ョ湅瀹屾暣 AI 鐢诲儚
+                </a-button>
+              </template>
+            </div>
+
+            <!-- AI 鐢诲儚 Modal -->
+            <a-modal
+              v-model:open="aiProfileModalVisible"
+              title="AI 娣卞害鐢诲儚鍒嗘瀽"
+              :width="1100"
+              :footer="null"
+              :bodyStyle="{ padding: '12px', height: '78vh', overflow: 'hidden', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
+              centered
+              destroyOnClose
+            >
+              <div class="h-full overflow-hidden rounded-[18px] border border-white/85 bg-white/88 shadow-[0_10px_22px_rgba(15,23,42,0.05)]">
+                <AIProfileDashboard
+                  :frontpage="frontpageDraft"
+                  :medical-text="combinedMedicalText"
+                  style="height: 100%; overflow-y: auto;"
+                />
+              </div>
+            </a-modal>
+          </template>
+          <template #drg>
+            <div class="space-y-3 p-3">
+              <div class="rounded-[18px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(247,250,252,0.98))] p-3.5 shadow-[0_10px_22px_rgba(15,23,42,0.04)]">
+                <div class="mb-1 text-[10px] font-black uppercase tracking-[0.08em] text-blue-600">褰撳墠鍒嗘瀽</div>
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="text-[15px] font-black text-slate-900">DRG 鍒嗙粍鍒嗘瀽</div>
+                    <div class="mt-1 max-w-[240px] text-[12px] leading-5 text-slate-500">鍩轰簬棣栭〉璇婃柇涓庢墜鏈紪鐮侊紝鐢熸垚鍒嗙粍缁撴灉銆佹潈閲嶄笌鏀粯椋庨櫓鍒ゆ柇銆</div>
+                  </div>
+                  <div v-if="drgResult" class="rounded-[14px] border border-blue-200 bg-blue-50/85 px-3 py-2 text-right">
+                    <div class="text-[10px] font-bold uppercase tracking-[0.08em] text-blue-600">鐘舵€</div>
+                    <div class="mt-1 text-[13px] font-black text-blue-700">宸茬敓鎴</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- DRG 鏈垎缁勭姸鎬?-->
+              <div v-if="!drgResult && !drgLoading" class="flex min-h-[268px] flex-col items-center justify-center rounded-[20px] border border-dashed border-blue-200/75 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(248,251,255,0.98))] px-5 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.82),0_16px_34px_rgba(148,163,184,0.1)]">
+                <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-[16px] border border-blue-200 bg-[linear-gradient(180deg,#eef4ff,#dbeafe)] shadow-[0_10px_20px_rgba(59,130,246,0.12),inset_0_1px_0_rgba(255,255,255,0.72)]">
+                  <NodeIndexOutlined class="text-[24px] text-blue-600" />
+                </div>
+                <div class="mb-1 text-[15px] font-black text-slate-800">DRG 鍒嗙粍鍒嗘瀽</div>
+                <div class="mb-5 max-w-[228px] text-[12px] leading-6 text-slate-500">鍩轰簬璇婃柇涓庢墜鏈紪鐮佽繘琛?DRG 鍒嗙粍锛岃緭鍑哄垎缁勭粨鏋滀笌鐩堜簭椋庨櫓鍒ゆ柇銆</div>
+                <a-button type="primary" size="small" @click="performDRGGrouping" :disabled="!frontpageDraft" class="!h-9 !rounded-full !border-0 !px-5 !text-sm !font-bold !shadow-[0_10px_20px_rgba(37,99,235,0.18),inset_0_1px_0_rgba(255,255,255,0.14)]">
+                  <template #icon><ThunderboltOutlined /></template>
+                  寮€濮嬪垎鏋?                </a-button>
+              </div>
+
+              <!-- DRG 鍔犺浇涓?-->
+              <div v-else-if="drgLoading" class="flex flex-col items-center py-8">
+                <a-spin />
+                <div class="text-xs text-slate-400 mt-3">DRG 鍒嗙粍璁＄畻涓?..</div>
+              </div>
+
+              <!-- DRG 宸插垎缁?/ 鎽樿鍗?-->
+              <template v-else-if="drgResult">
+                <div class="rounded-[18px] border border-slate-200/80 bg-white/80 p-3.5">
+                  <div class="mb-2 flex items-center gap-2">
+                    <NodeIndexOutlined class="text-blue-500" />
+                    <span class="text-xs font-bold text-slate-700">鍒嗙粍缁撴灉</span>
+                  </div>
+                  <div class="space-y-1.5">
+                    <div class="flex justify-between rounded-[12px] bg-slate-50/85 px-2.5 py-2 text-xs">
+                      <span class="text-slate-500">DRG 鍒嗙粍</span>
+                      <span class="font-bold text-slate-800">{{ drgResult.drg_code || '-' }}</span>
+                    </div>
+                    <div class="flex justify-between rounded-[12px] bg-slate-50/85 px-2.5 py-2 text-xs">
+                      <span class="text-slate-500">鏉冮噸</span>
+                      <span class="font-bold text-blue-600">{{ drgResult.weight || '-' }}</span>
+                    </div>
+                    <div v-if="drgResult.payment" class="flex justify-between rounded-[12px] bg-slate-50/85 px-2.5 py-2 text-xs">
+                      <span class="text-slate-500">鏀粯鏍囧噯</span>
+                      <span class="font-bold text-blue-600">楼{{ drgResult.payment }}</span>
+                    </div>
+                  </div>
+                </div>
+                <a-button block @click="drgDetailModalVisible = true" class="!h-9 !rounded-full !border-slate-200/90 !bg-white/85 !text-sm !font-bold !text-slate-700 !shadow-none hover:!border-blue-200 hover:!text-blue-700">
+                  <template #icon><EyeOutlined /></template>
+                  鏌ョ湅 DRG 璇︽儏
+                </a-button>
+                <a-button block type="link" size="small" @click="performDRGGrouping" class="!h-8 !rounded-full !text-xs !font-semibold">
+                  <SyncOutlined /> 閲嶆柊鍒嗙粍
+                </a-button>
+              </template>
+            </div>
+
+            <!-- DRG 璇︽儏 Modal -->
+            <a-modal
+              v-model:open="drgDetailModalVisible"
+              title="DRG 鍒嗙粍璇︽儏"
+              :width="960"
+              :footer="null"
+              :bodyStyle="{ padding: '12px', maxHeight: '78vh', overflowY: 'auto', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
+              centered
+              destroyOnClose
+            >
+              <div class="rounded-[18px] border border-white/85 bg-white/88 p-1 shadow-[0_10px_22px_rgba(15,23,42,0.05)]">
+                <DRGGroupingTab
+                  :drg-result="drgResult"
+                  :loading="drgLoading"
+                  :has-frontpage="!!frontpageDraft"
+                  :main-diagnosis-code="frontpageDraft?.diagnoses?.discharge_main_icd || ''"
+                  :main-diagnosis-text="frontpageDraft?.diagnoses?.discharge_main_diagnosis_text || ''"
+                  :main-procedure-code="frontpageDraft?.procedures?.main_procedure_code || ''"
+                  :main-procedure-name="frontpageDraft?.procedures?.main_procedure_text || ''"
+                  @group="performDRGGrouping"
+                  @open-optimization="openOptimization"
+                />
+              </div>
+            </a-modal>
+          </template>
+          <template #message>
+            <div class="space-y-3 p-3">
+              <div class="flex items-center justify-between gap-2 rounded-[16px] border border-slate-200/80 bg-white/72 px-3 py-2">
+                <a-segmented
+                  v-model:value="notificationReadFilter"
+                  size="small"
+                  :options="[
+                    { label: '鏈', value: 'unread' },
+                    { label: '鍏ㄩ儴', value: 'all' },
+                    { label: '宸茶', value: 'read' },
+                  ]"
+                />
+                <a-button type="link" size="small" :disabled="notificationUnreadCount === 0" @click="markAllAssistNotificationsRead" class="!h-7 !rounded-full !px-2 !text-xs">
+                  <CheckOutlined /> 鍏ㄩ儴宸茶
+                </a-button>
+              </div>
+              <div v-if="notificationLoading" class="py-8 text-center">
+                <a-spin />
+              </div>
+              <div v-else class="space-y-2 max-h-[440px] overflow-y-auto custom-scrollbar pr-1">
+                <div
+                  v-for="notif in filteredAssistNotifications"
+                  :key="notif.id"
+                  class="rounded-[16px] border p-3 shadow-[0_4px_12px_rgba(15,23,42,0.025)]"
+                  :class="notif.is_read ? 'border-slate-200/80 bg-white/74' : 'border-blue-200/80 bg-blue-50/72'"
+                >
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                        <NotificationOutlined class="text-blue-500" />
+                        <span class="truncate">{{ notif.title || '閫氱煡娑堟伅' }}</span>
+                      </div>
+                      <div class="mt-1 text-xs text-slate-500 leading-5">
+                        {{ notif.content || '鏆傛棤鍐呭' }}
+                      </div>
+                      <div class="mt-1 text-[11px] text-slate-400">
+                        {{ formatRelativeTime(notif.created_at) }}
+                      </div>
+                    </div>
+                    <a-tag v-if="!notif.is_read" color="blue">鏈</a-tag>
+                  </div>
+                  <div class="mt-2 flex items-center justify-end gap-2">
+                    <a-button size="small" class="!h-8 !rounded-full !border-slate-200/90 !shadow-none" @click="handleAssistNotificationClick(notif)">鍘诲鐞</a-button>
+                    <a-button v-if="!notif.is_read" type="link" size="small" class="!h-8 !rounded-full !text-xs" @click="markAssistNotificationRead(notif)">鏍囪宸茶</a-button>
+                  </div>
+                </div>
+                <div v-if="filteredAssistNotifications.length === 0" class="rounded-[18px] border border-dashed border-slate-200 bg-white/70 py-8">
+                  <a-empty description="鏆傛棤娑堟伅" />
+                </div>
+              </div>
+            </div>
+          </template>
+        </WorkstationAssistPanel>
+
+        <a-drawer
+          v-model:open="suggestionDrawerVisible"
+          title="DRG 浼樺寲寤鸿"
+          placement="right"
+          :width="560"
+          :headerStyle="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
+          :bodyStyle="{ padding: '16px', background: 'linear-gradient(180deg,#f8fafc 0%,#f3f6fa 100%)' }"
+        >
+          <div class="space-y-3">
+            <div
+              v-for="item in suggestions"
+              :key="item.suggestion_id"
+              class="rounded-[18px] border border-slate-200/80 bg-white/88 p-4 shadow-[0_6px_16px_rgba(15,23,42,0.03)]"
+            >
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <div class="text-sm font-semibold text-slate-800">
+                  {{ getSuggestionTitle(item.suggestion_type) }}
+                </div>
+                <a-tag :color="suggestionSeverityTag(item.severity)">
+                  {{ item.severity || 'info' }}
+                </a-tag>
+              </div>
+              <div class="text-sm text-slate-700 leading-6">
+                {{ item.message }}
+              </div>
+              <div v-if="item.evidence" class="mt-2 rounded-[12px] bg-slate-50/88 px-3 py-2 text-xs text-slate-500">
+                渚濇嵁锛歿{ item.evidence }}
+              </div>
+              <div class="mt-3 flex justify-end gap-2">
+                <a-button
+                  size="small"
+                  class="!h-8 !rounded-full !border-slate-200/90 !shadow-none"
+                  @click="handleDRGSuggestion('reject', item.suggestion_id)"
+                >
+                  蹇界暐
+                </a-button>
+                <a-button
+                  type="primary"
+                  size="small"
+                  class="!h-8 !rounded-full !border-0 !shadow-[0_6px_14px_rgba(37,99,235,0.14)]"
+                  @click="handleDRGSuggestion('accept', item.suggestion_id)"
+                >
+                  閲囩撼骞堕噸绠?                </a-button>
+              </div>
+            </div>
+
+            <a-empty
+              v-if="!suggestionsLoading && suggestions.length === 0"
+              description="暂无待处理优化建议"
+            />
+            <div v-if="suggestionsLoading" class="flex items-center justify-center py-10">
+              <a-spin />
+            </div>
+          </div>
+        </a-drawer>
+
+        <a-drawer
+          v-model:open="icdDrawerVisible"
+          title="ICD 缂栫爜鏌ヨ"
+          placement="right"
+          :width="920"
+          :headerStyle="{ borderBottom: '1px solid rgba(148,163,184,0.14)', background: 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(247,250,252,0.96) 100%)', padding: '16px 18px' }"
+          :bodyStyle="{ padding: '0', background: 'linear-gradient(180deg,#f8fafc 0%,#f2f6fa 100%)' }"
+        >
+          <div class="border-b border-slate-200/70 bg-white/82 px-4 py-3">
+            <div class="rounded-[16px] border border-slate-200/80 bg-slate-50/78 px-3 py-3">
+              <div class="mb-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">鍥炲～鐩爣</div>
+              <div class="flex flex-wrap items-center gap-3">
+                <a-segmented
+                  v-model:value="icdApplyTarget"
+                  :options="icdTargetOptions"
+                  size="small"
+                />
+                <div v-if="isOtherTarget" class="flex items-center gap-2 text-xs text-slate-500">
+                  <span>绗</span>
+                  <a-input-number
+                    v-model:value="icdApplyIndex"
+                    :min="1"
+                    :max="20"
+                    size="small"
+                    style="width: 78px"
+                  />
+                  <span>鏉</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="p-3">
+            <div class="overflow-hidden rounded-[18px] border border-white/85 bg-white/88 shadow-[0_8px_18px_rgba(15,23,42,0.04)]">
+              <ICDSearchPanel
+                allow-apply
+                :apply-label="icdApplyLabel"
+                @apply="handleApplyICDCode"
+              />
+            </div>
+          </div>
+        </a-drawer>
+      </div>
+    </template>
+
+    <!-- ====== 璐ㄦ帶瑙勫垯妯″紡 ====== -->
+    <template v-else-if="viewMode === 'rules'">
+      <aside class="w-56 flex-shrink-0 border-r border-slate-200/70 flex flex-col bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,247,251,0.95))] shadow-[8px_0_20px_rgba(15,23,42,0.03)]">
+        <div class="border-b border-slate-200/75 px-5 py-4 flex-shrink-0">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-[16px] border border-blue-100 bg-blue-50/90 shadow-[0_8px_16px_rgba(37,99,235,0.08)]">
+              <MedicineBoxOutlined class="text-blue-600 text-lg" />
+            </div>
+            <div>
+              <div class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Rules Console</div>
+              <span class="font-black text-slate-900 text-[16px] tracking-tight">鐥呮宸ヤ綔鍙</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto py-2.5 custom-scrollbar">
+          <div
+            v-for="dept in departments"
+            :key="dept.name"
+            @click="viewMode = 'list'; selectDept(dept.name)"
+            :class="[
+              'mx-2 mb-1 flex items-center justify-between px-3.5 py-3 rounded-xl cursor-pointer text-sm transition-all duration-200',
+              'text-slate-600 hover:bg-white hover:shadow-sm dark:text-slate-400 dark:hover:bg-slate-800'
+            ]"
+          >
+            <span class="truncate">{{ dept.name }}</span>
+            <div class="flex items-center gap-1.5">
+              <span
+                v-if="dept.warningCount > 0"
+                class="min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-blue-500 text-white text-[10px] font-bold px-1"
+              >{{ dept.warningCount }}</span>
+              <span class="min-w-[20px] h-[20px] flex items-center justify-center rounded-full text-[10px] font-bold px-1.5 bg-slate-200/80 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+              >{{ dept.total }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex-shrink-0 border-t border-slate-200/70 px-2.5 py-2.5">
+          <div class="flex items-center gap-2.5 rounded-[16px] border border-blue-200 bg-[linear-gradient(180deg,rgba(239,246,255,0.96),rgba(219,234,254,0.9))] px-3.5 py-3 text-sm font-bold text-blue-700 shadow-[0_10px_22px_rgba(37,99,235,0.08)]">
+            <SafetyCertificateOutlined class="text-base" />
+            <div>
+              <div>璐ㄦ帶瑙勫垯</div>
+              <div class="text-[11px] font-medium text-blue-600/80">缁熶竴瑙勫垯鎬昏</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+      <main class="flex-1 flex flex-col min-w-0 bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(241,245,249,0.98))] overflow-y-auto">
+        <header class="flex-shrink-0 border-b border-slate-200/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(247,250,252,0.96))] px-6 py-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <h2 class="text-[28px] font-black leading-none tracking-[-0.02em] text-slate-900">
+                {{ rulesSubTabTitle }}
+              </h2>
+            </div>
+            <div class="flex flex-col items-end gap-3">
+            <nav class="inline-flex items-center gap-1 rounded-full border border-slate-200/70 bg-white/78 p-1">
+            <a
+              v-for="tab in rulesSubTabs"
+              :key="tab.key"
+              href="#"
+              @click.prevent="rulesSubTab = tab.key"
+              :class="[
+                rulesSubTab === tab.key
+                  ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-[0_3px_8px_rgba(37,99,235,0.05)]'
+                  : 'border-transparent text-slate-500 hover:bg-white/70 hover:text-slate-800',
+                'whitespace-nowrap rounded-full border px-4 py-2 text-sm font-semibold flex items-center gap-1.5 transition-all'
+              ]"
+            >
+              <component :is="tab.icon" />
+              {{ tab.label }}
+            </a>
+            </nav>
+            <button
+              @click="viewMode = 'list'"
+              class="flex items-center gap-1.5 rounded-[14px] border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-500 transition-all hover:border-blue-200 hover:text-blue-700 hover:shadow-[0_8px_18px_rgba(37,99,235,0.08)]"
+            >
+              <LeftOutlined />
+              杩斿洖鐥呭巻鍒楄〃
+            </button>
+            </div>
+          </div>
+        </header>
+        <div class="flex-1 p-6">
+          <CodingRulesTab v-if="rulesSubTab === 'coding'" />
+          <FrontpageRulesOverview v-else-if="rulesSubTab === 'frontpage'" />
+          <SettlementRulesOverview v-else-if="rulesSubTab === 'settlement'" />
+        </div>
+      </main>
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import axios from 'axios'
+import { message, Modal } from 'ant-design-vue'
+import {
+  MedicineBoxOutlined,
+  SyncOutlined,
+  CheckCircleOutlined,
+  WarningOutlined,
+  InboxOutlined,
+  FileTextOutlined,
+  ThunderboltOutlined,
+  LeftOutlined,
+  RightOutlined,
+  UserOutlined,
+  FileSearchOutlined,
+  EyeOutlined,
+  CheckOutlined,
+  NotificationOutlined,
+  ScanOutlined,
+  NodeIndexOutlined,
+  SafetyCertificateOutlined,
+} from '@ant-design/icons-vue'
+import FrontPagePanel from '@/views/workstation/FrontPagePanel.vue'
+import EMRViewer from '@/components/qc/EMRViewer.vue'
+import WorkstationAssistPanel from './components/WorkstationAssistPanel.vue'
+import QCResultTab from './components/QCResultTab.vue'
+import ContentQCTab from './components/ContentQCTab.vue'
+import ICDSearchPanel from './components/ICDSearchPanel.vue'
+import SettlementSheet from './components/SettlementSheet.vue'
+import FrontpageWorkspacePanel from './components/FrontpageWorkspacePanel.vue'
+import AIProfileDashboard from '@/views/demo/frontpage/components/AIProfileDashboard.vue'
+import DRGGroupingTab from '@/views/demo/frontpage/components/DRGGroupingTab.vue'
+import CodingRulesTab from '@/components/rules/CodingRulesTab.vue'
+import FrontpageRulesOverview from './components/FrontpageRulesOverview.vue'
+import SettlementRulesOverview from './components/SettlementRulesOverview.vue'
+import DetailHeader from './components/DetailHeader.vue'
+import DetailSidebar from './components/DetailSidebar.vue'
+import { useDRGGrouping } from '@/views/demo/frontpage/composables/useDRGGrouping'
+import type { ICDCodeDetail } from './components/ICDDetailPanel.vue'
+import { useWorkstationSession } from './composables/useWorkstationSession'
+import { useFrontpageDraft } from './composables/useFrontpageDraft'
+import { useQcPipeline } from './composables/useQcPipeline'
+import { usePatientRecords } from './composables/usePatientRecords'
+import { useNotifications } from './composables/useNotifications'
+import type {
+  PatientRecord,
+  DocItem,
+  FrontpageFocusTarget,
+  QCIssueLike,
+} from './types'
+
+const {
+  viewMode,
+  selectedId,
+  frontpageTab,
+  assistPanelVisible,
+  assistTab,
+  icdDrawerVisible,
+  icdApplyTarget,
+  icdApplyIndex,
+  isOtherTarget,
+  openRecord: openSessionRecord,
+  goBackToList: backToList,
+  resetPerRecordTransient,
+} = useWorkstationSession()
+
+const {
+  allRecords,
+  departments,
+  currentPage,
+  serverTotal,
+  serverTotalPages,
+  loading,
+  activeDept,
+  searchText,
+  hospFilter,
+  hospOptions,
+  filteredRecords,
+  fetchData,
+  handlePageChange,
+  refreshData,
+  selectDept,
+} = usePatientRecords()
+
+const PINNED_DEPARTMENT_SLOTS = 19
+
+const visibleDepartments = computed(() => {
+  const all = departments.value
+  if (all.length <= PINNED_DEPARTMENT_SLOTS) return all
+
+  const visibleLimit = PINNED_DEPARTMENT_SLOTS - 1
+  const head = all.slice(0, visibleLimit)
+  const active = all.find((dept) => dept.name === activeDept.value)
+  if (!active) return head
+  if (head.some((dept) => dept.name === active.name)) return head
+
+  return [head[0], ...head.slice(1, visibleLimit - 1), active]
+})
+
+const overflowDepartments = computed(() => {
+  const visibleNames = new Set(visibleDepartments.value.map((dept) => dept.name))
+  return departments.value.filter((dept) => !visibleNames.has(dept.name))
+})
+
+const priorityRecords = computed(() => {
+  return [...filteredRecords.value]
+    .sort((a, b) => priorityScore(b) - priorityScore(a))
+    .slice(0, 4)
+})
+
+const priorityRecordIdSet = computed(() => new Set(priorityRecords.value.map((record) => record.id)))
+
+function isPriorityRecord(recordId: string) {
+  return priorityRecordIdSet.value.has(recordId)
+}
+
+function priorityScore(record: PatientRecord) {
+  let score = 0
+  const days = record.days || 0
+  const isDischarged = Boolean(record.dischargeDate && record.dischargeDate.trim() !== '')
+  const cdmFrontpageEmpty = Boolean(record.cdmFrontpageEmpty)
+
+  // 鏈€楂樹紭鍏堬細宸插嚭闄絾 CDM 鐥呮棣栭〉浠嶄负绌猴紙褰卞搷涓婃姤涓庡尰淇濇彁浜ゆ祦杞級
+  if (isDischarged && cdmFrontpageEmpty) score += 200
+  // 娆′紭鍏堬細宸插嚭闄絾浣忛櫌澶╂暟杈冮暱
+  if (isDischarged) score += 50
+
+  score += Math.min(days * 2, 40)
+  return score
+}
+
+function priorityReason(record: PatientRecord) {
+  const days = record.days || 0
+  const isDischarged = Boolean(record.dischargeDate && record.dischargeDate.trim() !== '')
+  const cdmFrontpageEmpty = Boolean(record.cdmFrontpageEmpty)
+  if (isDischarged && cdmFrontpageEmpty) return '\u5df2\u51fa\u9662\u4f46 CDM \u75c5\u6848\u9996\u9875\u4e3a\u7a7a\uff0c\u9700\u4f18\u5148\u751f\u6210\u7528\u4e8e\u4e0a\u62a5/\u533b\u4fdd\u63d0\u4ea4'
+  if (isDischarged && days >= 8) return '\u5df2\u51fa\u9662\uff0c\u5efa\u8bae\u5c3d\u5feb\u5b8c\u6210\u5355\u6848\u5904\u7406'
+  if (!isDischarged) return '\u4ecd\u5728\u9662\uff0c\u5efa\u8bae\u8ddf\u8fdb\u5f53\u524d\u8fdb\u5ea6'
+  return '\u53ef\u76f4\u63a5\u8fdb\u5165\u8be6\u60c5\u9875\u8fdb\u884c\u590d\u6838'
+}
+
+function priorityCardClass(record: PatientRecord) {
+  const days = record.days || 0
+  const isDischarged = Boolean(record.dischargeDate && record.dischargeDate.trim() !== '')
+  const cdmFrontpageEmpty = Boolean(record.cdmFrontpageEmpty)
+  if (isDischarged && cdmFrontpageEmpty) {
+    return 'border-blue-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(239,246,255,0.94))] shadow-[0_12px_24px_rgba(37,99,235,0.08)] hover:-translate-y-1'
+  }
+  if (!isDischarged && days >= 8) {
+    return 'border-sky-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(240,249,255,0.94))] shadow-[0_12px_24px_rgba(14,165,233,0.08)] hover:-translate-y-1'
+  }
+  return 'border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] shadow-[0_12px_24px_rgba(15,23,42,0.045)] hover:-translate-y-1'
+}
+
+function stayText(days?: number) {
+  return `\u4f4f\u9662 ${days || 0} \u5929`
+}
+
+function stayTextTone(days?: number) {
+  if (!days || days <= 7) return 'text-slate-500'
+  if (days <= 14) return 'text-blue-600'
+  return 'text-blue-700'
+}
+
+function dateRange(record: PatientRecord) {
+  return `${record.admissionDate || '--'} -> ${record.dischargeDate || '--'}`
+}
+
+// ========== 璐ㄦ帶瑙勫垯 Tab ==========
+const rulesSubTab = ref<'coding' | 'frontpage' | 'settlement'>('coding')
+const rulesSubTabs = [
+  { key: 'coding' as const, label: '缂栫爜璐ㄦ帶瑙勫垯', icon: MedicineBoxOutlined },
+  { key: 'frontpage' as const, label: '棣栭〉璐ㄦ帶瑙勫垯', icon: FileSearchOutlined },
+  { key: 'settlement' as const, label: '缁撶畻娓呭崟璐ㄦ帶瑙勫垯', icon: SafetyCertificateOutlined },
+]
+const rulesSubTabTitle = computed(() => {
+  const map: Record<string, string> = {
+    coding: '编码质控规则管理',
+    frontpage: '首页质控规则管理',
+    settlement: '结算清单质控规则管理',
+  }
+  return map[rulesSubTab.value] || '质控规则管理'
+})
+
+const rulesSubTabSubtitle = computed(() => {
+  const map: Record<string, string> = {
+    coding: '按编码规范维护规则，聚焦主诊断、手术操作与编码逻辑一致性。',
+    frontpage: '按病案首页字段维护规则，聚焦完整性、口径一致性与填写规范。',
+    settlement: '按结算清单数据维护规则，聚焦费用字段、必填项与清单逻辑校验。',
+  }
+  return map[rulesSubTab.value] || ''
+})
+
+const rulesSubTabDescription = computed(() => {
+  const map: Record<string, string> = {
+    coding: '基于 ICD 编码规范的质控规则，覆盖诊断与手术编码的完整性、格式与逻辑校验。',
+    frontpage: '基于病案首页数据的质控规则，校验首页字段的完整性、一致性和填写规范。',
+    settlement: '针对医保结算清单数据的质控规则，覆盖必填项校验及清单逻辑一致性检查。',
+  }
+  return map[rulesSubTab.value] || ''
+})
+
+// ========== ?? Tab ???? ==========
+const contentQCCount = ref(0)
+
+// ========== 璐ㄦ帶 Tab 鐙珛鍒锋柊 ==========
+const qcResultTabRef = ref<InstanceType<typeof QCResultTab> | null>(null)
+
+function handleAssistTabRefresh(tabKey: string) {
+  if (tabKey === 'form' || tabKey === 'cost') {
+    qcResultTabRef.value?.runFormQC()
+  } else if (tabKey === 'coding') {
+    qcResultTabRef.value?.runCodingQC()
+  } else if (tabKey === 'drg') {
+    performDRGGrouping()
+  } else if (tabKey === 'content') {
+    message.info('鍐呮兜璐ㄦ帶灏嗗湪鍚庣画鐗堟湰鏀寔鐙珛鍒锋柊')
+  }
+}
+
+
+const icdTargetOptions = [
+  { label: '主诊断编码', value: 'mainDiagnosis' },
+  { label: '其他诊断编码', value: 'otherDiagnosis' },
+  { label: '主手术编码', value: 'mainProcedure' },
+  { label: '其他手术编码', value: 'otherProcedure' },
+]
+
+const {
+  drgLoading,
+  drgResult,
+  suggestionDrawerVisible,
+  suggestionsLoading,
+  suggestions,
+  performDRGGrouping: doDRGGrouping,
+  openOptimizationDrawer,
+  handleSuggestion,
+  getSuggestionTitle,
+} = useDRGGrouping()
+
+// ========== 娑堟伅閫氱煡锛堟潵鑷?composable锛?==========
+const {
+  assistNotifications,
+  notificationUnreadCount,
+  notificationLoading,
+  notificationReadFilter,
+  filteredAssistNotifications,
+  fetchAssistNotifications,
+  markAssistNotificationRead,
+  markAllAssistNotificationsRead,
+  handleAssistNotificationClick,
+  formatRelativeTime,
+} = useNotifications(
+  allRecords,
+  openSessionRecord,
+  assistPanelVisible,
+  assistTab,
+  frontpageTab,
+)
+
+// ========== 鐥呭巻鏂囦功棰勮 ==========
+const documentsList = ref<DocItem[]>([])
+const documentsLoading = ref(false)
+const docDrawerVisible = ref(false)
+const docDrawerTitle = ref('')
+const docDrawerContent = ref('')
+
+// ========== 璇︽儏涓?Tab ==========
+const detailMainTab = ref('records')  // records | frontpage | settlement
+const emrViewerRef = ref<InstanceType<typeof EMRViewer> | null>(null)
+const emrRenderState = ref<'idle' | 'loading' | 'ready' | 'fallback'>('idle')
+
+// ========== 鐥呭巻璇︽儏锛堟嫾鎺ユ枃涔︼級 ==========
+const concatText = ref('')
+const concatLoading = ref(false)
+const concatSections = computed(() => {
+  if (!concatText.value) return []
+  const sections: { title: string; content: string }[] = []
+  const pattern = /={40}\s*\r?\n(?:馃搵\s*)?([^\r\n]+)\r?\n={40}\s*\r?\n\r?\n([\s\S]*?)(?=(?:\r?\n){3}={40}|$)/g
+
+  for (const match of concatText.value.matchAll(pattern)) {
+    const [, rawTitle = '', rawContent = ''] = match
+    sections.push({
+      title: rawTitle.trim(),
+      content: rawContent.trim(),
+    })
+  }
+
+  if (!sections.length) {
+    sections.push({
+      title: '瀹屾暣鐥呭巻',
+      content: concatText.value.trim(),
+    })
+  }
+
+  return sections
+})
+
+// ========== 缁撶畻娓呭崟 ==========
+const settlementData = ref<any>(null)
+const settlementLoading = ref(false)
+const settlementQcReport = ref<any>(null)
+const settlementQcLoading = ref(false)
+
+// ========== 鐥呮棣栭〉瀹樻柟鏍煎紡鏁版嵁 ==========
+const frontpageSheetData = ref<any>(null)
+const frontpageSheetLoading = ref(false)
+
+async function loadFrontpageSheet(patientId: string, visitId: string) {
+  frontpageSheetLoading.value = true
+  try {
+    const resp = await fetch(`/api/medical-records/frontpage-sheet/${patientId}/${visitId}`)
+    if (resp.ok) {
+      frontpageSheetData.value = await resp.json()
+    } else {
+      frontpageSheetData.value = null
+    }
+  } catch (e) {
+    console.error('鍔犺浇鐥呮棣栭〉鏁版嵁澶辫触:', e)
+    frontpageSheetData.value = null
+  } finally {
+    frontpageSheetLoading.value = false
+  }
+}
+const settlementQcFailed = computed(() => settlementQcReport.value?.summary?.failed || 0)
+
+// ========== 功能可用性判断（PRD 6）==========
+// AI 生成首页：仅要求已出院；已有首页数据时弹确认框覆盖
+const isDischarged = computed(() => !!selectedRecord.value?.dischargeDate)
+const hasExistingFrontpage = computed(() => !!frontpageSheetData.value)
+const canGenerateFrontpage = computed(() => isDischarged.value)
+const frontpageDisabledReason = computed(() => {
+  if (!isDischarged.value) return '在院患者暂不支持生成首页'
+  return ''
+})
+function handleGenerateFrontpage() {
+  if (hasExistingFrontpage.value) {
+    Modal.confirm({
+      title: '该患者已有病案首页数据',
+      content: '重新生成将覆盖已有首页数据，是否继续？',
+      okText: '重新生成',
+      cancelText: '取消',
+      onOk: () => {
+        detailMainTab.value = 'frontpage'
+        generateFrontpage()
+      },
+    })
+  } else {
+    detailMainTab.value = 'frontpage'
+    generateFrontpage()
+  }
+}
+// 缁撶畻娓呭崟鐢熸垚锛氫粎瀵瑰凡鍑洪櫌涓旀棤缁撶畻鏁版嵁鐨勭梾鍘嗗彲鐢?const hasExistingSettlement = computed(() => !!settlementData.value && settlementData.value?.data_source !== 'generated_from_frontpage')
+const canGenerateSettlement = computed(() => isDischarged.value && !hasExistingSettlement.value)
+
+const costColumns = [
+  { title: '鏀惰垂绫诲埆', dataIndex: 'type', width: 120 },
+  { title: '绛夌骇', dataIndex: 'level', width: 80 },
+  { title: '瀹炴敹閲戦', dataIndex: 'charge', width: 100 },
+  { title: '鐢茬被', dataIndex: 'class_a_amount', width: 80 },
+  { title: '涔欑被', dataIndex: 'class_b_amount', width: 80 },
+  { title: '鑷垂', dataIndex: 'own_pay_amount', width: 80 },
+]
+
+const settlementBasicFields = computed(() => {
+  const d = settlementData.value
+  if (!d) return []
+  return [
+    { label: '患者姓名', value: d.patient_name },
+    { label: '性别', value: d.patient_sex },
+    { label: '年龄', value: d.patient_age },
+    { label: '医保类型', value: d.patient_insurance_type || d.insurance_type },
+    { label: '病案号', value: d.mr_no },
+    { label: '住院号', value: d.inpat_no },
+  ]
+})
+
+const settlementHospFields = computed(() => {
+  const d = settlementData.value
+  if (!d) return []
+  return [
+    { label: '鍏ラ櫌绉戝', value: d.admission_dept_name },
+    { label: '鍑洪櫌绉戝', value: d.discharge_dept_name },
+    { label: '鍏ラ櫌鏃堕棿', value: d.admission_datetime },
+    { label: '鍑洪櫌鏃堕棿', value: d.discharge_datetime },
+    { label: '鍏ラ櫌閫斿緞', value: d.admission_route },
+    { label: '绂婚櫌鏂瑰紡', value: d.leaving_hospital_way },
+  ]
+})
+
+const settlementInsurFields = computed(() => {
+  const d = settlementData.value
+  if (!d) return []
+  return [
+    { label: '参保地', value: d.insured_place },
+    { label: '个人自付', value: d.out_of_pocket_advance },
+    { label: '个人自费', value: d.out_of_pocket_amount },
+    { label: '个人现金支付', value: d.cash_payment_amount },
+    { label: '医保支付方式', value: d.insurance_type },
+    { label: '结算状态', value: d.settlement_status },
+  ]
+})
+
+async function loadConcatText(visitId: string) {
+  concatLoading.value = true
+  concatText.value = ''
+  try {
+    const { data } = await axios.get(`/api/medical-records/documents/${visitId}`, { params: { mode: 'concat' } })
+    concatText.value = data.text || ''
+  } catch (err) {
+    console.error('鍔犺浇鐥呭巻璇︽儏澶辫触:', err)
+  } finally {
+    concatLoading.value = false
+  }
+}
+
+async function loadSettlement(patientId: string, visitId: string) {
+  settlementLoading.value = true
+  settlementData.value = null
+  settlementQcReport.value = null
+  try {
+    const { data } = await axios.get(`/api/medical-records/settlement/${patientId}/${visitId}`)
+    settlementData.value = data
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      // Fallback: 浠庨椤垫娊鍙栫粨鏋滀笌 CDM SQL 鐢熸垚鑽夌
+      try {
+        const { data: draft } = await axios.post(`/api/medical-records/settlement/${patientId}/${visitId}/generate`)
+        settlementData.value = draft
+      } catch (genErr) {
+        console.warn('鑽夌鐢熸垚涔熷け璐ワ紝鏄剧ず绌虹櫧鏍疯〃:', genErr)
+      }
+    } else {
+      console.error('鍔犺浇缁撶畻娓呭崟澶辫触:', err)
+    }
+  } finally {
+    settlementLoading.value = false
+  }
+}
+
+async function runSettlementQc() {
+  if (!selectedRecord.value) return
+  settlementQcLoading.value = true
+  try {
+    // 鏍规嵁鏁版嵁鏉ユ簮閫夋嫨瀵瑰簲鐨?QC 绔偣
+    const isGenerated = settlementData.value?.data_source === 'generated_from_frontpage'
+    const qcUrl = isGenerated
+      ? `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/generate/qc`
+      : `/api/medical-records/settlement/${selectedRecord.value.patientId}/${selectedRecord.value.visitId}/qc`
+    const { data } = await axios.post(qcUrl)
+    settlementQcReport.value = data
+    message.success(`璐ㄦ帶瀹屾垚: ${data.summary.passed}/${data.summary.total} 閫氳繃`)
+  } catch (err) {
+    message.error('缁撶畻娓呭崟璐ㄦ帶鎵ц澶辫触')
+    console.error(err)
+  } finally {
+    settlementQcLoading.value = false
+  }
+}
+
+// ========== AI鐢诲儚 & DRG Modal ==========
+const aiProfileModalVisible = ref(false)
+const profileAnalyzed = ref(false)
+const profileAnalyzing = ref(false)
+const drgDetailModalVisible = ref(false)
+
+async function loadDocuments(visitId: string) {
+  documentsLoading.value = true
+  documentsList.value = []
+  try {
+    const { data } = await axios.get(`/api/medical-records/documents/${visitId}`)
+    // 鍙樉绀烘湁鍐呭鐨勪笌鍓?3 涓牳蹇冩枃涔︾被鍨嬶紙鍗充娇鏃犲唴瀹逛篃灞曠ず锛?    const coreTypes = ['admission_record', 'discharge_record', 'surgery_record']
+    const docs: DocItem[] = data.documents || []
+    documentsList.value = docs.filter(
+      (d: DocItem) => d.has_content || coreTypes.includes(d.type)
+    )
+  } catch (err) {
+    console.error('鍔犺浇鐥呭巻鏂囦功澶辫触:', err)
+  } finally {
+    documentsLoading.value = false
+  }
+}
+
+function openDocPreview(doc: DocItem) {
+  docDrawerTitle.value = doc.label
+  docDrawerContent.value = doc.content || '鏆傛棤鍐呭'
+  docDrawerVisible.value = true
+}
+
+const combinedMedicalText = computed(() =>
+  documentsList.value
+    .filter(doc => doc.has_content && doc.content)
+    .map(doc => `${doc.label}\n${doc.content}`)
+    .join('\n\n')
+)
+
+const selectedRecord = computed(() =>
+  allRecords.value.find(r => r.id === selectedId.value),
+)
+
+const {
+  assistIssues,
+  assistBadgeCount: qcIssueCount,
+  qcRefreshSeed,
+  handleAssistIssuesChange,
+  touchCodingRefresh,
+  findEvidenceDoc,
+  findEvidenceSnippet,
+} = useQcPipeline()
+
+const {
+  frontpageGenerating,
+  frontpagePostProcessing,
+  frontpageDraft,
+  frontpageModule,
+  frontpageFocusTarget,
+  frontpageFields,
+  completedModules,
+  setDraftEmpty,
+  generateFrontpage,
+  handleExportFrontpage,
+  handleSaveFrontpage,
+  focusFrontpageSection,
+  handleApplyICDCode: applyICDCodeToDraft,
+  applyFrontPanelEdits,
+} = useFrontpageDraft(
+  selectedId,
+  selectedRecord,
+  combinedMedicalText,
+  touchCodingRefresh,
+)
+
+// ========== AI 鐢熸垚杩涘害杈呭姪 ==========
+import { MODULE_LABELS, type CompletedModule } from './composables/useFrontpageDraft'
+
+const ALL_MODULE_KEYS = ['basic_info', 'hospitalization', 'diagnoses', 'procedures', 'other_medical_info', 'staff', 'costs', 'confidence']
+const MODULE_LABELS_MAP = MODULE_LABELS
+
+const frontpageModuleCards = computed(() =>
+  ALL_MODULE_KEYS.map((key) => ({
+    key,
+    label: MODULE_LABELS_MAP[key] || key,
+    status: getModuleStatus(key),
+    entry: getModuleEntry(key),
+  })),
+)
+
+function getModuleEntry(m: string): CompletedModule | undefined {
+  return completedModules.value.find(c => c.name === m)
+}
+
+function getModuleStatus(m: string): 'done' | 'active' | 'pending' {
+  if (getModuleEntry(m)) return 'done'
+  if (frontpageModule.value === m) return 'active'
+  return 'pending'
+}
+
+// 生成完成后自动切到“首页预览/打印”tab
+watch(frontpageGenerating, (generating, wasGenerating) => {
+  if (wasGenerating && !generating && frontpageDraft.value) {
+    // 延迟一帧，确保 DOM 已刷新
+    nextTick(() => {
+      frontpageTab.value = 'preview'
+    })
+  }
+})
+
+
+
+
+onMounted(() => {
+  fetchData()
+  fetchAssistNotifications()
+})
+
+// 鍒囨崲鐥呭巻鏃舵竻闄や笂娆＄敓鎴愮粨鏋滐紝骞跺姞杞芥枃涔﹀垪琛ㄤ笌缁撶畻娓呭崟
+watch(selectedId, (newId) => {
+  setDraftEmpty()
+  resetPerRecordTransient()
+  assistIssues.value = []
+  suggestionDrawerVisible.value = false
+  docDrawerVisible.value = false
+  settlementQcReport.value = null
+  detailMainTab.value = 'records'
+  emrRenderState.value = newId ? 'loading' : 'idle'
+  if (newId) {
+    loadDocuments(newId)
+    loadConcatText(newId)
+    // 鍔犺浇缁撶畻娓呭崟锛堥渶瑕?patientId锛?    const record = allRecords.value.find(r => r.id === newId)
+    if (record?.patientId) {
+      loadSettlement(record.patientId, newId)
+      loadFrontpageSheet(record.patientId, newId)
+    }
+  } else {
+    documentsList.value = []
+    concatText.value = ''
+    settlementData.value = null
+    frontpageSheetData.value = null
+  }
+})
+
+// ========== 璁＄畻 ==========
+
+const detailItems = computed(() => {
+  const r = selectedRecord.value
+  if (!r) return []
+  return [
+    { label: '科室', value: r.department },
+    { label: '床号', value: r.bedNo ? `${r.bedNo}床` : '' },
+    { label: '性别/年龄', value: `${r.sex} / ${r.age}岁` },
+    { label: '医保类型', value: r.insurance },
+    { label: '入院日期', value: r.admissionDate },
+    { label: '住院天数', value: `${r.days}天` },
+    { label: '主管医生', value: r.doctor },
+    { label: '出院日期', value: r.dischargeDate },
+    { label: '病案号', value: r.id },
+  ]
+})
+
+const assistPatientInfo = computed(() => {
+  const record = selectedRecord.value
+  if (!record) return null
+  return {
+    name: record.name,
+    sex: record.sex,
+    age: `${record.age}岁`,
+    diagnosis: record.diagnosis,
+    visitId: record.id,
+  }
+})
+
+const assistBadgeCount = computed(() => {
+  if (qcIssueCount.value > 0) return qcIssueCount.value
+  const record = selectedRecord.value
+  if (!record) return 0
+  return record.status === 'warning' ? 1 : 0
+})
+
+const icdApplyLabel = computed(() => {
+  if (icdApplyTarget.value === 'mainDiagnosis') return '回填主诊断编码'
+  if (icdApplyTarget.value === 'mainProcedure') return '回填主手术编码'
+  if (icdApplyTarget.value === 'otherDiagnosis') return `回填其他诊断编码（第 ${icdApplyIndex.value} 条）`
+  return `回填其他手术编码（第 ${icdApplyIndex.value} 条）`
+})
+
+
+
+function openRecord(record: PatientRecord) {
+  openSessionRecord(record.id)
+  assistPanelVisible.value = false
+  icdDrawerVisible.value = false
+}
+
+// 蹇嵎缈婚〉
+const currentRecordIndex = computed(() => {
+  if (!selectedRecord.value) return -1
+  return filteredRecords.value.findIndex(r => r.id === selectedRecord.value!.id)
+})
+
+function goToPrevRecord() {
+  const idx = currentRecordIndex.value
+  if (idx > 0) {
+    openRecord(filteredRecords.value[idx - 1])
+  }
+}
+
+function goToNextRecord() {
+  const idx = currentRecordIndex.value
+  if (idx < filteredRecords.value.length - 1) {
+    openRecord(filteredRecords.value[idx + 1])
+  }
+}
+
+function goBackToList() {
+  backToList()
+  assistPanelVisible.value = false
+  icdDrawerVisible.value = false
+  suggestionDrawerVisible.value = false
+  // 涓嶆竻绌?selectedId锛屾柟渚胯繑鍥炲悗浠嶈兘鐪嬪埌楂樹寒
+}
+
+
+
+function handleLocateFromQC(payload: { target: FrontpageFocusTarget; issue: { description?: string } }) {
+  if (!frontpageDraft.value) {
+    message.warning('璇峰厛鐢熸垚棣栭〉鍚庡啀瀹氫綅瀛楁')
+    return
+  }
+  frontpageTab.value = 'fields'
+  focusFrontpageSection(payload.target as FrontpageFocusTarget)
+  if (payload?.issue?.description) {
+    message.info(`宸插畾浣嶏細${payload.issue.description}`)
+  }
+}
+
+function handleApplyICDCode(detail: ICDCodeDetail) {
+  const applied = applyICDCodeToDraft(detail, icdApplyTarget.value, Number(icdApplyIndex.value || 1))
+  if (!applied) return
+  frontpageTab.value = 'fields'
+  icdDrawerVisible.value = false
+  touchCodingRefresh()
+}
+
+function handleFrontPanelDraftChange(payload: { diagnoses: any[]; procedures: any[] }) {
+  applyFrontPanelEdits(payload)
+  touchCodingRefresh()
+}
+
+function handleJumpEvidenceFromQC(issue: QCIssueLike) {
+  const doc = findEvidenceDoc(issue, documentsList.value)
+  if (!doc) {
+    message.warning('鏆傛棤鍙烦杞殑鏂囦功渚濇嵁')
+    return
+  }
+  docDrawerTitle.value = `渚濇嵁鏂囦功锛?{doc.label}`
+  docDrawerContent.value = findEvidenceSnippet(issue, doc.content) || (doc.content || '鏆傛棤鍐呭')
+  docDrawerVisible.value = true
+}
+
+function handleEmrLoaded(payload: { content?: string }) {
+  emrRenderState.value = payload?.content ? 'ready' : 'fallback'
+}
+
+function handleEmrError() {
+  if (selectedId.value) {
+    emrRenderState.value = 'fallback'
+  }
+}
+
+function handleEmrDefectClick(defectId: string) {
+  assistPanelVisible.value = true
+  assistTab.value = 'form'
+  const matched = assistIssues.value.find(issue => (issue as { id?: string } | undefined)?.id === defectId)
+  if (matched?.description) {
+    message.info(`宸插畾浣嶈川鎺ч棶棰橈細${matched.description}`)
+  }
+}
+
+function handleAssistTabChange(tab: 'form' | 'coding' | 'cost' | 'profile' | 'drg' | 'message') {
+  assistTab.value = tab
+  if (tab === 'message') {
+    fetchAssistNotifications()
+  }
+}
+
+function performDRGGrouping() {
+  if (!selectedId.value) {
+    message.warning('璇峰厛閫夋嫨鐥呭巻')
+    return
+  }
+  doDRGGrouping(selectedId.value)
+}
+
+function openOptimization() {
+  if (!selectedId.value) {
+    message.warning('璇峰厛閫夋嫨鐥呭巻')
+    return
+  }
+  openOptimizationDrawer(selectedId.value)
+}
+
+function suggestionSeverityTag(severity?: string) {
+  if (severity === 'high' || severity === 'error' || severity === 'critical') return 'error'
+  if (severity === 'medium' || severity === 'warning') return 'warning'
+  return 'processing'
+}
+
+function handleDRGSuggestion(action: 'accept' | 'reject', suggestionId: number) {
+  if (!selectedId.value) {
+    message.warning('璇峰厛閫夋嫨鐥呭巻')
+    return
+  }
+  handleSuggestion(suggestionId, action, selectedId.value)
+}
+</script>
+
+<style scoped>
+.custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(203, 213, 225, 0.4); border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(148, 163, 184, 0.6); }
+
+.workstation-shell :deep(.ant-input-affix-wrapper),
+.workstation-shell :deep(.ant-input-search .ant-input),
+.workstation-shell :deep(.ant-select-selector) {
+  border-radius: 16px !important;
+}
+
+.workstation-shell :deep(.ant-input-affix-wrapper),
+.workstation-shell :deep(.ant-select-selector) {
+  min-height: 44px !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.05);
+}
+
+.workstation-shell :deep(.ant-input-affix-wrapper:hover),
+.workstation-shell :deep(.ant-select-focused .ant-select-selector),
+.workstation-shell :deep(.ant-select-selector:hover) {
+  border-color: rgba(34, 211, 238, 0.4) !important;
+}
+
+/* 璇︽儏涓?Tab 鏍峰紡 */
+.detail-main-tabs .ant-tabs-content {
+  flex: 1;
+  overflow: hidden;
+}
+.detail-main-tabs .ant-tabs-tabpane {
+  height: 100%;
+  overflow-y: auto;
+}
+</style>
+
+
+
+

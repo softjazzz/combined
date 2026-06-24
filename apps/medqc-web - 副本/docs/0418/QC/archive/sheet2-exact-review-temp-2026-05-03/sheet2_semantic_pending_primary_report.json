@@ -1,0 +1,72 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 7,
+  "families": [
+    {
+      "issue_family": "输血时间/量/前后记录不一致",
+      "row_count": 4,
+      "job_id": "c155f16b-edb2-4fde-af7d-3bfec8df7474",
+      "result_breakdown": {
+        "miss": 1,
+        "same_family_hit": 3
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 4
+      },
+      "items_count": 4,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "术前主刀医生查房/麻醉术前访视缺失",
+      "row_count": 1,
+      "job_id": "9974771f-7b60-49b9-a589-6d301bfefc4d",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
+      "row_count": 1,
+      "job_id": "23a3b2b3-c620-4563-8db1-b65ae5bc6801",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "输血记录链缺失/不全；输血时间/量/前后记录不一致",
+      "row_count": 1,
+      "job_id": "1d11262a-009f-4d91-857b-32fcd7c0bc14",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 157,
+    "exact_hit": 28,
+    "miss": 37,
+    "same_family_hit": 51,
+    "skip": 10
+  }
+}

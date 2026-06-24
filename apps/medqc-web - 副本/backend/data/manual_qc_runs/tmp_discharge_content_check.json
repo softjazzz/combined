@@ -1,0 +1,548 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T09:44:53.592955",
+  "run_finished_at": "2026-04-24T09:45:00.635707",
+  "template_count": 4,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 2,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 2,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_discharge_content_death_v1_defect.json",
+      "issue_type": "Z05_discharge_content",
+      "display_name": "出院记录内容-死亡记录边界",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-119"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P105D",
+        "visit_id": "SYN-RUN-105D",
+        "mr_no": "SYN0105D",
+        "patient_name": "合成患者戊",
+        "gender": "男",
+        "age": 74,
+        "department": "重症医学科"
+      },
+      "elapsed_seconds": 1.499,
+      "total_tokens": 798,
+      "prompt_tokens": 650,
+      "completion_tokens": 148,
+      "api_time": 1.495,
+      "packs": [
+        {
+          "pack_id": "discharge_content",
+          "document_type": "出院记录",
+          "rule_ids": [
+            "SC-119"
+          ],
+          "tokens_used": 798,
+          "prompt_tokens": 650,
+          "completion_tokens": 148,
+          "api_time": 1.4953639507293701
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-119",
+          "rule_name": "死亡记录缺项或内容错误【入院日期、死亡时间、入院情况、入院诊断、诊疗经过(重点记录病情演变、抢救经过",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "死亡记录缺失入院日期、入院情况、入院诊断及诊疗经过等核心内容。",
+          "evidence": "转归：死亡。死亡时间：2026-04-05 21:16。其余未记载。",
+          "suggestion": "补充完整入院信息、诊断依据及抢救诊疗经过。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-119\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"死亡记录缺失入院日期、入院情况、入院诊断及诊疗经过等核心内容。\",\n      \"evidence\": \"转归：死亡。死亡时间：2026-04-05 21:16。其余未记载。\",\n      \"suggestion\": \"补充完整入院信息、诊断依据及抢救诊疗经过。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            34
+          ],
+          "metadata": {
+            "tokens_used": 798,
+            "prompt_tokens": 650,
+            "completion_tokens": 148,
+            "input_tokens": 650,
+            "output_tokens": 148,
+            "api_time": 1.4953639507293701,
+            "first_result_latency": 1.4953639507293701,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "discharge_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 85
+          },
+          "target_document_type": "出院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-119": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-119": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_discharge_content_death_v1_pass.json",
+      "issue_type": "Z05_discharge_content",
+      "display_name": "出院记录内容-死亡记录边界",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-119"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P105D",
+        "visit_id": "SYN-RUN-105D",
+        "mr_no": "SYN0105D",
+        "patient_name": "合成患者戊",
+        "gender": "男",
+        "age": 74,
+        "department": "重症医学科"
+      },
+      "elapsed_seconds": 1.496,
+      "total_tokens": 1073,
+      "prompt_tokens": 942,
+      "completion_tokens": 131,
+      "api_time": 1.496,
+      "packs": [
+        {
+          "pack_id": "discharge_content",
+          "document_type": "出院记录",
+          "rule_ids": [
+            "SC-119"
+          ],
+          "tokens_used": 1073,
+          "prompt_tokens": 942,
+          "completion_tokens": 131,
+          "api_time": 1.496199369430542
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-119",
+          "rule_name": "死亡记录缺项或内容错误【入院日期、死亡时间、入院情况、入院诊断、诊疗经过(重点记录病情演变、抢救经过",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "死亡记录要素齐全，内容完整准确。",
+          "evidence": "入院日期：2026-04-01。死亡时间：2026-04-05 21:16。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-119\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"死亡记录要素齐全，内容完整准确。\",\n      \"evidence\": \"入院日期：2026-04-01。死亡时间：2026-04-05 21:16。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            6,
+            44
+          ],
+          "metadata": {
+            "tokens_used": 1073,
+            "prompt_tokens": 942,
+            "completion_tokens": 131,
+            "input_tokens": 942,
+            "output_tokens": 131,
+            "api_time": 1.496199369430542,
+            "first_result_latency": 1.496199369430542,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "discharge_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 448
+          },
+          "target_document_type": "出院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-119": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_discharge_content_v1_defect.json",
+      "issue_type": "Z05_discharge_content",
+      "display_name": "出院记录内容",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-118",
+        "SC-123"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P105",
+        "visit_id": "SYN-RUN-105",
+        "mr_no": "SYN0105",
+        "patient_name": "合成患者戊",
+        "gender": "男",
+        "age": 67,
+        "department": "心内科"
+      },
+      "elapsed_seconds": 1.748,
+      "total_tokens": 1057,
+      "prompt_tokens": 823,
+      "completion_tokens": 234,
+      "api_time": 1.748,
+      "packs": [
+        {
+          "pack_id": "discharge_content",
+          "document_type": "出院记录",
+          "rule_ids": [
+            "SC-118",
+            "SC-123"
+          ],
+          "tokens_used": 1057,
+          "prompt_tokens": 823,
+          "completion_tokens": 234,
+          "api_time": 1.747901201248169
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-118",
+          "rule_name": "出院记录缺项或内容错误(入院日期、出院日期、入院情况、入院诊断、诊疗经过、出院情况、出院医嘱、医师签",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "出院记录诊疗经过、出院医嘱及医师签名缺失。",
+          "evidence": "诊疗经过：治疗后好转。",
+          "suggestion": "补充详细诊疗经过、出院医嘱及医师签名。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-118\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"出院记录诊疗经过、出院医嘱及医师签名缺失。\",\n      \"evidence\": \"诊疗经过：治疗后好转。\",\n      \"suggestion\": \"补充详细诊疗经过、出院医嘱及医师签名。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-123\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"出院带药仅注明数量，缺药品名称、剂量等详情。\",\n      \"evidence\": \"出院带药：带药3种。\",\n      \"suggestion\": \"补充具体药品名称、剂量、途径及时间。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            41,
+            52
+          ],
+          "metadata": {
+            "tokens_used": 528,
+            "prompt_tokens": 411,
+            "completion_tokens": 117,
+            "input_tokens": 411,
+            "output_tokens": 117,
+            "api_time": 0.8739506006240845,
+            "first_result_latency": 1.747901201248169,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "discharge_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 78
+          },
+          "target_document_type": "出院记录"
+        },
+        {
+          "rule_id": "SC-123",
+          "rule_name": "出院带药不详细(无药品名称、用药剂量、给药途径、用药时间，或药名、剂量写错)",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "出院带药仅注明数量，缺药品名称、剂量等详情。",
+          "evidence": "出院带药：带药3种。",
+          "suggestion": "补充具体药品名称、剂量、途径及时间。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-118\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"出院记录诊疗经过、出院医嘱及医师签名缺失。\",\n      \"evidence\": \"诊疗经过：治疗后好转。\",\n      \"suggestion\": \"补充详细诊疗经过、出院医嘱及医师签名。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-123\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"出院带药仅注明数量，缺药品名称、剂量等详情。\",\n      \"evidence\": \"出院带药：带药3种。\",\n      \"suggestion\": \"补充具体药品名称、剂量、途径及时间。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            60,
+            70
+          ],
+          "metadata": {
+            "tokens_used": 528,
+            "prompt_tokens": 411,
+            "completion_tokens": 117,
+            "input_tokens": 411,
+            "output_tokens": 117,
+            "api_time": 0.8739506006240845,
+            "first_result_latency": 1.747901201248169,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "discharge_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 78
+          },
+          "target_document_type": "出院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-118": "non_compliant",
+          "SC-123": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-118": "non_compliant",
+          "SC-123": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_discharge_content_v1_pass.json",
+      "issue_type": "Z05_discharge_content",
+      "display_name": "出院记录内容",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-118",
+        "SC-123"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P105",
+        "visit_id": "SYN-RUN-105",
+        "mr_no": "SYN0105",
+        "patient_name": "合成患者戊",
+        "gender": "男",
+        "age": 67,
+        "department": "心内科"
+      },
+      "elapsed_seconds": 1.93,
+      "total_tokens": 1306,
+      "prompt_tokens": 1049,
+      "completion_tokens": 257,
+      "api_time": 1.928,
+      "packs": [
+        {
+          "pack_id": "discharge_content",
+          "document_type": "出院记录",
+          "rule_ids": [
+            "SC-118",
+            "SC-123"
+          ],
+          "tokens_used": 1306,
+          "prompt_tokens": 1049,
+          "completion_tokens": 257,
+          "api_time": 1.928375244140625
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-118",
+          "rule_name": "出院记录缺项或内容错误(入院日期、出院日期、入院情况、入院诊断、诊疗经过、出院情况、出院医嘱、医师签",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "出院记录要素完整，内容准确。",
+          "evidence": "【出院记录】医师签名：张医生",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-118\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"出院记录要素完整，内容准确。\",\n      \"evidence\": \"入院日期：2026-04-01。出院日期：2026-04-08。医师签名：张医生。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-123\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"出院带药信息详细，要素齐全。\",\n      \"evidence\": \"阿司匹林肠溶片100mg 口服 每日1次 早餐后 14天；瑞舒伐他汀10mg 口服 每晚1次 14天。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            321,
+            329
+          ],
+          "metadata": {
+            "tokens_used": 653,
+            "prompt_tokens": 524,
+            "completion_tokens": 128,
+            "input_tokens": 524,
+            "output_tokens": 128,
+            "api_time": 0.9641876220703125,
+            "first_result_latency": 1.928375244140625,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "discharge_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 283
+          },
+          "target_document_type": "出院记录"
+        },
+        {
+          "rule_id": "SC-123",
+          "rule_name": "出院带药不详细(无药品名称、用药剂量、给药途径、用药时间，或药名、剂量写错)",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "出院带药信息详细，要素齐全。",
+          "evidence": "【出院记录】出院医嘱：继续阿司匹林肠溶片100mg 口服 每日1次 早餐后 14天",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-118\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"出院记录要素完整，内容准确。\",\n      \"evidence\": \"入院日期：2026-04-01。出院日期：2026-04-08。医师签名：张医生。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-123\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"出院带药信息详细，要素齐全。\",\n      \"evidence\": \"阿司匹林肠溶片100mg 口服 每日1次 早餐后 14天；瑞舒伐他汀10mg 口服 每晚1次 14天。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            131,
+            166
+          ],
+          "metadata": {
+            "tokens_used": 653,
+            "prompt_tokens": 524,
+            "completion_tokens": 128,
+            "input_tokens": 524,
+            "output_tokens": 128,
+            "api_time": 0.9641876220703125,
+            "first_result_latency": 1.928375244140625,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "discharge_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 283
+          },
+          "target_document_type": "出院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-118": "compliant",
+          "SC-123": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ],
+  "bucket_filters": [
+    "discharge_content"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 3,
+    "stabilized": 3,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-118",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_discharge_content_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_discharge_content_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-119",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_discharge_content_death_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_discharge_content_death_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-123",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_discharge_content_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_discharge_content_v1_defect.json"
+        ],
+        "stabilized": true
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

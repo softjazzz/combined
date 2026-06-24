@@ -1,0 +1,2446 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "deepseek",
+  "model": "deepseek-v3.2",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T20:35:29.639387",
+  "run_finished_at": "2026-04-22T20:37:54.168412",
+  "template_count": 21,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 0,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 4,
+    "pass_regression": 17
+  },
+  "results": [
+    {
+      "template_file": "running_admission_consistency_conflict_v1_pass.json",
+      "issue_type": "A1_admission_past_history_conflict",
+      "display_name": "既往史与现病史前后矛盾",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-010",
+        "SC-019",
+        "SC-020"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 11.016,
+      "total_tokens": 1372,
+      "prompt_tokens": 1048,
+      "completion_tokens": 324,
+      "api_time": 11.015,
+      "packs": [
+        {
+          "pack_id": "admission_consistency_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-010",
+            "SC-019",
+            "SC-020"
+          ],
+          "tokens_used": 1372,
+          "prompt_tokens": 1048,
+          "completion_tokens": 324,
+          "api_time": 11.014967203140259
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-010",
+          "rule_name": "现病史与主诉不符",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "现病史与主诉内容基本一致，但现病史未明确描述腹痛性质与主诉的对应关系。",
+          "evidence": "主诉：反复右上腹痛1周。现病史：患者1周前出现右上腹阵发性绞痛。",
+          "suggestion": "在现病史中明确描述腹痛性质与主诉的对应关系。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"现病史与主诉内容基本一致，但现病史未明确描述腹痛性质与主诉的对应关系。\",\n      \"evidence\": \"主诉：反复右上腹痛1周。现病史：患者1周前出现右上腹阵发性绞痛。\",\n      \"suggestion\": \"在现病史中明确描述腹痛性质与主诉的对应关系。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院前辅助检查已记录，关键结果描述清晰。\",\n      \"evidence\": \"于外院行腹部超声提示胆囊结石。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"入院诊断存在，但次要诊断如慢性胆囊炎的证据描述不充分。\",\n      \"evidence\": \"入院诊断：胆囊结石伴慢性胆囊炎。\",\n      \"suggestion\": \"补充慢性胆囊炎的诊断依据。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 457,
+            "prompt_tokens": 349,
+            "completion_tokens": 108,
+            "input_tokens": 349,
+            "output_tokens": 108,
+            "api_time": 3.6716557343800864,
+            "first_result_latency": 11.014967203140259,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 305
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-019",
+          "rule_name": "入院前若有辅助检查未记录或记录不完善或抄写不准确或描述不清",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "入院前辅助检查已记录，关键结果描述清晰。",
+          "evidence": "于外院行腹部超声提示胆囊结石。",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"现病史与主诉内容基本一致，但现病史未明确描述腹痛性质与主诉的对应关系。\",\n      \"evidence\": \"主诉：反复右上腹痛1周。现病史：患者1周前出现右上腹阵发性绞痛。\",\n      \"suggestion\": \"在现病史中明确描述腹痛性质与主诉的对应关系。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院前辅助检查已记录，关键结果描述清晰。\",\n      \"evidence\": \"于外院行腹部超声提示胆囊结石。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"入院诊断存在，但次要诊断如慢性胆囊炎的证据描述不充分。\",\n      \"evidence\": \"入院诊断：胆囊结石伴慢性胆囊炎。\",\n      \"suggestion\": \"补充慢性胆囊炎的诊断依据。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 457,
+            "prompt_tokens": 349,
+            "completion_tokens": 108,
+            "input_tokens": 349,
+            "output_tokens": 108,
+            "api_time": 3.6716557343800864,
+            "first_result_latency": 11.014967203140259,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 305
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-020",
+          "rule_name": "入院记录无入院诊断或主次顺序错误或次要诊断有重要遗漏",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "入院诊断存在，但次要诊断如慢性胆囊炎的证据描述不充分。",
+          "evidence": "入院诊断：胆囊结石伴慢性胆囊炎。",
+          "suggestion": "补充慢性胆囊炎的诊断依据。",
+          "confidence": 0.6,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-010\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"现病史与主诉内容基本一致，但现病史未明确描述腹痛性质与主诉的对应关系。\",\n      \"evidence\": \"主诉：反复右上腹痛1周。现病史：患者1周前出现右上腹阵发性绞痛。\",\n      \"suggestion\": \"在现病史中明确描述腹痛性质与主诉的对应关系。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"入院前辅助检查已记录，关键结果描述清晰。\",\n      \"evidence\": \"于外院行腹部超声提示胆囊结石。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"入院诊断存在，但次要诊断如慢性胆囊炎的证据描述不充分。\",\n      \"evidence\": \"入院诊断：胆囊结石伴慢性胆囊炎。\",\n      \"suggestion\": \"补充慢性胆囊炎的诊断依据。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            183,
+            199
+          ],
+          "metadata": {
+            "tokens_used": 457,
+            "prompt_tokens": 349,
+            "completion_tokens": 108,
+            "input_tokens": 349,
+            "output_tokens": 108,
+            "api_time": 3.6716557343800864,
+            "first_result_latency": 11.014967203140259,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 305
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-010": "uncertain",
+          "SC-019": "compliant",
+          "SC-020": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-010": "uncertain",
+          "SC-020": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_admission_missing_exam_v1_pass.json",
+      "issue_type": "A2_admission_missing_special_exam",
+      "display_name": "入院记录缺少专科检查或关键体征",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-011",
+        "SC-012"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 8.909,
+      "total_tokens": 1187,
+      "prompt_tokens": 932,
+      "completion_tokens": 255,
+      "api_time": 8.909,
+      "packs": [
+        {
+          "pack_id": "admission_content_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-011",
+            "SC-012"
+          ],
+          "tokens_used": 1187,
+          "prompt_tokens": 932,
+          "completion_tokens": 255,
+          "api_time": 8.908799409866333
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-011",
+          "rule_name": "未描述与本次入院有关的重要的阴性症状以及与鉴别诊断有关的阳性症状",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "现病史及专科查体对关键阴性症状描述不充分。",
+          "evidence": "现病史提及“无发热，无腹痛，无黑便，无明显消瘦”，专科查体“指检未触及肿块，指套未染血”。",
+          "suggestion": "补充与鉴别诊断相关的阴性症状描述。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"现病史及专科查体对关键阴性症状描述不充分。\",\n      \"evidence\": \"现病史提及“无发热，无腹痛，无黑便，无明显消瘦”，专科查体“指检未触及肿块，指套未染血”。\",\n      \"suggestion\": \"补充与鉴别诊断相关的阴性症状描述。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"发病后至入院前的检查治疗经过描述不完整。\",\n      \"evidence\": \"现病史提及“于门诊行肛肠镜检查提示混合痔，未见直肠占位；曾外用痔疮膏及温水坐浴3天，症状略缓解”。\",\n      \"suggestion\": \"补充门诊检查治疗的详细经过及效果。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 593,
+            "prompt_tokens": 466,
+            "completion_tokens": 127,
+            "input_tokens": 466,
+            "output_tokens": 127,
+            "api_time": 4.4543997049331665,
+            "first_result_latency": 8.908799409866333,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 222
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-012",
+          "rule_name": "未描述发病后到入院前，在院内、外接受检查与治疗的详细经过及效果或欠缺",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "发病后至入院前的检查治疗经过描述不完整。",
+          "evidence": "现病史提及“于门诊行肛肠镜检查提示混合痔，未见直肠占位；曾外用痔疮膏及温水坐浴3天，症状略缓解”。",
+          "suggestion": "补充门诊检查治疗的详细经过及效果。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"现病史及专科查体对关键阴性症状描述不充分。\",\n      \"evidence\": \"现病史提及“无发热，无腹痛，无黑便，无明显消瘦”，专科查体“指检未触及肿块，指套未染血”。\",\n      \"suggestion\": \"补充与鉴别诊断相关的阴性症状描述。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-012\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"发病后至入院前的检查治疗经过描述不完整。\",\n      \"evidence\": \"现病史提及“于门诊行肛肠镜检查提示混合痔，未见直肠占位；曾外用痔疮膏及温水坐浴3天，症状略缓解”。\",\n      \"suggestion\": \"补充门诊检查治疗的详细经过及效果。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 593,
+            "prompt_tokens": 466,
+            "completion_tokens": 127,
+            "input_tokens": 466,
+            "output_tokens": 127,
+            "api_time": 4.4543997049331665,
+            "first_result_latency": 8.908799409866333,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 222
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-011": "uncertain",
+          "SC-012": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-011": "uncertain",
+          "SC-012": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_admission_present_history_incomplete_v1_pass.json",
+      "issue_type": "A3_admission_present_history_incomplete",
+      "display_name": "现病史记录不全",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-008",
+        "SC-009",
+        "SC-018"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 10.793,
+      "total_tokens": 1336,
+      "prompt_tokens": 1011,
+      "completion_tokens": 325,
+      "api_time": 10.792,
+      "packs": [
+        {
+          "pack_id": "admission_content_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-008",
+            "SC-009",
+            "SC-018"
+          ],
+          "tokens_used": 1336,
+          "prompt_tokens": 1011,
+          "completion_tokens": 325,
+          "api_time": 10.792186975479126
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-008",
+          "rule_name": "主诉书写不规范或不能导出第一诊断。",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "主诉内容过于简单，无法直接导出第一诊断。",
+          "evidence": "主诉：发热咳嗽3天。入院诊断：肺部感染。",
+          "suggestion": "补充主诉症状的部位、性质。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"主诉内容过于简单，无法直接导出第一诊断。\",\n      \"evidence\": \"主诉：发热咳嗽3天。入院诊断：肺部感染。\",\n      \"suggestion\": \"补充主诉症状的部位、性质。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"现病史对主要症状的描述不够详细。\",\n      \"evidence\": \"现病史：患者3天前受凉后出现发热，最高38.6℃，伴咳嗽、咳黄痰。\",\n      \"suggestion\": \"补充咳嗽频率、痰量及性质变化。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"体格检查对阳性体征的描述可能不够充分。\",\n      \"evidence\": \"体格检查：双肺呼吸音稍粗，右下肺可闻及少许湿啰音。\",\n      \"suggestion\": \"补充湿啰音的具体范围与性质。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 445,
+            "prompt_tokens": 337,
+            "completion_tokens": 108,
+            "input_tokens": 337,
+            "output_tokens": 108,
+            "api_time": 3.597395658493042,
+            "first_result_latency": 10.792186975479126,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 244
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-009",
+          "rule_name": "现病史记录不全或描述不清(包括发病的时间､起病缓急､主要症状､一般情况)。",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "现病史对主要症状的描述不够详细。",
+          "evidence": "现病史：患者3天前受凉后出现发热，最高38.6℃，伴咳嗽、咳黄痰。",
+          "suggestion": "补充咳嗽频率、痰量及性质变化。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"主诉内容过于简单，无法直接导出第一诊断。\",\n      \"evidence\": \"主诉：发热咳嗽3天。入院诊断：肺部感染。\",\n      \"suggestion\": \"补充主诉症状的部位、性质。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"现病史对主要症状的描述不够详细。\",\n      \"evidence\": \"现病史：患者3天前受凉后出现发热，最高38.6℃，伴咳嗽、咳黄痰。\",\n      \"suggestion\": \"补充咳嗽频率、痰量及性质变化。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"体格检查对阳性体征的描述可能不够充分。\",\n      \"evidence\": \"体格检查：双肺呼吸音稍粗，右下肺可闻及少许湿啰音。\",\n      \"suggestion\": \"补充湿啰音的具体范围与性质。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 445,
+            "prompt_tokens": 337,
+            "completion_tokens": 108,
+            "input_tokens": 337,
+            "output_tokens": 108,
+            "api_time": 3.597395658493042,
+            "first_result_latency": 10.792186975479126,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 244
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-018",
+          "rule_name": "体格检查遗漏主要阳性体征及有鉴别诊断意义的阴性体征，或记录不准确",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "体格检查对阳性体征的描述可能不够充分。",
+          "evidence": "体格检查：双肺呼吸音稍粗，右下肺可闻及少许湿啰音。",
+          "suggestion": "补充湿啰音的具体范围与性质。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"主诉内容过于简单，无法直接导出第一诊断。\",\n      \"evidence\": \"主诉：发热咳嗽3天。入院诊断：肺部感染。\",\n      \"suggestion\": \"补充主诉症状的部位、性质。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"现病史对主要症状的描述不够详细。\",\n      \"evidence\": \"现病史：患者3天前受凉后出现发热，最高38.6℃，伴咳嗽、咳黄痰。\",\n      \"suggestion\": \"补充咳嗽频率、痰量及性质变化。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-018\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"体格检查对阳性体征的描述可能不够充分。\",\n      \"evidence\": \"体格检查：双肺呼吸音稍粗，右下肺可闻及少许湿啰音。\",\n      \"suggestion\": \"补充湿啰音的具体范围与性质。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 445,
+            "prompt_tokens": 337,
+            "completion_tokens": 108,
+            "input_tokens": 337,
+            "output_tokens": 108,
+            "api_time": 3.597395658493042,
+            "first_result_latency": 10.792186975479126,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 244
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-008": "uncertain",
+          "SC-009": "uncertain",
+          "SC-018": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-008": "uncertain",
+          "SC-009": "uncertain",
+          "SC-018": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_first_course_diff_diagnosis_insufficient_v1_pass.json",
+      "issue_type": "B1_first_course_diff_diagnosis_insufficient",
+      "display_name": "首次病程记录鉴别诊断不全面",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-026"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 5.913,
+      "total_tokens": 819,
+      "prompt_tokens": 678,
+      "completion_tokens": 141,
+      "api_time": 5.912,
+      "packs": [
+        {
+          "pack_id": "first_course_reasoning",
+          "document_type": "首次病程记录",
+          "rule_ids": [
+            "SC-026"
+          ],
+          "tokens_used": 819,
+          "prompt_tokens": 678,
+          "completion_tokens": 141,
+          "api_time": 5.912316799163818
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-026",
+          "rule_name": "首次病程记录诊断依据或鉴别诊断不充分、不全面",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "鉴别诊断提及了具体病种，但缺乏对“直肠肿瘤”的具体排除依据。",
+          "evidence": "鉴别诊断：与肛裂、直肠息肉、直肠肿瘤相鉴别；患者无排便习惯改变，指检未及肿块，肛镜见痔核，暂不支持肿瘤。",
+          "suggestion": "补充直肠肿瘤的具体排除依据。",
+          "confidence": 0.7,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-026\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"鉴别诊断提及了具体病种，但缺乏对“直肠肿瘤”的具体排除依据。\",\n      \"evidence\": \"鉴别诊断：与肛裂、直肠息肉、直肠肿瘤相鉴别；患者无排便习惯改变，指检未及肿块，肛镜见痔核，暂不支持肿瘤。\",\n      \"suggestion\": \"补充直肠肿瘤的具体排除依据。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            44,
+            96
+          ],
+          "metadata": {
+            "tokens_used": 819,
+            "prompt_tokens": 678,
+            "completion_tokens": 141,
+            "input_tokens": 678,
+            "output_tokens": 141,
+            "api_time": 5.912316799163818,
+            "first_result_latency": 5.912316799163818,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_reasoning",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 172
+          },
+          "target_document_type": "首次病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-026": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-026": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_first_course_features_not_summarized_v1_pass.json",
+      "issue_type": "B2_first_course_features_not_summarized",
+      "display_name": "病例特点未提炼",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-023",
+        "SC-024"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 7.01,
+      "total_tokens": 1035,
+      "prompt_tokens": 837,
+      "completion_tokens": 198,
+      "api_time": 7.004,
+      "packs": [
+        {
+          "pack_id": "first_course_features",
+          "document_type": "首次病程记录",
+          "rule_ids": [
+            "SC-023",
+            "SC-024"
+          ],
+          "tokens_used": 1035,
+          "prompt_tokens": 837,
+          "completion_tokens": 198,
+          "api_time": 7.004303216934204
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-023",
+          "rule_name": "首次病程记录无病例特点",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "首次病程记录已包含病例特点部分。",
+          "evidence": "病例特点：1. 中年男性，慢性起病。2. 以上腹痛2月为主要表现...",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-023\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"首次病程记录已包含病例特点部分。\",\n      \"evidence\": \"病例特点：1. 中年男性，慢性起病。2. 以上腹痛2月为主要表现...\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-024\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病例特点已进行归纳提炼，并得出诊断导向性总结。\",\n      \"evidence\": \"结合病史和检查结果支持胃窦溃疡诊断。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 517,
+            "prompt_tokens": 418,
+            "completion_tokens": 99,
+            "input_tokens": 418,
+            "output_tokens": 99,
+            "api_time": 3.502151608467102,
+            "first_result_latency": 7.004303216934204,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_features",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 172
+          },
+          "target_document_type": "首次病程记录"
+        },
+        {
+          "rule_id": "SC-024",
+          "rule_name": "首次病程记录病例特点未归纳提炼或不全面",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病例特点已进行归纳提炼，并得出诊断导向性总结。",
+          "evidence": "结合病史和检查结果支持胃窦溃疡诊断。",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-023\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"首次病程记录已包含病例特点部分。\",\n      \"evidence\": \"病例特点：1. 中年男性，慢性起病。2. 以上腹痛2月为主要表现...\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-024\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病例特点已进行归纳提炼，并得出诊断导向性总结。\",\n      \"evidence\": \"结合病史和检查结果支持胃窦溃疡诊断。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            95,
+            113
+          ],
+          "metadata": {
+            "tokens_used": 517,
+            "prompt_tokens": 418,
+            "completion_tokens": 99,
+            "input_tokens": 418,
+            "output_tokens": 99,
+            "api_time": 3.502151608467102,
+            "first_result_latency": 7.004303216934204,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_features",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 172
+          },
+          "target_document_type": "首次病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-023": "compliant",
+          "SC-024": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_daily_course_abnormal_results_no_analysis_v1_pass.json",
+      "issue_type": "C1_daily_course_abnormal_results_no_analysis",
+      "display_name": "异常检查结果未分析",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-033",
+        "SC-036"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 8.12,
+      "total_tokens": 1023,
+      "prompt_tokens": 786,
+      "completion_tokens": 237,
+      "api_time": 8.12,
+      "packs": [
+        {
+          "pack_id": "daily_course_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-033",
+            "SC-036"
+          ],
+          "tokens_used": 1023,
+          "prompt_tokens": 786,
+          "completion_tokens": 237,
+          "api_time": 8.120463848114014
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-033",
+          "rule_name": "病程记录中对病情变化无分析判断或无具体处理意见",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录对病情变化有分析判断和具体处理意见。",
+          "evidence": "今日复查肾功能示肌酐156umol/L，较昨日升高，考虑肾前性因素可能，已调整补液方案并暂停肾毒性药物。",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-033\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录对病情变化有分析判断和具体处理意见。\",\n      \"evidence\": \"今日复查肾功能示肌酐156umol/L，较昨日升高，考虑肾前性因素可能，已调整补液方案并暂停肾毒性药物。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录提及重要辅助检查结果，并对异常结果有分析及处理意见。\",\n      \"evidence\": \"今日复查肾功能示肌酐156umol/L，较昨日升高，考虑肾前性因素可能，已调整补液方案并暂停肾毒性药物。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 511,
+            "prompt_tokens": 393,
+            "completion_tokens": 118,
+            "input_tokens": 393,
+            "output_tokens": 118,
+            "api_time": 4.060231924057007,
+            "first_result_latency": 8.120463848114014,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 97
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-036",
+          "rule_name": "无重要辅助检查结果、无对异常检查结果的分析及处理意见",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录提及重要辅助检查结果，并对异常结果有分析及处理意见。",
+          "evidence": "今日复查肾功能示肌酐156umol/L，较昨日升高，考虑肾前性因素可能，已调整补液方案并暂停肾毒性药物。",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-033\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录对病情变化有分析判断和具体处理意见。\",\n      \"evidence\": \"今日复查肾功能示肌酐156umol/L，较昨日升高，考虑肾前性因素可能，已调整补液方案并暂停肾毒性药物。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录提及重要辅助检查结果，并对异常结果有分析及处理意见。\",\n      \"evidence\": \"今日复查肾功能示肌酐156umol/L，较昨日升高，考虑肾前性因素可能，已调整补液方案并暂停肾毒性药物。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 511,
+            "prompt_tokens": 393,
+            "completion_tokens": 118,
+            "input_tokens": 393,
+            "output_tokens": 118,
+            "api_time": 4.060231924057007,
+            "first_result_latency": 8.120463848114014,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 97
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-033": "compliant",
+          "SC-036": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_daily_course_antibiotic_not_documented_v1_pass.json",
+      "issue_type": "C2_daily_course_antibiotic_not_documented",
+      "display_name": "抗菌药物使用未在病程中记录",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-032",
+        "SC-033"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 7.518,
+      "total_tokens": 991,
+      "prompt_tokens": 777,
+      "completion_tokens": 214,
+      "api_time": 7.531,
+      "packs": [
+        {
+          "pack_id": "daily_course_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-032",
+            "SC-033"
+          ],
+          "tokens_used": 991,
+          "prompt_tokens": 777,
+          "completion_tokens": 214,
+          "api_time": 7.531116962432861
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-032",
+          "rule_name": "病程记录重要病情变化(症状及体征)未记录或记录不全",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程记录仅提及发热，未描述具体症状体征变化。",
+          "evidence": "患者今日仍发热",
+          "suggestion": "补充具体体温、咳嗽、咳痰等变化。",
+          "confidence": 0.9,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-032\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程记录仅提及发热，未描述具体症状体征变化。\",\n      \"evidence\": \"患者今日仍发热\",\n      \"suggestion\": \"补充具体体温、咳嗽、咳痰等变化。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-033\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"对检查结果有分析判断并给出了具体处理意见。\",\n      \"evidence\": \"痰培养回报肺炎克雷伯菌，对哌拉西林他唑巴坦敏感，继续该抗感染方案并观察体温变化\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            7
+          ],
+          "metadata": {
+            "tokens_used": 495,
+            "prompt_tokens": 388,
+            "completion_tokens": 107,
+            "input_tokens": 388,
+            "output_tokens": 107,
+            "api_time": 3.7655584812164307,
+            "first_result_latency": 7.531116962432861,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 95
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-033",
+          "rule_name": "病程记录中对病情变化无分析判断或无具体处理意见",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "对检查结果有分析判断并给出了具体处理意见。",
+          "evidence": "痰培养回报肺炎克雷伯菌，对哌拉西林他唑巴坦敏感，继续该抗感染方案并观察体温变化",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-032\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程记录仅提及发热，未描述具体症状体征变化。\",\n      \"evidence\": \"患者今日仍发热\",\n      \"suggestion\": \"补充具体体温、咳嗽、咳痰等变化。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-033\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"对检查结果有分析判断并给出了具体处理意见。\",\n      \"evidence\": \"痰培养回报肺炎克雷伯菌，对哌拉西林他唑巴坦敏感，继续该抗感染方案并观察体温变化\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            8,
+            47
+          ],
+          "metadata": {
+            "tokens_used": 495,
+            "prompt_tokens": 388,
+            "completion_tokens": 107,
+            "input_tokens": 388,
+            "output_tokens": 107,
+            "api_time": 3.7655584812164307,
+            "first_result_latency": 7.531116962432861,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 95
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-032": "non_compliant",
+          "SC-033": "compliant"
+        },
+        "unexpected_hits": {
+          "SC-032": "non_compliant"
+        }
+      }
+    },
+    {
+      "template_file": "running_consultation_execution_generic_phrase_v1_pass.json",
+      "issue_type": "D1_consultation_execution_generic_phrase",
+      "display_name": "会诊执行记录仅写遵会诊意见执行",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-070"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P001",
+        "visit_id": "SYN-RUN-001",
+        "mr_no": "SYN0001",
+        "patient_name": "合成患者",
+        "gender": "男",
+        "age": 56,
+        "department": "普通外科"
+      },
+      "elapsed_seconds": 6.0,
+      "total_tokens": 786,
+      "prompt_tokens": 658,
+      "completion_tokens": 128,
+      "api_time": 6.0,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-070"
+          ],
+          "tokens_used": 786,
+          "prompt_tokens": 658,
+          "completion_tokens": 128,
+          "api_time": 5.999682426452637
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录已明确记录会诊意见采纳及具体执行计划。",
+          "evidence": "主文书：遵感染科会诊建议，已加做降钙素原，抗感染方案调整为头孢哌酮舒巴坦，计划明日复查胸部CT。",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录已明确记录会诊意见采纳及具体执行计划。\",\n      \"evidence\": \"主文书：遵感染科会诊建议，已加做降钙素原，抗感染方案调整为头孢哌酮舒巴坦，计划明日复查胸部CT。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 786,
+            "prompt_tokens": 658,
+            "completion_tokens": 128,
+            "input_tokens": 658,
+            "output_tokens": 128,
+            "api_time": 5.999682426452637,
+            "first_result_latency": 5.999682426452637,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 132
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-070": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_first_course_basis_not_structured_v1_pass.json",
+      "issue_type": "B3_first_course_basis_not_structured",
+      "display_name": "诊断依据书写不规范",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-025",
+        "SC-026"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-009",
+        "mr_no": "SYN0009",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 9.087,
+      "total_tokens": 1184,
+      "prompt_tokens": 917,
+      "completion_tokens": 267,
+      "api_time": 9.086,
+      "packs": [
+        {
+          "pack_id": "first_course_reasoning",
+          "document_type": "首次病程记录",
+          "rule_ids": [
+            "SC-025",
+            "SC-026"
+          ],
+          "tokens_used": 1184,
+          "prompt_tokens": 917,
+          "completion_tokens": 267,
+          "api_time": 9.086382389068604
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-025",
+          "rule_name": "首次病程记录无诊断依据、鉴别诊断、诊疗计划任意一项",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "首次病程记录包含诊断依据、鉴别诊断和诊疗计划三项。",
+          "evidence": "诊断依据：①反复上腹痛、餐后加重伴反酸嗳气；②胃镜提示胃窦溃疡；③查体上腹轻压痛。鉴别诊断：需与功能性消化不良、胃癌相鉴别。诊疗计划：予抑酸护胃、完善幽门螺杆菌...",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-025\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"首次病程记录包含诊断依据、鉴别诊断和诊疗计划三项。\",\n      \"evidence\": \"诊断依据：①反复上腹痛、餐后加重伴反酸嗳气；②胃镜提示胃窦溃疡；③查体上腹轻压痛。鉴别诊断：需与功能性消化不良、胃癌相鉴别。诊疗计划：予抑酸护胃、完善幽门螺杆菌检测。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-026\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"鉴别诊断虽有病名，但缺乏具体排除依据的推理。\",\n      \"evidence\": \"鉴别诊断：需与功能性消化不良、胃癌相鉴别，目前结合胃镜结果及临床表现暂不支持恶性病变。\",\n      \"suggestion\": \"补充具体排除功能性消化不良和胃癌的依据。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 592,
+            "prompt_tokens": 458,
+            "completion_tokens": 133,
+            "input_tokens": 458,
+            "output_tokens": 133,
+            "api_time": 4.543191194534302,
+            "first_result_latency": 9.086382389068604,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_reasoning",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 249
+          },
+          "target_document_type": "首次病程记录"
+        },
+        {
+          "rule_id": "SC-026",
+          "rule_name": "首次病程记录诊断依据或鉴别诊断不充分、不全面",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "鉴别诊断虽有病名，但缺乏具体排除依据的推理。",
+          "evidence": "鉴别诊断：需与功能性消化不良、胃癌相鉴别，目前结合胃镜结果及临床表现暂不支持恶性病变。",
+          "suggestion": "补充具体排除功能性消化不良和胃癌的依据。",
+          "confidence": 0.9,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-025\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"首次病程记录包含诊断依据、鉴别诊断和诊疗计划三项。\",\n      \"evidence\": \"诊断依据：①反复上腹痛、餐后加重伴反酸嗳气；②胃镜提示胃窦溃疡；③查体上腹轻压痛。鉴别诊断：需与功能性消化不良、胃癌相鉴别。诊疗计划：予抑酸护胃、完善幽门螺杆菌检测。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-026\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"鉴别诊断虽有病名，但缺乏具体排除依据的推理。\",\n      \"evidence\": \"鉴别诊断：需与功能性消化不良、胃癌相鉴别，目前结合胃镜结果及临床表现暂不支持恶性病变。\",\n      \"suggestion\": \"补充具体排除功能性消化不良和胃癌的依据。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            83,
+            126
+          ],
+          "metadata": {
+            "tokens_used": 592,
+            "prompt_tokens": 458,
+            "completion_tokens": 133,
+            "input_tokens": 458,
+            "output_tokens": 133,
+            "api_time": 4.543191194534302,
+            "first_result_latency": 9.086382389068604,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_reasoning",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 249
+          },
+          "target_document_type": "首次病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-025": "compliant",
+          "SC-026": "non_compliant"
+        },
+        "unexpected_hits": {
+          "SC-026": "non_compliant"
+        }
+      }
+    },
+    {
+      "template_file": "running_first_course_plan_incomplete_v1_pass.json",
+      "issue_type": "B4_first_course_plan_incomplete",
+      "display_name": "诊疗计划不完整",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-027"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-011",
+        "mr_no": "SYN0011",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 5.263,
+      "total_tokens": 739,
+      "prompt_tokens": 602,
+      "completion_tokens": 137,
+      "api_time": 5.263,
+      "packs": [
+        {
+          "pack_id": "first_course_reasoning",
+          "document_type": "首次病程记录",
+          "rule_ids": [
+            "SC-027"
+          ],
+          "tokens_used": 739,
+          "prompt_tokens": 602,
+          "completion_tokens": 137,
+          "api_time": 5.262845516204834
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-027",
+          "rule_name": "首次病程记录诊疗计划不全面、不具体",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "诊疗计划包含初步措施，但具体性不足，关键信息缺失。",
+          "evidence": "诊疗计划：予抑酸补液、完善血常规肝肾功能及腹部超声检查，动态观察腹痛和体温变化，根据结果调整治疗方案。",
+          "suggestion": "补充具体药物名称、剂量、频次及检查目的。",
+          "confidence": 0.7,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-027\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"诊疗计划包含初步措施，但具体性不足，关键信息缺失。\",\n      \"evidence\": \"诊疗计划：予抑酸补液、完善血常规肝肾功能及腹部超声检查，动态观察腹痛和体温变化，根据结果调整治疗方案。\",\n      \"suggestion\": \"补充具体药物名称、剂量、频次及检查目的。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            59,
+            110
+          ],
+          "metadata": {
+            "tokens_used": 739,
+            "prompt_tokens": 602,
+            "completion_tokens": 137,
+            "input_tokens": 602,
+            "output_tokens": 137,
+            "api_time": 5.262845516204834,
+            "first_result_latency": 5.262845516204834,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_reasoning",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 144
+          },
+          "target_document_type": "首次病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-027": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-027": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_daily_course_overly_brief_v1_pass.json",
+      "issue_type": "C3_daily_course_overly_brief",
+      "display_name": "病程记录过于简略",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-032",
+        "SC-036"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-013",
+        "mr_no": "SYN0013",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 7.592,
+      "total_tokens": 1010,
+      "prompt_tokens": 790,
+      "completion_tokens": 220,
+      "api_time": 7.6,
+      "packs": [
+        {
+          "pack_id": "daily_course_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-032",
+            "SC-036"
+          ],
+          "tokens_used": 1010,
+          "prompt_tokens": 790,
+          "completion_tokens": 220,
+          "api_time": 7.600082635879517
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-032",
+          "rule_name": "病程记录重要病情变化(症状及体征)未记录或记录不全",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录了症状体征的具体变化，未使用套话。",
+          "evidence": "今日患者仍有低热，咳嗽较前减轻，咳痰量减少。胸部听诊湿啰音减少。",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-032\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录了症状体征的具体变化，未使用套话。\",\n      \"evidence\": \"今日患者仍有低热，咳嗽较前减轻，咳痰量减少。胸部听诊湿啰音减少。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"提及检查结果但未提供具体数值，分析处理意见不明确。\",\n      \"evidence\": \"复查血常规白细胞较前下降。考虑抗感染治疗有效，继续原抗感染方案。\",\n      \"suggestion\": \"补充异常检查结果的具体数值。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 505,
+            "prompt_tokens": 395,
+            "completion_tokens": 110,
+            "input_tokens": 395,
+            "output_tokens": 110,
+            "api_time": 3.8000413179397583,
+            "first_result_latency": 7.600082635879517,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 122
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-036",
+          "rule_name": "无重要辅助检查结果、无对异常检查结果的分析及处理意见",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "提及检查结果但未提供具体数值，分析处理意见不明确。",
+          "evidence": "复查血常规白细胞较前下降。考虑抗感染治疗有效，继续原抗感染方案。",
+          "suggestion": "补充异常检查结果的具体数值。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-032\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录了症状体征的具体变化，未使用套话。\",\n      \"evidence\": \"今日患者仍有低热，咳嗽较前减轻，咳痰量减少。胸部听诊湿啰音减少。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"提及检查结果但未提供具体数值，分析处理意见不明确。\",\n      \"evidence\": \"复查血常规白细胞较前下降。考虑抗感染治疗有效，继续原抗感染方案。\",\n      \"suggestion\": \"补充异常检查结果的具体数值。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 505,
+            "prompt_tokens": 395,
+            "completion_tokens": 110,
+            "input_tokens": 395,
+            "output_tokens": 110,
+            "api_time": 3.8000413179397583,
+            "first_result_latency": 7.600082635879517,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 122
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-032": "compliant",
+          "SC-036": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-036": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_consultation_execution_copy_paste_v1_pass.json",
+      "issue_type": "D2_consultation_execution_copy_paste",
+      "display_name": "会诊执行记录复制粘贴严重",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-070"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-015",
+        "mr_no": "SYN0015",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 6.496,
+      "total_tokens": 785,
+      "prompt_tokens": 655,
+      "completion_tokens": 130,
+      "api_time": 6.495,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-070"
+          ],
+          "tokens_used": 785,
+          "prompt_tokens": 655,
+          "completion_tokens": 130,
+          "api_time": 6.49529242515564
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录已体现会诊意见采纳及具体执行动作。",
+          "evidence": "根据呼吸科会诊意见，今日已送检降钙素原，停用原头孢方案，改用左氧氟沙星抗感染，并嘱患者拍背排痰。",
+          "suggestion": "",
+          "confidence": 1.0,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录已体现会诊意见采纳及具体执行动作。\",\n      \"evidence\": \"根据呼吸科会诊意见，今日已送检降钙素原，停用原头孢方案，改用左氧氟沙星抗感染，并嘱患者拍背排痰。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            48
+          ],
+          "metadata": {
+            "tokens_used": 785,
+            "prompt_tokens": 655,
+            "completion_tokens": 130,
+            "input_tokens": 655,
+            "output_tokens": 130,
+            "api_time": 6.49529242515564,
+            "first_result_latency": 6.49529242515564,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 130
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-070": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_consultation_execution_no_specific_actions_v1_pass.json",
+      "issue_type": "D3_consultation_execution_no_specific_actions",
+      "display_name": "会诊执行记录无具体执行情况",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-070"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-017",
+        "mr_no": "SYN0017",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 5.943,
+      "total_tokens": 791,
+      "prompt_tokens": 641,
+      "completion_tokens": 150,
+      "api_time": 5.942,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-070"
+          ],
+          "tokens_used": 791,
+          "prompt_tokens": 641,
+          "completion_tokens": 150,
+          "api_time": 5.941900968551636
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程记录仅重复会诊意见，未明确记录采纳执行情况及具体结果。",
+          "evidence": "病程记录：\"今日依据感染科意见已复查血培养，继续美罗培南抗感染\"；会诊意见：\"建议复查血培养，维持美罗培南治疗\"",
+          "suggestion": "补充记录会诊意见采纳后的具体执行措施与结果。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程记录仅重复会诊意见，未明确记录采纳执行情况及具体结果。\",\n      \"evidence\": \"病程记录：\\\"今日依据感染科意见已复查血培养，继续美罗培南抗感染\\\"；会诊意见：\\\"建议复查血培养，维持美罗培南治疗\\\"\",\n      \"suggestion\": \"补充记录会诊意见采纳后的具体执行措施与结果。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 791,
+            "prompt_tokens": 641,
+            "completion_tokens": 150,
+            "input_tokens": 641,
+            "output_tokens": 150,
+            "api_time": 5.941900968551636,
+            "first_result_latency": 5.941900968551636,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 126
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-070": "non_compliant"
+        },
+        "unexpected_hits": {
+          "SC-070": "non_compliant"
+        }
+      }
+    },
+    {
+      "template_file": "running_senior_round_no_targeted_judgement_v1_pass.json",
+      "issue_type": "E1_senior_round_no_targeted_judgement",
+      "display_name": "上级查房未围绕关键问题做诊疗判断",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-050"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-019",
+        "mr_no": "SYN0019",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 5.539,
+      "total_tokens": 773,
+      "prompt_tokens": 649,
+      "completion_tokens": 124,
+      "api_time": 5.538,
+      "packs": [
+        {
+          "pack_id": "senior_course_content",
+          "document_type": "上级查房记录",
+          "rule_ids": [
+            "SC-050"
+          ],
+          "tokens_used": 773,
+          "prompt_tokens": 649,
+          "completion_tokens": 124,
+          "api_time": 5.5384297370910645
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-050",
+          "rule_name": "上级医师查房无病情分析或欠缺、无诊疗意见或住院期间每周内无副主任医师以上的医师或医疗组长查房记录;上",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "查房记录有病情分析和诊疗意见，但无法判断是否与日常病程重复。",
+          "evidence": "主任医师查房：目前考虑胃窦溃疡诊断明确...继续抑酸护胃治疗。",
+          "suggestion": "补充前次病程记录以供比对。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-050\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"查房记录有病情分析和诊疗意见，但无法判断是否与日常病程重复。\",\n      \"evidence\": \"主任医师查房：目前考虑胃窦溃疡诊断明确...继续抑酸护胃治疗。\",\n      \"suggestion\": \"补充前次病程记录以供比对。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 773,
+            "prompt_tokens": 649,
+            "completion_tokens": 124,
+            "input_tokens": 649,
+            "output_tokens": 124,
+            "api_time": 5.5384297370910645,
+            "first_result_latency": 5.5384297370910645,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "senior_course_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 123
+          },
+          "target_document_type": "上级查房记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-050": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-050": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_senior_round_copy_paste_v1_pass.json",
+      "issue_type": "E2_senior_round_copy_paste",
+      "display_name": "上级查房记录复制粘贴",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-050"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-021",
+        "mr_no": "SYN0021",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 5.231,
+      "total_tokens": 806,
+      "prompt_tokens": 661,
+      "completion_tokens": 145,
+      "api_time": 5.231,
+      "packs": [
+        {
+          "pack_id": "senior_course_content",
+          "document_type": "上级查房记录",
+          "rule_ids": [
+            "SC-050"
+          ],
+          "tokens_used": 806,
+          "prompt_tokens": 661,
+          "completion_tokens": 145,
+          "api_time": 5.231199264526367
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-050",
+          "rule_name": "上级医师查房无病情分析或欠缺、无诊疗意见或住院期间每周内无副主任医师以上的医师或医疗组长查房记录;上",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "上级查房记录与日常病程记录高度重复，新增分析意见证据不足。",
+          "evidence": "主文书：患者腹痛较前缓解...继续抑酸并逐步恢复流质饮食。辅助证据：患者夜间无发热，腹痛较前缓解，继续抑酸治疗。",
+          "suggestion": "补充上级医师对病情变化的独立判断或具体诊疗意见。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-050\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"上级查房记录与日常病程记录高度重复，新增分析意见证据不足。\",\n      \"evidence\": \"主文书：患者腹痛较前缓解...继续抑酸并逐步恢复流质饮食。辅助证据：患者夜间无发热，腹痛较前缓解，继续抑酸治疗。\",\n      \"suggestion\": \"补充上级医师对病情变化的独立判断或具体诊疗意见。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 806,
+            "prompt_tokens": 661,
+            "completion_tokens": 145,
+            "input_tokens": 661,
+            "output_tokens": 145,
+            "api_time": 5.231199264526367,
+            "first_result_latency": 5.231199264526367,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "senior_course_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 139
+          },
+          "target_document_type": "上级查房记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-050": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-050": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_admission_external_exam_inaccurate_v1_pass.json",
+      "issue_type": "A4_admission_external_exam_inaccurate",
+      "display_name": "入院前辅助检查记录错误或描述不清",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-019"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P003",
+        "visit_id": "SYN-RUN-031",
+        "mr_no": "SYN0031",
+        "patient_name": "合成患者三",
+        "gender": "男",
+        "age": 63,
+        "department": "骨科"
+      },
+      "elapsed_seconds": 5.297,
+      "total_tokens": 801,
+      "prompt_tokens": 661,
+      "completion_tokens": 140,
+      "api_time": 5.296,
+      "packs": [
+        {
+          "pack_id": "admission_consistency_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-019"
+          ],
+          "tokens_used": 801,
+          "prompt_tokens": 661,
+          "completion_tokens": 140,
+          "api_time": 5.295811891555786
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-019",
+          "rule_name": "入院前若有辅助检查未记录或记录不完善或抄写不准确或描述不清",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "入院前辅助检查记录不完善，关键信息缺失。",
+          "evidence": "主诉及现病史中提及“于门诊行髋关节X线提示左股骨粗隆间骨折”，但未记录检查日期、检查机构及具体报告号。",
+          "suggestion": "补充门诊X线检查的日期、机构及报告号。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-019\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"入院前辅助检查记录不完善，关键信息缺失。\",\n      \"evidence\": \"主诉及现病史中提及“于门诊行髋关节X线提示左股骨粗隆间骨折”，但未记录检查日期、检查机构及具体报告号。\",\n      \"suggestion\": \"补充门诊X线检查的日期、机构及报告号。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 801,
+            "prompt_tokens": 661,
+            "completion_tokens": 140,
+            "input_tokens": 661,
+            "output_tokens": 140,
+            "api_time": 5.295811891555786,
+            "first_result_latency": 5.295811891555786,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 154
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-019": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-019": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_admission_secondary_diagnosis_omitted_v1_pass.json",
+      "issue_type": "A5_admission_secondary_diagnosis_omitted",
+      "display_name": "入院诊断遗漏重要并存疾病",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-020"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P004",
+        "visit_id": "SYN-RUN-033",
+        "mr_no": "SYN0033",
+        "patient_name": "合成患者四",
+        "gender": "女",
+        "age": 58,
+        "department": "风湿免疫科"
+      },
+      "elapsed_seconds": 4.679,
+      "total_tokens": 749,
+      "prompt_tokens": 621,
+      "completion_tokens": 128,
+      "api_time": 4.679,
+      "packs": [
+        {
+          "pack_id": "admission_consistency_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-020"
+          ],
+          "tokens_used": 749,
+          "prompt_tokens": 621,
+          "completion_tokens": 128,
+          "api_time": 4.678821802139282
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-020",
+          "rule_name": "入院记录无入院诊断或主次顺序错误或次要诊断有重要遗漏",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "入院诊断存在，但次要诊断可能遗漏重要内容。",
+          "evidence": "入院诊断：1. 类风湿关节炎活动期；2. 双膝关节滑膜炎。检查检验：类风湿因子阳性。",
+          "suggestion": "请根据检查结果评估并补充次要诊断。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-020\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"入院诊断存在，但次要诊断可能遗漏重要内容。\",\n      \"evidence\": \"入院诊断：1. 类风湿关节炎活动期；2. 双膝关节滑膜炎。检查检验：类风湿因子阳性。\",\n      \"suggestion\": \"请根据检查结果评估并补充次要诊断。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 749,
+            "prompt_tokens": 621,
+            "completion_tokens": 128,
+            "input_tokens": 621,
+            "output_tokens": 128,
+            "api_time": 4.678821802139282,
+            "first_result_latency": 4.678821802139282,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_consistency_core",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 231
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-020": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-020": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_daily_course_medication_detail_missing_v1_pass.json",
+      "issue_type": "C4_daily_course_medication_detail_missing",
+      "display_name": "日常病程用药记录不具体",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-033"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P005",
+        "visit_id": "SYN-RUN-035",
+        "mr_no": "SYN0035",
+        "patient_name": "合成患者五",
+        "gender": "男",
+        "age": 71,
+        "department": "呼吸内科"
+      },
+      "elapsed_seconds": 5.131,
+      "total_tokens": 780,
+      "prompt_tokens": 649,
+      "completion_tokens": 131,
+      "api_time": 5.131,
+      "packs": [
+        {
+          "pack_id": "daily_course_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-033"
+          ],
+          "tokens_used": 780,
+          "prompt_tokens": 649,
+          "completion_tokens": 131,
+          "api_time": 5.131003379821777
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-033",
+          "rule_name": "病程记录中对病情变化无分析判断或无具体处理意见",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程记录对病情变化有分析判断和具体处理意见。",
+          "evidence": "患者仍有咳嗽咳痰，体温37.8℃。考虑肺部感染控制欠佳，停用头孢曲松，改用哌拉西林他唑巴坦抗感染。",
+          "suggestion": "请按“病程记录中对病情变化无分析判断或无具体处理意见”规则补...",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-033\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程记录对病情变化有分析判断和具体处理意见。\",\n      \"evidence\": \"患者仍有咳嗽咳痰，体温37.8℃。考虑肺部感染控制欠佳，停用头孢曲松，改用哌拉西林他唑巴坦抗感染。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 780,
+            "prompt_tokens": 649,
+            "completion_tokens": 131,
+            "input_tokens": 649,
+            "output_tokens": 131,
+            "api_time": 5.131003379821777,
+            "first_result_latency": 5.131003379821777,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 129
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-033": "non_compliant"
+        },
+        "unexpected_hits": {
+          "SC-033": "non_compliant"
+        }
+      }
+    },
+    {
+      "template_file": "running_daily_course_abnormal_vitals_no_followup_v1_pass.json",
+      "issue_type": "C5_daily_course_abnormal_vitals_no_followup",
+      "display_name": "异常生命体征或关键指标无后续处理",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-032",
+        "SC-033"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P006",
+        "visit_id": "SYN-RUN-037",
+        "mr_no": "SYN0037",
+        "patient_name": "合成患者六",
+        "gender": "男",
+        "age": 66,
+        "department": "心内科"
+      },
+      "elapsed_seconds": 7.866,
+      "total_tokens": 1005,
+      "prompt_tokens": 789,
+      "completion_tokens": 216,
+      "api_time": 7.866,
+      "packs": [
+        {
+          "pack_id": "daily_course_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-032",
+            "SC-033"
+          ],
+          "tokens_used": 1005,
+          "prompt_tokens": 789,
+          "completion_tokens": 216,
+          "api_time": 7.865699529647827
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-032",
+          "rule_name": "病程记录重要病情变化(症状及体征)未记录或记录不全",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程记录中重要病情变化记录不全，证据不足。",
+          "evidence": "今日血压仍波动在158/96mmHg，患者无明显头晕头痛。",
+          "suggestion": "补充记录具体症状体征变化细节。",
+          "confidence": 0.8,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-032\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"病程记录中重要病情变化记录不全，证据不足。\",\n      \"evidence\": \"今日血压仍波动在158/96mmHg，患者无明显头晕头痛。\",\n      \"suggestion\": \"补充记录具体症状体征变化细节。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-033\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录对病情变化有分析判断和具体处理意见。\",\n      \"evidence\": \"考虑血压控制欠佳，予加用硝苯地平控释片30mg qd，并继续监测血压变化。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            29
+          ],
+          "metadata": {
+            "tokens_used": 502,
+            "prompt_tokens": 394,
+            "completion_tokens": 108,
+            "input_tokens": 394,
+            "output_tokens": 108,
+            "api_time": 3.9328497648239136,
+            "first_result_latency": 7.865699529647827,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 108
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-033",
+          "rule_name": "病程记录中对病情变化无分析判断或无具体处理意见",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录对病情变化有分析判断和具体处理意见。",
+          "evidence": "考虑血压控制欠佳，予加用硝苯地平控释片30mg qd，并继续监测血压变化。",
+          "suggestion": "",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-032\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"病程记录中重要病情变化记录不全，证据不足。\",\n      \"evidence\": \"今日血压仍波动在158/96mmHg，患者无明显头晕头痛。\",\n      \"suggestion\": \"补充记录具体症状体征变化细节。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-033\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录对病情变化有分析判断和具体处理意见。\",\n      \"evidence\": \"考虑血压控制欠佳，予加用硝苯地平控释片30mg qd，并继续监测血压变化。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 502,
+            "prompt_tokens": 394,
+            "completion_tokens": 108,
+            "input_tokens": 394,
+            "output_tokens": 108,
+            "api_time": 3.9328497648239136,
+            "first_result_latency": 7.865699529647827,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 108
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-032": "uncertain",
+          "SC-033": "compliant"
+        },
+        "unexpected_hits": {
+          "SC-032": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_consultation_execution_not_followed_v1_pass.json",
+      "issue_type": "D4_consultation_execution_not_followed",
+      "display_name": "会诊意见书面称执行但实际未落实",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-070"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P007",
+        "visit_id": "SYN-RUN-039",
+        "mr_no": "SYN0039",
+        "patient_name": "合成患者七",
+        "gender": "女",
+        "age": 54,
+        "department": "神经内科"
+      },
+      "elapsed_seconds": 5.084,
+      "total_tokens": 784,
+      "prompt_tokens": 645,
+      "completion_tokens": 139,
+      "api_time": 5.083,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-070"
+          ],
+          "tokens_used": 784,
+          "prompt_tokens": 645,
+          "completion_tokens": 139,
+          "api_time": 5.083149194717407
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程记录仅重复会诊意见，未明确是否采纳及具体执行情况。",
+          "evidence": "病程记录：根据康复科会诊意见，今日已安排...；会诊意见：建议给予偏瘫肢体综合训练...",
+          "suggestion": "补充是否采纳会诊意见及具体执行措施或未采纳理由。",
+          "confidence": 0.5,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程记录仅重复会诊意见，未明确是否采纳及具体执行情况。\",\n      \"evidence\": \"病程记录：根据康复科会诊意见，今日已安排...；会诊意见：建议给予偏瘫肢体综合训练...\",\n      \"suggestion\": \"补充是否采纳会诊意见及具体执行措施或未采纳理由。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 784,
+            "prompt_tokens": 645,
+            "completion_tokens": 139,
+            "input_tokens": 645,
+            "output_tokens": 139,
+            "api_time": 5.083149194717407,
+            "first_result_latency": 5.083149194717407,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 134
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-070": "non_compliant"
+        },
+        "unexpected_hits": {
+          "SC-070": "non_compliant"
+        }
+      }
+    },
+    {
+      "template_file": "running_senior_round_no_revision_of_diagnosis_v1_pass.json",
+      "issue_type": "E3_senior_round_no_revision_of_diagnosis",
+      "display_name": "上级查房未修正诊断或未针对异常情况给意见",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-050"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P008",
+        "visit_id": "SYN-RUN-041",
+        "mr_no": "SYN0041",
+        "patient_name": "合成患者八",
+        "gender": "女",
+        "age": 61,
+        "department": "内分泌科"
+      },
+      "elapsed_seconds": 5.002,
+      "total_tokens": 786,
+      "prompt_tokens": 659,
+      "completion_tokens": 127,
+      "api_time": 5.002,
+      "packs": [
+        {
+          "pack_id": "senior_course_content",
+          "document_type": "上级查房记录",
+          "rule_ids": [
+            "SC-050"
+          ],
+          "tokens_used": 786,
+          "prompt_tokens": 659,
+          "completion_tokens": 127,
+          "api_time": 5.002483367919922
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-050",
+          "rule_name": "上级医师查房无病情分析或欠缺、无诊疗意见或住院期间每周内无副主任医师以上的医师或医疗组长查房记录;上",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "查房记录有分析意见，但无法判断是否与日常病程重复",
+          "evidence": "副主任医师查房：患者连续血压监测仍高，考虑高血压诊断明确，继续原降压方案基础上加用缬沙坦",
+          "suggestion": "补充日常病程记录以供比对",
+          "confidence": 0.6,
+          "llm_raw_output": "```json\n{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-050\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"查房记录有分析意见，但无法判断是否与日常病程重复\",\n      \"evidence\": \"副主任医师查房：患者连续血压监测仍高，考虑高血压诊断明确，继续原降压方案基础上加用缬沙坦\",\n      \"suggestion\": \"补充日常病程记录以供比对\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}\n```",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            44
+          ],
+          "metadata": {
+            "tokens_used": 786,
+            "prompt_tokens": 659,
+            "completion_tokens": 127,
+            "input_tokens": 659,
+            "output_tokens": 127,
+            "api_time": 5.002483367919922,
+            "first_result_latency": 5.002483367919922,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "senior_course_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 125
+          },
+          "target_document_type": "上级查房记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-050": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-050": "uncertain"
+        }
+      }
+    }
+  ]
+}

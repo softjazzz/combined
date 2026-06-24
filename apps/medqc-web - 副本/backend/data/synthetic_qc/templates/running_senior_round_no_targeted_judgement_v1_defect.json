@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_senior_round_no_targeted_judgement_v1",
+    "issue_type": "E1_senior_round_no_targeted_judgement",
+    "display_name": "上级查房未围绕关键问题做诊疗判断",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-050"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P002",
+    "visit_id": "SYN-RUN-020",
+    "mr_no": "SYN0020",
+    "patient_name": "合成患者二",
+    "gender": "女",
+    "age": 47,
+    "department": "消化内科"
+  },
+  "documents": [
+    {
+      "document_type": "senior_course_record",
+      "title": "上级查房记录",
+      "content": "主任医师查房：患者一般情况尚可，继续原治疗，严密观察病情变化。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["胃窦溃疡"],
+    "orders": ["继续原治疗"],
+    "exams": []
+  }
+}

@@ -1,0 +1,801 @@
+{
+  "schema_version": "v1",
+  "source": {
+    "excel_file": "docs/运行病历质控记录.xls",
+    "sheet_name": "Sheet2",
+    "scope": "llm_intrinsic_only",
+    "total_rows": 290,
+    "coverage_counts": {
+      "llm_intrinsic": 179,
+      "programmatic": 41,
+      "unsupported": 70
+    },
+    "intrinsic_category_counts": {
+      "admission_consistency": 56,
+      "daily_course_analysis": 46,
+      "first_course_reasoning": 35,
+      "consultation_execution": 29,
+      "senior_round_content": 13
+    }
+  },
+  "template_family": {
+    "name": "running_record_intrinsic_baseline_v1",
+    "description": "用于运行病历内涵问题回归的统一简化模板，正文以入院记录、首次病程、日常病程为主，按需补上级查房、会诊、检查检验和医嘱摘要。",
+    "document_outline": [
+      "病案首页摘要",
+      "入院记录",
+      "首次病程记录",
+      "日常病程记录",
+      "上级查房记录",
+      "会诊记录或会诊执行记录",
+      "诊断摘要",
+      "医嘱摘要",
+      "检查检验摘要"
+    ]
+  },
+  "issue_types": [
+    {
+      "issue_type": "A1_admission_past_history_conflict",
+      "display_name": "既往史与现病史前后矛盾",
+      "priority": "P0",
+      "source_category": "admission_consistency",
+      "template_name": "running_admission_consistency_conflict_v1",
+      "documents_required": ["admission_record", "first_course_record", "daily_course_record"],
+      "defect_injection": [
+        "既往史写明否认手术史或重大疾病史",
+        "现病史或体格检查中出现明确既往手术或疾病事实"
+      ],
+      "representative_examples": ["既往史否认手术史，但现病史出现左侧乳腺癌根治手术"],
+      "expected_rule_ids": ["SC-010", "SC-019", "SC-020"]
+    },
+    {
+      "issue_type": "A2_admission_missing_special_exam",
+      "display_name": "入院记录缺少专科检查或关键体征",
+      "priority": "P0",
+      "source_category": "admission_consistency",
+      "template_name": "running_admission_missing_exam_v1",
+      "documents_required": ["admission_record"],
+      "defect_injection": ["主诉和现病史完整", "体格检查缺少关键专科检查项或一般情况关键体征"],
+      "representative_examples": ["入院记录中无专科检查", "体格检查缺体重"],
+      "expected_rule_ids": ["SC-011", "SC-012"]
+    },
+    {
+      "issue_type": "A3_admission_present_history_incomplete",
+      "display_name": "现病史记录不全",
+      "priority": "P0",
+      "source_category": "admission_consistency",
+      "template_name": "running_admission_present_history_incomplete_v1",
+      "documents_required": ["admission_record"],
+      "defect_injection": [
+        "保留主诉",
+        "现病史缺少症状性质、持续时间、就诊经过、伴随症状或外院处理"
+      ],
+      "representative_examples": ["现病史记录不全"],
+      "expected_rule_ids": ["SC-008", "SC-009", "SC-018"]
+    },
+    {
+      "issue_type": "B1_first_course_diff_diagnosis_insufficient",
+      "display_name": "首次病程记录鉴别诊断不全面",
+      "priority": "P0",
+      "source_category": "first_course_reasoning",
+      "template_name": "running_first_course_diff_diagnosis_insufficient_v1",
+      "documents_required": ["admission_record", "first_course_record"],
+      "defect_injection": [
+        "仅给出1到2个过窄的鉴别诊断",
+        "排除依据简单，缺少关键阴性症状或关键检查"
+      ],
+      "representative_examples": ["首次病程记录鉴别诊断不全面"],
+      "expected_rule_ids": ["SC-026"]
+    },
+    {
+      "issue_type": "B2_first_course_features_not_summarized",
+      "display_name": "病例特点未提炼",
+      "priority": "P0",
+      "source_category": "first_course_reasoning",
+      "template_name": "running_first_course_features_not_summarized_v1",
+      "documents_required": ["admission_record", "first_course_record"],
+      "defect_injection": ["病例特点标题存在", "标题下直接复制现病史和体格检查原文，缺少提炼归纳"],
+      "representative_examples": ["病例特点直接堆病史，未归纳提炼"],
+      "expected_rule_ids": ["SC-023", "SC-024"]
+    },
+    {
+      "issue_type": "B3_first_course_basis_not_structured",
+      "display_name": "诊断依据书写不规范",
+      "priority": "P1",
+      "source_category": "first_course_reasoning",
+      "template_name": "running_first_course_basis_not_structured_v1",
+      "documents_required": ["first_course_record"],
+      "defect_injection": ["诊断依据写成整段混合描述", "未按诊断逐个对应书写依据"],
+      "representative_examples": ["首次病程中诊断依据书写不正确，未按诊断逐个书写"],
+      "expected_rule_ids": ["SC-025", "SC-026"]
+    },
+    {
+      "issue_type": "B4_first_course_plan_incomplete",
+      "display_name": "诊疗计划不完整",
+      "priority": "P1",
+      "source_category": "first_course_reasoning",
+      "template_name": "running_first_course_plan_incomplete_v1",
+      "documents_required": ["first_course_record"],
+      "defect_injection": ["诊疗计划只保留完善检查和择期处理", "缺少具体治疗与观察安排"],
+      "representative_examples": ["首次病程记录诊疗计划不完整"],
+      "expected_rule_ids": ["SC-027"]
+    },
+    {
+      "issue_type": "C1_daily_course_abnormal_results_no_analysis",
+      "display_name": "异常检查结果未分析",
+      "priority": "P0",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_daily_course_abnormal_results_no_analysis_v1",
+      "documents_required": ["daily_course_record", "exam_or_lab_summary"],
+      "defect_injection": ["检查检验结果明确异常", "病程只抄结果，不写分析与处理意见"],
+      "representative_examples": ["病程记录未分析异常检查结果"],
+      "expected_rule_ids": ["SC-033", "SC-036"]
+    },
+    {
+      "issue_type": "C2_daily_course_antibiotic_not_documented",
+      "display_name": "抗菌药物使用未在病程中记录",
+      "priority": "P0",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_daily_course_antibiotic_not_documented_v1",
+      "documents_required": ["daily_course_record", "drug_order_summary"],
+      "defect_injection": ["医嘱里存在明确抗菌药物", "病程中没有体现使用理由、疗效观察或调整"],
+      "representative_examples": ["使用抗菌药物治疗的患者，使用情况未在病程记录中记录"],
+      "expected_rule_ids": ["SC-032", "SC-033"]
+    },
+    {
+      "issue_type": "C3_daily_course_overly_brief",
+      "display_name": "病程记录过于简略",
+      "priority": "P1",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_daily_course_overly_brief_v1",
+      "documents_required": ["daily_course_record"],
+      "defect_injection": ["仅保留一句模板化病程描述", "不体现病情变化、体征、分析与处理"],
+      "representative_examples": ["病程记录仅写检查目的，无病情变化、体征、分析"],
+      "expected_rule_ids": ["SC-032", "SC-036"]
+    },
+    {
+      "issue_type": "D1_consultation_execution_generic_phrase",
+      "display_name": "会诊执行记录仅写遵会诊意见执行",
+      "priority": "P0",
+      "source_category": "consultation_execution",
+      "template_name": "running_consultation_execution_generic_phrase_v1",
+      "documents_required": ["consultation_record", "daily_course_record"],
+      "defect_injection": ["会诊意见存在", "执行记录只写遵会诊意见执行，不写具体动作"],
+      "representative_examples": ["请会诊执行记录书写不规范仅描述遵会诊意见执行"],
+      "expected_rule_ids": ["SC-070", "LX-016"]
+    },
+    {
+      "issue_type": "D2_consultation_execution_copy_paste",
+      "display_name": "会诊执行记录复制粘贴严重",
+      "priority": "P1",
+      "source_category": "consultation_execution",
+      "template_name": "running_consultation_execution_copy_paste_v1",
+      "documents_required": ["consultation_record", "consultation_execution_record"],
+      "defect_injection": ["执行记录与会诊意见文本高度一致", "缺少本病历具体执行动作"],
+      "representative_examples": ["请会诊执行记录复制粘贴严重"],
+      "expected_rule_ids": ["SC-070", "LX-016"]
+    },
+    {
+      "issue_type": "D3_consultation_execution_no_specific_actions",
+      "display_name": "会诊执行记录无具体执行情况",
+      "priority": "P1",
+      "source_category": "consultation_execution",
+      "template_name": "running_consultation_execution_no_specific_actions_v1",
+      "documents_required": ["consultation_record", "daily_course_record"],
+      "defect_injection": ["病程记录未体现药物、检查、观察或诊疗调整", "仅笼统表述已执行"],
+      "representative_examples": ["不能体现会诊执行情况"],
+      "expected_rule_ids": ["SC-070", "LX-016"]
+    },
+    {
+      "issue_type": "E1_senior_round_no_targeted_judgement",
+      "display_name": "上级查房未围绕关键问题做诊疗判断",
+      "priority": "P1",
+      "source_category": "senior_round_content",
+      "template_name": "running_senior_round_no_targeted_judgement_v1",
+      "documents_required": ["senior_course_record", "daily_course_record", "vital_sign_summary"],
+      "defect_injection": ["连续异常指标存在", "查房内容模板化，不对关键问题做诊疗分析或修正"],
+      "representative_examples": ["血压持续异常，上级查房未修正诊断"],
+      "expected_rule_ids": ["SC-049", "SC-050", "SC-052"]
+    },
+    {
+      "issue_type": "E2_senior_round_copy_paste",
+      "display_name": "上级查房记录复制粘贴",
+      "priority": "P1",
+      "source_category": "unreasonable_copy_content",
+      "template_name": "running_unreasonable_copy_round_note_v1",
+      "documents_required": ["senior_course_record", "daily_course_record"],
+      "defect_injection": ["连续两日上级查房记录仅改日期", "查房内容高度重复"],
+      "representative_examples": ["两天查房记录高度重复"],
+      "expected_rule_ids": ["CL-275"]
+    },
+    {
+      "issue_type": "A4_admission_external_exam_inaccurate",
+      "display_name": "入院前辅助检查记录错误或描述不清",
+      "priority": "P1",
+      "source_category": "admission_consistency",
+      "template_name": "running_admission_external_exam_inaccurate_v1",
+      "documents_required": ["admission_record"],
+      "defect_injection": [
+        "外院或门诊辅助检查真实存在",
+        "入院记录中对检查结果抄写错误、混入无关内容或表述不清"
+      ],
+      "representative_examples": ["病程记录中CT结果引用错误", "未记录在我院门诊的检查项目及结果"],
+      "expected_rule_ids": ["SC-019"]
+    },
+    {
+      "issue_type": "A5_admission_secondary_diagnosis_omitted",
+      "display_name": "入院诊断遗漏重要并存疾病",
+      "priority": "P1",
+      "source_category": "admission_consistency",
+      "template_name": "running_admission_secondary_diagnosis_omitted_v1",
+      "documents_required": ["admission_record", "first_course_record"],
+      "defect_injection": [
+        "现病史或既往史已明确提示重要慢病或并存病",
+        "入院诊断未体现该重要并存疾病"
+      ],
+      "representative_examples": [
+        "患者既往有类风湿关节炎，入院诊断未体现",
+        "高脂血症未诊断",
+        "患者既往有糖尿病史，入院诊断未诊断该疾病"
+      ],
+      "expected_rule_ids": ["SC-020"]
+    },
+    {
+      "issue_type": "C4_daily_course_medication_detail_missing",
+      "display_name": "日常病程用药记录不具体",
+      "priority": "P1",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_daily_course_medication_detail_missing_v1",
+      "documents_required": ["daily_course_record"],
+      "defect_injection": [
+        "病程记录写到继续抗感染或止痛治疗",
+        "未写调整理由、药物信息、剂量或处理意图"
+      ],
+      "representative_examples": [
+        "病程记录中，用药记录不规范，未记录药物剂量",
+        "未阐述其他用药方案及治疗措施"
+      ],
+      "expected_rule_ids": ["SC-033"]
+    },
+    {
+      "issue_type": "C5_daily_course_abnormal_vitals_no_followup",
+      "display_name": "异常生命体征或关键指标无后续处理",
+      "priority": "P1",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_daily_course_abnormal_vitals_no_followup_v1",
+      "documents_required": ["daily_course_record"],
+      "defect_injection": [
+        "上下文已出现高血压/高血糖/低钾等异常指标",
+        "病程记录未写病情变化分析、监测计划或处理措施"
+      ],
+      "representative_examples": [
+        "患者血压150/108mmHg,未做诊断及血压监测",
+        "低钾进一步加重，无处理"
+      ],
+      "expected_rule_ids": ["SC-032", "SC-033"]
+    },
+    {
+      "issue_type": "D4_consultation_execution_not_followed",
+      "display_name": "会诊意见书面称执行但实际未落实",
+      "priority": "P1",
+      "source_category": "consultation_execution",
+      "template_name": "running_consultation_execution_not_followed_v1",
+      "documents_required": ["consultation_record", "daily_course_record"],
+      "defect_injection": [
+        "会诊意见提出明确检查或治疗措施",
+        "病程记录声称遵照执行，但结构化事实未见对应落实或出现相反事实"
+      ],
+      "representative_examples": [
+        "请会诊执行记录描述为遵执，但实际未按会诊意见执行",
+        "仍然开具与会诊意见相反的治疗项目"
+      ],
+      "expected_rule_ids": ["SC-070", "LX-016"]
+    },
+    {
+      "issue_type": "E3_senior_round_no_revision_of_diagnosis",
+      "display_name": "上级查房未修正诊断或未针对异常情况给意见",
+      "priority": "P1",
+      "source_category": "senior_round_content",
+      "template_name": "running_senior_round_no_revision_of_diagnosis_v1",
+      "documents_required": ["senior_course_record"],
+      "defect_injection": [
+        "上下文已存在可疑诊断或异常指标持续存在",
+        "上级查房仅写继续观察/原治疗，未作修正或处理意见"
+      ],
+      "representative_examples": [
+        "连续监测三日后上级医师查房未对诊断进行修正",
+        "低钾进一步加重，无处理"
+      ],
+      "expected_rule_ids": ["SC-049", "SC-050", "SC-052"]
+    },
+    {
+      "issue_type": "Z01_admission_history_core",
+      "display_name": "入院记录核心内容",
+      "priority": "P0",
+      "source_category": "admission_consistency",
+      "template_name": "running_bucket_admission_history_core_v1",
+      "documents_required": ["admission_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖主诉、现病史、体格检查、专科检查完整性。"],
+      "expected_rule_ids": ["SC-004", "SC-007", "SC-008", "SC-009", "SC-011"],
+      "bucket_id": "admission_history_core",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z02_admission_history_extended",
+      "display_name": "入院记录扩展内容",
+      "priority": "P0",
+      "source_category": "admission_consistency",
+      "template_name": "running_bucket_admission_history_extended_v1",
+      "documents_required": ["admission_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖一般生命体征、既往/个人/家族史及现病史延展信息。"],
+      "expected_rule_ids": ["SC-012", "SC-013", "SC-014", "SC-016", "SC-018"],
+      "bucket_id": "admission_history_extended",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z03_admission_consistency",
+      "display_name": "入院记录一致性",
+      "priority": "P0",
+      "source_category": "admission_consistency",
+      "template_name": "running_bucket_admission_consistency_v1",
+      "documents_required": ["admission_record", "first_course_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖前后矛盾、门急诊辅助检查引用及重要并存疾病漏记。"],
+      "expected_rule_ids": ["SC-010", "SC-015", "SC-019", "SC-020"],
+      "bucket_id": "admission_consistency",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z04_consent_quality",
+      "display_name": "知情同意质量",
+      "priority": "P1",
+      "source_category": "consent_quality",
+      "template_name": "running_bucket_consent_quality_v1",
+      "documents_required": ["consent_form"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖特殊检查治疗描述、风险及患者签署意愿清晰度。"],
+      "expected_rule_ids": ["SC-131", "SC-134", "SC-136"],
+      "bucket_id": "consent_quality",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z05_discharge_content",
+      "display_name": "出院记录内容",
+      "priority": "P0",
+      "source_category": "discharge_content",
+      "template_name": "running_bucket_discharge_content_v1",
+      "documents_required": ["discharge_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖出院记录缺项、死亡/出院情况及带药详细度。"],
+      "expected_rule_ids": ["SC-118", "SC-119", "SC-123"],
+      "bucket_id": "discharge_content",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z06_discharge_orders",
+      "display_name": "出院医嘱与诊疗经过",
+      "priority": "P0",
+      "source_category": "discharge_content",
+      "template_name": "running_bucket_discharge_orders_v1",
+      "documents_required": ["discharge_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖主要药物、关键检查结果及出院医嘱完整性。"],
+      "expected_rule_ids": ["SC-121", "SC-122"],
+      "bucket_id": "discharge_orders",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z07_discharge_consistency",
+      "display_name": "出院诊断一致性",
+      "priority": "P0",
+      "source_category": "discharge_content",
+      "template_name": "running_bucket_discharge_consistency_v1",
+      "documents_required": ["discharge_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖出院诊断漏填、错填及顺序问题。"],
+      "expected_rule_ids": ["SC-125", "SC-127"],
+      "bucket_id": "discharge_consistency",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z08_exam_report_quality",
+      "display_name": "检查检验报告质量",
+      "priority": "P1",
+      "source_category": "exam_report_quality",
+      "template_name": "running_bucket_exam_report_quality_v1",
+      "documents_required": ["exam_item_report", "daily_course_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖报告单完整性及与病程/病理一致性。"],
+      "expected_rule_ids": ["SC-138", "SC-139", "SC-140"],
+      "bucket_id": "exam_report_quality",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z09_operation_content",
+      "display_name": "手术相关内容完整性",
+      "priority": "P1",
+      "source_category": "operation_record",
+      "template_name": "running_bucket_operation_content_v1",
+      "documents_required": ["consent_form", "presurg_summary", "surgery_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖知情同意、术前小结、手术记录核心内容。"],
+      "expected_rule_ids": ["SC-089", "SC-091", "SC-097", "SC-110", "SC-113"],
+      "bucket_id": "operation_content",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z10_operation_preop",
+      "display_name": "术前准备闭环",
+      "priority": "P1",
+      "source_category": "operation_record",
+      "template_name": "running_bucket_operation_preop_v1",
+      "documents_required": ["anesthesia_record", "presurg_discussion", "presurg_summary"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖术前小结、术前讨论、麻醉前评估及方案。"],
+      "expected_rule_ids": ["SC-081", "SC-083", "SC-084", "SC-085", "SC-086", "SC-092"],
+      "bucket_id": "operation_preop",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z11_operation_anesthesia_intraop",
+      "display_name": "麻醉术中闭环",
+      "priority": "P1",
+      "source_category": "operation_record",
+      "template_name": "running_bucket_operation_anesthesia_intraop_v1",
+      "documents_required": ["anesthesia_record", "surgery_record", "surgery_safecheck_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖无麻醉记录、术中麻醉记录及安全核查。"],
+      "expected_rule_ids": ["SC-093", "SC-094", "SC-099", "SC-100", "SC-101", "SC-103"],
+      "bucket_id": "operation_anesthesia_intraop",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z12_operation_postop_followup",
+      "display_name": "术后随访闭环",
+      "priority": "P1",
+      "source_category": "operation_record",
+      "template_name": "running_bucket_operation_postop_followup_v1",
+      "documents_required": [
+        "anesthesia_record",
+        "daily_course_record",
+        "postsurg_firstcourse_record",
+        "surgery_record"
+      ],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖术后首次病程、术后观察、麻醉访视与复查闭环。"],
+      "expected_rule_ids": ["SC-105", "SC-106", "SC-107", "SC-108", "SC-114", "SC-115"],
+      "bucket_id": "operation_postop_followup",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z13_first_course_features",
+      "display_name": "首次病程病例特点",
+      "priority": "P0",
+      "source_category": "first_course_reasoning",
+      "template_name": "running_bucket_first_course_features_v1",
+      "documents_required": ["first_course_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["保留现有强规则组，同时提供桶级模板。"],
+      "expected_rule_ids": ["SC-023", "SC-024"],
+      "bucket_id": "first_course_features",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z14_first_course_reasoning",
+      "display_name": "首次病程诊断推理",
+      "priority": "P0",
+      "source_category": "first_course_reasoning",
+      "template_name": "running_bucket_first_course_reasoning_v1",
+      "documents_required": ["first_course_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖诊断依据、鉴别诊断及计划完整性。"],
+      "expected_rule_ids": ["SC-025", "SC-026", "SC-027"],
+      "bucket_id": "first_course_reasoning",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z15_daily_course_core",
+      "display_name": "日常病程核心分析",
+      "priority": "P0",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_bucket_daily_course_core_v1",
+      "documents_required": ["daily_course_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖病情变化记录和分析处理意见。"],
+      "expected_rule_ids": ["SC-032", "SC-033"],
+      "bucket_id": "daily_course_core",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z16_daily_course_quality",
+      "display_name": "日常病程质量",
+      "priority": "P1",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_bucket_daily_course_quality_v1",
+      "documents_required": ["daily_course_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖简略、复制、无关叙述及异常变化未跟踪。"],
+      "expected_rule_ids": ["SC-035", "SC-039", "SC-040", "SC-047"],
+      "bucket_id": "daily_course_quality",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z17_rounds_rescue_discussion",
+      "display_name": "查房抢救讨论记录",
+      "priority": "P1",
+      "source_category": "senior_round_content",
+      "template_name": "running_bucket_rounds_rescue_discussion_v1",
+      "documents_required": [
+        "death_discussion",
+        "diffcase_discussion_record",
+        "rescue_record",
+        "senior_course_record"
+      ],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖查房、抢救、疑难讨论、死亡讨论内容完整性。"],
+      "expected_rule_ids": ["SC-050", "SC-051", "SC-055", "SC-057", "SC-058", "SC-060"],
+      "bucket_id": "rounds_rescue_discussion",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z18_handover_communication",
+      "display_name": "交接班与告知沟通",
+      "priority": "P1",
+      "source_category": "handover_communication",
+      "template_name": "running_bucket_handover_communication_v1",
+      "documents_required": ["daily_course_record", "handoff_record", "handover_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖交班缺项、描述不清及告知内容空泛。"],
+      "expected_rule_ids": ["SC-063", "SC-066", "SC-075", "SC-076"],
+      "bucket_id": "handover_communication",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环",
+      "priority": "P0",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_bucket_progress_treatment_linkage_v1",
+      "documents_required": ["daily_course_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖治疗措施变化、异常结果分析、会诊执行及输血闭环。"],
+      "expected_rule_ids": [
+        "SC-034",
+        "SC-036",
+        "SC-037",
+        "SC-043",
+        "SC-044",
+        "SC-046",
+        "SC-070",
+        "SC-073",
+        "SC-074"
+      ],
+      "bucket_id": "progress_treatment_linkage",
+      "coverage_style": "bucket_level_rule_traceable"
+    },
+    {
+      "issue_type": "Z20_progress_order_consistency",
+      "display_name": "病程医嘱一致性",
+      "priority": "P1",
+      "source_category": "daily_course_analysis",
+      "template_name": "running_bucket_progress_order_consistency_v1",
+      "documents_required": ["daily_course_record", "medical_order", "newborn_record"],
+      "defect_injection": ["按桶级 defect 模板注入该组规则的核心缺陷。"],
+      "representative_examples": ["覆盖报告转抄错误、长期医嘱描述不清及病程医嘱不一致。"],
+      "expected_rule_ids": ["SC-038", "SC-079", "SC-143", "SC-146"],
+      "bucket_id": "progress_order_consistency",
+      "coverage_style": "bucket_level_rule_traceable"
+    }
+  ],
+  "full_intrinsic_84": {
+    "baseline_model": "qwen3.6-35b-a3b",
+    "validation_granularity": "rule_level",
+    "bucket_count": 20,
+    "rule_count": 84,
+    "buckets": [
+      {
+        "bucket_id": "admission_history_core",
+        "display_name": "入院记录核心内容",
+        "priority": "P0",
+        "source_category": "admission_consistency",
+        "template_name": "running_bucket_admission_history_core_v1",
+        "documents_required": ["admission_record"],
+        "expected_rule_ids": ["SC-004", "SC-007", "SC-008", "SC-009", "SC-011"]
+      },
+      {
+        "bucket_id": "admission_history_extended",
+        "display_name": "入院记录扩展内容",
+        "priority": "P0",
+        "source_category": "admission_consistency",
+        "template_name": "running_bucket_admission_history_extended_v1",
+        "documents_required": ["admission_record"],
+        "expected_rule_ids": ["SC-012", "SC-013", "SC-014", "SC-016", "SC-018"]
+      },
+      {
+        "bucket_id": "admission_consistency",
+        "display_name": "入院记录一致性",
+        "priority": "P0",
+        "source_category": "admission_consistency",
+        "template_name": "running_bucket_admission_consistency_v1",
+        "documents_required": ["admission_record", "first_course_record"],
+        "expected_rule_ids": ["SC-010", "SC-015", "SC-019", "SC-020"]
+      },
+      {
+        "bucket_id": "consent_quality",
+        "display_name": "知情同意质量",
+        "priority": "P1",
+        "source_category": "consent_quality",
+        "template_name": "running_bucket_consent_quality_v1",
+        "documents_required": ["consent_form"],
+        "expected_rule_ids": ["SC-131", "SC-134", "SC-136"]
+      },
+      {
+        "bucket_id": "discharge_content",
+        "display_name": "出院记录内容",
+        "priority": "P0",
+        "source_category": "discharge_content",
+        "template_name": "running_bucket_discharge_content_v1",
+        "documents_required": ["discharge_record"],
+        "expected_rule_ids": ["SC-118", "SC-119", "SC-123"]
+      },
+      {
+        "bucket_id": "discharge_orders",
+        "display_name": "出院医嘱与诊疗经过",
+        "priority": "P0",
+        "source_category": "discharge_content",
+        "template_name": "running_bucket_discharge_orders_v1",
+        "documents_required": ["discharge_record"],
+        "expected_rule_ids": ["SC-121", "SC-122"]
+      },
+      {
+        "bucket_id": "discharge_consistency",
+        "display_name": "出院诊断一致性",
+        "priority": "P0",
+        "source_category": "discharge_content",
+        "template_name": "running_bucket_discharge_consistency_v1",
+        "documents_required": ["discharge_record"],
+        "expected_rule_ids": ["SC-125", "SC-127"]
+      },
+      {
+        "bucket_id": "exam_report_quality",
+        "display_name": "检查检验报告质量",
+        "priority": "P1",
+        "source_category": "exam_report_quality",
+        "template_name": "running_bucket_exam_report_quality_v1",
+        "documents_required": ["exam_item_report", "daily_course_record"],
+        "expected_rule_ids": ["SC-138", "SC-139", "SC-140"]
+      },
+      {
+        "bucket_id": "operation_content",
+        "display_name": "手术相关内容完整性",
+        "priority": "P1",
+        "source_category": "operation_record",
+        "template_name": "running_bucket_operation_content_v1",
+        "documents_required": ["consent_form", "presurg_summary", "surgery_record"],
+        "expected_rule_ids": ["SC-089", "SC-091", "SC-097", "SC-110", "SC-113"]
+      },
+      {
+        "bucket_id": "operation_preop",
+        "display_name": "术前准备闭环",
+        "priority": "P1",
+        "source_category": "operation_record",
+        "template_name": "running_bucket_operation_preop_v1",
+        "documents_required": ["anesthesia_record", "presurg_discussion", "presurg_summary"],
+        "expected_rule_ids": ["SC-081", "SC-083", "SC-084", "SC-085", "SC-086", "SC-092"]
+      },
+      {
+        "bucket_id": "operation_anesthesia_intraop",
+        "display_name": "麻醉术中闭环",
+        "priority": "P1",
+        "source_category": "operation_record",
+        "template_name": "running_bucket_operation_anesthesia_intraop_v1",
+        "documents_required": ["anesthesia_record", "surgery_record", "surgery_safecheck_record"],
+        "expected_rule_ids": ["SC-093", "SC-094", "SC-099", "SC-100", "SC-101", "SC-103"]
+      },
+      {
+        "bucket_id": "operation_postop_followup",
+        "display_name": "术后随访闭环",
+        "priority": "P1",
+        "source_category": "operation_record",
+        "template_name": "running_bucket_operation_postop_followup_v1",
+        "documents_required": [
+          "anesthesia_record",
+          "daily_course_record",
+          "postsurg_firstcourse_record",
+          "surgery_record"
+        ],
+        "expected_rule_ids": ["SC-105", "SC-106", "SC-107", "SC-108", "SC-114", "SC-115"]
+      },
+      {
+        "bucket_id": "first_course_features",
+        "display_name": "首次病程病例特点",
+        "priority": "P0",
+        "source_category": "first_course_reasoning",
+        "template_name": "running_bucket_first_course_features_v1",
+        "documents_required": ["first_course_record"],
+        "expected_rule_ids": ["SC-023", "SC-024"]
+      },
+      {
+        "bucket_id": "first_course_reasoning",
+        "display_name": "首次病程诊断推理",
+        "priority": "P0",
+        "source_category": "first_course_reasoning",
+        "template_name": "running_bucket_first_course_reasoning_v1",
+        "documents_required": ["first_course_record"],
+        "expected_rule_ids": ["SC-025", "SC-026", "SC-027"]
+      },
+      {
+        "bucket_id": "daily_course_core",
+        "display_name": "日常病程核心分析",
+        "priority": "P0",
+        "source_category": "daily_course_analysis",
+        "template_name": "running_bucket_daily_course_core_v1",
+        "documents_required": ["daily_course_record"],
+        "expected_rule_ids": ["SC-032", "SC-033"]
+      },
+      {
+        "bucket_id": "daily_course_quality",
+        "display_name": "日常病程质量",
+        "priority": "P1",
+        "source_category": "daily_course_analysis",
+        "template_name": "running_bucket_daily_course_quality_v1",
+        "documents_required": ["daily_course_record"],
+        "expected_rule_ids": ["SC-035", "SC-039", "SC-040", "SC-047"]
+      },
+      {
+        "bucket_id": "rounds_rescue_discussion",
+        "display_name": "查房抢救讨论记录",
+        "priority": "P1",
+        "source_category": "senior_round_content",
+        "template_name": "running_bucket_rounds_rescue_discussion_v1",
+        "documents_required": [
+          "death_discussion",
+          "diffcase_discussion_record",
+          "rescue_record",
+          "senior_course_record"
+        ],
+        "expected_rule_ids": ["SC-050", "SC-051", "SC-055", "SC-057", "SC-058", "SC-060"]
+      },
+      {
+        "bucket_id": "handover_communication",
+        "display_name": "交接班与告知沟通",
+        "priority": "P1",
+        "source_category": "handover_communication",
+        "template_name": "running_bucket_handover_communication_v1",
+        "documents_required": ["daily_course_record", "handoff_record", "handover_record"],
+        "expected_rule_ids": ["SC-063", "SC-066", "SC-075", "SC-076"]
+      },
+      {
+        "bucket_id": "progress_treatment_linkage",
+        "display_name": "病程治疗闭环",
+        "priority": "P0",
+        "source_category": "daily_course_analysis",
+        "template_name": "running_bucket_progress_treatment_linkage_v1",
+        "documents_required": ["daily_course_record"],
+        "expected_rule_ids": [
+          "SC-034",
+          "SC-036",
+          "SC-037",
+          "SC-043",
+          "SC-044",
+          "SC-046",
+          "SC-070",
+          "SC-073",
+          "SC-074"
+        ]
+      },
+      {
+        "bucket_id": "progress_order_consistency",
+        "display_name": "病程医嘱一致性",
+        "priority": "P1",
+        "source_category": "daily_course_analysis",
+        "template_name": "running_bucket_progress_order_consistency_v1",
+        "documents_required": ["daily_course_record", "medical_order", "newborn_record"],
+        "expected_rule_ids": ["SC-038", "SC-079", "SC-143", "SC-146"]
+      }
+    ],
+    "coverage_matrix_json": "apps/medqc-web/backend/data/synthetic_qc/sc146_intrinsic_84_coverage_matrix.json"
+  }
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "sheet2_row_id": "Sheet2-R0125",
+    "visit_id": "2104341",
+    "decision": "exact_confirmed",
+    "blocked_reason_type": "",
+    "reason": "release/0426 术前相关正文仅见妇科团队内部讨论及麻醉/护士参与，未见肿瘤科、泌尿外科等其他相关学科进入术前讨论或形成 MDT 记录，符合“四级手术无多学科讨论记录”。"
+  },
+  {
+    "sheet2_row_id": "Sheet2-R0126",
+    "visit_id": "2107085",
+    "decision": "exact_confirmed",
+    "blocked_reason_type": "",
+    "reason": "release/0426_full_auto 关节镜肩袖修复术术前正文仅见骨科团队内部评估与手术决定，consultation_record 仅为空壳签名，未见麻醉内科康复等多学科术前讨论记录，符合人工问题核心锚点。"
+  },
+  {
+    "sheet2_row_id": "Sheet2-R0169",
+    "visit_id": "2198921",
+    "decision": "blocked_with_reason",
+    "blocked_reason_type": "人工问题原文不可判",
+    "reason": "release/0426_full_auto 术前已回收到胸外科、心内科、麻醉科等多条会诊记录，人工问题所称“术前无多学科会诊”与原文不一致；是否构成规范 MDT 属同家族但非同锚点，不能判 exact。"
+  },
+  {
+    "sheet2_row_id": "Sheet2-R0195",
+    "visit_id": "2213827",
+    "decision": "blocked_with_reason",
+    "blocked_reason_type": "规则不支持",
+    "reason": "release/0426_full_auto 该条同时混有婚育史错误、左肾未显示后未进一步会诊/检查及四级手术 MDT 多个问题点，现有证据只能覆盖其中 MDT 一支，超出单一 SC-083 可精确闭环范围。"
+  },
+  {
+    "sheet2_row_id": "Sheet2-R0229",
+    "visit_id": "2264271",
+    "decision": "blocked_with_reason",
+    "blocked_reason_type": "人工问题原文不可判",
+    "reason": "release/0426_full_auto 术前已回收到呼吸与危重症医学科、麻醉科、肿瘤科、消化内科等多条会诊记录，人工问题所称“未行多学科讨论”与现有原文并不直接对应；是否满足规范 MDT 需另一层制度口径，不能按该原句判 exact。"
+  },
+  {
+    "sheet2_row_id": "Sheet2-R0246",
+    "visit_id": "2330104",
+    "decision": "blocked_with_reason",
+    "blocked_reason_type": "证据链不足",
+    "reason": "release/0426_full_auto 当前仅回收到安置输液港的普外科会诊，未回收到人工问题所称“MDT 记录中的肿瘤科意见”及其对照会诊单，证据链不足以核对“不一致”这一核心锚点。"
+  }
+]

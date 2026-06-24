@@ -1,0 +1,12 @@
+{
+  "primary_batch_job_ids": ["c2f34af2-aa45-4b07-b4de-019fc105a525"],
+  "reference_batch_job_ids": [],
+  "case_count": 8,
+  "core_case_count": 4,
+  "observe_case_count": 4,
+  "skip_case_count": 0,
+  "batch_hit_count": 4,
+  "batch_miss_count": 0,
+  "observe_hit_count": 0,
+  "observe_miss_count": 4
+}

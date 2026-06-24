@@ -1,0 +1,29 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 3,
+  "families": [
+    {
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "row_count": 3,
+      "job_id": "035d5c97-b025-499c-a8ae-95c2e99c0860",
+      "result_breakdown": {
+        "miss": 3
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 3
+      },
+      "items_count": 0,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 169,
+    "exact_hit": 25,
+    "miss": 37,
+    "same_family_hit": 43,
+    "skip": 9
+  }
+}

@@ -1,0 +1,576 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T10:17:04.747396",
+  "run_finished_at": "2026-04-24T10:17:14.708571",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 1,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_handover_communication_v1_defect.json",
+      "issue_type": "Z18_handover_communication",
+      "display_name": "交接班与告知沟通",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-063",
+        "SC-066",
+        "SC-075",
+        "SC-076"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P118",
+        "visit_id": "SYN-RUN-118",
+        "mr_no": "SYN0118",
+        "patient_name": "合成患者未",
+        "gender": "女",
+        "age": 63,
+        "department": "神经外科"
+      },
+      "elapsed_seconds": 4.512,
+      "total_tokens": 2543,
+      "prompt_tokens": 2067,
+      "completion_tokens": 476,
+      "api_time": 4.506,
+      "packs": [
+        {
+          "pack_id": "daily_course_content_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-066",
+            "SC-075",
+            "SC-076"
+          ],
+          "tokens_used": 1527,
+          "prompt_tokens": 1183,
+          "completion_tokens": 344,
+          "api_time": 3.2009754180908203
+        },
+        {
+          "pack_id": "handoff_content",
+          "document_type": "交接班记录",
+          "rule_ids": [
+            "SC-063"
+          ],
+          "tokens_used": 1016,
+          "prompt_tokens": 884,
+          "completion_tokens": 132,
+          "api_time": 1.3050906658172607
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-066",
+          "rule_name": "值班期间所有的诊疗活动未及时记入病历或记录不全",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "夜间诊疗活动未及时记录，次日补记且内容不全。",
+          "evidence": "【日常病程记录】2026-04-11 10:30补记：患者于2026-04-10 23:10突发室性早搏、血压降至82/55mmHg，值班医师夜间虽进行了吸氧、...",
+          "suggestion": "规范书写病程记录，确保实时完整。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-066\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"夜间诊疗活动未及时记录，次日补记且内容不全。\",\n      \"evidence\": \"当班病历未及时记录...直到次日上午查房后才统一补记\",\n      \"suggestion\": \"规范书写病程记录，确保实时完整。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-075\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病情变化未记录向患方告知情况。\",\n      \"evidence\": \"记录中未写向患者或家属告知病情变化\",\n      \"suggestion\": \"补充完善病情告知及沟通记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-076\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"自动出院无劝阻、告知及签名记录。\",\n      \"evidence\": \"未办理正规出院手续即离开...无患者或家属签名确认\",\n      \"suggestion\": \"完善自动出院知情同意书签字。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 509,
+            "prompt_tokens": 394,
+            "completion_tokens": 114,
+            "input_tokens": 394,
+            "output_tokens": 114,
+            "api_time": 1.0669918060302734,
+            "first_result_latency": 3.2009754180908203,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 352
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-075",
+          "rule_name": "重要病情变化向患者及其法定代理人或授权委托人告知情况未记录",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病情变化未记录向患方告知情况。",
+          "evidence": "【日常病程记录】2026-04-11 10:30补记：患者于2026-04-10 23:10突发室性早搏、血压降至82/55mmHg，值班医师夜间虽进行了吸氧、...",
+          "suggestion": "补充完善病情告知及沟通记录。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-066\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"夜间诊疗活动未及时记录，次日补记且内容不全。\",\n      \"evidence\": \"当班病历未及时记录...直到次日上午查房后才统一补记\",\n      \"suggestion\": \"规范书写病程记录，确保实时完整。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-075\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病情变化未记录向患方告知情况。\",\n      \"evidence\": \"记录中未写向患者或家属告知病情变化\",\n      \"suggestion\": \"补充完善病情告知及沟通记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-076\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"自动出院无劝阻、告知及签名记录。\",\n      \"evidence\": \"未办理正规出院手续即离开...无患者或家属签名确认\",\n      \"suggestion\": \"完善自动出院知情同意书签字。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 509,
+            "prompt_tokens": 394,
+            "completion_tokens": 114,
+            "input_tokens": 394,
+            "output_tokens": 114,
+            "api_time": 1.0669918060302734,
+            "first_result_latency": 3.2009754180908203,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 352
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-076",
+          "rule_name": "自动出院或放弃治疗无记录",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "自动出院无劝阻、告知及签名记录。",
+          "evidence": "【日常病程记录】2026-04-11 10:30补记：患者于2026-04-10 23:10突发室性早搏、血压降至82/55mmHg，值班医师夜间虽进行了吸氧、...",
+          "suggestion": "完善自动出院知情同意书签字。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-066\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"夜间诊疗活动未及时记录，次日补记且内容不全。\",\n      \"evidence\": \"当班病历未及时记录...直到次日上午查房后才统一补记\",\n      \"suggestion\": \"规范书写病程记录，确保实时完整。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-075\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病情变化未记录向患方告知情况。\",\n      \"evidence\": \"记录中未写向患者或家属告知病情变化\",\n      \"suggestion\": \"补充完善病情告知及沟通记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-076\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"自动出院无劝阻、告知及签名记录。\",\n      \"evidence\": \"未办理正规出院手续即离开...无患者或家属签名确认\",\n      \"suggestion\": \"完善自动出院知情同意书签字。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 509,
+            "prompt_tokens": 394,
+            "completion_tokens": 114,
+            "input_tokens": 394,
+            "output_tokens": 114,
+            "api_time": 1.0669918060302734,
+            "first_result_latency": 3.2009754180908203,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 352
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-063",
+          "rule_name": "交(接)班记录内容缺项或描述不清(入院日期、交班或接班日期、患者姓名、性别、年龄、主诉、入院情况、入",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "交班记录缺失入院日期、主诉及入院情况，内容严重缺项。",
+          "evidence": "【交接班记录】患者王某，女，63岁，神经外科住院",
+          "suggestion": "补充完整入院日期、主诉及入院情况。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-063\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"交班记录缺失入院日期、主诉及入院情况，内容严重缺项。\",\n      \"evidence\": \"患者王某，女，63岁...术后继续观察。\",\n      \"suggestion\": \"补充完整入院日期、主诉及入院情况。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            5,
+            22
+          ],
+          "metadata": {
+            "tokens_used": 1016,
+            "prompt_tokens": 884,
+            "completion_tokens": 132,
+            "input_tokens": 884,
+            "output_tokens": 132,
+            "api_time": 1.3050906658172607,
+            "first_result_latency": 1.3050906658172607,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "handoff_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 353
+          },
+          "target_document_type": "交接班记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-063": "non_compliant",
+          "SC-066": "non_compliant",
+          "SC-075": "non_compliant",
+          "SC-076": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-063": "non_compliant",
+          "SC-066": "non_compliant",
+          "SC-075": "non_compliant",
+          "SC-076": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_handover_communication_v1_pass.json",
+      "issue_type": "Z18_handover_communication",
+      "display_name": "交接班与告知沟通",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-063",
+        "SC-066",
+        "SC-075",
+        "SC-076"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P118",
+        "visit_id": "SYN-RUN-118",
+        "mr_no": "SYN0118",
+        "patient_name": "合成患者未",
+        "gender": "女",
+        "age": 63,
+        "department": "神经外科"
+      },
+      "elapsed_seconds": 4.867,
+      "total_tokens": 2681,
+      "prompt_tokens": 2227,
+      "completion_tokens": 454,
+      "api_time": 4.867,
+      "packs": [
+        {
+          "pack_id": "daily_course_content_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-066",
+            "SC-075",
+            "SC-076"
+          ],
+          "tokens_used": 1593,
+          "prompt_tokens": 1263,
+          "completion_tokens": 330,
+          "api_time": 3.604198694229126
+        },
+        {
+          "pack_id": "handoff_content",
+          "document_type": "交接班记录",
+          "rule_ids": [
+            "SC-063"
+          ],
+          "tokens_used": 1088,
+          "prompt_tokens": 964,
+          "completion_tokens": 124,
+          "api_time": 1.2623951435089111
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-066",
+          "rule_name": "值班期间所有的诊疗活动未及时记入病历或记录不全",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "值班期间诊疗活动及医患沟通记录完整，符合规范。",
+          "evidence": "【日常病程记录】2026-04-11 20:00与患者配偶王某某沟通，告知今日复查CT提示血肿较前稳定，引流管暂不拔除，继续脱水降压治疗，仍有再出血、颅压波动及...",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-066\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"值班期间诊疗活动及医患沟通记录完整，符合规范。\",\n      \"evidence\": \"2026-04-11 20:00与患者配偶王某某沟通...同意继续现有治疗方案\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-075\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病情变化及风险告知已详细记录并获家属确认。\",\n      \"evidence\": \"告知今日复查CT提示血肿较前稳定...仍有再出血、颅压波动及感染风险\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-076\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者继续治疗，无自动出院或放弃治疗情形。\",\n      \"evidence\": \"同意继续现有治疗方案\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            91
+          ],
+          "metadata": {
+            "tokens_used": 531,
+            "prompt_tokens": 421,
+            "completion_tokens": 110,
+            "input_tokens": 421,
+            "output_tokens": 110,
+            "api_time": 1.201399564743042,
+            "first_result_latency": 3.604198694229126,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 453
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-075",
+          "rule_name": "重要病情变化向患者及其法定代理人或授权委托人告知情况未记录",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病情变化及风险告知已详细记录并获家属确认。",
+          "evidence": "【日常病程记录】2026-04-11 20:00与患者配偶王某某沟通，告知今日复查CT提示血肿较前稳定，引流管暂不拔除，继续脱水降压治疗，仍有再出血、颅压波动及...",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-066\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"值班期间诊疗活动及医患沟通记录完整，符合规范。\",\n      \"evidence\": \"2026-04-11 20:00与患者配偶王某某沟通...同意继续现有治疗方案\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-075\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病情变化及风险告知已详细记录并获家属确认。\",\n      \"evidence\": \"告知今日复查CT提示血肿较前稳定...仍有再出血、颅压波动及感染风险\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-076\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者继续治疗，无自动出院或放弃治疗情形。\",\n      \"evidence\": \"同意继续现有治疗方案\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            91
+          ],
+          "metadata": {
+            "tokens_used": 531,
+            "prompt_tokens": 421,
+            "completion_tokens": 110,
+            "input_tokens": 421,
+            "output_tokens": 110,
+            "api_time": 1.201399564743042,
+            "first_result_latency": 3.604198694229126,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 453
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-076",
+          "rule_name": "自动出院或放弃治疗无记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "患者继续治疗，无自动出院或放弃治疗情形。",
+          "evidence": "同意继续现有治疗方案",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-066\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"值班期间诊疗活动及医患沟通记录完整，符合规范。\",\n      \"evidence\": \"2026-04-11 20:00与患者配偶王某某沟通...同意继续现有治疗方案\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-075\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病情变化及风险告知已详细记录并获家属确认。\",\n      \"evidence\": \"告知今日复查CT提示血肿较前稳定...仍有再出血、颅压波动及感染风险\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-076\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"患者继续治疗，无自动出院或放弃治疗情形。\",\n      \"evidence\": \"同意继续现有治疗方案\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            109,
+            119
+          ],
+          "metadata": {
+            "tokens_used": 531,
+            "prompt_tokens": 421,
+            "completion_tokens": 110,
+            "input_tokens": 421,
+            "output_tokens": 110,
+            "api_time": 1.201399564743042,
+            "first_result_latency": 3.604198694229126,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_content_core",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 453
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-063",
+          "rule_name": "交(接)班记录内容缺项或描述不清(入院日期、交班或接班日期、患者姓名、性别、年龄、主诉、入院情况、入",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "交接班记录要素齐全，描述清晰。",
+          "evidence": "【交接班记录】患者王某，女，63岁，住院号SYN0118，2026-04-10因突发头痛伴左侧肢体无力入院",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-063\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"交接班记录要素齐全，描述清晰。\",\n      \"evidence\": \"患者王某，女，63岁...2026-04-10因突发头痛伴左侧肢体无力入院\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            21,
+            67
+          ],
+          "metadata": {
+            "tokens_used": 1088,
+            "prompt_tokens": 964,
+            "completion_tokens": 124,
+            "input_tokens": 964,
+            "output_tokens": 124,
+            "api_time": 1.2623951435089111,
+            "first_result_latency": 1.2623951435089111,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "handoff_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 454
+          },
+          "target_document_type": "交接班记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-063": "compliant",
+          "SC-066": "compliant",
+          "SC-075": "compliant",
+          "SC-076": "not_applicable"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ],
+  "bucket_filters": [
+    "handover_communication"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 4,
+    "stabilized": 4,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-063",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_handover_communication_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_handover_communication_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-066",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_handover_communication_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_handover_communication_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-075",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_handover_communication_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_handover_communication_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-076",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_handover_communication_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_handover_communication_v1_defect.json"
+        ],
+        "stabilized": true
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

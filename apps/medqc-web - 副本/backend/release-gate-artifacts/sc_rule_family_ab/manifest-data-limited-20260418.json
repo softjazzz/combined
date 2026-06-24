@@ -1,0 +1,44 @@
+[
+  {
+    "institute_id": "MOCKV2",
+    "patient_id": "MV2P015",
+    "visit_id": "MV2-REAL-001",
+    "scene": "running",
+    "cohort_tag": "running_consult_or_discussion"
+  },
+  {
+    "institute_id": "MOCKV2",
+    "patient_id": "MV2P014",
+    "visit_id": "MV2-RICH-001",
+    "scene": "running",
+    "cohort_tag": "running_consult_or_discussion"
+  },
+  {
+    "institute_id": "LX001",
+    "patient_id": "P001",
+    "visit_id": "V-P001",
+    "scene": "running",
+    "cohort_tag": "running_consult_or_discussion"
+  },
+  {
+    "institute_id": "LZZXYY",
+    "patient_id": "P-LM-2025",
+    "visit_id": "V-LM-001",
+    "scene": "running",
+    "cohort_tag": "running_consult_or_discussion"
+  },
+  {
+    "institute_id": "INST001",
+    "patient_id": "P123456",
+    "visit_id": "BA20260035-V001",
+    "scene": "running",
+    "cohort_tag": "running_consult_or_discussion"
+  },
+  {
+    "institute_id": "LX001",
+    "patient_id": "P024",
+    "visit_id": "V001",
+    "scene": "final",
+    "cohort_tag": "final_terminal"
+  }
+]

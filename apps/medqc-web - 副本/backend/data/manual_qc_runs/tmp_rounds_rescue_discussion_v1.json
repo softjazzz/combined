@@ -1,0 +1,848 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T08:46:04.735049",
+  "run_finished_at": "2026-04-24T08:46:17.743586",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 1
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_rounds_rescue_discussion_v1_defect.json",
+      "issue_type": "Z17_rounds_rescue_discussion",
+      "display_name": "查房抢救讨论记录",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-050",
+        "SC-051",
+        "SC-055",
+        "SC-057",
+        "SC-058",
+        "SC-060"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P117",
+        "visit_id": "SYN-RUN-117",
+        "mr_no": "SYN0117",
+        "patient_name": "合成患者午",
+        "gender": "男",
+        "age": 72,
+        "department": "ICU"
+      },
+      "elapsed_seconds": 6.335,
+      "total_tokens": 3533,
+      "prompt_tokens": 2805,
+      "completion_tokens": 728,
+      "api_time": 6.329,
+      "packs": [
+        {
+          "pack_id": "senior_course_content",
+          "document_type": "上级查房记录",
+          "rule_ids": [
+            "SC-050",
+            "SC-051"
+          ],
+          "tokens_used": 1019,
+          "prompt_tokens": 801,
+          "completion_tokens": 218,
+          "api_time": 1.6175637245178223
+        },
+        {
+          "pack_id": "rescue_content",
+          "document_type": "抢救记录",
+          "rule_ids": [
+            "SC-055"
+          ],
+          "tokens_used": 724,
+          "prompt_tokens": 608,
+          "completion_tokens": 116,
+          "api_time": 1.0598623752593994
+        },
+        {
+          "pack_id": "diffcase_content",
+          "document_type": "疑难病例讨论记录",
+          "rule_ids": [
+            "SC-057",
+            "SC-058"
+          ],
+          "tokens_used": 1044,
+          "prompt_tokens": 773,
+          "completion_tokens": 271,
+          "api_time": 2.2252562046051025
+        },
+        {
+          "pack_id": "death_discussion_content",
+          "document_type": "死亡病例讨论记录",
+          "rule_ids": [
+            "SC-060"
+          ],
+          "tokens_used": 746,
+          "prompt_tokens": 623,
+          "completion_tokens": 123,
+          "api_time": 1.4265363216400146
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-050",
+          "rule_name": "上级医师查房无病情分析或欠缺、无诊疗意见或住院期间每周内无副主任医师以上的医师或医疗组长查房记录;上",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "上级查房记录仅重复医嘱，无病情分析或诊疗意见。",
+          "evidence": "今日主任查房：继续原治疗。",
+          "suggestion": "补充病情判断及具体诊疗计划。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-050\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"上级查房记录仅重复医嘱，无病情分析或诊疗意见。\",\n      \"evidence\": \"今日主任查房：继续原治疗。\",\n      \"suggestion\": \"补充病情判断及具体诊疗计划。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-051\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病危患者有主任查房记录，符合要求。\",\n      \"evidence\": \"今日主任查房；诊断：病危状态\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            13
+          ],
+          "metadata": {
+            "tokens_used": 509,
+            "prompt_tokens": 400,
+            "completion_tokens": 109,
+            "input_tokens": 400,
+            "output_tokens": 109,
+            "api_time": 0.8087818622589111,
+            "first_result_latency": 1.6175637245178223,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "senior_course_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 109
+          },
+          "target_document_type": "上级查房记录"
+        },
+        {
+          "rule_id": "SC-051",
+          "rule_name": "病危、病重、疑难病人无主(副主)任医师或科主任查房记录",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病危患者有主任查房记录，符合要求。",
+          "evidence": "【上级查房记录】今日主任查房：继续原治疗",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-050\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"上级查房记录仅重复医嘱，无病情分析或诊疗意见。\",\n      \"evidence\": \"今日主任查房：继续原治疗。\",\n      \"suggestion\": \"补充病情判断及具体诊疗计划。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-051\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病危患者有主任查房记录，符合要求。\",\n      \"evidence\": \"今日主任查房；诊断：病危状态\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            12
+          ],
+          "metadata": {
+            "tokens_used": 509,
+            "prompt_tokens": 400,
+            "completion_tokens": 109,
+            "input_tokens": 400,
+            "output_tokens": 109,
+            "api_time": 0.8087818622589111,
+            "first_result_latency": 1.6175637245178223,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "senior_course_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 109
+          },
+          "target_document_type": "上级查房记录"
+        },
+        {
+          "rule_id": "SC-055",
+          "rule_name": "抢救记录描述不清或抢救记录无标题",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "抢救记录仅一句话，缺乏具体抢救过程描述。",
+          "evidence": "抢救一次，病情重。",
+          "suggestion": "补充抢救时间、措施及效果详情。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-055\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"抢救记录仅一句话，缺乏具体抢救过程描述。\",\n      \"evidence\": \"抢救一次，病情重。\",\n      \"suggestion\": \"补充抢救时间、措施及效果详情。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            9
+          ],
+          "metadata": {
+            "tokens_used": 724,
+            "prompt_tokens": 608,
+            "completion_tokens": 116,
+            "input_tokens": 608,
+            "output_tokens": 116,
+            "api_time": 1.0598623752593994,
+            "first_result_latency": 1.0598623752593994,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "rescue_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 111
+          },
+          "target_document_type": "抢救记录"
+        },
+        {
+          "rule_id": "SC-057",
+          "rule_name": "疑难病例讨论记录缺项或描述不清(讨论日期、主持人、参加人员姓名及专业技术职务、具体讨论意见及主持人小",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "疑难病例讨论记录仅记“已讨论”，缺失日期、人员及具体意见等核心要素。",
+          "evidence": "【疑难病例讨论记录】已讨论",
+          "suggestion": "补充完整讨论时间、人员职务及详细讨论意见。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-057\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"疑难病例讨论记录仅记“已讨论”，缺失日期、人员及具体意见等核心要素。\",\n      \"evidence\": \"【主文书】已讨论。；【辅助证据】[死亡病例讨论记录] 记录简单。\",\n      \"suggestion\": \"补充完整讨论时间、人员职务及详细讨论意见。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-058\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病历未体现疑难病例讨论的具体结论，无法确认结论是否记入。\",\n      \"evidence\": \"【主文书】已讨论。；【上级查房记录】今日主任查房：继续原治疗。\",\n      \"suggestion\": \"明确记录疑难病例讨论的最终诊疗结论。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            3
+          ],
+          "metadata": {
+            "tokens_used": 522,
+            "prompt_tokens": 386,
+            "completion_tokens": 135,
+            "input_tokens": 386,
+            "output_tokens": 135,
+            "api_time": 1.1126281023025513,
+            "first_result_latency": 2.2252562046051025,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "diffcase_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 107
+          },
+          "target_document_type": "疑难病例讨论记录"
+        },
+        {
+          "rule_id": "SC-058",
+          "rule_name": "疑难病例讨论的结论未记入病历",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病历未体现疑难病例讨论的具体结论，无法确认结论是否记入。",
+          "evidence": "【疑难病例讨论记录】已讨论",
+          "suggestion": "明确记录疑难病例讨论的最终诊疗结论。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-057\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"疑难病例讨论记录仅记“已讨论”，缺失日期、人员及具体意见等核心要素。\",\n      \"evidence\": \"【主文书】已讨论。；【辅助证据】[死亡病例讨论记录] 记录简单。\",\n      \"suggestion\": \"补充完整讨论时间、人员职务及详细讨论意见。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-058\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病历未体现疑难病例讨论的具体结论，无法确认结论是否记入。\",\n      \"evidence\": \"【主文书】已讨论。；【上级查房记录】今日主任查房：继续原治疗。\",\n      \"suggestion\": \"明确记录疑难病例讨论的最终诊疗结论。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            3
+          ],
+          "metadata": {
+            "tokens_used": 522,
+            "prompt_tokens": 386,
+            "completion_tokens": 135,
+            "input_tokens": 386,
+            "output_tokens": 135,
+            "api_time": 1.1126281023025513,
+            "first_result_latency": 2.2252562046051025,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "diffcase_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 107
+          },
+          "target_document_type": "疑难病例讨论记录"
+        },
+        {
+          "rule_id": "SC-060",
+          "rule_name": "死亡病例讨论记录缺项或描述不清(科主任或副主任医师以上人员主持、参加人员姓名、专业技术职务及记录日期",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "死亡病例讨论记录仅记“记录简单”，缺失主持人、参加人员及职务等关键信息。",
+          "evidence": "记录简单。",
+          "suggestion": "补充主持及参会人员姓名、职称及日期。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-060\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"死亡病例讨论记录仅记“记录简单”，缺失主持人、参加人员及职务等关键信息。\",\n      \"evidence\": \"记录简单。\",\n      \"suggestion\": \"补充主持及参会人员姓名、职称及日期。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            5
+          ],
+          "metadata": {
+            "tokens_used": 746,
+            "prompt_tokens": 623,
+            "completion_tokens": 123,
+            "input_tokens": 623,
+            "output_tokens": 123,
+            "api_time": 1.4265363216400146,
+            "first_result_latency": 1.4265363216400146,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "death_discussion_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 107
+          },
+          "target_document_type": "死亡病例讨论记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-050": "non_compliant",
+          "SC-051": "compliant",
+          "SC-055": "non_compliant",
+          "SC-057": "non_compliant",
+          "SC-058": "non_compliant",
+          "SC-060": "uncertain"
+        },
+        "strict_hits": {
+          "SC-050": "non_compliant",
+          "SC-055": "non_compliant",
+          "SC-057": "non_compliant",
+          "SC-058": "non_compliant"
+        },
+        "soft_hits": {
+          "SC-060": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_bucket_rounds_rescue_discussion_v1_pass.json",
+      "issue_type": "Z17_rounds_rescue_discussion",
+      "display_name": "查房抢救讨论记录",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-050",
+        "SC-051",
+        "SC-055",
+        "SC-057",
+        "SC-058",
+        "SC-060"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P117",
+        "visit_id": "SYN-RUN-117",
+        "mr_no": "SYN0117",
+        "patient_name": "合成患者午",
+        "gender": "男",
+        "age": 72,
+        "department": "ICU"
+      },
+      "elapsed_seconds": 6.086,
+      "total_tokens": 3910,
+      "prompt_tokens": 3164,
+      "completion_tokens": 746,
+      "api_time": 6.086,
+      "packs": [
+        {
+          "pack_id": "senior_course_content",
+          "document_type": "上级查房记录",
+          "rule_ids": [
+            "SC-050",
+            "SC-051"
+          ],
+          "tokens_used": 1118,
+          "prompt_tokens": 890,
+          "completion_tokens": 228,
+          "api_time": 1.7936105728149414
+        },
+        {
+          "pack_id": "rescue_content",
+          "document_type": "抢救记录",
+          "rule_ids": [
+            "SC-055"
+          ],
+          "tokens_used": 843,
+          "prompt_tokens": 698,
+          "completion_tokens": 145,
+          "api_time": 1.1581311225891113
+        },
+        {
+          "pack_id": "diffcase_content",
+          "document_type": "疑难病例讨论记录",
+          "rule_ids": [
+            "SC-057",
+            "SC-058"
+          ],
+          "tokens_used": 1103,
+          "prompt_tokens": 863,
+          "completion_tokens": 240,
+          "api_time": 1.9004921913146973
+        },
+        {
+          "pack_id": "death_discussion_content",
+          "document_type": "死亡病例讨论记录",
+          "rule_ids": [
+            "SC-060"
+          ],
+          "tokens_used": 846,
+          "prompt_tokens": 713,
+          "completion_tokens": 133,
+          "api_time": 1.2334275245666504
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-050",
+          "rule_name": "上级医师查房无病情分析或欠缺、无诊疗意见或住院期间每周内无副主任医师以上的医师或医疗组长查房记录;上",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "上级查房记录包含病情分析及诊疗意见，符合规则要求。",
+          "evidence": "主任医师查房指出感染性休克诊断明确，需强化补液、升压及抗感染方案。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-050\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"上级查房记录包含病情分析及诊疗意见，符合规则要求。\",\n      \"evidence\": \"主任医师查房指出感染性休克诊断明确，需强化补液、升压及抗感染方案。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-051\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病危患者有主任医师查房记录，满足重症查房要求。\",\n      \"evidence\": \"患者病危...主任医师查房指出感染性休克诊断明确...\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            10,
+            43
+          ],
+          "metadata": {
+            "tokens_used": 559,
+            "prompt_tokens": 445,
+            "completion_tokens": 114,
+            "input_tokens": 445,
+            "output_tokens": 114,
+            "api_time": 0.8968052864074707,
+            "first_result_latency": 1.7936105728149414,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "senior_course_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 218
+          },
+          "target_document_type": "上级查房记录"
+        },
+        {
+          "rule_id": "SC-051",
+          "rule_name": "病危、病重、疑难病人无主(副主)任医师或科主任查房记录",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病危患者有主任医师查房记录，满足重症查房要求。",
+          "evidence": "【上级查房记录】患者病危，血压偏低，主任医师查房指出感染性休克诊断明确，需强化补液、升压及抗感染方案",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-050\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"上级查房记录包含病情分析及诊疗意见，符合规则要求。\",\n      \"evidence\": \"主任医师查房指出感染性休克诊断明确，需强化补液、升压及抗感染方案。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-051\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病危患者有主任医师查房记录，满足重症查房要求。\",\n      \"evidence\": \"患者病危...主任医师查房指出感染性休克诊断明确...\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            42
+          ],
+          "metadata": {
+            "tokens_used": 559,
+            "prompt_tokens": 445,
+            "completion_tokens": 114,
+            "input_tokens": 445,
+            "output_tokens": 114,
+            "api_time": 0.8968052864074707,
+            "first_result_latency": 1.7936105728149414,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "senior_course_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 218
+          },
+          "target_document_type": "上级查房记录"
+        },
+        {
+          "rule_id": "SC-055",
+          "rule_name": "抢救记录描述不清或抢救记录无标题",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "抢救记录存在但描述过于简略，缺乏具体抢救过程细节。",
+          "evidence": "16:20患者血压下降至78/45mmHg，立即补液、去甲肾上腺素升压、复查乳酸，家属已告知。",
+          "suggestion": "补充抢救具体措施及时间节点。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-055\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"抢救记录存在但描述过于简略，缺乏具体抢救过程细节。\",\n      \"evidence\": \"16:20患者血压下降至78/45mmHg，立即补液、去甲肾上腺素升压、复查乳酸，家属已告知。\",\n      \"suggestion\": \"补充抢救具体措施及时间节点。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            47
+          ],
+          "metadata": {
+            "tokens_used": 843,
+            "prompt_tokens": 698,
+            "completion_tokens": 145,
+            "input_tokens": 698,
+            "output_tokens": 145,
+            "api_time": 1.1581311225891113,
+            "first_result_latency": 1.1581311225891113,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "rescue_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 219
+          },
+          "target_document_type": "抢救记录"
+        },
+        {
+          "rule_id": "SC-057",
+          "rule_name": "疑难病例讨论记录缺项或描述不清(讨论日期、主持人、参加人员姓名及专业技术职务、具体讨论意见及主持人小",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "证据仅提及讨论内容，缺失主持人、参加人员姓名及职务等关键要素。",
+          "evidence": "围绕持续发热、感染灶不明进行讨论，形成补充CT及血培养方案。",
+          "suggestion": "补充主持人、参会人员姓名及职称。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-057\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据仅提及讨论内容，缺失主持人、参加人员姓名及职务等关键要素。\",\n      \"evidence\": \"围绕持续发热、感染灶不明进行讨论，形成补充CT及血培养方案。\",\n      \"suggestion\": \"补充主持人、参会人员姓名及职称。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-058\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未明确记录讨论形成的最终诊疗结论或后续处理决定。\",\n      \"evidence\": \"形成补充CT及血培养方案。\",\n      \"suggestion\": \"明确记录讨论结论及具体执行方案。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            30
+          ],
+          "metadata": {
+            "tokens_used": 551,
+            "prompt_tokens": 431,
+            "completion_tokens": 120,
+            "input_tokens": 431,
+            "output_tokens": 120,
+            "api_time": 0.9502460956573486,
+            "first_result_latency": 1.9004921913146973,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "diffcase_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 216
+          },
+          "target_document_type": "疑难病例讨论记录"
+        },
+        {
+          "rule_id": "SC-058",
+          "rule_name": "疑难病例讨论的结论未记入病历",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "证据未明确记录讨论形成的最终诊疗结论或后续处理决定。",
+          "evidence": "形成补充CT及血培养方案。",
+          "suggestion": "明确记录讨论结论及具体执行方案。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-057\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据仅提及讨论内容，缺失主持人、参加人员姓名及职务等关键要素。\",\n      \"evidence\": \"围绕持续发热、感染灶不明进行讨论，形成补充CT及血培养方案。\",\n      \"suggestion\": \"补充主持人、参会人员姓名及职称。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-058\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未明确记录讨论形成的最终诊疗结论或后续处理决定。\",\n      \"evidence\": \"形成补充CT及血培养方案。\",\n      \"suggestion\": \"明确记录讨论结论及具体执行方案。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            17,
+            30
+          ],
+          "metadata": {
+            "tokens_used": 551,
+            "prompt_tokens": 431,
+            "completion_tokens": 120,
+            "input_tokens": 431,
+            "output_tokens": 120,
+            "api_time": 0.9502460956573486,
+            "first_result_latency": 1.9004921913146973,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "diffcase_content",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 216
+          },
+          "target_document_type": "疑难病例讨论记录"
+        },
+        {
+          "rule_id": "SC-060",
+          "rule_name": "死亡病例讨论记录缺项或描述不清(科主任或副主任医师以上人员主持、参加人员姓名、专业技术职务及记录日期",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "死亡讨论记录中未体现主持人及参加人员的具体姓名、职务和日期。",
+          "evidence": "【死亡病例讨论记录】若患者死亡，已围绕死亡原因、诊疗经过和经验教训完整讨论",
+          "suggestion": "补充死亡讨论记录的主持人、参加者信息及日期。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-060\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"死亡讨论记录中未体现主持人及参加人员的具体姓名、职务和日期。\",\n      \"evidence\": \"senior_course_record:Y；diffcase_discussion_record:Y\",\n      \"suggestion\": \"补充死亡讨论记录的主持人、参加者信息及日期。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            27
+          ],
+          "metadata": {
+            "tokens_used": 846,
+            "prompt_tokens": 713,
+            "completion_tokens": 133,
+            "input_tokens": 713,
+            "output_tokens": 133,
+            "api_time": 1.2334275245666504,
+            "first_result_latency": 1.2334275245666504,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "death_discussion_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 216
+          },
+          "target_document_type": "死亡病例讨论记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-050": "compliant",
+          "SC-051": "compliant",
+          "SC-055": "uncertain",
+          "SC-057": "uncertain",
+          "SC-058": "uncertain",
+          "SC-060": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-055": "uncertain",
+          "SC-057": "uncertain",
+          "SC-058": "uncertain",
+          "SC-060": "uncertain"
+        }
+      }
+    }
+  ],
+  "bucket_filters": [
+    "rounds_rescue_discussion"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 6,
+    "stabilized": 0,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-050",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-051",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-055",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-057",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-058",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-060",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_rounds_rescue_discussion_v1_defect.json"
+        ],
+        "stabilized": false
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_progress_treatment_linkage_pathology_v1",
+    "issue_type": "Z19_progress_treatment_linkage",
+    "display_name": "病程治疗闭环-病理取材",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-037"],
+    "bucket_id": "progress_treatment_linkage"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P119A",
+    "visit_id": "SYN-RUN-119A",
+    "mr_no": "SYN0119A",
+    "patient_name": "合成患者申",
+    "gender": "男",
+    "age": 60,
+    "department": "普外科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "今日行胃镜活检，已取胃窦黏膜组织2块送病理。病理结果回报：慢性萎缩性胃炎伴肠化。已向患者家属告知结果，并调整后续治疗计划。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["慢性萎缩性胃炎伴肠化"],
+    "orders": ["胃镜活检送病理"],
+    "exams": ["病理结果回报"]
+  }
+}

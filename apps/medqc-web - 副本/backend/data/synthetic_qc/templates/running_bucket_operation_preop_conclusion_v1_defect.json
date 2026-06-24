@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_preop_conclusion_v1",
+    "issue_type": "Z10_operation_preop",
+    "display_name": "术前准备闭环-讨论结论",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-084", "SC-085"],
+    "bucket_id": "operation_preop"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P110C",
+    "visit_id": "SYN-RUN-110C",
+    "mr_no": "SYN0110C",
+    "patient_name": "合成患者癸丙",
+    "gender": "女",
+    "age": 47,
+    "department": "骨科"
+  },
+  "documents": [
+    {
+      "document_type": "presurg_discussion",
+      "title": "术前讨论",
+      "content": "已进行术前讨论，大家同意手术。记录未写术前讨论参加人员及职称，未写患者当前主要病情、手术指征、拟行术式、术中主要风险、替代方案、术后并发症预案，也没有形成明确讨论结论与执行意见。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["左股骨颈骨折"],
+    "orders": ["左侧人工全髋关节置换术"],
+    "exams": ["髋部X线提示左股骨颈骨折"]
+  }
+}

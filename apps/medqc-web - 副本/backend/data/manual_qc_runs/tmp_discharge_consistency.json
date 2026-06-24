@@ -1,0 +1,318 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-23T23:51:32.430678",
+  "run_finished_at": "2026-04-23T23:51:35.194434",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 0,
+    "partial_hit": 1,
+    "miss": 0,
+    "pass_ok": 1,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_discharge_consistency_v1_defect.json",
+      "issue_type": "Z07_discharge_consistency",
+      "display_name": "出院诊断一致性",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-125",
+        "SC-127"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P107",
+        "visit_id": "SYN-RUN-107",
+        "mr_no": "SYN0107",
+        "patient_name": "合成患者庚",
+        "gender": "男",
+        "age": 61,
+        "department": "肾内科"
+      },
+      "elapsed_seconds": 1.251,
+      "total_tokens": 736,
+      "prompt_tokens": 601,
+      "completion_tokens": 135,
+      "api_time": 1.243,
+      "packs": [
+        {
+          "pack_id": "discharge_consistency",
+          "document_type": "出院记录",
+          "rule_ids": [
+            "SC-125",
+            "SC-127"
+          ],
+          "tokens_used": 736,
+          "prompt_tokens": 601,
+          "completion_tokens": 135,
+          "api_time": 1.2431550025939941
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-127",
+          "rule_name": "病历中死亡时间记录不一致",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则 SC-127 仅适用于死亡病例，当前病历未检测到死亡记录或死亡事件",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则 SC-127 仅适用于死亡病例，当前病历未检测到死亡记录或死亡事件",
+            "method": "death_case_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "discharge_consistency",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 0
+          },
+          "rewrite_example": "",
+          "target_document_type": "出院记录"
+        },
+        {
+          "rule_id": "SC-125",
+          "rule_name": "出院诊断或死亡诊断错填、漏填、顺序错误",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "出院诊断与入院诊断存在差异，需确认是否漏填急性加重诊断。",
+          "evidence": "【出院记录】入院诊断：慢性肾功能不全急性加重，2型糖尿病",
+          "suggestion": "核实病情变化，补充或修正出院诊断。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.6,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-125\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"出院诊断与入院诊断存在差异，需确认是否漏填急性加重诊断。\",\n      \"evidence\": \"入院诊断：慢性肾功能不全急性加重...出院诊断：2型糖尿病；慢性肾炎。\",\n      \"suggestion\": \"核实病情变化，补充或修正出院诊断。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            22
+          ],
+          "metadata": {
+            "tokens_used": 736,
+            "prompt_tokens": 601,
+            "completion_tokens": 135,
+            "input_tokens": 601,
+            "output_tokens": 135,
+            "api_time": 1.2431550025939941,
+            "first_result_latency": 1.2431550025939941,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "discharge_consistency",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 63
+          },
+          "target_document_type": "出院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "partial_hit",
+        "relevant_statuses": {
+          "SC-125": "uncertain",
+          "SC-127": "not_applicable"
+        },
+        "strict_hits": {},
+        "soft_hits": {
+          "SC-125": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_bucket_discharge_consistency_v1_pass.json",
+      "issue_type": "Z07_discharge_consistency",
+      "display_name": "出院诊断一致性",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-125",
+        "SC-127"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P107",
+        "visit_id": "SYN-RUN-107",
+        "mr_no": "SYN0107",
+        "patient_name": "合成患者庚",
+        "gender": "男",
+        "age": 61,
+        "department": "肾内科"
+      },
+      "elapsed_seconds": 1.16,
+      "total_tokens": 751,
+      "prompt_tokens": 627,
+      "completion_tokens": 124,
+      "api_time": 1.16,
+      "packs": [
+        {
+          "pack_id": "discharge_consistency",
+          "document_type": "出院记录",
+          "rule_ids": [
+            "SC-125",
+            "SC-127"
+          ],
+          "tokens_used": 751,
+          "prompt_tokens": 627,
+          "completion_tokens": 124,
+          "api_time": 1.1603610515594482
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-127",
+          "rule_name": "病历中死亡时间记录不一致",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "规则 SC-127 仅适用于死亡病例，当前病历未检测到死亡记录或死亡事件",
+          "evidence": "",
+          "suggestion": "",
+          "confidence": 0.9,
+          "llm_raw_output": null,
+          "applicability": {
+            "is_applicable": false,
+            "reason": "规则 SC-127 仅适用于死亡病例，当前病历未检测到死亡记录或死亡事件",
+            "method": "death_case_guard"
+          },
+          "evidence_verified": true,
+          "metadata": {
+            "tokens_used": 0,
+            "api_time": 0.0,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "discharge_consistency",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 0
+          },
+          "rewrite_example": "",
+          "target_document_type": "出院记录"
+        },
+        {
+          "rule_id": "SC-125",
+          "rule_name": "出院诊断或死亡诊断错填、漏填、顺序错误",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "出院诊断填写完整，与入院诊断及病程一致，无漏填错填。",
+          "evidence": "出院诊断：慢性肾功能不全急性加重；2型糖尿病。诊疗经过与病程一致",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-125\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"出院诊断填写完整，与入院诊断及病程一致，无漏填错填。\",\n      \"evidence\": \"出院诊断：慢性肾功能不全急性加重；2型糖尿病。诊疗经过与病程一致\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            23,
+            55
+          ],
+          "metadata": {
+            "tokens_used": 751,
+            "prompt_tokens": 627,
+            "completion_tokens": 124,
+            "input_tokens": 627,
+            "output_tokens": 124,
+            "api_time": 1.1603610515594482,
+            "first_result_latency": 1.1603610515594482,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "discharge_consistency",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 101
+          },
+          "target_document_type": "出院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-125": "compliant",
+          "SC-127": "not_applicable"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ],
+  "bucket_filters": [
+    "discharge_consistency"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 2,
+    "stabilized": 0,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-125",
+        "pass_result": "pass_ok",
+        "defect_result": "partial_hit",
+        "pass_templates": [
+          "running_bucket_discharge_consistency_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_discharge_consistency_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-127",
+        "pass_result": "pass_ok",
+        "defect_result": "partial_hit",
+        "pass_templates": [
+          "running_bucket_discharge_consistency_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_discharge_consistency_v1_defect.json"
+        ],
+        "stabilized": false
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

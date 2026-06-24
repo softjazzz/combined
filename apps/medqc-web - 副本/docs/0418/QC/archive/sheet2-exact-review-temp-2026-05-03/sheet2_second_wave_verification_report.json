@@ -1,0 +1,43 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 10,
+  "families": [
+    {
+      "issue_family": "会诊执行记录缺失/未写执行情况",
+      "row_count": 4,
+      "job_id": "49498138-8f1b-4e09-bdf9-d6662ae2737b",
+      "result_breakdown": {
+        "miss": 3,
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 4
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "病程记录缺分析/缺处理意见",
+      "row_count": 6,
+      "job_id": "02c8d27b-95e8-4409-b78c-76d4548b5365",
+      "result_breakdown": {
+        "miss": 6
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 6
+      },
+      "items_count": 0,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 263,
+    "miss": 14,
+    "skip": 2,
+    "same_family_hit": 4
+  }
+}

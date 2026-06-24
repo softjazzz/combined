@@ -1,0 +1,28 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 1,
+  "families": [
+    {
+      "issue_family": "首次病程记录存在/时效；主治首次查房48小时；高级医师首次查房72小时",
+      "row_count": 1,
+      "job_id": "24615170-90d3-4447-987b-29b7af3f9dd7",
+      "result_breakdown": {
+        "exact_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 1,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "exact_hit": 64,
+    "same_family_hit": 204,
+    "pending": 2,
+    "skip": 13
+  }
+}

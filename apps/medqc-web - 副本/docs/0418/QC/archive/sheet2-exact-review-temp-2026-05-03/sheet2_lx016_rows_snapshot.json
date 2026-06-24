@@ -1,0 +1,129 @@
+[
+  {
+    "row_id": "Sheet2-R0150",
+    "visit_id": "2313364",
+    "patient_name": "孔祥斌",
+    "manual_issue_text": "1月13日，危急值处理不及时，请内分泌科会诊后，无会诊执行记录。1月16日病程记录中，未描述患者血糖控制情况及内分泌科会诊指导用药情况。1月23日，开具医嘱为普通饮食欠妥，",
+    "issue_family": "会诊执行记录缺失/未写执行情况；危急值记录不完整/处理不充分；诊疗医嘱与病程记录不一致",
+    "primary_rule_id": "LX-016",
+    "review_round": "LX-016-精确复核-第一轮",
+    "local_pg_key_excerpts": [
+      {
+        "title": "入院记录",
+        "record_time": "2026-03-29 10:05:55",
+        "excerpt": "左侧外踝红肿、破溃、流脓3天……门诊以软组织感染收住院。"
+      },
+      {
+        "title": "会诊记录",
+        "record_time": "2026-04-01 16:38:00",
+        "excerpt": "肾病内科会诊意见……已遵会诊意见给予尿毒清对症治疗，定期复查肾功能。"
+      },
+      {
+        "title": "会诊记录",
+        "record_time": "2026-04-02 16:56:00",
+        "excerpt": "临床药学会诊意见……已遵会诊意见停头孢呋辛，更换为万古霉素继续抗感染。"
+      }
+    ],
+    "release_key_excerpts": [
+      {
+        "source": "release/0426_full_auto",
+        "file": "daily_course_record.csv",
+        "record_time": "2026-04-03 08:28:33",
+        "excerpt": "今日请血管外科会诊协助诊疗……继续给予万古霉素抗感染、依诺肝素抗凝、烧伤膏外用。"
+      },
+      {
+        "source": "PG inpat_nondrug_order",
+        "file": "inpat_nondrug_order",
+        "update_time": "2026-03-29 09:50:44",
+        "excerpt": "糖尿病饮食、床旁血糖检测(护士) 为本次住院医嘱；未见 1 月内分泌会诊锚点。"
+      }
+    ]
+  },
+  {
+    "row_id": "Sheet2-R0173",
+    "visit_id": "2200664",
+    "patient_name": "朱泰廷",
+    "manual_issue_text": "1月30日后7天无病程记录，请心血管、肾内科、呼吸科、麻醉科、皮肤科等科室会诊后，无请会诊执行记录。",
+    "issue_family": "会诊执行记录缺失/未写执行情况；病程时效/缺失",
+    "primary_rule_id": "LX-016",
+    "review_round": "LX-016-精确复核-第一轮",
+    "local_pg_key_excerpts": [
+      {
+        "title": "唐远君副主任医师查房记录",
+        "record_time": "2026-02-08 09:36:46",
+        "excerpt": "患者自会诊后予以哌拉西林他唑巴坦治疗肺部感染处理……今日行术前讨论。"
+      },
+      {
+        "title": "术后第一天唐远君副主任医师查房记录",
+        "record_time": "2026-02-10 10:39:32",
+        "excerpt": "术后第一天继续膀胱冲洗治疗……观察患者病情变化。"
+      },
+      {
+        "title": "术后第二天余思源主治医师查房记录",
+        "record_time": "2026-02-11 11:20:00",
+        "excerpt": "病检提示前列腺腺泡性腺癌……今日请肿瘤科、CT室、病理科多学科会诊。"
+      }
+    ],
+    "release_key_excerpts": [
+      {
+        "source": "release/0426_full_auto",
+        "file": "consultation_record.csv",
+        "record_time": "2026-02-01 11:05:00",
+        "excerpt": "皮肤科会诊……遵会诊意见予以抗过敏治疗。"
+      },
+      {
+        "source": "release/0426_full_auto",
+        "file": "consultation_record.csv",
+        "record_time": "2026-02-05 11:02:00",
+        "excerpt": "肾病内科会诊……遵会诊意见予以完善甲状旁腺激素、无机磷、贫血三项。"
+      },
+      {
+        "source": "PG inpat_nondrug_order",
+        "file": "inpat_nondrug_order",
+        "update_time": "2026-02-05 15:54:47",
+        "excerpt": "已开立甲状旁腺激素测定、无机磷测定、贫血三项测定。"
+      }
+    ]
+  },
+  {
+    "row_id": "Sheet2-R0290",
+    "visit_id": "2324802",
+    "patient_name": "颜友芳",
+    "manual_issue_text": "会诊记录意见为定期复查血常规、血凝、DIC、大便隐血（未明确具体复查时间），请会诊执行记录中描述准会诊意见执行，但实际会诊7天后均未进行复查。",
+    "issue_family": "会诊记录内容质量/复制粘贴/结论不足；会诊意见已写遵执但实际未落实",
+    "primary_rule_id": "LX-016",
+    "review_round": "LX-016-精确复核-第一轮",
+    "local_pg_key_excerpts": [
+      {
+        "title": "会诊记录",
+        "record_time": "2026-04-06 15:44:02",
+        "excerpt": "建议行静脉血栓防治……定期复查血常规、血凝、DIC、大便隐血。患者目前呕吐暂不能排除消化道出血可能，暂不予抗凝，余遵会诊。"
+      },
+      {
+        "title": "日常病程记录",
+        "record_time": "2026-04-13 09:04:33",
+        "excerpt": "今日查房……拟加用氢化泼尼松、氨溴索、甘氨酸茶碱钠缓释片，同时可请心内科会诊。"
+      }
+    ],
+    "release_key_excerpts": [
+      {
+        "source": "PG inpat_nondrug_order",
+        "file": "inpat_nondrug_order",
+        "update_time": "2026-04-03 15:36:15",
+        "excerpt": "入院时已开立 血常规 / 血凝四项测定 / 大便常规+隐血。"
+      },
+      {
+        "source": "PG inpat_nondrug_order",
+        "file": "inpat_nondrug_order",
+        "update_time": "2026-04-14 09:58:39",
+        "excerpt": "4月14日仅补开 血常规、肾功3、电解质3、proBNP；仍未见血凝、DIC、大便隐血复查。"
+      },
+      {
+        "source": "PG inpat_drug_order",
+        "file": "inpat_drug_order",
+        "update_time": "2026-04-04 14:19:20",
+        "excerpt": "已开立地奥司明；4月15日又开立利伐沙班、比索洛尔、螺内酯、氢氯噻嗪、阿托伐他汀。"
+      }
+    ]
+  }
+]

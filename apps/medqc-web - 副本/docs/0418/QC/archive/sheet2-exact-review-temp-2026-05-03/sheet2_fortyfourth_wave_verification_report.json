@@ -1,0 +1,29 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 1,
+  "families": [
+    {
+      "issue_family": "病程记录病情变化记录不全",
+      "row_count": 1,
+      "job_id": "5ba9848b-0404-4df4-8498-fd46ab6b16d9",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 164,
+    "exact_hit": 28,
+    "miss": 38,
+    "same_family_hit": 44,
+    "skip": 9
+  }
+}

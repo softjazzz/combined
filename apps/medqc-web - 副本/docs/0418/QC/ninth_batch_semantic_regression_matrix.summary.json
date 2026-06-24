@@ -1,0 +1,15 @@
+{
+  "pool_id": "a627718c-bde9-4cd3-af9d-7856c072525e",
+  "target_pool_name": "0426",
+  "primary_batch_job_ids": ["e9f72aea-a782-4990-9a35-1eff5149a681"],
+  "reference_batch_job_ids": ["7835df63-78db-4aa5-9025-cf13bef59e75"],
+  "case_count": 9,
+  "core_case_count": 5,
+  "observe_case_count": 4,
+  "skip_case_count": 0,
+  "batch_hit_count": 5,
+  "batch_miss_count": 0,
+  "observe_hit_count": 0,
+  "observe_miss_count": 4,
+  "cases_with_narrowed_primary_rule": 7
+}

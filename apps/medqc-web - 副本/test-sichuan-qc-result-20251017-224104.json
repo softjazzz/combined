@@ -1,0 +1,33 @@
+{
+  "document_id": "test-doc-001",
+  "evaluation_summary": {
+    "total_rules": 68,
+    "compliant_rules": 57,
+    "compliance_rate": 85.0,
+    "overall_grade": "B",
+    "critical_violations": 3
+  },
+  "performance_metrics": {
+    "processing_time": 20.186843633651733,
+    "token_usage": 1375,
+    "estimated_cost": 0.00275
+  },
+  "evaluation_results": [
+    {
+      "rule_id": "SC-PLACEHOLDER",
+      "is_compliant": true,
+      "findings": "模型输出摘要",
+      "evidence": "### 结构化病历质控分析报告\n\n#### 文书类型: 首次病程记录  \n适用规则数: 0  \n\n---\n\n### 一、质控规则分析\n\n由于未提供具体的质控规则，我们将基于《四川省住院病历质量评定标准（2023年版）》中首次病程记录的相关通",
+      "confidence": 0.75
+    }
+  ],
+  "optimization_metrics": {
+    "token_savings_rate": 0.8,
+    "estimated_original_tokens": 6875,
+    "actual_tokens_saved": 5500,
+    "cost_savings": 0.011
+  },
+  "timestamp": "2025-10-17T14:41:04.527851+00:00",
+  "status": "success",
+  "mode": "single_prompt"
+}

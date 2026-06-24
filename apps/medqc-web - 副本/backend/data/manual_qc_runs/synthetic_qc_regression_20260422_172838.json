@@ -1,0 +1,117 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T17:28:36.583129",
+  "run_finished_at": "2026-04-22T17:28:38.035184",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_consultation_execution_copy_paste_v1_defect.json",
+      "issue_type": "D2_consultation_execution_copy_paste",
+      "display_name": "会诊执行记录复制粘贴严重",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-070"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P002",
+        "visit_id": "SYN-RUN-016",
+        "mr_no": "SYN0016",
+        "patient_name": "合成患者二",
+        "gender": "女",
+        "age": 47,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 1.36,
+      "total_tokens": 812,
+      "prompt_tokens": 667,
+      "completion_tokens": 145,
+      "api_time": 1.357,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-070"
+          ],
+          "tokens_used": 812,
+          "prompt_tokens": 667,
+          "completion_tokens": 145,
+          "api_time": 1.3574841022491455
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程记录未体现会诊意见的执行情况或采纳理由。",
+          "evidence": "会诊意见：建议完善降钙素原，调整抗菌药物为左氧氟沙星；医嘱：降钙素原；左氧氟沙星",
+          "suggestion": "补充病程记录中执行会诊意见的具体描述。",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程记录未体现会诊意见的执行情况或采纳理由。\",\n      \"evidence\": \"会诊意见：建议完善降钙素原，调整抗菌药物为左氧氟沙星；医嘱：降钙素原；左氧氟沙星\",\n      \"suggestion\": \"补充病程记录中执行会诊意见的具体描述。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": false,
+          "evidence_span": null,
+          "metadata": {
+            "tokens_used": 812,
+            "prompt_tokens": 667,
+            "completion_tokens": 145,
+            "input_tokens": 667,
+            "output_tokens": 145,
+            "api_time": 1.3574841022491455,
+            "first_result_latency": 1.3574841022491455,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 118
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-070": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-070": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    }
+  ]
+}

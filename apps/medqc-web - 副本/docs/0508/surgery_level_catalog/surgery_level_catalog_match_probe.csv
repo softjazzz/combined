@@ -1,0 +1,16 @@
+source_issue_file,visit_id,patient_name,surgery_name,matched_catalog_name,matched_level,match_type,match_confidence,source_page,review_status
+formal_qc_random10_original_chain_issue_review.json,2191573,廖小平,为肾透析的动静脉造瘘术,为肾透析的动静脉造瘘术,3,exact_normalized,0.96,69,matched
+formal_qc_random10_original_chain_issue_review.json,2191573,廖小平,左上肢血管探查术,手肌腱、血管、神经探查术,3,alias_contains,0.72,66,needs_review
+formal_qc_random10_original_chain_issue_review.json,2142472,张泽芳,左全膝关节翻修手术,,,no_match,0,,needs_review
+formal_qc_random10_original_chain_issue_review.json,2142472,张泽芳,术前手术,,,no_match,0,,needs_review
+formal_qc_random10_original_chain_issue_review.json,2142472,张泽芳,髌骨成形,膝关节镜下髌骨成形术,4,contains_normalized,0.72,23,needs_review
+formal_qc_random10_original_chain_issue_review.json,2142472,张泽芳,全膝关节假体翻修术(金属对聚乙烯)+髌骨成形术,全膝关节假体翻修术,4,contains_normalized,0.72,19,needs_review
+formal_qc_random10_batch3_original_chain_issue_review.json,2214679,田正群,腹腔镜经腹全子宫切除+双侧附件切除+阴道前后壁膨出修补术+膀胱膨出修补手术预案及难点对策术：1.术,,,no_match,0,,needs_review
+formal_qc_random10_batch3_original_chain_issue_review.json,2214679,田正群,腹腔镜经腹全子宫切除术+双侧卵巢和输卵管切除+阴道前壁修补+膀胱膨出修补术,腹腔镜经腹全子宫切除术,4,contains_normalized,0.72,5,needs_review
+formal_qc_random10_batch3_original_chain_issue_review.json,2214679,田正群,腹腔镜经腹全子宫切除+腹腔镜双侧卵巢和输卵管切除+阴道前后壁修补+膀胱膨出修补术,膀胱膨出修补术,3,contains_normalized,0.72,32,needs_review
+formal_qc_random10_batch3_original_chain_issue_review.json,2214679,田正群,腹腔镜经腹全子宫切除术+双侧卵巢和输卵管切除+阴道前后壁修补+膀胱膨出修补术,腹腔镜经腹全子宫切除术,4,contains_normalized,0.72,5,needs_review
+formal_qc_random10_batch3_original_chain_issue_review.json,2270715,马建倡,直肠癌手术,,,no_match,0,,needs_review
+formal_qc_random10_batch3_original_chain_issue_review.json,2270715,马建倡,腹腔镜下直肠恶性肿瘤手术,,,no_match,0,,needs_review
+formal_qc_random10_batch3_original_chain_issue_review.json,2270715,马建倡,结肠造口术,结肠造口术,3,exact_normalized,0.96,51,matched
+formal_qc_random10_batch3_original_chain_issue_review.json,2270715,马建倡,复瘘手术,,,no_match,0,,needs_review
+formal_qc_random10_batch3_original_chain_issue_review.json,2270715,马建倡,小肠肠粘连松解、小肠部分切除吻合术,,,no_match,0,,needs_review

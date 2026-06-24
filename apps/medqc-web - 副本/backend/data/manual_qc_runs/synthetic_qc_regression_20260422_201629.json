@@ -1,0 +1,120 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-22T20:16:28.929718",
+  "run_finished_at": "2026-04-22T20:16:29.930623",
+  "template_count": 1,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_senior_round_no_revision_of_diagnosis_v1_defect.json",
+      "issue_type": "E3_senior_round_no_revision_of_diagnosis",
+      "display_name": "上级查房未修正诊断或未针对异常情况给意见",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-050"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P008",
+        "visit_id": "SYN-RUN-042",
+        "mr_no": "SYN0042",
+        "patient_name": "合成患者八",
+        "gender": "女",
+        "age": 61,
+        "department": "内分泌科"
+      },
+      "elapsed_seconds": 0.908,
+      "total_tokens": 783,
+      "prompt_tokens": 662,
+      "completion_tokens": 121,
+      "api_time": 0.905,
+      "packs": [
+        {
+          "pack_id": "senior_course_content",
+          "document_type": "上级查房记录",
+          "rule_ids": [
+            "SC-050"
+          ],
+          "tokens_used": 783,
+          "prompt_tokens": 662,
+          "completion_tokens": 121,
+          "api_time": 0.9053184986114502
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-050",
+          "rule_name": "上级医师查房无病情分析或欠缺、无诊疗意见或住院期间每周内无副主任医师以上的医师或医疗组长查房记录;上",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "查房记录无病情分析及诊疗意见，仅重复医嘱。",
+          "evidence": "继续原治疗，注意观察病情变化",
+          "suggestion": "补充血压、血钾分析及具体调整方案。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-050\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"查房记录无病情分析及诊疗意见，仅重复医嘱。\",\n      \"evidence\": \"继续原治疗，注意观察病情变化\",\n      \"suggestion\": \"补充血压、血钾分析及具体调整方案。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            17,
+            31
+          ],
+          "metadata": {
+            "tokens_used": 783,
+            "prompt_tokens": 662,
+            "completion_tokens": 121,
+            "input_tokens": 662,
+            "output_tokens": 121,
+            "api_time": 0.9053184986114502,
+            "first_result_latency": 0.9053184986114502,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "senior_course_content",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 82
+          },
+          "target_document_type": "上级查房记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-050": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-050": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    }
+  ]
+}

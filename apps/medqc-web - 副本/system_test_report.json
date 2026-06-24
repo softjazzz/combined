@@ -1,0 +1,22 @@
+{
+  "test_time": "2025-09-03T20:12:22.233076",
+  "system_name": "四川省住院病历语义质控系统",
+  "frontend_url": "http://localhost:3000",
+  "backend_url": "http://localhost:8001",
+  "test_results": {
+    "backend_health": "✅ 通过",
+    "frontend_service": "✅ 通过",
+    "api_integration": "✅ 通过",
+    "ui_components": "✅ 通过",
+    "rule_count": 68,
+    "rule_categories": 8,
+    "complexity_levels": 3,
+    "defect_levels": 4
+  },
+  "recommendations": [
+    "✅ 系统已完全集成，可以正常使用",
+    "🎯 前端界面已适配四川省规则数据结构",
+    "📊 规则分类和统计显示正常",
+    "🔧 API响应速度良好，用户体验佳"
+  ]
+}

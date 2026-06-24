@@ -1,0 +1,119 @@
+{
+  "input_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "summary": {
+    "record_count": 4,
+    "skip_allowed_count": 0,
+    "fallback_available_count": 2,
+    "missing_document_type_breakdown": {
+      "术前讨论": 2
+    }
+  },
+  "results": [
+    {
+      "sheet2_row_id": "Sheet2-R0168",
+      "visit_id": "200245",
+      "patient_name": "徐玉彬",
+      "manual_issue_text": "手术记录无主刀医生签名",
+      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
+      "primary_rule_id": "SC-097",
+      "secondary_rule_ids": "SC-098",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::surgery_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\surgery_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\surgery_record.csv:no_row",
+        "local_pg@local_pg::presurg_summary:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\presurg_summary.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\presurg_summary.csv:no_row",
+        "local_pg@local_pg::postsurg_firstcourse_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\postsurg_firstcourse_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\postsurg_firstcourse_record.csv:no_row"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["手术记录", "手术/操作记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0192",
+      "visit_id": "2253222",
+      "patient_name": "陈金明",
+      "manual_issue_text": "手术记录无主刀医生签名",
+      "issue_family": "手术记录缺项/时间错误/逻辑不清/签名异常",
+      "primary_rule_id": "SC-097",
+      "secondary_rule_ids": "SC-098",
+      "skip_allowed": false,
+      "missing_document_types": [],
+      "checked_sources": [
+        "local_pg@local_pg::surgery_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\surgery_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\surgery_record.csv:no_row",
+        "local_pg@local_pg::presurg_summary:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\presurg_summary.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\presurg_summary.csv:no_row",
+        "local_pg@local_pg::postsurg_firstcourse_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\postsurg_firstcourse_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\postsurg_firstcourse_record.csv:no_row"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "已在至少一个数据源找到目标原始文书，不建议 skip",
+      "target_document_types": ["手术记录", "手术/操作记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0246",
+      "visit_id": "2330104",
+      "patient_name": "林永平",
+      "manual_issue_text": "多学科讨论记录中肿瘤科会诊意见与会诊记录单中会诊意见不一致",
+      "issue_family": "四级手术未 MDT",
+      "primary_rule_id": "SC-083",
+      "secondary_rule_ids": "",
+      "skip_allowed": false,
+      "missing_document_types": ["术前讨论"],
+      "checked_sources": [
+        "local_pg@local_pg::presurg_discussion:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\presurg_discussion.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\presurg_discussion.csv:no_row",
+        "local_pg@local_pg::presurg_summary:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\presurg_summary.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\presurg_summary.csv:no_row",
+        "local_pg@local_pg::surgery_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\surgery_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\surgery_record.csv:content(rows=1,content=1)",
+        "local_pg@local_pg::consultation_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\consultation_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\consultation_record.csv:content(rows=1,content=1)",
+        "local_pg@local_pg::daily_course_record:content(rows=2,content=2)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\daily_course_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\daily_course_record.csv:content(rows=2,content=2)"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "术前讨论 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["术前讨论", "会诊记录"]
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0263",
+      "visit_id": "2328501",
+      "patient_name": "余菊芳",
+      "manual_issue_text": "术前讨论结果未记入病历。四级肿瘤手术，无MDT记录。",
+      "issue_family": "四级手术未 MDT；术前讨论结论未入病历/缺项",
+      "primary_rule_id": "SC-083",
+      "secondary_rule_ids": "SC-084|SC-085",
+      "skip_allowed": false,
+      "missing_document_types": ["术前讨论"],
+      "checked_sources": [
+        "local_pg@local_pg::presurg_discussion:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\presurg_discussion.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\presurg_discussion.csv:no_row",
+        "local_pg@local_pg::presurg_summary:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\presurg_summary.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\presurg_summary.csv:no_row",
+        "local_pg@local_pg::surgery_record:content(rows=1,content=1)",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\surgery_record.csv:no_row",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\surgery_record.csv:no_row"
+      ],
+      "fallback_available": true,
+      "suggested_skip_reason": "术前讨论 原表缺失或无正文，但存在可回退文书，不建议 skip",
+      "target_document_types": ["术前讨论"]
+    }
+  ]
+}

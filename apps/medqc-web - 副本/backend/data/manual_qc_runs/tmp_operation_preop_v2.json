@@ -1,0 +1,1061 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T08:49:08.406100",
+  "run_finished_at": "2026-04-24T08:49:20.679598",
+  "template_count": 8,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 2,
+    "partial_hit": 2,
+    "miss": 0,
+    "pass_ok": 3,
+    "pass_regression": 1
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_operation_preop_conclusion_v1_defect.json",
+      "issue_type": "Z10_operation_preop",
+      "display_name": "术前准备闭环-讨论结论",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-084",
+        "SC-085"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P110C",
+        "visit_id": "SYN-RUN-110C",
+        "mr_no": "SYN0110C",
+        "patient_name": "合成患者癸丙",
+        "gender": "女",
+        "age": 47,
+        "department": "骨科"
+      },
+      "elapsed_seconds": 1.564,
+      "total_tokens": 968,
+      "prompt_tokens": 745,
+      "completion_tokens": 223,
+      "api_time": 1.561,
+      "packs": [
+        {
+          "pack_id": "presurg_discussion_procedure",
+          "document_type": "术前讨论",
+          "rule_ids": [
+            "SC-084",
+            "SC-085"
+          ],
+          "tokens_used": 968,
+          "prompt_tokens": 745,
+          "completion_tokens": 223,
+          "api_time": 1.5611870288848877
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-084",
+          "rule_name": "术前讨论的结论未记入病历",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "术前讨论仅记录同意手术，未记入具体结论。",
+          "evidence": "已进行术前讨论，大家同意手术。",
+          "suggestion": "补充术前讨论具体结论内容。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-084\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"术前讨论仅记录同意手术，未记入具体结论。\",\n      \"evidence\": \"已进行术前讨论，大家同意手术。\",\n      \"suggestion\": \"补充术前讨论具体结论内容。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-085\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"术前讨论结论缺失关键要素，记录不完整。\",\n      \"evidence\": \"已进行术前讨论，大家同意手术。\",\n      \"suggestion\": \"完善术前讨论结论的详细记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            15
+          ],
+          "metadata": {
+            "tokens_used": 484,
+            "prompt_tokens": 372,
+            "completion_tokens": 111,
+            "input_tokens": 372,
+            "output_tokens": 111,
+            "api_time": 0.7805935144424438,
+            "first_result_latency": 1.5611870288848877,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "presurg_discussion_procedure",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 70
+          },
+          "target_document_type": "术前讨论"
+        },
+        {
+          "rule_id": "SC-085",
+          "rule_name": "结论记录不完整",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "术前讨论结论缺失关键要素，记录不完整。",
+          "evidence": "已进行术前讨论，大家同意手术。",
+          "suggestion": "完善术前讨论结论的详细记录。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-084\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"术前讨论仅记录同意手术，未记入具体结论。\",\n      \"evidence\": \"已进行术前讨论，大家同意手术。\",\n      \"suggestion\": \"补充术前讨论具体结论内容。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-085\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"术前讨论结论缺失关键要素，记录不完整。\",\n      \"evidence\": \"已进行术前讨论，大家同意手术。\",\n      \"suggestion\": \"完善术前讨论结论的详细记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            15
+          ],
+          "metadata": {
+            "tokens_used": 484,
+            "prompt_tokens": 372,
+            "completion_tokens": 111,
+            "input_tokens": 372,
+            "output_tokens": 111,
+            "api_time": 0.7805935144424438,
+            "first_result_latency": 1.5611870288848877,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "presurg_discussion_procedure",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 70
+          },
+          "target_document_type": "术前讨论"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-084": "non_compliant",
+          "SC-085": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-084": "non_compliant",
+          "SC-085": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_operation_preop_conclusion_v1_pass.json",
+      "issue_type": "Z10_operation_preop",
+      "display_name": "术前准备闭环-讨论结论",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-084",
+        "SC-085"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P110C",
+        "visit_id": "SYN-RUN-110C",
+        "mr_no": "SYN0110C",
+        "patient_name": "合成患者癸丙",
+        "gender": "女",
+        "age": 47,
+        "department": "骨科"
+      },
+      "elapsed_seconds": 1.731,
+      "total_tokens": 1045,
+      "prompt_tokens": 807,
+      "completion_tokens": 238,
+      "api_time": 1.73,
+      "packs": [
+        {
+          "pack_id": "presurg_discussion_procedure",
+          "document_type": "术前讨论",
+          "rule_ids": [
+            "SC-084",
+            "SC-085"
+          ],
+          "tokens_used": 1045,
+          "prompt_tokens": 807,
+          "completion_tokens": 238,
+          "api_time": 1.7299528121948242
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-084",
+          "rule_name": "术前讨论的结论未记入病历",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "术前讨论结论已明确记入病历。",
+          "evidence": "讨论结论：患者目前生命体征平稳，具备手术指征；拟于明日上午在腰硬联合麻醉下行左侧人工全髋关节置换术",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-084\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"术前讨论结论已明确记入病历。\",\n      \"evidence\": \"讨论结论：患者目前生命体征平稳，具备手术指征；拟于明日上午在腰硬联合麻醉下行左侧人工全髋关节置换术\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-085\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"术前讨论结论记录完整，包含诊断、方案及风险预案。\",\n      \"evidence\": \"术中关注出血、脂肪栓塞及下肢静脉血栓风险，术后加强抗凝和康复训练\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            25,
+            74
+          ],
+          "metadata": {
+            "tokens_used": 522,
+            "prompt_tokens": 403,
+            "completion_tokens": 119,
+            "input_tokens": 403,
+            "output_tokens": 119,
+            "api_time": 0.8649764060974121,
+            "first_result_latency": 1.7299528121948242,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "presurg_discussion_procedure",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 156
+          },
+          "target_document_type": "术前讨论"
+        },
+        {
+          "rule_id": "SC-085",
+          "rule_name": "结论记录不完整",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "术前讨论结论记录完整，包含诊断、方案及风险预案。",
+          "evidence": "术中关注出血、脂肪栓塞及下肢静脉血栓风险，术后加强抗凝和康复训练",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-084\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"术前讨论结论已明确记入病历。\",\n      \"evidence\": \"讨论结论：患者目前生命体征平稳，具备手术指征；拟于明日上午在腰硬联合麻醉下行左侧人工全髋关节置换术\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-085\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"术前讨论结论记录完整，包含诊断、方案及风险预案。\",\n      \"evidence\": \"术中关注出血、脂肪栓塞及下肢静脉血栓风险，术后加强抗凝和康复训练\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            75,
+            107
+          ],
+          "metadata": {
+            "tokens_used": 522,
+            "prompt_tokens": 403,
+            "completion_tokens": 119,
+            "input_tokens": 403,
+            "output_tokens": 119,
+            "api_time": 0.8649764060974121,
+            "first_result_latency": 1.7299528121948242,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "presurg_discussion_procedure",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 156
+          },
+          "target_document_type": "术前讨论"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-084": "compliant",
+          "SC-085": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_operation_preop_mdt_v1_defect.json",
+      "issue_type": "Z10_operation_preop",
+      "display_name": "术前准备闭环-四级手术MDT",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-083"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P110B",
+        "visit_id": "SYN-RUN-110B",
+        "mr_no": "SYN0110B",
+        "patient_name": "合成患者癸乙",
+        "gender": "男",
+        "age": 61,
+        "department": "神经外科"
+      },
+      "elapsed_seconds": 1.217,
+      "total_tokens": 721,
+      "prompt_tokens": 602,
+      "completion_tokens": 119,
+      "api_time": 1.217,
+      "packs": [
+        {
+          "pack_id": "presurg_discussion_procedure",
+          "document_type": "术前讨论",
+          "rule_ids": [
+            "SC-083"
+          ],
+          "tokens_used": 721,
+          "prompt_tokens": 602,
+          "completion_tokens": 119,
+          "api_time": 1.2166047096252441
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-083",
+          "rule_name": "四级手术术前讨论未多学科讨论",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "术前讨论记录仅提及本科人员，未明确体现多学科参与。",
+          "evidence": "由本科主任和主治医师进行术前讨论",
+          "suggestion": "补充多学科会诊意见或讨论记录。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.6,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-083\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"术前讨论记录仅提及本科人员，未明确体现多学科参与。\",\n      \"evidence\": \"由本科主任和主治医师进行术前讨论\",\n      \"suggestion\": \"补充多学科会诊意见或讨论记录。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            21,
+            37
+          ],
+          "metadata": {
+            "tokens_used": 721,
+            "prompt_tokens": 602,
+            "completion_tokens": 119,
+            "input_tokens": 602,
+            "output_tokens": 119,
+            "api_time": 1.2166047096252441,
+            "first_result_latency": 1.2166047096252441,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "presurg_discussion_procedure",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 94
+          },
+          "target_document_type": "术前讨论"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "partial_hit",
+        "relevant_statuses": {
+          "SC-083": "uncertain"
+        },
+        "strict_hits": {},
+        "soft_hits": {
+          "SC-083": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_bucket_operation_preop_mdt_v1_pass.json",
+      "issue_type": "Z10_operation_preop",
+      "display_name": "术前准备闭环-四级手术MDT",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-083"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P110B",
+        "visit_id": "SYN-RUN-110B",
+        "mr_no": "SYN0110B",
+        "patient_name": "合成患者癸乙",
+        "gender": "男",
+        "age": 61,
+        "department": "神经外科"
+      },
+      "elapsed_seconds": 1.066,
+      "total_tokens": 756,
+      "prompt_tokens": 639,
+      "completion_tokens": 117,
+      "api_time": 1.066,
+      "packs": [
+        {
+          "pack_id": "presurg_discussion_procedure",
+          "document_type": "术前讨论",
+          "rule_ids": [
+            "SC-083"
+          ],
+          "tokens_used": 756,
+          "prompt_tokens": 639,
+          "completion_tokens": 117,
+          "api_time": 1.0657927989959717
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-083",
+          "rule_name": "四级手术术前讨论未多学科讨论",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "四级手术已组织多学科术前讨论，符合规则要求。",
+          "evidence": "已组织神经外科、麻醉科、影像科、重症医学科多学科术前讨论",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-083\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"四级手术已组织多学科术前讨论，符合规则要求。\",\n      \"evidence\": \"已组织神经外科、麻醉科、影像科、重症医学科多学科术前讨论\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            19,
+            47
+          ],
+          "metadata": {
+            "tokens_used": 756,
+            "prompt_tokens": 639,
+            "completion_tokens": 117,
+            "input_tokens": 639,
+            "output_tokens": 117,
+            "api_time": 1.0657927989959717,
+            "first_result_latency": 1.0657927989959717,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "presurg_discussion_procedure",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 148
+          },
+          "target_document_type": "术前讨论"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-083": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_operation_preop_summary_v1_defect.json",
+      "issue_type": "Z10_operation_preop",
+      "display_name": "术前准备闭环-术前小结",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-081"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P110A",
+        "visit_id": "SYN-RUN-110A",
+        "mr_no": "SYN0110A",
+        "patient_name": "合成患者癸甲",
+        "gender": "女",
+        "age": 52,
+        "department": "普外科"
+      },
+      "elapsed_seconds": 1.185,
+      "total_tokens": 734,
+      "prompt_tokens": 609,
+      "completion_tokens": 125,
+      "api_time": 1.185,
+      "packs": [
+        {
+          "pack_id": "presurg_summary_procedure",
+          "document_type": "术前小结",
+          "rule_ids": [
+            "SC-081"
+          ],
+          "tokens_used": 734,
+          "prompt_tokens": 609,
+          "completion_tokens": 125,
+          "api_time": 1.1850428581237793
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-081",
+          "rule_name": "术前小结缺项或描述不清(简要病情、术前诊断、手术指征、拟施手术名称和方式、拟施麻醉方式、注意事项，并",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "术前小结缺失简要病情、诊断、手术指征及麻醉方式等核心内容。",
+          "evidence": "患者拟手术治疗，已向家属交代风险。",
+          "suggestion": "补充完整术前小结各项要素。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-081\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"术前小结缺失简要病情、诊断、手术指征及麻醉方式等核心内容。\",\n      \"evidence\": \"患者拟手术治疗，已向家属交代风险。\",\n      \"suggestion\": \"补充完整术前小结各项要素。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            17
+          ],
+          "metadata": {
+            "tokens_used": 734,
+            "prompt_tokens": 609,
+            "completion_tokens": 125,
+            "input_tokens": 609,
+            "output_tokens": 125,
+            "api_time": 1.1850428581237793,
+            "first_result_latency": 1.1850428581237793,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "presurg_summary_procedure",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 73
+          },
+          "target_document_type": "术前小结"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-081": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-081": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_operation_preop_summary_v1_pass.json",
+      "issue_type": "Z10_operation_preop",
+      "display_name": "术前准备闭环-术前小结",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-081"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P110A",
+        "visit_id": "SYN-RUN-110A",
+        "mr_no": "SYN0110A",
+        "patient_name": "合成患者癸甲",
+        "gender": "女",
+        "age": 52,
+        "department": "普外科"
+      },
+      "elapsed_seconds": 0.973,
+      "total_tokens": 834,
+      "prompt_tokens": 711,
+      "completion_tokens": 123,
+      "api_time": 0.972,
+      "packs": [
+        {
+          "pack_id": "presurg_summary_procedure",
+          "document_type": "术前小结",
+          "rule_ids": [
+            "SC-081"
+          ],
+          "tokens_used": 834,
+          "prompt_tokens": 711,
+          "completion_tokens": 123,
+          "api_time": 0.9719133377075195
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-081",
+          "rule_name": "术前小结缺项或描述不清(简要病情、术前诊断、手术指征、拟施手术名称和方式、拟施麻醉方式、注意事项，并",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "术前小结要素齐全，内容描述清晰完整。",
+          "evidence": "【术前小结】简要病情：患者反复右上腹痛3月，加重伴发热1天，腹部超声提示胆囊结石并急性胆囊炎",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-081\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"术前小结要素齐全，内容描述清晰完整。\",\n      \"evidence\": \"简要病情：患者反复右上腹痛3月...拟施手术名称和方式：拟于全麻下行腹腔镜胆囊切除术\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            40
+          ],
+          "metadata": {
+            "tokens_used": 834,
+            "prompt_tokens": 711,
+            "completion_tokens": 123,
+            "input_tokens": 711,
+            "output_tokens": 123,
+            "api_time": 0.9719133377075195,
+            "first_result_latency": 0.9719133377075195,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "presurg_summary_procedure",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 214
+          },
+          "target_document_type": "术前小结"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-081": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_operation_preop_visit_v1_defect.json",
+      "issue_type": "Z10_operation_preop",
+      "display_name": "术前准备闭环-术前访视",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-086",
+        "SC-092"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P110D",
+        "visit_id": "SYN-RUN-110D",
+        "mr_no": "SYN0110D",
+        "patient_name": "合成患者癸丁",
+        "gender": "男",
+        "age": 68,
+        "department": "泌尿外科"
+      },
+      "elapsed_seconds": 1.913,
+      "total_tokens": 1010,
+      "prompt_tokens": 764,
+      "completion_tokens": 246,
+      "api_time": 1.913,
+      "packs": [
+        {
+          "pack_id": "anesthesia_procedure",
+          "document_type": "麻醉记录",
+          "rule_ids": [
+            "SC-086",
+            "SC-092"
+          ],
+          "tokens_used": 1010,
+          "prompt_tokens": 764,
+          "completion_tokens": 246,
+          "api_time": 1.912691354751587
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-086",
+          "rule_name": "无术前一天内主刀医生查看病人的记录或无麻醉术前访视记录",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "仅见拟行麻醉记录，缺失主刀医生术前一天查房及麻醉访视具体记录。",
+          "evidence": "术前已看病人，拟行麻醉。",
+          "suggestion": "补充主刀医生术前查房及麻醉访视详细记录。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-086\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"仅见拟行麻醉记录，缺失主刀医生术前一天查房及麻醉访视具体记录。\",\n      \"evidence\": \"术前已看病人，拟行麻醉。\",\n      \"suggestion\": \"补充主刀医生术前查房及麻醉访视详细记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-092\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"现有文本过于简略，无法判断是否包含姓名、病史等完整必填项。\",\n      \"evidence\": \"术前已看病人，拟行麻醉。\",\n      \"suggestion\": \"完善麻醉术前访视记录的完整性。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            12
+          ],
+          "metadata": {
+            "tokens_used": 505,
+            "prompt_tokens": 382,
+            "completion_tokens": 123,
+            "input_tokens": 382,
+            "output_tokens": 123,
+            "api_time": 0.9563456773757935,
+            "first_result_latency": 1.912691354751587,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "anesthesia_procedure",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 67
+          },
+          "target_document_type": "麻醉记录"
+        },
+        {
+          "rule_id": "SC-092",
+          "rule_name": "麻醉术前访视记录缺项或描述不清",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "现有文本过于简略，无法判断是否包含姓名、病史等完整必填项。",
+          "evidence": "术前已看病人，拟行麻醉。",
+          "suggestion": "完善麻醉术前访视记录的完整性。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.7,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-086\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"仅见拟行麻醉记录，缺失主刀医生术前一天查房及麻醉访视具体记录。\",\n      \"evidence\": \"术前已看病人，拟行麻醉。\",\n      \"suggestion\": \"补充主刀医生术前查房及麻醉访视详细记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-092\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"现有文本过于简略，无法判断是否包含姓名、病史等完整必填项。\",\n      \"evidence\": \"术前已看病人，拟行麻醉。\",\n      \"suggestion\": \"完善麻醉术前访视记录的完整性。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            12
+          ],
+          "metadata": {
+            "tokens_used": 505,
+            "prompt_tokens": 382,
+            "completion_tokens": 123,
+            "input_tokens": 382,
+            "output_tokens": 123,
+            "api_time": 0.9563456773757935,
+            "first_result_latency": 1.912691354751587,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "anesthesia_procedure",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 67
+          },
+          "target_document_type": "麻醉记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "partial_hit",
+        "relevant_statuses": {
+          "SC-086": "uncertain",
+          "SC-092": "uncertain"
+        },
+        "strict_hits": {},
+        "soft_hits": {
+          "SC-086": "uncertain",
+          "SC-092": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_bucket_operation_preop_visit_v1_pass.json",
+      "issue_type": "Z10_operation_preop",
+      "display_name": "术前准备闭环-术前访视",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-086",
+        "SC-092"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P110D",
+        "visit_id": "SYN-RUN-110D",
+        "mr_no": "SYN0110D",
+        "patient_name": "合成患者癸丁",
+        "gender": "男",
+        "age": 68,
+        "department": "泌尿外科"
+      },
+      "elapsed_seconds": 2.198,
+      "total_tokens": 1190,
+      "prompt_tokens": 916,
+      "completion_tokens": 274,
+      "api_time": 2.198,
+      "packs": [
+        {
+          "pack_id": "anesthesia_procedure",
+          "document_type": "麻醉记录",
+          "rule_ids": [
+            "SC-086",
+            "SC-092"
+          ],
+          "tokens_used": 1190,
+          "prompt_tokens": 916,
+          "completion_tokens": 274,
+          "api_time": 2.1976404190063477
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-086",
+          "rule_name": "无术前一天内主刀医生查看病人的记录或无麻醉术前访视记录",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "术前一天内存在主刀医生查看记录及麻醉术前访视记录。",
+          "evidence": "【麻醉记录】2026-04-10 20:10 麻醉医师李某术前访视",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-086\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"术前一天内存在主刀医生查看记录及麻醉术前访视记录。\",\n      \"evidence\": \"2026-04-10 19:30 主刀医生张某查看患者；2026-04-10 20:10 麻醉医师李某术前访视\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-092\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"麻醉术前访视记录缺失姓名、性别、年龄等基本信息及术前医嘱。\",\n      \"evidence\": \"既往高血压病史10年...拟行蛛网膜下腔阻滞联合硬膜外麻醉\",\n      \"suggestion\": \"补充患者基本信息及术前麻醉医嘱。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            27
+          ],
+          "metadata": {
+            "tokens_used": 595,
+            "prompt_tokens": 458,
+            "completion_tokens": 137,
+            "input_tokens": 458,
+            "output_tokens": 137,
+            "api_time": 1.0988202095031738,
+            "first_result_latency": 2.1976404190063477,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "anesthesia_procedure",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 223
+          },
+          "target_document_type": "麻醉记录"
+        },
+        {
+          "rule_id": "SC-092",
+          "rule_name": "麻醉术前访视记录缺项或描述不清",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "麻醉术前访视记录缺失姓名、性别、年龄等基本信息及术前医嘱。",
+          "evidence": "【麻醉记录】既往高血压病史10年，否认药物过敏",
+          "suggestion": "补充患者基本信息及术前麻醉医嘱。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-086\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"术前一天内存在主刀医生查看记录及麻醉术前访视记录。\",\n      \"evidence\": \"2026-04-10 19:30 主刀医生张某查看患者；2026-04-10 20:10 麻醉医师李某术前访视\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-092\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"麻醉术前访视记录缺失姓名、性别、年龄等基本信息及术前医嘱。\",\n      \"evidence\": \"既往高血压病史10年...拟行蛛网膜下腔阻滞联合硬膜外麻醉\",\n      \"suggestion\": \"补充患者基本信息及术前麻醉医嘱。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            28,
+            45
+          ],
+          "metadata": {
+            "tokens_used": 595,
+            "prompt_tokens": 458,
+            "completion_tokens": 137,
+            "input_tokens": 458,
+            "output_tokens": 137,
+            "api_time": 1.0988202095031738,
+            "first_result_latency": 2.1976404190063477,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "anesthesia_procedure",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 223
+          },
+          "target_document_type": "麻醉记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-086": "compliant",
+          "SC-092": "non_compliant"
+        },
+        "unexpected_hits": {
+          "SC-092": "non_compliant"
+        }
+      }
+    }
+  ],
+  "bucket_filters": [
+    "operation_preop"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 6,
+    "stabilized": 3,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-081",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_operation_preop_summary_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_operation_preop_summary_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-083",
+        "pass_result": "pass_ok",
+        "defect_result": "partial_hit",
+        "pass_templates": [
+          "running_bucket_operation_preop_mdt_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_operation_preop_mdt_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-084",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_operation_preop_conclusion_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_operation_preop_conclusion_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-085",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_operation_preop_conclusion_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_operation_preop_conclusion_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-086",
+        "pass_result": "pass_regression",
+        "defect_result": "partial_hit",
+        "pass_templates": [
+          "running_bucket_operation_preop_visit_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_operation_preop_visit_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-092",
+        "pass_result": "pass_regression",
+        "defect_result": "partial_hit",
+        "pass_templates": [
+          "running_bucket_operation_preop_visit_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_operation_preop_visit_v1_defect.json"
+        ],
+        "stabilized": false
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

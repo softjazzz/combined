@@ -1,0 +1,78 @@
+[
+  {
+    "row_id": "Sheet2-R0094",
+    "visit_id": "2062281",
+    "patient_name": "廖兴秀",
+    "manual_issue_text": "术后首次病程记录书写不规范，缺少术后处理措施、术后注意事项及向家属告知手术情况等内容。建议按照医院术后首次病程模板书写避免漏项。",
+    "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
+    "primary_rule_id": "SC-105",
+    "review_round": "SC-105-精确复核-第一轮",
+    "local_pg_key_excerpts": [
+      {
+        "title": "术后首次病程记录",
+        "record_time": null,
+        "excerpt": ""
+      },
+      {
+        "title": "石跃主治医师联合外一科刘强主治医师查房记录",
+        "record_time": "2025-11-07 09:22:08",
+        "excerpt": "术后第一天……顺利脱机拔管……但并非术后首次病程记录正文。"
+      }
+    ],
+    "release_key_excerpts": [
+      {
+        "source": "release/0426",
+        "file": "first_course_record.csv",
+        "record_time": "",
+        "excerpt": "3998339||1 空壳条目，无有效正文。"
+      },
+      {
+        "source": "release/0426_full_auto",
+        "file": "first_course_record.csv",
+        "record_time": "",
+        "excerpt": "3998339||1 空壳条目，无有效正文。"
+      },
+      {
+        "source": "release/0426 + release/0426_full_auto",
+        "file": "postsurg_firstcourse_record.csv",
+        "record_time": "",
+        "excerpt": "两处均无 visit_id=2062281 的术后首次病程记录行。"
+      }
+    ]
+  },
+  {
+    "row_id": "Sheet2-R0166",
+    "visit_id": "2200224",
+    "patient_name": "张乃军",
+    "manual_issue_text": "术后首次病程记录中手术时间与实际手术时间不一致",
+    "issue_family": "首次病程记录存在/时效；术后首次病程记录缺项/不清",
+    "primary_rule_id": "SC-105",
+    "review_round": "SC-105-精确复核-第一轮",
+    "local_pg_key_excerpts": [
+      {
+        "title": "术后首次病程记录",
+        "record_time": "2026-02-02 13:21:49",
+        "excerpt": "手术时间:2026年02月02日 10:45；麻醉方式:静吸复合全麻；手术方式:鼻内窥镜下鼻中隔成形术鼻骨折闭合性复位术。"
+      },
+      {
+        "title": "手术记录",
+        "record_time": "2026-02-02 13:12:34",
+        "excerpt": "surgery_begin_time=2026-02-02 10:45:00+08；surgery_end_time=2026-02-02 12:10:00+08。"
+      }
+    ],
+    "release_key_excerpts": [
+      {
+        "source": "release/0426_full_auto",
+        "file": "postsurg_firstcourse_record.csv",
+        "record_time": "2026-02-02 13:21:49",
+        "excerpt": "手术时间:2026年02月02日 10:45……术后处理措施:氨甲环酸止血、心电监测、吸氧、血氧饱和度监测等。"
+      },
+      {
+        "source": "PG surgery_record",
+        "file": "surgery_record",
+        "record_time": "2026-02-02 13:12:34",
+        "excerpt": "surgery_begin_time=2026-02-02 10:45:00+08，与术后首次病程记录一致。"
+      }
+    ]
+  }
+]

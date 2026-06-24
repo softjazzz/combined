@@ -1,0 +1,673 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T09:28:31.989836",
+  "run_finished_at": "2026-04-24T09:28:39.836236",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 1,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_admission_history_core_v1_defect.json",
+      "issue_type": "Z01_admission_history_core",
+      "display_name": "入院记录核心内容",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-004",
+        "SC-007",
+        "SC-008",
+        "SC-009",
+        "SC-011"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P101",
+        "visit_id": "SYN-RUN-101",
+        "mr_no": "SYN0101",
+        "patient_name": "合成患者甲",
+        "gender": "男",
+        "age": 62,
+        "department": "呼吸内科"
+      },
+      "elapsed_seconds": 3.935,
+      "total_tokens": 1762,
+      "prompt_tokens": 1202,
+      "completion_tokens": 560,
+      "api_time": 3.932,
+      "packs": [
+        {
+          "pack_id": "admission_content_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-004",
+            "SC-007",
+            "SC-008",
+            "SC-009",
+            "SC-011"
+          ],
+          "tokens_used": 1762,
+          "prompt_tokens": 1202,
+          "completion_tokens": 560,
+          "api_time": 3.9315154552459717
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-004",
+          "rule_name": "再次或多次入院记录未对本次住院前历次有关住院诊疗经过进行小结。",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "无法确认是否为再次入院，缺乏既往住院史证据。",
+          "evidence": "主诉：咳嗽咳痰1月。现病史：患者咳嗽1月入院。",
+          "suggestion": "补充既往住院记录或明确首次入院。",
+          "rewrite_example": "建议补写：补充与本次诊疗直接相关的病史要点、查体结果及入院诊断依据。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-004\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"无法确认是否为再次入院，缺乏既往住院史证据。\",\n      \"evidence\": \"主诉：咳嗽咳痰1月。现病史：患者咳嗽1月入院。\",\n      \"suggestion\": \"补充既往住院记录或明确首次入院。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-007\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历未提及病史陈述者身份及民事行为能力问题。\",\n      \"evidence\": \"无相关文本片段。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"主诉症状与诊断肺部感染逻辑一致，可导出第一诊断。\",\n      \"evidence\": \"主诉：咳嗽咳痰1月。入院诊断：肺部感染。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史仅复述主诉，缺失起病缓急、伴随症状等关键描述。\",\n      \"evidence\": \"现病史：患者咳嗽1月入院。\",\n      \"suggestion\": \"补充发病经过、性质及伴随症状。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史未描述鉴别诊断所需的阴性或阳性症状。\",\n      \"evidence\": \"现病史：患者咳嗽1月入院。体格检查：一般情况可。\",\n      \"suggestion\": \"补充发热、胸痛等鉴别相关症状描述。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            23
+          ],
+          "metadata": {
+            "tokens_used": 352,
+            "prompt_tokens": 240,
+            "completion_tokens": 112,
+            "input_tokens": 240,
+            "output_tokens": 112,
+            "api_time": 0.7863030910491944,
+            "first_result_latency": 3.9315154552459717,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 62
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-007",
+          "rule_name": "无完全民事行为能力的患者填写为病史陈述者。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病历未提及病史陈述者身份及民事行为能力问题。",
+          "evidence": "【入院记录】主诉：咳嗽咳痰1月",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-004\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"无法确认是否为再次入院，缺乏既往住院史证据。\",\n      \"evidence\": \"主诉：咳嗽咳痰1月。现病史：患者咳嗽1月入院。\",\n      \"suggestion\": \"补充既往住院记录或明确首次入院。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-007\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历未提及病史陈述者身份及民事行为能力问题。\",\n      \"evidence\": \"无相关文本片段。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"主诉症状与诊断肺部感染逻辑一致，可导出第一诊断。\",\n      \"evidence\": \"主诉：咳嗽咳痰1月。入院诊断：肺部感染。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史仅复述主诉，缺失起病缓急、伴随症状等关键描述。\",\n      \"evidence\": \"现病史：患者咳嗽1月入院。\",\n      \"suggestion\": \"补充发病经过、性质及伴随症状。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史未描述鉴别诊断所需的阴性或阳性症状。\",\n      \"evidence\": \"现病史：患者咳嗽1月入院。体格检查：一般情况可。\",\n      \"suggestion\": \"补充发热、胸痛等鉴别相关症状描述。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            9
+          ],
+          "metadata": {
+            "tokens_used": 352,
+            "prompt_tokens": 240,
+            "completion_tokens": 112,
+            "input_tokens": 240,
+            "output_tokens": 112,
+            "api_time": 0.7863030910491944,
+            "first_result_latency": 3.9315154552459717,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 62
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-008",
+          "rule_name": "主诉书写不规范或不能导出第一诊断。",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "主诉症状与诊断肺部感染逻辑一致，可导出第一诊断。",
+          "evidence": "【入院记录】主诉：咳嗽咳痰1月",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-004\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"无法确认是否为再次入院，缺乏既往住院史证据。\",\n      \"evidence\": \"主诉：咳嗽咳痰1月。现病史：患者咳嗽1月入院。\",\n      \"suggestion\": \"补充既往住院记录或明确首次入院。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-007\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历未提及病史陈述者身份及民事行为能力问题。\",\n      \"evidence\": \"无相关文本片段。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"主诉症状与诊断肺部感染逻辑一致，可导出第一诊断。\",\n      \"evidence\": \"主诉：咳嗽咳痰1月。入院诊断：肺部感染。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史仅复述主诉，缺失起病缓急、伴随症状等关键描述。\",\n      \"evidence\": \"现病史：患者咳嗽1月入院。\",\n      \"suggestion\": \"补充发病经过、性质及伴随症状。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史未描述鉴别诊断所需的阴性或阳性症状。\",\n      \"evidence\": \"现病史：患者咳嗽1月入院。体格检查：一般情况可。\",\n      \"suggestion\": \"补充发热、胸痛等鉴别相关症状描述。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            9
+          ],
+          "metadata": {
+            "tokens_used": 352,
+            "prompt_tokens": 240,
+            "completion_tokens": 112,
+            "input_tokens": 240,
+            "output_tokens": 112,
+            "api_time": 0.7863030910491944,
+            "first_result_latency": 3.9315154552459717,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 62
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-009",
+          "rule_name": "现病史记录不全或描述不清(包括发病的时间､起病缓急､主要症状､一般情况)。",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "现病史仅复述主诉，缺失起病缓急、伴随症状等关键描述。",
+          "evidence": "现病史：患者咳嗽1月入院。",
+          "suggestion": "补充发病经过、性质及伴随症状。",
+          "rewrite_example": "建议补写：补充与本次诊疗直接相关的病史要点、查体结果及入院诊断依据。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-004\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"无法确认是否为再次入院，缺乏既往住院史证据。\",\n      \"evidence\": \"主诉：咳嗽咳痰1月。现病史：患者咳嗽1月入院。\",\n      \"suggestion\": \"补充既往住院记录或明确首次入院。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-007\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历未提及病史陈述者身份及民事行为能力问题。\",\n      \"evidence\": \"无相关文本片段。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"主诉症状与诊断肺部感染逻辑一致，可导出第一诊断。\",\n      \"evidence\": \"主诉：咳嗽咳痰1月。入院诊断：肺部感染。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史仅复述主诉，缺失起病缓急、伴随症状等关键描述。\",\n      \"evidence\": \"现病史：患者咳嗽1月入院。\",\n      \"suggestion\": \"补充发病经过、性质及伴随症状。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史未描述鉴别诊断所需的阴性或阳性症状。\",\n      \"evidence\": \"现病史：患者咳嗽1月入院。体格检查：一般情况可。\",\n      \"suggestion\": \"补充发热、胸痛等鉴别相关症状描述。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            10,
+            23
+          ],
+          "metadata": {
+            "tokens_used": 352,
+            "prompt_tokens": 240,
+            "completion_tokens": 112,
+            "input_tokens": 240,
+            "output_tokens": 112,
+            "api_time": 0.7863030910491944,
+            "first_result_latency": 3.9315154552459717,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 62
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-011",
+          "rule_name": "未描述与本次入院有关的重要的阴性症状以及与鉴别诊断有关的阳性症状",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "现病史未描述鉴别诊断所需的阴性或阳性症状。",
+          "evidence": "现病史：患者咳嗽1月入院。体格检查：一般情况可。",
+          "suggestion": "补充发热、胸痛等鉴别相关症状描述。",
+          "rewrite_example": "建议补写：补充与本次诊疗直接相关的病史要点、查体结果及入院诊断依据。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-004\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"无法确认是否为再次入院，缺乏既往住院史证据。\",\n      \"evidence\": \"主诉：咳嗽咳痰1月。现病史：患者咳嗽1月入院。\",\n      \"suggestion\": \"补充既往住院记录或明确首次入院。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-007\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历未提及病史陈述者身份及民事行为能力问题。\",\n      \"evidence\": \"无相关文本片段。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"主诉症状与诊断肺部感染逻辑一致，可导出第一诊断。\",\n      \"evidence\": \"主诉：咳嗽咳痰1月。入院诊断：肺部感染。\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史仅复述主诉，缺失起病缓急、伴随症状等关键描述。\",\n      \"evidence\": \"现病史：患者咳嗽1月入院。\",\n      \"suggestion\": \"补充发病经过、性质及伴随症状。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"现病史未描述鉴别诊断所需的阴性或阳性症状。\",\n      \"evidence\": \"现病史：患者咳嗽1月入院。体格检查：一般情况可。\",\n      \"suggestion\": \"补充发热、胸痛等鉴别相关症状描述。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            10,
+            34
+          ],
+          "metadata": {
+            "tokens_used": 352,
+            "prompt_tokens": 240,
+            "completion_tokens": 112,
+            "input_tokens": 240,
+            "output_tokens": 112,
+            "api_time": 0.7863030910491944,
+            "first_result_latency": 3.9315154552459717,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 62
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-004": "uncertain",
+          "SC-007": "not_applicable",
+          "SC-008": "compliant",
+          "SC-009": "non_compliant",
+          "SC-011": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-009": "non_compliant",
+          "SC-011": "non_compliant"
+        },
+        "soft_hits": {
+          "SC-004": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_bucket_admission_history_core_v1_pass.json",
+      "issue_type": "Z01_admission_history_core",
+      "display_name": "入院记录核心内容",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-004",
+        "SC-007",
+        "SC-008",
+        "SC-009",
+        "SC-011"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P101",
+        "visit_id": "SYN-RUN-101",
+        "mr_no": "SYN0101",
+        "patient_name": "合成患者甲",
+        "gender": "男",
+        "age": 62,
+        "department": "呼吸内科"
+      },
+      "elapsed_seconds": 3.38,
+      "total_tokens": 1896,
+      "prompt_tokens": 1385,
+      "completion_tokens": 511,
+      "api_time": 3.379,
+      "packs": [
+        {
+          "pack_id": "admission_content_core",
+          "document_type": "入院记录",
+          "rule_ids": [
+            "SC-004",
+            "SC-007",
+            "SC-008",
+            "SC-009",
+            "SC-011"
+          ],
+          "tokens_used": 1896,
+          "prompt_tokens": 1385,
+          "completion_tokens": 511,
+          "api_time": 3.379377603530884
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-004",
+          "rule_name": "再次或多次入院记录未对本次住院前历次有关住院诊疗经过进行小结。",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "首次住院无既往史需小结",
+          "evidence": "患者本次为首次住院，既往无相关住院治疗史",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-004\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"首次住院无既往史需小结\",\n      \"evidence\": \"患者本次为首次住院，既往无相关住院治疗史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-007\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病史陈述者为患者本人且能准确陈述\",\n      \"evidence\": \"病史陈述者：患者本人，能准确陈述病情\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"主诉规范且与诊断社区获得性肺炎一致\",\n      \"evidence\": \"主诉：反复咳嗽咳痰伴气促1月；入院诊断：社区获得性肺炎\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史包含起病、症状、诊疗经过及一般情况\",\n      \"evidence\": \"1月前受凉后出现咳嗽...予头孢及雾化治疗5天后仍反复\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"已描述咯血、胸痛等鉴别阴性症状\",\n      \"evidence\": \"无咯血，无胸痛，无黑便\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            38,
+            58
+          ],
+          "metadata": {
+            "tokens_used": 379,
+            "prompt_tokens": 277,
+            "completion_tokens": 102,
+            "input_tokens": 277,
+            "output_tokens": 102,
+            "api_time": 0.6758755207061767,
+            "first_result_latency": 3.379377603530884,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 272
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-007",
+          "rule_name": "无完全民事行为能力的患者填写为病史陈述者。",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病史陈述者为患者本人且能准确陈述",
+          "evidence": "病史陈述者：患者本人，能准确陈述病情",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-004\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"首次住院无既往史需小结\",\n      \"evidence\": \"患者本次为首次住院，既往无相关住院治疗史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-007\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病史陈述者为患者本人且能准确陈述\",\n      \"evidence\": \"病史陈述者：患者本人，能准确陈述病情\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"主诉规范且与诊断社区获得性肺炎一致\",\n      \"evidence\": \"主诉：反复咳嗽咳痰伴气促1月；入院诊断：社区获得性肺炎\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史包含起病、症状、诊疗经过及一般情况\",\n      \"evidence\": \"1月前受凉后出现咳嗽...予头孢及雾化治疗5天后仍反复\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"已描述咯血、胸痛等鉴别阴性症状\",\n      \"evidence\": \"无咯血，无胸痛，无黑便\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            18
+          ],
+          "metadata": {
+            "tokens_used": 379,
+            "prompt_tokens": 277,
+            "completion_tokens": 102,
+            "input_tokens": 277,
+            "output_tokens": 102,
+            "api_time": 0.6758755207061767,
+            "first_result_latency": 3.379377603530884,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 272
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-008",
+          "rule_name": "主诉书写不规范或不能导出第一诊断。",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "主诉规范且与诊断社区获得性肺炎一致",
+          "evidence": "【入院记录】主诉：反复咳嗽咳痰伴气促1月",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-004\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"首次住院无既往史需小结\",\n      \"evidence\": \"患者本次为首次住院，既往无相关住院治疗史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-007\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病史陈述者为患者本人且能准确陈述\",\n      \"evidence\": \"病史陈述者：患者本人，能准确陈述病情\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"主诉规范且与诊断社区获得性肺炎一致\",\n      \"evidence\": \"主诉：反复咳嗽咳痰伴气促1月；入院诊断：社区获得性肺炎\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史包含起病、症状、诊疗经过及一般情况\",\n      \"evidence\": \"1月前受凉后出现咳嗽...予头孢及雾化治疗5天后仍反复\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"已描述咯血、胸痛等鉴别阴性症状\",\n      \"evidence\": \"无咯血，无胸痛，无黑便\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            19,
+            33
+          ],
+          "metadata": {
+            "tokens_used": 379,
+            "prompt_tokens": 277,
+            "completion_tokens": 102,
+            "input_tokens": 277,
+            "output_tokens": 102,
+            "api_time": 0.6758755207061767,
+            "first_result_latency": 3.379377603530884,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 272
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-009",
+          "rule_name": "现病史记录不全或描述不清(包括发病的时间､起病缓急､主要症状､一般情况)。",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "现病史包含起病、症状、诊疗经过及一般情况",
+          "evidence": "【入院记录】1月前受凉后出现咳嗽、黄色痰，活动后气促，无咯血，无胸痛，无黑便",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-004\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"首次住院无既往史需小结\",\n      \"evidence\": \"患者本次为首次住院，既往无相关住院治疗史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-007\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病史陈述者为患者本人且能准确陈述\",\n      \"evidence\": \"病史陈述者：患者本人，能准确陈述病情\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"主诉规范且与诊断社区获得性肺炎一致\",\n      \"evidence\": \"主诉：反复咳嗽咳痰伴气促1月；入院诊断：社区获得性肺炎\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史包含起病、症状、诊疗经过及一般情况\",\n      \"evidence\": \"1月前受凉后出现咳嗽...予头孢及雾化治疗5天后仍反复\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"已描述咯血、胸痛等鉴别阴性症状\",\n      \"evidence\": \"无咯血，无胸痛，无黑便\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            59,
+            91
+          ],
+          "metadata": {
+            "tokens_used": 379,
+            "prompt_tokens": 277,
+            "completion_tokens": 102,
+            "input_tokens": 277,
+            "output_tokens": 102,
+            "api_time": 0.6758755207061767,
+            "first_result_latency": 3.379377603530884,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 272
+          },
+          "target_document_type": "入院记录"
+        },
+        {
+          "rule_id": "SC-011",
+          "rule_name": "未描述与本次入院有关的重要的阴性症状以及与鉴别诊断有关的阳性症状",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "已描述咯血、胸痛等鉴别阴性症状",
+          "evidence": "无咯血，无胸痛，无黑便",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-004\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"首次住院无既往史需小结\",\n      \"evidence\": \"患者本次为首次住院，既往无相关住院治疗史\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-007\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病史陈述者为患者本人且能准确陈述\",\n      \"evidence\": \"病史陈述者：患者本人，能准确陈述病情\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-008\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"主诉规范且与诊断社区获得性肺炎一致\",\n      \"evidence\": \"主诉：反复咳嗽咳痰伴气促1月；入院诊断：社区获得性肺炎\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-009\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"现病史包含起病、症状、诊疗经过及一般情况\",\n      \"evidence\": \"1月前受凉后出现咳嗽...予头孢及雾化治疗5天后仍反复\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-011\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"已描述咯血、胸痛等鉴别阴性症状\",\n      \"evidence\": \"无咯血，无胸痛，无黑便\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            80,
+            91
+          ],
+          "metadata": {
+            "tokens_used": 379,
+            "prompt_tokens": 277,
+            "completion_tokens": 102,
+            "input_tokens": 277,
+            "output_tokens": 102,
+            "api_time": 0.6758755207061767,
+            "first_result_latency": 3.379377603530884,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "admission_content_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 272
+          },
+          "target_document_type": "入院记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-004": "not_applicable",
+          "SC-007": "compliant",
+          "SC-008": "compliant",
+          "SC-009": "compliant",
+          "SC-011": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ],
+  "bucket_filters": [
+    "admission_history_core"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 5,
+    "stabilized": 5,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-004",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_history_core_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_history_core_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-007",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_history_core_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_history_core_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-008",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_history_core_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_history_core_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-009",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_history_core_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_history_core_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-011",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_admission_history_core_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_admission_history_core_v1_defect.json"
+        ],
+        "stabilized": true
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

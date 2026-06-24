@@ -1,0 +1,35 @@
+{
+  "input_csv": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "summary": {
+    "record_count": 1,
+    "skip_allowed_count": 1,
+    "fallback_available_count": 0,
+    "missing_document_type_breakdown": {
+      "转科记录": 1
+    }
+  },
+  "results": [
+    {
+      "sheet2_row_id": "Sheet2-R0227",
+      "visit_id": "372465",
+      "patient_name": "梅秀英",
+      "manual_issue_text": "24小时内未完成转入记录",
+      "issue_family": "转科24小时内转入/转出记录",
+      "primary_rule_id": "SC-064",
+      "secondary_rule_ids": "",
+      "skip_allowed": true,
+      "missing_document_types": ["转科记录"],
+      "checked_sources": [
+        "local_pg@local_pg::transfer_in_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\transfer_in_record.csv:file_missing",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\transfer_in_record.csv:no_row",
+        "local_pg@local_pg::transfer_out_record:no_row",
+        "release_0426@D:\\LLM\\LX888\\release\\0426\\0426\\transfer_out_record.csv:file_missing",
+        "release_0426_full_auto@D:\\LLM\\LX888\\release\\0426_full_auto\\0426_full_auto\\transfer_out_record.csv:no_row"
+      ],
+      "fallback_available": false,
+      "suggested_skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 转科记录，且无可回退文书，可判 skip",
+      "target_document_types": ["转科记录"]
+    }
+  ]
+}

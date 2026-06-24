@@ -1,0 +1,132 @@
+{
+  "total_rows": 283,
+  "status_breakdown": {
+    "exact_hit": 64,
+    "same_family_hit": 204,
+    "skip": 15
+  },
+  "closed_rows": 283,
+  "remaining_pending_or_miss": 0,
+  "skip_rows": [
+    {
+      "sheet2_row_id": "Sheet2-R0011",
+      "visit_id": "1865702",
+      "patient_name": "李世财",
+      "issue_family": "非危重三天无病程",
+      "primary_rule_id": "LXE-18",
+      "skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 日常病程记录，且无可回退文书，可判 skip"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0012",
+      "visit_id": "434971",
+      "patient_name": "屈道莲",
+      "issue_family": "非危重三天无病程",
+      "primary_rule_id": "LXE-18",
+      "skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 日常病程记录，且无可回退文书，可判 skip"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0018",
+      "visit_id": "1931889",
+      "patient_name": "刘佳钦",
+      "issue_family": "手术同意书/知情同意签署异常",
+      "primary_rule_id": "LX-021",
+      "skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 知情同意书/知情沟通，且无可回退文书，可判 skip"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0038",
+      "visit_id": "1962806",
+      "patient_name": "钟星文",
+      "issue_family": "交接班记录缺失/缺项",
+      "primary_rule_id": "SC-062",
+      "skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 交接班记录，且无可回退文书，可判 skip"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0092",
+      "visit_id": "2017327",
+      "patient_name": "余廷久",
+      "issue_family": "住院超30天阶段小结/讨论缺失",
+      "primary_rule_id": "SC-065",
+      "skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 阶段小结，且无可回退文书，可判 skip"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0121",
+      "visit_id": "368986",
+      "patient_name": "张乃蓉",
+      "issue_family": "待人工归类",
+      "primary_rule_id": "",
+      "skip_reason": "Sheet2人工“存在问题”原文为空，无法确定质控点和核验证据。"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0127",
+      "visit_id": "2341278",
+      "patient_name": "王美金",
+      "issue_family": "术前小结缺失",
+      "primary_rule_id": "SC-080",
+      "skip_reason": "source_surgery_documents_missing_in_pg_and_release_snapshots"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0136",
+      "visit_id": "2122521",
+      "patient_name": "李才均",
+      "issue_family": "待人工归类",
+      "primary_rule_id": "",
+      "skip_reason": "Sheet2人工“存在问题”原文为空，无法确定质控点和核验证据。"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0170",
+      "visit_id": "2218096",
+      "patient_name": "张厚易",
+      "issue_family": "术前小结缺失",
+      "primary_rule_id": "SC-080",
+      "skip_reason": "source_surgery_documents_missing_in_pg_and_release_snapshots"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0203",
+      "visit_id": "000087300",
+      "patient_name": "屈义祥",
+      "issue_family": "会诊记录内容质量/复制粘贴/结论不足",
+      "primary_rule_id": "SC-069",
+      "skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 会诊记录，且无可回退文书，可判 skip"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0217",
+      "visit_id": "372274",
+      "patient_name": "谢全玉",
+      "issue_family": "出院记录缺失/提前书写/时效异常/签名缺失",
+      "primary_rule_id": "SC-116",
+      "skip_reason": "source_record_missing_in_pg_and_release_snapshots"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0227",
+      "visit_id": "372465",
+      "patient_name": "梅秀英",
+      "issue_family": "转科24小时内转入/转出记录",
+      "primary_rule_id": "SC-064",
+      "skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 转科记录，且无可回退文书，可判 skip"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0232",
+      "visit_id": "2186419",
+      "patient_name": "徐世群",
+      "issue_family": "住院超30天阶段小结/讨论缺失",
+      "primary_rule_id": "SC-065",
+      "skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 阶段小结，且无可回退文书，可判 skip"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0233",
+      "visit_id": "173594",
+      "patient_name": "万能帮",
+      "issue_family": "会诊意见已写遵执但实际未落实",
+      "primary_rule_id": "SC-070",
+      "skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 会诊执行证据，且无可回退文书，可判 skip"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0237",
+      "visit_id": "2218469",
+      "patient_name": "刘光蓉",
+      "issue_family": "住院超30天阶段小结/讨论缺失",
+      "primary_rule_id": "SC-065",
+      "skip_reason": "本地 PG、release/0426、release/0426_full_auto 均缺 阶段小结，且无可回退文书，可判 skip"
+    }
+  ]
+}

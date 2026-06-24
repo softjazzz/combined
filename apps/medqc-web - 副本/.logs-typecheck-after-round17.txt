@@ -1,0 +1,77 @@
+
+> medical-qc-system@1.0.0 type-check
+> vue-tsc --noEmit
+
+src/components/auth/AvatarUpload.vue(143,15): error TS2305: Module '"ant-design-vue/es/upload/interface"' has no exported member 'UploadRequestOption'.
+src/components/BatchFileProcessor.vue(214,16): error TS2322: Type '{ patientName?: string; content?: string; confidence?: number; documents?: unknown[]; }' is not assignable to type 'Partial<{ documents: ExtractedDocument[]; patientName?: string; department?: string; patientAge?: number; patientGender?: string; primaryDiagnosis?: string; secondaryDiagnosis?: string[]; majorSurgery?: string; confidence?: number; content?: string; }>'.
+  Types of property 'documents' are incompatible.
+    Type 'unknown[]' is not assignable to type 'ExtractedDocument[]'.
+      Type '{}' is missing the following properties from type 'ExtractedDocument': id, type, title, content, and 2 more.
+src/components/BatchFileProcessor.vue(215,16): error TS2559: Type '{ success: boolean; data?: { patientName?: string; content?: string; confidence?: number; documents?: unknown[]; }; message?: string; fileName: string; originalText?: string; }' has no properties in common with type 'LLMAnalysisMeta'.
+src/components/charts/RadarChartEcharts.vue(87,23): error TS2448: Block-scoped variable 'color' used before its declaration.
+src/components/common/BatchOperations.vue(404,5): error TS2349: This expression is not callable.
+  Type '{}' has no call signatures.
+src/components/common/BatchOperationsComponent.vue(404,5): error TS2349: This expression is not callable.
+  Type '{}' has no call signatures.
+src/components/common/DataTableComponent.vue(156,12): error TS2322: Type 'EmptyAction[]' is not assignable to type 'ActionItem[]'.
+  Type 'EmptyAction' is not assignable to type 'ActionItem'.
+    Types of property 'icon' are incompatible.
+      Type 'Component' is not assignable to type 'Record<string, unknown>'.
+        Type 'FunctionalComponent<any, {}, any, {}>' is not assignable to type 'Record<string, unknown>'.
+          Index signature for type 'string' is missing in type 'FunctionalComponent<any, {}, any, {}>'.
+src/components/common/DataTableComponent.vue(157,12): error TS2322: Type '(action: EmptyAction) => void' is not assignable to type '(action: ActionItem) => any'.
+  Types of parameters 'action' and 'action' are incompatible.
+    Type 'ActionItem' is not assignable to type 'EmptyAction'.
+      Types of property 'type' are incompatible.
+        Type '"default" | "link" | "text" | "primary" | "dashed"' is not assignable to type '"default" | "primary"'.
+          Type '"link"' is not assignable to type '"default" | "primary"'.
+src/components/common/RealtimeStatus.vue(21,39): error TS2339: Property 'getConnectionStatus' does not exist on type 'RealtimeService'.
+src/components/common/RealtimeStatusComponent.vue(21,39): error TS2339: Property 'getConnectionStatus' does not exist on type 'RealtimeService'.
+src/components/demo/QCNotificationDemoPanel.vue(373,29): error TS2339: Property 'handleClearAll' does not exist on type 'CreateComponentPublicInstanceWithMixins<ToResolvedProps<__VLS_Props, { notificationAction: (action: string, notification?: QCNotification) => any; }>, { h: { <K extends keyof HTMLElementTagNameMap>(type: K, children?: RawChildren): VNode<...>; <K extends keyof HTMLElementTagNameMap>(type: K, props?: VNodeProps & ......'.
+src/components/doctor-workstation/DoctorWorkstation.vue(624,34): error TS2339: Property 'template_content' does not exist on type 'MedicalRecordTemplate'.
+src/components/doctor-workstation/DoctorWorkstation.vue(706,48): error TS2345: Argument of type 'Partial<MedicalRecord>' is not assignable to parameter of type 'CreateMedicalRecordRequest'.
+  Property 'patient_name' is optional in type 'Partial<MedicalRecord>' but required in type 'CreateMedicalRecordRequest'.
+src/components/DocumentCategoryView.vue(426,30): error TS2552: Cannot find name 'QCAnalysisResultCompat'. Did you mean 'QCAnalysisResult'?
+src/components/layout/AdminLayout.vue(43,68): error TS2339: Property 'name' does not exist on type '{ readonly id: string; readonly email?: string; readonly display_name?: string; readonly department?: string; readonly hospital_id?: string; readonly roles?: readonly string[]; readonly is_active?: boolean; ... 7 more ...; readonly notifications?: { ...; }; }'.
+src/components/medical-records/EnhancedContentViewer.vue(33,48): error TS2551: Property 'value' does not exist on type 'boolean'. Did you mean 'valueOf'?
+src/components/medical-records/RecordDetail.vue(35,69): error TS2551: Property 'patient_age' does not exist on type 'RecordDetailModel'. Did you mean 'patient_name'?
+src/components/medical/BatchUploadComponent.vue(417,35): error TS2538: Type 'unknown' cannot be used as an index type.
+src/components/medical/QCAnalysisPanelComponent.vue(508,11): error TS2353: Object literal may only specify known properties, and 'itemId' does not exist in type 'QCIssueItem | { code: string; severity: string; description: string; suggestion: string; }'.
+src/components/notification/NotificationCenter.vue(415,13): error TS2322: Type 'Record<string, unknown>' is not assignable to type 'LocationQueryRaw'.
+  'string' index signatures are incompatible.
+    Type 'unknown' is not assignable to type 'LocationQueryValueRaw | LocationQueryValueRaw[]'.
+src/components/qc/CreateTaskDrawer.vue(123,25): error TS2322: Type 'string' is not assignable to type '"count" | "all" | "percentage"'.
+src/components/qc/SuggestionPanel.vue(260,3): error TS2724: '"@ant-design/icons-vue"' has no exported member named 'BookmarkOutlined'. Did you mean 'BookOutlined'?
+src/components/QCLLMConfig.vue(535,31): error TS2345: Argument of type 'string | ArrayBuffer' is not assignable to parameter of type 'string'.
+  Type 'ArrayBuffer' is not assignable to type 'string'.
+src/components/rules/DepartmentRulesTab.vue(405,26): error TS2305: Module '"vue"' has no exported member 'TableColumnsType'.
+src/mr/components/NavTree.vue(174,41): error TS2339: Property 'node' does not exist on type '{}'.
+src/views/dashboard/notifications/NotificationsView.vue(199,28): error TS2339: Property 'data' does not exist on type 'unknown'.
+src/views/dashboard/notifications/NotificationsView.vue(213,28): error TS2339: Property 'data' does not exist on type 'unknown'.
+src/views/debug/ApiTestView.vue(381,7): error TS2353: Object literal may only specify known properties, and 'bio' does not exist in type 'Partial<User>'.
+src/views/debug/ApiTestView.vue(487,7): error TS2353: Object literal may only specify known properties, and 'patient_name' does not exist in type 'CreateMedicalRecordRequest'.
+src/views/demo/ClinicalWorkstationDemoView.vue(59,82): error TS2339: Property 'patientId' does not exist on type '{ name: string; gender: "男" | "女"; age: number; idNumber?: string; }'.
+src/views/demo/frontpage/components/ExcelUploadView.vue(104,14): error TS2345: Argument of type '{ class: string; onClick: (sessionId?: string) => Promise<void>; }' is not assignable to parameter of type 'ButtonHTMLAttributes & ReservedProps & Record<string, unknown>'.
+  Type '{ class: string; onClick: (sessionId?: string) => Promise<void>; }' is not assignable to type 'ButtonHTMLAttributes'.
+    Types of property 'onClick' are incompatible.
+      Type '(sessionId?: string) => Promise<void>' is not assignable to type '(payload: PointerEvent) => void'.
+        Types of parameters 'sessionId' and 'payload' are incompatible.
+          Type 'PointerEvent' is not assignable to type 'string'.
+src/views/demo/frontpage/components/PreAnalysisView.vue(111,83): error TS2339: Property 'name' does not exist on type '{ code: string; text: string; }'.
+src/views/demo/FrontPageDemoView.vue(1248,5): error TS2353: Object literal may only specify known properties, and 'title' does not exist in type '{ name: string; description: string; medical_text: string; }'.
+src/views/demo/FrontPageDemoView.vue(1288,26): error TS2554: Expected 0 arguments, but got 1.
+src/views/demo/TestDemo.vue(31,5): error TS2561: Object literal may only specify known properties, but 'condition' does not exist in type 'QualityControlRule'. Did you mean to write 'conditions'?
+src/views/drg/FeeMonitoring.vue(288,26): error TS2339: Property 'drawerLoading' does not exist on type 'CreateComponentPublicInstanceWithMixins<ToResolvedProps<{}, {}>, { Empty: { new (...args: any[]): CreateComponentPublicInstanceWithMixins<Readonly<ExtractPropTypes<{ prefixCls: StringConstructor; imageStyle: { type: PropType<CSSProperties>; default: CSSProperties; }; image: { ...; }; description: { ...; }; }>> & Rea...'.
+src/views/drg/FeeMonitoring.vue(603,55): error TS2304: Cannot find name 'dayjs'.
+src/views/medical-records/BatchSmartImportView.vue(240,14): error TS2559: Type '{ success?: boolean; fileName?: string; message?: string; data?: { confidence?: number; patientName?: string; department?: string; }; originalText?: string; }' has no properties in common with type 'LLMAnalysisMeta'.
+src/views/medical-records/SmartImportMedicalRecordNew.vue(1086,7): error TS2353: Object literal may only specify known properties, and 'extractDocuments' does not exist in type 'ParseOptions'.
+src/views/medical-records/SmartImportMedicalRecordNew.vue(1440,32): error TS2304: Cannot find name 'supabase'.
+src/views/qc/QualityControlView.vue(201,91): error TS2339: Property 'record_type' does not exist on type '{ id: string; patient_name: string; patient_id: string; department: string; content: string; file_path: string; file_size: number; mime_type: string; status: "pending" | "analyzing" | "completed" | "failed"; ... 4 more ...; hospital_id: string; }'.
+src/views/qc/RealTimeQCView.vue(444,3): error TS2322: Type '{ id: string; name: string; description: string; type: "content" | "format" | "logic" | "completeness"; severity: QCAlertLevel; pattern?: string; isActive: boolean; priority: number; }' is not assignable to type '{ name: string; description: string; type: "completeness" | "content" | "format" | "logic"; severity: QCAlertLevel; priority: number; isActive: boolean; pattern: string; } | { ...; }'.
+  Type '{ id: string; name: string; description: string; type: "content" | "format" | "logic" | "completeness"; severity: QCAlertLevel; pattern?: string; isActive: boolean; priority: number; }' is not assignable to type '{ name: string; description: string; type: "completeness" | "content" | "format" | "logic"; severity: QCAlertLevel; priority: number; isActive: boolean; pattern: string; }'.
+    Property 'pattern' is optional in type '{ id: string; name: string; description: string; type: "completeness" | "content" | "format" | "logic"; severity: QCAlertLevel; pattern?: string; isActive: boolean; priority: number; }' but required in type '{ name: string; description: string; type: "completeness" | "content" | "format" | "logic"; severity: QCAlertLevel; priority: number; isActive: boolean; pattern: string; }'.
+src/views/statistics/StatisticsView.vue(39,41): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+src/views/statistics/StatisticsView.vue(453,11): error TS2554: Expected 2-4 arguments, but got 1.
+src/views/test/PatientDataTestView.vue(112,5): error TS2322: Type 'unknown' is not assignable to type 'Record<string, unknown>'.
+  Index signature for type 'string' is missing in type '{}'.
+src/views/test/RoleTestView.vue(24,79): error TS2339: Property 'join' does not exist on type 'string'.

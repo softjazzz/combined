@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_first_course_plan_incomplete_v1",
+    "issue_type": "B4_first_course_plan_incomplete",
+    "display_name": "诊疗计划不完整",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-027"]
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P002",
+    "visit_id": "SYN-RUN-012",
+    "mr_no": "SYN0012",
+    "patient_name": "合成患者二",
+    "gender": "女",
+    "age": 47,
+    "department": "消化内科"
+  },
+  "documents": [
+    {
+      "document_type": "first_course_record",
+      "title": "首次病程记录",
+      "content": "病例特点：上腹痛1周。诊断依据：结合病史考虑胃炎。鉴别诊断：待排。诊疗计划：完善检查，对症治疗。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["急性胃炎待查"],
+    "orders": ["对症治疗"],
+    "exams": []
+  }
+}

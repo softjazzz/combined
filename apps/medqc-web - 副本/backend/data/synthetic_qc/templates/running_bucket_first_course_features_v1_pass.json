@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_first_course_features_v1",
+    "issue_type": "Z13_first_course_features",
+    "display_name": "首次病程病例特点",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-023", "SC-024"],
+    "bucket_id": "first_course_features"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P113",
+    "visit_id": "SYN-RUN-113",
+    "mr_no": "SYN0113",
+    "patient_name": "合成患者寅",
+    "gender": "男",
+    "age": 50,
+    "department": "消化内科"
+  },
+  "documents": [
+    {
+      "document_type": "first_course_record",
+      "title": "首次病程记录",
+      "content": "病例特点：1. 中年男性，急性起病，以反复上腹痛2周为主要表现，进食后加重并伴反酸。2. 体征为上腹轻压痛，无反跳痛、肌紧张及腹膜刺激征，无发热、黑便等急腹症表现。3. 胃镜示胃窦溃疡A1期，为明确器质性病变证据。4. 结合病史特点、查体及胃镜结果，病例特点已归纳为消化性溃疡表现，支持胃窦溃疡诊断。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["胃窦溃疡"],
+    "orders": [],
+    "exams": ["胃镜示胃窦溃疡A1期"]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 2,
+  "families": [
+    {
+      "issue_family": "首次病程记录存在/时效；术前主刀医生查房/麻醉术前访视缺失；术后首次病程/麻醉术后访视缺失",
+      "row_count": 1,
+      "job_id": "b700803f-99b2-4322-8772-ded49626cc45",
+      "result_breakdown": {
+        "same_family_hit": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 1,
+      "failed_count": 0
+    },
+    {
+      "issue_family": "四级手术未 MDT；术前讨论结论未入病历/缺项",
+      "row_count": 1,
+      "job_id": "62e31eb5-e6f8-410a-8952-678e91362f5e",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 0,
+        "llm": 1
+      },
+      "items_count": 0,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 157,
+    "exact_hit": 28,
+    "miss": 22,
+    "same_family_hit": 65,
+    "skip": 11
+  }
+}

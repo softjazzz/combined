@@ -1,0 +1,460 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T09:36:37.911439",
+  "run_finished_at": "2026-04-24T09:36:44.074361",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 1
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_consent_quality_v1_defect.json",
+      "issue_type": "Z04_consent_quality",
+      "display_name": "知情同意质量",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-131",
+        "SC-134",
+        "SC-136"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P104",
+        "visit_id": "SYN-RUN-104",
+        "mr_no": "SYN0104",
+        "patient_name": "合成患者丁",
+        "gender": "女",
+        "age": 45,
+        "department": "肿瘤科"
+      },
+      "elapsed_seconds": 2.49,
+      "total_tokens": 1321,
+      "prompt_tokens": 987,
+      "completion_tokens": 334,
+      "api_time": 2.486,
+      "packs": [
+        {
+          "pack_id": "consent_content",
+          "document_type": "知情同意书",
+          "rule_ids": [
+            "SC-131",
+            "SC-134",
+            "SC-136"
+          ],
+          "tokens_used": 1321,
+          "prompt_tokens": 987,
+          "completion_tokens": 334,
+          "api_time": 2.485978841781616
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-131",
+          "rule_name": "特殊检查、特殊治疗、特殊用药、临床试验、药品试验、医疗器械试验、高耗材、自费项目同意书描述不清(特殊",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "化疗知情同意书关键内容缺失且无签名。",
+          "evidence": "【知情同意书】治疗目的、主要风险、替代方案、自费耗材情况未填写，患者及医师签名栏为空",
+          "suggestion": "补全风险替代方案并签署。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-131\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"化疗知情同意书关键内容缺失且无签名。\",\n      \"evidence\": \"治疗目的、主要风险...未填写，患者及医师签名栏为空。\",\n      \"suggestion\": \"补全风险替代方案并签署。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-134\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"输血同意书仅记知情，缺具体要素。\",\n      \"evidence\": \"拟输血治疗，家属知情。\",\n      \"suggestion\": \"完善输血指征及风险描述。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-136\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病重通知书仅记知情，缺必要信息。\",\n      \"evidence\": \"患者病重，家属已知情。\",\n      \"suggestion\": \"补充病情危重情况及建议。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            17,
+            52
+          ],
+          "metadata": {
+            "tokens_used": 440,
+            "prompt_tokens": 329,
+            "completion_tokens": 111,
+            "input_tokens": 329,
+            "output_tokens": 111,
+            "api_time": 0.8286596139272054,
+            "first_result_latency": 2.485978841781616,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "consent_content",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 125
+          },
+          "target_document_type": "知情同意书"
+        },
+        {
+          "rule_id": "SC-134",
+          "rule_name": "输血治疗知情同意书缺项或描述不清",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "输血同意书仅记知情，缺具体要素。",
+          "evidence": "【知情同意书】拟行中心静脉置管及化疗，患者知情",
+          "suggestion": "完善输血指征及风险描述。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-131\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"化疗知情同意书关键内容缺失且无签名。\",\n      \"evidence\": \"治疗目的、主要风险...未填写，患者及医师签名栏为空。\",\n      \"suggestion\": \"补全风险替代方案并签署。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-134\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"输血同意书仅记知情，缺具体要素。\",\n      \"evidence\": \"拟输血治疗，家属知情。\",\n      \"suggestion\": \"完善输血指征及风险描述。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-136\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病重通知书仅记知情，缺必要信息。\",\n      \"evidence\": \"患者病重，家属已知情。\",\n      \"suggestion\": \"补充病情危重情况及建议。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            16
+          ],
+          "metadata": {
+            "tokens_used": 440,
+            "prompt_tokens": 329,
+            "completion_tokens": 111,
+            "input_tokens": 329,
+            "output_tokens": 111,
+            "api_time": 0.8286596139272054,
+            "first_result_latency": 2.485978841781616,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "consent_content",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 125
+          },
+          "target_document_type": "知情同意书"
+        },
+        {
+          "rule_id": "SC-136",
+          "rule_name": "病危(重)通知书缺项或描述不清",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病重通知书仅记知情，缺必要信息。",
+          "evidence": "【知情同意书】拟行中心静脉置管及化疗，患者知情",
+          "suggestion": "补充病情危重情况及建议。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-131\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"化疗知情同意书关键内容缺失且无签名。\",\n      \"evidence\": \"治疗目的、主要风险...未填写，患者及医师签名栏为空。\",\n      \"suggestion\": \"补全风险替代方案并签署。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-134\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"输血同意书仅记知情，缺具体要素。\",\n      \"evidence\": \"拟输血治疗，家属知情。\",\n      \"suggestion\": \"完善输血指征及风险描述。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-136\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病重通知书仅记知情，缺必要信息。\",\n      \"evidence\": \"患者病重，家属已知情。\",\n      \"suggestion\": \"补充病情危重情况及建议。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            16
+          ],
+          "metadata": {
+            "tokens_used": 440,
+            "prompt_tokens": 329,
+            "completion_tokens": 111,
+            "input_tokens": 329,
+            "output_tokens": 111,
+            "api_time": 0.8286596139272054,
+            "first_result_latency": 2.485978841781616,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "consent_content",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 125
+          },
+          "target_document_type": "知情同意书"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-131": "non_compliant",
+          "SC-134": "non_compliant",
+          "SC-136": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-131": "non_compliant",
+          "SC-134": "non_compliant",
+          "SC-136": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_consent_quality_v1_pass.json",
+      "issue_type": "Z04_consent_quality",
+      "display_name": "知情同意质量",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-131",
+        "SC-134",
+        "SC-136"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P104",
+        "visit_id": "SYN-RUN-104",
+        "mr_no": "SYN0104",
+        "patient_name": "合成患者丁",
+        "gender": "女",
+        "age": 45,
+        "department": "肿瘤科"
+      },
+      "elapsed_seconds": 3.337,
+      "total_tokens": 1483,
+      "prompt_tokens": 1096,
+      "completion_tokens": 387,
+      "api_time": 3.336,
+      "packs": [
+        {
+          "pack_id": "consent_content",
+          "document_type": "知情同意书",
+          "rule_ids": [
+            "SC-131",
+            "SC-134",
+            "SC-136"
+          ],
+          "tokens_used": 1483,
+          "prompt_tokens": 1096,
+          "completion_tokens": 387,
+          "api_time": 3.3361363410949707
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-131",
+          "rule_name": "特殊检查、特殊治疗、特殊用药、临床试验、药品试验、医疗器械试验、高耗材、自费项目同意书描述不清(特殊",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "证据提及高值耗材及自费项目已告知，但未见具体同意书文本或明细描述。",
+          "evidence": "【知情同意书】已向患者说明置管及化疗目的、主要步骤、常见并发症、药物不良反应、替代方案、高值耗材及自费项目情况",
+          "suggestion": "补充特殊/自费项目知情同意书原件或详细记录。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.6,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-131\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据提及高值耗材及自费项目已告知，但未见具体同意书文本或明细描述。\",\n      \"evidence\": \"已向患者说明...高值耗材及自费项目情况。患者本人签字\",\n      \"suggestion\": \"补充特殊/自费项目知情同意书原件或详细记录。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-134\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据仅描述输血告知过程，未体现输血前检查结果等关键缺项核查。\",\n      \"evidence\": \"已告知输血目的、血型核对、主要输血风险...\",\n      \"suggestion\": \"完善输血前检查结果及拟输成分等关键信息记录。\",\n      \"confidence\": 0.5,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-136\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据提及病情评估为病重及家属签字，但未明确是否为正式病危重通知书文书。\",\n      \"evidence\": \"当前病情评估为病重。已向患者家属说明...家属签字确认。\",\n      \"suggestion\": \"确认并补全病危（重）通知书的规范签署及日期。\",\n      \"confidence\": 0.5,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            29,
+            77
+          ],
+          "metadata": {
+            "tokens_used": 494,
+            "prompt_tokens": 365,
+            "completion_tokens": 129,
+            "input_tokens": 365,
+            "output_tokens": 129,
+            "api_time": 1.112045447031657,
+            "first_result_latency": 3.3361363410949707,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "consent_content",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 295
+          },
+          "target_document_type": "知情同意书"
+        },
+        {
+          "rule_id": "SC-134",
+          "rule_name": "输血治疗知情同意书缺项或描述不清",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "证据仅描述输血告知过程，未体现输血前检查结果等关键缺项核查。",
+          "evidence": "【知情同意书】患者诊断乳腺恶性肿瘤，拟行中心静脉置管并实施EC方案化疗",
+          "suggestion": "完善输血前检查结果及拟输成分等关键信息记录。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-131\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据提及高值耗材及自费项目已告知，但未见具体同意书文本或明细描述。\",\n      \"evidence\": \"已向患者说明...高值耗材及自费项目情况。患者本人签字\",\n      \"suggestion\": \"补充特殊/自费项目知情同意书原件或详细记录。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-134\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据仅描述输血告知过程，未体现输血前检查结果等关键缺项核查。\",\n      \"evidence\": \"已告知输血目的、血型核对、主要输血风险...\",\n      \"suggestion\": \"完善输血前检查结果及拟输成分等关键信息记录。\",\n      \"confidence\": 0.5,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-136\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据提及病情评估为病重及家属签字，但未明确是否为正式病危重通知书文书。\",\n      \"evidence\": \"当前病情评估为病重。已向患者家属说明...家属签字确认。\",\n      \"suggestion\": \"确认并补全病危（重）通知书的规范签署及日期。\",\n      \"confidence\": 0.5,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            28
+          ],
+          "metadata": {
+            "tokens_used": 494,
+            "prompt_tokens": 365,
+            "completion_tokens": 129,
+            "input_tokens": 365,
+            "output_tokens": 129,
+            "api_time": 1.112045447031657,
+            "first_result_latency": 3.3361363410949707,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "consent_content",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 295
+          },
+          "target_document_type": "知情同意书"
+        },
+        {
+          "rule_id": "SC-136",
+          "rule_name": "病危(重)通知书缺项或描述不清",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "证据提及病情评估为病重及家属签字，但未明确是否为正式病危重通知书文书。",
+          "evidence": "【知情同意书】患者诊断乳腺恶性肿瘤，拟行中心静脉置管并实施EC方案化疗",
+          "suggestion": "确认并补全病危（重）通知书的规范签署及日期。",
+          "rewrite_example": "建议补写：围绕关键异常、证据依据和处理动作，形成一段可直接入病历的完整记录。",
+          "confidence": 0.5,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-131\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据提及高值耗材及自费项目已告知，但未见具体同意书文本或明细描述。\",\n      \"evidence\": \"已向患者说明...高值耗材及自费项目情况。患者本人签字\",\n      \"suggestion\": \"补充特殊/自费项目知情同意书原件或详细记录。\",\n      \"confidence\": 0.6,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-134\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据仅描述输血告知过程，未体现输血前检查结果等关键缺项核查。\",\n      \"evidence\": \"已告知输血目的、血型核对、主要输血风险...\",\n      \"suggestion\": \"完善输血前检查结果及拟输成分等关键信息记录。\",\n      \"confidence\": 0.5,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-136\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据提及病情评估为病重及家属签字，但未明确是否为正式病危重通知书文书。\",\n      \"evidence\": \"当前病情评估为病重。已向患者家属说明...家属签字确认。\",\n      \"suggestion\": \"确认并补全病危（重）通知书的规范签署及日期。\",\n      \"confidence\": 0.5,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            28
+          ],
+          "metadata": {
+            "tokens_used": 494,
+            "prompt_tokens": 365,
+            "completion_tokens": 129,
+            "input_tokens": 365,
+            "output_tokens": 129,
+            "api_time": 1.112045447031657,
+            "first_result_latency": 3.3361363410949707,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "consent_content",
+            "pack_size": 3,
+            "pack_fallback": false,
+            "context_tokens_estimate": 295
+          },
+          "target_document_type": "知情同意书"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-131": "uncertain",
+          "SC-134": "uncertain",
+          "SC-136": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-131": "uncertain",
+          "SC-134": "uncertain",
+          "SC-136": "uncertain"
+        }
+      }
+    }
+  ],
+  "bucket_filters": [
+    "consent_quality"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 3,
+    "stabilized": 0,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-131",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_consent_quality_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_consent_quality_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-134",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_consent_quality_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_consent_quality_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-136",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_consent_quality_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_consent_quality_v1_defect.json"
+        ],
+        "stabilized": false
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

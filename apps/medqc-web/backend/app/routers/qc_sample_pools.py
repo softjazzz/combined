@@ -128,6 +128,10 @@ def _resolve_luxian_0609_execution_rule_ids(customer_rule_ids: list[str]) -> tup
     return execution_rule_ids, invalid_rule_ids
 
 
+def _luxian_0609_customer_rule_count() -> int:
+    return len(load_luxian_0609_rules())
+
+
 class SamplePoolImportRequest(BaseModel):
     pool_name: str = Field(..., description="样本池名称")
     source_file: str = Field(..., description="Excel 文件路径")
@@ -701,6 +705,13 @@ async def run_sample_pool_intrinsic_validation(
 
     if not rule_ids:
         raise HTTPException(status_code=422, detail="当前样本池没有可执行规则")
+    customer_rule_count = (
+        len(requested_selected_rule_ids)
+        if requested_selected_rule_ids
+        else _luxian_0609_customer_rule_count()
+        if rule_set_key == "luxian_0609_qc_v1"
+        else len(rule_ids)
+    )
     execution_strategy = (
         EXECUTION_STRATEGY_FAST_SCREEN
         if is_formal_fast_screen_full
@@ -755,7 +766,7 @@ async def run_sample_pool_intrinsic_validation(
         "rule_set_name": rule_set_name,
         "rule_set_version": rule_set_version,
         "rule_count": len(rule_ids),
-        "customer_rule_count": len(requested_selected_rule_ids) if requested_selected_rule_ids else len(rule_ids),
+        "customer_rule_count": customer_rule_count,
         "execution_rule_count": len(rule_ids),
         "execution_strategy": execution_strategy,
         "quality_profile": "throughput_v1",
@@ -811,7 +822,7 @@ async def run_sample_pool_intrinsic_validation(
             "selected_record_count": len(requested_record_ids),
             "record_count": record_count,
             "rule_count": len(rule_ids),
-            "customer_rule_count": len(requested_selected_rule_ids) if requested_selected_rule_ids else len(rule_ids),
+            "customer_rule_count": customer_rule_count,
             "execution_rule_count": len(rule_ids),
             "selected_rule_ids": requested_selected_rule_ids,
             "scoped_customer_rule_ids": requested_selected_rule_ids,

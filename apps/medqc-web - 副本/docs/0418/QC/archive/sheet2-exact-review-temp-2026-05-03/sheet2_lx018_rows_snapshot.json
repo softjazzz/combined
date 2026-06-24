@@ -1,0 +1,30 @@
+[
+  {
+    "sheet2_row_id": "Sheet2-R0108",
+    "visit_id": "2083787",
+    "patient_name": "付学云",
+    "primary_rule_id": "LX-018",
+    "manual_issue_text": "2025.11.18田安琴主治医师查房记录无内容；11月17日及11月18日，无输血前评估、无输血记录、无输血后评估。",
+    "source": "release/0426_full_auto",
+    "evidence": {
+      "senior_course_record": "2025-11-18 田安琴主治医师查房记录正文完整，包含病史、体格检查、2025-11-17/11-18 辅助检查、初步诊断、诊断依据及诊疗计划。",
+      "bloodtrans_record_2025_11_17": "第1次输血：2025年11月17日 12:58开始输入，于2025年11月17日 14:40输注完毕。",
+      "bloodtrans_record_2025_11_18_first": "第2次输血：2025年11月18日 15:15开始输入，于2025年11月18日 16:22输注完毕。",
+      "bloodtrans_record_2025_11_18_second": "第3次输血：2025年11月18日 16:35开始输入，于2025年11月18日 17:55输注完毕。",
+      "blood_application_rows": 0,
+      "mr_bloodtrans_rows": 0
+    }
+  },
+  {
+    "sheet2_row_id": "Sheet2-R0183",
+    "visit_id": "2213639",
+    "patient_name": "杜卫红",
+    "primary_rule_id": "LX-018",
+    "manual_issue_text": "患者2月6日共输注两袋血浆，但输血记录未分别记录输血开始时间及结束时间",
+    "source": "release/0426_full_auto/bloodtrans_record.csv",
+    "evidence": {
+      "bloodtrans_record": "第1次输血；输入0231125045584 O型Rh(D)阳性血浆200ml，于2026年02月06日15:05开始输入，于2026年02月06日15:51输注完毕并开始输入0231125023443 O型Rh(D)阳性血浆200ml，于2026年02月06日 16:09输注完毕。",
+      "interpretation": "记录分别写出了首袋开始/结束时间和第二袋结束时间，但没有单独给出第二袋开始时间。"
+    }
+  }
+]

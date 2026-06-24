@@ -1,0 +1,100 @@
+{
+  "summary": {
+    "total_gates": 9,
+    "passed_gates": 9,
+    "failed_gates": 0,
+    "all_passed": true
+  },
+  "gates": [
+    {
+      "name": "auth_guard",
+      "command": "C:\\Python310\\python.exe scripts/check_auth_guard.py",
+      "passed": true,
+      "duration_seconds": 0.13,
+      "metrics": {
+        "required_checks": 7,
+        "passed_checks": 7,
+        "coverage_ratio": 1.0
+      }
+    },
+    {
+      "name": "secret_hygiene",
+      "command": "C:\\Python310\\python.exe scripts/check_secret_hygiene.py",
+      "passed": true,
+      "duration_seconds": 0.15,
+      "metrics": {
+        "findings": 0
+      }
+    },
+    {
+      "name": "alert_rules",
+      "command": "C:\\Python310\\python.exe scripts/check_alert_rules.py",
+      "passed": true,
+      "duration_seconds": 0.14,
+      "metrics": {
+        "pass_marker_found": true
+      }
+    },
+    {
+      "name": "openapi_contract",
+      "command": "C:\\Python310\\python.exe scripts/check_openapi_contract.py",
+      "passed": true,
+      "duration_seconds": 11.2,
+      "metrics": {
+        "pass_marker_found": true
+      }
+    },
+    {
+      "name": "metrics_catalog",
+      "command": "C:\\Python310\\python.exe scripts/check_metrics_catalog.py",
+      "passed": true,
+      "duration_seconds": 0.15,
+      "metrics": {
+        "pass_marker_found": true
+      }
+    },
+    {
+      "name": "migration_roundtrip",
+      "command": "C:\\Python310\\python.exe scripts/check_migration_roundtrip.py",
+      "passed": true,
+      "duration_seconds": 5.79,
+      "metrics": {
+        "head_count": 1,
+        "head": "20260315_000002"
+      }
+    },
+    {
+      "name": "pytest_contract",
+      "command": "C:\\Python310\\python.exe -m pytest -q tests/unit/test_auth_sync_contract.py tests/unit/test_openapi_contract.py tests/unit/test_sync_router.py tests/unit/test_observability_contract.py",
+      "passed": true,
+      "duration_seconds": 33.73,
+      "metrics": {
+        "passed": 33,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "pytest_security_consistency",
+      "command": "C:\\Python310\\python.exe -m pytest -q tests/unit/test_audit_logging.py tests/unit/test_security_hardening.py tests/unit/test_sync_consistency.py tests/unit/test_sync_idempotency.py tests/unit/test_system_api.py tests/unit/test_task_audit.py tests/unit/test_upload_rate_limit.py tests/unit/test_upload_security_controls.py tests/unit/test_production_guard.py",
+      "passed": true,
+      "duration_seconds": 44.79,
+      "metrics": {
+        "passed": 48,
+        "failed": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "name": "pytest_integration_smoke",
+      "command": "C:\\Python310\\python.exe -m pytest -q tests/integration/test_release_gate_smoke.py",
+      "passed": true,
+      "duration_seconds": 30.13,
+      "metrics": {
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      }
+    }
+  ]
+}

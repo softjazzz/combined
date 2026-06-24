@@ -1,0 +1,40 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_exam_report_quality_v1",
+    "issue_type": "Z08_exam_report_quality",
+    "display_name": "检查检验报告质量",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-138", "SC-139", "SC-140"],
+    "bucket_id": "exam_report_quality"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P108",
+    "visit_id": "SYN-RUN-108",
+    "mr_no": "SYN0108",
+    "patient_name": "合成患者辛",
+    "gender": "女",
+    "age": 59,
+    "department": "消化内科"
+  },
+  "documents": [
+    {
+      "document_type": "exam_item_report",
+      "title": "胃镜报告",
+      "content": "胃镜示胃窦溃疡A1期，病理取材送检。病理报告：慢性活动性胃炎伴肠化。"
+    },
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "今日记录胃镜正常，病理未见异常，继续原治疗。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["胃炎"],
+    "orders": ["继续原治疗"],
+    "exams": ["胃镜示胃窦溃疡A1期"]
+  }
+}

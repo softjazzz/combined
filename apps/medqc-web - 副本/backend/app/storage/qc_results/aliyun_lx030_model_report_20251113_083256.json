@@ -1,0 +1,747 @@
+[
+  {
+    "model_code": "qwen-plus",
+    "model_name": "Qwen-Plus",
+    "detected": true,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 8.598606824874878,
+      "is_compliant": false,
+      "status": "non_compliant",
+      "issues": [
+        {
+          "description": "诊断遗漏",
+          "evidence": "病案首页列有'高脂血症'，出院诊断未见"
+        }
+      ],
+      "detected": true,
+      "findings": "病案首页诊断中包含'高脂血症'，但在出院诊断中未见该诊断，存在诊断遗漏。",
+      "evidence": "记载：\"病案首页诊断：\\n1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\n5. 高脂血症\" 记载：\"出院诊断：\\n1. 冠心病 急急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\"",
+      "token_usage": 1692
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": false,
+        "issues": [
+          {
+            "description": "诊断遗漏",
+            "evidence": "病案首页列有'高脂血症'，出院诊断未见"
+          }
+        ],
+        "findings": "病案首页诊断中包含'高脂血症'，但在出院诊断中未见该诊断，存在诊断遗漏。",
+        "evidence": "记载：\"病案首页诊断：\\n1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\n5. 高脂血症\" 记载：\"出院诊断：\\n1. 冠心病 急急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\"",
+        "suggestion": "(1) 补充出院诊断中的'高脂血症'；(2) 建议核对病案首页与出院诊断的一致性；(3) 建议补充病情变化依据",
+        "confidence": 0.5,
+        "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"病案首页诊断中包含'高脂血症'，但在出院诊断中未见该诊断，存在诊断遗漏。\",\n  \"issues\": [\n    {\n      \"description\": \"诊断遗漏\",\n      \"evidence\": \"病案首页列有'高脂血症'，出院诊断未见\"\n    }\n  ],\n  \"evidence\": \"记载：\\\"病案首页诊断：\\\\n1. 冠心病 急性非ST段抬高型心肌梗死\\\\n   冠状动脉粥样硬化性心脏病\\\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\\\n3. 高血压病 3级 极高危\\\\n4. 2型糖尿病\\\\n5. 高脂血症\\\" 记载：\\\"出院诊断：\\\\n1. 冠心病 急急性非ST段抬高型心肌梗死\\\\n   冠状动脉粥样硬化性心脏病\\\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\\\n3. 高血压病 3级 极高危\\\\n4. 2型糖尿病\\\"\",\n  \"suggestion\": \"(1) 补充出院诊断中的'高脂血症'；(2) 建议核对病案首页与出院诊断的一致性；(3) 建议补充病情变化依据\",\n  \"confidence\": 0.9\n}",
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1692
+        },
+        "metadata": {
+          "tokens_used": 1692,
+          "api_time": 8.59279751777649
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "21a2b2c8-d388-4857-a28f-67c9fd7a8604",
+      "_http_status": 200,
+      "_elapsed": 8.598606824874878
+    }
+  },
+  {
+    "model_code": "qwen-turbo",
+    "model_name": "Qwen-Turbo",
+    "detected": true,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 4.26277232170105,
+      "is_compliant": false,
+      "status": "non_compliant",
+      "issues": [
+        {
+          "description": "心功能分级不一致",
+          "evidence": "病案首页诊断：心功能Ⅱ级（NYHA分级）；出院诊断：心功能Ⅱ级（NYHA分级）"
+        }
+      ],
+      "detected": true,
+      "findings": "病案首页诊断与出院诊断存在不一致，主要体现在心功能分级变化未在出院记录中体现。",
+      "evidence": "病案首页诊断：\"1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n5. 高脂血症\"\n出院诊断：\"1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\"",
+      "token_usage": 1703
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": false,
+        "issues": [
+          {
+            "description": "心功能分级不一致",
+            "evidence": "病案首页诊断：心功能Ⅱ级（NYHA分级）；出院诊断：心功能Ⅱ级（NYHA分级）"
+          }
+        ],
+        "findings": "病案首页诊断与出院诊断存在不一致，主要体现在心功能分级变化未在出院记录中体现。",
+        "evidence": "病案首页诊断：\"1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n5. 高脂血症\"\n出院诊断：\"1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\"",
+        "suggestion": "(1) 出院记录应与病案首页诊断保持一致，包括心功能分级等关键信息。\n(2) 建议补充病情变化依据，如心功能从Ⅲ级转为Ⅱ级的临床依据。",
+        "confidence": 0.5,
+        "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"病案首页诊断与出院诊断存在不一致，主要体现在心功能分级变化未在出院记录中体现。\",\n  \"issues\": [\n    {\n      \"description\": \"心功能分级不一致\",\n      \"evidence\": \"病案首页诊断：心功能Ⅱ级（NYHA分级）；出院诊断：心功能Ⅱ级（NYHA分级）\"\n    }\n  ],\n  \"evidence\": \"病案首页诊断：\\\"1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\n5. 高脂血症\\\"\\n出院诊断：\\\"1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\\"\"\n  ,\n  \"suggestion\": \"(1) 出院记录应与病案首页诊断保持一致，包括心功能分级等关键信息。\\n(2) 建议补充病情变化依据，如心功能从Ⅲ级转为Ⅱ级的临床依据。\",\n  \"confidence\": 0.8\n}",
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1703
+        },
+        "metadata": {
+          "tokens_used": 1703,
+          "api_time": 4.256185293197632
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "a5b1d4d4-8e25-4537-9153-8faf9cd107bf",
+      "_http_status": 200,
+      "_elapsed": 4.26277232170105
+    }
+  },
+  {
+    "model_code": "qwen-max",
+    "model_name": "Qwen-Max",
+    "detected": false,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 14.43317174911499,
+      "is_compliant": true,
+      "status": "compliant",
+      "issues": [],
+      "detected": false,
+      "findings": "病案首页诊断与出院诊断一致，无遗漏或新增项目。",
+      "evidence": "记载：\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后）2. 心功能不全 心功能Ⅱ级（NYHA分级）3. 高血压病 3级 极高危4. 2型糖尿病5. 高脂血症\" 记载：\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后）2. 心功能不全 心功能Ⅱ级（NYHA分级）3. 高血压病 3级 极高危4. 2型糖尿病\"",
+      "token_usage": 1746
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": true,
+        "issues": [],
+        "findings": "病案首页诊断与出院诊断一致，无遗漏或新增项目。",
+        "evidence": "记载：\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后）2. 心功能不全 心功能Ⅱ级（NYHA分级）3. 高血压病 3级 极高危4. 2型糖尿病5. 高脂血症\" 记载：\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后）2. 心功能不全 心功能Ⅱ级（NYHA分级）3. 高血压病 3级 极高危4. 2型糖尿病\"",
+        "suggestion": "(1)建议补充病情变化依据",
+        "confidence": 0.5,
+        "llm_raw_output": "```json\n{\n  \"is_compliant\": true,\n  \"findings\": \"病案首页诊断与出院诊断一致，无遗漏或新增项目。\",\n  \"issues\": [],\n  \"evidence\": \"记载：\\\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后）2. 心功能不全 心功能Ⅱ级（NYHA分级）3. 高血压病 3级 极高危4. 2型糖尿病5. 高脂血症\\\" 记载：\\\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后）2. 心功能不全 心功能Ⅱ级（NYHA分级）3. 高血压病 3级 极高危4. 2型糖尿病\\\"\",\n  \"suggestion\": \"(1)建议补充病情变化依据\",\n  \"confidence\": 0.9\n}\n```\n\n### 解释：\n- **is_compliant**: `true` - 因为病案首页诊断与出院诊断在名称、顺序及主次标识上完全一致。\n- **findings**: 指出病案首页诊断与出院诊断一致，没有发现任何遗漏或新增的诊断项目。\n- **issues**: 由于没有发现任何问题，所以此部分为空。\n- **evidence**: 逐字引用了病案首页和出院记录中的诊断条目。\n- **suggestion**: 建议补充病情变化依据，因为注意到入院时的心功能分级为Ⅲ级，而出院时为Ⅱ级。但根据规则，这不影响合规性的判定。\n- **confidence**: 设定为0.9，表示对评估结果有很高的信心。",
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1746
+        },
+        "metadata": {
+          "tokens_used": 1746,
+          "api_time": 14.427202224731445
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "84f76733-4799-492d-ba04-5f13123b6710",
+      "_http_status": 200,
+      "_elapsed": 14.43317174911499
+    }
+  },
+  {
+    "model_code": "qwen3-30b-a3b",
+    "model_name": "Qwen3-30B-A3B",
+    "detected": true,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 4.284623861312866,
+      "is_compliant": false,
+      "status": "non_compliant",
+      "issues": [
+        {
+          "description": "心功能分级不一致",
+          "evidence": "病案首页诊断：'心功能不全 心功能Ⅱ级（NYHA分级）'；出院诊断：'心功能不全 心功能Ⅱ级（NYHA分级）'"
+        }
+      ],
+      "detected": true,
+      "findings": "病案首页诊断与出院诊断存在不一致，主要体现在心功能分级变化未在出院记录中体现。",
+      "evidence": "病案首页诊断：'1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n5. 高脂血症'\n出院诊断：'1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病'",
+      "token_usage": 1707
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": false,
+        "issues": [
+          {
+            "description": "心功能分级不一致",
+            "evidence": "病案首页诊断：'心功能不全 心功能Ⅱ级（NYHA分级）'；出院诊断：'心功能不全 心功能Ⅱ级（NYHA分级）'"
+          }
+        ],
+        "findings": "病案首页诊断与出院诊断存在不一致，主要体现在心功能分级变化未在出院记录中体现。",
+        "evidence": "病案首页诊断：'1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n5. 高脂血症'\n出院诊断：'1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病'",
+        "suggestion": "(1) 建议补充病情变化依据，如心功能从Ⅲ级转为Ⅱ级的临床依据。\n(2) 确保出院记录与病案首页诊断内容保持一致。",
+        "confidence": 0.5,
+        "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"病案首页诊断与出院诊断存在不一致，主要体现在心功能分级变化未在出院记录中体现。\",\n  \"issues\": [\n    {\n      \"description\": \"心功能分级不一致\",\n      \"evidence\": \"病案首页诊断：'心功能不全 心功能Ⅱ级（NYHA分级）'；出院诊断：'心功能不全 心功能Ⅱ级（NYHA分级）'\"\n    }\n  ],\n  \"evidence\": \"病案首页诊断：'1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\n5. 高脂血症'\\n出院诊断：'1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病'\",\n  \"suggestion\": \"(1) 建议补充病情变化依据，如心功能从Ⅲ级转为Ⅱ级的临床依据。\\n(2) 确保出院记录与病案首页诊断内容保持一致。\",\n  \"confidence\": 0.8\n}",
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1707
+        },
+        "metadata": {
+          "tokens_used": 1707,
+          "api_time": 4.271512746810913
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "6909c4f6-dce7-4198-b122-5113372043fc",
+      "_http_status": 200,
+      "_elapsed": 4.284623861312866
+    }
+  },
+  {
+    "model_code": "qwen3-30b-a3b-instruct-2507",
+    "model_name": "Qwen3-30B-A3B Instruct (2507)",
+    "detected": false,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 2.6807775497436523,
+      "is_compliant": true,
+      "status": "compliant",
+      "issues": [],
+      "detected": false,
+      "findings": "病案首页诊断与出院诊断在诊断名称、顺序及主次标识上完全一致，未发现遗漏、新增或不一致项。",
+      "evidence": "病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n5. 高脂血症\n出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病",
+      "token_usage": 1623
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": true,
+        "issues": [],
+        "findings": "病案首页诊断与出院诊断在诊断名称、顺序及主次标识上完全一致，未发现遗漏、新增或不一致项。",
+        "evidence": "病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n5. 高脂血症\n出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病",
+        "suggestion": [
+          "建议补充病情变化依据（入院时心功能Ⅲ级，出院时心功能Ⅱ级）"
+        ],
+        "confidence": 0.5,
+        "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"病案首页诊断与出院诊断在诊断名称、顺序及主次标识上完全一致，未发现遗漏、新增或不一致项。\",\n  \"issues\": [],\n  \"evidence\": \"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\n5. 高脂血症\\n出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\",\n  \"suggestion\": [\n    \"建议补充病情变化依据（入院时心功能Ⅲ级，出院时心功能Ⅱ级）\"\n  ],\n  \"confidence\": 0.85\n}",
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1623
+        },
+        "metadata": {
+          "tokens_used": 1623,
+          "api_time": 2.6750123500823975
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "4cb92b0b-6a91-4032-800f-7edc7d6c05ee",
+      "_http_status": 200,
+      "_elapsed": 2.6807775497436523
+    }
+  },
+  {
+    "model_code": "qwen3-14b",
+    "model_name": "Qwen3-14B",
+    "detected": false,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 6.598323345184326,
+      "is_compliant": true,
+      "status": "compliant",
+      "issues": [],
+      "detected": false,
+      "findings": "病案首页诊断与出院诊断在诊断名称、顺序及主次标记上均一致，未发现遗漏或新增项目。",
+      "evidence": "\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\"；\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"",
+      "token_usage": 1620
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": true,
+        "issues": [],
+        "findings": "病案首页诊断与出院诊断在诊断名称、顺序及主次标记上均一致，未发现遗漏或新增项目。",
+        "evidence": "\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\"；\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"",
+        "suggestion": "(1) 病案首页诊断与出院诊断内容一致，无需修改。(2) 若入院诊断与出院诊断存在变化，建议补充病情变化依据。",
+        "confidence": 0.5,
+        "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"病案首页诊断与出院诊断在诊断名称、顺序及主次标记上均一致，未发现遗漏或新增项目。\",\n  \"issues\": [],\n  \"evidence\": \"\\\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\\\"；\\\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\\\"\",\n  \"suggestion\": \"(1) 病案首页诊断与出院诊断内容一致，无需修改。(2) 若入院诊断与出院诊断存在变化，建议补充病情变化依据。\",\n  \"confidence\": 0.9\n}",
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1620
+        },
+        "metadata": {
+          "tokens_used": 1620,
+          "api_time": 6.592520713806152
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "c287571d-6379-48da-a7f5-0e20e7da456d",
+      "_http_status": 200,
+      "_elapsed": 6.598323345184326
+    }
+  },
+  {
+    "model_code": "qwen3-8b",
+    "model_name": "Qwen3-8B",
+    "detected": false,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 4.744218587875366,
+      "is_compliant": true,
+      "status": "compliant",
+      "issues": [],
+      "detected": false,
+      "findings": "病案首页诊断与出院诊断内容一致，未发现不一致项。",
+      "evidence": "记载:\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\"; 记载:\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"",
+      "token_usage": 1624
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": true,
+        "issues": [],
+        "findings": "病案首页诊断与出院诊断内容一致，未发现不一致项。",
+        "evidence": "记载:\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\"; 记载:\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"",
+        "suggestion": "(1) 确认心功能分级变化的依据；(2) 检查高脂血症是否需在出院记录中体现；(3) 核实诊断顺序是否符合临床逻辑。",
+        "confidence": 0.5,
+        "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"病案首页诊断与出院诊断内容一致，未发现不一致项。\",\n  \"issues\": [],\n  \"evidence\": \"记载:\\\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\\\"; 记载:\\\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\\\"\",\n  \"suggestion\": \"(1) 确认心功能分级变化的依据；(2) 检查高脂血症是否需在出院记录中体现；(3) 核实诊断顺序是否符合临床逻辑。\",\n  \"confidence\": 0.8\n}",
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1624
+        },
+        "metadata": {
+          "tokens_used": 1624,
+          "api_time": 4.73772668838501
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "dae71e44-5a08-45d5-aa41-30e9440111b3",
+      "_http_status": 200,
+      "_elapsed": 4.744218587875366
+    }
+  },
+  {
+    "model_code": "qwen3-4b",
+    "model_name": "Qwen3-4B",
+    "detected": true,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 8.072376251220703,
+      "is_compliant": false,
+      "status": "non_compliant",
+      "issues": [
+        {
+          "description": "心功能分级变化",
+          "evidence": "病案首页列有'心功能不全 心功能Ⅲ级（NYHA分级）'，出院诊断为'心功能不全 心功能Ⅱ级（NYHA分级）'"
+        }
+      ],
+      "detected": true,
+      "findings": "出院记录诊断与病案首页诊断存在不一致。",
+      "evidence": "病案首页诊断：\"1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅲ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n5. 高脂血症\"；出院诊断：\"1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\"",
+      "token_usage": 1702
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": false,
+        "issues": [
+          {
+            "description": "心功能分级变化",
+            "evidence": "病案首页列有'心功能不全 心功能Ⅲ级（NYHA分级）'，出院诊断为'心功能不全 心功能Ⅱ级（NYHA分级）'"
+          }
+        ],
+        "findings": "出院记录诊断与病案首页诊断存在不一致。",
+        "evidence": "病案首页诊断：\"1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅲ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n5. 高脂血症\"；出院诊断：\"1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\"",
+        "suggestion": "(1) 建议补充心功能分级变化的医学依据；(2) 检查其他诊断是否与病案首页一致；(3) 若发现入院与出院诊断存在变化，建议补充病情变化依据",
+        "confidence": 0.5,
+        "llm_raw_output": "```json\n{\n  \"is_compliant\": false,\n  \"findings\": \"出院记录诊断与病案首页诊断存在不一致。\",\n  \"issues\": [\n    {\n      \"description\": \"心功能分级变化\",\n      \"evidence\": \"病案首页列有'心功能不全 心功能Ⅲ级（NYHA分级）'，出院诊断为'心功能不全 心功能Ⅱ级（NYHA分级）'\"\n    }\n  ],\n  \"evidence\": \"病案首页诊断：\\\"1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅲ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\n5. 高脂血症\\\"；出院诊断：\\\"1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\\"\",\n  \"suggestion\": \"(1) 建议补充心功能分级变化的医学依据；(2) 检查其他诊断是否与病案首页一致；(3) 若发现入院与出院诊断存在变化，建议补充病情变化依据\",\n  \"confidence\": 0.8\n}\n```",
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1702
+        },
+        "metadata": {
+          "tokens_used": 1702,
+          "api_time": 8.064867973327637
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "66a836a9-412a-4b2a-b638-08476c9d7445",
+      "_http_status": 200,
+      "_elapsed": 8.072376251220703
+    }
+  },
+  {
+    "model_code": "qwen3-235b-a22b-instruct-2507",
+    "model_name": "Qwen3-235B",
+    "detected": true,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 10.576899528503418,
+      "is_compliant": false,
+      "status": "non_compliant",
+      "issues": [
+        {
+          "description": "诊断遗漏",
+          "evidence": "病案首页列有'高脂血症'，出院诊断未见"
+        }
+      ],
+      "detected": true,
+      "findings": "病案首页诊断中包含'高脂血症'，但在出院诊断中未见该诊断，存在诊断遗漏。",
+      "evidence": "记载：\"病案首页诊断：\\n1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\n5. 高脂血症\" 记载：\"出院诊断：\\n1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\"",
+      "token_usage": 1685
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": false,
+        "issues": [
+          {
+            "description": "诊断遗漏",
+            "evidence": "病案首页列有'高脂血症'，出院诊断未见"
+          }
+        ],
+        "findings": "病案首页诊断中包含'高脂血症'，但在出院诊断中未见该诊断，存在诊断遗漏。",
+        "evidence": "记载：\"病案首页诊断：\\n1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\n5. 高脂血症\" 记载：\"出院诊断：\\n1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\"",
+        "suggestion": "(1) 核查高脂血症是否应列入出院诊断；(2) 如属实，补充至出院诊断列表；(3) 建议补充病情变化依据",
+        "confidence": 0.5,
+        "llm_raw_output": "{\n  \"is_compliant\": false,\n  \"findings\": \"病案首页诊断中包含'高脂血症'，但在出院诊断中未见该诊断，存在诊断遗漏。\",\n  \"issues\": [\n    {\n      \"description\": \"诊断遗漏\",\n      \"evidence\": \"病案首页列有'高脂血症'，出院诊断未见\"\n    }\n  ],\n  \"evidence\": \"记载：\\\"病案首页诊断：\\\\n1. 冠心病 急性非ST段抬高型心肌梗死\\\\n   冠状动脉粥样硬化性心脏病\\\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\\\n3. 高血压病 3级 极高危\\\\n4. 2型糖尿病\\\\n5. 高脂血症\\\" 记载：\\\"出院诊断：\\\\n1. 冠心病 急性非ST段抬高型心肌梗死\\\\n   冠状动脉粥样硬化性心脏病\\\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\\\n3. 高血压病 3级 极高危\\\\n4. 2型糖尿病\\\"\",\n  \"suggestion\": \"(1) 核查高脂血症是否应列入出院诊断；(2) 如属实，补充至出院诊断列表；(3) 建议补充病情变化依据\",\n  \"confidence\": 0.9\n}",
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1685
+        },
+        "metadata": {
+          "tokens_used": 1685,
+          "api_time": 10.564124345779419
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "08531cc6-d548-4dc9-86fc-53beec9d1737",
+      "_http_status": 200,
+      "_elapsed": 10.576899528503418
+    }
+  },
+  {
+    "model_code": "qwen2.5-32b-instruct",
+    "model_name": "Qwen2.5-32B-Instruct",
+    "detected": true,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 11.560840129852295,
+      "is_compliant": false,
+      "status": "non_compliant",
+      "issues": [
+        {
+          "description": "诊断遗漏",
+          "evidence": "病案首页列有'高脂血症'，出院诊断未见"
+        }
+      ],
+      "detected": true,
+      "findings": "病案首页诊断与出院诊断存在不一致情况，具体表现为病案首页诊断中包含'高脂血症'，而出院诊断中未见该诊断。",
+      "evidence": "记载:\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\" 记载:\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"",
+      "token_usage": 1657
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": false,
+        "issues": [
+          {
+            "description": "诊断遗漏",
+            "evidence": "病案首页列有'高脂血症'，出院诊断未见"
+          }
+        ],
+        "findings": "病案首页诊断与出院诊断存在不一致情况，具体表现为病案首页诊断中包含'高脂血症'，而出院诊断中未见该诊断。",
+        "evidence": "记载:\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\" 记载:\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"",
+        "suggestion": "(1)建议补充高脂血症诊断于出院诊断中。(2)建议补充病情变化依据。",
+        "confidence": 0.5,
+        "llm_raw_output": "```json\n{\n  \"is_compliant\": false,\n  \"findings\": \"病案首页诊断与出院诊断存在不一致情况，具体表现为病案首页诊断中包含'高脂血症'，而出院诊断中未见该诊断。\",\n  \"issues\": [\n    {\n      \"description\": \"诊断遗漏\",\n      \"evidence\": \"病案首页列有'高脂血症'，出院诊断未见\"\n    }\n  ],\n  \"evidence\": \"记载:\\\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\\\" 记载:\\\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\\\"\",\n  \"suggestion\": \"(1)建议补充高脂血症诊断于出院诊断中。(2)建议补充病情变化依据。\",\n  \"confidence\": 0.8\n}\n```",
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1657
+        },
+        "metadata": {
+          "tokens_used": 1657,
+          "api_time": 11.554494142532349
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "8b0f41e2-201d-45e6-836c-0650cd77eab8",
+      "_http_status": 200,
+      "_elapsed": 11.560840129852295
+    }
+  },
+  {
+    "model_code": "qwen2.5-14b-instruct",
+    "model_name": "Qwen2.5-14B-Instruct",
+    "detected": true,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 10.811882972717285,
+      "is_compliant": false,
+      "status": "non_compliant",
+      "issues": [
+        {
+          "description": "心功能等级变化",
+          "evidence": "病案首页列有'心功能不全 心功能Ⅲ级（NYHA分级）'，出院诊断列为'心功能不全 心功能Ⅱ级（NYHA分级）'"
+        },
+        {
+          "description": "新增诊断未补充说明",
+          "evidence": "病案首页列有'冠状动脉粥样硬化性心脏病'和'经皮冠状动脉介入治疗术后（前降支支架植入术后）'，未见补充说明"
+        }
+      ],
+      "detected": true,
+      "findings": "病案首页诊断与出院诊断存在不一致情况，具体如下：\n1. 病案首页诊断第2条的心功能不全心功能等级从心功能Ⅲ级变为心功能Ⅱ级，未见补充说明。\n2. 病案首页诊断第2条增加了冠状动脉粥样硬化性心脏病和经皮冠状动脉介入治疗术后（前降支支架植入术后）的内容，出院诊断中也包含这些内容，但未见补充说明。",
+      "evidence": "记载：\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅲ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\" 记载：\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"",
+      "token_usage": 1840
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": false,
+        "issues": [
+          {
+            "description": "心功能等级变化",
+            "evidence": "病案首页列有'心功能不全 心功能Ⅲ级（NYHA分级）'，出院诊断列为'心功能不全 心功能Ⅱ级（NYHA分级）'"
+          },
+          {
+            "description": "新增诊断未补充说明",
+            "evidence": "病案首页列有'冠状动脉粥样硬化性心脏病'和'经皮冠状动脉介入治疗术后（前降支支架植入术后）'，未见补充说明"
+          }
+        ],
+        "findings": "病案首页诊断与出院诊断存在不一致情况，具体如下：\n1. 病案首页诊断第2条的心功能不全心功能等级从心功能Ⅲ级变为心功能Ⅱ级，未见补充说明。\n2. 病案首页诊断第2条增加了冠状动脉粥样硬化性心脏病和经皮冠状动脉介入治疗术后（前降支支架植入术后）的内容，出院诊断中也包含这些内容，但未见补充说明。",
+        "evidence": "记载：\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅲ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\" 记载：\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\"",
+        "suggestion": "(1) 建议补充心功能等级变化的病情变化依据。(2) 建议补充新增诊断的病情变化依据。(3) 建议补充病情变化的详细说明。",
+        "confidence": 0.5,
+        "llm_raw_output": "```json\n{\n  \"is_compliant\": false,\n  \"findings\": \"病案首页诊断与出院诊断存在不一致情况，具体如下：\\n1. 病案首页诊断第2条的心功能不全心功能等级从心功能Ⅲ级变为心功能Ⅱ级，未见补充说明。\\n2. 病案首页诊断第2条增加了冠状动脉粥样硬化性心脏病和经皮冠状动脉介入治疗术后（前降支支架植入术后）的内容，出院诊断中也包含这些内容，但未见补充说明。\",\n  \"issues\": [\n    {\n      \"description\": \"心功能等级变化\",\n      \"evidence\": \"病案首页列有'心功能不全 心功能Ⅲ级（NYHA分级）'，出院诊断列为'心功能不全 心功能Ⅱ级（NYHA分级）'\"\n    },\n    {\n      \"description\": \"新增诊断未补充说明\",\n      \"evidence\": \"病案首页列有'冠状动脉粥样硬化性心脏病'和'经皮冠状动脉介入治疗术后（前降支支架植入术后）'，未见补充说明\"\n    }\n  ],\n  \"evidence\": \"记载：\\\"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅲ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病 5. 高脂血症\\\" 记载：\\\"出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死 冠状动脉粥样硬化性心脏病 经皮冠状动脉介入治疗术后（前降支支架植入术后） 2. 心功能不全 心功能Ⅱ级（NYHA分级） 3. 高血压病 3级 极高危 4. 2型糖尿病\\\"\",\n  \"suggestion\": \"(1) 建议补充心功能等级变化的病情变化依据。(2) 建议补充新增诊断的病情变化依据。(3) 建议补充病情变化的详细说明。\",\n  \"confidence\": 0.8\n}\n```",
+        "status": "non_compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1840
+        },
+        "metadata": {
+          "tokens_used": 1840,
+          "api_time": 10.805866241455078
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "66262a70-4886-49fd-8449-45eca67d8f46",
+      "_http_status": 200,
+      "_elapsed": 10.811882972717285
+    }
+  },
+  {
+    "model_code": "qwen2.5-7b-1m",
+    "model_name": "Qwen2.5-7B-1M",
+    "detected": false,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 0.3226804733276367,
+      "is_compliant": true,
+      "status": "uncertain",
+      "issues": [],
+      "detected": false,
+      "findings": "LLM 未返回任何内容。",
+      "evidence": "",
+      "token_usage": 0
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": true,
+        "issues": [],
+        "findings": "LLM 未返回任何内容。",
+        "evidence": "",
+        "suggestion": "",
+        "confidence": 0.7,
+        "llm_raw_output": "",
+        "status": "uncertain",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": true,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 0
+        },
+        "metadata": {
+          "tokens_used": 0,
+          "api_time": 0.31699395179748535
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "1b99eec4-f397-4d5c-baf2-8389fdfb3fba",
+      "_http_status": 200,
+      "_elapsed": 0.3226804733276367
+    }
+  },
+  {
+    "model_code": "qwen-flash-2025-07-28",
+    "model_name": "Qwen Flash (2025-07-28)",
+    "detected": false,
+    "summary": {
+      "http_status": 200,
+      "elapsed_seconds": 2.627513885498047,
+      "is_compliant": true,
+      "status": "compliant",
+      "issues": [],
+      "detected": false,
+      "findings": "病案首页诊断与出院诊断在诊断名称、顺序及主次标识上完全一致，未发现遗漏、新增或不一致项。",
+      "evidence": "病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n5. 高脂血症\n出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病",
+      "token_usage": 1623
+    },
+    "raw_response": {
+      "success": true,
+      "data": {
+        "rule_id": "LX-030",
+        "rule_name": "出院记录诊断与病案首页不一致",
+        "is_compliant": true,
+        "issues": [],
+        "findings": "病案首页诊断与出院诊断在诊断名称、顺序及主次标识上完全一致，未发现遗漏、新增或不一致项。",
+        "evidence": "病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病\n5. 高脂血症\n出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死\n   冠状动脉粥样硬化性心脏病\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\n3. 高血压病 3级 极高危\n4. 2型糖尿病",
+        "suggestion": [
+          "建议补充病情变化依据（入院时心功能Ⅲ级，出院时心功能Ⅱ级）"
+        ],
+        "confidence": 0.5,
+        "llm_raw_output": "{\n  \"is_compliant\": true,\n  \"findings\": \"病案首页诊断与出院诊断在诊断名称、顺序及主次标识上完全一致，未发现遗漏、新增或不一致项。\",\n  \"issues\": [],\n  \"evidence\": \"病案首页诊断：1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\\n5. 高脂血症\\n出院诊断：1. 冠心病 急性非ST段抬高型心肌梗死\\n   冠状动脉粥样硬化性心脏病\\n   经皮冠状动脉介入治疗术后（前降支支架植入术后）\\n2. 心功能不全 心功能Ⅱ级（NYHA分级）\\n3. 高血压病 3级 极高危\\n4. 2型糖尿病\",\n  \"suggestion\": [\n    \"建议补充病情变化依据（入院时心功能Ⅲ级，出院时心功能Ⅱ级）\"\n  ],\n  \"confidence\": 0.85\n}",
+        "status": "compliant",
+        "applicability": {
+          "is_applicable": true,
+          "reason": "",
+          "method": "default"
+        },
+        "not_applicable": false,
+        "not_applicable_reason": "",
+        "evidence_verified": false,
+        "evidence_span": null,
+        "token_usage": {
+          "total_tokens": 1623
+        },
+        "metadata": {
+          "tokens_used": 1623,
+          "api_time": 2.6203205585479736
+        }
+      },
+      "message": "规则测试完成",
+      "trace_id": "9ded5c5a-bdb5-4273-9dcb-5d7a663e45a7",
+      "_http_status": 200,
+      "_elapsed": 2.627513885498047
+    }
+  }
+]

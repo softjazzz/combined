@@ -25,6 +25,15 @@
       </div>
       <div class="synthetic-case-header-actions">
         <a-button
+          class="synthetic-case-ghost-button"
+          @click="openSyntheticCaseGuide"
+        >
+          <template #icon>
+            <Compass :size="15" />
+          </template>
+          功能导览
+        </a-button>
+        <a-button
           v-if="wizardStep > 1"
           class="synthetic-case-ghost-button"
           @click="showPreview = true"
@@ -81,6 +90,8 @@
     <nav
       class="synthetic-case-wizard"
       aria-label="创建测试病历步骤"
+      data-synthetic-guide="wizard"
+      :class="syntheticCaseGuideTargetClass('wizard')"
     >
       <button
         v-for="step in builderSteps"
@@ -113,7 +124,11 @@
             <Layers :size="16" />
             规则族
           </div>
-          <div class="synthetic-case-template-list">
+          <div
+            class="synthetic-case-template-list"
+            data-synthetic-guide="rule-family"
+            :class="syntheticCaseGuideTargetClass('rule-family')"
+          >
             <button
               v-for="family in syntheticCaseRuleFamilies"
               :key="family.key"
@@ -126,49 +141,6 @@
               <span>{{ family.rules.length }} 条规则</span>
               <small>{{ family.description }}</small>
             </button>
-          </div>
-
-          <div class="synthetic-case-panel-title synthetic-case-doc-title">
-            <FileText :size="16" />
-            本次质控点
-          </div>
-          <div
-            v-if="selectedRuleFamily"
-            class="synthetic-case-rule-panel"
-          >
-            <div class="synthetic-case-rule-panel-head">
-              <div>
-                <strong>{{ selectedRuleFamily.name }}</strong>
-                <small>{{ selectedRuleFamily.description }}</small>
-              </div>
-              <span>{{ selectedRuleSelection.length }}/{{ selectedRuleFamily.rules.length }}</span>
-            </div>
-            <label
-              v-for="rule in selectedRuleFamily.rules"
-              :key="rule.ruleId"
-              class="synthetic-case-rule-option"
-            >
-              <input
-                :checked="selectedRuleSelection.includes(rule.ruleId)"
-                type="checkbox"
-                @change="
-                  toggleRuleSelection(rule.ruleId, ($event.target as HTMLInputElement).checked)
-                "
-              >
-              <div>
-                <strong>{{ rule.ruleId }}</strong>
-                <span>{{ rule.name }}</span>
-                <small>{{ rule.requiredDocumentsLabel }}</small>
-              </div>
-            </label>
-            <a-button
-              type="primary"
-              block
-              class="synthetic-case-generate-button"
-              @click="generateRuleDrivenCase"
-            >
-              生成测试病历骨架
-            </a-button>
           </div>
         </template>
 
@@ -202,6 +174,8 @@
         <div
           v-if="wizardStep === 2"
           class="synthetic-case-editor-tabs"
+          data-synthetic-guide="editor-tabs"
+          :class="syntheticCaseGuideTargetClass('editor-tabs')"
         >
           <button
             v-for="tab in editorTabs"
@@ -239,7 +213,21 @@
               <div
                 v-if="selectedRuleFamily"
                 class="synthetic-case-rule-grid"
+                data-synthetic-guide="rule-selection"
+                :class="syntheticCaseGuideTargetClass('rule-selection')"
               >
+                <div class="synthetic-case-rule-grid-head">
+                  <div>
+                    <strong>{{ selectedRuleFamily.name }}</strong>
+                    <small>本组 {{ selectedRuleFamily.rules.length }} 条，已选 {{ selectedFamilyRuleSelectionCount }} 条</small>
+                  </div>
+                  <button
+                    type="button"
+                    @click="toggleSelectedRuleFamily"
+                  >
+                    {{ isSelectedRuleFamilyFullySelected ? '取消本组' : '全选本组' }}
+                  </button>
+                </div>
                 <label
                   v-for="rule in selectedRuleFamily.rules"
                   :key="rule.ruleId"
@@ -262,7 +250,11 @@
               </div>
             </div>
 
-            <aside class="synthetic-case-selection-summary">
+            <aside
+              class="synthetic-case-selection-summary"
+              data-synthetic-guide="expectation"
+              :class="syntheticCaseGuideTargetClass('expectation')"
+            >
               <div>
                 <span>本轮期望结果</span>
                 <div class="synthetic-case-fixed-status">
@@ -308,6 +300,8 @@
                 type="primary"
                 block
                 class="synthetic-case-generate-button"
+                data-synthetic-guide="generate"
+                :class="syntheticCaseGuideTargetClass('generate')"
                 @click="generateRuleDrivenCase"
               >
                 生成病历草稿
@@ -319,6 +313,8 @@
         <section
           v-if="wizardStep === 2 && editorTab === 'overview'"
           class="synthetic-case-card"
+          data-synthetic-guide="basic-info"
+          :class="syntheticCaseGuideTargetClass('basic-info')"
         >
           <div class="synthetic-case-section-head">
             <div>
@@ -415,6 +411,8 @@
         <section
           v-if="wizardStep === 2 && editorTab === 'documents'"
           class="synthetic-case-card"
+          data-synthetic-guide="documents"
+          :class="syntheticCaseGuideTargetClass('documents')"
         >
           <div class="synthetic-case-section-head">
             <div>
@@ -507,6 +505,30 @@
                 :rows="10"
                 placeholder="粘贴或编辑这份文书的完整文本。缺陷应由真实文书内容自然体现，不要写“备注：这里缺失”。"
               />
+              <div class="synthetic-case-doc-edit-footer">
+                <span
+                  class="synthetic-case-doc-edit-status"
+                  :class="{ 'is-dirty': isDocumentDirty(document) }"
+                >
+                  {{ documentEditStatusText(document) }}
+                </span>
+                <div class="synthetic-case-inline-actions">
+                  <a-button
+                    size="small"
+                    :disabled="!isDocumentDirty(document)"
+                    @click="applyDocumentEdit(document)"
+                  >
+                    应用修改
+                  </a-button>
+                  <a-button
+                    size="small"
+                    :disabled="!canRestoreDocumentTemplate(document)"
+                    @click="restoreDocumentTemplate(document)"
+                  >
+                    还原模板
+                  </a-button>
+                </div>
+              </div>
             </article>
           </div>
         </section>
@@ -585,6 +607,8 @@
         <section
           v-if="wizardStep === 3"
           class="synthetic-case-card synthetic-case-confirm-card"
+          data-synthetic-guide="confirm"
+          :class="syntheticCaseGuideTargetClass('confirm')"
         >
           <div class="synthetic-case-section-head">
             <div>
@@ -640,6 +664,8 @@
               type="primary"
               class="synthetic-case-primary-button is-strong"
               :loading="savingAndRunning"
+              data-synthetic-guide="save-run"
+              :class="syntheticCaseGuideTargetClass('save-run')"
               @click="handleSave(true)"
             >
               保存并验证选中质控点
@@ -665,14 +691,67 @@
         <pre>{{ previewText }}</pre>
       </div>
     </a-modal>
+
+    <div
+      v-if="syntheticCaseGuideOpen"
+      class="synthetic-case-tour-layer"
+    >
+      <div class="synthetic-case-tour-scrim" />
+      <div
+        class="synthetic-case-tour-card"
+        :style="syntheticCaseTourCardStyle"
+      >
+        <div class="synthetic-case-tour-kicker">
+          创建测试病历导览
+        </div>
+        <div class="synthetic-case-tour-count">
+          {{ syntheticCaseGuideStepIndex + 1 }} / {{ syntheticCaseGuideSteps.length }}
+        </div>
+        <h3>{{ currentSyntheticCaseGuideStep.title }}</h3>
+        <p>{{ currentSyntheticCaseGuideStep.description }}</p>
+        <div class="synthetic-case-tour-dots">
+          <button
+            v-for="(_, index) in syntheticCaseGuideSteps"
+            :key="index"
+            type="button"
+            :class="{ 'is-active': index === syntheticCaseGuideStepIndex }"
+            :aria-label="`查看第 ${index + 1} 步`"
+            @click="goToSyntheticCaseGuideStep(index)"
+          />
+        </div>
+        <div class="synthetic-case-tour-actions">
+          <a-button
+            class="!rounded-lg"
+            @click="closeSyntheticCaseGuide"
+          >
+            跳过
+          </a-button>
+          <a-button
+            v-if="syntheticCaseGuideStepIndex > 0"
+            class="!rounded-lg"
+            @click="goToPreviousSyntheticCaseGuideStep"
+          >
+            上一步
+          </a-button>
+          <a-button
+            type="primary"
+            class="!rounded-lg"
+            @click="goToNextSyntheticCaseGuideStep"
+          >
+            {{ isLastSyntheticCaseGuideStep ? '完成导览' : '下一步' }}
+          </a-button>
+        </div>
+      </div>
+    </div>
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import type { CSSProperties } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { ArrowLeft, Eye, FileText, Layers } from 'lucide-vue-next'
+import { ArrowLeft, Compass, Eye, FileText, Layers } from 'lucide-vue-next'
 import {
   createManualTestMedicalRecord,
   runManualSamplePool,
@@ -682,6 +761,7 @@ import { syntheticCaseRuleFamilies, syntheticCaseTemplates } from './syntheticCa
 import type { SyntheticCaseBuilderMode, TestRecordDocumentForm } from './types'
 import {
   buildSyntheticCaseRunPayload,
+  buildRuleDrivenCaseTitle,
   createDefaultSyntheticCaseForm,
   createSyntheticDocument,
   documentTypeLabel,
@@ -694,6 +774,7 @@ import {
 } from './syntheticCaseBuilder'
 
 const router = useRouter()
+const route = useRoute()
 const form = ref(createDefaultSyntheticCaseForm())
 const newDocumentType = ref('daily_course_record')
 const saving = ref(false)
@@ -702,6 +783,89 @@ const showPreview = ref(false)
 const wizardStep = ref<1 | 2 | 3>(1)
 const editorTab = ref<'overview' | 'documents' | 'orders' | 'exams' | 'preview'>('overview')
 const selectedRuleSelection = ref<string[]>([])
+const syntheticCaseGuideOpen = ref(false)
+const syntheticCaseGuideStepIndex = ref(0)
+const syntheticCaseTourCardStyle = ref<CSSProperties>({})
+let syntheticCaseGuidePositionTimer: ReturnType<typeof setTimeout> | null = null
+
+type SyntheticCaseGuideTarget =
+  | 'wizard'
+  | 'rule-family'
+  | 'rule-selection'
+  | 'expectation'
+  | 'generate'
+  | 'editor-tabs'
+  | 'basic-info'
+  | 'documents'
+  | 'confirm'
+  | 'save-run'
+
+const SYNTHETIC_CASE_GUIDE_STORAGE_KEY = 'medqc_synthetic_case_builder_guide_seen_v1'
+
+const syntheticCaseGuideSteps: Array<{
+  target: SyntheticCaseGuideTarget
+  title: string
+  description: string
+  wizardStep: 1 | 2 | 3
+  editorTab?: typeof editorTab.value
+}> = [
+  {
+    target: 'wizard',
+    title: '三步创建测试病历',
+    description: '先选质控点，再编辑自动生成的病历草稿，最后保存到客户自建样本池并验证。',
+    wizardStep: 1,
+  },
+  {
+    target: 'rule-family',
+    title: '选择规则族',
+    description: '左侧按规则族组织 LX0609 质控点，例如基础时限、会诊质量、手术麻醉等。',
+    wizardStep: 1,
+  },
+  {
+    target: 'rule-selection',
+    title: '勾选本次要验证的质控点',
+    description: '勾选后，后续保存验证只会运行这些 LX0609 质控点，不会扩展到全集。',
+    wizardStep: 1,
+  },
+  {
+    target: 'expectation',
+    title: '确认期望结果和材料',
+    description: '右侧会提示当前模板的期望结果、关键材料和已选质控点，便于演示前确认范围。',
+    wizardStep: 1,
+  },
+  {
+    target: 'generate',
+    title: '生成病历草稿',
+    description: '点击后系统会按所选质控点生成真实病历风格草稿，进入可编辑状态。',
+    wizardStep: 1,
+  },
+  {
+    target: 'basic-info',
+    title: '编辑基本信息',
+    description: '这里调整病历名称、患者脱敏信息、科室和入院时间，这些内容会显示在样本池列表里。',
+    wizardStep: 2,
+    editorTab: 'overview',
+  },
+  {
+    target: 'documents',
+    title: '检查和编辑文书',
+    description: '这里编辑入院记录、病程、会诊、手术麻醉等文书正文，缺陷应由文书事实自然体现。',
+    wizardStep: 2,
+    editorTab: 'documents',
+  },
+  {
+    target: 'confirm',
+    title: '确认保存范围',
+    description: '保存前确认测试病历、验证范围和文书数量，确保只跑选中的 LX0609 质控点。',
+    wizardStep: 3,
+  },
+  {
+    target: 'save-run',
+    title: '保存并验证',
+    description: '点击后会保存到客户自建样本池，并立即创建只包含选中质控点的验证任务。',
+    wizardStep: 3,
+  },
+]
 
 const builderSteps = [
   {
@@ -746,6 +910,19 @@ const configuredRuleCount = computed(
 )
 const selectedRuleFamily = computed(() =>
   syntheticCaseRuleFamilies.find((family) => family.key === form.value.selectedRuleFamilyKey),
+)
+const selectedFamilyRuleIds = computed(() =>
+  selectedRuleFamily.value?.rules.map((rule) => rule.ruleId) || [],
+)
+const selectedFamilyRuleSelectionCount = computed(
+  () =>
+    selectedFamilyRuleIds.value.filter((ruleId) => selectedRuleSelection.value.includes(ruleId))
+      .length,
+)
+const isSelectedRuleFamilyFullySelected = computed(
+  () =>
+    selectedFamilyRuleIds.value.length > 0 &&
+    selectedFamilyRuleSelectionCount.value === selectedFamilyRuleIds.value.length,
 )
 const allRuleOptions = computed(() =>
   syntheticCaseRuleFamilies.flatMap((family) =>
@@ -795,6 +972,12 @@ const isDraftStale = computed(
     form.value.builderMode === 'rule' &&
     form.value.selectedRuleIds.length > 0 &&
     !hasSameRuleScope(selectedRuleSelection.value, form.value.selectedRuleIds),
+)
+const currentSyntheticCaseGuideStep = computed(
+  () => syntheticCaseGuideSteps[syntheticCaseGuideStepIndex.value] || syntheticCaseGuideSteps[0],
+)
+const isLastSyntheticCaseGuideStep = computed(
+  () => syntheticCaseGuideStepIndex.value >= syntheticCaseGuideSteps.length - 1,
 )
 const currentCaseSourceLabel = computed(() => {
   if (form.value.builderMode === 'rule') {
@@ -849,6 +1032,52 @@ function goBack() {
   router.push({ name: 'WorkstationV4CustomerSampleValidation' })
 }
 
+function parseRouteRuleIds(value: unknown): string[] {
+  const items = Array.isArray(value) ? value : [value]
+  return normalizeRuleIds(
+    items.flatMap((item) =>
+      String(item || '')
+        .split(/[,\s，、]+/u)
+        .map((ruleId) => ruleId.trim()),
+    ),
+  )
+}
+
+function resolveInitialRuleFamilyKey(ruleIds: string[], routeFamilyKey: unknown): string {
+  const requestedFamilyKey = String(
+    Array.isArray(routeFamilyKey) ? routeFamilyKey[0] || '' : routeFamilyKey || '',
+  ).trim()
+  if (
+    requestedFamilyKey &&
+    syntheticCaseRuleFamilies.some((family) => family.key === requestedFamilyKey)
+  ) {
+    return requestedFamilyKey
+  }
+  const selectedRuleSet = new Set(ruleIds)
+  const exactFamily = syntheticCaseRuleFamilies.find(
+    (family) =>
+      family.rules.length > 0 && family.rules.every((rule) => selectedRuleSet.has(rule.ruleId)),
+  )
+  if (exactFamily) return exactFamily.key
+  return (
+    syntheticCaseRuleFamilies.find((family) =>
+      family.rules.some((rule) => selectedRuleSet.has(rule.ruleId)),
+    )?.key || syntheticCaseRuleFamilies[0]?.key || ''
+  )
+}
+
+function initializeRuleSelectionFromRoute() {
+  if (!syntheticCaseRuleFamilies.length) return
+  form.value.builderMode = 'rule'
+  const routeRuleIds = parseRouteRuleIds(route.query.ruleIds)
+  if (routeRuleIds.length) {
+    selectedRuleSelection.value = routeRuleIds
+    selectRuleFamily(resolveInitialRuleFamilyKey(routeRuleIds, route.query.ruleFamily))
+    return
+  }
+  selectRuleFamily(syntheticCaseRuleFamilies[0].key)
+}
+
 function createFormFromTemplate(
   template: SyntheticCaseTemplate,
   options: {
@@ -888,14 +1117,19 @@ function createFormFromTemplate(
     documents: template.documents.map((document) => ({
       ...document,
       key: createSyntheticDocument(document.document_type).key,
+      originalContent: String(document.originalContent ?? document.content ?? ''),
+      appliedContent: String(document.appliedContent ?? document.content ?? ''),
     })),
   }
 }
 
 function cloneTemplateDocument(document: TestRecordDocumentForm): TestRecordDocumentForm {
+  const content = String(document.content || '')
   return {
     ...document,
     key: createSyntheticDocument(document.document_type).key,
+    originalContent: String(document.originalContent ?? content),
+    appliedContent: String(document.appliedContent ?? content),
   }
 }
 
@@ -903,9 +1137,15 @@ function uniqueDocumentsFromTemplates(
   templates: SyntheticCaseTemplate[],
 ): TestRecordDocumentForm[] {
   const seen = new Set<string>()
+  const seenSingletonTypes = new Set<string>()
+  const singletonDocumentTypes = new Set(['admission_record', 'first_course_record', 'discharge_record'])
   const documents: TestRecordDocumentForm[] = []
   templates.forEach((template) => {
     template.documents.forEach((document) => {
+      if (singletonDocumentTypes.has(document.document_type)) {
+        if (seenSingletonTypes.has(document.document_type)) return
+        seenSingletonTypes.add(document.document_type)
+      }
       const key = `${document.document_type}:${document.title}:${document.content.slice(0, 36)}`
       if (seen.has(key)) return
       seen.add(key)
@@ -931,7 +1171,7 @@ function createRuleDrivenForm() {
     selectedRuleFamilyKey: families[0]?.key || form.value.selectedRuleFamilyKey || '',
   })
   const familyNames = families.map((family) => family.name)
-  nextForm.caseTitle = `${familyNames.join('、')}测试病历`
+  nextForm.caseTitle = buildRuleDrivenCaseTitle(familyNames, normalizedSelection)
   nextForm.manualIssueText = `按质控点创建：${normalizedSelection.join('、')}。`
   nextForm.documents = uniqueDocumentsFromTemplates(templates)
   nextForm.goldenAnswers = templates
@@ -961,6 +1201,18 @@ function toggleRuleSelection(ruleId: string, checked: boolean) {
   selectedRuleSelection.value = selectedRuleSelection.value.filter((item) => item !== ruleId)
 }
 
+function toggleSelectedRuleFamily() {
+  const familyRuleIds = selectedFamilyRuleIds.value
+  if (!familyRuleIds.length) return
+  if (isSelectedRuleFamilyFullySelected.value) {
+    selectedRuleSelection.value = selectedRuleSelection.value.filter(
+      (ruleId) => !familyRuleIds.includes(ruleId),
+    )
+    return
+  }
+  selectedRuleSelection.value = normalizeRuleIds([...selectedRuleSelection.value, ...familyRuleIds])
+}
+
 function generateRuleDrivenCase() {
   if (!selectedRuleFamily.value) {
     message.warning('请先选择一个规则族')
@@ -979,7 +1231,122 @@ function generateRuleDrivenCase() {
   selectedRuleSelection.value = [...nextForm.selectedRuleIds]
   wizardStep.value = 2
   editorTab.value = 'overview'
-  message.success(`已根据 ${selectedRuleSelection.value.length} 条质控点生成病历骨架`)
+  message.success(`已根据 ${selectedRuleSelection.value.length} 条质控点生成病历草稿`)
+}
+
+function syntheticCaseGuideTargetClass(target: SyntheticCaseGuideTarget) {
+  return {
+    'synthetic-case-tour-target': syntheticCaseGuideOpen.value,
+    'is-current-tour-target':
+      syntheticCaseGuideOpen.value && currentSyntheticCaseGuideStep.value.target === target,
+  }
+}
+
+function clampSyntheticCaseTourPosition(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function updateSyntheticCaseTourCardPosition() {
+  if (!syntheticCaseGuideOpen.value) return
+  const target = currentSyntheticCaseGuideStep.value.target
+  const element = document.querySelector(`[data-synthetic-guide="${target}"]`)
+  if (!element) return
+  const rect = element.getBoundingClientRect()
+  const gap = 18
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const cardWidth = Math.min(420, Math.max(280, viewportWidth - 32))
+  const cardHeight = 238
+  const maxLeft = Math.max(gap, viewportWidth - cardWidth - gap)
+  const maxTop = Math.max(gap, viewportHeight - cardHeight - gap)
+  let left = rect.right + gap
+  let top = rect.top
+  if (left + cardWidth > viewportWidth - gap) {
+    left = rect.left - cardWidth - gap
+  }
+  if (left < gap) {
+    left = clampSyntheticCaseTourPosition(rect.left, gap, maxLeft)
+    top = rect.bottom + gap
+    if (top + cardHeight > viewportHeight - gap) {
+      top = rect.top - cardHeight - gap
+    }
+  }
+  syntheticCaseTourCardStyle.value = {
+    width: `${cardWidth}px`,
+    left: `${clampSyntheticCaseTourPosition(left, gap, maxLeft)}px`,
+    top: `${clampSyntheticCaseTourPosition(top, gap, maxTop)}px`,
+  }
+}
+
+function scheduleSyntheticCaseTourCardPositionUpdate() {
+  if (syntheticCaseGuidePositionTimer) {
+    clearTimeout(syntheticCaseGuidePositionTimer)
+  }
+  updateSyntheticCaseTourCardPosition()
+  syntheticCaseGuidePositionTimer = setTimeout(updateSyntheticCaseTourCardPosition, 320)
+}
+
+function applySyntheticCaseGuideStep() {
+  const step = currentSyntheticCaseGuideStep.value
+  wizardStep.value = step.wizardStep
+  if (step.editorTab) {
+    editorTab.value = step.editorTab
+  }
+  void nextTick(() => {
+    const element = document.querySelector(`[data-synthetic-guide="${step.target}"]`)
+    if (typeof element?.scrollIntoView === 'function') {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+    }
+    scheduleSyntheticCaseTourCardPositionUpdate()
+  })
+}
+
+function hasSeenSyntheticCaseGuide(): boolean {
+  try {
+    return window.localStorage?.getItem(SYNTHETIC_CASE_GUIDE_STORAGE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function markSyntheticCaseGuideSeen() {
+  try {
+    window.localStorage?.setItem(SYNTHETIC_CASE_GUIDE_STORAGE_KEY, 'true')
+  } catch {
+    // localStorage 可能被浏览器策略禁用，不影响导览关闭。
+  }
+}
+
+function openSyntheticCaseGuide() {
+  syntheticCaseGuideStepIndex.value = 0
+  syntheticCaseGuideOpen.value = true
+  applySyntheticCaseGuideStep()
+}
+
+function closeSyntheticCaseGuide() {
+  syntheticCaseGuideOpen.value = false
+  syntheticCaseTourCardStyle.value = {}
+  markSyntheticCaseGuideSeen()
+}
+
+function goToSyntheticCaseGuideStep(index: number) {
+  syntheticCaseGuideStepIndex.value = Math.min(
+    Math.max(index, 0),
+    syntheticCaseGuideSteps.length - 1,
+  )
+  applySyntheticCaseGuideStep()
+}
+
+function goToPreviousSyntheticCaseGuideStep() {
+  goToSyntheticCaseGuideStep(syntheticCaseGuideStepIndex.value - 1)
+}
+
+function goToNextSyntheticCaseGuideStep() {
+  if (isLastSyntheticCaseGuideStep.value) {
+    closeSyntheticCaseGuide()
+    return
+  }
+  goToSyntheticCaseGuideStep(syntheticCaseGuideStepIndex.value + 1)
 }
 
 function goWizardStep(step: 1 | 2 | 3) {
@@ -1021,6 +1388,46 @@ function syncDocumentTitle(document: TestRecordDocumentForm) {
   }
 }
 
+function ensureDocumentEditBaseline(document: TestRecordDocumentForm) {
+  const content = String(document.content || '')
+  if (document.originalContent === undefined) {
+    document.originalContent = content
+  }
+  if (document.appliedContent === undefined) {
+    document.appliedContent = content
+  }
+}
+
+function isDocumentDirty(document: TestRecordDocumentForm): boolean {
+  ensureDocumentEditBaseline(document)
+  return String(document.content || '') !== String(document.appliedContent || '')
+}
+
+function canRestoreDocumentTemplate(document: TestRecordDocumentForm): boolean {
+  ensureDocumentEditBaseline(document)
+  return String(document.content || '') !== String(document.originalContent || '')
+}
+
+function documentEditStatusText(document: TestRecordDocumentForm): string {
+  if (isDocumentDirty(document)) {
+    return '已修改，保存病历后生效'
+  }
+  return '已应用到当前草稿'
+}
+
+function applyDocumentEdit(document: TestRecordDocumentForm) {
+  ensureDocumentEditBaseline(document)
+  document.appliedContent = String(document.content || '')
+  message.success('文书修改已应用到当前病历草稿')
+}
+
+function restoreDocumentTemplate(document: TestRecordDocumentForm) {
+  ensureDocumentEditBaseline(document)
+  document.content = String(document.originalContent || '')
+  document.appliedContent = String(document.originalContent || '')
+  message.success('已还原为模板文书内容')
+}
+
 function validateForm(): boolean {
   if (form.value.builderMode === 'rule') {
     if (!form.value.selectedRuleFamilyKey) {
@@ -1028,7 +1435,7 @@ function validateForm(): boolean {
       return false
     }
     if (!form.value.selectedRuleIds.length) {
-      message.warning('请先按质控点生成测试病历骨架')
+      message.warning('请先按质控点生成病历草稿')
       return false
     }
     if (isDraftStale.value) {
@@ -1080,6 +1487,7 @@ async function handleSave(runAfterSave: boolean) {
     }
     const poolId = result.data.pool?.id
     const visitId = result.data.visit_id
+    let createdJobId = ''
     if (runAfterSave && poolId && visitId) {
       const runResult = await runManualSamplePool(
         poolId,
@@ -1089,6 +1497,7 @@ async function handleSave(runAfterSave: boolean) {
       if (!runResult.success || !runResult.data) {
         message.warning(runResult.message || '测试病历已保存，但验证任务创建失败')
       } else {
+        createdJobId = runResult.data.job_id
         message.success('测试病历已保存，验证任务已创建')
       }
     } else {
@@ -1096,7 +1505,13 @@ async function handleSave(runAfterSave: boolean) {
     }
     await router.push({
       name: 'WorkstationV4CustomerSampleValidation',
-      query: poolId ? { poolId } : undefined,
+      query: poolId
+        ? {
+            poolId,
+            recordId: visitId,
+            ...(createdJobId ? { jobId: createdJobId } : {}),
+          }
+        : undefined,
     })
   } finally {
     saving.value = false
@@ -1104,10 +1519,24 @@ async function handleSave(runAfterSave: boolean) {
   }
 }
 
-if (syntheticCaseRuleFamilies.length) {
-  form.value.builderMode = 'rule'
-  selectRuleFamily(syntheticCaseRuleFamilies[0].key)
-}
+initializeRuleSelectionFromRoute()
+
+onMounted(() => {
+  window.addEventListener('resize', updateSyntheticCaseTourCardPosition)
+  window.addEventListener('scroll', updateSyntheticCaseTourCardPosition, true)
+  if (!hasSeenSyntheticCaseGuide()) {
+    openSyntheticCaseGuide()
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateSyntheticCaseTourCardPosition)
+  window.removeEventListener('scroll', updateSyntheticCaseTourCardPosition, true)
+  if (syntheticCaseGuidePositionTimer) {
+    clearTimeout(syntheticCaseGuidePositionTimer)
+    syntheticCaseGuidePositionTimer = null
+  }
+})
 </script>
 
 <style scoped>
@@ -1513,94 +1942,23 @@ if (syntheticCaseRuleFamilies.length) {
   gap: 8px;
 }
 
-.synthetic-case-rule-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.74);
-  padding: 12px;
-}
-
-.synthetic-case-rule-panel-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.synthetic-case-rule-panel-head strong {
-  display: block;
-  color: #1d1d1f;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 19px;
-}
-
-.synthetic-case-rule-panel-head small {
-  display: block;
-  margin-top: 4px;
-  color: rgba(29, 29, 31, 0.56);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.synthetic-case-rule-panel-head span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  height: 24px;
-  border-radius: 999px;
-  background: rgba(0, 102, 204, 0.08);
+.synthetic-case-rule-grid-head button {
+  height: 30px;
+  border: 1px solid rgba(0, 102, 204, 0.14);
+  border-radius: 9px;
+  background: rgba(0, 102, 204, 0.07);
   color: #0066cc;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.synthetic-case-rule-option {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  padding: 8px 0;
   cursor: pointer;
-}
-
-.synthetic-case-rule-option + .synthetic-case-rule-option {
-  border-top: 1px dashed rgba(0, 0, 0, 0.08);
-}
-
-.synthetic-case-rule-option input {
-  width: 15px;
-  height: 15px;
-  margin-top: 2px;
-  accent-color: #0066cc;
-}
-
-.synthetic-case-rule-option strong {
-  display: block;
-  color: #0066cc;
   font-size: 12px;
   font-weight: 700;
-  line-height: 18px;
+  padding: 0 10px;
+  transition: 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  white-space: nowrap;
 }
 
-.synthetic-case-rule-option span {
-  display: block;
-  color: #1d1d1f;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 19px;
-}
-
-.synthetic-case-rule-option small {
-  display: block;
-  margin-top: 3px;
-  color: rgba(29, 29, 31, 0.54);
-  font-size: 12px;
-  line-height: 18px;
+.synthetic-case-rule-grid-head button:hover {
+  border-color: rgba(0, 102, 204, 0.28);
+  background: rgba(0, 102, 204, 0.11);
 }
 
 .synthetic-case-generate-button {
@@ -1698,6 +2056,34 @@ if (syntheticCaseRuleFamilies.length) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.synthetic-case-rule-grid-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 10px 12px;
+}
+
+.synthetic-case-rule-grid-head strong {
+  display: block;
+  color: #1d1d1f;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 20px;
+}
+
+.synthetic-case-rule-grid-head small {
+  display: block;
+  margin-top: 3px;
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .synthetic-case-rule-card {
@@ -1914,6 +2300,27 @@ if (syntheticCaseRuleFamilies.length) {
 .synthetic-case-doc-grid {
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   margin-bottom: 12px;
+}
+
+.synthetic-case-doc-edit-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding-top: 10px;
+}
+
+.synthetic-case-doc-edit-status {
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.synthetic-case-doc-edit-status.is-dirty {
+  color: #b45309;
 }
 
 .synthetic-case-doc-select {
@@ -2151,6 +2558,118 @@ if (syntheticCaseRuleFamilies.length) {
 .synthetic-case-page :deep(.ant-select-focused .ant-select-selector) {
   border-color: rgba(0, 102, 204, 0.46) !important;
   box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.08) !important;
+}
+
+.synthetic-case-tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+}
+
+.synthetic-case-tour-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.synthetic-case-tour-card {
+  position: absolute;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 12px 36px rgba(15, 23, 42, 0.16),
+    0 2px 8px rgba(15, 23, 42, 0.08);
+  padding: 16px;
+  pointer-events: auto;
+}
+
+.synthetic-case-tour-kicker {
+  color: rgba(29, 29, 31, 0.5);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.synthetic-case-tour-count {
+  display: inline-flex;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12);
+  padding: 3px 9px;
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 18px;
+}
+
+.synthetic-case-tour-card h3 {
+  margin: 10px 0 0;
+  color: #1d1d1f;
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 24px;
+}
+
+.synthetic-case-tour-card p {
+  margin: 7px 0 0;
+  color: rgba(29, 29, 31, 0.64);
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.synthetic-case-tour-dots {
+  margin-top: 13px;
+  display: flex;
+  gap: 6px;
+}
+
+.synthetic-case-tour-dots button {
+  width: 24px;
+  height: 5px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+
+.synthetic-case-tour-dots button.is-active {
+  background: #f59e0b;
+}
+
+.synthetic-case-tour-actions {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.synthetic-case-tour-actions :deep(.ant-btn) {
+  height: 34px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.synthetic-case-tour-actions :deep(.ant-btn-primary) {
+  border-color: #0066cc;
+  background: #0066cc;
+}
+
+.synthetic-case-tour-target {
+  position: relative;
+}
+
+.synthetic-case-tour-target.is-current-tour-target {
+  z-index: 90;
+  border-radius: 14px;
+  outline: 3px solid #f59e0b;
+  outline-offset: 5px;
+  box-shadow:
+    0 0 0 10px rgba(245, 158, 11, 0.24),
+    0 0 0 16px rgba(255, 255, 255, 0.82),
+    0 14px 34px rgba(180, 83, 9, 0.22);
 }
 
 @media (max-width: 1280px) {

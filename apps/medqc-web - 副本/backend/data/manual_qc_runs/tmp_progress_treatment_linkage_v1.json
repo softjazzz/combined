@@ -1,0 +1,1132 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T07:59:01.364236",
+  "run_finished_at": "2026-04-24T07:59:13.791951",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 0,
+    "pass_regression": 1
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-034",
+        "SC-036",
+        "SC-037",
+        "SC-043",
+        "SC-044",
+        "SC-046",
+        "SC-070",
+        "SC-073",
+        "SC-074"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119",
+        "visit_id": "SYN-RUN-119",
+        "mr_no": "SYN0119",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "血液内科"
+      },
+      "elapsed_seconds": 5.465,
+      "total_tokens": 3240,
+      "prompt_tokens": 2289,
+      "completion_tokens": 951,
+      "api_time": 5.462,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-034",
+            "SC-036",
+            "SC-037",
+            "SC-043",
+            "SC-044"
+          ],
+          "tokens_used": 1712,
+          "prompt_tokens": 1213,
+          "completion_tokens": 499,
+          "api_time": 2.9873485565185547
+        },
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-046",
+            "SC-070",
+            "SC-073",
+            "SC-074"
+          ],
+          "tokens_used": 1528,
+          "prompt_tokens": 1076,
+          "completion_tokens": 452,
+          "api_time": 2.474769115447998
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-034",
+          "rule_name": "病程中对治疗措施、药物、医嘱变化未记录或分析",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程仅记录继续原治疗，未分析检查异常原因及医嘱变化依据。",
+          "evidence": "今日检查异常，继续原治疗；请会诊后遵意见执行",
+          "suggestion": "补充检查异常分析及治疗调整理由。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"病程仅记录继续原治疗，未分析检查异常原因及医嘱变化依据。\",\n      \"evidence\": \"今日检查异常，继续原治疗；请会诊后遵意见执行\",\n      \"suggestion\": \"补充检查异常分析及治疗调整理由。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"明确提及检查异常但无具体结果描述及针对性处理意见。\",\n      \"evidence\": \"今日检查异常\",\n      \"suggestion\": \"补充异常检查结果详情及具体分析处理措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历证据中未涉及取材或病理相关诊疗行为。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"证据中未提及抗菌药物使用，无法判定指征合规性。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"证据中未提及抗菌药物医嘱，不适用本规则。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            22
+          ],
+          "metadata": {
+            "tokens_used": 342,
+            "prompt_tokens": 242,
+            "completion_tokens": 99,
+            "input_tokens": 242,
+            "output_tokens": 99,
+            "api_time": 0.597469711303711,
+            "first_result_latency": 2.9873485565185547,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 74
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-036",
+          "rule_name": "无重要辅助检查结果、无对异常检查结果的分析及处理意见",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "明确提及检查异常但无具体结果描述及针对性处理意见。",
+          "evidence": "今日检查异常",
+          "suggestion": "补充异常检查结果详情及具体分析处理措施。",
+          "rewrite_example": "今日病程：腹痛较前加重，结合检查结果考虑病情进展，已请上级医师评估并调整处理计划。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"病程仅记录继续原治疗，未分析检查异常原因及医嘱变化依据。\",\n      \"evidence\": \"今日检查异常，继续原治疗；请会诊后遵意见执行\",\n      \"suggestion\": \"补充检查异常分析及治疗调整理由。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"明确提及检查异常但无具体结果描述及针对性处理意见。\",\n      \"evidence\": \"今日检查异常\",\n      \"suggestion\": \"补充异常检查结果详情及具体分析处理措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历证据中未涉及取材或病理相关诊疗行为。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"证据中未提及抗菌药物使用，无法判定指征合规性。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"证据中未提及抗菌药物医嘱，不适用本规则。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            6
+          ],
+          "metadata": {
+            "tokens_used": 342,
+            "prompt_tokens": 242,
+            "completion_tokens": 99,
+            "input_tokens": 242,
+            "output_tokens": 99,
+            "api_time": 0.597469711303711,
+            "first_result_latency": 2.9873485565185547,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 74
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-037",
+          "rule_name": "取材情况和病理结果未在病程记录中记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病历证据中未涉及取材或病理相关诊疗行为。",
+          "evidence": "【日常病程记录】今日检查异常，继续原治疗",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"病程仅记录继续原治疗，未分析检查异常原因及医嘱变化依据。\",\n      \"evidence\": \"今日检查异常，继续原治疗；请会诊后遵意见执行\",\n      \"suggestion\": \"补充检查异常分析及治疗调整理由。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"明确提及检查异常但无具体结果描述及针对性处理意见。\",\n      \"evidence\": \"今日检查异常\",\n      \"suggestion\": \"补充异常检查结果详情及具体分析处理措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历证据中未涉及取材或病理相关诊疗行为。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"证据中未提及抗菌药物使用，无法判定指征合规性。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"证据中未提及抗菌药物医嘱，不适用本规则。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            12
+          ],
+          "metadata": {
+            "tokens_used": 342,
+            "prompt_tokens": 242,
+            "completion_tokens": 99,
+            "input_tokens": 242,
+            "output_tokens": 99,
+            "api_time": 0.597469711303711,
+            "first_result_latency": 2.9873485565185547,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 74
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-043",
+          "rule_name": "抗菌药物使用不符合《抗菌药物临床应用指南》,无指征使用抗菌素或者越级使用抗菌药物",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "证据中未提及抗菌药物使用，无法判定指征合规性。",
+          "evidence": "【日常病程记录】今日检查异常，继续原治疗",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"病程仅记录继续原治疗，未分析检查异常原因及医嘱变化依据。\",\n      \"evidence\": \"今日检查异常，继续原治疗；请会诊后遵意见执行\",\n      \"suggestion\": \"补充检查异常分析及治疗调整理由。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"明确提及检查异常但无具体结果描述及针对性处理意见。\",\n      \"evidence\": \"今日检查异常\",\n      \"suggestion\": \"补充异常检查结果详情及具体分析处理措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历证据中未涉及取材或病理相关诊疗行为。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"证据中未提及抗菌药物使用，无法判定指征合规性。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"证据中未提及抗菌药物医嘱，不适用本规则。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            12
+          ],
+          "metadata": {
+            "tokens_used": 342,
+            "prompt_tokens": 242,
+            "completion_tokens": 99,
+            "input_tokens": 242,
+            "output_tokens": 99,
+            "api_time": 0.597469711303711,
+            "first_result_latency": 2.9873485565185547,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 74
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-044",
+          "rule_name": "抗菌药物使用相关医嘱不完整,使用情况未在病程记录 中有相应记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "证据中未提及抗菌药物医嘱，不适用本规则。",
+          "evidence": "【日常病程记录】今日检查异常，继续原治疗",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"病程仅记录继续原治疗，未分析检查异常原因及医嘱变化依据。\",\n      \"evidence\": \"今日检查异常，继续原治疗；请会诊后遵意见执行\",\n      \"suggestion\": \"补充检查异常分析及治疗调整理由。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"明确提及检查异常但无具体结果描述及针对性处理意见。\",\n      \"evidence\": \"今日检查异常\",\n      \"suggestion\": \"补充异常检查结果详情及具体分析处理措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历证据中未涉及取材或病理相关诊疗行为。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"证据中未提及抗菌药物使用，无法判定指征合规性。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"证据中未提及抗菌药物医嘱，不适用本规则。\",\n      \"evidence\": \"\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            12
+          ],
+          "metadata": {
+            "tokens_used": 342,
+            "prompt_tokens": 242,
+            "completion_tokens": 99,
+            "input_tokens": 242,
+            "output_tokens": 99,
+            "api_time": 0.597469711303711,
+            "first_result_latency": 2.9873485565185547,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 74
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-046",
+          "rule_name": "有创诊疗操作记录描述不规范",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "有创操作记录缺失，无法判定描述规范性。",
+          "evidence": "今日检查异常，继续原治疗；请会诊后遵意见执行；输血后观察。",
+          "suggestion": "补充有创诊疗操作详细记录。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-046\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"有创操作记录缺失，无法判定描述规范性。\",\n      \"evidence\": \"今日检查异常，继续原治疗；请会诊后遵意见执行；输血后观察。\",\n      \"suggestion\": \"补充有创诊疗操作详细记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程仅要求执行会诊意见，未记录具体采纳及执行情况。\",\n      \"evidence\": \"请会诊后遵意见执行\",\n      \"suggestion\": \"补充会诊意见采纳情况及具体执行措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示输血前九项检查结果，无法判定是否完善。\",\n      \"evidence\": \"诊断：贫血；医嘱：输血后观察\",\n      \"suggestion\": \"核查并补全输血前相关九项检查报告。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"仅有输血后观察提示，缺乏完整输血评估及记录单。\",\n      \"evidence\": \"输血后观察\",\n      \"suggestion\": \"完善输血前评估、记录单及输血后评价。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            29
+          ],
+          "metadata": {
+            "tokens_used": 382,
+            "prompt_tokens": 269,
+            "completion_tokens": 113,
+            "input_tokens": 269,
+            "output_tokens": 113,
+            "api_time": 0.6186922788619995,
+            "first_result_latency": 2.474769115447998,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 74
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程仅要求执行会诊意见，未记录具体采纳及执行情况。",
+          "evidence": "请会诊后遵意见执行",
+          "suggestion": "补充会诊意见采纳情况及具体执行措施。",
+          "rewrite_example": "今日记录会诊意见：继续抑酸治疗，完善幽门螺杆菌检测，已开立相关医嘱并向患者交代。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-046\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"有创操作记录缺失，无法判定描述规范性。\",\n      \"evidence\": \"今日检查异常，继续原治疗；请会诊后遵意见执行；输血后观察。\",\n      \"suggestion\": \"补充有创诊疗操作详细记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程仅要求执行会诊意见，未记录具体采纳及执行情况。\",\n      \"evidence\": \"请会诊后遵意见执行\",\n      \"suggestion\": \"补充会诊意见采纳情况及具体执行措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示输血前九项检查结果，无法判定是否完善。\",\n      \"evidence\": \"诊断：贫血；医嘱：输血后观察\",\n      \"suggestion\": \"核查并补全输血前相关九项检查报告。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"仅有输血后观察提示，缺乏完整输血评估及记录单。\",\n      \"evidence\": \"输血后观察\",\n      \"suggestion\": \"完善输血前评估、记录单及输血后评价。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            13,
+            22
+          ],
+          "metadata": {
+            "tokens_used": 382,
+            "prompt_tokens": 269,
+            "completion_tokens": 113,
+            "input_tokens": 269,
+            "output_tokens": 113,
+            "api_time": 0.6186922788619995,
+            "first_result_latency": 2.474769115447998,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 74
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-073",
+          "rule_name": "输血病人未做输血前相关九项检查",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "证据未显示输血前九项检查结果，无法判定是否完善。",
+          "evidence": "【日常病程记录】输血后观察",
+          "suggestion": "核查并补全输血前相关九项检查报告。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.7,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-046\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"有创操作记录缺失，无法判定描述规范性。\",\n      \"evidence\": \"今日检查异常，继续原治疗；请会诊后遵意见执行；输血后观察。\",\n      \"suggestion\": \"补充有创诊疗操作详细记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程仅要求执行会诊意见，未记录具体采纳及执行情况。\",\n      \"evidence\": \"请会诊后遵意见执行\",\n      \"suggestion\": \"补充会诊意见采纳情况及具体执行措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示输血前九项检查结果，无法判定是否完善。\",\n      \"evidence\": \"诊断：贫血；医嘱：输血后观察\",\n      \"suggestion\": \"核查并补全输血前相关九项检查报告。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"仅有输血后观察提示，缺乏完整输血评估及记录单。\",\n      \"evidence\": \"输血后观察\",\n      \"suggestion\": \"完善输血前评估、记录单及输血后评价。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            23,
+            28
+          ],
+          "metadata": {
+            "tokens_used": 382,
+            "prompt_tokens": 269,
+            "completion_tokens": 113,
+            "input_tokens": 269,
+            "output_tokens": 113,
+            "api_time": 0.6186922788619995,
+            "first_result_latency": 2.474769115447998,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 74
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-074",
+          "rule_name": "输血病人无输血前评估、输血记录、输血后评价记录、输血反应记录或输血记录单填写不全等",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "仅有输血后观察提示，缺乏完整输血评估及记录单。",
+          "evidence": "输血后观察",
+          "suggestion": "完善输血前评估、记录单及输血后评价。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.7,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-046\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"有创操作记录缺失，无法判定描述规范性。\",\n      \"evidence\": \"今日检查异常，继续原治疗；请会诊后遵意见执行；输血后观察。\",\n      \"suggestion\": \"补充有创诊疗操作详细记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程仅要求执行会诊意见，未记录具体采纳及执行情况。\",\n      \"evidence\": \"请会诊后遵意见执行\",\n      \"suggestion\": \"补充会诊意见采纳情况及具体执行措施。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"证据未显示输血前九项检查结果，无法判定是否完善。\",\n      \"evidence\": \"诊断：贫血；医嘱：输血后观察\",\n      \"suggestion\": \"核查并补全输血前相关九项检查报告。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"仅有输血后观察提示，缺乏完整输血评估及记录单。\",\n      \"evidence\": \"输血后观察\",\n      \"suggestion\": \"完善输血前评估、记录单及输血后评价。\",\n      \"confidence\": 0.7,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            23,
+            28
+          ],
+          "metadata": {
+            "tokens_used": 382,
+            "prompt_tokens": 269,
+            "completion_tokens": 113,
+            "input_tokens": 269,
+            "output_tokens": 113,
+            "api_time": 0.6186922788619995,
+            "first_result_latency": 2.474769115447998,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 74
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-034": "uncertain",
+          "SC-036": "non_compliant",
+          "SC-037": "not_applicable",
+          "SC-043": "not_applicable",
+          "SC-044": "not_applicable",
+          "SC-046": "uncertain",
+          "SC-070": "non_compliant",
+          "SC-073": "uncertain",
+          "SC-074": "uncertain"
+        },
+        "strict_hits": {
+          "SC-036": "non_compliant",
+          "SC-070": "non_compliant"
+        },
+        "soft_hits": {
+          "SC-034": "uncertain",
+          "SC-046": "uncertain",
+          "SC-073": "uncertain",
+          "SC-074": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-034",
+        "SC-036",
+        "SC-037",
+        "SC-043",
+        "SC-044",
+        "SC-046",
+        "SC-070",
+        "SC-073",
+        "SC-074"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119",
+        "visit_id": "SYN-RUN-119",
+        "mr_no": "SYN0119",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "血液内科"
+      },
+      "elapsed_seconds": 6.055,
+      "total_tokens": 3364,
+      "prompt_tokens": 2403,
+      "completion_tokens": 961,
+      "api_time": 6.053,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-034",
+            "SC-036",
+            "SC-037",
+            "SC-043",
+            "SC-044"
+          ],
+          "tokens_used": 1812,
+          "prompt_tokens": 1270,
+          "completion_tokens": 542,
+          "api_time": 3.430762529373169
+        },
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-046",
+            "SC-070",
+            "SC-073",
+            "SC-074"
+          ],
+          "tokens_used": 1552,
+          "prompt_tokens": 1133,
+          "completion_tokens": 419,
+          "api_time": 2.6227176189422607
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-034",
+          "rule_name": "病程中对治疗措施、药物、医嘱变化未记录或分析",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录了治疗措施变化及分析。",
+          "evidence": "【日常病程记录】今日复查血红蛋白下降，结合黑便考虑上消化道出血可能，已暂停阿司匹林，予PPI静滴并申请胃镜",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录了治疗措施变化及分析。\",\n      \"evidence\": \"已暂停阿司匹林，予PPI静滴并申请胃镜。会诊建议完善凝血功能并调整抗凝方案，病程中已记录具体执行。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"无重要辅助检查异常结果需分析。\",\n      \"evidence\": \"仅提及血红蛋白下降、黑便等临床表现，无其他重要辅助检查报告。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历未涉及取材及病理检查。\",\n      \"evidence\": \"文书内容仅涉及上消化道出血的药物治疗及内镜申请，无取材描述。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前医嘱未见抗菌药物使用。\",\n      \"evidence\": \"医嘱为：暂停阿司匹林；PPI静滴；申请胃镜；输注红细胞2U。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"无抗菌药物医嘱，无需记录使用情况。\",\n      \"evidence\": \"医嘱列表中无抗菌药物，病程亦未提及抗菌药使用。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            45
+          ],
+          "metadata": {
+            "tokens_used": 362,
+            "prompt_tokens": 254,
+            "completion_tokens": 108,
+            "input_tokens": 254,
+            "output_tokens": 108,
+            "api_time": 0.6861525058746338,
+            "first_result_latency": 3.430762529373169,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 145
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-036",
+          "rule_name": "无重要辅助检查结果、无对异常检查结果的分析及处理意见",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "无重要辅助检查异常结果需分析。",
+          "evidence": "【日常病程记录】今日复查血红蛋白下降，结合黑便考虑上消化道出血可能，已暂停阿司匹林，予PPI静滴并申请胃镜",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录了治疗措施变化及分析。\",\n      \"evidence\": \"已暂停阿司匹林，予PPI静滴并申请胃镜。会诊建议完善凝血功能并调整抗凝方案，病程中已记录具体执行。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"无重要辅助检查异常结果需分析。\",\n      \"evidence\": \"仅提及血红蛋白下降、黑便等临床表现，无其他重要辅助检查报告。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历未涉及取材及病理检查。\",\n      \"evidence\": \"文书内容仅涉及上消化道出血的药物治疗及内镜申请，无取材描述。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前医嘱未见抗菌药物使用。\",\n      \"evidence\": \"医嘱为：暂停阿司匹林；PPI静滴；申请胃镜；输注红细胞2U。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"无抗菌药物医嘱，无需记录使用情况。\",\n      \"evidence\": \"医嘱列表中无抗菌药物，病程亦未提及抗菌药使用。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            45
+          ],
+          "metadata": {
+            "tokens_used": 362,
+            "prompt_tokens": 254,
+            "completion_tokens": 108,
+            "input_tokens": 254,
+            "output_tokens": 108,
+            "api_time": 0.6861525058746338,
+            "first_result_latency": 3.430762529373169,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 145
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-037",
+          "rule_name": "取材情况和病理结果未在病程记录中记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病历未涉及取材及病理检查。",
+          "evidence": "【日常病程记录】今日复查血红蛋白下降，结合黑便考虑上消化道出血可能，已暂停阿司匹林，予PPI静滴并申请胃镜",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录了治疗措施变化及分析。\",\n      \"evidence\": \"已暂停阿司匹林，予PPI静滴并申请胃镜。会诊建议完善凝血功能并调整抗凝方案，病程中已记录具体执行。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"无重要辅助检查异常结果需分析。\",\n      \"evidence\": \"仅提及血红蛋白下降、黑便等临床表现，无其他重要辅助检查报告。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历未涉及取材及病理检查。\",\n      \"evidence\": \"文书内容仅涉及上消化道出血的药物治疗及内镜申请，无取材描述。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前医嘱未见抗菌药物使用。\",\n      \"evidence\": \"医嘱为：暂停阿司匹林；PPI静滴；申请胃镜；输注红细胞2U。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"无抗菌药物医嘱，无需记录使用情况。\",\n      \"evidence\": \"医嘱列表中无抗菌药物，病程亦未提及抗菌药使用。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            45
+          ],
+          "metadata": {
+            "tokens_used": 362,
+            "prompt_tokens": 254,
+            "completion_tokens": 108,
+            "input_tokens": 254,
+            "output_tokens": 108,
+            "api_time": 0.6861525058746338,
+            "first_result_latency": 3.430762529373169,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 145
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-043",
+          "rule_name": "抗菌药物使用不符合《抗菌药物临床应用指南》,无指征使用抗菌素或者越级使用抗菌药物",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "当前医嘱未见抗菌药物使用。",
+          "evidence": "【日常病程记录】今日复查血红蛋白下降，结合黑便考虑上消化道出血可能，已暂停阿司匹林，予PPI静滴并申请胃镜",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录了治疗措施变化及分析。\",\n      \"evidence\": \"已暂停阿司匹林，予PPI静滴并申请胃镜。会诊建议完善凝血功能并调整抗凝方案，病程中已记录具体执行。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"无重要辅助检查异常结果需分析。\",\n      \"evidence\": \"仅提及血红蛋白下降、黑便等临床表现，无其他重要辅助检查报告。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历未涉及取材及病理检查。\",\n      \"evidence\": \"文书内容仅涉及上消化道出血的药物治疗及内镜申请，无取材描述。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前医嘱未见抗菌药物使用。\",\n      \"evidence\": \"医嘱为：暂停阿司匹林；PPI静滴；申请胃镜；输注红细胞2U。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"无抗菌药物医嘱，无需记录使用情况。\",\n      \"evidence\": \"医嘱列表中无抗菌药物，病程亦未提及抗菌药使用。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            45
+          ],
+          "metadata": {
+            "tokens_used": 362,
+            "prompt_tokens": 254,
+            "completion_tokens": 108,
+            "input_tokens": 254,
+            "output_tokens": 108,
+            "api_time": 0.6861525058746338,
+            "first_result_latency": 3.430762529373169,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 145
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-044",
+          "rule_name": "抗菌药物使用相关医嘱不完整,使用情况未在病程记录 中有相应记录",
+          "status": "not_applicable",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "无抗菌药物医嘱，无需记录使用情况。",
+          "evidence": "【日常病程记录】今日复查血红蛋白下降，结合黑便考虑上消化道出血可能，已暂停阿司匹林，予PPI静滴并申请胃镜",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录了治疗措施变化及分析。\",\n      \"evidence\": \"已暂停阿司匹林，予PPI静滴并申请胃镜。会诊建议完善凝血功能并调整抗凝方案，病程中已记录具体执行。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"无重要辅助检查异常结果需分析。\",\n      \"evidence\": \"仅提及血红蛋白下降、黑便等临床表现，无其他重要辅助检查报告。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"病历未涉及取材及病理检查。\",\n      \"evidence\": \"文书内容仅涉及上消化道出血的药物治疗及内镜申请，无取材描述。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"当前医嘱未见抗菌药物使用。\",\n      \"evidence\": \"医嘱为：暂停阿司匹林；PPI静滴；申请胃镜；输注红细胞2U。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"not_applicable\",\n      \"findings\": \"无抗菌药物医嘱，无需记录使用情况。\",\n      \"evidence\": \"医嘱列表中无抗菌药物，病程亦未提及抗菌药使用。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            45
+          ],
+          "metadata": {
+            "tokens_used": 362,
+            "prompt_tokens": 254,
+            "completion_tokens": 108,
+            "input_tokens": 254,
+            "output_tokens": 108,
+            "api_time": 0.6861525058746338,
+            "first_result_latency": 3.430762529373169,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 5,
+            "pack_fallback": false,
+            "context_tokens_estimate": 145
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-046",
+          "rule_name": "有创诊疗操作记录描述不规范",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "有创操作记录描述缺失，无法判定规范性。",
+          "evidence": "【日常病程记录】今日复查血红蛋白下降，结合黑便考虑上消化道出血可能，已暂停阿司匹林，予PPI静滴并申请胃镜",
+          "suggestion": "补充胃镜及输血操作详细记录。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-046\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"有创操作记录描述缺失，无法判定规范性。\",\n      \"evidence\": \"申请胃镜；输注红细胞2U\",\n      \"suggestion\": \"补充胃镜及输血操作详细记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程已记录会诊意见执行，符合规范。\",\n      \"evidence\": \"病程中已记录具体执行\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"输血前九项检查结果未提及，证据不足。\",\n      \"evidence\": \"输注红细胞2U后复查血常规改善\",\n      \"suggestion\": \"补充输血前相关九项检查报告。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"缺乏输血评估、记录单及评价记录。\",\n      \"evidence\": \"输注红细胞2U后复查血常规改善\",\n      \"suggestion\": \"完善输血全过程文书记录。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            45
+          ],
+          "metadata": {
+            "tokens_used": 388,
+            "prompt_tokens": 283,
+            "completion_tokens": 104,
+            "input_tokens": 283,
+            "output_tokens": 104,
+            "api_time": 0.6556794047355652,
+            "first_result_latency": 2.6227176189422607,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 145
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程已记录会诊意见执行，符合规范。",
+          "evidence": "病程中已记录具体执行",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-046\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"有创操作记录描述缺失，无法判定规范性。\",\n      \"evidence\": \"申请胃镜；输注红细胞2U\",\n      \"suggestion\": \"补充胃镜及输血操作详细记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程已记录会诊意见执行，符合规范。\",\n      \"evidence\": \"病程中已记录具体执行\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"输血前九项检查结果未提及，证据不足。\",\n      \"evidence\": \"输注红细胞2U后复查血常规改善\",\n      \"suggestion\": \"补充输血前相关九项检查报告。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"缺乏输血评估、记录单及评价记录。\",\n      \"evidence\": \"输注红细胞2U后复查血常规改善\",\n      \"suggestion\": \"完善输血全过程文书记录。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            80,
+            90
+          ],
+          "metadata": {
+            "tokens_used": 388,
+            "prompt_tokens": 283,
+            "completion_tokens": 104,
+            "input_tokens": 283,
+            "output_tokens": 104,
+            "api_time": 0.6556794047355652,
+            "first_result_latency": 2.6227176189422607,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 145
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-073",
+          "rule_name": "输血病人未做输血前相关九项检查",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "输血前九项检查结果未提及，证据不足。",
+          "evidence": "输注红细胞2U后复查血常规改善",
+          "suggestion": "补充输血前相关九项检查报告。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-046\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"有创操作记录描述缺失，无法判定规范性。\",\n      \"evidence\": \"申请胃镜；输注红细胞2U\",\n      \"suggestion\": \"补充胃镜及输血操作详细记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程已记录会诊意见执行，符合规范。\",\n      \"evidence\": \"病程中已记录具体执行\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"输血前九项检查结果未提及，证据不足。\",\n      \"evidence\": \"输注红细胞2U后复查血常规改善\",\n      \"suggestion\": \"补充输血前相关九项检查报告。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"缺乏输血评估、记录单及评价记录。\",\n      \"evidence\": \"输注红细胞2U后复查血常规改善\",\n      \"suggestion\": \"完善输血全过程文书记录。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            46,
+            61
+          ],
+          "metadata": {
+            "tokens_used": 388,
+            "prompt_tokens": 283,
+            "completion_tokens": 104,
+            "input_tokens": 283,
+            "output_tokens": 104,
+            "api_time": 0.6556794047355652,
+            "first_result_latency": 2.6227176189422607,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 145
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-074",
+          "rule_name": "输血病人无输血前评估、输血记录、输血后评价记录、输血反应记录或输血记录单填写不全等",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "缺乏输血评估、记录单及评价记录。",
+          "evidence": "输注红细胞2U后复查血常规改善",
+          "suggestion": "完善输血全过程文书记录。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.9,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-046\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"有创操作记录描述缺失，无法判定规范性。\",\n      \"evidence\": \"申请胃镜；输注红细胞2U\",\n      \"suggestion\": \"补充胃镜及输血操作详细记录。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程已记录会诊意见执行，符合规范。\",\n      \"evidence\": \"病程中已记录具体执行\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"输血前九项检查结果未提及，证据不足。\",\n      \"evidence\": \"输注红细胞2U后复查血常规改善\",\n      \"suggestion\": \"补充输血前相关九项检查报告。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"缺乏输血评估、记录单及评价记录。\",\n      \"evidence\": \"输注红细胞2U后复查血常规改善\",\n      \"suggestion\": \"完善输血全过程文书记录。\",\n      \"confidence\": 0.9,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            46,
+            61
+          ],
+          "metadata": {
+            "tokens_used": 388,
+            "prompt_tokens": 283,
+            "completion_tokens": 104,
+            "input_tokens": 283,
+            "output_tokens": 104,
+            "api_time": 0.6556794047355652,
+            "first_result_latency": 2.6227176189422607,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 4,
+            "pack_fallback": false,
+            "context_tokens_estimate": 145
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-034": "compliant",
+          "SC-036": "not_applicable",
+          "SC-037": "not_applicable",
+          "SC-043": "not_applicable",
+          "SC-044": "not_applicable",
+          "SC-046": "uncertain",
+          "SC-070": "compliant",
+          "SC-073": "uncertain",
+          "SC-074": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-046": "uncertain",
+          "SC-073": "uncertain",
+          "SC-074": "uncertain"
+        }
+      }
+    }
+  ],
+  "bucket_filters": [
+    "progress_treatment_linkage"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 9,
+    "stabilized": 0,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-034",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-036",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-037",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-043",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-044",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-046",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-070",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-073",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-074",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": false
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

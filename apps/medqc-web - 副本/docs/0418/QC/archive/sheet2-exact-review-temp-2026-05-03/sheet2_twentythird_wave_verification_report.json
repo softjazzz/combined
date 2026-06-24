@@ -1,0 +1,29 @@
+{
+  "ledger": "D:\\LLM\\LX888\\apps\\medqc-web\\docs\\0418\\QC\\sheet2_verification_ledger_seed.csv",
+  "pool": "0426",
+  "created_by": "sheet2_issue_family_verification",
+  "selected_row_count": 1,
+  "families": [
+    {
+      "issue_family": "上级查房内容空洞/复制粘贴/身份异常",
+      "row_count": 1,
+      "job_id": "c1dbb35c-7cc2-4d89-8d4c-20768634d6cf",
+      "result_breakdown": {
+        "miss": 1
+      },
+      "executor_breakdown": {
+        "program": 1,
+        "llm": 0
+      },
+      "items_count": 0,
+      "failed_count": 0
+    }
+  ],
+  "verification_status_breakdown": {
+    "pending": 192,
+    "exact_hit": 20,
+    "miss": 29,
+    "same_family_hit": 34,
+    "skip": 8
+  }
+}

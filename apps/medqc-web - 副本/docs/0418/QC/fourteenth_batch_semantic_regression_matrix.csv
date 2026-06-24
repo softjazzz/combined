@@ -1,0 +1,5 @@
+case_id,stage,record_id,patient_name,issue_family,manual_issue_text,primary_rule_id,expected_status,actual_status,expected_hit_type,actual_hit_type,target_document_type,current_status,notes,batch_job_id
+semantic-b14-obs-001,fourteenth_batch,1919190,潘泗澄,首次病程无病例特点,首次病程中只有主诊断有诊断依据及鉴别诊断，其余诊断均未书写诊断依据及鉴别诊断,SC-023,uncertain,uncertain,same_family_hit,same_family_hit,首次病程记录,observe,当前最新正式 batch 下仍为 uncertain，先保留为 SC-023 观察位。,2d4ef141-7614-4c66-956d-51f0dfd7f363
+semantic-b14-core-002,fourteenth_batch,1982983,陈桂树,首次病程病例特点未归纳提炼或不全面,首次病程记录鉴别诊断不全面,SC-024,non_compliant,non_compliant,same_family_hit,same_family_hit,首次病程记录,core,,2d4ef141-7614-4c66-956d-51f0dfd7f363
+semantic-b14-core-003,fourteenth_batch,2144246,张世英,首次病程病例特点未归纳提炼或不全面,入院记录诊断不全，患者无房颤，但入院记录心率和脉搏不等，首次病程记录中鉴别诊断不全面。,SC-024,non_compliant,non_compliant,exact_hit,exact_hit,首次病程记录,core,,2d4ef141-7614-4c66-956d-51f0dfd7f363
+semantic-b14-core-004,fourteenth_batch,2023362,程天金,首次病程病例特点未归纳提炼或不全面,首次病程记录鉴别诊断不全面，患者既往有糖尿病史，入院诊断未诊断该疾病。现病史阴性症状采集不全面，不能支撑鉴别诊断。,SC-024,non_compliant,non_compliant,exact_hit,exact_hit,首次病程记录,core,,2d4ef141-7614-4c66-956d-51f0dfd7f363

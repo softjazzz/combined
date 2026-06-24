@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_daily_course_core_v1",
+    "issue_type": "Z15_daily_course_core",
+    "display_name": "日常病程核心分析",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-032", "SC-033"],
+    "bucket_id": "daily_course_core"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P115",
+    "visit_id": "SYN-RUN-115",
+    "mr_no": "SYN0115",
+    "patient_name": "合成患者辰",
+    "gender": "男",
+    "age": 64,
+    "department": "呼吸内科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "患者今日仍有发热，最高38.5℃，咳黄痰较前减少，复查血常规白细胞下降。考虑抗感染治疗有效，但炎症未完全控制，继续头孢哌酮舒巴坦治疗并加强排痰、监测体温。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["肺部感染"],
+    "orders": ["继续头孢哌酮舒巴坦", "加强排痰"],
+    "exams": ["白细胞下降"]
+  }
+}

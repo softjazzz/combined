@@ -1,0 +1,51 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_operation_postop_followup_v1",
+    "issue_type": "Z12_operation_postop_followup",
+    "display_name": "术后随访闭环",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-105", "SC-106", "SC-107", "SC-108", "SC-114", "SC-115"],
+    "bucket_id": "operation_postop_followup"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P112",
+    "visit_id": "SYN-RUN-112",
+    "mr_no": "SYN0112",
+    "patient_name": "合成患者丑",
+    "gender": "女",
+    "age": 44,
+    "department": "甲乳外科"
+  },
+  "documents": [
+    {
+      "document_type": "surgery_record",
+      "title": "手术记录",
+      "content": "行乳腺肿物切除术。未见手术分级或授权记录；术中所见仅写“顺利”，未描述肿物部位、术区情况及出血情况。"
+    },
+    {
+      "document_type": "postsurg_firstcourse_record",
+      "title": "术后首次病程记录",
+      "content": "术后返回病房。未写手术结束时间、麻醉方式、术中诊断、生命体征和处理计划。"
+    },
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "仅有术后第1日简单记录“情况一般”。未见术后第2、3日连续病程及上级医师查房；术后血常规提示白细胞升高，但病程未记录也未分析。"
+    },
+    {
+      "document_type": "anesthesia_record",
+      "title": "麻醉记录",
+      "content": "麻醉记录无术后访视内容，也无访视医师签名。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["乳腺肿物"],
+    "orders": ["术后观察"],
+    "exams": ["术后血常规白细胞升高未分析"],
+    "rounds_days": 1
+  }
+}

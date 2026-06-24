@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_progress_treatment_linkage_v1",
+    "issue_type": "Z19_progress_treatment_linkage",
+    "display_name": "病程治疗闭环",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-034", "SC-036", "SC-070"],
+    "bucket_id": "progress_treatment_linkage"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P119",
+    "visit_id": "SYN-RUN-119",
+    "mr_no": "SYN0119",
+    "patient_name": "合成患者申",
+    "gender": "男",
+    "age": 60,
+    "department": "血液内科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "今日复查血红蛋白继续下降并黑便增多，考虑消化道出血活动。消化内科会诊意见建议立即停用阿司匹林、完善凝血功能并尽快安排胃镜检查，但病程仅写继续原治疗，未记录异常结果分析及会诊意见执行情况。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["消化道出血待查"],
+    "orders": ["继续原治疗", "已请消化内科会诊"],
+    "exams": ["血红蛋白继续下降", "黑便增多"]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_progress_treatment_linkage_procedure_v1",
+    "issue_type": "Z19_progress_treatment_linkage",
+    "display_name": "病程治疗闭环-有创操作",
+    "variant": "defect",
+    "scene": "running",
+    "expected_rule_ids": ["SC-046"],
+    "bucket_id": "progress_treatment_linkage"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P119B",
+    "visit_id": "SYN-RUN-119B",
+    "mr_no": "SYN0119B",
+    "patient_name": "合成患者申",
+    "gender": "男",
+    "age": 60,
+    "department": "消化内科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "今日仅记录“行胃镜检查，过程顺利”。病程未写胃镜检查适应证、术前知情同意及准备情况，未写镜下所见、是否取病理或采取止血等具体操作，也未写术后观察要点、并发症监测及检查结果对后续治疗的影响。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["消化道出血待查"],
+    "orders": ["胃镜检查"],
+    "exams": []
+  }
+}

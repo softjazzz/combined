@@ -1,0 +1,253 @@
+{
+  "target": "Sheet2 same_rule/same_family 多锚点 family-level LLM 回放验证",
+  "source_reaudit_categories": [
+    "same_rule_multi_anchor_promptable",
+    "same_family_multi_subitem_promptable"
+  ],
+  "row_count": 6,
+  "real_llm_called_count": 5,
+  "single_prompt_multi_subitem_verified_count": 4,
+  "pass_count": 4,
+  "fail_count": 2,
+  "overall_result_breakdown": {
+    "no_hit": 2,
+    "partial_hit": 3,
+    "not_run": 1
+  },
+  "results": [
+    {
+      "sheet2_row_id": "Sheet2-R0021",
+      "visit_id": "1915821",
+      "patient_name": "魏治伦",
+      "replay_scope": "admission_issue_family_level",
+      "customer_validation_chain": "run_admission_issue_family_reclassification -> build_admission_issue_family_bundle -> build_admission_issue_family_prompt -> normalize_admission_consistency_llm_output",
+      "llm_called": true,
+      "single_prompt_multi_subitem_verified": true,
+      "overall_result": "no_hit",
+      "primary_rule_id": "SC-009",
+      "recommended_rule_ids": ["SC-009"],
+      "sub_item_count": 5,
+      "sub_items": [
+        {
+          "rule_id": "SC-009",
+          "status": "compliant",
+          "item": "现病史-咽痛性质/持续时间/缓解方式",
+          "evidence": "咽痛、咽部异物感10+天。患者于10+天前无明显诱因开始出现咽痛，为持续性疼痛...效果欠佳",
+          "reason": "人工问题与原文冲突。原文已明确记录疼痛性质为持续性，持续时间为10+天，缓解方式虽未提及但注明治疗效果欠佳，记录完整。"
+        },
+        {
+          "rule_id": "SC-009",
+          "status": "compliant",
+          "item": "现病史-咳痰性状/频率/伴随症状",
+          "evidence": "伴咳嗽、咳痰，为白色粘痰，夜间更甚，无咳血，伴咽痒，无吞咽困难，无发热、头晕",
+          "reason": "人工问题与原文冲突。原文已详细记录痰液性状（白色粘痰）、频率特点（夜间更甚）及伴随症状（咽痒、异物感、无咳血/发热等）。"
+        },
+        {
+          "rule_id": "SC-009",
+          "status": "compliant",
+          "item": "现病史-院外治疗经过",
+          "evidence": "当地卫生院输液治疗（具体药物及剂量不详），效果欠佳",
+          "reason": "人工问题与原文冲突。原文已记录治疗方式（输液），并客观标注具体药物及剂量不详，符合病历书写规范，非缺项。"
+        },
+        {
+          "rule_id": "SC-009",
+          "status": "compliant",
+          "item": "现病史-门诊检查项目及结果",
+          "evidence": "遂至我院门诊就诊，门诊间接喉镜检查后考虑“急性咽喉炎”",
+          "reason": "人工问题与原文冲突。原文已明确记录门诊检查项目（间接喉镜）及初步诊断结果。"
+        },
+        {
+          "rule_id": "SC-009",
+          "status": "compliant",
+          "item": "现病史-一般情况/体重变化",
+          "evidence": "发病以来精神状态良好，睡眠良好，饮食情况良好，大小便如常，体重无明显变化",
+          "reason": "人工问题与原文冲突。原文已明确记录体重无明显变化。"
+        }
+      ],
+      "llm_error": "",
+      "validation_conclusion": "pass"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0069",
+      "visit_id": "2030069",
+      "patient_name": "柯贤林",
+      "replay_scope": "admission_issue_family_level",
+      "customer_validation_chain": "run_admission_issue_family_reclassification -> build_admission_issue_family_bundle -> build_admission_issue_family_prompt -> normalize_admission_consistency_llm_output",
+      "llm_called": true,
+      "single_prompt_multi_subitem_verified": false,
+      "overall_result": "no_hit",
+      "primary_rule_id": "SC-020",
+      "recommended_rule_ids": ["SC-020"],
+      "sub_item_count": 1,
+      "sub_items": [
+        {
+          "rule_id": "SC-020",
+          "status": "compliant",
+          "item": "初步诊断完整性/准确性",
+          "evidence": "入院记录初步诊断为：1.右侧输尿管结石伴右肾积水；2.右侧肾绞痛。超声提示前列腺稍大伴钙化，尿常规WBC轻度升高(+1)但亚硝酸盐及细菌阴性，现病史明确否认尿频、尿急、尿痛。",
+          "reason": "当前初步诊断已完整覆盖患者本次急性发作的核心阳性证据（结石、积水、绞痛）。前列腺仅‘稍大’属常见伴随改变，尿检仅轻度白细胞升高且无尿路刺激征及明确感染指标，均不支持作为本次急性入院的主要诊断。人工问题所指漏诊缺乏临床依据，与病历实际情况冲突。"
+        }
+      ],
+      "llm_error": "",
+      "validation_conclusion": "fail"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0103",
+      "visit_id": "2073404",
+      "patient_name": "古正洪",
+      "replay_scope": "admission_issue_family_level",
+      "customer_validation_chain": "run_admission_issue_family_reclassification -> build_admission_issue_family_bundle -> build_admission_issue_family_prompt -> normalize_admission_consistency_llm_output",
+      "llm_called": true,
+      "single_prompt_multi_subitem_verified": true,
+      "overall_result": "partial_hit",
+      "primary_rule_id": "SC-008",
+      "recommended_rule_ids": ["SC-008", "SC-010", "SC-012", "SC-018", "SC-020"],
+      "sub_item_count": 5,
+      "sub_items": [
+        {
+          "rule_id": "SC-008",
+          "status": "non_compliant",
+          "item": "主诉规范性",
+          "evidence": "原文主诉仅记录“右侧腰腹部 1+天”，缺乏症状性质或部位完整描述。",
+          "reason": "主诉未完整反映主要症状及持续时间，不符合书写规范。"
+        },
+        {
+          "rule_id": "SC-012",
+          "status": "non_compliant",
+          "item": "诊治经过",
+          "evidence": "原文现病史仅记载“故于我院门诊就诊，辅查：...”，未记录门诊具体用药或治疗经过。",
+          "reason": "现病史中门诊/院外诊治经过记录不全。"
+        },
+        {
+          "rule_id": "SC-010",
+          "status": "non_compliant",
+          "item": "既往史完整性",
+          "evidence": "原文既往史仅写“有慢病病史既往高血压病史，控制不详、未规律服药”。",
+          "reason": "既往史缺失高血压确诊或发病时间，记录不规范。"
+        },
+        {
+          "rule_id": "SC-018",
+          "status": "compliant",
+          "item": "查体完整性/前后矛盾",
+          "evidence": "原文四肢检查明确记载“右手截肢，可见术后瘢痕；余无畸形”。",
+          "reason": "人工问题指控与原文记录冲突，原文已完整描述右手截肢情况，该项实际合规。"
+        },
+        {
+          "rule_id": "SC-020",
+          "status": "compliant",
+          "item": "入院诊断完整性",
+          "evidence": "原文入院记录诊断明确包含“4.右手截肢”。",
+          "reason": "人工问题指控与原文记录冲突，原文已包含右手截肢诊断，该项实际合规。"
+        }
+      ],
+      "llm_error": "",
+      "validation_conclusion": "pass"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0110",
+      "visit_id": "2326610",
+      "patient_name": "张仕枝",
+      "replay_scope": "admission_issue_family_level",
+      "customer_validation_chain": "run_admission_issue_family_reclassification -> build_admission_issue_family_bundle -> build_admission_issue_family_prompt -> normalize_admission_consistency_llm_output",
+      "llm_called": true,
+      "single_prompt_multi_subitem_verified": true,
+      "overall_result": "partial_hit",
+      "primary_rule_id": "SC-009",
+      "recommended_rule_ids": ["SC-009", "SC-011", "SC-012", "SC-010"],
+      "sub_item_count": 5,
+      "sub_items": [
+        {
+          "rule_id": "SC-011",
+          "status": "non_compliant",
+          "item": "现病史阳性/阴性症状采集不全",
+          "evidence": "现病史仅提及“无发热、头昏、恶心、呕吐，无心前区压榨感，无胸痛、无识障碍、肢体活动障碍等不适。...无畏寒、发热”，缺乏针对白血病/贫血核心鉴别症状（如出血倾向、骨痛、感染征象、神经系统定位体征等）的阴性采集。",
+          "reason": "现病史阴性症状采集确实不全面，未覆盖血液系统疾病核心鉴别点，符合SC-011缺陷特征。"
+        },
+        {
+          "rule_id": "SC-012",
+          "status": "compliant",
+          "item": "诊治经过记录",
+          "evidence": "现病史明确记载“未行相关治疗。反复于我院输血缓解症状。...院外未行相关诊疗。”",
+          "reason": "病历已清晰记录院外未治疗及院内输血史，人工问题称“无诊治经过”与原文直接冲突。"
+        },
+        {
+          "rule_id": "SC-009",
+          "status": "compliant",
+          "item": "现病史针对性描述",
+          "evidence": "现病史未提及“头痛”主诉或症状，仅记录“无发热、头昏...”。",
+          "reason": "病历原文未涉及头痛症状，人工问题所指症状不存在，属无效指控/冲突。"
+        },
+        {
+          "rule_id": "SC-009",
+          "status": "compliant",
+          "item": "入院记录完整性",
+          "evidence": "现病史明确记载“门诊以“重度贫血”收入我科。”",
+          "reason": "病历已记录门诊初步诊断，人工问题称“无门诊初步诊断”与原文冲突。"
+        },
+        {
+          "rule_id": "SC-010",
+          "status": "compliant",
+          "item": "既往史规范性",
+          "evidence": "既往史按慢病（白血病、高血压）、传染病、外伤手术、输血、预防接种、过敏、特殊病史等分类陈述，结构清晰。",
+          "reason": "既往史书写条理清晰、分类规范，人工问题称“混乱无条理”与原文冲突。"
+        }
+      ],
+      "llm_error": "",
+      "validation_conclusion": "pass"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0210",
+      "visit_id": "2256518",
+      "patient_name": "赖世成",
+      "replay_scope": "admission_issue_family_level",
+      "customer_validation_chain": "run_admission_issue_family_reclassification -> build_admission_issue_family_bundle -> build_admission_issue_family_prompt -> normalize_admission_consistency_llm_output",
+      "llm_called": true,
+      "single_prompt_multi_subitem_verified": true,
+      "overall_result": "partial_hit",
+      "primary_rule_id": "SC-018",
+      "recommended_rule_ids": ["SC-018", "SC-008", "SC-010"],
+      "sub_item_count": 3,
+      "sub_items": [
+        {
+          "rule_id": "SC-008",
+          "status": "non_compliant",
+          "item": "主诉规范性",
+          "evidence": "入院记录主诉原文：“无明显诱因出现左膝疼痛3月。”",
+          "reason": "主诉未严格遵循“症状/体征+时间”的标准书写规范，建议规范为“左膝疼痛3月”。"
+        },
+        {
+          "rule_id": "SC-010",
+          "status": "non_compliant",
+          "item": "既往史完整性",
+          "evidence": "入院记录既往史原文：“自诉高血压病史，规律服用氨氯地平。...有慢病病史。”生命体征原文：“脉搏68次/分”。",
+          "reason": "既往史仅笼统提及“有慢病病史”，未规范记录慢病具体诊断、用药及控制情况；生命体征仅记录脉搏，未记录心率，存在记录不全/不一致。"
+        },
+        {
+          "rule_id": "SC-018",
+          "status": "compliant",
+          "item": "查体专科/前后矛盾",
+          "evidence": "入院记录体格检查原文：“腹部见长约3cm手术瘢痕。”“四肢检查：:见专科”。",
+          "reason": "人工指出的“腹部手术史查体未做描述”与原文“腹部见长约3cm手术瘢痕”冲突；人工指出的“四肢检查记录为四肢关节活动正常”与原文“四肢检查：:见专科”冲突。原文查体记录完整且无前后矛盾，故该项判定为合规。"
+        }
+      ],
+      "llm_error": "",
+      "validation_conclusion": "pass"
+    },
+    {
+      "sheet2_row_id": "Sheet2-R0220",
+      "visit_id": "2268187",
+      "patient_name": "代云聪",
+      "replay_scope": "consultation_record_quality",
+      "customer_validation_chain": "not_available_for_family_level_multi_subitem",
+      "llm_called": false,
+      "single_prompt_multi_subitem_verified": false,
+      "overall_result": "not_run",
+      "primary_rule_id": "SC-069",
+      "recommended_rule_ids": ["SC-069"],
+      "sub_item_count": 0,
+      "sub_items": [],
+      "llm_error": "客户样本验证页当前仅入院记录问题族具备 family-level 多 subitem prompt；SC-069 会诊记录质量没有同等 family prompt，不能证明真实可跑。",
+      "validation_conclusion": "fail_no_family_prompt"
+    }
+  ]
+}

@@ -1,0 +1,347 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T09:20:35.380959",
+  "run_finished_at": "2026-04-24T09:20:39.199268",
+  "template_count": 2,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 1,
+    "partial_hit": 0,
+    "miss": 0,
+    "pass_ok": 1,
+    "pass_regression": 0
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_first_course_features_v1_defect.json",
+      "issue_type": "Z13_first_course_features",
+      "display_name": "首次病程病例特点",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-023",
+        "SC-024"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P113",
+        "visit_id": "SYN-RUN-113",
+        "mr_no": "SYN0113",
+        "patient_name": "合成患者寅",
+        "gender": "男",
+        "age": 50,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 1.873,
+      "total_tokens": 1052,
+      "prompt_tokens": 809,
+      "completion_tokens": 243,
+      "api_time": 1.868,
+      "packs": [
+        {
+          "pack_id": "first_course_features",
+          "document_type": "首次病程记录",
+          "rule_ids": [
+            "SC-023",
+            "SC-024"
+          ],
+          "tokens_used": 1052,
+          "prompt_tokens": 809,
+          "completion_tokens": 243,
+          "api_time": 1.8677740097045898
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-023",
+          "rule_name": "首次病程记录无病例特点",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "首次病程记录有病例特点但仅罗列原文，实质缺失归纳提炼。",
+          "evidence": "以上仅为原始病史与检查罗列，未作归纳提炼",
+          "suggestion": "补充诊断导向的归纳总结。",
+          "rewrite_example": "建议补写：概括主要症状演变、关键阳性/阴性体征、检查结果及诊断导向性判断。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-023\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"首次病程记录有病例特点但仅罗列原文，实质缺失归纳提炼。\",\n      \"evidence\": \"以上仅为原始病史与检查罗列，未作归纳提炼\",\n      \"suggestion\": \"补充诊断导向的归纳总结。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-024\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病例特点为现病史及查体原文堆砌，无概括性总结。\",\n      \"evidence\": \"摘录现病史及查体如下...以上仅为原始病史与检查罗列\",\n      \"suggestion\": \"提炼核心特征，避免原文复制。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            51,
+            71
+          ],
+          "metadata": {
+            "tokens_used": 526,
+            "prompt_tokens": 404,
+            "completion_tokens": 121,
+            "input_tokens": 404,
+            "output_tokens": 121,
+            "api_time": 0.9338870048522949,
+            "first_result_latency": 1.8677740097045898,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_features",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 102
+          },
+          "target_document_type": "首次病程记录"
+        },
+        {
+          "rule_id": "SC-024",
+          "rule_name": "首次病程记录病例特点未归纳提炼或不全面",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病例特点为现病史及查体原文堆砌，无概括性总结。",
+          "evidence": "【首次病程记录】病例特点：摘录现病史及查体如下，患者2周来上腹痛，进食后加重，伴反酸",
+          "suggestion": "提炼核心特征，避免原文复制。",
+          "rewrite_example": "病例特点：反复上腹痛2月，进食后加重；胃镜示胃窦溃疡；上腹轻压痛，无反跳痛，考虑胃溃疡可能。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-023\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"首次病程记录有病例特点但仅罗列原文，实质缺失归纳提炼。\",\n      \"evidence\": \"以上仅为原始病史与检查罗列，未作归纳提炼\",\n      \"suggestion\": \"补充诊断导向的归纳总结。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-024\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病例特点为现病史及查体原文堆砌，无概括性总结。\",\n      \"evidence\": \"摘录现病史及查体如下...以上仅为原始病史与检查罗列\",\n      \"suggestion\": \"提炼核心特征，避免原文复制。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            34
+          ],
+          "metadata": {
+            "tokens_used": 526,
+            "prompt_tokens": 404,
+            "completion_tokens": 121,
+            "input_tokens": 404,
+            "output_tokens": 121,
+            "api_time": 0.9338870048522949,
+            "first_result_latency": 1.8677740097045898,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_features",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 102
+          },
+          "target_document_type": "首次病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-023": "non_compliant",
+          "SC-024": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-023": "non_compliant",
+          "SC-024": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_first_course_features_v1_pass.json",
+      "issue_type": "Z13_first_course_features",
+      "display_name": "首次病程病例特点",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-023",
+        "SC-024"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P113",
+        "visit_id": "SYN-RUN-113",
+        "mr_no": "SYN0113",
+        "patient_name": "合成患者寅",
+        "gender": "男",
+        "age": 50,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 1.679,
+      "total_tokens": 1087,
+      "prompt_tokens": 871,
+      "completion_tokens": 216,
+      "api_time": 1.679,
+      "packs": [
+        {
+          "pack_id": "first_course_features",
+          "document_type": "首次病程记录",
+          "rule_ids": [
+            "SC-023",
+            "SC-024"
+          ],
+          "tokens_used": 1087,
+          "prompt_tokens": 871,
+          "completion_tokens": 216,
+          "api_time": 1.6787197589874268
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-023",
+          "rule_name": "首次病程记录无病例特点",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "首次病程记录包含病例特点，内容完整。",
+          "evidence": "【首次病程记录】病例特点：1. 中年男性，急性起病，以反复上腹痛2周为主要表现，进食后加重并伴反酸",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-023\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"首次病程记录包含病例特点，内容完整。\",\n      \"evidence\": \"病例特点：1. 中年男性...4. 结合病史特点...\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-024\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病例特点已归纳提炼，非原文堆砌。\",\n      \"evidence\": \"病例特点已归纳为消化性溃疡表现，支持胃窦溃疡诊断。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            41
+          ],
+          "metadata": {
+            "tokens_used": 543,
+            "prompt_tokens": 435,
+            "completion_tokens": 108,
+            "input_tokens": 435,
+            "output_tokens": 108,
+            "api_time": 0.8393598794937134,
+            "first_result_latency": 1.6787197589874268,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_features",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 164
+          },
+          "target_document_type": "首次病程记录"
+        },
+        {
+          "rule_id": "SC-024",
+          "rule_name": "首次病程记录病例特点未归纳提炼或不全面",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病例特点已归纳提炼，非原文堆砌。",
+          "evidence": "病例特点已归纳为消化性溃疡表现，支持胃窦溃疡诊断。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-023\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"首次病程记录包含病例特点，内容完整。\",\n      \"evidence\": \"病例特点：1. 中年男性...4. 结合病史特点...\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-024\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病例特点已归纳提炼，非原文堆砌。\",\n      \"evidence\": \"病例特点已归纳为消化性溃疡表现，支持胃窦溃疡诊断。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            125,
+            150
+          ],
+          "metadata": {
+            "tokens_used": 543,
+            "prompt_tokens": 435,
+            "completion_tokens": 108,
+            "input_tokens": 435,
+            "output_tokens": 108,
+            "api_time": 0.8393598794937134,
+            "first_result_latency": 1.6787197589874268,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "first_course_features",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 164
+          },
+          "target_document_type": "首次病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-023": "compliant",
+          "SC-024": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ],
+  "bucket_filters": [
+    "first_course_features"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 2,
+    "stabilized": 2,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-023",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_first_course_features_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_first_course_features_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-024",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_first_course_features_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_first_course_features_v1_defect.json"
+        ],
+        "stabilized": true
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

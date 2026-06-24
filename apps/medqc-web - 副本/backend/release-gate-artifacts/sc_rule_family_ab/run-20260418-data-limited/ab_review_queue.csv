@@ -1,0 +1,8 @@
+visit_id,rule_id,rule_name,scene,cohort_tag,execution_domain,doc_scope,rule_family,status_a,status_b,same_status,confidence_a,confidence_b,findings_a,findings_b,evidence_a,evidence_b,suggestion_a,suggestion_b,bucket_key_a,bucket_key_b,record_excerpt,review_verdict,review_notes
+V001,SC-126,出院记录(死亡记录)无医师签名,final,final_terminal,terminal,primary,signature_authority,uncertain,non_compliant,False,0.9,0.5,无法判定出院记录是否有医师签名，因提供的文本中未包含签名信息。,病历中存在严重缺陷。规则要求出院记录必须由医师签名确认，但提供的病历文本中仅包含出院记录的标题和患者基本信息（如姓名、年龄、诊断等），完全缺失了‘医师签名’这一关键要素。此外，辅助证据显示该文书被标记为'first_course_record'（首次病程记录）的内容混入或误标，且未提供有效的出院记录签署信息，导致无法确认该出院记录是否经过医师审核签字，不符合质控规则SC-126关于签名完整性的要求。,患者范建华，男，48岁，因胆囊结石伴胆囊炎入院治疗10天后好转出院。,"## discharge_record
+患者范建华，男，48岁，因胆囊结石伴胆囊炎入院治疗10天后好转出院。
+[无医师签名内容]",请补充出院记录的医师签名页或完整文书以进行核查。,请立即补充出院记录中的医师签名，确保由负责治疗的执业医师手写或电子签名确认，以符合医疗文书规范及质控要求。同时需核对文书分类，确保出院记录与首次病程记录不混淆。,terminal::primary,terminal::primary::signature_authority,"## discharge_record
+患者范建华，男，48岁，因胆囊结石伴胆囊炎入院治疗10天后好转出院。
+
+## first_course_record
+【首次病程记录】 入院时间：2026-01-06 患者范建华，男，48岁，因'胆囊结石伴胆囊炎'入院。 初步诊断：胆囊结石伴胆囊炎（K80.1） 诊疗计划：完善检查，给予对症治疗。",,

@@ -1,0 +1,1500 @@
+{
+  "mode": "synthetic_running_qc_regression",
+  "provider": "alibaba",
+  "model": "qwen3.6-35b-a3b",
+  "mapping_schema_version": "v1",
+  "template_family": "running_record_intrinsic_baseline_v1",
+  "run_started_at": "2026-04-24T08:04:24.728280",
+  "run_finished_at": "2026-04-24T08:04:42.120679",
+  "template_count": 10,
+  "strict_hit_statuses": [
+    "non_compliant"
+  ],
+  "soft_hit_statuses": [
+    "uncertain"
+  ],
+  "summary": {
+    "hit": 4,
+    "partial_hit": 1,
+    "miss": 0,
+    "pass_ok": 4,
+    "pass_regression": 1
+  },
+  "results": [
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-034",
+        "SC-036",
+        "SC-070"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119",
+        "visit_id": "SYN-RUN-119",
+        "mr_no": "SYN0119",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "血液内科"
+      },
+      "elapsed_seconds": 2.775,
+      "total_tokens": 1833,
+      "prompt_tokens": 1460,
+      "completion_tokens": 373,
+      "api_time": 2.771,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-034",
+            "SC-036"
+          ],
+          "tokens_used": 1037,
+          "prompt_tokens": 798,
+          "completion_tokens": 239,
+          "api_time": 1.7682907581329346
+        },
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-070"
+          ],
+          "tokens_used": 796,
+          "prompt_tokens": 662,
+          "completion_tokens": 134,
+          "api_time": 1.0030255317687988
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-034",
+          "rule_name": "病程中对治疗措施、药物、医嘱变化未记录或分析",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程未记录会诊意见及医嘱调整分析。",
+          "evidence": "【日常病程记录】消化内科会诊意见建议立即停用阿司匹林、完善凝血功能并尽快安排胃镜检查，但病程仅写继续原治疗，未记录异常结果分析及会诊意见执行情况",
+          "suggestion": "补充会诊意见执行情况及用药调整分析。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程未记录会诊意见及医嘱调整分析。\",\n      \"evidence\": \"消化内科会诊意见建议立即停用阿司匹林...但病程仅写继续原治疗\",\n      \"suggestion\": \"补充会诊意见执行情况及用药调整分析。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程未对血红蛋白下降等异常结果进行分析。\",\n      \"evidence\": \"今日复查血红蛋白继续下降并黑便增多...未记录异常结果分析\",\n      \"suggestion\": \"补充对实验室检查异常的分析及处理措施。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            28,
+            92
+          ],
+          "metadata": {
+            "tokens_used": 518,
+            "prompt_tokens": 399,
+            "completion_tokens": 119,
+            "input_tokens": 399,
+            "output_tokens": 119,
+            "api_time": 0.8841453790664673,
+            "first_result_latency": 1.7682907581329346,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 148
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-036",
+          "rule_name": "无重要辅助检查结果、无对异常检查结果的分析及处理意见",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程未对血红蛋白下降等异常结果进行分析。",
+          "evidence": "【日常病程记录】消化内科会诊意见建议立即停用阿司匹林、完善凝血功能并尽快安排胃镜检查，但病程仅写继续原治疗，未记录异常结果分析及会诊意见执行情况",
+          "suggestion": "补充对实验室检查异常的分析及处理措施。",
+          "rewrite_example": "今日病程：腹痛较前加重，结合检查结果考虑病情进展，已请上级医师评估并调整处理计划。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程未记录会诊意见及医嘱调整分析。\",\n      \"evidence\": \"消化内科会诊意见建议立即停用阿司匹林...但病程仅写继续原治疗\",\n      \"suggestion\": \"补充会诊意见执行情况及用药调整分析。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程未对血红蛋白下降等异常结果进行分析。\",\n      \"evidence\": \"今日复查血红蛋白继续下降并黑便增多...未记录异常结果分析\",\n      \"suggestion\": \"补充对实验室检查异常的分析及处理措施。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            28,
+            92
+          ],
+          "metadata": {
+            "tokens_used": 518,
+            "prompt_tokens": 399,
+            "completion_tokens": 119,
+            "input_tokens": 399,
+            "output_tokens": 119,
+            "api_time": 0.8841453790664673,
+            "first_result_latency": 1.7682907581329346,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 148
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程仅写继续原治疗，未记录会诊意见采纳及执行情况。",
+          "evidence": "【日常病程记录】消化内科会诊意见建议立即停用阿司匹林、完善凝血功能并尽快安排胃镜检查，但病程仅写继续原治疗，未记录异常结果分析及会诊意见执行情况",
+          "suggestion": "补充记录是否采纳会诊意见及具体执行措施或理由。",
+          "rewrite_example": "今日记录会诊意见：继续抑酸治疗，完善幽门螺杆菌检测，已开立相关医嘱并向患者交代。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程仅写继续原治疗，未记录会诊意见采纳及执行情况。\",\n      \"evidence\": \"病程仅写继续原治疗；消化内科会诊意见建议立即停用阿司匹林...\",\n      \"suggestion\": \"补充记录是否采纳会诊意见及具体执行措施或理由。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            28,
+            92
+          ],
+          "metadata": {
+            "tokens_used": 796,
+            "prompt_tokens": 662,
+            "completion_tokens": 134,
+            "input_tokens": 662,
+            "output_tokens": 134,
+            "api_time": 1.0030255317687988,
+            "first_result_latency": 1.0030255317687988,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 148
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-034": "non_compliant",
+          "SC-036": "non_compliant",
+          "SC-070": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-034": "non_compliant",
+          "SC-036": "non_compliant",
+          "SC-070": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-034",
+        "SC-036",
+        "SC-070"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119",
+        "visit_id": "SYN-RUN-119",
+        "mr_no": "SYN0119",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "血液内科"
+      },
+      "elapsed_seconds": 2.443,
+      "total_tokens": 1903,
+      "prompt_tokens": 1550,
+      "completion_tokens": 353,
+      "api_time": 2.441,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-034",
+            "SC-036"
+          ],
+          "tokens_used": 1067,
+          "prompt_tokens": 843,
+          "completion_tokens": 224,
+          "api_time": 1.3700225353240967
+        },
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-070"
+          ],
+          "tokens_used": 836,
+          "prompt_tokens": 707,
+          "completion_tokens": 129,
+          "api_time": 1.0710973739624023
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-034",
+          "rule_name": "病程中对治疗措施、药物、医嘱变化未记录或分析",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程已记录阿司匹林暂停及PPI静滴等治疗措施变化。",
+          "evidence": "已暂停阿司匹林，予PPI静滴并补液支持治疗",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程已记录阿司匹林暂停及PPI静滴等治疗措施变化。\",\n      \"evidence\": \"已暂停阿司匹林，予PPI静滴并补液支持治疗\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程已分析血红蛋白下降原因并给出处理意见。\",\n      \"evidence\": \"结合黑便考虑上消化道出血可能...消化内科会诊建议完善凝血功能\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            37,
+            58
+          ],
+          "metadata": {
+            "tokens_used": 533,
+            "prompt_tokens": 421,
+            "completion_tokens": 112,
+            "input_tokens": 421,
+            "output_tokens": 112,
+            "api_time": 0.6850112676620483,
+            "first_result_latency": 1.3700225353240967,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 182
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-036",
+          "rule_name": "无重要辅助检查结果、无对异常检查结果的分析及处理意见",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程已分析血红蛋白下降原因并给出处理意见。",
+          "evidence": "【日常病程记录】今日复查血红蛋白由82g/L降至74g/L，结合黑便考虑上消化道出血可能，已暂停阿司匹林，予PPI静滴并补液支持治疗",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-034\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程已记录阿司匹林暂停及PPI静滴等治疗措施变化。\",\n      \"evidence\": \"已暂停阿司匹林，予PPI静滴并补液支持治疗\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-036\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程已分析血红蛋白下降原因并给出处理意见。\",\n      \"evidence\": \"结合黑便考虑上消化道出血可能...消化内科会诊建议完善凝血功能\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            58
+          ],
+          "metadata": {
+            "tokens_used": 533,
+            "prompt_tokens": 421,
+            "completion_tokens": 112,
+            "input_tokens": 421,
+            "output_tokens": 112,
+            "api_time": 0.6850112676620483,
+            "first_result_latency": 1.3700225353240967,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 182
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-070",
+          "rule_name": "申请会诊医师未在病程记录中记录会诊意见及执行情况",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录已明确记载会诊意见及具体执行措施。",
+          "evidence": "病程中已记录会诊意见及执行：已开凝血功能、已停止抗血小板、继续禁食补液，今晚复查血常规。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-070\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录已明确记载会诊意见及具体执行措施。\",\n      \"evidence\": \"病程中已记录会诊意见及执行：已开凝血功能、已停止抗血小板、继续禁食补液，今晚复查血常规。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            93,
+            137
+          ],
+          "metadata": {
+            "tokens_used": 836,
+            "prompt_tokens": 707,
+            "completion_tokens": 129,
+            "input_tokens": 707,
+            "output_tokens": 129,
+            "api_time": 1.0710973739624023,
+            "first_result_latency": 1.0710973739624023,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 182
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-034": "compliant",
+          "SC-036": "compliant",
+          "SC-070": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_antibiotic_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环-抗菌药",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-043",
+        "SC-044"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119C",
+        "visit_id": "SYN-RUN-119C",
+        "mr_no": "SYN0119C",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "呼吸内科"
+      },
+      "elapsed_seconds": 1.959,
+      "total_tokens": 1011,
+      "prompt_tokens": 755,
+      "completion_tokens": 256,
+      "api_time": 1.959,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-043",
+            "SC-044"
+          ],
+          "tokens_used": 1011,
+          "prompt_tokens": 755,
+          "completion_tokens": 256,
+          "api_time": 1.9588842391967773
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-043",
+          "rule_name": "抗菌药物使用不符合《抗菌药物临床应用指南》,无指征使用抗菌素或者越级使用抗菌药物",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "无感染证据越级使用美罗培南且病程未记录指征。",
+          "evidence": "胸部CT未见感染灶，今日仍升级使用美罗培南，病程未记录抗菌药使用指征",
+          "suggestion": "补充感染指征或停用抗菌药物并完善记录。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"无感染证据越级使用美罗培南且病程未记录指征。\",\n      \"evidence\": \"胸部CT未见感染灶，今日仍升级使用美罗培南，病程未记录抗菌药使用指征\",\n      \"suggestion\": \"补充感染指征或停用抗菌药物并完善记录。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程记录缺失美罗培南剂量、频次及疗程信息。\",\n      \"evidence\": \"也未记录剂量、给药频次和疗程\",\n      \"suggestion\": \"在病程中补充抗菌药物具体用法用量及疗程。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            10,
+            44
+          ],
+          "metadata": {
+            "tokens_used": 505,
+            "prompt_tokens": 377,
+            "completion_tokens": 128,
+            "input_tokens": 377,
+            "output_tokens": 128,
+            "api_time": 0.9794421195983887,
+            "first_result_latency": 1.9588842391967773,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 102
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-044",
+          "rule_name": "抗菌药物使用相关医嘱不完整,使用情况未在病程记录 中有相应记录",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程记录缺失美罗培南剂量、频次及疗程信息。",
+          "evidence": "也未记录剂量、给药频次和疗程",
+          "suggestion": "在病程中补充抗菌药物具体用法用量及疗程。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"无感染证据越级使用美罗培南且病程未记录指征。\",\n      \"evidence\": \"胸部CT未见感染灶，今日仍升级使用美罗培南，病程未记录抗菌药使用指征\",\n      \"suggestion\": \"补充感染指征或停用抗菌药物并完善记录。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"病程记录缺失美罗培南剂量、频次及疗程信息。\",\n      \"evidence\": \"也未记录剂量、给药频次和疗程\",\n      \"suggestion\": \"在病程中补充抗菌药物具体用法用量及疗程。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            45,
+            59
+          ],
+          "metadata": {
+            "tokens_used": 505,
+            "prompt_tokens": 377,
+            "completion_tokens": 128,
+            "input_tokens": 377,
+            "output_tokens": 128,
+            "api_time": 0.9794421195983887,
+            "first_result_latency": 1.9588842391967773,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 102
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-043": "non_compliant",
+          "SC-044": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-043": "non_compliant",
+          "SC-044": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_antibiotic_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环-抗菌药",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-043",
+        "SC-044"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119C",
+        "visit_id": "SYN-RUN-119C",
+        "mr_no": "SYN0119C",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "呼吸内科"
+      },
+      "elapsed_seconds": 1.737,
+      "total_tokens": 1010,
+      "prompt_tokens": 770,
+      "completion_tokens": 240,
+      "api_time": 1.736,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-043",
+            "SC-044"
+          ],
+          "tokens_used": 1010,
+          "prompt_tokens": 770,
+          "completion_tokens": 240,
+          "api_time": 1.7362544536590576
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-043",
+          "rule_name": "抗菌药物使用不符合《抗菌药物临床应用指南》,无指征使用抗菌素或者越级使用抗菌药物",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "哌拉西林他唑巴坦用于肺部感染符合指南，无越级或无指征使用。",
+          "evidence": "【日常病程记录】患者发热、咳脓痰，胸部CT提示右下肺感染，予哌拉西林他唑巴坦抗感染治疗",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"哌拉西林他唑巴坦用于肺部感染符合指南，无越级或无指征使用。\",\n      \"evidence\": \"予哌拉西林他唑巴坦抗感染治疗；胸部CT提示右下肺感染\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录已包含抗菌药名称、剂量、频次及指征，记录完整。\",\n      \"evidence\": \"病程已记录抗菌药名称、剂量、给药频次及使用指征\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            35
+          ],
+          "metadata": {
+            "tokens_used": 505,
+            "prompt_tokens": 385,
+            "completion_tokens": 120,
+            "input_tokens": 385,
+            "output_tokens": 120,
+            "api_time": 0.8681272268295288,
+            "first_result_latency": 1.7362544536590576,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 114
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-044",
+          "rule_name": "抗菌药物使用相关医嘱不完整,使用情况未在病程记录 中有相应记录",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录已包含抗菌药名称、剂量、频次及指征，记录完整。",
+          "evidence": "病程已记录抗菌药名称、剂量、给药频次及使用指征",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-043\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"哌拉西林他唑巴坦用于肺部感染符合指南，无越级或无指征使用。\",\n      \"evidence\": \"予哌拉西林他唑巴坦抗感染治疗；胸部CT提示右下肺感染\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-044\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录已包含抗菌药名称、剂量、频次及指征，记录完整。\",\n      \"evidence\": \"病程已记录抗菌药名称、剂量、给药频次及使用指征\",\n      \"suggestion\": \"\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            36,
+            59
+          ],
+          "metadata": {
+            "tokens_used": 505,
+            "prompt_tokens": 385,
+            "completion_tokens": 120,
+            "input_tokens": 385,
+            "output_tokens": 120,
+            "api_time": 0.8681272268295288,
+            "first_result_latency": 1.7362544536590576,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 114
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-043": "compliant",
+          "SC-044": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_pathology_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环-病理取材",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-037"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119A",
+        "visit_id": "SYN-RUN-119A",
+        "mr_no": "SYN0119A",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "普外科"
+      },
+      "elapsed_seconds": 1.09,
+      "total_tokens": 674,
+      "prompt_tokens": 549,
+      "completion_tokens": 125,
+      "api_time": 1.09,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-037"
+          ],
+          "tokens_used": 674,
+          "prompt_tokens": 549,
+          "completion_tokens": 125,
+          "api_time": 1.0895838737487793
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-037",
+          "rule_name": "取材情况和病理结果未在病程记录中记录",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "病程记录仅提及送检，缺失具体取材部位及病理结果。",
+          "evidence": "今日行胃镜活检，已取组织送检。",
+          "suggestion": "补充取材细节及后续病理报告结论。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"病程记录仅提及送检，缺失具体取材部位及病理结果。\",\n      \"evidence\": \"今日行胃镜活检，已取组织送检。\",\n      \"suggestion\": \"补充取材细节及后续病理报告结论。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            15
+          ],
+          "metadata": {
+            "tokens_used": 674,
+            "prompt_tokens": 549,
+            "completion_tokens": 125,
+            "input_tokens": 549,
+            "output_tokens": 125,
+            "api_time": 1.0895838737487793,
+            "first_result_latency": 1.0895838737487793,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 50
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "partial_hit",
+        "relevant_statuses": {
+          "SC-037": "uncertain"
+        },
+        "strict_hits": {},
+        "soft_hits": {
+          "SC-037": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_pathology_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环-病理取材",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-037"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119A",
+        "visit_id": "SYN-RUN-119A",
+        "mr_no": "SYN0119A",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "普外科"
+      },
+      "elapsed_seconds": 1.012,
+      "total_tokens": 711,
+      "prompt_tokens": 591,
+      "completion_tokens": 120,
+      "api_time": 1.012,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_core",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-037"
+          ],
+          "tokens_used": 711,
+          "prompt_tokens": 591,
+          "completion_tokens": 120,
+          "api_time": 1.0119709968566895
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-037",
+          "rule_name": "取材情况和病理结果未在病程记录中记录",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病程记录已包含取材情况及病理结果。",
+          "evidence": "已取胃窦黏膜组织2块送病理。病理结果回报：慢性萎缩性胃炎伴肠化。",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-037\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病程记录已包含取材情况及病理结果。\",\n      \"evidence\": \"已取胃窦黏膜组织2块送病理。病理结果回报：慢性萎缩性胃炎伴肠化。\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            8,
+            40
+          ],
+          "metadata": {
+            "tokens_used": 711,
+            "prompt_tokens": 591,
+            "completion_tokens": 120,
+            "input_tokens": 591,
+            "output_tokens": 120,
+            "api_time": 1.0119709968566895,
+            "first_result_latency": 1.0119709968566895,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_core",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 107
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-037": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_procedure_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环-有创操作",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-046"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119B",
+        "visit_id": "SYN-RUN-119B",
+        "mr_no": "SYN0119B",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 1.158,
+      "total_tokens": 662,
+      "prompt_tokens": 541,
+      "completion_tokens": 121,
+      "api_time": 1.158,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-046"
+          ],
+          "tokens_used": 662,
+          "prompt_tokens": 541,
+          "completion_tokens": 121,
+          "api_time": 1.1579020023345947
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-046",
+          "rule_name": "有创诊疗操作记录描述不规范",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "有创操作记录缺乏关键要素，描述过于简略。",
+          "evidence": "今日行胃镜检查，过程顺利。",
+          "suggestion": "补充适应症、麻醉方式及术后处理。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.95,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-046\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"有创操作记录缺乏关键要素，描述过于简略。\",\n      \"evidence\": \"今日行胃镜检查，过程顺利。\",\n      \"suggestion\": \"补充适应症、麻醉方式及术后处理。\",\n      \"confidence\": 0.95,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            13
+          ],
+          "metadata": {
+            "tokens_used": 662,
+            "prompt_tokens": 541,
+            "completion_tokens": 121,
+            "input_tokens": 541,
+            "output_tokens": 121,
+            "api_time": 1.1579020023345947,
+            "first_result_latency": 1.1579020023345947,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 48
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-046": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-046": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_procedure_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环-有创操作",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-046"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119B",
+        "visit_id": "SYN-RUN-119B",
+        "mr_no": "SYN0119B",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "消化内科"
+      },
+      "elapsed_seconds": 1.435,
+      "total_tokens": 748,
+      "prompt_tokens": 610,
+      "completion_tokens": 138,
+      "api_time": 1.434,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-046"
+          ],
+          "tokens_used": 748,
+          "prompt_tokens": 610,
+          "completion_tokens": 138,
+          "api_time": 1.4343655109405518
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-046",
+          "rule_name": "有创诊疗操作记录描述不规范",
+          "status": "uncertain",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "有创操作记录缺失术前知情同意及具体器械参数等关键要素。",
+          "evidence": "【日常病程记录】今日10:20在心电监护下行胃镜检查，术前核对完成，操作过程顺利",
+          "suggestion": "补充知情同意书签署时间及具体止血器械型号。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 0.8,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-046\",\n      \"is_compliant\": false,\n      \"status\": \"uncertain\",\n      \"findings\": \"有创操作记录缺失术前知情同意及具体器械参数等关键要素。\",\n      \"evidence\": \"今日10:20在心电监护下行胃镜检查...已予局部喷洒止血并夹闭处理\",\n      \"suggestion\": \"补充知情同意书签署时间及具体止血器械型号。\",\n      \"confidence\": 0.8,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            32
+          ],
+          "metadata": {
+            "tokens_used": 748,
+            "prompt_tokens": 610,
+            "completion_tokens": 138,
+            "input_tokens": 610,
+            "output_tokens": 138,
+            "api_time": 1.4343655109405518,
+            "first_result_latency": 1.4343655109405518,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 1,
+            "pack_fallback": false,
+            "context_tokens_estimate": 132
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_regression",
+        "relevant_statuses": {
+          "SC-046": "uncertain"
+        },
+        "unexpected_hits": {
+          "SC-046": "uncertain"
+        }
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_transfusion_v1_defect.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环-输血",
+      "variant": "defect",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-073",
+        "SC-074"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119D",
+        "visit_id": "SYN-RUN-119D",
+        "mr_no": "SYN0119D",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "血液内科"
+      },
+      "elapsed_seconds": 1.666,
+      "total_tokens": 962,
+      "prompt_tokens": 742,
+      "completion_tokens": 220,
+      "api_time": 1.665,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-073",
+            "SC-074"
+          ],
+          "tokens_used": 962,
+          "prompt_tokens": 742,
+          "completion_tokens": 220,
+          "api_time": 1.6653919219970703
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-073",
+          "rule_name": "输血病人未做输血前相关九项检查",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "输血前缺失九项检查记录。",
+          "evidence": "病程未见输血前九项检查",
+          "suggestion": "补全输血前九项检查结果。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"输血前缺失九项检查记录。\",\n      \"evidence\": \"病程未见输血前九项检查\",\n      \"suggestion\": \"补全输血前九项检查结果。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"缺失输血评估、反应观察及后评价。\",\n      \"evidence\": \"无输血评估记录...未记录输血反应观察和输血后评价\",\n      \"suggestion\": \"完善输血全流程记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            13,
+            24
+          ],
+          "metadata": {
+            "tokens_used": 481,
+            "prompt_tokens": 371,
+            "completion_tokens": 110,
+            "input_tokens": 371,
+            "output_tokens": 110,
+            "api_time": 0.8326959609985352,
+            "first_result_latency": 1.6653919219970703,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 88
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-074",
+          "rule_name": "输血病人无输血前评估、输血记录、输血后评价记录、输血反应记录或输血记录单填写不全等",
+          "status": "non_compliant",
+          "is_compliant": false,
+          "issues": [],
+          "findings": "缺失输血评估、反应观察及后评价。",
+          "evidence": "【日常病程记录】因贫血拟输悬浮红细胞2U，病程未见输血前九项检查及输血评估记录，输血后仅记病情稍改善，未记录输血反应观察和输血后评价",
+          "suggestion": "完善输血全流程记录。",
+          "rewrite_example": "建议补写：记录病情变化、相关检查结果、已采取处理及下一步诊疗计划。",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"输血前缺失九项检查记录。\",\n      \"evidence\": \"病程未见输血前九项检查\",\n      \"suggestion\": \"补全输血前九项检查结果。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": false,\n      \"status\": \"non_compliant\",\n      \"findings\": \"缺失输血评估、反应观察及后评价。\",\n      \"evidence\": \"无输血评估记录...未记录输血反应观察和输血后评价\",\n      \"suggestion\": \"完善输血全流程记录。\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            0,
+            58
+          ],
+          "metadata": {
+            "tokens_used": 481,
+            "prompt_tokens": 371,
+            "completion_tokens": 110,
+            "input_tokens": 371,
+            "output_tokens": 110,
+            "api_time": 0.8326959609985352,
+            "first_result_latency": 1.6653919219970703,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 88
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "defect_should_hit",
+        "status": "hit",
+        "relevant_statuses": {
+          "SC-073": "non_compliant",
+          "SC-074": "non_compliant"
+        },
+        "strict_hits": {
+          "SC-073": "non_compliant",
+          "SC-074": "non_compliant"
+        },
+        "soft_hits": {}
+      }
+    },
+    {
+      "template_file": "running_bucket_progress_treatment_linkage_transfusion_v1_pass.json",
+      "issue_type": "Z19_progress_treatment_linkage",
+      "display_name": "病程治疗闭环-输血",
+      "variant": "pass",
+      "scene": "running",
+      "expected_rule_ids": [
+        "SC-073",
+        "SC-074"
+      ],
+      "patient_identity": {
+        "institute_id": "SYNTHETIC",
+        "patient_id": "SYN-P119D",
+        "visit_id": "SYN-RUN-119D",
+        "mr_no": "SYN0119D",
+        "patient_name": "合成患者申",
+        "gender": "男",
+        "age": 60,
+        "department": "血液内科"
+      },
+      "elapsed_seconds": 1.53,
+      "total_tokens": 986,
+      "prompt_tokens": 776,
+      "completion_tokens": 210,
+      "api_time": 1.529,
+      "packs": [
+        {
+          "pack_id": "daily_course_procedure_followup",
+          "document_type": "日常病程记录",
+          "rule_ids": [
+            "SC-073",
+            "SC-074"
+          ],
+          "tokens_used": 986,
+          "prompt_tokens": 776,
+          "completion_tokens": 210,
+          "api_time": 1.529381275177002
+        }
+      ],
+      "result_items": [
+        {
+          "rule_id": "SC-073",
+          "rule_name": "输血病人未做输血前相关九项检查",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病历明确记载已完成输血前九项检查。",
+          "evidence": "已完成输血前九项检查及输血评估",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病历明确记载已完成输血前九项检查。\",\n      \"evidence\": \"已完成输血前九项检查及输血评估\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病历记载输血过程平稳、无反应且已完成评价。\",\n      \"evidence\": \"输血过程平稳，无输血反应...已完成输血记录及输血后评价\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            11,
+            26
+          ],
+          "metadata": {
+            "tokens_used": 493,
+            "prompt_tokens": 388,
+            "completion_tokens": 105,
+            "input_tokens": 388,
+            "output_tokens": 105,
+            "api_time": 0.764690637588501,
+            "first_result_latency": 1.529381275177002,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 128
+          },
+          "target_document_type": "日常病程记录"
+        },
+        {
+          "rule_id": "SC-074",
+          "rule_name": "输血病人无输血前评估、输血记录、输血后评价记录、输血反应记录或输血记录单填写不全等",
+          "status": "compliant",
+          "is_compliant": true,
+          "issues": [],
+          "findings": "病历记载输血过程平稳、无反应且已完成评价。",
+          "evidence": "【日常病程记录】输血过程平稳，无输血反应，输血后复查血红蛋白升至72g/L，已完成输血记录及输血后评价",
+          "suggestion": "",
+          "rewrite_example": "",
+          "confidence": 1.0,
+          "llm_raw_output": "{\n  \"results\": [\n    {\n      \"rule_id\": \"SC-073\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病历明确记载已完成输血前九项检查。\",\n      \"evidence\": \"已完成输血前九项检查及输血评估\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    },\n    {\n      \"rule_id\": \"SC-074\",\n      \"is_compliant\": true,\n      \"status\": \"compliant\",\n      \"findings\": \"病历记载输血过程平稳、无反应且已完成评价。\",\n      \"evidence\": \"输血过程平稳，无输血反应...已完成输血记录及输血后评价\",\n      \"suggestion\": \"\",\n      \"confidence\": 1.0,\n      \"issues\": []\n    }\n  ]\n}",
+          "applicability": {
+            "is_applicable": true,
+            "reason": "",
+            "method": "default"
+          },
+          "evidence_verified": true,
+          "evidence_span": [
+            38,
+            81
+          ],
+          "metadata": {
+            "tokens_used": 493,
+            "prompt_tokens": 388,
+            "completion_tokens": 105,
+            "input_tokens": 388,
+            "output_tokens": 105,
+            "api_time": 0.764690637588501,
+            "first_result_latency": 1.529381275177002,
+            "cot_mode": "disabled",
+            "requested_enable_thinking": false,
+            "thinking_heuristic_applied": false,
+            "response_has_think_tags": false,
+            "response_has_reasoning_content": false,
+            "prompt_strategy": "batch_compact_v1",
+            "quality_profile": "throughput_v1",
+            "batch_output_mode": "minimal",
+            "pack_id": "daily_course_procedure_followup",
+            "pack_size": 2,
+            "pack_fallback": false,
+            "context_tokens_estimate": 128
+          },
+          "target_document_type": "日常病程记录"
+        }
+      ],
+      "expectation_result": {
+        "expectation": "pass_should_not_hit",
+        "status": "pass_ok",
+        "relevant_statuses": {
+          "SC-073": "compliant",
+          "SC-074": "compliant"
+        },
+        "unexpected_hits": {}
+      }
+    }
+  ],
+  "bucket_filters": [
+    "progress_treatment_linkage"
+  ],
+  "rule_coverage_summary": {
+    "rule_count": 9,
+    "stabilized": 7,
+    "pass_missing": 0,
+    "defect_missing": 0,
+    "entries": [
+      {
+        "rule_id": "SC-034",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-036",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-037",
+        "pass_result": "pass_ok",
+        "defect_result": "partial_hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_pathology_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_pathology_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-043",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_antibiotic_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_antibiotic_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-044",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_antibiotic_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_antibiotic_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-046",
+        "pass_result": "pass_regression",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_procedure_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_procedure_v1_defect.json"
+        ],
+        "stabilized": false
+      },
+      {
+        "rule_id": "SC-070",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-073",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_transfusion_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_transfusion_v1_defect.json"
+        ],
+        "stabilized": true
+      },
+      {
+        "rule_id": "SC-074",
+        "pass_result": "pass_ok",
+        "defect_result": "hit",
+        "pass_templates": [
+          "running_bucket_progress_treatment_linkage_transfusion_v1_pass.json"
+        ],
+        "defect_templates": [
+          "running_bucket_progress_treatment_linkage_transfusion_v1_defect.json"
+        ],
+        "stabilized": true
+      }
+    ]
+  },
+  "coverage_matrix_schema_version": "v1"
+}

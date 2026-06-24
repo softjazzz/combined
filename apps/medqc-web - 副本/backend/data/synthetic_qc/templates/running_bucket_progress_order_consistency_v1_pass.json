@@ -1,0 +1,51 @@
+{
+  "metadata": {
+    "schema_version": "v1",
+    "template_family": "running_record_intrinsic_baseline_v1",
+    "template_name": "running_bucket_progress_order_consistency_v1",
+    "issue_type": "Z20_progress_order_consistency",
+    "display_name": "病程医嘱一致性",
+    "variant": "pass",
+    "scene": "running",
+    "expected_rule_ids": ["SC-038", "SC-079", "SC-143", "SC-146"],
+    "bucket_id": "progress_order_consistency"
+  },
+  "patient_identity": {
+    "institute_id": "SYNTHETIC",
+    "patient_id": "SYN-P120",
+    "visit_id": "SYN-RUN-120",
+    "mr_no": "SYN0120",
+    "patient_name": "合成患者酉",
+    "gender": "女",
+    "age": 29,
+    "department": "产科"
+  },
+  "documents": [
+    {
+      "document_type": "daily_course_record",
+      "title": "日常病程记录",
+      "content": "2026-04-10 08:00复核B超提示单胎头位、羊水适中，与原报告完全一致。病程中已分析继续待产观察并记录对应医嘱：胎心监护 bid、补液 qd。"
+    },
+    {
+      "document_type": "medical_order",
+      "title": "长期医嘱单",
+      "content": "患者姓名：李某；科别：产科；住院病案号：SYN0120；页码：1/1；起始时间：2026-04-10 08:00；长期医嘱：胎心监护 bid，补液 qd；停止时间：2026-04-11 08:00；开立医师签名：王医生；核对护士签名：赵护士。"
+    },
+    {
+      "document_type": "newborn_record",
+      "title": "新生儿记录",
+      "content": "2026-04-11 10:15娩出活婴，性别：男，Apgar评分10分。产程记录、分娩记录及新生儿记录中性别均记为男。"
+    },
+    {
+      "document_type": "delivery_record",
+      "title": "分娩记录",
+      "content": "新生儿男性，体重3250g，与新生儿记录一致。"
+    }
+  ],
+  "structured_facts": {
+    "diagnoses": ["待产"],
+    "orders": ["胎心监护", "补液"],
+    "exams": ["B超提示单胎头位、羊水适中"],
+    "newborn_gender": "男"
+  }
+}

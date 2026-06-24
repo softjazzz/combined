@@ -153,7 +153,9 @@
               <div class="drawer-section-title">
                 泸县0609验证范围
               </div>
-              <span class="summary-mode-badge"> scoped run </span>
+              <span class="summary-mode-badge">
+                {{ luxianScopeModeLabel }}
+              </span>
             </div>
           </div>
           <div class="luxian-scope-grid">
@@ -182,7 +184,9 @@
               <span
                 v-if="!luxianSelectedRuleIds.length"
                 class="luxian-scope-muted"
-              > 未返回 </span>
+              >
+                {{ isLuxianScopedRun ? '未返回' : '未限定，执行全量 0609 质控点' }}
+              </span>
               <span
                 v-else-if="luxianSelectedRuleIds.length > luxianSelectedRuleIdsPreview.length"
                 class="luxian-scope-muted"
@@ -335,13 +339,19 @@
                 v-for="item in businessIssueCards"
                 :key="`conclusion-${resolveIssueStableKey(item)}`"
                 class="issue-conclusion-card"
+                :class="item.issue_card_class"
               >
                 <div class="issue-conclusion-head">
                   <div class="issue-conclusion-head-main">
-                    <span class="issue-conclusion-title">
-                      {{ item.rule_code || item.rule_id || '未知规则' }} ·
-                      {{ item.rule_name || '未知质控点' }}
-                    </span>
+                    <div class="issue-conclusion-title-row">
+                      <span class="issue-conclusion-title">
+                        <span class="issue-rule-code">
+                          {{ item.rule_code || item.rule_id || '未知规则' }}
+                        </span>
+                        ·
+                        {{ item.rule_name || '未知质控点' }}
+                      </span>
+                    </div>
                     <div class="issue-conclusion-meta">
                       <span>{{ item.record_id || '-' }}</span>
                       <span>{{
@@ -354,6 +364,26 @@
                   <a-tag class="aggregation-count-tag">
                     {{ resolveDisplayStatusText(item) || resolveStatusText(item.status) }}
                   </a-tag>
+                </div>
+                <div class="issue-at-a-glance">
+                  <div class="issue-glance-block issue-glance-block--conclusion">
+                    <div class="issue-glance-label">
+                      质控结论
+                    </div>
+                    <strong>{{ truncateText(item.findings, 112) }}</strong>
+                  </div>
+                  <div class="issue-glance-block">
+                    <div class="issue-glance-label">
+                      关键证据
+                    </div>
+                    <span>{{ item.evidence_summary }}</span>
+                  </div>
+                  <div class="issue-glance-block">
+                    <div class="issue-glance-label">
+                      处理建议
+                    </div>
+                    <span>{{ truncateText(item.suggestion, 96) }}</span>
+                  </div>
                 </div>
                 <div
                   v-if="hasEvidenceChain(item)"
@@ -475,13 +505,13 @@
                     </div>
                   </div>
                 </div>
-                <div class="issue-conclusion-summary">
+                <div
+                  v-if="isIssueExpanded(item)"
+                  class="issue-conclusion-summary"
+                >
                   <div class="issue-conclusion-row">
                     <span class="issue-conclusion-label">结论</span>
-                    <div
-                      v-if="isIssueExpanded(item)"
-                      class="issue-conclusion-structured"
-                    >
+                    <div class="issue-conclusion-structured">
                       <template v-if="resolveStructuredText(item.findings).summary">
                         <p
                           v-for="(paragraph, index) in resolveStructuredText(item.findings).summary"
@@ -540,19 +570,13 @@
                         无
                       </span>
                     </div>
-                    <span v-else>
-                      {{ truncateText(item.findings, 88) }}
-                    </span>
                   </div>
                   <div class="issue-conclusion-row">
                     <span class="issue-conclusion-label">证据</span>
-                    <div
-                      v-if="isIssueExpanded(item)"
-                      class="issue-conclusion-structured"
-                    >
-                      <template v-if="resolveStructuredText(item.evidence).summary">
+                    <div class="issue-conclusion-structured">
+                      <template v-if="item.customer_evidence_structured.summary">
                         <p
-                          v-for="(paragraph, index) in resolveStructuredText(item.evidence).summary"
+                          v-for="(paragraph, index) in item.customer_evidence_structured.summary"
                           :key="`evidence-summary-${resolveIssueStableKey(item)}-${index}`"
                           class="issue-conclusion-summary-text"
                         >
@@ -560,8 +584,7 @@
                         </p>
                       </template>
                       <div
-                        v-for="(section, sectionIndex) in resolveStructuredText(item.evidence)
-                          .sections"
+                        v-for="(section, sectionIndex) in item.customer_evidence_structured.sections"
                         :key="`evidence-section-${resolveIssueStableKey(item)}-${sectionIndex}`"
                         class="issue-conclusion-section"
                       >
@@ -588,11 +611,11 @@
                         </ol>
                       </div>
                       <ol
-                        v-if="resolveStructuredText(item.evidence).points.length"
+                        v-if="item.customer_evidence_structured.points.length"
                         class="issue-conclusion-points"
                       >
                         <li
-                          v-for="(point, index) in resolveStructuredText(item.evidence).points"
+                          v-for="(point, index) in item.customer_evidence_structured.points"
                           :key="`evidence-point-${resolveIssueStableKey(item)}-${index}`"
                         >
                           {{ point }}
@@ -600,24 +623,18 @@
                       </ol>
                       <span
                         v-if="
-                          !resolveStructuredText(item.evidence).summary.length &&
-                            !resolveStructuredText(item.evidence).sections.length &&
-                            !resolveStructuredText(item.evidence).points.length
+                          !item.customer_evidence_structured.summary.length &&
+                            !item.customer_evidence_structured.sections.length &&
+                            !item.customer_evidence_structured.points.length
                         "
                       >
                         无
                       </span>
                     </div>
-                    <span v-else>
-                      {{ truncateText(item.evidence, 96) }}
-                    </span>
                   </div>
                   <div class="issue-conclusion-row">
                     <span class="issue-conclusion-label">建议</span>
-                    <div
-                      v-if="isIssueExpanded(item)"
-                      class="issue-conclusion-structured"
-                    >
+                    <div class="issue-conclusion-structured">
                       <template v-if="resolveStructuredText(item.suggestion).summary">
                         <p
                           v-for="(paragraph, index) in resolveStructuredText(item.suggestion)
@@ -677,9 +694,6 @@
                         无
                       </span>
                     </div>
-                    <span v-else>
-                      {{ truncateText(item.suggestion, 72) }}
-                    </span>
                   </div>
                   <div
                     v-if="item.rewrite_example"
@@ -2089,7 +2103,18 @@ const displayIssueItems = computed<SichuanBatchIssueItem[]>(() => {
 
 const businessIssueCards = computed(() => {
   const startIndex = (issuePagination.current - 1) * issuePagination.pageSize
-  return displayIssueItems.value.slice(startIndex, startIndex + issuePagination.pageSize)
+  return displayIssueItems.value
+    .slice(startIndex, startIndex + issuePagination.pageSize)
+    .map((item) => {
+      const customerEvidenceText = resolveCustomerEvidenceText(item.evidence)
+      return {
+        ...item,
+        customer_evidence_text: customerEvidenceText,
+        customer_evidence_structured: resolveStructuredText(customerEvidenceText),
+        evidence_summary: resolveIssueEvidenceSummary(item),
+        issue_card_class: resolveIssueCardClass(item),
+      }
+    })
 })
 
 const linkedIssueRowKey = computed(() => {
@@ -2272,6 +2297,20 @@ const luxianSelectedRuleIds = computed(() => {
     : normalizeStringList(filters.scoped_customer_rule_ids)
 })
 
+const luxianRecordRuleMapEntries = computed(() => {
+  const rawMap = batchJobFilters.value.record_rule_map
+  if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) return []
+  return Object.entries(rawMap as Record<string, unknown>)
+})
+
+const isLuxianScopedRun = computed(
+  () => luxianSelectedRuleIds.value.length > 0 || luxianRecordRuleMapEntries.value.length > 0,
+)
+
+const luxianScopeModeLabel = computed(() =>
+  isLuxianScopedRun.value ? 'scoped run' : '全量 0609 规则集',
+)
+
 const luxianSelectedRuleIdsPreview = computed(() => luxianSelectedRuleIds.value.slice(0, 12))
 
 const luxianExecutionRuleIds = computed(() => {
@@ -2317,10 +2356,8 @@ const luxianGenericRuleCount = computed(() => {
 })
 
 const luxianRecordRuleMapSummary = computed(() => {
-  const rawMap = batchJobFilters.value.record_rule_map
-  if (!rawMap || typeof rawMap !== 'object' || Array.isArray(rawMap)) return '未返回'
-  const entries = Object.entries(rawMap as Record<string, unknown>)
-  if (!entries.length) return '未返回'
+  const entries = luxianRecordRuleMapEntries.value
+  if (!entries.length) return isLuxianScopedRun.value ? '未返回' : '全量运行，不按单病历限定执行规则'
   const uniqueRules = new Set<string>()
   entries.forEach(([, ruleIds]) => {
     normalizeStringList(ruleIds).forEach((ruleId) => uniqueRules.add(ruleId))
@@ -2341,7 +2378,7 @@ const luxianScopeCards = computed(() => [
     key: 'customer',
     label: '客户质控点数',
     value: luxianCustomerRuleCount.value > 0 ? luxianCustomerRuleCount.value : '未返回',
-    desc: '来自 selected/scoped LX0609 质控点',
+    desc: isLuxianScopedRun.value ? '来自 selected/scoped LX0609 质控点' : '全量 0609 客户质控点',
   },
   {
     key: 'execution',
@@ -2883,7 +2920,8 @@ const issueFocusSummary = computed(() => {
   const rejectedBySystemCount = ruleLevelSummary.value.rejectedBySystemCount
   const technicalErrorCount = ruleLevelSummary.value.technicalErrorCount
   if (isLuxian0609BatchJob.value) {
-    return `当前为泸县0609 scoped run 结果，共 ${total} 条客户质控点结果，其中不合规 ${nonCompliantCount} 条，数据不足 ${dataQualityGapCount} 条，待复核 ${uncertainCount} 条，技术异常 ${technicalErrorCount} 条。`
+    const modeText = isLuxianScopedRun.value ? 'scoped run' : '全量 0609 规则集'
+    return `当前为泸县0609 ${modeText} 结果，共 ${total} 条客户质控点结果，其中不合规 ${nonCompliantCount} 条，数据不足 ${dataQualityGapCount} 条，待复核 ${uncertainCount} 条，技术异常 ${technicalErrorCount} 条。`
   }
   if (isPostprocessedFormalResult.value) {
     return `当前为正式质控四层准入结果，共 ${total} 条可查看结果，其中确认缺陷 ${nonCompliantCount} 条，数据缺口 ${dataQualityGapCount} 条，系统驳回 ${rejectedBySystemCount} 条，技术异常 ${technicalErrorCount} 条。原始 LLM 不合规不会直接计入确认缺陷。`
@@ -3101,6 +3139,78 @@ function normalizeEvidenceText(value: unknown, limit = 120) {
   return text.length > limit ? `${text.slice(0, limit)}...` : text
 }
 
+const INTERNAL_EVIDENCE_LABELS = [
+  '证据模板',
+  '触发状态',
+  '触发说明',
+  '映射执行规则',
+  '应包含证据要素',
+]
+
+const CUSTOMER_EVIDENCE_PRIORITY_LABELS = ['执行证据', '关键证据', '判断依据']
+
+const EVIDENCE_LABELS = [
+  ...INTERNAL_EVIDENCE_LABELS,
+  ...CUSTOMER_EVIDENCE_PRIORITY_LABELS,
+  '质控点',
+]
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function resolveLabeledEvidenceValue(text: string, label: string) {
+  const labelPattern = new RegExp(`${escapeRegExp(label)}[：:]\\s*`, 'u')
+  const match = labelPattern.exec(text)
+  if (!match) return ''
+  const start = match.index + match[0].length
+  const nextLabelIndexes = EVIDENCE_LABELS.filter((candidate) => candidate !== label)
+    .map((candidate) => {
+      const nextPattern = new RegExp(`${escapeRegExp(candidate)}[：:]\\s*`, 'u')
+      const nextMatch = nextPattern.exec(text.slice(start))
+      return nextMatch ? start + nextMatch.index : -1
+    })
+    .filter((index) => index >= 0)
+  const end = nextLabelIndexes.length ? Math.min(...nextLabelIndexes) : text.length
+  return text
+    .slice(start, end)
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function removeInternalEvidenceSegments(text: string) {
+  let output = text
+  INTERNAL_EVIDENCE_LABELS.forEach((label) => {
+    const labelPattern = new RegExp(`${escapeRegExp(label)}[：:]\\s*`, 'u')
+    let match = labelPattern.exec(output)
+    while (match) {
+      const start = match.index
+      const contentStart = start + match[0].length
+      const nextLabelIndexes = EVIDENCE_LABELS.filter((candidate) => candidate !== label)
+        .map((candidate) => {
+          const nextPattern = new RegExp(`${escapeRegExp(candidate)}[：:]\\s*`, 'u')
+          const nextMatch = nextPattern.exec(output.slice(contentStart))
+          return nextMatch ? contentStart + nextMatch.index : -1
+        })
+        .filter((index) => index >= 0)
+      const end = nextLabelIndexes.length ? Math.min(...nextLabelIndexes) : output.length
+      output = `${output.slice(0, start)} ${output.slice(end)}`
+      match = labelPattern.exec(output)
+    }
+  })
+  return output.replace(/\s+/g, ' ').trim()
+}
+
+function resolveCustomerEvidenceText(text?: string | null) {
+  const raw = String(text || '').trim()
+  if (!raw) return ''
+  const priorityEvidence = CUSTOMER_EVIDENCE_PRIORITY_LABELS.map((label) =>
+    resolveLabeledEvidenceValue(raw, label),
+  ).find(Boolean)
+  if (priorityEvidence) return priorityEvidence
+  return removeInternalEvidenceSegments(raw)
+}
+
 function hasEvidenceChain(item?: Partial<SichuanBatchIssueItem> | null) {
   if (!item) return false
   return Boolean(
@@ -3132,6 +3242,17 @@ function resolveEvidenceStatusText(status?: string) {
     error: '错误',
   }
   return map[normalized] || resolveStatusText(normalized)
+}
+
+function resolveIssueCardClass(item: Partial<SichuanBatchIssueItem>) {
+  const status = normalizeLuxianStatusKey(item.result_status || item.status || item.display_status)
+  return {
+    'issue-conclusion-card--danger': status === 'non_compliant' || status === 'technical_error',
+    'issue-conclusion-card--warning':
+      status === 'data_gap' || status === 'uncertain' || status === 'not_executed',
+    'issue-conclusion-card--success': status === 'compliant',
+    'issue-conclusion-card--muted': status === 'not_applicable',
+  }
 }
 
 function resolveExecutorTypeText(value?: string) {
@@ -3260,10 +3381,38 @@ function resolveEvidenceChainItems(item: Partial<SichuanBatchIssueItem>): Eviden
         source,
         recordTime: normalizeEvidenceText(evidence.record_time, 32),
         fieldPath: normalizeEvidenceText(evidence.field_path, 40),
-        quote: normalizeEvidenceText(evidence.quote, 260) || '未返回原文片段',
+        quote: normalizeEvidenceText(evidence.quote, 260),
       }
     })
     .filter((item) => item.quote)
+}
+
+function formatEvidenceSummaryItem(evidence: EvidenceDisplayItem) {
+  const source = [evidence.source, evidence.fieldPath].filter(Boolean).join(' · ')
+  return source ? `${source}：${evidence.quote}` : evidence.quote
+}
+
+function resolveIssueEvidenceSummary(item: Partial<SichuanBatchIssueItem>) {
+  const status = normalizeLuxianStatusKey(item.result_status || item.status || item.display_status)
+  if (status === 'data_gap') {
+    const missingSources = resolveSourceNames(toRecord(item.dependencies)?.missing_sources)
+    if (missingSources) {
+      return truncateText(`已识别相关触发事实，但缺少 ${missingSources}，需补齐后再自动判定。`, 140)
+    }
+  }
+  const evidences = resolveEvidenceChainItems(item)
+  if (evidences.length) {
+    return truncateText(evidences.slice(0, 2).map(formatEvidenceSummaryItem).join('；'), 180)
+  }
+  const triggerFact = resolveTriggerFacts(item)[0]
+  if (triggerFact?.value) {
+    return truncateText(`${triggerFact.label}：${triggerFact.value}`, 118)
+  }
+  const decision = resolveDecisionRows(item).find((row) => row.key === 'decision-summary')
+  if (decision?.value) {
+    return truncateText(decision.value, 118)
+  }
+  return truncateText(resolveCustomerEvidenceText(item.evidence), 140)
 }
 
 function resolveDecisionRows(item: Partial<SichuanBatchIssueItem>): EvidenceDisplayRow[] {
@@ -4154,11 +4303,45 @@ onUnmounted(() => {
 }
 
 .issue-conclusion-card {
+  position: relative;
+  overflow: hidden;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   background: #fff;
-  padding: 14px 16px;
+  padding: 16px 18px 14px;
   box-shadow: 0 10px 24px rgba(148, 163, 184, 0.08);
+}
+
+.issue-conclusion-card::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: #94a3b8;
+  content: '';
+}
+
+.issue-conclusion-card--danger {
+  border-color: rgba(239, 68, 68, 0.22);
+}
+
+.issue-conclusion-card--danger::before {
+  background: #ef4444;
+}
+
+.issue-conclusion-card--warning {
+  border-color: rgba(245, 158, 11, 0.24);
+}
+
+.issue-conclusion-card--warning::before {
+  background: #f59e0b;
+}
+
+.issue-conclusion-card--success::before {
+  background: #10b981;
+}
+
+.issue-conclusion-card--muted::before {
+  background: #94a3b8;
 }
 
 .issue-conclusion-head {
@@ -4174,12 +4357,31 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+.issue-conclusion-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.issue-rule-code {
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: rgba(0, 102, 204, 0.09);
+  color: #0066cc;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 18px;
+}
+
 .issue-conclusion-title {
   display: block;
   font-size: 14px;
   line-height: 1.5;
   color: #0f172a;
-  font-weight: 600;
+  font-weight: 700;
+  word-break: break-word;
 }
 
 .issue-conclusion-meta {
@@ -4195,6 +4397,46 @@ onUnmounted(() => {
   color: #475569;
   padding: 2px 7px;
   font-size: 11px;
+}
+
+.issue-at-a-glance {
+  display: grid;
+  grid-template-columns: 1.1fr 1.4fr 1.1fr;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.issue-glance-block {
+  min-width: 0;
+  border: 1px solid rgba(226, 232, 240, 0.82);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.82);
+  padding: 10px 12px;
+}
+
+.issue-glance-block--conclusion {
+  background: rgba(239, 68, 68, 0.045);
+}
+
+.issue-glance-label {
+  margin-bottom: 5px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.issue-glance-block strong,
+.issue-glance-block span {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.65;
+  word-break: break-word;
+}
+
+.issue-glance-block strong {
+  font-weight: 750;
 }
 
 .evidence-chain-strip {
@@ -4334,20 +4576,25 @@ onUnmounted(() => {
 .issue-conclusion-summary {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
+  padding-top: 12px;
 }
 
 .issue-conclusion-row {
-  font-size: 12px;
+  font-size: 13px;
   color: #334155;
   line-height: 1.7;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 10px;
 }
 
 .issue-conclusion-actions {
-  margin-top: 10px;
+  margin-top: 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.82);
+  padding-top: 8px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -4355,7 +4602,7 @@ onUnmounted(() => {
 
 .issue-conclusion-label {
   color: #64748b;
-  font-weight: 500;
+  font-weight: 700;
 }
 
 .issue-conclusion-structured {
@@ -4835,6 +5082,15 @@ onUnmounted(() => {
 
   .issue-filter-bar {
     grid-template-columns: 1fr;
+  }
+
+  .issue-at-a-glance {
+    grid-template-columns: 1fr;
+  }
+
+  .issue-conclusion-title-row {
+    flex-direction: column;
+    gap: 6px;
   }
 
   .issue-conclusion-row {
