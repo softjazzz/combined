@@ -37,7 +37,7 @@ function Copy-TreeExclude([string]$source, [string]$destination, [string[]]$excl
 }
 
 if (-not $SkipBuild) {
-  Write-Step "以 customer 模式构建前端 dist"
+  Write-Step "Build frontend dist in customer mode"
   Push-Location $projectRoot
   try {
     npx vite build --mode customer --config vite.config.mjs --configLoader native
@@ -47,17 +47,29 @@ if (-not $SkipBuild) {
   }
 }
 
-Write-Step "准备发布目录 $releaseDir"
+Write-Step "Prepare release directory $releaseDir"
 if (Test-Path -LiteralPath $releaseDir) {
   Remove-Item -LiteralPath $releaseDir -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $releaseDir, $backendDir, $frontendDir, $toolsDir | Out-Null
 
-Write-Step "复制前端构建产物"
+Write-Step "Copy frontend build artifacts"
 Copy-Item -LiteralPath (Join-Path $projectRoot "dist") -Destination (Join-Path $frontendDir "dist") -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "scripts\serve_dist_spa.py") -Destination (Join-Path $toolsDir "serve_dist_spa.py") -Force
+Write-Step "Slim frontend fonts (keep Source Han Sans SC Regular/Medium only)"
+$distFontsDir = Join-Path $frontendDir "dist\fonts"
+$sfProDir = Join-Path $distFontsDir "sf-pro"
+if (Test-Path -LiteralPath $sfProDir) {
+  Remove-Item -LiteralPath $sfProDir -Recurse -Force
+}
+$sourceHanDir = Join-Path $distFontsDir "source-han-sans-sc"
+if (Test-Path -LiteralPath $sourceHanDir) {
+  Get-ChildItem -LiteralPath $sourceHanDir -File | Where-Object {
+    $_.Name -notin @("SourceHanSansSC-Regular.otf", "SourceHanSansSC-Medium.otf")
+  } | Remove-Item -Force
+}
 
-Write-Step "复制后端源码（排除 ICD 向量索引和开发目录）"
+Write-Step "Copy backend source (exclude ICD vector index and development directories)"
 Copy-TreeExclude `
   -source (Join-Path $projectRoot "backend") `
   -destination $backendDir `
@@ -71,27 +83,30 @@ if (Test-Path -LiteralPath (Join-Path $backendDir "data\manual_qc_runs")) {
   Remove-Item -LiteralPath (Join-Path $backendDir "data\manual_qc_runs") -Recurse -Force
 }
 
-Write-Step "写入部署说明"
-$readme = @"
-# Customer deployment package
-
-Generated at: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-
-## Directory layout
-- frontend/dist: frontend static assets
-- backend: backend source code
-
-## Excluded from this package
-- backend/data/vector
-- backend/data/manual_qc_runs
-- cache, test, virtual environment, and log directories
-
-## Notes
-- This package does not include the ICD semantic vector index.
-- This package does not include the ICD vector index builder script.
-- Frontend is built in customer mode and does not hardcode the public API domain.
-"@
+Write-Step "Write deployment README"
+$generatedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+$readmeLines = @(
+  "# Customer deployment package",
+  "",
+  "Generated at: $generatedAt",
+  "",
+  "## Directory layout",
+  "- frontend/dist: frontend static assets",
+  "- backend: backend source code",
+  "",
+  "## Excluded from this package",
+  "- backend/data/vector",
+  "- backend/data/manual_qc_runs",
+  "- frontend font files except Source Han Sans SC Regular/Medium",
+  "- cache, test, virtual environment, and log directories",
+  "",
+  "## Notes",
+  "- This package does not include the ICD semantic vector index.",
+  "- This package does not include the ICD vector index builder script.",
+  "- This package keeps only Source Han Sans SC Regular/Medium and removes SF Pro font files.",
+  "- Frontend is built in customer mode and does not hardcode the public API domain."
+)
+$readme = $readmeLines -join "`n"
 $readme | Set-Content -LiteralPath (Join-Path $releaseDir "README-deployment.txt") -Encoding UTF8
-
-Write-Step "打包完成"
+Write-Step "Package completed"
 Write-Host $releaseDir

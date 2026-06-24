@@ -1,4 +1,3 @@
-@import './sf-pro.css';
 @import './source-han-sans-sc.css';
 
 @tailwind base;
@@ -42,8 +41,8 @@
     line-height: 1.5;
     -webkit-text-size-adjust: 100%;
     font-family:
-      'Source Han Sans SC', 'San Francisco', 'SF Pro Display', 'SF Pro Text', 'Inter',
-      'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+      'Source Han Sans SC', 'San Francisco', 'Inter', 'PingFang SC', 'Microsoft YaHei UI',
+      'Microsoft YaHei', sans-serif;
   }
 
   body {
